@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { devPortalSession } from '@/lib/dev-auth'
 import {
   signPortalToken,
   verifyPortalToken,
@@ -75,6 +76,8 @@ export async function logoutCliente(): Promise<void> {
 export async function getPortalSession(): Promise<PortalSession | null> {
   const jar   = await cookies()
   const token = jar.get(PORTAL_COOKIE)?.value
-  if (!token) return null
+  // Bypass de login SOLO en desarrollo local: si no hay cookie y el bypass está activo
+  // (doble candado), impersonamos el tenant indicado en DEV_PORTAL_CLIENT_ID.
+  if (!token) return devPortalSession()
   return verifyPortalToken(token)
 }

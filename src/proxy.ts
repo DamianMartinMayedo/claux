@@ -1,8 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isAuthBypassed } from '@/lib/dev-auth'
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
+
+  // Bypass de login SOLO en desarrollo local (doble candado en isAuthBypassed):
+  // nunca mostramos el login; si se pide /admin/login, redirigimos al dashboard.
+  if (isAuthBypassed()) {
+    if (request.nextUrl.pathname === '/admin/login') {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url))
+    }
+    return response
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

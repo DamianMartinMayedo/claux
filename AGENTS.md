@@ -14,12 +14,34 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 
 **Antes de escribir cualquier código**, lee completo [docs/CONTEXTO.md](docs/CONTEXTO.md). Es la fuente de verdad del producto, la arquitectura y las prioridades de construcción.
 
+> ## ⚠️ REGLA DE UI — INNEGOCIABLE (leer antes de tocar cualquier `.tsx` con JSX o `src/app/globals.css`)
+>
+> Toca UI ⇒ **lee primero [skills/ui/SKILL.md](skills/ui/SKILL.md)**. No es opcional ni "para tareas grandes": aplica aunque solo añadas un botón, cambies un color o ajustes un margen.
+>
+> - **Prohibido el estilo inline** (`style={{…}}`). Única excepción: un valor de runtime pasado como custom property (documentado en la skill).
+> - **Tokens y clases del design system siempre**: `var(--color-*)`, `var(--space-*)`, `var(--text-*)`, etc., y las clases de la hoja única `src/app/globals.css` (~3.200 líneas). Nada de hex/px mágicos.
+> - **Tailwind solo es reset**: prohibido usar clases utilitarias de Tailwind en el markup.
+> - Especificación visual completa (valores de tokens): `docs/CLAUX-LEGACY.md` §8.
+
+## Qué leer según la tarea (no sobre-leas)
+
+| Tu tarea toca… | Lee (además de CONTEXTO.md) |
+|---|---|
+| Cualquier `.tsx`/JSX o `globals.css` | `skills/ui/SKILL.md` (obligatorio) + `docs/CLAUX-LEGACY.md` §8 si necesitas valores de tokens |
+| Planes, módulos, precios, gating, admin de clientes | `docs/MODELO-MODULOS.md` |
+| Base de datos / queries / esquema | sección relevante de `docs/CLAUX-LEGACY.md` + `skills/supabase-postgres-best-practices` |
+| Lógica de negocio financiera (ventas, pagos, monedas) | sección relevante de `docs/CLAUX-LEGACY.md` |
+| Código Next.js (RSC, rutas, cache, data) | `skills/next-best-practices` (+ `next-cache-components` si usas `use cache`/PPR) |
+
+Lee solo lo que tu tarea necesita. De `docs/CLAUX-LEGACY.md` usa sus encabezados para leer la sección puntual, nunca el archivo entero.
+
 ## Índice de documentación (`docs/`)
 
 | Documento | Qué contiene | Cuándo consultarlo |
 |---|---|---|
 | [CONTEXTO.md](docs/CONTEXTO.md) | Visión del producto, estado actual del código, principios de arquitectura, modelo de datos, prioridades de Fase 0 | Siempre antes de empezar cualquier tarea |
 | [CLAUX-LEGACY.md](docs/CLAUX-LEGACY.md) | Design system completo (tokens, clases CSS, layout), esquema de BD, flujos financieros, convenciones de código | Al trabajar con UI/estilos, base de datos o lógica de negocio |
+| [MODELO-MODULOS.md](docs/MODELO-MODULOS.md) | Diseño del modelo comercial v2 (base contable + módulos à la carte): tablas, migración pendiente, gating, nomenclatura genérica, IA como módulo, discrepancias y checklist de implementación | Al implementar planes/módulos/precios, gating del portal o el admin de clientes |
 
 ## Política de eficiencia (ahorro de tokens)
 
@@ -38,9 +60,23 @@ Ante cualquier contradicción entre documentos, el orden de prioridad es:
 2. docs/CLAUX-LEGACY.md
 3. Cualquier otro documento
 
-## Skills instaladas
+## Skills instaladas (13)
 
-- `skills/ui/SKILL.md` → leerla SIEMPRE que se cree, edite o revise cualquier componente, página, layout o CSS (cualquier .tsx con JSX o globals.css). Regla central: prohibido el estilo inline; tokens y clases del design system siempre.
+Curadas para el stack real (Next.js 16 + React 19 + Supabase + design system propio en CSS, sin utilidades Tailwind, sin backend Express). Se eliminaron las que se solapaban o no encajaban.
+
+- `skills/ui/SKILL.md` → SIEMPRE que se cree, edite o revise cualquier componente, página, layout o CSS (cualquier .tsx con JSX o globals.css). Ver el bloque "REGLA DE UI" arriba. Regla central: prohibido el estilo inline; tokens y clases del design system siempre.
+- `skills/emil-design-eng/SKILL.md` → al pulir detalles de UI, animaciones, interacciones y decisiones de diseño que hacen que el software se sienta bien.
+- `skills/accessibility/SKILL.md` → al auditar o mejorar accesibilidad web (WCAG 2.2, screen readers, navegación por teclado).
+- `skills/seo/SKILL.md` → al optimizar visibilidad en buscadores (meta tags, structured data, sitemap, technical SEO) — clave para landing y páginas públicas.
+- `skills/core-web-vitals/SKILL.md` → al optimizar Core Web Vitals (LCP, INP, CLS); crítico para el presupuesto de rendimiento de las páginas públicas (CONTEXTO §3).
+- `skills/next-best-practices/SKILL.md` → al escribir o revisar código Next.js (convenciones de archivos, RSC, data patterns, metadata, error handling).
+- `skills/next-cache-components/SKILL.md` → al trabajar con Cache Components, PPR, `use cache`, cacheLife y cacheTag en Next.js 16.
+- `skills/next-upgrade/SKILL.md` → al actualizar Next.js a una nueva versión (migration guides y codemods).
+- `skills/react-best-practices/SKILL.md` → al escribir, revisar o refactorizar código React/Next.js para optimizar rendimiento (waterfalls, bundle size, re-renders).
+- `skills/composition-patterns/SKILL.md` → al refactorizar componentes con proliferación de props booleanos, construir librerías de componentes o diseñar APIs reutilizables.
+- `skills/typescript-advanced-types/SKILL.md` → al implementar lógica de tipos compleja (generics, conditional types, mapped types, type safety).
+- `skills/supabase-postgres-best-practices/SKILL.md` → al escribir, revisar u optimizar queries Postgres, diseñar esquemas o configurar Supabase.
+- `skills/nodejs-best-practices/SKILL.md` → al tomar decisiones de arquitectura Node (patrones async, seguridad) en route handlers/server actions y el futuro webhook del bot.
 
 Regla de auto-registro — obligatoria para TODO agente IA: antes de empezar cualquier tarea, escanea la carpeta `skills/` en la raíz del repo. Cada subcarpeta que contenga un archivo `SKILL.md` es una skill instalada. Si encuentras alguna que no aparezca en la lista de arriba, léela, añádela aquí (una línea: ruta → cuándo leerla, deducida de su descripción) y guarda este archivo antes de continuar. El propietario instala skills sin avisar; mantener esta lista al día es responsabilidad del agente, no del propietario.
 

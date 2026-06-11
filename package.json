@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:webpack": "next dev --webpack",
+    "fix-native": "xattr -dr com.apple.quarantine node_modules 2>/dev/null; rm -rf .next; echo 'Cuarentena de binarios nativos limpiada y cache .next borrada.'",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

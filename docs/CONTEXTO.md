@@ -1,9 +1,9 @@
 # CLAUX — Contexto del proyecto para desarrollo
-> Fuente de verdad del producto y la arquitectura. Vive en docs/ y se lee completo antes de cualquier tarea (ver AGENTS.md).
+> Fuente de verdad del producto y la arquitectura. Vive en docs/ y se lee completo antes de cualquier tarea (ver AGENTS.md). Derivado del plan de negocio de junio 2026 (v2).
 
 ## 1. Qué es CLAUX
 
-Plataforma SaaS todo en uno para digitalizar negocios locales cubanos, principalmente restaurantes. Una sola aplicación multi-tenant: cada negocio (tenant) ve y configura únicamente los módulos activos en su plan. El cliente objetivo no tiene ninguna herramienta previa (menú en papel, reservas por teléfono, cuentas en libreta) y accede casi siempre desde móvil con conexión lenta. El equipo opera desde España y Cuba; el hosting y los servicios externos se contratan desde España/EEUU.
+Plataforma SaaS todo en uno para digitalizar negocios locales cubanos. El vertical de lanzamiento son los restaurantes, pero la plataforma es multi-sector por configuración (gimnasios, salones de belleza, tiendas, servicios): el núcleo es el mismo y cambian la terminología y los módulos típicos, vía plantillas de onboarding por sector. Por eso la nomenclatura interna de los módulos públicos es genérica: **"catálogo digital QR"** (que en restaurantes se renderiza como "menú") y **"reservas y citas"** (mesas, citas por profesional o clases según el sector). Una sola aplicación multi-tenant: cada negocio (tenant) ve y configura únicamente los módulos que tiene activos. El cliente accede casi siempre desde móvil con conexión lenta. La IA es el eje de la comunicación comercial del producto; internamente se usa solo donde aporta (ver principios 6 y 9). El equipo opera desde España y Cuba; el hosting y los servicios externos se contratan desde España/EEUU.
 
 ## 2. Punto de partida del código — AUDITADO (junio 2026)
 
@@ -23,7 +23,13 @@ El desarrollo NO parte de cero. El repositorio existente (`DamianMartinMayedo/cl
 
 **Deuda técnica a corregir pronto:** (1) el hash de contraseñas de `client_users` es SHA-256+salt — migrar a scrypt o argon2 antes de tener clientes reales; (2) las migraciones de `supabase/migrations` empiezan en 001 sobre tablas creadas a mano en el SQL Editor — volcar el esquema base completo al repo para que la base de datos sea reconstruible; (3) la seguridad entre tenants depende de filtrar por `client_id` en cada query (no hay políticas RLS por tenant): toda query nueva debe revisarse contra esta regla.
 
-**Nota de nomenclatura:** el código y `docs/CLAUX-LEGACY.md` usan planes Básico/Profesional/Empresarial (herencia del enfoque mini-ERP genérico). El modelo comercial vigente es Básico/Intermedio/Avanzado + add-on IA (sección 5), con verticalización en restaurantes. Los planes son datos, no código, así que el cambio es de contenido; ante conflicto entre `docs/CLAUX-LEGACY.md` y este documento, prevalece este documento.
+**Nota de nomenclatura:** el código y `docs/CLAUX-LEGACY.md` usan planes Básico/Profesional/Empresarial (herencia del enfoque mini-ERP genérico). El modelo comercial vigente es **base contable + módulos à la carte** (sección 5): los "planes" pasan a ser la configuración de módulos activos de cada tenant con precio compuesto. Los planes son datos, no código, así que el cambio es de contenido y de gating; ante conflicto entre `docs/CLAUX-LEGACY.md` y este documento, prevalece este documento.
+
+**Cambios de la sesión de alineación v2 (junio 2026):**
+- **Modelo à la carte diseñado y documentado** (no implementado) en [docs/MODELO-MODULOS.md](MODELO-MODULOS.md): catálogo de módulos + módulos por cliente con precio compuesto, migración SQL lista (pendiente de aplicar), nomenclatura genérica (`catalogo_qr`, `reservas_citas`), la IA como módulo único context-aware (`asistente_ia`), discrepancias y checklist de implementación. Auditoría clave: el gating del portal depende de `plans.modulos` (no del nombre del plan), así que migrarlo apenas toca una query.
+- **Bypass de login para desarrollo local** (`src/lib/dev-auth.ts`): doble candado `NODE_ENV==='development'` + `DEV_BYPASS_AUTH=true`; inerte en producción (verificado con `next build`). Capa el admin (`src/proxy.ts`, layout admin) y, opcionalmente, el portal vía `DEV_PORTAL_CLIENT_ID` (`getPortalSession`). Documentado en README §Desarrollo local y `.env.example`.
+- **Skills curadas a 13** (de 19; eliminadas las solapadas o ajenas al stack) y `AGENTS.md` reforzado: regla de UI destacada + tabla "qué leer según la tarea" para ahorrar tokens.
+- **Arranque local:** los binarios nativos (Turbopack SWC, lightningcss, tailwind-oxide) venían en cuarentena de macOS; script `npm run fix-native` y `dev:webpack` como respaldo.
 
 ## 3. Principios de arquitectura no negociables
 
@@ -40,23 +46,30 @@ El desarrollo NO parte de cero. El repositorio existente (`DamianMartinMayedo/cl
 ## 4. Piezas de la plataforma
 
 - **Público (embudo):** landing de CLAUX + formulario de diagnóstico + informe de resultados con CTA a reunión. Ultraligero.
-- **Público (por negocio):** menú QR multi-idioma (ES/EN) + mini-web (ubicación, horarios, fotos, link a reservas) + formulario de reservas + (premium) chat embebido con IA.
+- **Público (por negocio):** catálogo digital QR (menú en restaurantes; multi-idioma opcional) + mini-web (ubicación, horarios, fotos, link a reservas) + formulario de reservas + (premium) chat embebido con IA.
 - **Panel del dueño (PWA):** edición de menú y datos del negocio, gestión de reservas (confirmar/rechazar, capacidad por franjas, no-shows), y los módulos de gestión según plan (contabilidad, inventario, RRHH, analítica…). Notificaciones al Telegram personal del dueño (reserva nueva, resumen semanal).
 - **Bot de Telegram por negocio:** versión botones (base) y versión conversacional con IA (add-on).
 - **Admin interno (solo equipo CLAUX):** clientes, módulos activos por cliente con toggle, plan, precio resultante (cada módulo tiene precio unitario interno; el toggle recalcula la mensualidad), estado y vencimiento de pago, consumo de IA por tenant, y gestión del periodo de gracia. Versión 1 deliberadamente mínima.
 
-## 5. Catálogo de módulos y planes
+## 5. Catálogo de módulos y modelo comercial
 
-| Plan | Módulos |
-|---|---|
-| Básico — "Presencia y reservas" | Menú QR multi-idioma · mini-web · reservas (formulario + panel + notificaciones) · bot Telegram de botones · soporte |
-| Intermedio — "Gestión" | Básico + contabilidad básica (ingresos/gastos, cierres de caja) · inventario con disponibilidad en carta · RRHH básico |
-| Avanzado — "Negocio completo" | Intermedio + multi-local con datos consolidados · analítica · roles de usuario para empleados · marketing/reseñas · pedidos a domicilio |
-| Add-on IA (sobre cualquier plan) | Chat conversacional (Telegram + embebido en menú) · dudas de carta (ingredientes, alérgenos, calorías, recomendaciones) · reservas y pedidos en lenguaje natural · en Intermedio+: consultas del dueño sobre su negocio · en Avanzado: sobre todos sus locales · resumen semanal por IA |
+El modelo comercial NO son planes cerrados: es **una base mensual + módulos à la carte** que suman al precio. Cada cliente tiene la base más el conjunto de módulos activos; el admin interno gestiona el toggle por módulo y el precio resultante se recalcula automáticamente. Los módulos no contratados se muestran en el portal visibles pero bloqueados, con CTA de activación (patrón ya implementado en el sidebar).
 
-Módulos de fases futuras (no MVP): operación en sala offline-first sobre red local del negocio (comandas, pantalla de cocina), gestión de repartidores, fidelización, CRM ampliado. Variantes "Google" como integraciones opcionales: sincronización de reservas con Google Calendar, exportación de finanzas a Sheets, optimización de perfil de Google Business.
+| Módulo | Contenido | Precio fundador / estándar |
+|---|---|---|
+| **Base (obligatoria)** | Sistema contable básico: ingresos/gastos en categorías simples, caja y banco, facturación simple multi-moneda, panel del negocio, soporte | $20 / $35 al mes |
+| Catálogo digital QR + mini-web | Carta/catálogo/servicios con fotos y precios por QR y enlace; mini-web pública; multi-idioma opcional | +$10 / +$18 |
+| Reservas y citas + bot Telegram | Formulario público, panel (confirmar/rechazar, capacidad o agenda por franjas, no-shows), bot de botones, notificaciones al dueño | +$10 / +$18 |
+| Inventario | Stock, movimientos, disponibilidad conectada al catálogo | +$8 / +$14 |
+| RRHH | Empleados, turnos, pagos/nómina simple | +$8 / +$14 |
+| Contabilidad avanzada | Plan de cuentas, modo dual (simple + contable oficial coexistentes), rol contador externo | +$8 / +$14 |
+| Multi-negocio | Varias empresas/locales con consolidación | +$12 / +$20 |
+| Marketing y reseñas | Google Maps/Business, reseñas, promos | +$6 / +$10 |
+| Asistente IA | Chat con clientes (Telegram + embebido en catálogo), reservas/pedidos en lenguaje natural, consultas del dueño sobre sus módulos activos, resumen semanal | +$15 / +$25 |
 
-Precios de referencia (fundador / estándar): Básico $20/$35, Intermedio $45/$75, Avanzado $80/$130, IA +$15/+$25, setup $100-200/$200-400. Configurables desde el admin; nunca hardcodear precios en el producto.
+Módulos de fases futuras (no MVP): operación en sala offline-first sobre red local (comandas, pantalla de cocina) y equivalentes por vertical, gestión de repartidores, fidelización, CRM. Variantes "Google" como integraciones opcionales (Calendar, Sheets, Business Profile).
+
+Implicación técnica: el modelo de "planes" existente (plans.modulos) se reinterpreta como configuración por cliente — la entidad que manda es el conjunto de módulos activos del tenant y su precio compuesto, no un tier con nombre. Los precios viven en datos gestionados desde el admin; nunca hardcodear precios en el producto.
 
 ## 6. Modelo de datos mínimo (orientativo)
 
@@ -80,7 +93,7 @@ La auditoría (sección 2), el cascarón multi-tenant y el admin interno ya exis
 4. Reservas: formulario público + panel en el portal + notificación Telegram al dueño.
 5. Bot de Telegram de botones (reservar, menú, horarios, ubicación) con enrutado multi-tenant por token.
 6. Landing de CLAUX + formulario de diagnóstico + informe (embudo).
-7. Reconfiguración de planes (datos) al modelo Básico/Intermedio/Avanzado + add-on IA, y exposición de los nuevos módulos en el gating existente.
+7. Adaptación del modelo comercial en datos y admin al esquema base + módulos (sección 5): el tenant tiene su conjunto de módulos activos y precio compuesto; el admin permite activar/desactivar módulos por cliente con recálculo automático de la mensualidad; el gating del portal mantiene el patrón existente.
 8. Cierre del módulo de gestión mínimo para el plan Intermedio (registro de ingresos/gastos y cierres de caja sobre la base de ventas/tesorería ya prevista; inventario con disponibilidad en carta conectado al menú).
 9. Add-on IA v1 (motor híbrido + DeepSeek + límites por tenant).
 

@@ -5,3 +5,7 @@ out/
 .DS_Store
 tsconfig.tsbuildinfo
 .vercel
+
+# Estado local de herramientas de agentes (las skills reales viven en skills/)
+.claude/
+.agents/
