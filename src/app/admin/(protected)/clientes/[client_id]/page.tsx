@@ -1,0 +1,282 @@
+import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import AccionesDetalle from './AccionesDetalle'
+import EditarClienteModal from './EditarClienteModal'
+
+const ESTADO_BADGE: Record<string, string> = {
+  ACTIVO:     'badge-success',
+  TRIAL:      'badge-info',
+  GRACIA:     'badge-warning',
+  SUSPENDIDO: 'badge-warning',
+  VENCIDO:    'badge-error',
+}
+
+const METODO_LABEL: Record<string, string> = {
+  tropipay:      'TropiPay',
+  transferencia: 'Transferencia',
+  efectivo:      'Efectivo',
+}
+
+const MOTIVOS_GRACIA: Record<string, string> = {
+  descuento: 'Descuento comercial',
+  promocion: 'Promoción',
+  oferta:    'Oferta especial',
+  cortesia:  'Cortesía',
+  liquidez:  'Problema de liquidez',
+  otro:      'Otro',
+}
+
+function formatFecha(fecha: string | null | undefined) {
+  if (!fecha) return '—'
+  // Parseo seguro sin desfase de timezone (YYYY-MM-DD → no usar new Date(str) directamente)
+  const [y, m, d] = fecha.split('T')[0].split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+export default async function ClienteDetallePage({
+  params,
+}: {
+  params: Promise<{ client_id: string }>
+}) {
+  const { client_id } = await params
+  const supabase = await createClient()
+
+  const [{ data: cliente }, { data: pagos }, { data: planes }] = await Promise.all([
+    supabase.from('clients').select('*').eq('client_id', client_id).single(),
+    supabase
+      .from('payments')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('fecha_fin_periodo', { ascending: false }),
+    supabase
+      .from('plans')
+      .select('plan_id, nombre, precio_usd, duracion_dias')
+      .eq('estado', 'ACTIVO')
+      .order('precio_usd'),
+  ])
+
+  if (!cliente) notFound()
+
+  const planNombre  = Object.fromEntries((planes ?? []).map(p => [p.plan_id, p.nombre]))
+  const totalPagado = (pagos ?? []).reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
+  const ultimoPago  = pagos?.[0] ?? null
+  const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
+
+  return (
+    <div className="view-container">
+
+      {/* ── Breadcrumb ── */}
+      <nav className="breadcrumb" aria-label="Ruta de navegación">
+        <Link href="/admin/clientes">Clientes</Link>
+        <svg className="breadcrumb-sep" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+        <span className="breadcrumb-current">{cliente.nombre_empresa}</span>
+      </nav>
+
+      {/* ── Header ── */}
+      <div className="detail-header">
+        <div className="detail-header-info">
+          <h1 className="page-title">{cliente.nombre_empresa}</h1>
+          <div className="detail-badges">
+            <span className="badge badge-neutral">
+              {planNombre[cliente.plan_id] ?? cliente.plan_id ?? '—'}
+            </span>
+            <span className={`badge badge-dot ${ESTADO_BADGE[cliente.estado] ?? 'badge-neutral'}`}>
+              {cliente.estado}
+            </span>
+          </div>
+        </div>
+        <EditarClienteModal cliente={{
+          client_id:       cliente.client_id,
+          nombre_empresa:  cliente.nombre_empresa,
+          nombre_contacto: cliente.nombre_contacto,
+          email_admin:     cliente.email_admin,
+          notas:           cliente.notas,
+        }} />
+      </div>
+
+      {/* ── Barra de acciones (Client Component) ── */}
+      <AccionesDetalle
+        cliente={{
+          client_id:        cliente.client_id,
+          nombre_empresa:   cliente.nombre_empresa,
+          estado:           cliente.estado,
+          plan_id:          cliente.plan_id,
+          fecha_expiracion: cliente.fecha_expiracion,
+        }}
+        planes={planes ?? []}
+      />
+
+      {/* ── Banner período especial ── */}
+      {tieneGracia && (
+        <div className="info-banner info-banner-gracia">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <div>
+            <strong>Período especial activo</strong>
+            <span>
+              Motivo: {MOTIVOS_GRACIA[cliente.motivo_gracia] ?? cliente.motivo_gracia}
+              {' · '}Válido hasta: <strong>{formatFecha(cliente.fecha_fin_gracia)}</strong>
+            </span>
+            {cliente.notas_gracia && (
+              <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', display: 'block', marginTop: 4 }}>
+                {cliente.notas_gracia}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Grid de datos ── */}
+      <div className="detail-grid">
+
+        {/* Información del cliente */}
+        <div className="card">
+          <h2 className="detail-section-title">Información del cliente</h2>
+
+          <div className="detail-field">
+            <span className="detail-field-label">Email administrador</span>
+            <span className="detail-field-value">{cliente.email_admin}</span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Nombre de contacto</span>
+            <span className="detail-field-value">{cliente.nombre_contacto || '—'}</span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Plan actual</span>
+            <span className="detail-field-value">
+              {planNombre[cliente.plan_id] ?? cliente.plan_id ?? '—'}
+            </span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Estado</span>
+            <span className="detail-field-value">
+              <span className={`badge badge-dot ${ESTADO_BADGE[cliente.estado] ?? 'badge-neutral'}`}>
+                {cliente.estado}
+              </span>
+            </span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Fecha de alta</span>
+            <span className="detail-field-value">
+              {formatFecha(cliente.fecha_inicio ?? cliente.created_at)}
+            </span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Expiración</span>
+            <span className="detail-field-value">{formatFecha(cliente.fecha_expiracion)}</span>
+          </div>
+          {cliente.notas && (
+            <div className="detail-field">
+              <span className="detail-field-label">Notas internas</span>
+              <span className="detail-field-value">{cliente.notas}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Resumen de pagos */}
+        <div className="card">
+          <h2 className="detail-section-title">Resumen de pagos</h2>
+
+          <div className="detail-field">
+            <span className="detail-field-label">Total pagado</span>
+            <span className="detail-field-value detail-field-value-large">
+              ${totalPagado.toFixed(2)} USD
+            </span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Último pago</span>
+            <span className="detail-field-value">
+              {ultimoPago ? (
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span><strong>${ultimoPago.monto_usd?.toFixed(2)} USD</strong> · {METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo}</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                    Registrado: {formatFecha(ultimoPago.fecha)}
+                  </span>
+                  {ultimoPago.fecha_inicio_periodo && ultimoPago.fecha_fin_periodo && (
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                      Período: {formatFecha(ultimoPago.fecha_inicio_periodo)} → {formatFecha(ultimoPago.fecha_fin_periodo)}
+                    </span>
+                  )}
+                </span>
+              ) : '—'}
+            </span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Método preferido</span>
+            <span className="detail-field-value">
+              {ultimoPago ? (METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo ?? '—') : '—'}
+            </span>
+          </div>
+          <div className="detail-field">
+            <span className="detail-field-label">Número de pagos</span>
+            <span className="detail-field-value">{pagos?.length ?? 0}</span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ── Historial de pagos ── */}
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Historial de pagos</h2>
+          <span className="badge badge-neutral">
+            {pagos?.length ?? 0} pago{pagos?.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {!pagos || pagos.length === 0 ? (
+          <div className="table-empty" style={{ paddingTop: 'var(--space-6)', paddingBottom: 'var(--space-6)' }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            <p>Sin pagos registrados aún.</p>
+          </div>
+        ) : (
+          <div className="table-wrapper" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, marginTop: 0 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Monto</th>
+                  <th>Método</th>
+                  <th>Período cubierto</th>
+                  <th>Plan</th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagos.map(p => (
+                  <tr key={p.pago_id}>
+                    <td className="table-muted">{formatFecha(p.fecha)}</td>
+                    <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
+                    <td>
+                      <span className="badge badge-neutral">
+                        {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
+                      </span>
+                    </td>
+                    <td className="table-muted" style={{ fontSize: 'var(--text-xs)' }}>
+                      {p.fecha_inicio_periodo && p.fecha_fin_periodo
+                        ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
+                        : '—'}
+                    </td>
+                    <td className="table-muted">
+                      {planNombre[p.plan_id] ?? p.plan_id ?? '—'}
+                    </td>
+                    <td className="table-muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--text-xs)' }}>
+                      {p.notas ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+    </div>
+  )
+}
