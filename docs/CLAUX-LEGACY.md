@@ -1,3 +1,7 @@
+> **Aviso:** Especificación original del enfoque mini-ERP genérico. Sigue siendo válida como referencia técnica (design system, esquema de BD, flujos financieros), pero el modelo de producto vigente es el de [docs/CONTEXTO.md](CONTEXTO.md).
+
+---
+
 # CLAUX — Guía Técnica y de Diseño
 **Versión:** 2.0 (Next.js + Supabase) | **Basada en:** Documento Base v1.0 (GAS) + Design System v1.0
 
