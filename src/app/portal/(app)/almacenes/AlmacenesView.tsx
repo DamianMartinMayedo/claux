@@ -252,7 +252,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
   }, [data.almacenes])
 
   return (
-    <div className="view-container" style={{ maxWidth: 1000 }}>
+    <div className="view-container">
 
       {/* ── Cabecera ── */}
       <div className="page-header">

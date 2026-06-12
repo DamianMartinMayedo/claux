@@ -86,7 +86,7 @@ export default function OfertaDetalle({ data, resumen }: Props) {
   }
 
   return (
-    <div className="view-container" style={{ maxWidth: 1000 }}>
+    <div className="view-container">
 
       {/* ── Breadcrumb ── */}
       <div style={{ marginBottom: 12 }}>

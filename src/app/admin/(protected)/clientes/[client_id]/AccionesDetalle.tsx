@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia } from '@/app/actions/clientes'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
 
 const MOTIVOS_GRACIA = [
@@ -101,7 +103,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   const [error, setError]         = useState('')
   const [success, setSuccess]     = useState('')
   const [advertencia, setAdvertencia] = useState('')
-  const [mounted, setMounted]     = useState(false)
+  const mounted = useMounted()
 
   // Gracia
   const [diasGracia, setDiasGracia]         = useState('')
@@ -120,22 +122,14 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   const formPagoRef   = useRef<HTMLFormElement>(null)
   const router        = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
-
-  useEffect(() => {
-    if (!modal) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [modal])
-
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setModal(null); setError(''); setSuccess(''); setAdvertencia('')
     setDiasGracia(''); setFechaCalculada('—')
     setFechaInicio(''); setFechaFin(''); setMontoSugerido('')
     setPlanPago(cliente.plan_id); setPlanDuracionDias(30); setUltimoPago(null)
-  }
+  }, [cliente.plan_id])
+
+  useModalKeyboard(!!modal, handleClose)
 
   function onDiasChange(val: string) {
     setDiasGracia(val)

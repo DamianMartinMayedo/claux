@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { logoutCliente } from '@/app/actions/portal/auth'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 
 type Rol = 'admin_empresa' | 'usuario'
 
@@ -72,14 +73,20 @@ interface Props {
 export default function PortalSidebar({ rol, modulosActivos }: Props) {
   const pathname     = usePathname()
   const [pending, startTransition] = useTransition()
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   function handleLogout() {
+    setShowLogoutDialog(true)
+  }
+
+  function confirmLogout() {
     startTransition(() => { logoutCliente() })
   }
 
   const nav = buildNav(rol, modulosActivos)
 
   return (
+    <>
     <aside className="portal-sidebar">
       <nav className="flex-1">
         {nav.map(group => (
@@ -121,6 +128,18 @@ export default function PortalSidebar({ rol, modulosActivos }: Props) {
         </button>
       </div>
     </aside>
+
+    {showLogoutDialog && (
+      <ConfirmDialog
+        title="Cerrar sesión"
+        body="¿Estás seguro de que deseas cerrar sesión?"
+        confirmLabel="Cerrar sesión"
+        danger
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutDialog(false)}
+      />
+    )}
+  </>
   )
 }
 

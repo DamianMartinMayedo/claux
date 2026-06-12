@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarPago } from '@/app/actions/pagos'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Pago = {
   pago_id: string; client_id: string; plan_id: string | null
@@ -40,7 +42,7 @@ export default function EditarPagoModal({
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
   const [success, setSuccess] = useState('')
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
 
   const [monto, setMonto]         = useState(String(pago.monto_usd))
   const [metodo, setMetodo]       = useState(pago.metodo)
@@ -52,15 +54,11 @@ export default function EditarPagoModal({
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
+  const handleClose = useCallback(() => {
+    setOpen(false); setError(''); setSuccess('')
+  }, [])
 
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [open])
+  useModalKeyboard(open, handleClose)
 
   function handleOpen() {
     // Resetear a valores actuales del pago
@@ -72,10 +70,6 @@ export default function EditarPagoModal({
     setNotas(pago.notas ?? '')
     setError(''); setSuccess('')
     setOpen(true)
-  }
-
-  function handleClose() {
-    setOpen(false); setError(''); setSuccess('')
   }
 
   async function handleSubmit(e: React.FormEvent) {

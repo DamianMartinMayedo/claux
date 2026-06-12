@@ -92,7 +92,9 @@ export async function actualizarPlan(formData: FormData) {
   const dias_trial   = parseInt(formData.get('dias_trial') as string)
   const max_empresas = parseInt(formData.get('max_empresas') as string)
   const max_usuarios = parseInt(formData.get('max_usuarios') as string)
-  const modulos      = (formData.getAll('modulos') as string[]).join(',')
+  // Guardar como ARRAY (igual que crearPlan); el portal espera array. Antes se guardaba
+  // CSV aquí y rompía el gating al editar un plan. Ver docs/MODELO-MODULOS.md §9 D1.
+  const modulos      = formData.getAll('modulos') as string[]
   const estado       = formData.get('estado') as string
   const visible      = formData.get('visible') === 'true'
   const descripcion  = ((formData.get('descripcion') as string) ?? '').trim() || null

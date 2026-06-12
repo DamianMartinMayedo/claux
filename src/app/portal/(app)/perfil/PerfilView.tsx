@@ -69,7 +69,7 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
   }
 
   return (
-    <div className="view-container" style={{ maxWidth: 780 }}>
+    <div className="view-container">
 
       {/* ── Cabecera ── */}
       <div className="page-header">

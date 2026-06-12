@@ -97,7 +97,7 @@ export default function FacturaDetalle({ data, resumen }: Props) {
   }
 
   return (
-    <div className="view-container" style={{ maxWidth: 1000 }}>
+    <div className="view-container">
 
       <div style={{ marginBottom: 12 }}>
         <Link href="/portal/ventas" style={{

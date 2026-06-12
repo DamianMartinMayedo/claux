@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarCliente } from '@/app/actions/clientes'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Props = {
   cliente: {
@@ -19,24 +21,13 @@ export default function EditarClienteModal({ cliente }: Props) {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
+  const handleClose = useCallback(() => { setOpen(false); setError('') }, [])
 
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = ''
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  function handleClose() { setOpen(false); setError('') }
+  useModalKeyboard(open, handleClose)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { eliminarPago } from '@/app/actions/pagos'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 export default function EliminarPagoBtn({
   pagoId,
@@ -15,20 +17,12 @@ export default function EliminarPagoBtn({
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
   const router = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
+  const handleClose = useCallback(() => { setOpen(false); setError('') }, [])
 
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [open])
-
-  function handleClose() { setOpen(false); setError('') }
+  useModalKeyboard(open, handleClose)
 
   async function handleConfirm() {
     setLoading(true); setError('')

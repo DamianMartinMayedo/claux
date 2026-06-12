@@ -15,17 +15,7 @@ import {
   type TipoProducto,
   type ProductosPageData,
 } from '@/app/actions/portal/productos'
-import {
-  ProductoFormModal,
-  MONEDAS_FALLBACK,
-  UNIDADES_GRUPOS,
-  TODAS_UNIDADES,
-  PreciosCostosEditor,
-  UnidadSelect,
-  rowsToObj,
-  objToRows,
-  type PrecioRow,
-} from './_ProductoFormModal'
+import { ProductoFormModal } from './_ProductoFormModal'
 
 // ── Estilos inline reutilizables ──────────────────────────────────────────────
 
@@ -357,7 +347,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   }
 
   return (
-    <div className="view-container" style={{ maxWidth: 1100 }}>
+    <div className="view-container">
 
       {/* ── Cabecera ── */}
       <div className="page-header">
@@ -456,13 +446,18 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                     {productosFiltrados.map(p => {
                       const stockBajo = p.tipo === 'PRODUCTO' && p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo
                       return (
-                        <tr key={p.producto_id} className={p.estado === 'INACTIVO' ? 'ter-row-archivada' : ''}>
+                        <tr
+                          key={p.producto_id}
+                          className={`table-row-clickable${p.estado === 'INACTIVO' ? ' ter-row-archivada' : ''}`}
+                          onClick={() => router.push(`/portal/productos/${p.producto_id}`)}
+                        >
 
                           {/* Nombre — con enlace al detalle */}
                           <td>
                             <Link
                               href={`/portal/productos/${p.producto_id}`}
                               style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}
+                              onClick={(e) => e.stopPropagation()}
                             >
                               {p.nombre}
                             </Link>
@@ -531,7 +526,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
                           {/* Acciones */}
                           <td>
-                            <div className="ter-actions">
+                            <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
                               {p.estado === 'ACTIVO' ? (
                                 <>
                                   {p.tipo === 'PRODUCTO' && (

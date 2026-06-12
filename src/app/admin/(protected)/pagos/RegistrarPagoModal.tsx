@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Cliente = { client_id: string; nombre_empresa: string; plan_id: string }
 type Plan    = { plan_id: string; nombre: string; precio_usd: number; duracion_dias: number }
@@ -75,7 +77,7 @@ export default function RegistrarPagoModal({
   const [error, setError]             = useState('')
   const [success, setSuccess]         = useState('')
   const [advertencia, setAdvertencia] = useState('')
-  const [mounted, setMounted]         = useState(false)
+  const mounted = useMounted()
 
   const [clienteId, setClienteId]         = useState(preselectedClientId ?? '')
   const [montoSugerido, setMontoSugerido] = useState('')
@@ -88,16 +90,6 @@ export default function RegistrarPagoModal({
 
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
-
-  useEffect(() => { setMounted(true) }, [])
-
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [open])
 
   async function cargarDefecto(id: string) {
     if (!id) return
@@ -163,12 +155,14 @@ export default function RegistrarPagoModal({
     if (preselectedClientId) cargarDefecto(preselectedClientId)
   }
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setOpen(false); setError(''); setSuccess(''); setAdvertencia('')
     setMontoSugerido(''); setFechaInicio(''); setFechaFin('')
     setPlanId(''); setFechaExpActual(null); setUltimoPago(null)
     setClienteId(preselectedClientId ?? '')
-  }
+  }, [preselectedClientId])
+
+  useModalKeyboard(open, handleClose)
 
   // ── Alertas calculadas ───────────────────────────────────────────────
   const alertaInicioTemprano = (fechaInicio && fechaExpActual && fechaInicio < fechaExpActual)

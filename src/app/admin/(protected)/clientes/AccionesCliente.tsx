@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { cambiarPlan, cambiarEstadoCliente, aplicarGracia } from '@/app/actions/clientes'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Plan = { plan_id: string; nombre: string; nivel: string; precio_usd: number }
 
@@ -21,21 +23,12 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
   const [success, setSuccess] = useState('')
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
-
-  useEffect(() => {
-    if (!modal) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [modal])
-
-  function handleClose() { setModal(null); setError(''); setSuccess('') }
+  const handleClose = useCallback(() => { setModal(null); setError(''); setSuccess('') }, [])
+  useModalKeyboard(!!modal, handleClose)
 
   async function handleSubmit(action: (fd: FormData) => Promise<{ ok: boolean; error?: string }>) {
     setError('')

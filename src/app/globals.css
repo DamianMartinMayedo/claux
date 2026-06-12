@@ -11,6 +11,7 @@
   --color-primary-dark:      #008C88;   /* alias legacy */
   --color-primary-highlight: #C8ECEA;
   --color-primary-subtle:    #E9F9F8;
+  --color-primary-text:      #00716D;   /* teal accesible para TEXTO sobre fondo claro (≥4.5:1) */
 
   /* ── Secundario — Ámbar Caribe ── */
   --color-amber:             #C97A0C;
@@ -28,12 +29,12 @@
   --color-surface-offset:   #EEEDE8;
   --color-surface-offset-2: #E7E6E0;
   --color-surface-dynamic:  #DDDBD4;
-  --color-divider:          #D5D3CC;
+  --color-divider:          #C7C5BC;
 
   /* ── Texto (carbón cálido) ── */
   --color-text:         #1C1B16;
-  --color-text-muted:   #6A6960;
-  --color-text-faint:   #AEADA6;
+  --color-text-muted:   #5C5B52;   /* secundario, más nítido (~6:1) */
+  --color-text-faint:   #76746A;   /* terciario accesible (~4.3:1; antes #AEADA6 fallaba 2:1) */
   --color-text-inv:     #F8F7F2;   /* texto sobre fondos oscuros */
 
   /* ── Estados funcionales ── */
@@ -41,13 +42,14 @@
   --color-success-bg:   #E8F5E9;
   --color-error:        #B71C1C;
   --color-error-bg:     #FFEBEE;
-  --color-warning:      #C97A0C;
+  --color-warning:      #A86208;   /* texto de warning legible sobre claro y sobre warning-bg */
   --color-warning-bg:   #FEF3C7;
-  --color-info:         #00AFAA;
+  --color-info:         #00716D;   /* teal de texto/icono en badges (sobre info-bg, accesible) */
   --color-info-bg:      #E0F7F6;
 
   /* ── Bordes ── */
-  --color-border:       #E8E7E2;
+  --color-border:       #D9D7D0;   /* más definido (antes #E8E7E2 casi invisible) */
+  --color-border-strong:#B8B5AC;   /* hover de bordes — más oscuro que --color-border */
   --color-border-focus: #00AFAA;
 
   --space-1:  0.25rem;  --space-2:  0.5rem;   --space-3:  0.75rem;
@@ -72,7 +74,7 @@
   --font-display: 'Cabinet Grotesk', system-ui, sans-serif;
   --font-body:    'Satoshi', system-ui, sans-serif;
 
-  --text-xs:   0.75rem;   --text-sm:   0.875rem;  --text-base: 1rem;
+  --text-xs:   0.8125rem; --text-sm:   0.9375rem; --text-base: 1rem;   /* xs 13px · sm 15px (subida moderada) */
   --text-lg:   1.125rem;  --text-xl:   1.25rem;   --text-2xl:  1.5rem;
   --text-3xl:  1.875rem;  --text-4xl:  2.25rem;
 
@@ -88,15 +90,16 @@
     --color-primary-dark:      #00AFAA;
     --color-primary-highlight: #0D3533;
     --color-primary-subtle:    #091F1E;
+    --color-primary-text:      #3FD4CF;   /* en dark el teal claro ya pasa como texto (~10:1) */
     --color-bg:                #131210;
     --color-surface:           #181714;
     --color-surface-2:         #1E1D1A;
     --color-surface-offset:    #252420;
     --color-surface-offset-2:  #2A2925;
-    --color-divider:           #302E2A;
+    --color-divider:           #3A3833;
     --color-text:              #F5F4EF;
-    --color-text-muted:        #9A9890;
-    --color-text-faint:        #6A6960;
+    --color-text-muted:        #A8A69C;
+    --color-text-faint:        #8E8C82;   /* legible en dark (antes #6A6960 ~3.2:1) */
     --color-text-inv:          #1C1B16;
     --color-success:           #66BB6A;
     --color-success-bg:        #0D2B0F;
@@ -106,7 +109,8 @@
     --color-warning-bg:        #2D1E04;
     --color-info:              #3FD4CF;
     --color-info-bg:           #0A2625;
-    --color-border:            #2A2924;
+    --color-border:            #34322D;   /* bordes más definidos en dark */
+    --color-border-strong:     #504D45;   /* hover de bordes en dark */
     --color-border-focus:      #3FD4CF;
     --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
     --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
@@ -133,8 +137,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; line-height: 1.2; color: var(--color-text); }
-a { color: var(--color-primary); text-decoration: none; transition: color var(--transition); }
-a:hover { color: var(--color-primary-dark); }
+a { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
+a:hover { color: var(--color-primary-hover); }
 img, svg { display: block; }
 ul, ol { list-style: none; }
 button { cursor: pointer; font-family: inherit; }
@@ -317,8 +321,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin-bottom: var(--space-8);
   flex-wrap: wrap;
 }
-.page-title { font-size: var(--text-2xl); font-weight: 800; }
-.page-subtitle { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-1); }
+.page-title { font-size: var(--text-3xl); font-weight: 800; }
+.page-subtitle { font-size: var(--text-lg); color: var(--color-text-muted); margin-top: var(--space-1); }
 
 /* ═══════════════════════════════════════════════════
    BOTONES
@@ -422,20 +426,26 @@ textarea.input { resize: vertical; min-height: 80px; }
 
 /* ── Table cell utilities ── */
 .table-muted { color: var(--color-text-muted); }
-.table-code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: var(--text-xs); font-weight: 700; color: var(--color-primary); }
+.table-code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: var(--text-xs); font-weight: 700; color: var(--color-primary-text); }
 .table-code-muted { font-family: 'SF Mono', 'Fira Code', monospace; font-size: var(--text-xs); font-weight: 700; color: var(--color-text-muted); }
 .table-empresa { font-weight: 600; }
 .table-empresa-contact { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
 .table-empresa-link {
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration: none;
   transition: color var(--transition);
   display: block;
 }
 .table-empresa-link:hover { color: var(--color-primary-hover); text-decoration: underline; }
+/* ═══════════════════════════════════════════════════
+   FILAS CLICKEABLES
+   ═══════════════════════════════════════════════════ */
+/* Patrón: añadir className="table-row-clickable" + onClick con router.push al <tr>.
+   Las celdas con botones/acciones requieren onClick={(e) => e.stopPropagation()}
+   en el contenedor de los botones. El Link del nombre también lleva stopPropagation. */
 .table-row-clickable { cursor: pointer; transition: background var(--transition); }
-.table-row-clickable:hover { background: var(--color-surface-offset); }
+.table-row-clickable:hover { background: var(--color-surface-2); }
 .table-price { font-weight: 700; }
 .table-actions-right { text-align: right; white-space: nowrap; padding-right: var(--space-3) !important; }
 .table-actions-group { display: inline-flex; align-items: center; gap: var(--space-2); }
@@ -449,6 +459,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 .btn-icon:hover { background: var(--color-surface-offset); color: var(--color-text); border-color: var(--color-border-strong); }
 .btn-icon-danger:hover  { background: var(--color-error-bg);   color: var(--color-error);   border-color: var(--color-error); }
 .btn-icon-success       { background: var(--color-success-bg); color: var(--color-success); border-color: var(--color-success); }
+.btn-icon-success:hover { background: var(--color-success); color: #fff; border-color: var(--color-success); }
 
 /* ═══════════════════════════════════════════════════
    FILTROS / BÚSQUEDA
@@ -490,7 +501,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 .card-table > .table-wrapper,
 .card-table .mon-card-header + .table-wrapper { border: none; box-shadow: none; border-radius: 0; }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
-.card-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; }
+.card-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; }
 .card-body { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 
 /* ═══════════════════════════════════════════════════
@@ -602,14 +613,14 @@ textarea.input { resize: vertical; min-height: 80px; }
 /* ── Planes: filas expandibles ── */
 .plan-row-expandable {
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--transition);
 }
 .plan-row-expandable:hover {
   background: var(--color-surface-2) !important;
 }
 .plan-expand-chevron {
   color: var(--color-text-muted);
-  transition: transform 0.18s ease;
+  transition: transform var(--transition);
   flex-shrink: 0;
 }
 .plan-expand-chevron.expanded {
@@ -1436,7 +1447,7 @@ textarea:focus-visible {
 }
 .pv-ver-todos {
   font-size: var(--text-xs);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration: none;
   font-weight: 500;
   transition: color var(--transition);
@@ -1569,8 +1580,8 @@ textarea:focus-visible {
   cursor: pointer;
   border: 1px solid var(--color-border);
   background: transparent;
-  color: var(--color-text-secondary);
-  transition: all 0.12s ease;
+  color: var(--color-text-muted);
+  transition: all var(--transition);
 }
 .actividad-pill:hover {
   background: var(--color-surface-offset);
@@ -1924,7 +1935,7 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--color-border);
 }
 .mon-section-title {
-  font-size: var(--text-base);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -2309,7 +2320,7 @@ textarea:focus-visible {
   width: 100%; padding: 7px 10px 7px 34px;
   border: 1px solid var(--color-border); border-radius: var(--radius-md);
   background: var(--color-surface); color: var(--color-text);
-  font-size: var(--text-sm); outline: none; transition: border-color .15s;
+  font-size: var(--text-sm); outline: none; transition: border-color var(--transition);
 }
 .ter-search:focus { border-color: var(--color-primary); }
 .ter-search::placeholder { color: var(--color-text-muted); }
@@ -2354,12 +2365,12 @@ textarea:focus-visible {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px;
   border: none; border-radius: var(--radius-md); background: transparent;
-  color: var(--color-text-muted); cursor: pointer; transition: background .15s, color .15s;
+  color: var(--color-text-muted); cursor: pointer; transition: background var(--transition), color var(--transition);
   text-decoration: none;
 }
 .ter-action-btn:hover                     { background: var(--color-surface-2); color: var(--color-text); }
-.ter-action-btn.ter-action-danger:hover   { background: #fef2f2; color: var(--color-error); }
-.ter-action-btn.ter-action-restore:hover  { background: #f0fdf4; color: var(--color-success); }
+.ter-action-btn.ter-action-danger:hover   { background: var(--color-error-bg); color: var(--color-error); }
+.ter-action-btn.ter-action-restore:hover  { background: var(--color-success-bg); color: var(--color-success); }
 
 /* ── Modal base ───────────────────────────────────────────────────────────── */
 .modal-lg { max-width: 800px; }
@@ -2369,7 +2380,7 @@ textarea:focus-visible {
 .ter-form-section { margin-bottom: var(--space-5); }
 .ter-form-section:last-child { margin-bottom: 0; }
 .ter-form-section-title {
-  display: block; font-size: var(--text-xs); font-weight: 700;
+  display: block; font-size: var(--text-base); font-weight: 700;
   text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-muted);
   margin-bottom: var(--space-3); padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--color-border);
@@ -2413,9 +2424,9 @@ textarea:focus-visible {
   padding: 4px 14px; border: 1px solid var(--color-border);
   border-radius: var(--radius-full); background: var(--color-surface);
   color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600;
-  cursor: pointer; white-space: nowrap; transition: all .15s;
+  cursor: pointer; white-space: nowrap; transition: all var(--transition);
 }
-.via-pago-swap-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-surface); }
+.via-pago-swap-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-info-bg); }
 
 /* Contrato link en modal — v2 */
 .ter-contrato-link {
@@ -2425,9 +2436,6 @@ textarea:focus-visible {
 }
 .ter-contrato-link:hover { text-decoration: underline; }
 
-/* Botón danger */
-.btn-danger { background: var(--color-error); color: #fff; border-color: var(--color-error); }
-.btn-danger:hover:not(:disabled) { opacity: .88; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    MÓDULO PRODUCTOS
@@ -2446,7 +2454,7 @@ textarea:focus-visible {
   font-size: var(--text-sm); font-weight: 600;
   color: var(--color-text-muted); cursor: pointer;
   border-bottom: 2px solid transparent; margin-bottom: -2px;
-  transition: color .15s, border-color .15s;
+  transition: color var(--transition), border-color var(--transition);
 }
 .prd-tab:hover   { color: var(--color-text); }
 .prd-tab.active  { color: var(--color-primary); border-bottom-color: var(--color-primary); }
@@ -2455,7 +2463,7 @@ textarea:focus-visible {
   background: var(--color-surface-2); color: var(--color-text-muted);
   border-radius: var(--radius-full); padding: 1px 7px;
 }
-.prd-tab.active .prd-tab-count { background: var(--color-primary-light, #e0f5f4); color: var(--color-primary); }
+.prd-tab.active .prd-tab-count { background: var(--color-info-bg); color: var(--color-primary); }
 
 /* ── Tipo selector ────────────────────────────────────────────────────────── */
 .prd-tipo-selector {
@@ -2467,10 +2475,10 @@ textarea:focus-visible {
   border: 2px solid var(--color-border); border-radius: var(--radius-lg);
   background: var(--color-surface); cursor: pointer;
   color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 600;
-  transition: all .15s; flex: 1; text-align: left;
+  transition: all var(--transition); flex: 1; text-align: left;
 }
-.prd-tipo-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-.prd-tipo-btn.active               { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light, #e0f5f4); }
+.prd-tipo-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-info-bg); }
+.prd-tipo-btn.active               { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-info-bg); }
 .prd-tipo-btn:disabled             { opacity: .6; cursor: default; }
 .prd-tipo-btn-text {
   display: flex; flex-direction: column; gap: 2px;
@@ -2484,7 +2492,7 @@ textarea:focus-visible {
 .prd-form-section { margin-bottom: var(--space-5); }
 .prd-form-section:last-child { margin-bottom: 0; }
 .prd-form-section-title {
-  display: block; font-size: var(--text-xs); font-weight: 700;
+  display: block; font-size: var(--text-base); font-weight: 700;
   text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-muted);
   margin-bottom: var(--space-3); padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--color-border);
@@ -2522,9 +2530,9 @@ textarea:focus-visible {
 .prd-precios-add {
   font-size: var(--text-xs); font-weight: 700; color: var(--color-primary);
   background: none; border: none; cursor: pointer; padding: 2px 6px;
-  border-radius: var(--radius-sm); transition: background .15s;
+  border-radius: var(--radius-sm); transition: background var(--transition);
 }
-.prd-precios-add:hover { background: var(--color-primary-light, #e0f5f4); }
+.prd-precios-add:hover { background: var(--color-info-bg); }
 .prd-precios-empty {
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-xs); color: var(--color-text-muted); margin: 0;
@@ -2541,10 +2549,10 @@ textarea:focus-visible {
   width: 24px; height: 24px; flex-shrink: 0;
   border: none; background: none; cursor: pointer;
   color: var(--color-text-muted); font-size: 18px; line-height: 1;
-  border-radius: var(--radius-sm); transition: background .15s, color .15s;
+  border-radius: var(--radius-sm); transition: background var(--transition), color var(--transition);
   display: flex; align-items: center; justify-content: center;
 }
-.prd-precio-remove:hover { background: #fef2f2; color: var(--color-error); }
+.prd-precio-remove:hover { background: var(--color-error-bg); color: var(--color-error); }
 
 /* ── Tabla: células ───────────────────────────────────────────────────────── */
 .prd-codigo {
@@ -2628,7 +2636,7 @@ textarea:focus-visible {
   color: var(--color-text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color .15s, border-color .15s;
+  transition: color var(--transition), border-color var(--transition);
 }
 .ven-tab:hover { color: var(--color-text); }
 .ven-tab.active {
@@ -2658,7 +2666,7 @@ textarea:focus-visible {
 .ven-form-section:last-child { margin-bottom: 0; }
 .ven-form-section-title {
   display: block;
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  font-size: var(--text-base); font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: var(--color-text-muted);
   margin-bottom: var(--space-4);
   padding-bottom: var(--space-3);
@@ -2833,7 +2841,7 @@ textarea:focus-visible {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  transition: box-shadow 0.15s;
+  transition: box-shadow var(--transition);
 }
 .ven-info-card:first-child {
   border-top: 3px solid var(--color-primary);
@@ -2893,7 +2901,13 @@ textarea:focus-visible {
 }
 
 /* ── Tabla rows ───────────────────────────────────────────────────────────── */
-.ven-tr-clickable:hover { background: var(--color-surface-2); }
+/* Fila clickable: navega al detalle al pulsar cualquier celda.
+   Dentro de la fila, los botones/acciones deben llevar onClick={(e) => e.stopPropagation()}.
+   El Link del nombre también lleva stopPropagation para evitar doble navegación. */
+.ven-tr-clickable,
+.table-row-clickable { cursor: pointer; transition: background var(--transition); }
+.ven-tr-clickable:hover,
+.table-row-clickable:hover { background: var(--color-surface-2); }
 .ven-link-numero {
   color: var(--color-primary);
   font-weight: 600;

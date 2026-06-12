@@ -23,6 +23,16 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 > - **Tailwind solo es reset**: prohibido usar clases utilitarias de Tailwind en el markup.
 > - Especificación visual completa (valores de tokens): `docs/CLAUX-LEGACY.md` §8.
 
+> ## ⚠️ REGLA DE TABLAS — FILAS SIEMPRE CLICKEABLES
+>
+> Toda tabla con página de detalle debe tener las filas clickables (navegar al detalle al pulsar cualquier celda).
+>
+> - Clase CSS canónica: **`table-row-clickable`** (definida en `globals.css` ~línea 441, con cursor:pointer + hover).
+> - Cada `<tr>` lleva `className="table-row-clickable"` + `onClick={() => router.push(...)}`.
+> - Las celdas con botones/acciones deben llevar **stopPropagation** en el contenedor: `<div className="ter-actions" onClick={(e) => e.stopPropagation()}>`.
+> - El `<Link>` del nombre también lleva `onClick={(e) => e.stopPropagation()}` para evitar doble navegación.
+> - Referencia de implementación: `TercerosView.tsx` (con botones) o `VentasView.tsx` (sin botones).
+
 ## Qué leer según la tarea (no sobre-leas)
 
 | Tu tarea toca… | Lee (además de CONTEXTO.md) |

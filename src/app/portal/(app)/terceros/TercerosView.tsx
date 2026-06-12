@@ -141,7 +141,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   const archivados = data.terceros.filter(t => !t.activo).length
 
   return (
-    <div className="view-container" style={{ maxWidth: 1100 }}>
+    <div className="view-container">
 
       {/* ── Cabecera ── */}
       <div className="page-header">
@@ -225,7 +225,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
               </thead>
               <tbody>
                 {tercerosFiltrados.map(t => (
-                  <tr key={t.tercero_id} className={!t.activo ? 'ter-row-archivada' : ''}>
+                  <tr
+                    key={t.tercero_id}
+                    className={`table-row-clickable${!t.activo ? ' ter-row-archivada' : ''}`}
+                    onClick={() => router.push(`/portal/terceros/${t.tercero_id}`)}
+                  >
 
                     {/* Nombre / ID */}
                     <td>
@@ -233,6 +237,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                         href={`/portal/terceros/${t.tercero_id}`}
                         className="ter-nombre"
                         style={{ textDecoration: 'none', color: 'inherit' }}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {t.nombre}
                       </Link>
@@ -288,7 +293,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
 
                     {/* Acciones */}
                     <td>
-                      <div className="ter-actions">
+                      <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
                         {/* Contrato */}
                         {t.contrato_url && (
                           <a

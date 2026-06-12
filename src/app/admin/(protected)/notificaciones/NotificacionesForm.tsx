@@ -37,7 +37,7 @@ export default function NotificacionesForm({ diasAviso }: { diasAviso: number })
           </div>
           <div>
             <p className="notif-section-title">Alertas del dashboard</p>
-            <p className="notif-section-sub">Controla cuándo aparecen los clientes en la métrica "Próximos a vencer"</p>
+            <p className="notif-section-sub">Controla cuándo aparecen los clientes en la métrica «Próximos a vencer»</p>
           </div>
         </div>
 

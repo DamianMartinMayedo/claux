@@ -196,10 +196,12 @@ function ParModal({
   const [fuente, setFuente]  = useState<Par['fuente']>(par.fuente)
   const [tasa,   setTasa]    = useState(par.tasa?.toString() ?? '')
 
-  // Si la fuente cambia a auto, limpiar tasa manual
-  useEffect(() => {
-    if (fuente !== 'MANUAL') setTasa('')
-  }, [fuente])
+  // Si la fuente cambia a auto, limpiar la tasa manual (en el propio handler,
+  // sin setState dentro de un efecto → evita renders en cascada).
+  function cambiarFuente(nueva: Par['fuente']) {
+    setFuente(nueva)
+    if (nueva !== 'MANUAL') setTasa('')
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -238,7 +240,7 @@ function ParModal({
 
             <div className="input-group">
               <label>Fuente de la tasa</label>
-              <select className="input" value={fuente} onChange={e => setFuente(e.target.value as Par['fuente'])}>
+              <select className="input" value={fuente} onChange={e => cambiarFuente(e.target.value as Par['fuente'])}>
                 <option value="EL_TOQUE">El Toque — tasas informales CUP</option>
                 <option value="FRANKFURTER">Frankfurter — mercado internacional</option>
                 <option value="MANUAL">Manual — ingreso directo</option>

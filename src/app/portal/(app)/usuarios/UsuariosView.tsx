@@ -419,7 +419,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
 
           <div className="card" style={{ padding: 'var(--space-5) var(--space-6)' }}>
             <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 700, marginBottom: 'var(--space-3)' }}>
-              Flag "Solo lectura"
+              Flag «Solo lectura»
             </h3>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
               Se puede activar en cualquier rol. Un usuario con solo lectura puede navegar por todos los módulos

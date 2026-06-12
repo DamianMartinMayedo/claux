@@ -1,30 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { actualizarPlan } from '@/app/actions/planes'
-
-const DURACION_MODALIDAD: Record<string, number> = {
-  mensual: 30, trimestral: 90, semestral: 180, anual: 365,
-}
-
-const MODULOS = [
-  { id: 'ventas',               label: 'Ventas' },
-  { id: 'compras',              label: 'Compras' },
-  { id: 'tesoreria',            label: 'Tesorería' },
-  { id: 'terceros',             label: 'Clientes / Proveedores' },
-  { id: 'contabilidad_simple',  label: 'Contabilidad Simple' },
-  { id: 'modulo_contable',      label: 'Módulo Contable' },
-  { id: 'inventario',           label: 'Inventario' },
-  { id: 'rrhh',                 label: 'RR.HH.' },
-  { id: 'gestion_documental',   label: 'Gestión Documental' },
-  { id: 'rol_contador_externo', label: 'Contador Externo' },
-  { id: 'multiempresa',         label: 'Multiempresa' },
-  { id: 'presupuestos',         label: 'Presupuestos' },
-  { id: 'crm',                  label: 'CRM' },
-  { id: 'activos_fijos',        label: 'Activos Fijos' },
-]
+import { MODULOS, DURACION_MODALIDAD } from '@/lib/planes-constants'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Plan = {
   plan_id: string; nombre: string; nivel: string; modalidad: string
@@ -38,7 +20,7 @@ export default function EditarPlanModal({ plan }: { plan: Plan }) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [success, setSuccess] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
   const formRef     = useRef<HTMLFormElement>(null)
   const duracionRef = useRef<HTMLInputElement>(null)
   const router      = useRouter()
@@ -47,15 +29,9 @@ export default function EditarPlanModal({ plan }: { plan: Plan }) {
     ? plan.modulos.filter(Boolean)
     : (plan.modulos ?? '').split(',').map(m => m.trim()).filter(Boolean)
 
-  useEffect(() => { setMounted(true) }, [])
+  const handleClose = useCallback(() => { setOpen(false); setError(''); setSuccess(false) }, [])
 
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [open])
+  useModalKeyboard(open, handleClose)
 
   function onModalidadChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const sugerido = DURACION_MODALIDAD[e.target.value]
@@ -72,8 +48,6 @@ export default function EditarPlanModal({ plan }: { plan: Plan }) {
     setSuccess(true)
     setTimeout(() => { setOpen(false); setSuccess(false); router.refresh() }, 1200)
   }
-
-  function handleClose() { setOpen(false); setError(''); setSuccess(false) }
 
   const modal = (
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>

@@ -419,7 +419,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   const esCliente   = tercero.tipo === 'CLIENTE'   || tercero.tipo === 'AMBOS'
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px' }}>
+    <div className="view-container">
 
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: '#64748b' }}>

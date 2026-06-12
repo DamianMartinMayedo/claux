@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import Link                   from 'next/link'
+import { useRouter }            from 'next/navigation'
+import Link                     from 'next/link'
 import {
   ESTADO_OFERTA_LABEL,
   ESTADO_OFERTA_STYLE,
@@ -204,6 +205,7 @@ function TablaOfertas({
   clienteNombres: Record<string, string>
   mostrarEmpresa: boolean
 }) {
+  const router = useRouter()
   return (
     <div className="table-wrapper">
       <table className="table">
@@ -219,9 +221,9 @@ function TablaOfertas({
         </thead>
         <tbody>
           {ofertas.map(o => (
-            <tr key={o.oferta_id} className="ven-tr-clickable">
+            <tr key={o.oferta_id} className="table-row-clickable" onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}>
               <td>
-                <Link href={`/portal/ventas/ofertas/${o.oferta_id}`} className="ven-link-numero">
+                <Link href={`/portal/ventas/ofertas/${o.oferta_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {o.numero}
                 </Link>
               </td>
@@ -256,6 +258,7 @@ function TablaFacturas({
   clienteNombres: Record<string, string>
   mostrarEmpresa: boolean
 }) {
+  const router = useRouter()
   return (
     <div className="table-wrapper">
       <table className="table">
@@ -272,9 +275,9 @@ function TablaFacturas({
         </thead>
         <tbody>
           {facturas.map(f => (
-            <tr key={f.factura_id} className="ven-tr-clickable">
+            <tr key={f.factura_id} className="table-row-clickable" onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}>
               <td>
-                <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ven-link-numero">
+                <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {f.numero}
                 </Link>
               </td>

@@ -59,7 +59,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
     ['VENCIDO', 'SUSPENDIDO'].includes(data.estado)       ? 'prf-badge-vencido'  : ''
 
   return (
-    <div className="view-container" style={{ maxWidth: 860 }}>
+    <div className="view-container">
 
       {/* ── Cabecera ── */}
       <div className="page-header">

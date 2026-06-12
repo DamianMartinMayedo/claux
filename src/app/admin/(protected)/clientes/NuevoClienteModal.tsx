@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearCliente } from '@/app/actions/clientes'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Plan = { plan_id: string; nombre: string; nivel: string; precio_usd: number }
 
@@ -12,22 +14,20 @@ export default function NuevoClienteModal({ planes }: { planes: Plan[] }) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string } | null>(null)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
-
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = ''
-      window.removeEventListener('keydown', onKey)
+  const handleClose = useCallback(() => {
+    setOpen(false)
+    setError('')
+    if (resultado) {
+      setResultado(null)
+      router.refresh()
     }
-  }, [open])
+  }, [resultado, router])
+
+  useModalKeyboard(open, handleClose)
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault()
@@ -38,15 +38,6 @@ export default function NuevoClienteModal({ planes }: { planes: Plan[] }) {
     if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
     setResultado({ client_id: res.client_id!, passwordTemporal: res.passwordTemporal! })
     formRef.current?.reset()
-  }
-
-  function handleClose() {
-    setOpen(false)
-    setError('')
-    if (resultado) {
-      setResultado(null)
-      router.refresh()
-    }
   }
 
   const modal = (

@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearPlan } from '@/app/actions/planes'
+import { MODULOS as MODULOS_DEF } from '@/lib/planes-constants'
+import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { useMounted } from '@/lib/use-mounted'
 
 type Plan = {
   plan_id: string; nombre: string; descripcion: string | null
@@ -13,23 +16,6 @@ type Plan = {
   modulos: string | string[] | null
   estado: string; visible: boolean
 }
-
-const MODULOS_DEF = [
-  { id: 'ventas',               label: 'Ventas' },
-  { id: 'compras',              label: 'Compras' },
-  { id: 'tesoreria',            label: 'Tesorería' },
-  { id: 'terceros',             label: 'Clientes / Proveedores' },
-  { id: 'contabilidad_simple',  label: 'Contabilidad Simple' },
-  { id: 'modulo_contable',      label: 'Módulo Contable' },
-  { id: 'inventario',           label: 'Inventario' },
-  { id: 'rrhh',                 label: 'RR.HH.' },
-  { id: 'gestion_documental',   label: 'Gestión Documental' },
-  { id: 'rol_contador_externo', label: 'Contador Externo' },
-  { id: 'multiempresa',         label: 'Multiempresa' },
-  { id: 'presupuestos',         label: 'Presupuestos' },
-  { id: 'crm',                  label: 'CRM' },
-  { id: 'activos_fijos',        label: 'Activos Fijos' },
-]
 
 function parseModulos(raw: string | string[] | null): string[] {
   if (!raw) return []
@@ -42,7 +28,7 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [success, setSuccess] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useMounted()
 
   // ── Campos controlados ─────────────────────────────────────────────
   const [nombre,       setNombre]       = useState('')
@@ -61,15 +47,9 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  useEffect(() => { setMounted(true) }, [])
+  const handleClose = useCallback(() => { setOpen(false); setError(''); setSuccess(false) }, [])
 
-  useEffect(() => {
-    if (!open) return
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
-  }, [open])
+  useModalKeyboard(open, handleClose)
 
   function handleOpen() {
     setNombre(`Copia de ${plan.nombre}`)
@@ -87,8 +67,6 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
     setError(''); setSuccess(false)
     setOpen(true)
   }
-
-  function handleClose() { setOpen(false); setError(''); setSuccess(false) }
 
   function toggleModulo(id: string) {
     setModulosCheck(prev =>
