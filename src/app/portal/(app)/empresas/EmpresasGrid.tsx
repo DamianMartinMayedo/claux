@@ -45,7 +45,7 @@ function EmpresaCard({
           <div
             className="emp-avatar-lg"
             style={empresa.logo_url
-              ? { background: '#fff', border: '1px solid var(--color-border)' }
+              ? { background: 'var(--color-surface)', border: '1px solid var(--color-border)' }
               : { background: color }}
           >
             {empresa.logo_url

@@ -104,7 +104,7 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
                     cursor: 'pointer',
                     border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
                     background: active ? 'var(--color-primary-highlight)' : 'transparent',
-                    color: active ? 'var(--color-primary-active)' : 'var(--color-text-secondary)',
+                    color: active ? 'var(--color-primary-active)' : 'var(--color-text-muted)',
                     transition: 'all 0.12s ease',
                     lineHeight: '1.5',
                   }}
@@ -175,7 +175,7 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
                   </td>
 
                   {/* Acción */}
-                  <td style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+                  <td style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
                     {ACTION_LABEL[r.action] ?? r.action}
                   </td>
 

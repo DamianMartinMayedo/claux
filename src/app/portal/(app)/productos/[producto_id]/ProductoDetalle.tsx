@@ -36,7 +36,7 @@ const S = {
     display: 'inline-flex', alignItems: 'center',
     fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    background: '#e0f2fe', color: '#0369a1',
+    background: '#e0f2fe', color: 'var(--color-primary-text)',
   },
   badgeServicio: {
     display: 'inline-flex', alignItems: 'center',
@@ -54,28 +54,28 @@ const S = {
     display: 'inline-flex', alignItems: 'center',
     fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    background: '#f1f5f9', color: '#64748b',
+    background: 'var(--color-surface-2)', color: 'var(--color-text-muted)',
   },
   card: {
-    background: 'var(--color-surface, #fff)',
-    border:     '1px solid var(--color-border, #e2e8f0)',
+    background: 'var(--color-surface)',
+    border:     '1px solid var(--color-border)',
     borderRadius: '12px',
     padding:    '20px',
     marginBottom: '16px',
   },
   label: {
     fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em', color: 'var(--color-text-muted, #64748b)',
+    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
     marginBottom: '4px',
   },
   value: {
-    fontSize: '14px', color: 'var(--color-text, #1e293b)',
+    fontSize: '14px', color: 'var(--color-text)',
   },
   sectionTitle: {
     fontSize: '13px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em', color: 'var(--color-text-muted, #64748b)',
+    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
     marginBottom: '16px', paddingBottom: '8px',
-    borderBottom: '1px solid var(--color-border, #e2e8f0)',
+    borderBottom: '1px solid var(--color-border)',
   },
 }
 
@@ -94,9 +94,9 @@ function Tab({ active, onClick, label, badge }: {
         display: 'inline-flex', alignItems: 'center', gap: '6px',
         padding: '10px 18px',
         fontSize: '13px', fontWeight: active ? 700 : 500,
-        color:   active ? 'var(--color-primary, #0ea5e9)' : 'var(--color-text-muted, #64748b)',
+        color:   active ? 'var(--color-primary)' : 'var(--color-text-muted)',
         borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-        borderBottom: active ? '2px solid var(--color-primary, #0ea5e9)' : '2px solid transparent',
+        borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
         background: 'transparent', borderRadius: '0',
         cursor: 'pointer', transition: 'color 0.15s',
         whiteSpace: 'nowrap',
@@ -107,8 +107,8 @@ function Tab({ active, onClick, label, badge }: {
         <span style={{
           fontSize: '10px', fontWeight: 700, padding: '1px 6px',
           borderRadius: '999px',
-          background: active ? 'var(--color-primary, #0ea5e9)' : '#e2e8f0',
-          color: active ? '#fff' : '#64748b',
+          background: active ? 'var(--color-primary)' : 'var(--color-border)',
+          color: active ? '#fff' : 'var(--color-text-muted)',
         }}>
           {badge}
         </span>
@@ -123,7 +123,7 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div style={S.label}>{label}</div>
-      <div style={S.value}>{value ?? <span style={{ color: '#cbd5e1' }}>—</span>}</div>
+      <div style={S.value}>{value ?? <span style={{ color: 'var(--color-text-faint)' }}>—</span>}</div>
     </div>
   )
 }
@@ -141,7 +141,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
         <div style={S.sectionTitle}>Datos generales</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
           <Campo label="Nombre"      value={producto.nombre} />
-          <Campo label="Código"      value={<code style={{ fontFamily: 'monospace', color: 'var(--color-text, #1e293b)' }}>{producto.codigo}</code>} />
+          <Campo label="Código"      value={<code style={{ fontFamily: 'monospace', color: 'var(--color-text)' }}>{producto.codigo}</code>} />
           <Campo label="Tipo"        value={
             <span style={esServicio ? S.badgeServicio : S.badgeProducto}>
               {esServicio ? 'Servicio' : 'Producto'}
@@ -157,7 +157,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
           <Campo label="Proveedor"   value={proveedor ? (
             <Link
               href={`/portal/terceros/${proveedor.tercero_id}`}
-              style={{ color: 'var(--color-primary, #0ea5e9)', textDecoration: 'none' }}
+              style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
             >
               {proveedor.nombre}
             </Link>
@@ -182,10 +182,10 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
               <div style={{
                 fontSize: '28px', fontWeight: 800,
                 color: producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
-                  ? '#dc2626' : 'var(--color-text, #1e293b)',
+                  ? '#dc2626' : 'var(--color-text)',
               }}>
                 {producto.stock_actual.toLocaleString('es-VE')}
-                <span style={{ fontSize: '14px', fontWeight: 500, marginLeft: '6px', color: '#64748b' }}>
+                <span style={{ fontSize: '14px', fontWeight: 500, marginLeft: '6px', color: 'var(--color-text-muted)' }}>
                   {producto.unidad}
                 </span>
               </div>
@@ -206,7 +206,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
           <Campo label="Creado"       value={fmtDate(producto.created_at)} />
           <Campo label="Actualizado"  value={fmtDate(producto.updated_at)} />
-          <Campo label="ID interno"   value={<code style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8' }}>{producto.producto_id}</code>} />
+          <Campo label="ID interno"   value={<code style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-text-faint)' }}>{producto.producto_id}</code>} />
         </div>
       </div>
 
@@ -233,16 +233,16 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontWeight: 700, color: '#64748b', fontSize: '12px', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
                   Moneda
                 </th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: '#64748b', fontSize: '12px', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
                   Precio de venta
                 </th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: '#64748b', fontSize: '12px', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
                   Costo
                 </th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: '#64748b', fontSize: '12px', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
                   Margen
                 </th>
               </tr>
@@ -256,28 +256,28 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
                   : null
 
                 return (
-                  <tr key={mon} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <tr key={mon} style={{ background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-2)' }}>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{
                         display: 'inline-block', padding: '2px 10px', borderRadius: '6px',
-                        background: '#f1f5f9', fontWeight: 700, fontSize: '12px',
+                        background: 'var(--color-surface-2)', fontWeight: 700, fontSize: '12px',
                         fontFamily: 'monospace', letterSpacing: '0.04em',
                       }}>
                         {mon}
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>
-                      {precio > 0 ? fmt(precio, mon) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      {precio > 0 ? fmt(precio, mon) : <span style={{ color: 'var(--color-text-faint)' }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      {costo > 0 ? fmt(costo, mon) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      {costo > 0 ? fmt(costo, mon) : <span style={{ color: 'var(--color-text-faint)' }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       {margen !== null ? (
                         <span style={{ color: parseFloat(margen) > 20 ? '#16a34a' : parseFloat(margen) > 0 ? '#ca8a04' : '#dc2626', fontWeight: 600 }}>
                           {margen}%
                         </span>
-                      ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      ) : <span style={{ color: 'var(--color-text-faint)' }}>—</span>}
                     </td>
                   </tr>
                 )
@@ -294,11 +294,11 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
 
 function TabMovimientos() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8' }}>
+    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
         <IconBoxLg />
       </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: '#64748b' }}>
+      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
         Movimientos de inventario
       </div>
       <div style={{ fontSize: '13px' }}>
@@ -312,11 +312,11 @@ function TabMovimientos() {
 
 function TabHistorialPrecios() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8' }}>
+    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
         <IconTrendingUpLg />
       </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: '#64748b' }}>
+      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
         Historial de precios
       </div>
       <div style={{ fontSize: '13px' }}>
@@ -361,7 +361,7 @@ function StockModal({
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
     }}>
       <div style={{
-        background: '#fff', borderRadius: '16px', padding: '32px',
+        background: 'var(--color-surface)', borderRadius: '16px', padding: '32px',
         width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       }}>
         <h3 style={{ margin: '0 0 20px', fontSize: '18px', fontWeight: 700 }}>
@@ -369,7 +369,7 @@ function StockModal({
         </h3>
 
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Stock actual</div>
+          <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Stock actual</div>
           <div style={{ fontSize: '24px', fontWeight: 700 }}>
             {producto.stock_actual.toLocaleString('es-VE')} {producto.unidad}
           </div>
@@ -382,7 +382,7 @@ function StockModal({
           <input
             type="number" value={cantidad} onChange={e => setCantidad(e.target.value)}
             placeholder="ej: 10 o -5"
-            style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -405,7 +405,7 @@ function StockModal({
           <input
             type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
             placeholder="ej: Conteo físico, devolución, etc."
-            style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -418,7 +418,7 @@ function StockModal({
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             onClick={onClose}
-            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
           >
             Cancelar
           </button>
@@ -427,8 +427,8 @@ function StockModal({
             disabled={pending || preview < 0}
             style={{
               flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-              background: pending || preview < 0 ? '#e2e8f0' : 'var(--color-primary, #0ea5e9)',
-              color: pending || preview < 0 ? '#94a3b8' : '#fff',
+              background: pending || preview < 0 ? 'var(--color-border)' : 'var(--color-primary)',
+              color: pending || preview < 0 ? 'var(--color-text-faint)' : '#fff',
               fontSize: '14px', fontWeight: 600, cursor: pending || preview < 0 ? 'not-allowed' : 'pointer',
             }}
           >
@@ -484,12 +484,12 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
     <div className="view-container">
 
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: '#64748b' }}>
-        <Link href="/portal/productos" style={{ color: '#64748b', textDecoration: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+        <Link href="/portal/productos" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
           Productos
         </Link>
         <span>›</span>
-        <span style={{ color: 'var(--color-text, #1e293b)', fontWeight: 600 }}>{producto.nombre}</span>
+        <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{producto.nombre}</span>
       </div>
 
       {/* Header */}
@@ -507,7 +507,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
               {producto.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ marginTop: '6px', fontSize: '13px', color: '#64748b' }}>
+          <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
             <code style={{ fontFamily: 'monospace', color: '#0891b2', fontWeight: 600 }}>{producto.codigo}</code>
             {producto.codigo_proveedor && (
               <span style={{ marginLeft: '12px' }}>Cód. proveedor: <strong>{producto.codigo_proveedor}</strong></span>
@@ -523,7 +523,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                border: '1px solid #0ea5e9', background: '#e0f2fe', color: '#0369a1', cursor: 'pointer',
+                border: '1px solid #0ea5e9', background: '#e0f2fe', color: 'var(--color-primary-text)', cursor: 'pointer',
               }}
             >
               <IconLayers /> Ajustar stock
@@ -534,7 +534,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid #e2e8f0', background: '#fff', color: '#1e293b', cursor: 'pointer',
+              border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer',
             }}
           >
             <IconEdit /> Editar
@@ -545,7 +545,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid #e2e8f0', background: '#fff',
+              border: '1px solid var(--color-border)', background: 'var(--color-surface)',
               color: producto.estado === 'ACTIVO' ? '#dc2626' : '#16a34a',
               cursor: pending ? 'not-allowed' : 'pointer',
             }}
@@ -567,7 +567,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
       {/* Tabs */}
       <div style={{
-        display: 'flex', gap: '0', borderBottom: '1px solid #e2e8f0',
+        display: 'flex', gap: '0', borderBottom: '1px solid var(--color-border)',
         overflowX: 'auto', marginBottom: '4px',
       }}>
         <Tab active={tab === 'info'}        onClick={() => setTab('info')}        label="Información" />

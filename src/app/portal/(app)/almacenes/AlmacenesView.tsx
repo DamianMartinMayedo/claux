@@ -180,7 +180,7 @@ function ConfirmArchivar({
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
         <div className="modal-body">
-          <p style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
             ¿Archivar <strong>{almacen.nombre}</strong>? No aparecerá en listas activas
             pero podrás restaurarlo cuando lo necesites.
           </p>
@@ -390,8 +390,8 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                         display: 'inline-block',
                         fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-                        background: a.activo ? '#dcfce7' : '#f1f5f9',
-                        color:      a.activo ? '#16a34a' : '#64748b',
+                        background: a.activo ? '#dcfce7' : 'var(--color-surface-2)',
+                        color:      a.activo ? '#16a34a' : 'var(--color-text-muted)',
                       }}>
                         {a.activo ? 'Activo' : 'Archivado'}
                       </span>
@@ -432,9 +432,9 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
         background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
         fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.6,
       }}>
-        <strong style={{ color: 'var(--color-text-secondary)' }}>Nota:</strong> Los movimientos de inventario
+        <strong style={{ color: 'var(--color-text-muted)' }}>Nota:</strong> Los movimientos de inventario
         (entradas, salidas, ajustes y transferencias entre almacenes) se gestionan en el módulo{' '}
-        <strong style={{ color: 'var(--color-text-secondary)' }}>Inventario</strong> dentro de Gestión.
+        <strong style={{ color: 'var(--color-text-muted)' }}>Inventario</strong> dentro de Gestión.
       </div>
 
       {/* ── Modales ── */}

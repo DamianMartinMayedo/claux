@@ -33,8 +33,8 @@ const VIA_BADGE: Record<string, { label: string; bg: string; color: string }> = 
   'Pago Móvil':                  { label: 'PM',      bg: '#ede9fe', color: '#5b21b6'  },
   'Zelle':                       { label: 'ZELLE',   bg: '#fce7f3', color: '#9d174d'  },
   'TropiPay':                    { label: 'TPPAY',   bg: '#f0fdf4', color: '#166534'  },
-  'Efectivo (VES)':              { label: 'EF-VES',  bg: '#f1f5f9', color: '#475569'  },
-  'Efectivo (USD)':              { label: 'EF-USD',  bg: '#f1f5f9', color: '#475569'  },
+  'Efectivo (VES)':              { label: 'EF-VES',  bg: 'var(--color-surface-2)', color: 'var(--color-text-muted)'  },
+  'Efectivo (USD)':              { label: 'EF-USD',  bg: 'var(--color-surface-2)', color: 'var(--color-text-muted)'  },
 }
 
 const TIPO_STYLE: Record<TipoTercero, React.CSSProperties> = {
@@ -53,25 +53,25 @@ const S = {
     ...extra,
   }),
   card: {
-    background: 'var(--color-surface, #fff)',
-    border:     '1px solid var(--color-border, #e2e8f0)',
+    background: 'var(--color-surface)',
+    border:     '1px solid var(--color-border)',
     borderRadius: '12px',
     padding:    '20px',
     marginBottom: '16px',
   } as React.CSSProperties,
   label: {
     fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
-    letterSpacing: '0.06em', color: 'var(--color-text-muted, #64748b)',
+    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
     marginBottom: '4px',
   } as React.CSSProperties,
   value: {
-    fontSize: '14px', color: 'var(--color-text, #1e293b)',
+    fontSize: '14px', color: 'var(--color-text)',
   } as React.CSSProperties,
   sectionTitle: {
     fontSize: '13px', fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: '0.06em', color: '#64748b',
+    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
     marginBottom: '16px', paddingBottom: '8px',
-    borderBottom: '1px solid #e2e8f0',
+    borderBottom: '1px solid var(--color-border)',
   } as React.CSSProperties,
 }
 
@@ -86,7 +86,7 @@ function Campo({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
     <div>
       <div style={S.label}>{label}</div>
-      <div style={S.value}>{value ?? <span style={{ color: '#cbd5e1' }}>—</span>}</div>
+      <div style={S.value}>{value ?? <span style={{ color: 'var(--color-text-faint)' }}>—</span>}</div>
     </div>
   )
 }
@@ -106,9 +106,9 @@ function Tab({ active, onClick, label, badge }: {
         display: 'inline-flex', alignItems: 'center', gap: '6px',
         padding: '10px 18px',
         fontSize: '13px', fontWeight: active ? 700 : 500,
-        color:   active ? 'var(--color-primary, #0ea5e9)' : '#64748b',
+        color:   active ? 'var(--color-primary)' : 'var(--color-text-muted)',
         borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-        borderBottom: active ? '2px solid var(--color-primary, #0ea5e9)' : '2px solid transparent',
+        borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
         background: 'transparent', borderRadius: '0',
         cursor: 'pointer', whiteSpace: 'nowrap',
       }}
@@ -117,8 +117,8 @@ function Tab({ active, onClick, label, badge }: {
       {badge !== undefined && (
         <span style={{
           fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '999px',
-          background: active ? 'var(--color-primary, #0ea5e9)' : '#e2e8f0',
-          color: active ? '#fff' : '#64748b',
+          background: active ? 'var(--color-primary)' : 'var(--color-border)',
+          color: active ? '#fff' : 'var(--color-text-muted)',
         }}>
           {badge}
         </span>
@@ -130,9 +130,9 @@ function Tab({ active, onClick, label, badge }: {
 // ── Pill de vía de pago ───────────────────────────────────────────────────────
 
 function ViaPill({ via }: { via: ViaPago | null }) {
-  if (!via?.tipo) return <span style={{ color: '#cbd5e1' }}>—</span>
+  if (!via?.tipo) return <span style={{ color: 'var(--color-text-faint)' }}>—</span>
   const info = VIA_BADGE[via.tipo]
-  if (!info) return <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>{via.tipo}</span>
+  if (!info) return <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>{via.tipo}</span>
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -168,11 +168,11 @@ function ViaDetalle({ via, title }: { via: ViaPago | null; title: string }) {
 
   return (
     <div style={{
-      border: '1px solid #e2e8f0', borderRadius: '10px',
+      border: '1px solid var(--color-border)', borderRadius: '10px',
       padding: '14px 18px', marginBottom: '12px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-        <span style={{ fontWeight: 700, fontSize: '13px', color: '#1e293b' }}>{title}</span>
+        <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>{title}</span>
         <ViaPill via={via} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
@@ -208,7 +208,7 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
           <Campo label="Estado"         value={
             <span style={S.badge(tercero.activo
               ? { background: '#dcfce7', color: '#16a34a' }
-              : { background: '#f1f5f9', color: '#64748b' }
+              : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }
             )}>
               {tercero.activo ? 'Activo' : 'Inactivo'}
             </span>
@@ -225,7 +225,7 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
           <Campo label="Cargo"         value={tercero.cargo} />
           <Campo label="Teléfono"      value={tercero.telefono} />
           <Campo label="Email"         value={tercero.email
-            ? <a href={`mailto:${tercero.email}`} style={{ color: 'var(--color-primary, #0ea5e9)', textDecoration: 'none' }}>{tercero.email}</a>
+            ? <a href={`mailto:${tercero.email}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{tercero.email}</a>
             : null}
           />
         </div>
@@ -275,7 +275,7 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
               <div>
                 <div style={S.label}>Documento</div>
                 <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: 'var(--color-primary, #0ea5e9)', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}>
                   <IconFileLink /> Ver contrato
                 </a>
               </div>
@@ -298,7 +298,7 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
           <Campo label="Creado"      value={fmtDate(tercero.created_at)} />
           <Campo label="Actualizado" value={fmtDate(tercero.updated_at)} />
-          <Campo label="ID interno"  value={<code style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8' }}>{tercero.tercero_id}</code>} />
+          <Campo label="ID interno"  value={<code style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-text-faint)' }}>{tercero.tercero_id}</code>} />
         </div>
       </div>
 
@@ -312,11 +312,11 @@ function TabProductos({ count, terceroId }: { count: number; terceroId: string }
   return (
     <div style={{ padding: '24px 0' }}>
       {count === 0 ? (
-        <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8' }}>
+        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
             <IconBoxLg />
           </div>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: '#64748b' }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
             Sin productos asignados
           </div>
           <div style={{ fontSize: '13px' }}>
@@ -324,11 +324,11 @@ function TabProductos({ count, terceroId }: { count: number; terceroId: string }
           </div>
         </div>
       ) : (
-        <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8' }}>
+        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
             <IconBoxLg />
           </div>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: '#64748b' }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
             {count} producto{count !== 1 ? 's' : ''} de este proveedor
           </div>
           <div style={{ fontSize: '13px', marginBottom: '20px' }}>
@@ -339,7 +339,7 @@ function TabProductos({ count, terceroId }: { count: number; terceroId: string }
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '10px 20px', borderRadius: '8px',
-              background: 'var(--color-primary, #0ea5e9)', color: '#fff',
+              background: 'var(--color-primary)', color: '#fff',
               textDecoration: 'none', fontWeight: 600, fontSize: '14px',
             }}
           >
@@ -355,11 +355,11 @@ function TabProductos({ count, terceroId }: { count: number; terceroId: string }
 
 function TabCuentasPorPagar() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8' }}>
+    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
         <IconCreditCardLg />
       </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: '#64748b' }}>
+      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
         Cuentas por pagar
       </div>
       <div style={{ fontSize: '13px' }}>
@@ -373,11 +373,11 @@ function TabCuentasPorPagar() {
 
 function TabHistorial() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8' }}>
+    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
         <IconActivityLg />
       </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: '#64748b' }}>
+      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
         Historial de transacciones
       </div>
       <div style={{ fontSize: '13px' }}>
@@ -422,12 +422,12 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
     <div className="view-container">
 
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: '#64748b' }}>
-        <Link href="/portal/terceros" style={{ color: '#64748b', textDecoration: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+        <Link href="/portal/terceros" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
           Terceros
         </Link>
         <span>›</span>
-        <span style={{ color: '#1e293b', fontWeight: 600 }}>{tercero.nombre}</span>
+        <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{tercero.nombre}</span>
       </div>
 
       {/* Header */}
@@ -443,15 +443,15 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
             </span>
             <span style={S.badge(tercero.activo
               ? { background: '#dcfce7', color: '#16a34a' }
-              : { background: '#f1f5f9', color: '#64748b' }
+              : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }
             )}>
               {tercero.activo ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ marginTop: '6px', fontSize: '13px', color: '#64748b', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--color-text-muted)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
             {tercero.identificacion && <span>RIF/CI: <strong>{tercero.identificacion}</strong></span>}
             {tercero.telefono       && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconPhone />{tercero.telefono}</span>}
-            {tercero.email          && <a href={`mailto:${tercero.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#0ea5e9', textDecoration: 'none' }}><IconMail />{tercero.email}</a>}
+            {tercero.email          && <a href={`mailto:${tercero.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-primary)', textDecoration: 'none' }}><IconMail />{tercero.email}</a>}
           </div>
         </div>
 
@@ -462,7 +462,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid #e2e8f0', background: '#fff', color: '#1e293b', cursor: 'pointer',
+              border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer',
             }}
           >
             <IconEdit /> Editar
@@ -473,7 +473,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid #e2e8f0', background: '#fff',
+              border: '1px solid var(--color-border)', background: 'var(--color-surface)',
               color: tercero.activo ? '#dc2626' : '#16a34a',
               cursor: pending ? 'not-allowed' : 'pointer',
             }}
@@ -495,7 +495,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
 
       {/* Tabs */}
       <div style={{
-        display: 'flex', borderBottom: '1px solid #e2e8f0',
+        display: 'flex', borderBottom: '1px solid var(--color-border)',
         overflowX: 'auto', marginBottom: '4px',
       }}>
         <Tab active={tab === 'datos'}    onClick={() => setTab('datos')}    label="Datos" />

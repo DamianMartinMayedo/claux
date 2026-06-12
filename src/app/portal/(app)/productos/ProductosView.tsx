@@ -25,7 +25,7 @@ const S = {
     display: 'inline-flex', alignItems: 'center',
     fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-    background: '#e0f2fe', color: '#0369a1',
+    background: '#e0f2fe', color: 'var(--color-primary-text)',
   },
   badgeServicio: {
     display: 'inline-flex', alignItems: 'center',
@@ -189,7 +189,7 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
         <div className="modal-body">
-          <p style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
             ¿Archivar <strong>{nombre}</strong>? No aparecerá en listas activas,
             pero podrás restaurarlo cuando lo necesites.
           </p>
@@ -605,8 +605,8 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 minWidth: 28, padding: '2px 10px', borderRadius: '999px',
                                 fontSize: '12px', fontWeight: 700,
-                                background: 'var(--color-primary-light, #e0f5f4)',
-                                color: 'var(--color-primary, #0ea5e9)',
+                                background: 'var(--color-info-bg)',
+                                color: 'var(--color-primary)',
                                 border: 'none', cursor: 'pointer',
                               }}
                               title="Ver productos de esta categoría"
