@@ -75,7 +75,7 @@ function StockModal({ producto, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Ajuste de stock</h2>
@@ -141,7 +141,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar categoría' : 'Nueva categoría'}</h2>
@@ -182,7 +182,7 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
   nombre: string; onConfirm: () => void; onClose: () => void; isPending: boolean
 }) {
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Archivar</h2>

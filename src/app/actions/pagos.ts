@@ -149,8 +149,22 @@ export async function registrarPago(formData: FormData) {
   }
 
   // ── Generar pago_id secuencial ───────────────────────────────────
-  const { count } = await supabase.from('payments').select('*', { count: 'exact', head: true })
-  const pago_id   = `PAG-${String((count ?? 0) + 1).padStart(4, '0')}`
+  // Buscar el último pago_id existente y generar el siguiente
+  const { data: ultimoPago } = await supabase
+    .from('payments')
+    .select('pago_id')
+    .order('pago_id', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  let nextNum = 1
+  if (ultimoPago?.pago_id) {
+    const match = ultimoPago.pago_id.match(/PAG-(\d+)/)
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1
+    }
+  }
+  const pago_id = `PAG-${String(nextNum).padStart(4, '0')}`
 
   // ── Registrar pago ───────────────────────────────────────────────
   const { error: errorPago } = await supabase.from('payments').insert({

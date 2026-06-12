@@ -258,7 +258,7 @@ export default function EditarFacturaPage({ data, resumen, empresasFull }: Props
       </form>
 
       {previewOpen && canPreview && (
-        <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) setPreviewOpen(false) }}>
+        <div className="modal-backdrop open">
           <div className="ven-preview-modal" role="dialog" aria-modal>
             <div className="ven-preview-modal-header">
               <span className="ven-preview-modal-title"><IconEye /> Vista previa</span>

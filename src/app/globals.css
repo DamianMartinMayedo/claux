@@ -71,8 +71,8 @@
   --duration:   180ms;
   --transition: var(--duration) var(--ease);
 
-  --font-display: 'Cabinet Grotesk', system-ui, sans-serif;
-  --font-body:    'Satoshi', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'Space Grotesk', system-ui, sans-serif;
 
   --text-xs:   0.8125rem; --text-sm:   0.9375rem; --text-base: 1rem;   /* xs 13px · sm 15px (subida moderada) */
   --text-lg:   1.125rem;  --text-xl:   1.25rem;   --text-2xl:  1.5rem;
@@ -386,7 +386,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   outline: none; transition: border-color var(--transition), box-shadow var(--transition);
   appearance: none;
 }
-.input:focus { border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(0,175,170,0.12); }
+.input:focus { border-color: var(--color-border-focus); }
 .input::placeholder { color: var(--color-text-muted); }
 select.input {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236A6960' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
@@ -492,7 +492,7 @@ textarea.input { resize: vertical; min-height: 80px; }
   color: var(--color-text); transition: border-color var(--transition);
   outline: none; font-family: var(--font-body);
 }
-.search-input:focus { border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(0,175,170,0.1); }
+.search-input:focus { border-color: var(--color-border-focus); }
 .search-input::placeholder { color: var(--color-text-muted); }
 
 /* ═══════════════════════════════════════════════════
@@ -606,12 +606,35 @@ textarea.input { resize: vertical; min-height: 80px; }
   cursor: pointer;
   user-select: none;
 }
-.module-check input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--color-primary);
+input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
   cursor: pointer;
   flex-shrink: 0;
+  position: relative;
+  transition: all var(--transition);
+}
+input[type="checkbox"]:hover {
+  border-color: var(--color-primary);
+}
+input[type="checkbox"]:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 /* ── Planes: filas expandibles ── */
@@ -1177,9 +1200,6 @@ textarea.input { resize: vertical; min-height: 80px; }
 .checkbox-group input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-  flex-shrink: 0;
 }
 .checkbox-group .checkbox-label {
   font-size: var(--text-sm);
@@ -1201,12 +1221,15 @@ textarea.input { resize: vertical; min-height: 80px; }
 
 /* ── Focus visible for keyboard navigation ── */
 button:focus-visible,
-a:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 0;
+}
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: 1px solid var(--color-primary);
+  outline-offset: 0;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -2334,7 +2357,7 @@ textarea:focus-visible {
   font-size: var(--text-sm); color: var(--color-text-secondary);
   cursor: pointer; white-space: nowrap; user-select: none;
 }
-.ter-archivados-toggle input[type="checkbox"] { accent-color: var(--color-primary); }
+.ter-archivados-toggle input[type="checkbox"] { }
 
 /* ── Tabla ────────────────────────────────────────────────────────────────── */
 .ter-nombre        { font-weight: 600; font-size: var(--text-sm); color: var(--color-text); }

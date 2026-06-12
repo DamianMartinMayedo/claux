@@ -43,7 +43,7 @@ export default function NuevoClienteModal({ planes }: { planes: Plan[] }) {
   const modal = (
     <div
       className="modal-backdrop"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
+     
     >
       <div className="modal">
         {resultado ? (

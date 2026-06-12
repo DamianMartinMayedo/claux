@@ -101,7 +101,7 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
   }
 
   const modal = (
-    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 600 }}>
         <div className="modal-header">
           <div>

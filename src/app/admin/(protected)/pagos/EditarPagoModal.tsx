@@ -87,7 +87,7 @@ export default function EditarPagoModal({
   const modal = (
     <div
       className="modal-backdrop"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
+     
     >
       <div className="modal" style={{ maxWidth: 520 }}>
         <div className="modal-header">

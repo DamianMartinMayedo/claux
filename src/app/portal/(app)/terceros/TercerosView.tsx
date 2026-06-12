@@ -55,7 +55,7 @@ function ConfirmArchivar({
   isPending: boolean
 }) {
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Archivar tercero</h2>

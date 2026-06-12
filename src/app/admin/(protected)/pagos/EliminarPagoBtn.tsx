@@ -36,7 +36,7 @@ export default function EliminarPagoBtn({
   const modal = (
     <div
       className="modal-backdrop"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
+     
     >
       <div className="modal" style={{ maxWidth: 420 }}>
         <div className="modal-header">

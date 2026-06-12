@@ -177,7 +177,7 @@ export function ProductoFormModal({
   }
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal modal-lg" role="dialog" aria-modal>
 
         <div className="modal-header">

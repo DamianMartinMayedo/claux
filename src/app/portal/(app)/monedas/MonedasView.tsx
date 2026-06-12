@@ -78,7 +78,7 @@ function MonedaModal({
   }
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal" style={{ maxWidth: 440 }} role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar moneda' : 'Añadir moneda'}</h2>
@@ -221,7 +221,7 @@ function ParModal({
   const esAuto = fuente !== 'MANUAL'
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal" style={{ maxWidth: 380 }} role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Configurar par</h2>
@@ -321,7 +321,7 @@ function ConsolidacionModal({
   }
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal" style={{ maxWidth: 380 }} role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Moneda de consolidación</h2>

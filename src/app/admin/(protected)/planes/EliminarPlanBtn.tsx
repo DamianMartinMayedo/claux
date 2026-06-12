@@ -28,7 +28,7 @@ export default function EliminarPlanBtn({ planId, planNombre }: { planId: string
   }
 
   const modal = (
-    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <h2 className="modal-title">Eliminar plan</h2>

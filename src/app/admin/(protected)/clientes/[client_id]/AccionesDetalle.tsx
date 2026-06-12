@@ -258,7 +258,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
   // ── Modal: Período especial ──────────────────────────────────────────
   const modalGracia = (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 480 }}>
         <div className="modal-header">
           <h2 className="modal-title">Aplicar período especial</h2>
@@ -336,7 +336,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   // ── Modal: Confirmar Suspender / Reactivar ───────────────────────────
   const nuevoEstado = esActivo ? 'SUSPENDIDO' : 'ACTIVO'
   const modalEstado = (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <h2 className="modal-title">{esActivo ? 'Suspender cliente' : 'Reactivar cliente'}</h2>
@@ -389,7 +389,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
   // ── Modal: Registrar pago ────────────────────────────────────────────
   const modalPago = (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 540 }}>
         <div className="modal-header">
           <h2 className="modal-title">Registrar pago</h2>

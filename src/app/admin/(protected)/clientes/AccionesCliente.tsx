@@ -44,7 +44,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
 
   // ── Modal: Cambiar plan ──────────────────────────────────────────────
   const modalCambiarPlan = (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 460 }}>
         <div className="modal-header">
           <h2 className="modal-title">Cambiar plan</h2>
@@ -90,7 +90,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
   // ── Modal: Suspender / Reactivar ─────────────────────────────────────
   const nuevoEstado = esSuspendido ? 'ACTIVO' : 'SUSPENDIDO'
   const modalEstado = (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <h2 className="modal-title">{esSuspendido ? 'Reactivar cliente' : 'Suspender cliente'}</h2>
@@ -133,7 +133,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
 
   // ── Modal: Período de gracia ─────────────────────────────────────────
   const modalGracia = (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 460 }}>
         <div className="modal-header">
           <h2 className="modal-title">Período de gracia</h2>
