@@ -137,8 +137,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; line-height: 1.2; color: var(--color-text); }
-a { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
-a:hover { color: var(--color-primary-hover); }
+/* Enlaces de texto. Excluye los <a> que son botones (.btn): esos toman su color
+   de las clases .btn-* y no deben heredar el color de enlace (rompía el hover:
+   el texto teal coincidía con el fondo teal del botón). */
+a:not(.btn) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
+a:not(.btn):hover { color: var(--color-primary-hover); }
+a.btn { text-decoration: none; }
 img, svg { display: block; }
 ul, ol { list-style: none; }
 button { cursor: pointer; font-family: inherit; }
@@ -337,10 +341,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary   { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
-.btn-primary:hover:not(:disabled)   { background: var(--color-primary-hover); border-color: var(--color-primary-hover); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.btn-primary:hover:not(:disabled)   { background: var(--color-primary-hover); border-color: var(--color-primary-hover); color: #fff; box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .btn-primary:active:not(:disabled)  { transform: translateY(0); box-shadow: none; }
 .btn-secondary { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
-.btn-secondary:hover:not(:disabled) { background: var(--color-surface-offset); border-color: var(--color-text-muted); }
+.btn-secondary:hover:not(:disabled) { background: var(--color-surface-offset); border-color: var(--color-text-muted); color: var(--color-text); }
 .btn-ghost     { background: transparent; color: var(--color-text-muted); border-color: transparent; }
 .btn-ghost:hover:not(:disabled)     { background: var(--color-surface-offset); color: var(--color-text); }
 .btn-danger    { background: var(--color-error-bg); color: var(--color-error); border-color: transparent; }
