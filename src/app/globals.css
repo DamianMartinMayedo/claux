@@ -3231,4 +3231,12 @@ textarea:focus-visible {
   .pdf-standalone { background: #fff !important; padding: 0 !important; }
 }
 
+/* ── Dialog (confirm / alert) — sustituye estilos inline de Dialog.tsx ──────── */
+.modal-backdrop.dialog-top { z-index: 9999; }
+.modal-confirm { max-width: 440px; }
+.modal-alert   { max-width: 420px; }
+.dialog-title  { font-size: var(--text-base); display: flex; align-items: center; gap: var(--space-2); }
+.dialog-text   { margin: 0; color: var(--color-text-muted); line-height: 1.6; }
+.dialog-warn-icon { color: var(--color-error); flex-shrink: 0; }
+
 /* end */

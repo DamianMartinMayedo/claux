@@ -271,45 +271,33 @@ export async function obtenerOfertaDetalle(
 
   if (!oferta) return null
 
-  // Empresa (debe pertenecer al cliente)
-  const { data: empresa } = await db
-    .from('empresas')
-    .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
-    .eq('empresa_id', oferta.empresa_id)
-    .eq('client_id',  session.client_id)
-    .maybeSingle()
-  if (!empresa) return null
-
-  // Cliente
-  const { data: cliente } = await db
-    .from('third_parties')
-    .select('tercero_id, nombre, identificacion, direccion, ciudad, pais, email, telefono')
-    .eq('tercero_id', oferta.cliente_id)
-    .eq('client_id',  session.client_id)
-    .maybeSingle()
-  if (!cliente) return null
-
-  // Líneas y ajustes
-  const [linRes, ajuRes] = await Promise.all([
+  // empresa, cliente, líneas, ajustes y factura solo dependen de la oferta ya
+  // cargada (no entre sí) → una sola tanda en paralelo (antes eran secuenciales).
+  const [empRes, cliRes, linRes, ajuRes, facRes] = await Promise.all([
+    db.from('empresas')
+      .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
+      .eq('empresa_id', oferta.empresa_id)
+      .eq('client_id',  session.client_id)
+      .maybeSingle(),
+    db.from('third_parties')
+      .select('tercero_id, nombre, identificacion, direccion, ciudad, pais, email, telefono')
+      .eq('tercero_id', oferta.cliente_id)
+      .eq('client_id',  session.client_id)
+      .maybeSingle(),
     db.from('documento_lineas').select('*')
-      .eq('documento_tipo', 'OFERTA')
-      .eq('documento_id', oferta_id)
-      .order('orden'),
+      .eq('documento_tipo', 'OFERTA').eq('documento_id', oferta_id).order('orden'),
     db.from('documento_ajustes').select('*')
-      .eq('documento_tipo', 'OFERTA')
-      .eq('documento_id', oferta_id)
-      .order('orden'),
+      .eq('documento_tipo', 'OFERTA').eq('documento_id', oferta_id).order('orden'),
+    oferta.factura_id
+      ? db.from('facturas').select('factura_id, numero').eq('factura_id', oferta.factura_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
-  // Factura asociada (si existe)
-  let factura: { factura_id: string; numero: string } | null = null
-  if (oferta.factura_id) {
-    const { data } = await db
-      .from('facturas').select('factura_id, numero')
-      .eq('factura_id', oferta.factura_id)
-      .maybeSingle()
-    factura = data ?? null
-  }
+  const empresa = empRes.data
+  if (!empresa) return null
+  const cliente = cliRes.data
+  if (!cliente) return null
+  const factura = (facRes.data ?? null) as { factura_id: string; numero: string } | null
 
   return {
     oferta:  oferta as Oferta,
@@ -337,41 +325,33 @@ export async function obtenerFacturaDetalle(
     .maybeSingle()
   if (!factura) return null
 
-  const { data: empresa } = await db
-    .from('empresas')
-    .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
-    .eq('empresa_id', factura.empresa_id)
-    .eq('client_id',  session.client_id)
-    .maybeSingle()
-  if (!empresa) return null
-
-  const { data: cliente } = await db
-    .from('third_parties')
-    .select('tercero_id, nombre, identificacion, direccion, ciudad, pais, email, telefono')
-    .eq('tercero_id', factura.cliente_id)
-    .eq('client_id',  session.client_id)
-    .maybeSingle()
-  if (!cliente) return null
-
-  const [linRes, ajuRes] = await Promise.all([
+  // empresa, cliente, líneas, ajustes y oferta solo dependen de la factura ya
+  // cargada → una sola tanda en paralelo (antes eran secuenciales).
+  const [empRes, cliRes, linRes, ajuRes, ofeRes] = await Promise.all([
+    db.from('empresas')
+      .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
+      .eq('empresa_id', factura.empresa_id)
+      .eq('client_id',  session.client_id)
+      .maybeSingle(),
+    db.from('third_parties')
+      .select('tercero_id, nombre, identificacion, direccion, ciudad, pais, email, telefono')
+      .eq('tercero_id', factura.cliente_id)
+      .eq('client_id',  session.client_id)
+      .maybeSingle(),
     db.from('documento_lineas').select('*')
-      .eq('documento_tipo', 'FACTURA')
-      .eq('documento_id', factura_id)
-      .order('orden'),
+      .eq('documento_tipo', 'FACTURA').eq('documento_id', factura_id).order('orden'),
     db.from('documento_ajustes').select('*')
-      .eq('documento_tipo', 'FACTURA')
-      .eq('documento_id', factura_id)
-      .order('orden'),
+      .eq('documento_tipo', 'FACTURA').eq('documento_id', factura_id).order('orden'),
+    factura.oferta_id
+      ? db.from('ofertas').select('oferta_id, numero').eq('oferta_id', factura.oferta_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
-  let oferta: { oferta_id: string; numero: string } | null = null
-  if (factura.oferta_id) {
-    const { data } = await db
-      .from('ofertas').select('oferta_id, numero')
-      .eq('oferta_id', factura.oferta_id)
-      .maybeSingle()
-    oferta = data ?? null
-  }
+  const empresa = empRes.data
+  if (!empresa) return null
+  const cliente = cliRes.data
+  if (!cliente) return null
+  const oferta = (ofeRes.data ?? null) as { oferta_id: string; numero: string } | null
 
   return {
     factura: factura as Factura,
