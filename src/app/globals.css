@@ -140,8 +140,8 @@ h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; line-hei
 /* Enlaces de texto. Excluye los <a> que son botones (.btn): esos toman su color
    de las clases .btn-* y no deben heredar el color de enlace (rompía el hover:
    el texto teal coincidía con el fondo teal del botón). */
-a:not(.btn) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
-a:not(.btn):hover { color: var(--color-primary-hover); }
+a:not(.btn):not(.nav-item) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
+a:not(.btn):not(.nav-item):hover { color: var(--color-primary-hover); }
 a.btn { text-decoration: none; }
 img, svg { display: block; }
 ul, ol { list-style: none; }
@@ -282,7 +282,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   cursor: pointer;
   transition: all var(--transition);
   border: none;
@@ -294,7 +294,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
 .nav-item:hover { background-color: var(--color-surface-offset); color: var(--color-text); }
-.nav-item.active { background-color: var(--color-info-bg); color: var(--color-primary); font-weight: 600; }
+.nav-item.active { background-color: var(--color-info-bg); color: var(--color-primary-active); font-weight: 600; }
 .sidebar-footer-nav {
   margin-top: auto;
   padding-top: var(--space-4);
