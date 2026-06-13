@@ -3,7 +3,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AccionesDetalle from './AccionesDetalle'
 import EditarClienteModal from './EditarClienteModal'
+import ModulosCard from './ModulosCard'
 import { ESTADO_BADGE } from '@/lib/badges'
+import { getSetting } from '@/app/actions/settings'
 
 const METODO_LABEL: Record<string, string> = {
   tropipay:      'TropiPay',
@@ -35,23 +37,25 @@ export default async function ClienteDetallePage({
   const { client_id } = await params
   const supabase = await createClient()
 
-  const [{ data: cliente }, { data: pagos }, { data: planes }] = await Promise.all([
+  const [{ data: cliente }, { data: pagos }, { data: catalogo }] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).single(),
     supabase
       .from('payments')
       .select('*')
       .eq('client_id', client_id)
-      .order('fecha_fin_periodo', { ascending: false }),
+      .order('fecha', { ascending: false }),
     supabase
-      .from('plans')
-      .select('plan_id, nombre, precio_usd, duracion_dias')
-      .eq('estado', 'ACTIVO')
-      .order('precio_usd'),
+      .from('modulos_catalogo')
+      .select('clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo')
+      .eq('activo', true)
+      .order('orden'),
   ])
 
   if (!cliente) notFound()
 
-  const planNombre  = Object.fromEntries((planes ?? []).map(p => [p.plan_id, p.nombre]))
+  const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const cicloLabel  = cliente.ciclo_facturacion === 'anual' ? 'Anual' : 'Mensual'
+  const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
   const totalPagado = (pagos ?? []).reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
   const ultimoPago  = pagos?.[0] ?? null
   const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
@@ -74,7 +78,7 @@ export default async function ClienteDetallePage({
           <h1 className="page-title">{cliente.nombre_empresa}</h1>
           <div className="detail-badges">
             <span className="badge badge-neutral">
-              {planNombre[cliente.plan_id] ?? cliente.plan_id ?? '—'}
+              ${precioMes.toFixed(2)}/mes · {cicloLabel}
             </span>
             <span className={`badge badge-dot ${ESTADO_BADGE[cliente.estado] ?? 'badge-neutral'}`}>
               {cliente.estado}
@@ -96,10 +100,8 @@ export default async function ClienteDetallePage({
           client_id:        cliente.client_id,
           nombre_empresa:   cliente.nombre_empresa,
           estado:           cliente.estado,
-          plan_id:          cliente.plan_id,
           fecha_expiracion: cliente.fecha_expiracion,
         }}
-        planes={planes ?? []}
       />
 
       {/* ── Banner período especial ── */}
@@ -139,9 +141,9 @@ export default async function ClienteDetallePage({
             <span className="detail-field-value">{cliente.nombre_contacto || '—'}</span>
           </div>
           <div className="detail-field">
-            <span className="detail-field-label">Plan actual</span>
+            <span className="detail-field-label">Suscripción</span>
             <span className="detail-field-value">
-              {planNombre[cliente.plan_id] ?? cliente.plan_id ?? '—'}
+              ${precioMes.toFixed(2)}/mes · {cicloLabel}
             </span>
           </div>
           <div className="detail-field">
@@ -212,6 +214,19 @@ export default async function ClienteDetallePage({
 
       </div>
 
+      {/* ── Módulos contratados ── */}
+      {catalogo && catalogo.length > 0 && (
+        <ModulosCard
+          client_id={client_id}
+          modulosActivos={Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []}
+          tarifa={cliente.tarifa ?? 'estandar'}
+          ciclo={cliente.ciclo_facturacion ?? 'mensual'}
+          precioMensual={Number(cliente.precio_mensual_usd ?? 0)}
+          descuentoAnualPct={descuentoAnual}
+          catalogo={catalogo}
+        />
+      )}
+
       {/* ── Historial de pagos ── */}
       <div className="card">
         <div className="card-header">
@@ -236,8 +251,8 @@ export default async function ClienteDetallePage({
                   <th>Fecha</th>
                   <th>Monto</th>
                   <th>Método</th>
+                  <th>Concepto</th>
                   <th>Período cubierto</th>
-                  <th>Plan</th>
                   <th>Notas</th>
                 </tr>
               </thead>
@@ -251,13 +266,15 @@ export default async function ClienteDetallePage({
                         {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
                       </span>
                     </td>
+                    <td>
+                      <span className={`badge ${p.concepto === 'configuracion' ? 'badge-info' : 'badge-neutral'}`}>
+                        {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
+                      </span>
+                    </td>
                     <td className="table-muted text-xs">
                       {p.fecha_inicio_periodo && p.fecha_fin_periodo
                         ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
                         : '—'}
-                    </td>
-                    <td className="table-muted">
-                      {planNombre[p.plan_id] ?? p.plan_id ?? '—'}
                     </td>
                     <td className="table-muted td-notes">
                       {p.notas ?? '—'}

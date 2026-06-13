@@ -9,13 +9,17 @@ const METODO_LABEL: Record<string, string> = {
 }
 
 type Pago = {
-  pago_id: string; client_id: string; plan_id: string | null
+  pago_id: string; client_id: string; concepto: string | null
   monto_usd: number; metodo: string; fecha: string
   fecha_inicio_periodo: string | null; fecha_fin_periodo: string | null
   notas: string | null
 }
 
 const POR_PAGINA = 10
+
+function conceptoLabel(concepto: string | null) {
+  return concepto === 'configuracion' ? 'Configuración' : 'Suscripción'
+}
 
 function formatFecha(fecha: string | null) {
   if (!fecha) return '—'
@@ -26,14 +30,13 @@ function formatFecha(fecha: string | null) {
 function exportCSV(
   pagos: Pago[],
   clienteNombre: Record<string, string>,
-  planNombre: Record<string, string>,
 ) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const headers = ['ID Pago', 'Cliente ID', 'Empresa', 'Plan ID', 'Plan', 'Método',
+  const headers = ['ID Pago', 'Cliente ID', 'Empresa', 'Concepto', 'Método',
     'Monto USD', 'Fecha', 'Inicio período', 'Fin período', 'Notas']
   const rows = pagos.map(p => [
     p.pago_id, p.client_id, clienteNombre[p.client_id] ?? '',
-    p.plan_id ?? '', planNombre[p.plan_id ?? ''] ?? '',
+    conceptoLabel(p.concepto),
     METODO_LABEL[p.metodo] ?? p.metodo,
     p.monto_usd, p.fecha ?? '',
     p.fecha_inicio_periodo ?? '', p.fecha_fin_periodo ?? '', p.notas ?? '',
@@ -48,29 +51,26 @@ function exportCSV(
 export default function PagosTabla({
   pagos,
   clienteNombre,
-  planNombre,
-  planesOpciones,
 }: {
   pagos: Pago[]
   clienteNombre: Record<string, string>
-  planNombre: Record<string, string>
-  planesOpciones: { plan_id: string; nombre: string }[]
 }) {
-  const [busqueda, setBusqueda]       = useState('')
-  const [filtroPlan, setFiltroPlan]   = useState('')
-  const [filtroMetodo, setFiltroMetodo] = useState('')
-  const [pagina, setPagina]           = useState(1)
+  const [busqueda, setBusqueda]           = useState('')
+  const [filtroConcepto, setFiltroConcepto] = useState('')
+  const [filtroMetodo, setFiltroMetodo]   = useState('')
+  const [pagina, setPagina]               = useState(1)
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase()
     return pagos.filter(p => {
       const nombre = (clienteNombre[p.client_id] ?? '').toLowerCase()
-      const coincideBusqueda = !q || nombre.includes(q) || p.client_id.toLowerCase().includes(q)
-      const coincidePlan   = !filtroPlan   || p.plan_id === filtroPlan
-      const coincideMetodo = !filtroMetodo || p.metodo  === filtroMetodo
-      return coincideBusqueda && coincidePlan && coincideMetodo
+      const coincideBusqueda  = !q || nombre.includes(q) || p.client_id.toLowerCase().includes(q)
+      const conceptoP = p.concepto === 'configuracion' ? 'configuracion' : 'suscripcion'
+      const coincideConcepto  = !filtroConcepto || conceptoP === filtroConcepto
+      const coincideMetodo    = !filtroMetodo || p.metodo  === filtroMetodo
+      return coincideBusqueda && coincideConcepto && coincideMetodo
     })
-  }, [pagos, busqueda, filtroPlan, filtroMetodo, clienteNombre])
+  }, [pagos, busqueda, filtroConcepto, filtroMetodo, clienteNombre])
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
   const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
@@ -93,12 +93,11 @@ export default function PagosTabla({
           />
         </div>
 
-        <select className="filter-select" value={filtroPlan}
-          onChange={e => resetPagina(() => setFiltroPlan(e.target.value))}>
-          <option value="">Todos los planes</option>
-          {planesOpciones.map(p => (
-            <option key={p.plan_id} value={p.plan_id}>{p.nombre}</option>
-          ))}
+        <select className="filter-select" value={filtroConcepto}
+          onChange={e => resetPagina(() => setFiltroConcepto(e.target.value))}>
+          <option value="">Todos los conceptos</option>
+          <option value="suscripcion">Suscripción</option>
+          <option value="configuracion">Configuración</option>
         </select>
 
         <select className="filter-select" value={filtroMetodo}
@@ -109,7 +108,7 @@ export default function PagosTabla({
           <option value="efectivo">Efectivo</option>
         </select>
 
-        <button className="btn btn-secondary" onClick={() => exportCSV(filtrados, clienteNombre, planNombre)}>
+        <button className="btn btn-secondary" onClick={() => exportCSV(filtrados, clienteNombre)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -134,7 +133,7 @@ export default function PagosTabla({
               <tr>
                 <th>ID</th>
                 <th>Cliente</th>
-                <th>Plan</th>
+                <th>Concepto</th>
                 <th>Método</th>
                 <th>Monto USD</th>
                 <th>Fecha</th>
@@ -151,7 +150,11 @@ export default function PagosTabla({
                     <div className="table-empresa">{clienteNombre[p.client_id] ?? p.client_id}</div>
                     <div className="table-empresa-contact">{p.client_id}</div>
                   </td>
-                  <td className="table-muted">{planNombre[p.plan_id ?? ''] ?? p.plan_id ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${p.concepto === 'configuracion' ? 'badge-info' : 'badge-neutral'}`}>
+                      {conceptoLabel(p.concepto)}
+                    </span>
+                  </td>
                   <td>
                     <span className="badge badge-neutral">
                       {METODO_LABEL[p.metodo] ?? p.metodo}
@@ -172,7 +175,6 @@ export default function PagosTabla({
                       <EditarPagoModal
                         pago={p}
                         clienteNombre={clienteNombre[p.client_id] ?? p.client_id}
-                        planesOpciones={planesOpciones}
                       />
                       <EliminarPagoBtn
                         pagoId={p.pago_id}

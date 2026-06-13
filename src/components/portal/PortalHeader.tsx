@@ -5,10 +5,10 @@ interface Props {
   session:       PortalSession
   nombreEmpresa: string
   estado:        string
-  planNombre:    string
+  suscripcion:   string
 }
 
-export default function PortalHeader({ session, nombreEmpresa, estado, planNombre }: Props) {
+export default function PortalHeader({ session, nombreEmpresa, estado, suscripcion }: Props) {
   const estadoCls   = ESTADO_BADGE[estado]   ?? 'badge-neutral'
   const estadoLabel = ESTADO_LABEL[estado]   ?? estado
   const inicial     = session.email.charAt(0).toUpperCase()
@@ -21,7 +21,7 @@ export default function PortalHeader({ session, nombreEmpresa, estado, planNombr
       </div>
       <div className="portal-header-right">
         <span className={`badge ${estadoCls} badge-dot`}>{estadoLabel}</span>
-        <span className="portal-header-plan">{planNombre}</span>
+        <span className="portal-header-plan">{suscripcion}</span>
         <div className="portal-header-user">
           <div className="portal-header-avatar">{inicial}</div>
           <span className="portal-header-email">{session.email}</span>

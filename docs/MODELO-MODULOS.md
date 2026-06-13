@@ -3,19 +3,26 @@
 > Spec de diseño e implementación del modelo comercial. Complementa `docs/CONTEXTO.md` §5 (que define el
 > **qué** del negocio); aquí está el **cómo** técnico. Ante conflicto manda CONTEXTO.md.
 >
-> **Estado:** DISEÑADO, NO IMPLEMENTADO. La migración de abajo está lista pero **no se ha aplicado** a la
-> Supabase compartida. Nada de este documento toca todavía el código de producción. Ver §8 "Qué falta".
+> **Estado:** IMPLEMENTADO (junio 2026). Migraciones **017** (`modulos_catalogo` + columnas de cliente) y
+> **018** (eliminación de `plans` + `ciclo_facturacion` + `payments.concepto` + ajustes) aplicadas. El gating
+> del portal lee `clients.modulos_activos`; el admin tiene catálogo (`/admin/modulos`) y toggle por cliente
+> con recálculo de precio; los planes cerrados se eliminaron por completo. §2 (auditoría previa) queda como
+> contexto histórico de por qué se hizo el cambio. Pendiente posterior: build-out de los módulos (Inventario
+> compras/movimientos, RRHH, IA) y funcionalidades por sector — ver §8.
 
 ---
 
-## 1. El problema en una frase
+## 1. El problema en una frase (resuelto)
 
-Hoy el código modela **planes cerrados con nombre** (tabla `plans`: Básico/Profesional/Empresarial, con un
+El código modelaba **planes cerrados con nombre** (tabla `plans`: Básico/Profesional/Empresarial, con un
 precio único por plan). El modelo comercial v2 (CONTEXTO §5) es otra cosa: **una base obligatoria + módulos
 sueltos que el cliente activa a la carta**, y el precio mensual de cada cliente es la **suma** de su base
-más los módulos que tenga encendidos. Hay que alinear los datos y el admin con eso.
+más los módulos que tenga encendidos. **Ya implementado**: los planes se eliminaron y el precio se calcula
+desde `modulos_catalogo` según `clients.modulos_activos` + tarifa, con ciclo mensual/anual.
 
-## 2. Lo que YA hay (auditoría, verificado en código junio 2026)
+## 2. Lo que había antes (auditoría histórica, pre-migración 018)
+
+> Contexto de por qué se hizo el cambio. La tabla `plans` y la UI de planes descritas aquí **ya no existen**.
 
 - **Tabla `plans`** (creada a mano en Supabase, no está en `supabase/migrations/`). Columnas: `plan_id`
   (PK, p.ej. `BM001`), `nombre`, `nivel` (basico/profesional/empresarial), `modalidad`, `precio_usd`,
@@ -34,6 +41,34 @@ más los módulos que tenga encendidos. Hay que alinear los datos y el admin con
 - **No hay planes sembrados**: se crean a mano desde `/admin/planes`.
 - **No existe** ningún módulo ni UI público de "menú/catálogo/reservas/citas": son trabajo futuro.
 
+## 2.1 Frontera base/módulo (reenfoque junio 2026) — fuente canónica
+
+Decisión del propietario al retomar el proyecto: la **base** deja de ser un mini-ERP genérico y se
+define como un **sistema contable completo aunque simple**. Esto mueve la frontera respecto a lo que
+había en el código. Mapa de pertenencia de cada pieza ya construida o declarada:
+
+| Pieza | Estado código | Destino | Acción |
+|---|---|---|---|
+| Ventas (facturas + ofertas) | Hecho | **BASE** | Mantener; el selector de productos pasa a depender de Inventario |
+| Terceros (clientes/proveedores) | Hecho | **BASE** | Mantener |
+| Monedas y tasas (multimoneda) | Hecho | **BASE** | Mantener |
+| Tesorería | Placeholder | **BASE** | Construir |
+| Gastos / Cobros | No existe | **BASE** | Construir |
+| Cuentas por cobrar / por pagar | No existe | **BASE** | Construir |
+| Reportes financieros | No existe | **BASE** | Construir |
+| Productos | Hecho | **MÓDULO `inventario`** | Re-bucketing + gating |
+| Almacenes | Hecho | **MÓDULO `inventario`** | Re-bucketing + gating |
+| Compras | Placeholder | **MÓDULO `inventario`** | Gating; construir |
+| Mis Empresas (multiempresa) | Hecho | **MÓDULO `multiempresa`** | Gating (lógica intacta) |
+| RRHH | Placeholder | **MÓDULO `rrhh`** | Gating; construir |
+| IA | No existe | **MÓDULO `asistente_ia`** | Construir |
+| Menú QR / Reservas / Docs imprenta | No existe | **FUNCIONALIDAD** (`catalogo_qr`, `reservas_citas`, `documentos_imprenta`) | Catálogo + construir |
+
+Claves ERP heredadas (§2) que **se retiran del MVP**: `contabilidad_simple` y `modulo_contable`
+(absorbidas por la base contable completa), `rol_contador_externo` (tier contable avanzado futuro),
+`presupuestos` (= ofertas, ya en base), `crm`, `activos_fijos` (futuro). `compras` deja de ser flag
+propio: queda bajo `inventario`. `terceros`, `tesoreria`, `ventas` dejan de necesitar flag: son base.
+
 ## 3. Arquitectura elegida: catálogo de módulos + módulos por cliente
 
 Decisión del propietario (frente a "reutilizar la tabla plans"): es la única que cumple CONTEXTO §5 al
@@ -41,7 +76,9 @@ Decisión del propietario (frente a "reutilizar la tabla plans"): es la única q
 
 **La idea, simple:**
 1. Un **catálogo** de módulos disponibles, con su precio (tabla `modulos_catalogo`). Es una lista de
-   "productos" que CLAUX vende. Los precios viven aquí, en datos — **nunca** en el código.
+   "productos" que CLAUX vende. Los precios viven aquí, en datos — **nunca** en el código. Cada
+   entrada lleva un `tipo` (`base` | `modulo` | `funcionalidad`) que decide cómo se agrupa y presenta
+   en el admin y el portal; `es_base` marca la fila obligatoria que siempre está activa.
 2. Cada **cliente** guarda **qué módulos tiene encendidos** y a qué **tarifa** (fundador o estándar). Su
    **precio mensual** = base + suma de los módulos encendidos, según su tarifa. Se recalcula cada vez que
    se togglea un módulo.
@@ -57,19 +94,22 @@ modulos_catalogo (catálogo de lo que se vende)         clients (cada negocio)
 │ precio_fundador_usd    10.00             │           │                   reservas_citas]│
 │ precio_estandar_usd    18.00             │           │ tarifa           'fundador'     │
 │ es_base          (bool) false            │           │ precio_mensual_usd  30.00       │
-│ orden            (int)  20               │           │ plan_id          (se conserva)  │
+│ tipo             'funcionalidad'         │           │ ciclo_facturacion 'mensual'     │
+│ orden            (int)  20               │           │ plan_id          (NULL, inerte) │
 │ activo           (bool) true             │           └─────────────────────────────────┘
 └─────────────────────────────────────────┘
 ```
 
-`plan_id` **se conserva** (no se borra): el histórico de `payments` lo referencia. Simplemente deja de ser
-la fuente del gating.
+`plan_id` se **vació** (migración 018): la tabla `plans` se eliminó y la columna queda inerte y anulable
+(sin FK). El histórico de `payments` conserva los importes pero no la etiqueta de plan. El gating ya no
+depende de planes.
 
-## 4. Migración SQL — PENDIENTE DE APLICAR
+## 4. Migración SQL — APLICADA (017 + 018)
 
-> ⚠️ **No la apliques hasta la fase de implementación** (§8). Cuando llegue el momento, se promueve a
-> `supabase/migrations/017_modulos_catalogo.sql` y se aplica con `supabase db push` o desde el SQL Editor.
-> Ajusta los precios al catálogo real de CONTEXTO §5 antes de correrla.
+> ✅ Aplicada como `supabase/migrations/017_modulos_catalogo.sql` (catálogo + columnas de cliente) y
+> `supabase/migrations/018_eliminar_planes.sql` (elimina `plans`, añade `ciclo_facturacion`,
+> `payments.concepto` y los ajustes `pago_setup_usd_default`/`descuento_anual_pct`/`dias_trial_default`;
+> backfill de clientes sin módulos a `['base']`). El DDL de 017 se conserva abajo como referencia.
 
 ```sql
 -- ── 017: Catálogo de módulos + módulos por cliente (modelo à la carte) ──────────
@@ -81,7 +121,8 @@ CREATE TABLE IF NOT EXISTS modulos_catalogo (
   descripcion          text,
   precio_fundador_usd  numeric(10,2) NOT NULL DEFAULT 0,
   precio_estandar_usd  numeric(10,2) NOT NULL DEFAULT 0,
-  es_base              boolean NOT NULL DEFAULT false,  -- la base obligatoria
+  es_base              boolean NOT NULL DEFAULT false,  -- la base obligatoria (siempre activa)
+  tipo                 text    NOT NULL DEFAULT 'modulo',  -- 'base' | 'modulo' | 'funcionalidad'
   orden                int NOT NULL DEFAULT 0,
   activo               boolean NOT NULL DEFAULT true
 );
@@ -93,16 +134,15 @@ ALTER TABLE clients
   ADD COLUMN IF NOT EXISTS precio_mensual_usd numeric(10,2) NOT NULL DEFAULT 0;
 
 -- 3. Seed del catálogo (precios fundador / estándar de CONTEXTO §5 — AJUSTAR si cambian)
-INSERT INTO modulos_catalogo (clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, orden) VALUES
-  ('base',            'Base contable',            'Contable básico, caja/banco, facturación simple, panel, soporte', 20, 35, true,  10),
-  ('catalogo_qr',     'Catálogo digital QR + mini-web', 'Carta/catálogo por QR, mini-web pública, multi-idioma opcional', 10, 18, false, 20),
-  ('reservas_citas',  'Reservas y citas + bot',   'Formulario, panel, bot de botones, notificaciones',               10, 18, false, 30),
-  ('inventario',      'Inventario',               'Stock, movimientos, disponibilidad en catálogo',                   8, 14, false, 40),
-  ('rrhh',            'RRHH',                     'Empleados, turnos, nómina simple',                                 8, 14, false, 50),
-  ('contabilidad_avanzada', 'Contabilidad avanzada', 'Plan de cuentas, modo dual, rol contador externo',             8, 14, false, 60),
-  ('multinegocio',    'Multi-negocio',            'Varias empresas/locales con consolidación',                       12, 20, false, 70),
-  ('marketing',       'Marketing y reseñas',      'Google Business, reseñas, promos',                                 6, 10, false, 80),
-  ('asistente_ia',    'Asistente IA',             'Chat con clientes, NL para reservas/pedidos, consultas del dueño', 15, 25, false, 90)
+INSERT INTO modulos_catalogo (clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo, orden) VALUES
+  ('base',            'Base contable',     'Ventas, gastos/cobros, cuentas por cobrar/pagar, tesorería, reportes, terceros, multimoneda', 20, 35, true,  'base',          10),
+  ('inventario',      'Inventario',        'Almacenes, productos, compras, movimientos, disponibilidad',                                  8,  14, false, 'modulo',        20),
+  ('rrhh',            'RRHH',              'Personal, contratos, bajas, turnos, nómina simple',                                           8,  14, false, 'modulo',        30),
+  ('multiempresa',    'Multiempresa',      'Varias empresas/locales con consolidación',                                                   12, 20, false, 'modulo',        40),
+  ('asistente_ia',    'Asistente IA',      'Chat con clientes, NL para reservas/pedidos, consultas del dueño, resumen semanal',           15, 25, false, 'modulo',        50),
+  ('catalogo_qr',     'Catálogo digital QR + mini-web', 'Carta/catálogo por QR, mini-web pública, multi-idioma opcional',                 10, 18, false, 'funcionalidad', 60),
+  ('reservas_citas',  'Reservas y citas + bot', 'Formulario, panel, bot de botones, notificaciones',                                      10, 18, false, 'funcionalidad', 70),
+  ('documentos_imprenta', 'Documentos de imprenta', 'El cliente envía sus documentos por correo antes de recogerlos',                     0,  0,  false, 'funcionalidad', 80)
 ON CONFLICT (clave) DO NOTHING;
 
 -- 4. Grants a service_role (toda la app accede vía service_role; patrón de 011_grants_rls.sql)
@@ -113,21 +153,40 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.modulos_catalogo TO service_role;
 notify pgrst, 'reload schema';
 ```
 
-> Las claves del seed son las del **modelo público nuevo**. Los 14 módulos ERP actuales (`ventas`, etc.)
-> conviven: son submódulos de gestión que ya gatea el sidebar. Al implementar se decide si se fusionan bajo
-> las claves nuevas (p.ej. `inventario` ya coincide) o se mantienen como sub-flags.
+> Las claves del seed son las del **modelo vigente** (§2.1). La frontera ya está resuelta: `base` absorbe
+> ventas/terceros/tesorería/gastos/cobros/CxC/CxP/reportes; `inventario` absorbe productos/almacenes/compras/
+> movimientos; `multiempresa` reusa la clave existente del mismo nombre (facilita el backfill). Las claves ERP
+> heredadas retiradas del MVP (`modulo_contable`, `rol_contador_externo`, `presupuestos`, `crm`, `activos_fijos`)
+> **no se siembran**; cuando se diseñe el tier contable avanzado o marketing, se añaden como filas nuevas.
 
-## 5. Cambios de código al implementar (resumen, NO hacer aún)
+## 5. Cambios de código al implementar (resumen)
 
 - **Gating** — `src/app/portal/(app)/layout.tsx`: cambiar la query que hoy lee `plans.modulos` por
-  `clients.modulos_activos`. `PortalSidebar` **no se toca**.
+  `clients.modulos_activos` (incluir siempre `'base'`). Sigue pasando una lista de strings al sidebar.
+- **Sidebar** — `src/components/portal/PortalSidebar.tsx`: reestructurar `buildNav` a la frontera nueva.
+  Grupo **Contabilidad** (base, siempre visible): Ventas, Gastos/Cobros, Cuentas por cobrar, Cuentas por
+  pagar, Tesorería, Reportes, Terceros, Monedas. Grupo **Inventario** (`modulo: inventario`): Productos,
+  Almacenes, Compras, Movimientos. Grupos **RRHH**, **Multiempresa** (Mis Empresas), **IA**
+  (`asistente_ia`). Grupo **Funcionalidades**: Catálogo QR, Reservas, Documentos imprenta. Implica mover
+  Productos/Almacenes fuera del grupo "Catálogo" y Mis Empresas a su módulo, Compras de Gestión a
+  Inventario, y **quitar** el item Contabilidad (`modulo_contable`).
+- **Empresas (gating sin tocar lógica)** — con `multiempresa` OFF, ocultar la gestión de empresas y operar
+  sobre la empresa por defecto del cliente; el scoping por `empresa_id` se mantiene intacto.
+- **Editor de líneas de factura** — `src/app/portal/(app)/ventas/_DocumentoLineasEditor.tsx` ya soporta
+  entrada manual y selección por `datalist`. Gatear la carga de `productos` por el módulo `inventario` en
+  el fetch del formulario (`_FacturaFormModal`/`_OfertaFormModal`): sin Inventario → `productos = []`
+  (manual puro); con Inventario → se cargan. No cambia la lógica de cálculo.
 - **Admin** — en el detalle de cliente (`src/app/admin/(protected)/clientes/[client_id]/`): UI de **toggle
-  por módulo** que actualiza `modulos_activos` y **recalcula** `precio_mensual_usd` = precio de `base` +
-  Σ precios de los módulos activos según `clients.tarifa`. Server action nueva en
-  `src/app/actions/clientes.ts`.
-- **Catálogo** — pantalla admin para CRUD de `modulos_catalogo` (editar precios fundador/estándar).
+  por módulo/funcionalidad** (agrupada por `tipo`; base bloqueada en ON) que actualiza `modulos_activos` y
+  **recalcula** `precio_mensual_usd` = precio de `base` + Σ precios de lo activo según `clients.tarifa`.
+  Server action nueva en `src/app/actions/clientes.ts`.
+- **Catálogo** — pantalla admin para CRUD de `modulos_catalogo` (precios fundador/estándar, `tipo`, `activo`).
+- **Constante `MODULOS`** — `src/lib/planes-constants.ts` (y los 3 modales de `/admin/planes`) se unifican a
+  una sola fuente leída de `modulos_catalogo`.
 - **Plans** — el CRUD de `/admin/planes` se **deprecia** (no se borra de golpe; el histórico de pagos sigue
   usando `plan_id`).
+- **Base contable nueva** — construir Tesorería, Gastos/Cobros, Cuentas por cobrar/pagar y Reportes
+  financieros reutilizando los patrones de Ventas (trabajo de páginas, no de gating).
 
 ## 6. Nomenclatura genérica (multi-sector)
 
@@ -158,28 +217,31 @@ por caso de uso. Cómo funciona:
   intercambiable, salida siempre desde el servidor.
 - Su disponibilidad se gatea como cualquier módulo: `asistente_ia` dentro de `clients.modulos_activos`.
 
-## 8. Qué falta y cómo seguir (checklist de implementación)
+## 8. Estado de implementación
 
-Cuando se decida implementar el modelo (no en esta sesión), en este orden:
+**Hecho (migraciones 017 + 018):**
+- [x] **017** aplicada: `modulos_catalogo` (`tipo`) + columnas `clients.modulos_activos`/`tarifa`/`precio_mensual_usd`; seed de 8 filas.
+- [x] **Gating** del portal lee `clients.modulos_activos` (`layout.tsx`).
+- [x] **Sidebar** reestructurado a la frontera nueva (Contabilidad/base, Inventario, RRHH, Multiempresa, IA, Funcionalidades); item Contabilidad (`modulo_contable`) retirado.
+- [x] **Gating de Empresas** por módulo `multiempresa` (OFF → máx. 1 empresa); `empresa_id` intacto.
+- [x] **Admin toggle** en detalle de cliente (`ModulosCard`, agrupado por `tipo`, base bloqueada) + `setModulosCliente` (recalcula `precio_mensual_usd`).
+- [x] **Admin catálogo** `/admin/modulos` (CRUD de precios/`activo`).
+- [x] **Backfill** de clientes sin módulos → `['base']` (en 018).
+- [x] **Planes eliminados (018)**: tabla `plans` borrada, `plan_id` vaciado, `/admin/planes` + `planes-constants.ts` + `cambiarPlan` retirados.
+- [x] **Ciclo de facturación** `clients.ciclo_facturacion` (mensual/anual con descuento configurable); importe del cobro derivado en `obtenerDatosPagoDefecto`.
+- [x] **Pago de configuración** `payments.concepto` (`suscripcion`|`configuracion`); registrado opcionalmente al crear cliente; ajustes en `/admin/configuracion`.
 
-1. **Ajustar precios** del seed (§4) al catálogo vigente de CONTEXTO §5 y **aplicar** la migración:
-   promoverla a `supabase/migrations/017_modulos_catalogo.sql` y correrla (`supabase db push` o SQL Editor).
-2. **Cambiar el gating**: en `src/app/portal/(app)/layout.tsx`, leer `clients.modulos_activos` en vez de
-   `plans.modulos`.
-3. **Admin de toggle**: UI en el detalle de cliente + server action que actualiza `modulos_activos` y
-   recalcula `precio_mensual_usd`. Recálculo: `base + Σ módulos activos` según `tarifa`.
-4. **Admin de catálogo**: CRUD de `modulos_catalogo` (precios).
-5. **Migrar clientes existentes**: rellenar `modulos_activos`/`tarifa`/`precio_mensual_usd` a partir de su
-   `plans.modulos` actual (script de una vez).
-6. **Deprecar** el CRUD de `/admin/planes` y limpiar la duplicación de la constante `MODULOS` (hoy en 3
-   archivos) hacia una sola fuente, idealmente leída de `modulos_catalogo`.
+**Pendiente:**
+- [ ] **Completar la base contable**: Tesorería, Gastos/Cobros, Cuentas por cobrar/pagar y Reportes financieros (reutilizando patrones de Ventas).
+- [ ] **Gatear el selector de productos** del editor de líneas (`_DocumentoLineasEditor`) por el módulo `inventario` (sin módulo → entrada manual).
+- [ ] **Build-out de módulos**: Inventario (compras/movimientos), RRHH, Asistente IA; funcionalidades por sector (catálogo QR, reservas, documentos imprenta).
 
 ## 9. Discrepancias detectadas (registro, con recomendación)
 
 | # | Discrepancia | Recomendación |
 |---|---|---|
-| D1 | `crearPlan` guarda `plans.modulos` como **array** ([planes.ts:61](../src/app/actions/planes.ts)) pero `actualizarPlan` lo guarda como **CSV string** ([planes.ts:95](../src/app/actions/planes.ts)); el portal espera array → **editar un plan puede romper su gating**. | Corregir al implementar el modelo (queda obsoleto con `clients.modulos_activos`). Anotado, no tocar ahora. |
-| D2 | `plans.precio_usd` / `nivel` / `modalidad` (precio único por tier) | Superado por el precio compuesto. |
-| D3 | `docs/CLAUX-LEGACY.md` usa nombres Básico/Profesional/Empresarial | Ya marcado superado en CONTEXTO §2; al editar LEGACY, alinear. |
-| D4 | `plans.max_empresas` / `max_usuarios` (límites en el plan) | Decidir en implementación si pasan a `clients` o al módulo `multinegocio`. Anotado. |
+| D1 | `actualizarPlan` guardaba `plans.modulos` como CSV y rompía el gating al editar | **Resuelto** (CONTEXTO §2, ahora array). Queda moot al pasar el gating a `clients.modulos_activos`. |
+| D2 | `plans.precio_usd` / `nivel` / `modalidad` (precio único por tier) | Superado por el precio compuesto (`clients.precio_mensual_usd`). |
+| D3 | `docs/CLAUX-LEGACY.md` usa nombres Básico/Profesional/Empresarial | Marcado superado en CONTEXTO §2; al editar LEGACY, alinear a base + módulos. |
+| D4 | `plans.max_empresas` / `max_usuarios` (límites en el plan) | **Resuelto**: el límite de empresas lo da el módulo `multiempresa` (OFF → 1 empresa); ver `empresas.ts` y `empresas/page.tsx`. `max_usuarios` queda como futuro. |
 | D5 | `BloqueadoScreen` solo cubre SUSPENDIDO/VENCIDO; la degradación gradual (aviso→degradación→corte, CONTEXTO §8) está parcial | Anotado para la fase de corte por impago. |

@@ -29,32 +29,60 @@ function buildNav(rol: Rol): NavGroup[] {
       ],
     },
     {
-      label: 'Gestión',
+      // Base contable — siempre visible (sin modulo: los items sin gate nunca se bloquean)
+      label: 'Contabilidad',
       items: [
-        { href: '/portal/ventas',       label: 'Ventas',       modulo: 'ventas',          icon: <IconVentas /> },
-        { href: '/portal/compras',      label: 'Compras',      modulo: 'compras',         icon: <IconCompras /> },
-        { href: '/portal/tesoreria',    label: 'Tesorería',    modulo: 'tesoreria',       icon: <IconTesoreria /> },
-        { href: '/portal/inventario',   label: 'Inventario',   modulo: 'inventario',      icon: <IconInventario /> },
-        { href: '/portal/contabilidad', label: 'Contabilidad', modulo: 'modulo_contable', icon: <IconContabilidad /> },
-        { href: '/portal/rrhh',         label: 'RRHH',         modulo: 'rrhh',            icon: <IconRRHH /> },
+        { href: '/portal/ventas',     label: 'Ventas',              icon: <IconVentas /> },
+        { href: '/portal/gastos',     label: 'Gastos y cobros',     icon: <IconGastos /> },
+        { href: '/portal/cxc',        label: 'Cuentas por cobrar',  icon: <IconCxC /> },
+        { href: '/portal/cxp',        label: 'Cuentas por pagar',   icon: <IconCxP /> },
+        { href: '/portal/tesoreria',  label: 'Tesorería',           icon: <IconTesoreria /> },
+        { href: '/portal/reportes',   label: 'Reportes',            icon: <IconReportes /> },
+        { href: '/portal/terceros',   label: 'Terceros',            icon: <IconTerceros /> },
+        { href: '/portal/monedas',    label: 'Monedas y Tasas',     icon: <IconMonedas /> },
       ],
     },
     {
-      label: 'Catálogo',
+      label: 'Inventario',
       items: [
-        { href: '/portal/productos', label: 'Productos',       icon: <IconProductos /> },
-        { href: '/portal/terceros',  label: 'Terceros',        icon: <IconTerceros /> },
-        { href: '/portal/almacenes', label: 'Almacenes',       icon: <IconAlmacenes /> },
-        { href: '/portal/monedas',   label: 'Monedas y Tasas', icon: <IconMonedas /> },
-        { href: '/portal/empresas',  label: 'Mis Empresas',    icon: <IconEmpresas /> },
+        { href: '/portal/productos',  label: 'Productos',   modulo: 'inventario', icon: <IconProductos /> },
+        { href: '/portal/almacenes',  label: 'Almacenes',   modulo: 'inventario', icon: <IconAlmacenes /> },
+        { href: '/portal/compras',    label: 'Compras',     modulo: 'inventario', icon: <IconCompras /> },
+        { href: '/portal/inventario', label: 'Movimientos', modulo: 'inventario', icon: <IconInventario /> },
+      ],
+    },
+    {
+      label: 'RRHH',
+      items: [
+        { href: '/portal/rrhh', label: 'Personal y nómina', modulo: 'rrhh', icon: <IconRRHH /> },
+      ],
+    },
+    {
+      label: 'Multiempresa',
+      items: [
+        { href: '/portal/empresas', label: 'Mis Empresas', modulo: 'multiempresa', icon: <IconEmpresas /> },
+      ],
+    },
+    {
+      label: 'Asistente IA',
+      items: [
+        { href: '/portal/ia', label: 'Asistente IA', modulo: 'asistente_ia', icon: <IconIA /> },
+      ],
+    },
+    {
+      label: 'Funcionalidades',
+      items: [
+        { href: '/portal/catalogo',  label: 'Catálogo QR',        modulo: 'catalogo_qr',         icon: <IconCatalogo /> },
+        { href: '/portal/reservas',  label: 'Reservas y citas',   modulo: 'reservas_citas',      icon: <IconReservas /> },
+        { href: '/portal/imprenta',  label: 'Docs imprenta',      modulo: 'documentos_imprenta', icon: <IconImprenta /> },
       ],
     },
     {
       label: 'Cuenta',
       items: [
-        { href: '/portal/perfil',      label: 'Mi perfil',  icon: <IconPerfil /> },
+        { href: '/portal/perfil',      label: 'Mi perfil',   icon: <IconPerfil /> },
         ...(rol === 'admin_empresa'
-          ? [{ href: '/portal/usuarios',    label: 'Usuarios',   icon: <IconUsuarios /> }]
+          ? [{ href: '/portal/usuarios', label: 'Usuarios', icon: <IconUsuarios /> }]
           : []),
         { href: '/portal/facturacion', label: 'Facturación', icon: <IconFacturacion /> },
         { href: '/portal/soporte',     label: 'Soporte',     icon: <IconSoporte /> },
@@ -161,8 +189,29 @@ function IconTerceros() {
 function IconInventario() {
   return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
 }
-function IconContabilidad() {
-  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+function IconGastos() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v4l3 3"/></svg>
+}
+function IconCxC() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><path d="M10 17l2-2 2 2"/></svg>
+}
+function IconCxP() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><path d="M10 15l2 2 2-2"/></svg>
+}
+function IconReportes() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+}
+function IconIA() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a5 5 0 015 5v3a5 5 0 01-10 0V7a5 5 0 015-5z"/><path d="M2 17c0-3 3-5 10-5s10 2 10 5"/></svg>
+}
+function IconCatalogo() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+}
+function IconReservas() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+}
+function IconImprenta() {
+  return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
 }
 function IconRRHH() {
   return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>

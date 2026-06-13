@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
 import { addDays, toDateStr } from '@/lib/date-utils'
+import { getSetting } from '@/app/actions/settings'
+import { diasCiclo } from '@/lib/billing'
 
 // ── Utilidades de seguridad ──────────────────────────────────────────
 async function hashPassword(password: string, salt: string): Promise<string> {
@@ -23,6 +25,27 @@ function generateSalt(): string {
 }
 
 
+// ── Helper: precio mensual a partir de los módulos activos ───────────
+// Suma base + módulos/funcionalidades activos según la tarifa. Precios desde modulos_catalogo
+// (nunca hardcodeados). 'base' debe venir ya incluida en modulosActivos.
+async function calcularPrecioMensual(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  modulosActivos: string[],
+  tarifa: string,
+): Promise<number> {
+  const { data: catalogo } = await supabase
+    .from('modulos_catalogo')
+    .select('clave, precio_fundador_usd, precio_estandar_usd, activo')
+    .eq('activo', true)
+  const campo = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
+  return (catalogo ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((m: any) => modulosActivos.includes(m.clave))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .reduce((sum: number, m: any) => sum + Number(m[campo] ?? 0), 0)
+}
+
 // ── Crear cliente ────────────────────────────────────────────────────
 export async function crearCliente(formData: FormData) {
   const supabase = await createClient()
@@ -30,13 +53,18 @@ export async function crearCliente(formData: FormData) {
   const nombre_empresa  = (formData.get('nombre_empresa')  as string ?? '').trim()
   const nombre_contacto = (formData.get('nombre_contacto') as string ?? '').trim()
   const email_admin     = (formData.get('email_admin')     as string ?? '').trim().toLowerCase()
-  const plan_id         = formData.get('plan_id') as string
   const notas           = (formData.get('notas')           as string ?? '').trim() || null
   const es_trial        = formData.get('es_trial') === 'true'
+  const tarifa          = (formData.get('tarifa') as string ?? 'estandar').trim()
+  const ciclo           = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
+  const pagoSetupRaw    = parseFloat(formData.get('pago_setup_usd') as string ?? '0')
+  const pago_setup_usd  = isNaN(pagoSetupRaw) ? 0 : pagoSetupRaw
 
-  if (!nombre_empresa || !email_admin || !plan_id) {
-    return { ok: false, error: 'Nombre de empresa, email y plan son obligatorios.' }
+  if (!nombre_empresa || !email_admin) {
+    return { ok: false, error: 'Nombre de empresa y email son obligatorios.' }
   }
+  if (!['fundador', 'estandar'].includes(tarifa)) return { ok: false, error: 'Tarifa inválida.' }
+  if (!['mensual', 'anual'].includes(ciclo))      return { ok: false, error: 'Ciclo de facturación inválido.' }
 
   // Verificar email único
   const { data: emailExiste } = await supabase
@@ -46,19 +74,16 @@ export async function crearCliente(formData: FormData) {
     .maybeSingle()
   if (emailExiste) return { ok: false, error: 'Ya existe un cliente con ese email.' }
 
-  // Resolver plan
-  const { data: plan } = await supabase
-    .from('plans')
-    .select('dias_trial, duracion_dias')
-    .eq('plan_id', plan_id)
-    .single()
-  if (!plan) return { ok: false, error: 'Plan no encontrado.' }
+  // Módulos seleccionados (base siempre incluida) y precio mensual resultante
+  const modulosRaw = formData.getAll('modulos') as string[]
+  const modulos_activos = modulosRaw.includes('base') ? modulosRaw : ['base', ...modulosRaw]
+  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
 
-  // Calcular estado y expiración
+  // Estado y vigencia: trial → días configurables; activo → duración del ciclo
   const estadoInicial = es_trial ? 'TRIAL' : 'ACTIVO'
   const diasVigencia  = es_trial
-    ? (plan.dias_trial    ?? 15)
-    : (plan.duracion_dias ?? 30)
+    ? (parseInt(await getSetting('dias_trial_default', '15'), 10) || 15)
+    : diasCiclo(ciclo)
 
   // Generar client_id secuencial
   const { count } = await supabase.from('clients').select('*', { count: 'exact', head: true })
@@ -72,7 +97,10 @@ export async function crearCliente(formData: FormData) {
     nombre_empresa,
     nombre_contacto: nombre_contacto || null,
     email_admin,
-    plan_id,
+    modulos_activos,
+    tarifa,
+    ciclo_facturacion: ciclo,
+    precio_mensual_usd,
     fecha_inicio:     toDateStr(hoy),
     fecha_expiracion: toDateStr(fechaExpiracion),
     estado:           estadoInicial,
@@ -87,8 +115,36 @@ export async function crearCliente(formData: FormData) {
     entity:      'cliente',
     entity_id:   client_id,
     action:      'crear',
-    description: `Creó cliente ${nombre_empresa} (${client_id}) — Plan: ${plan_id} — Estado: ${estadoInicial}`,
+    description: `Creó cliente ${nombre_empresa} (${client_id}) — ${modulos_activos.length} módulo(s) · tarifa ${tarifa}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — Estado: ${estadoInicial}`,
   })
+
+  // Pago único de configuración (opcional, relevante a nivel contable)
+  if (pago_setup_usd > 0) {
+    const { data: ultimoPago } = await supabase
+      .from('payments').select('pago_id').order('pago_id', { ascending: false }).limit(1).maybeSingle()
+    let nextNum = 1
+    if (ultimoPago?.pago_id) {
+      const match = ultimoPago.pago_id.match(/PAG-(\d+)/)
+      if (match) nextNum = parseInt(match[1], 10) + 1
+    }
+    const pago_id = `PAG-${String(nextNum).padStart(4, '0')}`
+    await supabase.from('payments').insert({
+      pago_id,
+      client_id,
+      monto_usd: pago_setup_usd,
+      metodo:    'transferencia',
+      concepto:  'configuracion',
+      fecha:     toDateStr(hoy),
+      notas:     'Pago único de configuración inicial',
+    })
+    await logActividad(supabase, {
+      user_email:  user?.email ?? 'sistema',
+      entity:      'pago',
+      entity_id:   pago_id,
+      action:      'registrar',
+      description: `Registró pago de configuración ${pago_id} — Cliente: ${client_id} — $${pago_setup_usd.toFixed(2)}`,
+    })
+  }
 
   // Crear usuario admin inicial del cliente
   const passwordTemporal = generatePassword()
@@ -110,52 +166,8 @@ export async function crearCliente(formData: FormData) {
 
   revalidatePath('/admin/clientes')
   revalidatePath('/admin/dashboard')
+  revalidatePath('/admin/pagos')
   return { ok: true, client_id, passwordTemporal }
-}
-
-// ── Cambiar plan ─────────────────────────────────────────────────────
-export async function cambiarPlan(formData: FormData) {
-  const supabase = await createClient()
-
-  const client_id   = formData.get('client_id') as string
-  const nuevo_plan  = formData.get('plan_id')   as string
-
-  if (!client_id || !nuevo_plan) {
-    return { ok: false, error: 'Datos incompletos.' }
-  }
-
-  const { data: plan } = await supabase
-    .from('plans')
-    .select('duracion_dias')
-    .eq('plan_id', nuevo_plan)
-    .single()
-  if (!plan) return { ok: false, error: 'Plan no encontrado.' }
-
-  const nuevaExpiracion = addDays(new Date(), plan.duracion_dias ?? 30)
-
-  const { error } = await supabase
-    .from('clients')
-    .update({
-      plan_id:          nuevo_plan,
-      fecha_expiracion: toDateStr(nuevaExpiracion),
-    })
-    .eq('client_id', client_id)
-
-  if (error) return { ok: false, error: error.message }
-
-  const { data: { user: u2 } } = await supabase.auth.getUser()
-  await logActividad(supabase, {
-    user_email:  u2?.email ?? 'sistema',
-    entity:      'cliente',
-    entity_id:   client_id,
-    action:      'cambiar_plan',
-    description: `Cambió plan del cliente ${client_id} a ${nuevo_plan}`,
-  })
-
-  revalidatePath('/admin/clientes')
-  revalidatePath(`/admin/clientes/${client_id}`)
-  revalidatePath('/admin/dashboard')
-  return { ok: true as const }
 }
 
 // ── Cambiar estado (ACTIVO ↔ SUSPENDIDO) ────────────────────────────
@@ -250,6 +262,48 @@ export async function aplicarGracia(formData: FormData) {
   revalidatePath(`/admin/clientes/${client_id}`)
   revalidatePath('/admin/dashboard')
   return { ok: true as const, hasta: toDateStr(fechaGracia) }
+}
+
+// ── Módulos à la carte: activar/desactivar y recalcular precio ───────
+export async function setModulosCliente(formData: FormData) {
+  const supabase = await createClient()
+
+  const client_id = (formData.get('client_id') as string ?? '').trim()
+  const tarifa    = (formData.get('tarifa')    as string ?? 'estandar').trim()
+  const ciclo     = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
+
+  if (!client_id) return { ok: false, error: 'client_id requerido.' }
+  if (!['fundador', 'estandar'].includes(tarifa)) return { ok: false, error: 'Tarifa inválida.' }
+  if (!['mensual', 'anual'].includes(ciclo))      return { ok: false, error: 'Ciclo de facturación inválido.' }
+
+  // Los módulos activos vienen como checkboxes: múltiples values con name="modulos"
+  const modulosRaw = formData.getAll('modulos') as string[]
+  // 'base' siempre activo — garantizarlo aquí
+  const modulos_activos = modulosRaw.includes('base') ? modulosRaw : ['base', ...modulosRaw]
+
+  // precio = base + Σ módulos activos según tarifa (siempre desde el catálogo)
+  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
+
+  const { error } = await supabase
+    .from('clients')
+    .update({ modulos_activos, tarifa, ciclo_facturacion: ciclo, precio_mensual_usd })
+    .eq('client_id', client_id)
+
+  if (error) return { ok: false, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'modulos',
+    description: `Actualizó módulos del cliente ${client_id} — tarifa ${tarifa}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — módulos: [${modulos_activos.join(', ')}]`,
+  })
+
+  revalidatePath(`/admin/clientes/${client_id}`)
+  revalidatePath('/admin/clientes')
+  revalidatePath('/admin/dashboard')
+  return { ok: true as const, precio_mensual_usd }
 }
 
 // ── Editar datos del cliente ──────────────────────────────────────────

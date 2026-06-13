@@ -7,8 +7,12 @@ import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 
-type Cliente = { client_id: string; nombre_empresa: string; plan_id: string }
-type Plan    = { plan_id: string; nombre: string; precio_usd: number; duracion_dias: number }
+type Cliente = {
+  client_id: string
+  nombre_empresa: string
+  precio_mensual_usd: number | null
+  ciclo_facturacion: string | null
+}
 type UltimoPago = { monto_usd: number; fecha_inicio: string; fecha_fin: string }
 
 // ── Utilidades de fecha ──────────────────────────────────────────────
@@ -39,8 +43,8 @@ function calcProrata(
   fechaInicio: string,
   fechaExpActual: string | null,
   ultimoPago: UltimoPago | null,
-  planPrice: number,
-): { overlapDays: number; dailyRate: number; credit: number; planPrice: number; suggestedNet: number } | null {
+  precioPeriodo: number,
+): { overlapDays: number; dailyRate: number; credit: number; precioPeriodo: number; suggestedNet: number } | null {
   if (!ultimoPago || !fechaInicio || !fechaExpActual) return null
   if (fechaInicio >= fechaExpActual) return null
   const periodDays = daysBetween(ultimoPago.fecha_inicio, ultimoPago.fecha_fin)
@@ -49,8 +53,8 @@ function calcProrata(
   if (overlapDays <= 0) return null
   const dailyRate    = ultimoPago.monto_usd / periodDays
   const credit       = dailyRate * overlapDays
-  const suggestedNet = Math.max(0, planPrice - credit)
-  return { overlapDays, dailyRate, credit, planPrice, suggestedNet }
+  const suggestedNet = Math.max(0, precioPeriodo - credit)
+  return { overlapDays, dailyRate, credit, precioPeriodo, suggestedNet }
 }
 
 function formatDateES(dateStr: string): string {
@@ -64,11 +68,11 @@ function formatDateES(dateStr: string): string {
 
 export default function RegistrarPagoModal({
   clientes,
-  planes,
+  descuentoAnualPct,
   preselectedClientId,
 }: {
   clientes: Cliente[]
-  planes: Plan[]
+  descuentoAnualPct: number
   preselectedClientId?: string
 }) {
   const [open, setOpen]               = useState(false)
@@ -81,10 +85,11 @@ export default function RegistrarPagoModal({
 
   const [clienteId, setClienteId]         = useState(preselectedClientId ?? '')
   const [montoSugerido, setMontoSugerido] = useState('')
+  const [montoBase, setMontoBase]         = useState(0)
   const [fechaInicio, setFechaInicio]     = useState('')
   const [fechaFin, setFechaFin]           = useState('')
-  const [planId, setPlanId]               = useState('')
-  const [planDuracionDias, setPlanDuracionDias] = useState(30)
+  const [duracionDias, setDuracionDias]   = useState(30)
+  const [ciclo, setCiclo]                 = useState('mensual')
   const [fechaExpActual, setFechaExpActual]     = useState<string | null>(null)
   const [ultimoPago, setUltimoPago]             = useState<UltimoPago | null>(null)
 
@@ -98,10 +103,11 @@ export default function RegistrarPagoModal({
     setLoadingDefecto(false)
     if (!res.ok) return
     setMontoSugerido(String(res.monto_sugerido))
+    setMontoBase(Number(res.monto_sugerido))
     setFechaInicio(res.fecha_inicio)
     setFechaFin(res.fecha_fin)
-    setPlanId(res.plan_id)
-    setPlanDuracionDias(res.duracion_dias)
+    setDuracionDias(res.duracion_dias)
+    setCiclo(res.ciclo)
     setFechaExpActual(res.fecha_expiracion_actual)
     setUltimoPago(res.ultimo_pago)
   }
@@ -109,33 +115,16 @@ export default function RegistrarPagoModal({
   async function onClienteChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const id = e.target.value
     setClienteId(id)
-    setMontoSugerido(''); setFechaInicio(''); setFechaFin('')
-    setPlanId(''); setFechaExpActual(null); setUltimoPago(null)
+    setMontoSugerido(''); setMontoBase(0); setFechaInicio(''); setFechaFin('')
+    setCiclo('mensual'); setFechaExpActual(null); setUltimoPago(null)
     await cargarDefecto(id)
-  }
-
-  function onPlanChange(newPlanId: string) {
-    setPlanId(newPlanId)
-    const plan = planes.find(p => p.plan_id === newPlanId)
-    if (plan) {
-      setPlanDuracionDias(plan.duracion_dias)
-      if (fechaInicio) setFechaFin(addDays(fechaInicio, plan.duracion_dias))
-      const pr = calcProrata(fechaInicio, fechaExpActual, ultimoPago, plan.precio_usd)
-      setMontoSugerido(pr ? String(pr.suggestedNet.toFixed(2)) : String(plan.precio_usd))
-    }
   }
 
   function onInicioChange(val: string) {
     setFechaInicio(val)
-    if (val && planDuracionDias) setFechaFin(addDays(val, planDuracionDias))
-    const planActual = planes.find(p => p.plan_id === planId)
-    const planPrice  = planActual?.precio_usd ?? parseFloat(montoSugerido) ?? 0
-    const pr = calcProrata(val, fechaExpActual, ultimoPago, planPrice)
-    if (pr) {
-      setMontoSugerido(String(pr.suggestedNet.toFixed(2)))
-    } else if (planActual) {
-      setMontoSugerido(String(planActual.precio_usd))
-    }
+    if (val && duracionDias) setFechaFin(addDays(val, duracionDias))
+    const pr = calcProrata(val, fechaExpActual, ultimoPago, montoBase)
+    setMontoSugerido(pr ? String(pr.suggestedNet.toFixed(2)) : String(montoBase.toFixed(2)))
   }
 
   async function handleSubmit(e: { preventDefault(): void }) {
@@ -157,8 +146,8 @@ export default function RegistrarPagoModal({
 
   const handleClose = useCallback(() => {
     setOpen(false); setError(''); setSuccess(''); setAdvertencia('')
-    setMontoSugerido(''); setFechaInicio(''); setFechaFin('')
-    setPlanId(''); setFechaExpActual(null); setUltimoPago(null)
+    setMontoSugerido(''); setMontoBase(0); setFechaInicio(''); setFechaFin('')
+    setCiclo('mensual'); setFechaExpActual(null); setUltimoPago(null)
     setClienteId(preselectedClientId ?? '')
   }, [preselectedClientId])
 
@@ -166,15 +155,14 @@ export default function RegistrarPagoModal({
 
   // ── Alertas calculadas ───────────────────────────────────────────────
   const alertaInicioTemprano = (fechaInicio && fechaExpActual && fechaInicio < fechaExpActual)
-    ? `Se recomienda que el inicio (${formatDateES(fechaInicio)}) sea igual o posterior a la expiración actual (${formatDateES(fechaExpActual)}). Puedes continuar si el cambio de plan lo requiere.`
+    ? `Se recomienda que el inicio (${formatDateES(fechaInicio)}) sea igual o posterior a la expiración actual (${formatDateES(fechaExpActual)}).`
     : null
 
-  const selectedPlan = planes.find(p => p.plan_id === planId)
   const prorata = calcProrata(
     fechaInicio,
     fechaExpActual,
     ultimoPago,
-    selectedPlan?.precio_usd ?? parseFloat(montoSugerido) ?? 0,
+    montoBase || parseFloat(montoSugerido) || 0,
   )
 
   const modal = (
@@ -211,26 +199,18 @@ export default function RegistrarPagoModal({
               </select>
               {loadingDefecto && (
                 <span className="text-xs-muted">
-                  Cargando datos del plan...
+                  Cargando datos de la suscripción...
                 </span>
               )}
             </div>
 
-            {/* Plan + Método */}
+            {/* Ciclo (informativo) + Método */}
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>Plan</label>
-                <select
-                  name="plan_id"
-                  className="input"
-                  value={planId}
-                  onChange={(e) => onPlanChange(e.target.value)}
-                >
-                  <option value="" disabled>— Selecciona cliente primero —</option>
-                  {planes.map(p => (
-                    <option key={p.plan_id} value={p.plan_id}>{p.nombre}</option>
-                  ))}
-                </select>
+                <label>Ciclo</label>
+                <div className="input input-display">
+                  {ciclo === 'anual' ? `Anual (−${descuentoAnualPct}%)` : 'Mensual'} · {duracionDias} días
+                </div>
               </div>
               <div className="input-group">
                 <label>Método de pago <span className="required">*</span></label>
@@ -242,25 +222,15 @@ export default function RegistrarPagoModal({
               </div>
             </div>
 
-            {/* Monto */}
+            {/* Monto (fijado por la configuración del cliente, no editable) */}
             <div className="input-group">
-              <label>Monto USD <span className="required">*</span></label>
-              <input
-                name="monto_usd"
-                type="number"
-                step="0.01"
-                min="0.01"
-                className="input"
-                required
-                value={montoSugerido}
-                onChange={(e) => setMontoSugerido(e.target.value)}
-                placeholder="0.00"
-              />
-              {prorata && (
-                <span className="text-xs-muted">
-                  Sugerido: ${prorata.suggestedNet.toFixed(2)} (${prorata.planPrice.toFixed(2)} − crédito ${prorata.credit.toFixed(2)})
-                </span>
-              )}
+              <label>Monto USD a cobrar</label>
+              <div className="input input-display">${(parseFloat(montoSugerido) || 0).toFixed(2)}</div>
+              <input type="hidden" name="monto_usd" value={montoSugerido} />
+              <span className="input-hint">
+                Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
+                {prorata && ` Ajustado por prorrateo: crédito $${prorata.credit.toFixed(2)} sobre $${prorata.precioPeriodo.toFixed(2)}.`}
+              </span>
             </div>
 
             {/* Período */}
@@ -322,7 +292,7 @@ export default function RegistrarPagoModal({
                   <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
                   <span>Tarifa diaria período anterior: ${prorata.dailyRate.toFixed(4)}/día</span>
                   <span>Crédito por días ya pagados: −${prorata.credit.toFixed(2)}</span>
-                  <strong>Monto sugerido primer mes: ${prorata.suggestedNet.toFixed(2)}</strong>
+                  <strong>Monto sugerido primer período: ${prorata.suggestedNet.toFixed(2)}</strong>
                 </div>
               </div>
             )}

@@ -11,14 +11,17 @@ const ESTADO_BADGE: Record<string, string> = {
 
 type Cliente = {
   client_id: string; nombre_empresa: string; nombre_contacto: string | null
-  email_admin: string; plan_id: string; estado: string
+  email_admin: string; estado: string
+  precio_mensual_usd: number | null; ciclo_facturacion: string | null
   fecha_expiracion: string | null; fecha_inicio: string | null
   created_at: string | null; notas: string | null
 }
 
-type Plan = { plan_id: string; nombre: string }
-
 const POR_PAGINA = 10
+
+function cicloLabel(ciclo: string | null) {
+  return ciclo === 'anual' ? 'Anual' : 'Mensual'
+}
 
 function formatFecha(fecha: string | null) {
   if (!fecha) return '—'
@@ -51,13 +54,13 @@ const DIAS_COLOR: Record<DiasInfo['variant'], string> = {
   muted:   'var(--color-text-muted)',
 }
 
-function exportCSV(clientes: Cliente[], planNombre: Record<string, string>) {
+function exportCSV(clientes: Cliente[]) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const headers = ['ID Cliente', 'Empresa', 'Contacto', 'Email', 'Plan ID', 'Plan',
+  const headers = ['ID Cliente', 'Empresa', 'Contacto', 'Email', 'Precio mensual USD', 'Ciclo',
     'Estado', 'Expiración', 'Días restantes', 'Fecha alta', 'Notas']
   const rows = clientes.map(c => [
     c.client_id, c.nombre_empresa, c.nombre_contacto ?? '', c.email_admin,
-    c.plan_id, planNombre[c.plan_id] ?? '', c.estado,
+    Number(c.precio_mensual_usd ?? 0).toFixed(2), cicloLabel(c.ciclo_facturacion), c.estado,
     c.fecha_expiracion ?? '', calcDiasRestantes(c.fecha_expiracion, c.estado).label,
     c.fecha_inicio ?? c.created_at ?? '', c.notas ?? '',
   ])
@@ -70,17 +73,12 @@ function exportCSV(clientes: Cliente[], planNombre: Record<string, string>) {
 
 export default function ClientesTabla({
   clientes,
-  planes,
-  planNombre,
 }: {
   clientes: Cliente[]
-  planes: Plan[]
-  planNombre: Record<string, string>
 }) {
   const router = useRouter()
   const [busqueda, setBusqueda]         = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroPlan, setFiltroPlan]     = useState('')
   const [pagina, setPagina]             = useState(1)
 
   const filtrados = useMemo(() => {
@@ -91,10 +89,9 @@ export default function ClientesTabla({
         c.email_admin.toLowerCase().includes(q) ||
         c.client_id.toLowerCase().includes(q)
       const coincideEstado = !filtroEstado || c.estado === filtroEstado
-      const coincidePlan   = !filtroPlan   || c.plan_id === filtroPlan
-      return coincideBusqueda && coincideEstado && coincidePlan
+      return coincideBusqueda && coincideEstado
     })
-  }, [clientes, busqueda, filtroEstado, filtroPlan])
+  }, [clientes, busqueda, filtroEstado])
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
   const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
@@ -127,15 +124,7 @@ export default function ClientesTabla({
           <option value="VENCIDO">Vencido</option>
         </select>
 
-        <select className="filter-select" value={filtroPlan}
-          onChange={e => resetPagina(() => setFiltroPlan(e.target.value))}>
-          <option value="">Todos los planes</option>
-          {planes.map(p => (
-            <option key={p.plan_id} value={p.plan_id}>{p.nombre}</option>
-          ))}
-        </select>
-
-        <button className="btn btn-secondary" onClick={() => exportCSV(filtrados, planNombre)}>
+        <button className="btn btn-secondary" onClick={() => exportCSV(filtrados)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -161,7 +150,7 @@ export default function ClientesTabla({
               <tr>
                 <th>Empresa</th>
                 <th>Email</th>
-                <th>Plan</th>
+                <th>Precio/mes</th>
                 <th>Estado</th>
                 <th>Expiración</th>
                 <th className="text-center">Días</th>
@@ -183,7 +172,9 @@ export default function ClientesTabla({
                       <div className="table-empresa-contact">{c.client_id}</div>
                     </td>
                     <td className="table-muted">{c.email_admin}</td>
-                    <td className="table-muted">{planNombre[c.plan_id] ?? c.plan_id ?? '—'}</td>
+                    <td className="table-muted">
+                      ${Number(c.precio_mensual_usd ?? 0).toFixed(2)} · {cicloLabel(c.ciclo_facturacion)}
+                    </td>
                     <td>
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>
                         {c.estado}

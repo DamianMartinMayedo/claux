@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     { count: totalClientes },
     { count: clientesActivos },
     { count: enTrial },
-    { count: totalPlanes },
+    { count: totalModulos },
     { count: proximosVencer },
     { count: suspendidos },
     { data: clientesActivosDatos },
@@ -33,13 +33,13 @@ export default async function DashboardPage() {
     supabase.from('clients').select('*', { count: 'exact', head: true }),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'ACTIVO'),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'TRIAL'),
-    supabase.from('plans').select('*', { count: 'exact', head: true }).eq('estado', 'ACTIVO'),
+    supabase.from('modulos_catalogo').select('*', { count: 'exact', head: true }).eq('activo', true),
     supabase.from('clients').select('*', { count: 'exact', head: true })
       .in('estado', ['ACTIVO', 'TRIAL'])
       .gte('fecha_expiracion', fechaHoyStr)
       .lte('fecha_expiracion', fechaAvisoStr),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'SUSPENDIDO'),
-    supabase.from('clients').select('plan_id').in('estado', ['ACTIVO', 'TRIAL']),
+    supabase.from('clients').select('precio_mensual_usd').in('estado', ['ACTIVO', 'TRIAL']),
     supabase.from('payments').select('monto_usd, fecha'),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)
     supabase.from('clients')
@@ -55,19 +55,10 @@ export default async function DashboardPage() {
       .order('fecha_expiracion', { ascending: true }),
   ])
 
-  // Ingresos estimados
-  const planIds = (clientesActivosDatos ?? []).map(c => c.plan_id).filter(Boolean)
-  let ingresosEstimados = 0
-  if (planIds.length > 0) {
-    const { data: planesActivos } = await supabase
-      .from('plans').select('plan_id, precio_usd').in('plan_id', planIds)
-    if (planesActivos) {
-      const precioMap = Object.fromEntries(planesActivos.map(p => [p.plan_id, p.precio_usd ?? 0]))
-      ingresosEstimados = (clientesActivosDatos ?? []).reduce(
-        (sum, c) => sum + (precioMap[c.plan_id] ?? 0), 0
-      )
-    }
-  }
+  // Ingresos mensuales estimados (MRR): suma del precio mensual de activos + trial
+  const ingresosEstimados = (clientesActivosDatos ?? []).reduce(
+    (sum, c) => sum + Number(c.precio_mensual_usd ?? 0), 0
+  )
 
   // Ingresos del mes actual
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
@@ -130,9 +121,9 @@ export default async function DashboardPage() {
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
           </div>
-          <p className="metric-label">Planes activos</p>
-          <p className="metric-value">{totalPlanes ?? 0}</p>
-          <p className="metric-sub">Disponibles para contratar</p>
+          <p className="metric-label">Módulos activos</p>
+          <p className="metric-value">{totalModulos ?? 0}</p>
+          <p className="metric-sub">En el catálogo</p>
         </div>
       </div>
 

@@ -21,8 +21,6 @@ const METODO_LABEL: Record<string, string> = {
   tropipay: 'TropiPay', transferencia: 'Transferencia', efectivo: 'Efectivo',
 }
 
-type Plan = { plan_id: string; nombre: string; precio_usd: number; duracion_dias: number }
-
 type UltimoPago = { monto_usd: number; fecha_inicio: string; fecha_fin: string }
 
 type Props = {
@@ -30,10 +28,8 @@ type Props = {
     client_id: string
     nombre_empresa: string
     estado: string
-    plan_id: string
     fecha_expiracion: string | null
   }
-  planes: Plan[]
 }
 
 type ModalType = 'gracia' | 'estado' | 'pago' | null
@@ -96,7 +92,7 @@ function addDaysES(days: number): string {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
-export default function AccionesDetalle({ cliente, planes }: Props) {
+export default function AccionesDetalle({ cliente }: Props) {
   const [modal, setModal]         = useState<ModalType>(null)
   const [loading, setLoading]     = useState(false)
   const [loadingPago, setLoadingPago] = useState(false)
@@ -111,10 +107,11 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
   // Pago — estado controlado
   const [montoSugerido, setMontoSugerido]     = useState('')
+  const [montoBase, setMontoBase]             = useState(0)
   const [fechaInicio, setFechaInicio]         = useState('')
   const [fechaFin, setFechaFin]               = useState('')
-  const [planPago, setPlanPago]               = useState(cliente.plan_id)
-  const [planDuracionDias, setPlanDuracionDias] = useState(30)
+  const [duracionDias, setDuracionDias]       = useState(30)
+  const [ciclo, setCiclo]                     = useState('mensual')
   const [fechaExpActual, setFechaExpActual]   = useState<string | null>(cliente.fecha_expiracion)
   const [ultimoPago, setUltimoPago]           = useState<UltimoPago | null>(null)
 
@@ -125,9 +122,9 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   const handleClose = useCallback(() => {
     setModal(null); setError(''); setSuccess(''); setAdvertencia('')
     setDiasGracia(''); setFechaCalculada('—')
-    setFechaInicio(''); setFechaFin(''); setMontoSugerido('')
-    setPlanPago(cliente.plan_id); setPlanDuracionDias(30); setUltimoPago(null)
-  }, [cliente.plan_id])
+    setFechaInicio(''); setFechaFin(''); setMontoSugerido(''); setMontoBase(0)
+    setDuracionDias(30); setCiclo('mensual'); setUltimoPago(null)
+  }, [])
 
   useModalKeyboard(!!modal, handleClose)
 
@@ -145,41 +142,23 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
     setLoadingPago(false)
     if (res.ok) {
       setMontoSugerido(String(res.monto_sugerido))
+      setMontoBase(Number(res.monto_sugerido))
       setFechaInicio(res.fecha_inicio)
       setFechaFin(res.fecha_fin)
-      setPlanPago(res.plan_id)
-      setPlanDuracionDias(res.duracion_dias)
+      setDuracionDias(res.duracion_dias)
+      setCiclo(res.ciclo)
       setFechaExpActual(res.fecha_expiracion_actual)
       setUltimoPago(res.ultimo_pago)
-    }
-  }
-
-  // ── Cambio de plan: actualiza monto (con pro-rata si aplica), duración y fecha fin ──
-  function onPlanChange(planId: string) {
-    setPlanPago(planId)
-    const plan = planes.find(p => p.plan_id === planId)
-    if (plan) {
-      setPlanDuracionDias(plan.duracion_dias)
-      if (fechaInicio) setFechaFin(addDays(fechaInicio, plan.duracion_dias))
-      // Auto-aplicar pro-rata si hay solapamiento, si no usar precio del plan
-      const pr = calcProrata(fechaInicio, fechaExpActual, ultimoPago, plan.precio_usd)
-      setMontoSugerido(pr ? String(pr.suggestedNet.toFixed(2)) : String(plan.precio_usd))
     }
   }
 
   // ── Cambio de fecha inicio: recalcula fecha fin y pro-rata ───────────
   function onInicioChange(val: string) {
     setFechaInicio(val)
-    if (val && planDuracionDias) setFechaFin(addDays(val, planDuracionDias))
-    // Recalcular monto con nuevo inicio
-    const planActual = planes.find(p => p.plan_id === planPago)
-    const planPrice  = planActual?.precio_usd ?? parseFloat(montoSugerido) ?? 0
-    const pr = calcProrata(val, fechaExpActual, ultimoPago, planPrice)
-    if (pr) {
-      setMontoSugerido(String(pr.suggestedNet.toFixed(2)))
-    } else if (planActual) {
-      setMontoSugerido(String(planActual.precio_usd))
-    }
+    if (val && duracionDias) setFechaFin(addDays(val, duracionDias))
+    // Recalcular monto con nuevo inicio (pro-rata sobre el precio del período)
+    const pr = calcProrata(val, fechaExpActual, ultimoPago, montoBase)
+    setMontoSugerido(pr ? String(pr.suggestedNet.toFixed(2)) : String(montoBase.toFixed(2)))
   }
 
   // ── Suspender / Reactivar ────────────────────────────────────────────
@@ -228,16 +207,15 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
   // ── Alertas calculadas del modal de pago ────────────────────────────
   const alertaInicioTemprano = (fechaInicio && fechaExpActual && fechaInicio < fechaExpActual)
-    ? `Se recomienda que el inicio del nuevo período (${formatDateES(fechaInicio)}) sea igual o posterior a la expiración actual (${formatDateES(fechaExpActual)}). Puedes continuar si el cambio de plan lo requiere.`
+    ? `Se recomienda que el inicio del nuevo período (${formatDateES(fechaInicio)}) sea igual o posterior a la expiración actual (${formatDateES(fechaExpActual)}).`
     : null
 
   // Pro-rata para mostrar el desglose en la UI (monto ya se auto-aplicó en los handlers)
-  const selectedPlan = planes.find(p => p.plan_id === planPago)
   const prorata = calcProrata(
     fechaInicio,
     fechaExpActual,
     ultimoPago,
-    selectedPlan?.precio_usd ?? parseFloat(montoSugerido) ?? 0,
+    montoBase || parseFloat(montoSugerido) || 0,
   )
 
   const esActivo    = cliente.estado === 'ACTIVO' || cliente.estado === 'TRIAL'
@@ -406,24 +384,17 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
             {loadingPago && (
               <div className="loading-row">
-                <span className="spinner spinner-xs" /> Cargando datos del plan…
+                <span className="spinner spinner-xs" /> Cargando datos de la suscripción…
               </div>
             )}
 
-            {/* Plan + Método */}
+            {/* Ciclo (informativo) + Método */}
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>Plan</label>
-                <select
-                  name="plan_id"
-                  className="input"
-                  value={planPago}
-                  onChange={(e) => onPlanChange(e.target.value)}
-                >
-                  {planes.map(p => (
-                    <option key={p.plan_id} value={p.plan_id}>{p.nombre}</option>
-                  ))}
-                </select>
+                <label>Ciclo</label>
+                <div className="input input-display">
+                  {ciclo === 'anual' ? 'Anual' : 'Mensual'} · {duracionDias} días
+                </div>
               </div>
               <div className="input-group">
                 <label>Método <span className="required">*</span></label>
@@ -435,25 +406,15 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
               </div>
             </div>
 
-            {/* Monto */}
+            {/* Monto (fijado por la configuración del cliente, no editable) */}
             <div className="input-group">
-              <label>Monto USD <span className="required">*</span></label>
-              <input
-                name="monto_usd"
-                type="number"
-                step="0.01"
-                min="0.01"
-                className="input"
-                required
-                value={montoSugerido}
-                onChange={(e) => setMontoSugerido(e.target.value)}
-                placeholder="0.00"
-              />
-              {prorata && (
-                <span className="input-hint">
-                  Sugerido: ${prorata.suggestedNet.toFixed(2)} (precio plan ${prorata.planPrice.toFixed(2)} − crédito ${prorata.credit.toFixed(2)})
-                </span>
-              )}
+              <label>Monto USD a cobrar</label>
+              <div className="input input-display">${(parseFloat(montoSugerido) || 0).toFixed(2)}</div>
+              <input type="hidden" name="monto_usd" value={montoSugerido} />
+              <span className="input-hint">
+                Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
+                {prorata && ` Ajustado por prorrateo: crédito $${prorata.credit.toFixed(2)} sobre $${prorata.planPrice.toFixed(2)}.`}
+              </span>
             </div>
 
             {/* Período */}
@@ -512,7 +473,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
                   <span>Tarifa diaria período anterior: ${prorata.dailyRate.toFixed(4)}/día</span>
                   <span>Crédito por días ya pagados: −${prorata.credit.toFixed(2)}</span>
                   <span>
-                    <strong>Monto sugerido primer mes nuevo plan: ${prorata.suggestedNet.toFixed(2)}</strong>
+                    <strong>Monto sugerido primer período: ${prorata.suggestedNet.toFixed(2)}</strong>
                     {' '}(ajustado arriba en el campo Monto)
                   </span>
                 </div>

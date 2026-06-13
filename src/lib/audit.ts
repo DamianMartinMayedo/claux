@@ -5,7 +5,7 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function logActividad(supabase: any, params: {
   user_email: string
-  entity:     'cliente' | 'plan' | 'pago' | 'sistema'
+  entity:     'cliente' | 'plan' | 'pago' | 'sistema' | 'modulo_catalogo' | 'modulo_cliente'
   entity_id?: string | null
   action:     string
   description: string

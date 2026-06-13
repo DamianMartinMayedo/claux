@@ -1,16 +1,22 @@
 import { createClient } from '@/lib/supabase/server'
+import { getSetting } from '@/app/actions/settings'
 import NuevoClienteModal from './NuevoClienteModal'
 import ClientesTabla     from './ClientesTabla'
 
 export default async function ClientesPage() {
   const supabase = await createClient()
 
-  const [{ data: clientes }, { data: planes }] = await Promise.all([
+  const [{ data: clientes }, { data: catalogo }] = await Promise.all([
     supabase.from('clients').select('*').order('created_at', { ascending: false }),
-    supabase.from('plans').select('plan_id, nombre, nivel, precio_usd').eq('estado', 'ACTIVO').order('precio_usd'),
+    supabase
+      .from('modulos_catalogo')
+      .select('clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo')
+      .eq('activo', true)
+      .order('orden'),
   ])
 
-  const planNombre = Object.fromEntries((planes ?? []).map(p => [p.plan_id, p.nombre]))
+  const setupDefault = parseFloat(await getSetting('pago_setup_usd_default', '1000')) || 0
+  const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const total = clientes?.length ?? 0
 
   return (
@@ -22,7 +28,11 @@ export default async function ClientesPage() {
             {total} cliente{total !== 1 ? 's' : ''} registrado{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <NuevoClienteModal planes={planes ?? []} />
+        <NuevoClienteModal
+          catalogo={catalogo ?? []}
+          setupDefault={setupDefault}
+          descuentoAnualPct={descuentoAnual}
+        />
       </div>
 
       {!clientes || clientes.length === 0 ? (
@@ -38,11 +48,7 @@ export default async function ClientesPage() {
           </div>
         </div>
       ) : (
-        <ClientesTabla
-          clientes={clientes}
-          planes={planes ?? []}
-          planNombre={planNombre}
-        />
+        <ClientesTabla clientes={clientes} />
       )}
     </div>
   )

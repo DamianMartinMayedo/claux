@@ -9,3 +9,6 @@ tsconfig.tsbuildinfo
 # Estado local de herramientas de agentes (las skills reales viven en skills/)
 .claude/
 .agents/
+
+# Unlighthouse (artefacto generado de auditorías Lighthouse)
+.unlighthouse/

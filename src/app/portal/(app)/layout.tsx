@@ -13,27 +13,22 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const { data: cliente } = await db
     .from('clients')
-    .select('nombre_empresa, estado, plan_id')
+    .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion')
     .eq('client_id', session.client_id)
     .single()
 
   if (!cliente) redirect('/portal/login')
 
-  // Obtener módulos del plan
-  let planNombre     = ''
-  let modulosActivos: string[] = []
+  // Módulos activos leídos del cliente (modelo à la carte).
+  // 'base' siempre está activo — lo garantizamos aquí para que el sidebar
+  // no dependa de que el campo esté bien rellenado en cada fila.
+  const modulosActivos: string[] = Array.isArray(cliente.modulos_activos) && cliente.modulos_activos.length > 0
+    ? (cliente.modulos_activos.includes('base') ? cliente.modulos_activos : ['base', ...cliente.modulos_activos])
+    : ['base']
 
-  if (cliente.plan_id) {
-    const { data: plan } = await db
-      .from('plans')
-      .select('nombre, modulos')
-      .eq('plan_id', cliente.plan_id)
-      .single()
-    if (plan) {
-      planNombre     = plan.nombre ?? ''
-      modulosActivos = Array.isArray(plan.modulos) ? plan.modulos : []
-    }
-  }
+  // Etiqueta de suscripción para el header (precio mensual + ciclo)
+  const precioMes  = Number(cliente.precio_mensual_usd ?? 0)
+  const suscripcion = `$${precioMes.toFixed(2)}/mes${cliente.ciclo_facturacion === 'anual' ? ' · anual' : ''}`
 
   const bloqueado = ['SUSPENDIDO', 'VENCIDO'].includes(cliente.estado)
 
@@ -43,7 +38,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         session={session}
         nombreEmpresa={cliente.nombre_empresa}
         estado={cliente.estado}
-        planNombre={planNombre}
+        suscripcion={suscripcion}
       />
       <PortalSidebar
         rol={session.rol}

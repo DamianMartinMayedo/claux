@@ -13,20 +13,27 @@ El desarrollo NO parte de cero. El repositorio existente (`DamianMartinMayedo/cl
 
 **Lo que YA existe y se reutiliza:**
 - **Multi-tenancy real** por `client_id` en todas las tablas. Doble autenticación: super admin con Supabase Auth (`/admin`) y usuarios de cliente con tabla `client_users` + JWT HMAC propio en cookie httpOnly (`/portal`). Roles: `admin_empresa`, `usuario`, `solo_lectura`.
-- **Feature flags operativos**: los planes (`plans.modulos`) determinan los módulos activos; el sidebar del portal candado los no contratados (visibles pero bloqueados, con upgrade como CTA).
-- **Admin interno completo** (`/admin`): clientes con estados ACTIVO/TRIAL/GRACIA/VENCIDO/SUSPENDIDO, periodo de gracia con motivo y fecha, planes con CRUD y precios en USD, registro de pagos con reactivación automática, dashboard de vencimientos, log de auditoría y pantalla de bloqueo con degradación (`BloqueadoScreen`).
+- **Feature flags operativos**: los módulos activos del cliente (`clients.modulos_activos`) determinan qué módulos se ven; el sidebar del portal candado los no contratados (visibles pero bloqueados, con upgrade como CTA).
+- **Admin interno completo** (`/admin`): clientes con estados ACTIVO/TRIAL/GRACIA/VENCIDO/SUSPENDIDO, periodo de gracia con motivo y fecha, catálogo de módulos con precios en USD (`/admin/modulos`), toggle de módulos por cliente con recálculo automático del precio, registro de pagos (suscripción y pago único de configuración) con reactivación automática, dashboard de vencimientos, log de auditoría y pantalla de bloqueo con degradación (`BloqueadoScreen`).
 - **Portal cliente (ERP de gestión)**: multi-empresa, multi-moneda con pares de tasa (CUP/MLC/USD/EUR), terceros, productos con categorías, almacenes, ventas (facturas y ofertas con numeración correlativa tipo `FAC-2026-0001`, estados BORRADOR/CONFIRMADO/ANULADO, anulación sin borrado físico, PDF) y gestión de usuarios.
 
-**Declarado pero sin implementar** (en navegación con gating, sin páginas): compras, tesorería, inventario (hay almacenes pero no movimientos), contabilidad, RRHH.
+**Declarado pero sin implementar** (en navegación, sin páginas): tesorería, gastos/cobros, cuentas por cobrar/pagar y reportes financieros — todos pasan a la **base contable** (ver §5); compras y movimientos quedan en el **módulo inventario** (que ya tiene almacenes y productos); RRHH y asistente IA son módulos. El placeholder "contabilidad" (`modulo_contable`) se retira del MVP: la base ya cubre la contabilidad simple completa y un tier contable avanzado (partida doble / plan de cuentas oficial) es trabajo futuro.
 
 **Lo que NO existe y constituye el trabajo de Fase 0** (la raíz redirige hoy a `/admin/login`): toda la capa pública — landing + formulario de diagnóstico + informe (embudo), menú digital QR + mini-web por negocio, sistema de reservas con panel, bot de Telegram y capa de IA. Las páginas públicas se construyen estáticas/pre-renderizadas (SSG/ISR de Next) fuera del portal: deben cumplir el presupuesto de rendimiento de la sección 3 y NO cargar el peso del ERP. Requerirán además una vía de lectura pública de datos (políticas RLS de solo lectura para menú/mini-web o generación estática), ya que hoy todo el acceso es vía `service_role` en servidor.
 
 **Deuda técnica a corregir pronto:** (1) el hash de contraseñas de `client_users` es SHA-256+salt — migrar a scrypt o argon2 antes de tener clientes reales; (2) las migraciones de `supabase/migrations` empiezan en 001 sobre tablas creadas a mano en el SQL Editor — volcar el esquema base completo al repo para que la base de datos sea reconstruible; (3) la seguridad entre tenants depende de filtrar por `client_id` en cada query (no hay políticas RLS por tenant): toda query nueva debe revisarse contra esta regla.
 
-**Nota de nomenclatura:** el código y `docs/CLAUX-LEGACY.md` usan planes Básico/Profesional/Empresarial (herencia del enfoque mini-ERP genérico). El modelo comercial vigente es **base contable + módulos à la carte** (sección 5): los "planes" pasan a ser la configuración de módulos activos de cada tenant con precio compuesto. Los planes son datos, no código, así que el cambio es de contenido y de gating; ante conflicto entre `docs/CLAUX-LEGACY.md` y este documento, prevalece este documento.
+**Nota de nomenclatura:** el sistema de planes cerrados (Básico/Profesional/Empresarial, tabla `plans`) **se eliminó por completo** (migración 018: tabla borrada, `plan_id` vaciado e inerte). Las referencias a esos planes en `docs/CLAUX-LEGACY.md` son obsoletas. El modelo vigente es **base contable + módulos à la carte** (sección 5): cada tenant tiene su conjunto de módulos activos (`clients.modulos_activos`) con precio compuesto recalculado. Ante conflicto entre `docs/CLAUX-LEGACY.md` y este documento, prevalece este documento.
 
-**Cambios de la sesión de alineación v2 (junio 2026):**
-- **Modelo à la carte diseñado y documentado** (no implementado) en [docs/MODELO-MODULOS.md](MODELO-MODULOS.md): catálogo de módulos + módulos por cliente con precio compuesto, migración SQL lista (pendiente de aplicar), nomenclatura genérica (`catalogo_qr`, `reservas_citas`), la IA como módulo único context-aware (`asistente_ia`), discrepancias y checklist de implementación. Auditoría clave: el gating del portal depende de `plans.modulos` (no del nombre del plan), así que migrarlo apenas toca una query.
+**Reenfoque junio 2026 — base contable + módulos à la carte (IMPLEMENTADO):** la base deja de ser un mini-ERP genérico y es un **sistema contable completo aunque simple** (ventas, gastos/cobros, cuentas por cobrar/pagar, tesorería, reportes financieros, terceros, multimoneda). En consecuencia: **Productos, Almacenes y Compras** pasan al **módulo Inventario**; **Multiempresa** pasa a ser **módulo de pago** (con el módulo OFF, 1 empresa por defecto); no hay módulo de contabilidad avanzada por ahora. Sin el módulo Inventario, las líneas de factura se escriben a mano; con él, se pueden elegir de los productos. La mecánica (catálogo `modulos_catalogo` + `clients.modulos_activos` + precio compuesto) está implementada y especificada en [docs/MODELO-MODULOS.md](MODELO-MODULOS.md).
+
+**Sistema de módulos à la carte implementado (junio 2026) — migraciones 017 + 018:**
+- **Planes eliminados (018):** tabla `plans` borrada; `clients.plan_id`/`payments.plan_id` vaciados (columnas inertes anulables, sin FK). Toda la UI/lógica de planes retirada (`/admin/planes`, `cambiarPlan`, `planes-constants.ts`).
+- **Catálogo y gating (017):** `modulos_catalogo` (`tipo` base/modulo/funcionalidad, precios fundador/estándar) sembrado con 8 filas; gating del portal lee `clients.modulos_activos`; admin `/admin/modulos` (CRUD de precios) y toggle por cliente con recálculo (`setModulosCliente`). Alta de cliente con selección de módulos.
+- **Ciclo de facturación (018):** `clients.ciclo_facturacion` (mensual/anual; anual con descuento configurable). Conmutable por cliente respetando los plazos ya pagados. El importe sugerido del cobro sale de `precio_mensual_usd` + ciclo.
+- **Pago único de configuración (018):** `payments.concepto` (`suscripcion`|`configuracion`); al crear cliente se registra **una vez** un pago de configuración (importe por defecto en Ajustes, editable en el alta, 0 lo omite). No extiende la suscripción ni se repite en los cobros mensuales. _Futuro: este registro podrá automatizarse cuando haya cobro automático; de momento es manual._
+- **Ajustes configurables (`settings`):** `pago_setup_usd_default`, `descuento_anual_pct`, `dias_trial_default`, editables en `/admin/configuracion` → sección Facturación.
+- **Pagos:** registro manual (el cliente paga, verificamos y registramos); el cobro automático es futuro. El **monto a cobrar en el registro de pago no es editable**: sale del precio configurado del cliente (`precio_mensual_usd` × ciclo, con prorrateo si hay solapamiento de período).
 - **Bypass de login para desarrollo local** (`src/lib/dev-auth.ts`): doble candado `NODE_ENV==='development'` + `DEV_BYPASS_AUTH=true`; inerte en producción (verificado con `next build`). Capa el admin (`src/proxy.ts`, layout admin) y, opcionalmente, el portal vía `DEV_PORTAL_CLIENT_ID` (`getPortalSession`). Documentado en README §Desarrollo local y `.env.example`.
 - **Skills curadas a 13** (de 19; eliminadas las solapadas o ajenas al stack) y `AGENTS.md` reforzado: regla de UI destacada + tabla "qué leer según la tarea" para ahorrar tokens.
 - **Arranque local:** los binarios nativos (Turbopack SWC, lightningcss, tailwind-oxide) venían en cuarentena de macOS; script `npm run fix-native` y `dev:webpack` como respaldo.
@@ -66,30 +73,43 @@ El desarrollo NO parte de cero. El repositorio existente (`DamianMartinMayedo/cl
 
 ## 5. Catálogo de módulos y modelo comercial
 
-El modelo comercial NO son planes cerrados: es **una base mensual + módulos à la carte** que suman al precio. Cada cliente tiene la base más el conjunto de módulos activos; el admin interno gestiona el toggle por módulo y el precio resultante se recalcula automáticamente. Los módulos no contratados se muestran en el portal visibles pero bloqueados, con CTA de activación (patrón ya implementado en el sidebar).
+El modelo comercial NO son planes cerrados: es **una base mensual + módulos à la carte** que suman al precio. Cada cliente tiene la base más el conjunto de módulos/funcionalidades activos; el admin interno gestiona el toggle y el precio resultante se recalcula automáticamente. Lo no contratado se muestra en el portal visible pero bloqueado, con CTA de activación (patrón ya implementado en el sidebar). Tres tipos de pieza con **una sola mecánica de on/off**: la **base** (obligatoria, el sistema contable), los **módulos** (capacidades generales) y las **funcionalidades por sector** (propias de un tipo de negocio concreto).
 
-| Módulo | Contenido | Precio fundador / estándar |
+**Base contable (obligatoria) — $20 / $35 al mes.** Es el núcleo de CLAUX: un sistema contable completo aunque simple. Incluye:
+- **Ventas:** ingresos, ofertas/presupuestos y facturas (numeración correlativa, multimoneda, PDF).
+- **Gastos y cobros.**
+- **Cuentas por cobrar** y **cuentas por pagar.**
+- **Tesorería:** cajas/cuentas, movimientos y saldos multimoneda.
+- **Reportes financieros:** estado de resultados y flujo de caja simples.
+- **Terceros** (clientes y proveedores) y **multimoneda** con pares de tasa.
+- Panel del negocio y soporte.
+
+No incluye partida doble ni plan de cuentas oficial: si en el futuro hace falta, será un **tier contable avanzado** con funcionalidades nuevas, no parte de la base.
+
+| Módulo (capacidad general) | Contenido | Precio fundador / estándar |
 |---|---|---|
-| **Base (obligatoria)** | Sistema contable básico: ingresos/gastos en categorías simples, caja y banco, facturación simple multi-moneda, panel del negocio, soporte | $20 / $35 al mes |
-| Catálogo digital QR + mini-web | Carta/catálogo/servicios con fotos y precios por QR y enlace; mini-web pública; multi-idioma opcional | +$10 / +$18 |
-| Reservas y citas + bot Telegram | Formulario público, panel (confirmar/rechazar, capacidad o agenda por franjas, no-shows), bot de botones, notificaciones al dueño | +$10 / +$18 |
-| Inventario | Stock, movimientos, disponibilidad conectada al catálogo | +$8 / +$14 |
-| RRHH | Empleados, turnos, pagos/nómina simple | +$8 / +$14 |
-| Contabilidad avanzada | Plan de cuentas, modo dual (simple + contable oficial coexistentes), rol contador externo | +$8 / +$14 |
-| Multi-negocio | Varias empresas/locales con consolidación | +$12 / +$20 |
-| Marketing y reseñas | Google Maps/Business, reseñas, promos | +$6 / +$10 |
+| Inventario | Almacenes, productos, compras, movimientos, disponibilidad conectada al catálogo | +$8 / +$14 |
+| RRHH | Personal, contratos, bajas, turnos, nómina simple | +$8 / +$14 |
+| Multiempresa | Varias empresas/locales con consolidación (lógica ya implementada; pasa a ser de pago) | +$12 / +$20 |
 | Asistente IA | Chat con clientes (Telegram + embebido en catálogo), reservas/pedidos en lenguaje natural, consultas del dueño sobre sus módulos activos, resumen semanal | +$15 / +$25 |
 
-Módulos de fases futuras (no MVP): operación en sala offline-first sobre red local (comandas, pantalla de cocina) y equivalentes por vertical, gestión de repartidores, fidelización, CRM. Variantes "Google" como integraciones opcionales (Calendar, Sheets, Business Profile).
+| Funcionalidad por sector | Contenido | Precio fundador / estándar |
+|---|---|---|
+| Catálogo digital QR + mini-web | Carta/catálogo/servicios con fotos y precios por QR y enlace; mini-web pública; multi-idioma opcional | +$10 / +$18 |
+| Reservas y citas + bot Telegram | Formulario público, panel (confirmar/rechazar, capacidad o agenda por franjas, no-shows), bot de botones, notificaciones al dueño | +$10 / +$18 |
+| Documentos de imprenta | El cliente envía sus documentos por correo antes de pasar a recogerlos | a definir |
 
-Implicación técnica: el modelo de "planes" existente (plans.modulos) se reinterpreta como configuración por cliente — la entidad que manda es el conjunto de módulos activos del tenant y su precio compuesto, no un tier con nombre. Los precios viven en datos gestionados desde el admin; nunca hardcodear precios en el producto.
+Módulos/funcionalidades de fases futuras (no MVP): **contabilidad avanzada** (plan de cuentas, partida doble / modo contable oficial cubano, rol contador externo), **marketing y reseñas** (Google Business, promos), operación en sala offline-first sobre red local (comandas, pantalla de cocina) y equivalentes por vertical, gestión de repartidores, fidelización, CRM, activos fijos. Variantes "Google" como integraciones opcionales (Calendar, Sheets, Business Profile).
+
+Implicación técnica (implementada): el modelo de "planes" cerrados se eliminó; la entidad que manda es el conjunto de módulos activos del tenant (`clients.modulos_activos`) y su precio compuesto, más su ciclo (`ciclo_facturacion`), no un tier con nombre. Los precios viven en datos gestionados desde el admin (tabla `modulos_catalogo`); nunca hardcodear precios en el producto. Detalle técnico de la mecánica en [docs/MODELO-MODULOS.md](MODELO-MODULOS.md).
 
 ## 6. Modelo de datos mínimo (orientativo)
 
 - **Negocio (tenant):** identidad, datos públicos (nombre, dirección, geoloc, horarios, fotos, idiomas), plan, módulos activos, estado de pago, configuración del bot (token Telegram, tono), límites de IA.
 - **Menú:** categorías y platos con nombre, precio, foto, descripción, **ingredientes, alérgenos y calorías** (campos necesarios para el add-on de IA; se capturan en el onboarding llave en mano), disponibilidad (agotado), traducciones.
 - **Reservas:** fecha/franja, personas, datos de contacto, canal de origen (web/bot), estado (pendiente/confirmada/rechazada/no-show), capacidad por franja del negocio.
-- **Contabilidad / inventario / RRHH:** auditar y reutilizar el modelo de la base de código existente; adaptarlo a multi-tenant si no lo es.
+- **Base contable:** ventas (facturas/ofertas), terceros y monedas ya existen y se reutilizan. Pendientes de construir: gastos/cobros, cuentas por cobrar/pagar, tesorería y reportes financieros (reutilizando los patrones de ventas: numeración correlativa, estados, multimoneda).
+- **Inventario / RRHH:** Productos y Almacenes (ya construidos) pertenecen al **módulo inventario**, no a la base. Las líneas de factura de la base se introducen a mano; el módulo inventario añade el selector de productos sobre el mismo editor (`_DocumentoLineasEditor` ya soporta ambos modos vía `datalist`). RRHH es módulo aparte (personal, contratos, bajas, turnos, nómina simple).
 - **Uso de IA:** registro por tenant, mes, conversaciones y tokens.
 
 ## 7. Restricciones de contexto (Cuba) que condicionan decisiones técnicas
@@ -98,16 +118,16 @@ Conectividad móvil lenta y cara (ETECSA), cortes eléctricos frecuentes, usuari
 
 ## 8. Prioridades de construcción (Fase 0 — MVP comercializable)
 
-La auditoría (sección 2), el cascarón multi-tenant y el admin interno ya existen. El trabajo de Fase 0 es la capa pública vertical de restaurantes, en este orden:
+La auditoría (sección 2), el cascarón multi-tenant y el admin interno ya existen. El **sistema real de módulos à la carte ya está implementado** (migraciones 017 + 018; planes eliminados). El eje pendiente de la primera ola es **convertir la base en un sistema contable completo**; la capa pública vertical de restaurantes viene después. Orden:
 
 1. Deuda técnica previa: migrar hash de contraseñas a scrypt/argon2 y volcar el esquema base de la BD al repo.
-2. Modelo de datos del vertical: extender el tenant con datos públicos del negocio (sección 6) y crear menú (categorías/platos con ingredientes, alérgenos, calorías, foto, agotado, traducciones) y reservas.
-3. Menú QR + mini-web pública (rutas públicas estáticas/ISR, presupuesto de rendimiento de la sección 3) + edición del menú en el portal del dueño.
-4. Reservas: formulario público + panel en el portal + notificación Telegram al dueño.
-5. Bot de Telegram de botones (reservar, menú, horarios, ubicación) con enrutado multi-tenant por token.
-6. Landing de CLAUX + formulario de diagnóstico + informe (embudo).
-7. Adaptación del modelo comercial en datos y admin al esquema base + módulos (sección 5): el tenant tiene su conjunto de módulos activos y precio compuesto; el admin permite activar/desactivar módulos por cliente con recálculo automático de la mensualidad; el gating del portal mantiene el patrón existente.
-8. Cierre del módulo de gestión mínimo para el plan Intermedio (registro de ingresos/gastos y cierres de caja sobre la base de ventas/tesorería ya prevista; inventario con disponibilidad en carta conectado al menú).
-9. Add-on IA v1 (motor híbrido + DeepSeek + límites por tenant).
+2. ~~**Sistema de módulos à la carte**~~ **(HECHO)**: catálogo `modulos_catalogo` (`tipo` base/módulo/funcionalidad), columnas `clients.modulos_activos`/`tarifa`/`ciclo_facturacion`/`precio_mensual_usd`, gating del portal leído del cliente, admin con toggle por módulo y recálculo de precio (`/admin/modulos` + tarjeta en detalle de cliente), ciclo mensual/anual con descuento, pago único de configuración, y planes eliminados. Detalle técnico en [docs/MODELO-MODULOS.md](MODELO-MODULOS.md).
+3. **Completar la base contable (siguiente):** Tesorería, Gastos/Cobros, Cuentas por cobrar, Cuentas por pagar y Reportes financieros, reutilizando los patrones de Ventas. Gate del selector de productos en las líneas de factura por el módulo Inventario.
+4. Modelo de datos del vertical: extender el tenant con datos públicos del negocio (sección 6) y crear catálogo (categorías/platos con ingredientes, alérgenos, calorías, foto, agotado, traducciones) y reservas.
+5. Catálogo QR + mini-web pública (rutas públicas estáticas/ISR, presupuesto de rendimiento de la sección 3) + edición en el portal del dueño.
+6. Reservas: formulario público + panel en el portal + notificación Telegram al dueño.
+7. Bot de Telegram de botones (reservar, catálogo, horarios, ubicación) con enrutado multi-tenant por token.
+8. Landing de CLAUX + formulario de diagnóstico + informe (embudo).
+9. Build-out de los módulos restantes (Inventario: compras/movimientos; RRHH) y add-on IA v1 (motor híbrido + DeepSeek + límites por tenant).
 
 Regla general: ante la duda entre hacerlo perfecto o hacerlo vendible, vendible — pero nunca a costa de los principios de la sección 3, que son los que evitan rehacer la casa después.

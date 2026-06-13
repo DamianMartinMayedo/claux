@@ -83,7 +83,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
         <div className="fac-plan-card">
           <div className="fac-plan-left">
             <div className="fac-plan-title-row">
-              <h2 className="fac-plan-name">{data.plan_nombre}</h2>
+              <h2 className="fac-plan-name">{data.suscripcion}</h2>
               <span className={`prf-badge ${estadoCls}`}>{ESTADO_LABEL[data.estado] ?? data.estado}</span>
             </div>
             <p className="fac-plan-id">{data.client_id}</p>
@@ -123,7 +123,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                   <th>ID</th>
                   <th>Fecha</th>
                   <th>Período</th>
-                  <th>Plan</th>
+                  <th>Concepto</th>
                   <th className="text-right">Monto</th>
                   <th>Método</th>
                 </tr>
@@ -138,14 +138,18 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                       {fmt(p.fecha)}
                     </td>
                     <td>
-                      <span className="fac-periodo">
-                        {fmt(p.fecha_inicio_periodo)}
-                        <span className="fac-periodo-sep">→</span>
-                        {fmt(p.fecha_fin_periodo)}
-                      </span>
+                      {p.fecha_inicio_periodo && p.fecha_fin_periodo ? (
+                        <span className="fac-periodo">
+                          {fmt(p.fecha_inicio_periodo)}
+                          <span className="fac-periodo-sep">→</span>
+                          {fmt(p.fecha_fin_periodo)}
+                        </span>
+                      ) : (
+                        <span className="text-sm-muted">—</span>
+                      )}
                     </td>
                     <td className="text-sm-muted">
-                      {p.plan_id ? (data.plan_nombres[p.plan_id] ?? p.plan_id) : '—'}
+                      {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
                     </td>
                     <td className="text-right">
                       <span className="fac-monto">{fmtUsd(p.monto_usd)}</span>

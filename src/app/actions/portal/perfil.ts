@@ -14,7 +14,7 @@ export interface PerfilData {
   nombre_contacto:  string | null
   email_admin:      string
   estado:           string
-  plan_nombre:      string
+  suscripcion:      string
   fecha_expiracion: string | null
   // Mi usuario (editable)
   user_id:      string
@@ -34,7 +34,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   const [{ data: cliente }, { data: usuario }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, nombre_contacto, email_admin, estado, plan_id, fecha_expiracion')
+      .select('nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
       .eq('client_id', session.client_id)
       .single(),
     db.from('client_users')
@@ -45,15 +45,8 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   if (!cliente || !usuario) return null
 
-  let plan_nombre = cliente.plan_id ?? '—'
-  if (cliente.plan_id) {
-    const { data: plan } = await db
-      .from('plans')
-      .select('nombre')
-      .eq('plan_id', cliente.plan_id)
-      .single()
-    if (plan) plan_nombre = plan.nombre
-  }
+  const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
+  const suscripcion = `$${precioMes.toFixed(2)}/mes${cliente.ciclo_facturacion === 'anual' ? ' · anual' : ''}`
 
   return {
     client_id:        session.client_id,
@@ -61,7 +54,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
     nombre_contacto:  cliente.nombre_contacto,
     email_admin:      cliente.email_admin,
     estado:           cliente.estado,
-    plan_nombre,
+    suscripcion,
     fecha_expiracion: cliente.fecha_expiracion,
     user_id:          session.user_id,
     email:            session.email,

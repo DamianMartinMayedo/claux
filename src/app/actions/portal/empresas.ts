@@ -148,32 +148,26 @@ export async function guardarEmpresa(
 
   if (!empresa_id_form) {
     // ── Crear ──────────────────────────────────────────────────────────────
-    // Verificar límite del plan
+    // Límite por módulo: sin 'multiempresa' el cliente solo puede tener 1 empresa.
     const { data: cliente } = await db
       .from('clients')
-      .select('plan_id')
+      .select('modulos_activos')
       .eq('client_id', session.client_id)
       .single()
 
-    if (cliente?.plan_id) {
-      const { data: plan } = await db
-        .from('plans')
-        .select('max_empresas')
-        .eq('plan_id', cliente.plan_id)
-        .single()
+    const tieneMultiempresa = Array.isArray(cliente?.modulos_activos)
+      && cliente.modulos_activos.includes('multiempresa')
 
-      const maxEmp = plan?.max_empresas ?? null
-      if (maxEmp !== null) {
-        const { count } = await db
-          .from('empresas')
-          .select('empresa_id', { count: 'exact', head: true })
-          .eq('client_id', session.client_id)
+    if (!tieneMultiempresa) {
+      const { count } = await db
+        .from('empresas')
+        .select('empresa_id', { count: 'exact', head: true })
+        .eq('client_id', session.client_id)
 
-        if ((count ?? 0) >= maxEmp) {
-          return {
-            ok: false,
-            error: `Tu plan permite un máximo de ${maxEmp} empresa${maxEmp === 1 ? '' : 's'}. Actualiza tu suscripción para añadir más.`,
-          }
+      if ((count ?? 0) >= 1) {
+        return {
+          ok: false,
+          error: 'Tu suscripción permite una sola empresa. Activa el módulo Multiempresa para añadir más.',
         }
       }
     }

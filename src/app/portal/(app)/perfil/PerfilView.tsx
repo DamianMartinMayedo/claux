@@ -100,8 +100,8 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
             <span className="prf-value">{perfil.email_admin}</span>
           </div>
           <div className="prf-field">
-            <span className="prf-label">Plan</span>
-            <span className="prf-value prf-value-strong">{perfil.plan_nombre}</span>
+            <span className="prf-label">Suscripción</span>
+            <span className="prf-value prf-value-strong">{perfil.suscripcion}</span>
           </div>
           <div className="prf-field">
             <span className="prf-label">Estado</span>

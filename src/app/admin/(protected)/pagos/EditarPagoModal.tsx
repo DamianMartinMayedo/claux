@@ -8,12 +8,11 @@ import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 
 type Pago = {
-  pago_id: string; client_id: string; plan_id: string | null
+  pago_id: string; client_id: string; concepto: string | null
   monto_usd: number; metodo: string
   fecha_inicio_periodo: string | null; fecha_fin_periodo: string | null
   notas: string | null
 }
-type Plan = { plan_id: string; nombre: string }
 
 function toYMD(s: string | null): string {
   if (!s) return ''
@@ -32,12 +31,12 @@ function formatDateES(dateStr: string): string {
 export default function EditarPagoModal({
   pago,
   clienteNombre,
-  planesOpciones,
 }: {
   pago: Pago
   clienteNombre: string
-  planesOpciones: Plan[]
 }) {
+  const esConfiguracion = pago.concepto === 'configuracion'
+
   const [open, setOpen]     = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
@@ -46,7 +45,6 @@ export default function EditarPagoModal({
 
   const [monto, setMonto]         = useState(String(pago.monto_usd))
   const [metodo, setMetodo]       = useState(pago.metodo)
-  const [planId, setPlanId]       = useState(pago.plan_id ?? '')
   const [fechaInicio, setFechaInicio] = useState(toYMD(pago.fecha_inicio_periodo))
   const [fechaFin, setFechaFin]   = useState(toYMD(pago.fecha_fin_periodo))
   const [notas, setNotas]         = useState(pago.notas ?? '')
@@ -64,7 +62,6 @@ export default function EditarPagoModal({
     // Resetear a valores actuales del pago
     setMonto(String(pago.monto_usd))
     setMetodo(pago.metodo)
-    setPlanId(pago.plan_id ?? '')
     setFechaInicio(toYMD(pago.fecha_inicio_periodo))
     setFechaFin(toYMD(pago.fecha_fin_periodo))
     setNotas(pago.notas ?? '')
@@ -108,21 +105,13 @@ export default function EditarPagoModal({
           <div className="modal-body">
             <input type="hidden" name="pago_id" value={pago.pago_id} />
 
-            {/* Plan + Método */}
+            {/* Concepto + Método */}
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>Plan</label>
-                <select
-                  name="plan_id"
-                  className="input"
-                  value={planId}
-                  onChange={e => setPlanId(e.target.value)}
-                >
-                  <option value="">— Sin cambio de plan —</option>
-                  {planesOpciones.map(p => (
-                    <option key={p.plan_id} value={p.plan_id}>{p.nombre}</option>
-                  ))}
-                </select>
+                <label>Concepto</label>
+                <div className="input input-display">
+                  {esConfiguracion ? 'Configuración (pago único)' : 'Suscripción'}
+                </div>
               </div>
               <div className="input-group">
                 <label>Método <span className="required">*</span></label>
@@ -156,43 +145,45 @@ export default function EditarPagoModal({
               />
             </div>
 
-            {/* Período */}
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Inicio período <span className="required">*</span></label>
-                <input
-                  name="fecha_inicio_periodo"
-                  type="date"
-                  lang="es-ES"
-                  className="input"
-                  required
-                  value={fechaInicio}
-                  onChange={e => setFechaInicio(e.target.value)}
-                />
-                {fechaInicio && (
-                  <span className="text-xs-muted">
-                    {formatDateES(fechaInicio)}
-                  </span>
-                )}
+            {/* Período (solo suscripción) */}
+            {!esConfiguracion && (
+              <div className="grid-cols-2">
+                <div className="input-group">
+                  <label>Inicio período <span className="required">*</span></label>
+                  <input
+                    name="fecha_inicio_periodo"
+                    type="date"
+                    lang="es-ES"
+                    className="input"
+                    required
+                    value={fechaInicio}
+                    onChange={e => setFechaInicio(e.target.value)}
+                  />
+                  {fechaInicio && (
+                    <span className="text-xs-muted">
+                      {formatDateES(fechaInicio)}
+                    </span>
+                  )}
+                </div>
+                <div className="input-group">
+                  <label>Fin período <span className="required">*</span></label>
+                  <input
+                    name="fecha_fin_periodo"
+                    type="date"
+                    lang="es-ES"
+                    className="input"
+                    required
+                    value={fechaFin}
+                    onChange={e => setFechaFin(e.target.value)}
+                  />
+                  {fechaFin && (
+                    <span className="text-xs-muted">
+                      {formatDateES(fechaFin)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="input-group">
-                <label>Fin período <span className="required">*</span></label>
-                <input
-                  name="fecha_fin_periodo"
-                  type="date"
-                  lang="es-ES"
-                  className="input"
-                  required
-                  value={fechaFin}
-                  onChange={e => setFechaFin(e.target.value)}
-                />
-                {fechaFin && (
-                  <span className="text-xs-muted">
-                    {formatDateES(fechaFin)}
-                  </span>
-                )}
-              </div>
-            </div>
+            )}
 
             {/* Notas */}
             <div className="input-group">

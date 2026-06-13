@@ -4,30 +4,28 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
 import { toDateStr } from '@/lib/date-utils'
+import { getSetting } from '@/app/actions/settings'
+import { diasCiclo, importeCiclo } from '@/lib/billing'
 
 // ── Datos por defecto para pre-rellenar el formulario de pago ────────
-// Lógica: fecha_inicio = día siguiente a la fecha_expiracion actual (o hoy si no hay)
-// fecha_fin = fecha_inicio + plan.duracion_dias
+// Modelo base + módulos: el importe sugerido sale del precio_mensual_usd del cliente y su ciclo
+// (mensual = precio; anual = precio × 12 con descuento). La duración del período la marca el ciclo.
+// fecha_inicio = día siguiente a la fecha_expiracion actual (o hoy si no hay).
 export async function obtenerDatosPagoDefecto(clientId: string) {
   const supabase = await createClient()
 
   const { data: cliente } = await supabase
     .from('clients')
-    .select('plan_id, fecha_expiracion')
+    .select('precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
     .eq('client_id', clientId)
     .single()
 
   if (!cliente) return { ok: false as const, error: 'Cliente no encontrado.' }
 
-  const { data: plan } = await supabase
-    .from('plans')
-    .select('plan_id, nombre, precio_usd, duracion_dias')
-    .eq('plan_id', cliente.plan_id)
-    .single()
-
-  if (!plan) return { ok: false as const, error: 'Plan no encontrado.' }
-
-  const duracionDias = plan.duracion_dias ?? 30
+  const ciclo        = cliente.ciclo_facturacion ?? 'mensual'
+  const duracionDias = diasCiclo(ciclo)
+  const descuento    = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const montoSugerido = importeCiclo(Number(cliente.precio_mensual_usd ?? 0), ciclo, descuento)
 
   // fecha_inicio = día siguiente a la expiración actual (o hoy si no hay expiración)
   let fechaBase: Date
@@ -44,22 +42,23 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   const fechaFin = new Date(fechaBase)
   fechaFin.setDate(fechaFin.getDate() + duracionDias)
 
-  // Último pago — para el cálculo pro-rata en cambios de plan
+  // Último pago de suscripción — para el cálculo pro-rata
   const { data: ultimoPago } = await supabase
     .from('payments')
     .select('monto_usd, fecha_inicio_periodo, fecha_fin_periodo')
     .eq('client_id', clientId)
+    .eq('concepto', 'suscripcion')
+    .not('fecha_fin_periodo', 'is', null)
     .order('fecha_fin_periodo', { ascending: false })
     .limit(1)
     .maybeSingle()
 
   return {
     ok:                      true as const,
-    monto_sugerido:          plan.precio_usd,
+    monto_sugerido:          montoSugerido,
     fecha_inicio:            toDateStr(fechaBase),
     fecha_fin:               toDateStr(fechaFin),
-    plan_id:                 plan.plan_id,
-    plan_nombre:             plan.nombre,
+    ciclo,
     duracion_dias:           duracionDias,
     fecha_expiracion_actual: cliente.fecha_expiracion ?? null,
     ultimo_pago:             ultimoPago
@@ -83,7 +82,6 @@ export async function registrarPago(formData: FormData) {
   const supabase = await createClient()
 
   const client_id            = formData.get('client_id')            as string
-  const plan_id              = (formData.get('plan_id') as string)?.trim() || null
   const monto_usd            = parseFloat(formData.get('monto_usd') as string)
   const metodo               = formData.get('metodo')               as string
   const fecha_inicio_periodo = formData.get('fecha_inicio_periodo') as string
@@ -114,22 +112,10 @@ export async function registrarPago(formData: FormData) {
   // ── Verificar cliente ────────────────────────────────────────────
   const { data: cliente } = await supabase
     .from('clients')
-    .select('client_id, estado, plan_id, fecha_expiracion')
+    .select('client_id, estado, fecha_expiracion')
     .eq('client_id', client_id)
     .single()
   if (!cliente) return { ok: false as const, error: 'Cliente no encontrado.' }
-
-  // ── Validar nuevo plan si se incluye ────────────────────────────
-  if (plan_id && plan_id !== cliente.plan_id) {
-    const { data: planNuevo } = await supabase
-      .from('plans')
-      .select('plan_id')
-      .eq('plan_id', plan_id)
-      .single()
-    if (!planNuevo) {
-      return { ok: false as const, error: `Plan "${plan_id}" no válido.` }
-    }
-  }
 
   // ── Detectar gap entre expiración actual y nueva fecha de inicio ─
   let advertencia_gap: string | null = null
@@ -163,11 +149,11 @@ export async function registrarPago(formData: FormData) {
   }
   const pago_id = `PAG-${String(nextNum).padStart(4, '0')}`
 
-  // ── Registrar pago ───────────────────────────────────────────────
+  // ── Registrar pago (suscripción) ─────────────────────────────────
   const { error: errorPago } = await supabase.from('payments').insert({
     pago_id,
     client_id,
-    plan_id:             plan_id || cliente.plan_id,
+    concepto:            'suscripcion',
     monto_usd,
     metodo,
     fecha:               toDateStr(new Date()),
@@ -182,12 +168,9 @@ export async function registrarPago(formData: FormData) {
   const estadosReactivar = ['VENCIDO', 'SUSPENDIDO', 'TRIAL', 'GRACIA']
   const nuevoEstado = estadosReactivar.includes(cliente.estado) ? 'ACTIVO' : cliente.estado
 
-  const planFinal = plan_id || cliente.plan_id
-
   await supabase
     .from('clients')
     .update({
-      plan_id:          planFinal,
       fecha_expiracion: fecha_fin_periodo,
       estado:           nuevoEstado,
       // Limpiar campos de gracia si los tenía (igual que el original)
@@ -220,27 +203,63 @@ export async function registrarPago(formData: FormData) {
 }
 
 // ── Editar pago ──────────────────────────────────────────────────────
-// Actualiza todos los campos del pago. Si es el más reciente del cliente
-// (por fecha_fin_periodo), también sincroniza fecha_expiracion y plan_id
-// del cliente.
+// Suscripción: actualiza importe/método/período; si es el pago más reciente,
+// sincroniza fecha_expiracion del cliente.
+// Configuración (pago único): solo importe/método/notas, sin período ni expiración.
 export async function editarPago(formData: FormData) {
   const supabase = await createClient()
 
   const pago_id              = formData.get('pago_id')              as string
-  const plan_id              = (formData.get('plan_id') as string)?.trim() || null
   const monto_usd            = parseFloat(formData.get('monto_usd') as string)
   const metodo               = formData.get('metodo')               as string
   const fecha_inicio_periodo = formData.get('fecha_inicio_periodo') as string
   const fecha_fin_periodo    = formData.get('fecha_fin_periodo')    as string
   const notas                = ((formData.get('notas') as string) ?? '').trim() || null
 
-  if (!pago_id || !metodo || !fecha_inicio_periodo || !fecha_fin_periodo)
+  if (!pago_id || !metodo)
     return { ok: false as const, error: 'Campos obligatorios requeridos.' }
   if (isNaN(monto_usd) || monto_usd <= 0)
     return { ok: false as const, error: 'El monto debe ser un número positivo.' }
   if (!['tropipay', 'transferencia', 'efectivo'].includes(metodo))
     return { ok: false as const, error: 'Método de pago no válido.' }
 
+  // Obtener el pago original (concepto decide la rama)
+  const { data: pago } = await supabase
+    .from('payments')
+    .select('client_id, concepto')
+    .eq('pago_id', pago_id)
+    .single()
+  if (!pago) return { ok: false as const, error: 'Pago no encontrado.' }
+
+  const esConfiguracion = pago.concepto === 'configuracion'
+
+  // ── Pago de configuración: sin período ni sincronización de expiración ──
+  if (esConfiguracion) {
+    const { error: errPago } = await supabase
+      .from('payments')
+      .update({ monto_usd, metodo, notas })
+      .eq('pago_id', pago_id)
+    if (errPago) return { ok: false as const, error: errPago.message }
+
+    const { data: { user: upc } } = await supabase.auth.getUser()
+    await logActividad(supabase, {
+      user_email:  upc?.email ?? 'sistema',
+      entity:      'pago',
+      entity_id:   pago_id,
+      action:      'editar',
+      description: `Editó pago de configuración ${pago_id} — $${monto_usd}`,
+    })
+
+    revalidatePath('/admin/pagos')
+    revalidatePath('/admin/clientes')
+    revalidatePath(`/admin/clientes/${pago.client_id}`)
+    revalidatePath('/admin/dashboard')
+    return { ok: true as const, esUltimo: false }
+  }
+
+  // ── Pago de suscripción: requiere período ──
+  if (!fecha_inicio_periodo || !fecha_fin_periodo)
+    return { ok: false as const, error: 'El período es obligatorio.' }
   const dInicio = new Date(fecha_inicio_periodo)
   const dFin    = new Date(fecha_fin_periodo)
   if (isNaN(dInicio.getTime()) || isNaN(dFin.getTime()))
@@ -248,43 +267,28 @@ export async function editarPago(formData: FormData) {
   if (dFin <= dInicio)
     return { ok: false as const, error: 'La fecha de fin debe ser posterior a la de inicio.' }
 
-  // Obtener el pago original
-  const { data: pago } = await supabase
-    .from('payments')
-    .select('client_id, plan_id')
-    .eq('pago_id', pago_id)
-    .single()
-  if (!pago) return { ok: false as const, error: 'Pago no encontrado.' }
-
   // ¿Es el más reciente de este cliente?
   const { data: ultimo } = await supabase
     .from('payments')
     .select('pago_id')
     .eq('client_id', pago.client_id)
+    .eq('concepto', 'suscripcion')
     .order('fecha_fin_periodo', { ascending: false })
     .limit(1)
     .single()
   const esUltimo = ultimo?.pago_id === pago_id
 
-  // Actualizar el registro de pago
   const { error: errPago } = await supabase
     .from('payments')
-    .update({
-      plan_id:             plan_id ?? pago.plan_id,
-      monto_usd,
-      metodo,
-      fecha_inicio_periodo,
-      fecha_fin_periodo,
-      notas,
-    })
+    .update({ monto_usd, metodo, fecha_inicio_periodo, fecha_fin_periodo, notas })
     .eq('pago_id', pago_id)
   if (errPago) return { ok: false as const, error: errPago.message }
 
-  // Si es el último pago, sincronizar fecha_expiracion (y plan si cambió)
+  // Si es el último pago, sincronizar fecha_expiracion
   if (esUltimo) {
-    const updateCliente: Record<string, unknown> = { fecha_expiracion: fecha_fin_periodo }
-    if (plan_id && plan_id !== pago.plan_id) updateCliente.plan_id = plan_id
-    await supabase.from('clients').update(updateCliente).eq('client_id', pago.client_id)
+    await supabase.from('clients')
+      .update({ fecha_expiracion: fecha_fin_periodo })
+      .eq('client_id', pago.client_id)
   }
 
   const { data: { user: up2 } } = await supabase.auth.getUser()
@@ -305,23 +309,48 @@ export async function editarPago(formData: FormData) {
 }
 
 // ── Eliminar pago ────────────────────────────────────────────────────
-// Solo permite eliminar el pago más reciente del cliente.
-// Al hacerlo revierte fecha_expiracion al período anterior (o null).
+// Suscripción: solo el pago más reciente; revierte fecha_expiracion al anterior.
+// Configuración (pago único): se puede eliminar siempre, sin tocar la expiración.
 export async function eliminarPago(pagoId: string) {
   const supabase = await createClient()
 
   const { data: pago } = await supabase
     .from('payments')
-    .select('client_id, fecha_fin_periodo')
+    .select('client_id, concepto, fecha_fin_periodo')
     .eq('pago_id', pagoId)
     .single()
   if (!pago) return { ok: false as const, error: 'Pago no encontrado.' }
 
-  // Verificar que sea el más reciente
+  const esConfiguracion = pago.concepto === 'configuracion'
+
+  if (esConfiguracion) {
+    // Pago único: borrar sin restricciones y sin tocar la suscripción
+    const { error: errDel } = await supabase
+      .from('payments').delete().eq('pago_id', pagoId)
+    if (errDel) return { ok: false as const, error: errDel.message }
+
+    const { data: { user: upc } } = await supabase.auth.getUser()
+    await logActividad(supabase, {
+      user_email:  upc?.email ?? 'sistema',
+      entity:      'pago',
+      entity_id:   pagoId,
+      action:      'eliminar',
+      description: `Eliminó pago de configuración ${pagoId} — Cliente: ${pago.client_id}`,
+    })
+
+    revalidatePath('/admin/pagos')
+    revalidatePath('/admin/clientes')
+    revalidatePath(`/admin/clientes/${pago.client_id}`)
+    revalidatePath('/admin/dashboard')
+    return { ok: true as const }
+  }
+
+  // Verificar que sea el más reciente (entre los de suscripción)
   const { data: ultimo } = await supabase
     .from('payments')
     .select('pago_id')
     .eq('client_id', pago.client_id)
+    .eq('concepto', 'suscripcion')
     .order('fecha_fin_periodo', { ascending: false })
     .limit(1)
     .single()
@@ -338,11 +367,12 @@ export async function eliminarPago(pagoId: string) {
     .from('payments').delete().eq('pago_id', pagoId)
   if (errDel) return { ok: false as const, error: errDel.message }
 
-  // Revertir fecha_expiracion al pago anterior (si existe)
+  // Revertir fecha_expiracion al pago de suscripción anterior (si existe)
   const { data: anterior } = await supabase
     .from('payments')
     .select('fecha_fin_periodo')
     .eq('client_id', pago.client_id)
+    .eq('concepto', 'suscripcion')
     .order('fecha_fin_periodo', { ascending: false })
     .limit(1)
     .maybeSingle()
