@@ -99,7 +99,7 @@ export function ViaFields({ tipo, value, onChange }: {
         {inp('id_titular', 'ID / Passport / EIN',  'Ej: 12-3456789',            3)}
         {inp('telefono',   'Teléfono titular',      'Ej: +1 555 123 4567',       3, 'tel')}
         <div className="input-group ter-col-full">
-          <label>Dirección <span style={{ fontWeight: 400, fontSize: '0.8rem' }}>(CP, ciudad, estado, país)</span></label>
+          <label>Dirección <span className="label-hint-xs">(CP, ciudad, estado, país)</span></label>
           <textarea className="input input-textarea" rows={2} value={get('direccion')}
             onChange={e => set('direccion', e.target.value)}
             placeholder="Ej: 123 Main St, Springfield, FL 12345, USA" />
@@ -136,7 +136,7 @@ export function ViaFields({ tipo, value, onChange }: {
     return (
       <div className="via-pago-fields">
         <div className="input-group ter-col-full">
-          <label>Referencia <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+          <label>Referencia <span className="label-hint">(opcional)</span></label>
           <input className="input" value={get('referencia')}
             onChange={e => set('referencia', e.target.value)}
             placeholder="Ej: Pago en caja principal" />
@@ -167,13 +167,13 @@ export function ViasPagoEditor({ value, onChange, label, optional = false }: {
           {optional && <span className="via-pago-optional"> — opcional</span>}
         </span>
         {value?.tipo && (
-          <span className={`via-badge ${VIA_BADGE[value.tipo]?.cls ?? ''}`} style={{ fontSize: '10px' }}>
+          <span className={`via-badge ${VIA_BADGE[value.tipo]?.cls ?? ''}`}>
             {VIA_BADGE[value.tipo]?.label ?? value.tipo}
           </span>
         )}
       </div>
       <div className="via-pago-body">
-        <div className="input-group" style={{ maxWidth: 300 }}>
+        <div className="input-group input-group-narrow">
           <label>Tipo de pago</label>
           <select className="input" value={tipo} onChange={e => handleTipoChange(e.target.value)}>
             <option value="">{optional ? '— Ninguna —' : '— Seleccionar —'}</option>
@@ -224,7 +224,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-lg" role="dialog" aria-modal>
+      <div className="modal modal-xl" role="dialog" aria-modal>
 
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar tercero' : 'Nuevo tercero'}</h2>
@@ -258,8 +258,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
                   <label>Empresa <span className="required">*</span></label>
                   {empresas.length === 1 ? (
                     <>
-                      <input className="input" readOnly value={empresas[0].nombre}
-                        style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }} />
+                      <input className="input input-static" readOnly value={empresas[0].nombre} />
                       <input type="hidden" name="empresa_id" value={empresas[0].empresa_id} />
                     </>
                   ) : (
@@ -395,15 +394,15 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
                         </>
                       : 'PDF del contrato (opcional)'}
                   </label>
-                  <input className="input" type="file" name="contrato"
-                    accept=".pdf,.jpg,.jpeg,.png" style={{ paddingTop: 6, paddingBottom: 6 }} />
+                  <input className="input input-file" type="file" name="contrato"
+                    accept=".pdf,.jpg,.jpeg,.png" />
                   <span className="input-hint">Formatos: PDF, JPG, PNG. Máx. 10 MB.</span>
                 </div>
               </div>
             </div>
 
             {/* ── NOTAS ── */}
-            <div className="ter-form-section" style={{ marginBottom: 0 }}>
+            <div className="ter-form-section mb-0">
               <span className="ter-form-section-title">Notas internas</span>
               <div className="input-group">
                 <textarea className="input input-textarea" name="notas" rows={2}
@@ -419,7 +418,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : 'Crear tercero'}
             </button>
           </div>

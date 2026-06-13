@@ -3,10 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
-
-function toDateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
-}
+import { toDateStr } from '@/lib/date-utils'
 
 // ── Datos por defecto para pre-rellenar el formulario de pago ────────
 // Lógica: fecha_inicio = día siguiente a la fecha_expiracion actual (o hoy si no hay)

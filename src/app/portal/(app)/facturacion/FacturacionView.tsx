@@ -71,7 +71,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
 
       {/* ── Alerta si vence pronto o ya venció ── */}
       {dias !== null && dias <= 7 && (
-        <div className={`alert ${dias <= 0 ? 'alert-error' : 'alert-warning'}`} style={{ marginBottom: 'var(--space-5)' }}>
+        <div className={`alert mb-5 ${dias <= 0 ? 'alert-error' : 'alert-warning'}`}>
           {dias <= 0
             ? 'Tu suscripción ha expirado. Contacta a soporte para renovarla.'
             : `Tu suscripción vence en ${dias} día${dias === 1 ? '' : 's'}. Contacta a soporte para renovarla.`}
@@ -79,10 +79,10 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       )}
 
       {/* ── Suscripción activa ── */}
-      <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
+      <div className="card mb-5">
         <div className="fac-plan-card">
           <div className="fac-plan-left">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+            <div className="fac-plan-title-row">
               <h2 className="fac-plan-name">{data.plan_nombre}</h2>
               <span className={`prf-badge ${estadoCls}`}>{ESTADO_LABEL[data.estado] ?? data.estado}</span>
             </div>
@@ -105,7 +105,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">Historial de pagos</h2>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          <span className="text-xs-muted">
             {data.pagos.length} registro{data.pagos.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -134,7 +134,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                     <td>
                       <span className="fac-pago-id">{p.pago_id}</span>
                     </td>
-                    <td style={{ fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                    <td className="text-sm-nowrap">
                       {fmt(p.fecha)}
                     </td>
                     <td>
@@ -144,7 +144,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                         {fmt(p.fecha_fin_periodo)}
                       </span>
                     </td>
-                    <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                    <td className="text-sm-muted">
                       {p.plan_id ? (data.plan_nombres[p.plan_id] ?? p.plan_id) : '—'}
                     </td>
                     <td className="text-right">
@@ -168,7 +168,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
 // ── Iconos ────────────────────────────────────────────────────────────────────
 function IconReceipt() {
   return (
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.25 }}>
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.25">
       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
       <polyline points="14 2 14 8 20 8"/>
       <line x1="16" y1="13" x2="8" y2="13"/>

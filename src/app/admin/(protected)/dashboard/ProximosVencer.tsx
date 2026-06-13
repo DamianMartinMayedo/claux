@@ -48,7 +48,7 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
         <tr>
           <th>Cliente</th>
           <th>Estado</th>
-          <th style={{ textAlign: 'right' }}>Días</th>
+          <th className="text-right">Días</th>
         </tr>
       </thead>
       <tbody>
@@ -66,8 +66,8 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
                   {c.estado}
                 </span>
               </td>
-              <td style={{ textAlign: 'right' }}>
-                <span style={{ fontWeight: 700, fontSize: 'var(--text-xs)', color }}>
+              <td className="text-right">
+                <span className="dias-value" style={{ color }}>
                   {label}
                 </span>
               </td>

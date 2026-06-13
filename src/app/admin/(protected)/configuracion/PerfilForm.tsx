@@ -46,7 +46,7 @@ export default function PerfilForm({
 
   if (passwordOnly) {
     return (
-      <div style={{ marginTop: 'var(--space-4)' }}>
+      <div className="mt-4">
         {sentOk ? (
           <div className="reset-sent-box">
             <div className="reset-sent-icon">
@@ -74,13 +74,13 @@ export default function PerfilForm({
             {sending ? 'Enviando…' : 'Enviar enlace de cambio de contraseña'}
           </button>
         )}
-        {error && <div className="alert alert-error" style={{ marginTop: 'var(--space-3)' }}>{error}</div>}
+        {error && <div className="alert alert-error mt-3">{error}</div>}
       </div>
     )
   }
 
   return (
-    <form onSubmit={handleSaveName} style={{ marginTop: 'var(--space-5)' }}>
+    <form onSubmit={handleSaveName} className="mt-5">
       <div className="form-group">
         <label className="form-label">Nombre</label>
         <input
@@ -91,14 +91,14 @@ export default function PerfilForm({
           required
         />
       </div>
-      <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+      <div className="form-group mt-4">
         <label className="form-label">Email</label>
-        <input className="form-input" value={email} disabled style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+        <input className="form-input input-disabled" value={email} disabled />
         <p className="form-hint">El email no se puede cambiar desde aquí.</p>
       </div>
-      {error   && <div className="alert alert-error"   style={{ margin: 'var(--space-4) 0 0' }}>{error}</div>}
-      {savedOk && <div className="alert alert-success" style={{ margin: 'var(--space-4) 0 0' }}>Nombre actualizado correctamente.</div>}
-      <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginTop: 'var(--space-5)' }}>
+      {error   && <div className="alert alert-error   mt-4">{error}</div>}
+      {savedOk && <div className="alert alert-success mt-4">Nombre actualizado correctamente.</div>}
+      <button type="submit" className="btn btn-primary mt-5" disabled={saving}>
         {saving ? 'Guardando...' : 'Guardar cambios'}
       </button>
     </form>

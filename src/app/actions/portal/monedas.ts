@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
-import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 

@@ -91,7 +91,7 @@ export default function LoginPage() {
             <>
               <h1 className="login-card-title">Recuperar contraseña</h1>
               {sentOk ? (
-                <div style={{ marginTop: 'var(--space-4)' }}>
+                <div className="mt-4">
                   <div className="reset-sent-box">
                     <div className="reset-sent-icon">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -107,8 +107,7 @@ export default function LoginPage() {
                   </div>
                   <button
                     type="button"
-                    className="login-forgot-link"
-                    style={{ marginTop: 'var(--space-5)', display: 'block', textAlign: 'center', width: '100%' }}
+                    className="login-forgot-link link-full-center mt-5"
                     onClick={() => { setMode('login'); setSentOk(false) }}
                   >
                     ← Volver al inicio de sesión
@@ -116,7 +115,7 @@ export default function LoginPage() {
                 </div>
               ) : (
                 <form onSubmit={handleForgot} className="login-form">
-                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+                  <p className="text-sm-muted mb-4">
                     Introduce tu email y te enviaremos un enlace para restablecer tu contraseña.
                   </p>
                   <div className="form-group">

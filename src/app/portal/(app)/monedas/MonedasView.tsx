@@ -79,14 +79,14 @@ function MonedaModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal" style={{ maxWidth: 440 }} role="dialog" aria-modal>
+      <div className="modal modal-440" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar moneda' : 'Añadir moneda'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ padding: 'var(--space-5) var(--space-6)' }}>
+          <div className="modal-body modal-body-wide">
             {esEdicion && <input type="hidden" name="codigo_original" value={moneda.codigo} />}
 
             <div className="mon-form-grid">
@@ -114,13 +114,12 @@ function MonedaModal({
                 <div className="input-group mon-full">
                   <label>Código <span className="required">*</span></label>
                   <input
-                    className="input"
+                    className="input input-uppercase"
                     name="codigo"
                     value={codigo}
                     onChange={e => setCodigo(e.target.value.toUpperCase())}
                     placeholder="Ej: CUPB"
                     maxLength={10}
-                    style={{ textTransform: 'uppercase' }}
                     required
                   />
                   <span className="input-hint">Identificador único, sin espacios. Ej: CUPB para tasa oficial bancaria.</span>
@@ -163,14 +162,14 @@ function MonedaModal({
 
             </div>
 
-            {error && <div className="alert alert-error" style={{ marginTop: 'var(--space-4)' }}>{error}</div>}
+            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} />{esEdicion ? 'Guardando…' : 'Añadir'}</>
+                ? <><span className="spinner spinner-sm" />{esEdicion ? 'Guardando…' : 'Añadir'}</>
                 : esEdicion ? 'Guardar cambios' : 'Añadir moneda'}
             </button>
           </div>
@@ -222,14 +221,14 @@ function ParModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal" style={{ maxWidth: 380 }} role="dialog" aria-modal>
+      <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Configurar par</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ padding: 'var(--space-5) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <div className="modal-body modal-body-form">
 
             {/* Identificación del par */}
             <div className="par-modal-id">
@@ -283,7 +282,7 @@ function ParModal({
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} />{esAuto ? 'Obteniendo…' : 'Guardando…'}</>
+                ? <><span className="spinner spinner-sm" />{esAuto ? 'Obteniendo…' : 'Guardando…'}</>
                 : esAuto ? 'Guardar y obtener tasa' : 'Guardar tasa'}
             </button>
           </div>
@@ -322,13 +321,13 @@ function ConsolidacionModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal" style={{ maxWidth: 380 }} role="dialog" aria-modal>
+      <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Moneda de consolidación</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
         </div>
-        <div className="modal-body" style={{ padding: 'var(--space-5) var(--space-6)' }}>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+        <div className="modal-body modal-body-wide">
+          <p className="text-sm-muted mb-4">
             Todos los estados consolidados se expresan en esta moneda (IAS 21).
           </p>
           <div className="mon-radio-list">
@@ -343,12 +342,12 @@ function ConsolidacionModal({
               </label>
             ))}
           </div>
-          {error && <div className="alert alert-error" style={{ marginTop: 'var(--space-4)' }}>{error}</div>}
+          {error && <div className="alert alert-error mt-4">{error}</div>}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
           <button type="button" className="btn btn-primary" onClick={handleConfirm} disabled={isPending || sel === actual}>
-            {isPending ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} />Cambiando…</> : 'Establecer'}
+            {isPending ? <><span className="spinner spinner-sm" />Cambiando…</> : 'Establecer'}
           </button>
         </div>
       </div>
@@ -420,7 +419,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
           <h1 className="page-title">Monedas y tasas</h1>
           <p className="page-subtitle">Configura las monedas y los tipos de cambio entre ellas.</p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={handleActualizarAuto} disabled={autoPending}>
             {autoPending ? <><span className="spinner spinner-sm" /> Actualizando…</> : <><IconRefresh /> Actualizar automáticas</>}
           </button>
@@ -433,7 +432,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
       </div>
 
       {autoMsg && (
-        <div className="alert alert-warning" style={{ marginBottom: 'var(--space-5)' }}>{autoMsg}</div>
+        <div className="alert alert-warning mb-5">{autoMsg}</div>
       )}
 
       <div className="mon-layout">
@@ -486,7 +485,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
         <div className="card card-table">
           <div className="mon-card-header">
             <h2 className="mon-section-title">Pares de cambio</h2>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            <span className="text-xs-muted">
               Se generan al añadir monedas
             </span>
           </div>
@@ -504,7 +503,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                     <th className="text-right">Tasa</th>
                     <th>Fuente</th>
                     <th>Actualizada</th>
-                    {esAdmin && <th style={{ width: 40 }} />}
+                    {esAdmin && <th className="mon-col-act" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -522,9 +521,9 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                       </td>
                       <td>
                         <span className="mon-fuente-dot" style={{ '--dot-color': FUENTE_COLOR[p.fuente] } as React.CSSProperties} />
-                        <span style={{ fontSize: 'var(--text-xs)' }}>{FUENTE_LABEL[p.fuente]}</span>
+                        <span className="text-xs">{FUENTE_LABEL[p.fuente]}</span>
                       </td>
-                      <td style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                      <td className="text-xs-muted">
                         {p.fecha ?? '—'}
                       </td>
                       {esAdmin && (
@@ -577,5 +576,5 @@ function IconEdit()    { return <svg viewBox="0 0 24 24" fill="none" stroke="cur
 function IconRefresh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> }
 function IconStar()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> }
 function IconArrow()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> }
-function IconArrowSm() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> }
-function IconInfo()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" style={{ flexShrink: 0, color: 'var(--color-primary)' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> }
+function IconArrowSm() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" className="text-muted flex-shrink-0"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> }
+function IconInfo()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className="text-primary flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> }

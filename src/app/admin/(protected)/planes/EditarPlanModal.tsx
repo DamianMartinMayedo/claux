@@ -51,7 +51,7 @@ export default function EditarPlanModal({ plan }: { plan: Plan }) {
 
   const modal = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 600 }}>
+      <div className="modal modal-lg">
         <div className="modal-header">
           <h2 className="modal-title">Editar plan</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -117,7 +117,7 @@ export default function EditarPlanModal({ plan }: { plan: Plan }) {
                 <input name="max_empresas" type="number" min="1" className="input" defaultValue={plan.max_empresas ?? 1} />
               </div>
               <div className="input-group">
-                <label>Máx. usuarios <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(-1 = ilimitado)</span></label>
+                <label>Máx. usuarios <span className="label-muted-hint">(-1 = ilimitado)</span></label>
                 <input name="max_usuarios" type="number" min="-1" className="input" defaultValue={plan.max_usuarios ?? 2} />
               </div>
             </div>

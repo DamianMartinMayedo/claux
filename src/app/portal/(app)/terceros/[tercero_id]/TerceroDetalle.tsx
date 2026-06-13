@@ -7,7 +7,6 @@ import {
   archivarTercero,
   restaurarTercero,
   type TerceroDetalleData,
-  type Tercero,
   type TipoTercero,
   type ViaPago,
 } from '@/app/actions/portal/terceros'
@@ -26,53 +25,21 @@ const CONDICION_LABEL: Record<string, string> = {
   '15': '15 días', '30': '30 días', '60': '60 días', '90': '90 días',
 }
 
-const VIA_BADGE: Record<string, { label: string; bg: string; color: string }> = {
-  'Transferencia (VES)':         { label: 'TB-VES',  bg: '#fef3c7', color: '#92400e'  },
-  'Transferencia (USD)':         { label: 'TB-USD',  bg: '#d1fae5', color: '#065f46'  },
-  'Transferencia Internacional': { label: 'TBI',     bg: '#dbeafe', color: '#1e40af'  },
-  'Pago Móvil':                  { label: 'PM',      bg: '#ede9fe', color: '#5b21b6'  },
-  'Zelle':                       { label: 'ZELLE',   bg: '#fce7f3', color: '#9d174d'  },
-  'TropiPay':                    { label: 'TPPAY',   bg: '#f0fdf4', color: '#166534'  },
-  'Efectivo (VES)':              { label: 'EF-VES',  bg: 'var(--color-surface-2)', color: 'var(--color-text-muted)'  },
-  'Efectivo (USD)':              { label: 'EF-USD',  bg: 'var(--color-surface-2)', color: 'var(--color-text-muted)'  },
+const VIA_BADGE: Record<string, { label: string; cls: string }> = {
+  'Transferencia (VES)':         { label: 'TB-VES',  cls: 'via-badge-ves'      },
+  'Transferencia (USD)':         { label: 'TB-USD',  cls: 'via-badge-usd'      },
+  'Transferencia Internacional': { label: 'TBI',     cls: 'via-badge-intl'     },
+  'Pago Móvil':                  { label: 'PM',      cls: 'via-badge-pm'       },
+  'Zelle':                       { label: 'ZELLE',   cls: 'via-badge-zelle'    },
+  'TropiPay':                    { label: 'TPPAY',   cls: 'via-badge-tropipay' },
+  'Efectivo (VES)':              { label: 'EF-VES',  cls: 'via-badge-ef'       },
+  'Efectivo (USD)':              { label: 'EF-USD',  cls: 'via-badge-ef'       },
 }
 
-const TIPO_STYLE: Record<TipoTercero, React.CSSProperties> = {
-  CLIENTE:   { background: '#dbeafe', color: '#1d4ed8' },
-  PROVEEDOR: { background: '#dcfce7', color: '#166534' },
-  AMBOS:     { background: '#fef9c3', color: '#854d0e' },
-}
-
-// ── Estilos ───────────────────────────────────────────────────────────────────
-
-const S = {
-  badge: (extra: React.CSSProperties): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    ...extra,
-  }),
-  card: {
-    background: 'var(--color-surface)',
-    border:     '1px solid var(--color-border)',
-    borderRadius: '12px',
-    padding:    '20px',
-    marginBottom: '16px',
-  } as React.CSSProperties,
-  label: {
-    fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
-    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
-    marginBottom: '4px',
-  } as React.CSSProperties,
-  value: {
-    fontSize: '14px', color: 'var(--color-text)',
-  } as React.CSSProperties,
-  sectionTitle: {
-    fontSize: '13px', fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
-    marginBottom: '16px', paddingBottom: '8px',
-    borderBottom: '1px solid var(--color-border)',
-  } as React.CSSProperties,
+const TIPO_BADGE: Record<TipoTercero, string> = {
+  CLIENTE:   'badge-info',
+  PROVEEDOR: 'badge-success',
+  AMBOS:     'badge-amber',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -85,8 +52,8 @@ function fmtDate(iso: string | null) {
 function Campo({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
     <div>
-      <div style={S.label}>{label}</div>
-      <div style={S.value}>{value ?? <span style={{ color: 'var(--color-text-faint)' }}>—</span>}</div>
+      <div className="det-label">{label}</div>
+      <div className="det-value">{value ?? <span className="text-faint">—</span>}</div>
     </div>
   )
 }
@@ -100,28 +67,10 @@ function Tab({ active, onClick, label, badge }: {
   badge?:  number
 }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '6px',
-        padding: '10px 18px',
-        fontSize: '13px', fontWeight: active ? 700 : 500,
-        color:   active ? 'var(--color-primary)' : 'var(--color-text-muted)',
-        borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-        borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-        background: 'transparent', borderRadius: '0',
-        cursor: 'pointer', whiteSpace: 'nowrap',
-      }}
-    >
+    <button onClick={onClick} className={`detail-tab${active ? ' active' : ''}`}>
       {label}
       {badge !== undefined && (
-        <span style={{
-          fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '999px',
-          background: active ? 'var(--color-primary)' : 'var(--color-border)',
-          color: active ? '#fff' : 'var(--color-text-muted)',
-        }}>
-          {badge}
-        </span>
+        <span className="detail-tab-count">{badge}</span>
       )}
     </button>
   )
@@ -130,16 +79,11 @@ function Tab({ active, onClick, label, badge }: {
 // ── Pill de vía de pago ───────────────────────────────────────────────────────
 
 function ViaPill({ via }: { via: ViaPago | null }) {
-  if (!via?.tipo) return <span style={{ color: 'var(--color-text-faint)' }}>—</span>
+  if (!via?.tipo) return <span className="text-faint">—</span>
   const info = VIA_BADGE[via.tipo]
-  if (!info) return <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>{via.tipo}</span>
+  if (!info) return <span className="text-xs-muted">{via.tipo}</span>
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '2px 10px', borderRadius: '6px',
-      fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em',
-      background: info.bg, color: info.color,
-    }} title={via.tipo}>
+    <span className={`via-badge ${info.cls}`} title={via.tipo}>
       {info.label}
     </span>
   )
@@ -167,19 +111,16 @@ function ViaDetalle({ via, title }: { via: ViaPago | null; title: string }) {
   ].filter(([, v]) => !!v) as [string, string][]
 
   return (
-    <div style={{
-      border: '1px solid var(--color-border)', borderRadius: '10px',
-      padding: '14px 18px', marginBottom: '12px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-        <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>{title}</span>
+    <div className="det-via-box">
+      <div className="det-via-header">
+        <span className="det-via-title">{title}</span>
         <ViaPill via={via} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+      <div className="det-field-grid-sm">
         {fields.map(([label, value]) => (
           <div key={label}>
-            <div style={S.label}>{label}</div>
-            <div style={{ ...S.value, wordBreak: 'break-all' }}>{value}</div>
+            <div className="det-label">{label}</div>
+            <div className="det-value det-value-break">{value}</div>
           </div>
         ))}
       </div>
@@ -193,23 +134,20 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
   const { tercero, empresa_nombre } = data
 
   return (
-    <div style={{ padding: '24px 0' }}>
+    <div className="det-tab-body">
       {/* Identificación — fila fija de 4 columnas */}
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Identificación</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+      <div className="det-card">
+        <div className="det-section-title">Identificación</div>
+        <div className="det-grid-4">
           <Campo label="Nombre"         value={tercero.nombre} />
           <Campo label="Tipo"           value={
-            <span style={S.badge(TIPO_STYLE[tercero.tipo])}>
+            <span className={`badge ${TIPO_BADGE[tercero.tipo]}`}>
               {TIPO_LABEL[tercero.tipo]}
             </span>
           } />
           <Campo label="Identificación" value={tercero.identificacion} />
           <Campo label="Estado"         value={
-            <span style={S.badge(tercero.activo
-              ? { background: '#dcfce7', color: '#16a34a' }
-              : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }
-            )}>
+            <span className={`badge ${tercero.activo ? 'badge-success' : 'badge-neutral'}`}>
               {tercero.activo ? 'Activo' : 'Inactivo'}
             </span>
           } />
@@ -217,21 +155,21 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
       </div>
 
       {/* Contacto */}
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Contacto</div>
+      <div className="det-card">
+        <div className="det-section-title">Contacto</div>
         {/* Fila 1: Representante · Cargo · Teléfono · Email */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
+        <div className="det-grid-4 mb-5">
           <Campo label="Representante" value={tercero.representante} />
           <Campo label="Cargo"         value={tercero.cargo} />
           <Campo label="Teléfono"      value={tercero.telefono} />
           <Campo label="Email"         value={tercero.email
-            ? <a href={`mailto:${tercero.email}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{tercero.email}</a>
+            ? <a href={`mailto:${tercero.email}`} className="link-primary">{tercero.email}</a>
             : null}
           />
         </div>
         {/* Fila 2: Dirección (2 cols) · Ciudad · País */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-          <div style={{ gridColumn: 'span 2' }}>
+        <div className="det-grid-4">
+          <div className="det-col-span-2">
             <Campo label="Dirección" value={tercero.direccion} />
           </div>
           <Campo label="Ciudad" value={tercero.ciudad} />
@@ -240,9 +178,9 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
       </div>
 
       {/* Condiciones comerciales */}
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Condiciones comerciales</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+      <div className="det-card">
+        <div className="det-section-title">Condiciones comerciales</div>
+        <div className="det-grid-4">
           <Campo label="Condición de pago" value={CONDICION_LABEL[tercero.condicion_pago] ?? tercero.condicion_pago} />
           <Campo label="Límite de crédito" value={
             tercero.limite_credito !== null
@@ -256,8 +194,8 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
 
       {/* Vías de pago */}
       {(tercero.via_primaria || tercero.via_secundaria) && (
-        <div style={S.card}>
-          <div style={S.sectionTitle}>Vías de pago</div>
+        <div className="det-card">
+          <div className="det-section-title">Vías de pago</div>
           <ViaDetalle via={tercero.via_primaria}   title="Vía primaria"   />
           <ViaDetalle via={tercero.via_secundaria} title="Vía secundaria" />
         </div>
@@ -265,17 +203,16 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
 
       {/* Contrato */}
       {(tercero.num_contrato || tercero.contrato_url || tercero.fecha_inicio_contrato) && (
-        <div style={S.card}>
-          <div style={S.sectionTitle}>Contrato</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+        <div className="det-card">
+          <div className="det-section-title">Contrato</div>
+          <div className="det-field-grid">
             <Campo label="N° contrato"  value={tercero.num_contrato} />
             <Campo label="Inicio"       value={fmtDate(tercero.fecha_inicio_contrato)} />
             <Campo label="Vencimiento"  value={fmtDate(tercero.fecha_fin_contrato)} />
             {tercero.contrato_url && (
               <div>
-                <div style={S.label}>Documento</div>
-                <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}>
+                <div className="det-label">Documento</div>
+                <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer" className="det-link-icon">
                   <IconFileLink /> Ver contrato
                 </a>
               </div>
@@ -286,67 +223,47 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
 
       {/* Notas */}
       {tercero.notas && (
-        <div style={S.card}>
-          <div style={S.sectionTitle}>Notas</div>
-          <div style={{ ...S.value, whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{tercero.notas}</div>
+        <div className="det-card">
+          <div className="det-section-title">Notas</div>
+          <div className="det-value det-value-pre">{tercero.notas}</div>
         </div>
       )}
 
       {/* Metadatos */}
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Registro</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+      <div className="det-card">
+        <div className="det-section-title">Registro</div>
+        <div className="det-field-grid">
           <Campo label="Creado"      value={fmtDate(tercero.created_at)} />
           <Campo label="Actualizado" value={fmtDate(tercero.updated_at)} />
-          <Campo label="ID interno"  value={<code style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-text-faint)' }}>{tercero.tercero_id}</code>} />
+          <Campo label="ID interno"  value={<code className="code-id">{tercero.tercero_id}</code>} />
         </div>
       </div>
-
     </div>
   )
 }
 
 // ── Tab: Productos del proveedor (placeholder) ────────────────────────────────
 
-function TabProductos({ count, terceroId }: { count: number; terceroId: string }) {
+function TabProductos({ count }: { count: number }) {
   return (
-    <div style={{ padding: '24px 0' }}>
-      {count === 0 ? (
-        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-            <IconBoxLg />
-          </div>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-            Sin productos asignados
-          </div>
-          <div style={{ fontSize: '13px' }}>
-            Este proveedor no tiene productos vinculados en el catálogo.
-          </div>
-        </div>
-      ) : (
-        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-            <IconBoxLg />
-          </div>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-            {count} producto{count !== 1 ? 's' : ''} de este proveedor
-          </div>
-          <div style={{ fontSize: '13px', marginBottom: '20px' }}>
-            Listado detallado disponible próximamente.
-          </div>
-          <Link
-            href={`/portal/productos`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '10px 20px', borderRadius: '8px',
-              background: 'var(--color-primary)', color: '#fff',
-              textDecoration: 'none', fontWeight: 600, fontSize: '14px',
-            }}
-          >
-            Ver catálogo de productos →
-          </Link>
-        </div>
-      )}
+    <div className="det-tab-body">
+      <div className="det-empty">
+        <div className="det-empty-icon"><IconBoxLg /></div>
+        {count === 0 ? (
+          <>
+            <div className="det-empty-title">Sin productos asignados</div>
+            <div className="det-empty-text">Este proveedor no tiene productos vinculados en el catálogo.</div>
+          </>
+        ) : (
+          <>
+            <div className="det-empty-title">{count} producto{count !== 1 ? 's' : ''} de este proveedor</div>
+            <div className="det-empty-text mb-5">Listado detallado disponible próximamente.</div>
+            <Link href="/portal/productos" className="btn btn-primary">
+              Ver catálogo de productos →
+            </Link>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -355,16 +272,10 @@ function TabProductos({ count, terceroId }: { count: number; terceroId: string }
 
 function TabCuentasPorPagar() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-        <IconCreditCardLg />
-      </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-        Cuentas por pagar
-      </div>
-      <div style={{ fontSize: '13px' }}>
-        Aquí se mostrarán las facturas y saldos pendientes con este proveedor.
-      </div>
+    <div className="det-empty">
+      <div className="det-empty-icon"><IconCreditCardLg /></div>
+      <div className="det-empty-title">Cuentas por pagar</div>
+      <div className="det-empty-text">Aquí se mostrarán las facturas y saldos pendientes con este proveedor.</div>
     </div>
   )
 }
@@ -373,16 +284,10 @@ function TabCuentasPorPagar() {
 
 function TabHistorial() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-        <IconActivityLg />
-      </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-        Historial de transacciones
-      </div>
-      <div style={{ fontSize: '13px' }}>
-        Aquí se mostrará el historial de ventas y compras con este contacto.
-      </div>
+    <div className="det-empty">
+      <div className="det-empty-icon"><IconActivityLg /></div>
+      <div className="det-empty-title">Historial de transacciones</div>
+      <div className="det-empty-text">Aquí se mostrará el historial de ventas y compras con este contacto.</div>
     </div>
   )
 }
@@ -399,7 +304,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   const [pending,   startT]       = useTransition()
   const router = useRouter()
 
-  const { tercero, empresa_nombre, productos_count, empresas } = data
+  const { tercero, productos_count, empresas } = data
 
   function toggleActivo() {
     startT(async () => {
@@ -422,61 +327,45 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
     <div className="view-container">
 
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
-        <Link href="/portal/terceros" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
-          Terceros
-        </Link>
+      <div className="breadcrumb">
+        <Link href="/portal/terceros">Terceros</Link>
         <span>›</span>
-        <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{tercero.nombre}</span>
+        <span className="breadcrumb-current">{tercero.nombre}</span>
       </div>
 
       {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        gap: '16px', flexWrap: 'wrap', marginBottom: '8px',
-      }}>
+      <div className="det-page-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800 }}>{tercero.nombre}</h1>
-            <span style={S.badge(TIPO_STYLE[tercero.tipo])}>
+          <div className="det-title-group">
+            <h1 className="det-page-title">{tercero.nombre}</h1>
+            <span className={`badge ${TIPO_BADGE[tercero.tipo]}`}>
               {TIPO_LABEL[tercero.tipo]}
             </span>
-            <span style={S.badge(tercero.activo
-              ? { background: '#dcfce7', color: '#16a34a' }
-              : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }
-            )}>
+            <span className={`badge ${tercero.activo ? 'badge-success' : 'badge-neutral'}`}>
               {tercero.activo ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--color-text-muted)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div className="det-meta-row">
             {tercero.identificacion && <span>RIF/CI: <strong>{tercero.identificacion}</strong></span>}
-            {tercero.telefono       && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconPhone />{tercero.telefono}</span>}
-            {tercero.email          && <a href={`mailto:${tercero.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-primary)', textDecoration: 'none' }}><IconMail />{tercero.email}</a>}
+            {tercero.telefono       && <span className="det-meta-inline"><IconPhone />{tercero.telefono}</span>}
+            {tercero.email          && (
+              <a href={`mailto:${tercero.email}`} className="det-meta-inline link-primary">
+                <IconMail />{tercero.email}
+              </a>
+            )}
           </div>
         </div>
 
         {/* Acciones */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowEdit(true)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer',
-            }}
-          >
+        <div className="det-actions">
+          <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
             <IconEdit /> Editar
           </button>
           <button
             onClick={toggleActivo}
             disabled={pending}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid var(--color-border)', background: 'var(--color-surface)',
-              color: tercero.activo ? '#dc2626' : '#16a34a',
-              cursor: pending ? 'not-allowed' : 'pointer',
-            }}
+            className="btn btn-secondary"
+            style={{ color: tercero.activo ? 'var(--color-error)' : 'var(--color-success)' }}
           >
             {tercero.activo ? <><IconArchive /> Archivar</> : <><IconRestore /> Restaurar</>}
           </button>
@@ -484,20 +373,11 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
       </div>
 
       {statusMsg && (
-        <div style={{
-          padding: '10px 16px', borderRadius: '8px',
-          background: '#f0fdf4', color: '#16a34a',
-          fontSize: '13px', fontWeight: 600, marginBottom: '16px',
-        }}>
-          {statusMsg}
-        </div>
+        <div className="alert alert-success mb-4">{statusMsg}</div>
       )}
 
       {/* Tabs */}
-      <div style={{
-        display: 'flex', borderBottom: '1px solid var(--color-border)',
-        overflowX: 'auto', marginBottom: '4px',
-      }}>
+      <div className="detail-tabs">
         <Tab active={tab === 'datos'}    onClick={() => setTab('datos')}    label="Datos" />
         {esProveedor && (
           <Tab active={tab === 'productos'} onClick={() => setTab('productos')} label="Productos" badge={productos_count} />
@@ -515,11 +395,11 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
 
       {/* Contenido */}
       {tab === 'datos'     && <TabDatos    data={data} />}
-      {tab === 'productos' && <TabProductos count={productos_count} terceroId={tercero.tercero_id} />}
+      {tab === 'productos' && <TabProductos count={productos_count} />}
       {tab === 'cp'        && <TabCuentasPorPagar />}
       {tab === 'historial' && <TabHistorial />}
 
-      {/* Modal edición — mismo formulario que en la lista */}
+      {/* Modal edición */}
       {showEdit && (
         <TerceroFormModal
           tercero={tercero}
@@ -539,13 +419,12 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
 
 // ── Iconos (Feather, stroke, currentColor) ────────────────────────────────────
 
-function IconX()           { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
 function IconEdit()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
 function IconArchive()     { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> }
 function IconRestore()     { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> }
 function IconPhone()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.37 2 2 0 013.6 1.21h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.77a16 16 0 006.29 6.29l1.63-1.63a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg> }
 function IconMail()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> }
 function IconFileLink()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> }
-function IconBoxLg()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconCreditCardLg(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> }
-function IconActivityLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> }
+function IconBoxLg()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
+function IconCreditCardLg(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> }
+function IconActivityLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> }

@@ -46,38 +46,24 @@ export function PreciosCostosEditor({
   }
 
   return (
-    <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '6px 12px', background: 'var(--color-surface-2)',
-        borderBottom: rows.length ? '1px solid var(--color-border)' : undefined,
-      }}>
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
-          {label}
-        </span>
-        <button type="button" onClick={addRow}
-          style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-          + Añadir
-        </button>
+    <div className="prd-editor-wrap">
+      <div className={`prd-editor-header${rows.length ? ' prd-editor-header-sep' : ''}`}>
+        <span className="prd-editor-label">{label}</span>
+        <button type="button" onClick={addRow} className="btn-ghost-xs">+ Añadir</button>
       </div>
       {rows.length === 0 && (
-        <p style={{ padding: '10px 12px', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 0 }}>
-          Sin {label.toLowerCase()} configurados
-        </p>
+        <p className="prd-editor-empty">Sin {label.toLowerCase()} configurados</p>
       )}
       {rows.map((row, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: i < rows.length - 1 ? '1px solid var(--color-border)' : undefined }}>
-          <select className="input" value={row.moneda}
-            onChange={e => updateRow(i, 'moneda', e.target.value)}
-            style={{ width: 88, flexShrink: 0, fontSize: 'var(--text-sm)', padding: '4px 6px' }}>
+        <div key={i} className={`prd-editor-row${i < rows.length - 1 ? ' prd-editor-row-sep' : ''}`}>
+          <select className="input prd-editor-select" value={row.moneda}
+            onChange={e => updateRow(i, 'moneda', e.target.value)}>
             <option value="">—</option>
             {monedasDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <input className="input" type="number" step="0.01" min="0" placeholder="0.00"
-            value={row.valor} onChange={e => updateRow(i, 'valor', e.target.value)}
-            style={{ flex: 1, fontSize: 'var(--text-sm)', padding: '4px 8px' }} />
-          <button type="button" onClick={() => removeRow(i)} title="Quitar"
-            style={{ width: 24, height: 24, flexShrink: 0, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 18, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)' }}>
+          <input className="input prd-editor-input" type="number" step="0.01" min="0" placeholder="0.00"
+            value={row.valor} onChange={e => updateRow(i, 'valor', e.target.value)} />
+          <button type="button" onClick={() => removeRow(i)} title="Quitar" className="prd-editor-del-btn">
             ×
           </button>
         </div>
@@ -126,7 +112,7 @@ export function UnidadSelect({ defaultValue }: { defaultValue?: string }) {
         <option value="__otra__">Otra (personalizada)…</option>
       </select>
       {sel === '__otra__' && (
-        <input className="input" style={{ marginTop: 6 }} type="text"
+        <input className="input mt-2" type="text"
           value={custom} onChange={e => setCustom(e.target.value)}
           placeholder="Escribe la unidad…" />
       )}
@@ -193,28 +179,18 @@ export function ProductoFormModal({
             {/* ── Tipo ── */}
             <div className="ter-form-section">
               <span className="ter-form-section-title">Tipo</span>
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div className="prd-tipo-grid">
                 {(['PRODUCTO', 'SERVICIO'] as TipoProducto[]).map(t => (
                   <button key={t} type="button"
                     onClick={() => !isEdit && setTipo(t)}
                     disabled={isEdit}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '12px 16px',
-                      border: `2px solid ${tipo === t ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      borderRadius: 'var(--radius-lg)',
-                      background: tipo === t ? '#e0f5f4' : 'var(--color-surface)',
-                      color: tipo === t ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      cursor: isEdit ? 'default' : 'pointer',
-                      opacity: isEdit ? 0.7 : 1,
-                      textAlign: 'left',
-                    }}>
+                    className={`prd-tipo-btn${tipo === t ? ' active' : ''}`}>
                     {t === 'PRODUCTO' ? <IconBox /> : <IconZap />}
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
+                    <span className="prd-tipo-labels">
+                      <span className="prd-tipo-name">
                         {t === 'PRODUCTO' ? 'Producto' : 'Servicio'}
                       </span>
-                      <span style={{ fontWeight: 400, fontSize: 'var(--text-xs)', opacity: 0.8 }}>
+                      <span className="prd-tipo-desc">
                         {t === 'PRODUCTO' ? 'Bien físico con stock' : 'Sin inventario físico'}
                       </span>
                     </span>
@@ -222,9 +198,7 @@ export function ProductoFormModal({
                 ))}
               </div>
               {isEdit && (
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 6 }}>
-                  El tipo no puede modificarse una vez creado.
-                </p>
+                <p className="prd-tipo-hint">El tipo no puede modificarse una vez creado.</p>
               )}
             </div>
 
@@ -272,7 +246,7 @@ export function ProductoFormModal({
             {/* ── Precios y costos ── */}
             <div className="ter-form-section">
               <span className="ter-form-section-title">Precios y costos</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-cols-2">
                 <PreciosCostosEditor label="Precios de venta" rows={precios} onChange={setPrecios} monedasDisponibles={monedasDisponibles} />
                 <PreciosCostosEditor label="Costos"           rows={costos}  onChange={setCostos}  monedasDisponibles={monedasDisponibles} />
               </div>
@@ -280,15 +254,14 @@ export function ProductoFormModal({
 
             {/* ── Stock (solo PRODUCTO) ── */}
             {tipo === 'PRODUCTO' && (
-              <div className="ter-form-section" style={{ marginBottom: 0 }}>
+              <div className="ter-form-section mb-0">
                 <span className="ter-form-section-title">Inventario</span>
                 <div className="ter-form-grid">
                   {isEdit && (
                     <div className="input-group ter-col-span-3">
                       <label>Stock actual</label>
-                      <input className="input" readOnly
-                        value={`${producto?.stock_actual ?? 0} ${producto?.unidad ?? ''}`}
-                        style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }} />
+                      <input className="input input-static" readOnly
+                        value={`${producto?.stock_actual ?? 0} ${producto?.unidad ?? ''}`} />
                       <span className="input-hint">Ajusta el stock desde el botón correspondiente.</span>
                     </div>
                   )}
@@ -302,14 +275,14 @@ export function ProductoFormModal({
               </div>
             )}
 
-            {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : `Crear ${tipo === 'SERVICIO' ? 'servicio' : 'producto'}`}
             </button>
           </div>

@@ -19,14 +19,6 @@ const ENTITY_LABEL: Record<string, string> = {
   sistema: 'Sistema',
 }
 
-// bg / text explícitos para no depender de color-mix ni variables ausentes
-const ENTITY_BADGE: Record<string, { bg: string; color: string }> = {
-  cliente: { bg: '#DBEAFE', color: '#1D4ED8' },
-  plan:    { bg: '#FEF3C7', color: '#92400E' },
-  pago:    { bg: '#D1FAE5', color: '#065F46' },
-  sistema: { bg: '#F3F4F6', color: '#6B7280' },
-}
-
 const ACTION_LABEL: Record<string, string> = {
   crear:          'Crear',
   editar:         'Editar',
@@ -75,52 +67,30 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
   }, [registros, filtroEntity, busqueda])
 
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+    <div className="card card-table">
 
       {/* ── Barra de filtros ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 16,
-        flexWrap: 'wrap',
-        padding: '12px 20px',
-        borderBottom: '1px solid var(--color-border)',
-      }}>
+      <div className="act-toolbar">
         {/* Pills de entidad */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', marginRight: 2 }}>
-            Entidad
-          </span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {FILTROS.map(f => {
-              const active = filtroEntity === f.value
-              return (
-                <button
-                  key={f.value}
-                  onClick={() => setFiltroEntity(f.value)}
-                  style={{
-                    padding: '3px 12px',
-                    borderRadius: 99,
-                    fontSize: 12,
-                    fontWeight: active ? 600 : 500,
-                    cursor: 'pointer',
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    background: active ? 'var(--color-primary-highlight)' : 'transparent',
-                    color: active ? 'var(--color-primary-active)' : 'var(--color-text-muted)',
-                    transition: 'all 0.12s ease',
-                    lineHeight: '1.5',
-                  }}
-                >
-                  {f.label}
-                </button>
-              )
-            })}
+        <div className="act-filters-group">
+          <span className="act-filter-label">Entidad</span>
+          <div className="act-pills">
+            {FILTROS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setFiltroEntity(f.value)}
+                className={`act-pill${filtroEntity === f.value ? ' active' : ''}`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Buscador */}
-        <div style={{ flex: 1, minWidth: 200 }}>
+        <div className="act-search-wrap">
           <input
-            className="input"
-            style={{ width: '100%' }}
+            className="input input-full"
             placeholder="Buscar por descripción, email o ID…"
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
@@ -129,84 +99,58 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
       </div>
 
       {/* ── Tabla ── */}
-      <div style={{ overflowX: 'auto' }}>
+      <div className="act-table-scroll">
         <table className="table">
           <thead>
             <tr>
-              <th style={{ width: 155 }}>Fecha</th>
-              <th style={{ width: 85  }}>Entidad</th>
-              <th style={{ width: 130 }}>Acción</th>
+              <th className="act-col-date">Fecha</th>
+              <th className="act-col-entity">Entidad</th>
+              <th className="act-col-action">Acción</th>
               <th>Descripción</th>
-              <th style={{ width: 200 }}>Usuario</th>
+              <th className="act-col-user">Usuario</th>
             </tr>
           </thead>
           <tbody>
             {filtrados.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{
-                  textAlign: 'center',
-                  color: 'var(--color-text-muted)',
-                  padding: 'var(--space-8)',
-                  fontSize: 'var(--text-sm)',
-                }}>
+                <td colSpan={5} className="act-empty-td">
                   Sin registros
                 </td>
               </tr>
-            ) : filtrados.map(r => {
-              const badge = ENTITY_BADGE[r.entity] ?? { bg: '#F3F4F6', color: '#6B7280' }
-              return (
-                <tr key={r.id}>
-                  {/* Fecha */}
-                  <td style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                    {formatFecha(r.created_at)}
-                  </td>
+            ) : filtrados.map(r => (
+              <tr key={r.id}>
+                <td className="act-date-cell">
+                  {formatFecha(r.created_at)}
+                </td>
 
-                  {/* Entidad */}
-                  <td>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center',
-                      padding: '2px 8px', borderRadius: 99,
-                      fontSize: 11, fontWeight: 600,
-                      background: badge.bg, color: badge.color,
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {ENTITY_LABEL[r.entity] ?? r.entity}
-                    </span>
-                  </td>
+                <td>
+                  <span className={`act-entity-badge act-badge-${r.entity}`}>
+                    {ENTITY_LABEL[r.entity] ?? r.entity}
+                  </span>
+                </td>
 
-                  {/* Acción */}
-                  <td style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                    {ACTION_LABEL[r.action] ?? r.action}
-                  </td>
+                <td className="act-action-cell">
+                  {ACTION_LABEL[r.action] ?? r.action}
+                </td>
 
-                  {/* Descripción */}
-                  <td style={{ fontSize: 'var(--text-sm)' }}>
-                    {r.description}
-                    {r.entity_id && (
-                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 6 }}>
-                        [{r.entity_id}]
-                      </span>
-                    )}
-                  </td>
+                <td className="act-desc-cell">
+                  {r.description}
+                  {r.entity_id && (
+                    <span className="act-entity-id">[{r.entity_id}]</span>
+                  )}
+                </td>
 
-                  {/* Usuario */}
-                  <td style={{ fontSize: 12, color: 'var(--color-text-muted)', wordBreak: 'break-all' }}>
-                    {r.user_email}
-                  </td>
-                </tr>
-              )
-            })}
+                <td className="act-user-cell">
+                  {r.user_email}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
       {/* ── Footer contador ── */}
-      <div style={{
-        padding: '10px 20px',
-        fontSize: 12,
-        color: 'var(--color-text-muted)',
-        borderTop: '1px solid var(--color-border)',
-      }}>
+      <div className="act-footer">
         {filtrados.length} registro{filtrados.length !== 1 ? 's' : ''}
         {filtrados.length !== registros.length && ` de ${registros.length}`}
       </div>

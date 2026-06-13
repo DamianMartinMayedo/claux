@@ -186,24 +186,24 @@ export function DocumentoPdf({
         <thead>
           <tr>
             <th style={{ width: tieneDescuentosLinea ? '44%' : '50%' }}>Descripción</th>
-            <th style={{ width: '12%', textAlign: 'right' }}>Cantidad</th>
-            <th style={{ width: '18%', textAlign: 'right' }}>Precio unit.</th>
-            {tieneDescuentosLinea && <th style={{ width: '8%', textAlign: 'right' }}>Dto.%</th>}
-            <th style={{ width: '18%', textAlign: 'right' }}>Total</th>
+            <th className="pdf-col-qty">Cantidad</th>
+            <th className="pdf-col-price">Precio unit.</th>
+            {tieneDescuentosLinea && <th className="pdf-col-dto">Dto.%</th>}
+            <th className="pdf-col-price">Total</th>
           </tr>
         </thead>
         <tbody>
           {lineas.map(l => (
             <tr key={l.linea_id}>
               <td>{l.descripcion}</td>
-              <td style={{ textAlign: 'right' }}>{Number(l.cantidad)}</td>
-              <td style={{ textAlign: 'right' }}>{formatearMoneda(Number(l.precio_unitario), moneda)}</td>
+              <td className="text-right">{Number(l.cantidad)}</td>
+              <td className="text-right">{formatearMoneda(Number(l.precio_unitario), moneda)}</td>
               {tieneDescuentosLinea && (
-                <td style={{ textAlign: 'right' }}>
+                <td className="text-right">
                   {Number(l.descuento_pct) > 0 ? `${Number(l.descuento_pct)}%` : ''}
                 </td>
               )}
-              <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatearMoneda(Number(l.total), moneda)}</td>
+              <td className="pdf-td-amt">{formatearMoneda(Number(l.total), moneda)}</td>
             </tr>
           ))}
         </tbody>

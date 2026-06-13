@@ -40,7 +40,7 @@ export default function NuevoPlanModal() {
 
   const modal = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 600 }}>
+      <div className="modal modal-lg">
         <div className="modal-header">
           <h2 className="modal-title">Nuevo plan</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -57,7 +57,7 @@ export default function NuevoPlanModal() {
             <div className="input-group">
               <label>Nombre del plan <span className="required">*</span></label>
               <input name="nombre" className="input" required placeholder="Ej: Básico Mensual" />
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+              <span className="text-xs-muted">
                 El ID se genera automáticamente según nivel y modalidad (ej: BM001, PT002).
               </span>
             </div>
@@ -107,7 +107,7 @@ export default function NuevoPlanModal() {
                 <input name="max_empresas" type="number" min="1" className="input" defaultValue={1} />
               </div>
               <div className="input-group">
-                <label>Máx. usuarios <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(-1 = ilimitado)</span></label>
+                <label>Máx. usuarios <span className="label-muted-hint">(-1 = ilimitado)</span></label>
                 <input name="max_usuarios" type="number" min="-1" className="input" defaultValue={2} />
               </div>
             </div>

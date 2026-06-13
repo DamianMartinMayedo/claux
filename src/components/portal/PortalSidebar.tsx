@@ -20,9 +20,7 @@ interface NavGroup {
   items: NavItem[]
 }
 
-function buildNav(rol: Rol, modulosActivos: string[]): NavGroup[] {
-  const tiene = (m: string) => modulosActivos.includes(m)
-
+function buildNav(rol: Rol): NavGroup[] {
   return [
     {
       label: 'Principal',
@@ -83,7 +81,7 @@ export default function PortalSidebar({ rol, modulosActivos }: Props) {
     startTransition(() => { logoutCliente() })
   }
 
-  const nav = buildNav(rol, modulosActivos)
+  const nav = buildNav(rol)
 
   return (
     <>
@@ -194,5 +192,5 @@ function IconSoporte() {
   return <svg className="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
 }
 function IconLock() {
-  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.5 }}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0" opacity="0.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
 }

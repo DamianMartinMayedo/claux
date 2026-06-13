@@ -34,7 +34,7 @@ const CONDICION_LABEL: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function ViaBadge({ via }: { via: ViaPago | null }) {
-  if (!via?.tipo) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+  if (!via?.tipo) return <span className="text-muted">—</span>
   const info = VIA_BADGE[via.tipo]
   if (!info) return <span className="via-badge">{via.tipo}</span>
   return (
@@ -56,13 +56,13 @@ function ConfirmArchivar({
 }) {
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
+      <div className="modal modal-440" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Archivar tercero</h2>
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
         <div className="modal-body">
-          <p style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          <p className="modal-body-text">
             ¿Archivar a <strong>{tercero.nombre}</strong>? No aparecerá en listas activas
             pero podrás restaurarlo cuando lo necesites.
           </p>
@@ -71,7 +71,7 @@ function ConfirmArchivar({
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
             {isPending
-              ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Archivando…</>
+              ? <><span className="spinner spinner-sm" /> Archivando…</>
               : 'Archivar'}
           </button>
         </div>
@@ -195,7 +195,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <h2 className="mon-section-title">
             {verArchivados ? 'Archivados' : 'Terceros activos'}
           </h2>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          <span className="text-xs-muted">
             {tercerosFiltrados.length} de {verArchivados ? archivados : activos}
           </span>
         </div>
@@ -220,7 +220,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                   <th>Representante</th>
                   <th>Vías de pago</th>
                   <th>Cond. pago</th>
-                  <th style={{ width: 96 }}></th>
+                  <th className="ter-col-act"></th>
                 </tr>
               </thead>
               <tbody>
@@ -235,8 +235,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     <td>
                       <Link
                         href={`/portal/terceros/${t.tercero_id}`}
-                        className="ter-nombre"
-                        style={{ textDecoration: 'none', color: 'inherit' }}
+                        className="ter-nombre link-inherit"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {t.nombre}
@@ -253,7 +252,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
 
                     {/* Empresa */}
                     {empresasLista.length > 1 && (
-                      <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                      <td className="text-sm-muted">
                         {data.empresa_nombres[t.empresa_id] ?? t.empresa_id}
                       </td>
                     )}
@@ -273,21 +272,21 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                           <span className="ter-contacto-item"><IconMail /> {t.email}</span>
                         )}
                         {!t.representante && !t.telefono && !t.email && (
-                          <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                          <span className="text-muted">—</span>
                         )}
                       </div>
                     </td>
 
                     {/* Vías de pago */}
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div className="ter-via-stack">
                         <ViaBadge via={t.via_primaria} />
                         {t.via_secundaria?.tipo && <ViaBadge via={t.via_secundaria} />}
                       </div>
                     </td>
 
                     {/* Condición pago */}
-                    <td style={{ fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                    <td className="ter-condicion">
                       {CONDICION_LABEL[t.condicion_pago] ?? t.condicion_pago}
                     </td>
 
@@ -302,7 +301,6 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                             rel="noopener noreferrer"
                             className="ter-action-btn"
                             title="Ver contrato"
-                            style={{ textDecoration: 'none' }}
                           >
                             <IconFileLink />
                           </a>
@@ -376,7 +374,7 @@ function IconRestore() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
 }
 function IconUsers() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" style={{ opacity: 0.25 }}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" opacity="0.25"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
 }
 function IconPhone() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.37 2 2 0 013.6 1.21h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.77a16 16 0 006.29 6.29l1.63-1.63a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>

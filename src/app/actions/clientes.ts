@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
+import { addDays, toDateStr } from '@/lib/date-utils'
 
 // ── Utilidades de seguridad ──────────────────────────────────────────
 async function hashPassword(password: string, salt: string): Promise<string> {
@@ -21,15 +22,6 @@ function generateSalt(): string {
   return crypto.randomUUID()
 }
 
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
-function toDateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
-}
 
 // ── Crear cliente ────────────────────────────────────────────────────
 export async function crearCliente(formData: FormData) {

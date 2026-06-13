@@ -45,7 +45,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
   // ── Modal: Cambiar plan ──────────────────────────────────────────────
   const modalCambiarPlan = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 460 }}>
+      <div className="modal modal-460">
         <div className="modal-header">
           <h2 className="modal-title">Cambiar plan</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -57,7 +57,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
         <form ref={formRef} onSubmit={(e) => { e.preventDefault(); handleSubmit(cambiarPlan) }}>
           <input type="hidden" name="client_id" value={cliente.client_id} />
           <div className="modal-body">
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+            <p className="text-sm-muted mb-3">
               Cliente: <strong>{cliente.nombre_empresa}</strong>
             </p>
             <div className="input-group">
@@ -70,7 +70,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
                 ))}
               </select>
             </div>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            <p className="text-xs-muted">
               La fecha de expiración se recalculará desde hoy según la duración del nuevo plan.
             </p>
             {error   && <div className="alert alert-error">{error}</div>}
@@ -91,7 +91,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
   const nuevoEstado = esSuspendido ? 'ACTIVO' : 'SUSPENDIDO'
   const modalEstado = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 420 }}>
+      <div className="modal modal-420">
         <div className="modal-header">
           <h2 className="modal-title">{esSuspendido ? 'Reactivar cliente' : 'Suspender cliente'}</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -104,7 +104,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
           <input type="hidden" name="client_id" value={cliente.client_id} />
           <input type="hidden" name="estado" value={nuevoEstado} />
           <div className="modal-body">
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+            <p className="text-sm-muted">
               {esSuspendido
                 ? <>¿Reactivar el acceso de <strong>{cliente.nombre_empresa}</strong>? El estado pasará a ACTIVO.</>
                 : <>¿Suspender el acceso de <strong>{cliente.nombre_empresa}</strong>? El cliente no podrá iniciar sesión.</>
@@ -134,7 +134,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
   // ── Modal: Período de gracia ─────────────────────────────────────────
   const modalGracia = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 460 }}>
+      <div className="modal modal-460">
         <div className="modal-header">
           <h2 className="modal-title">Período de gracia</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -146,7 +146,7 @@ export default function AccionesCliente({ cliente, planes }: { cliente: Cliente;
         <form ref={formRef} onSubmit={(e) => { e.preventDefault(); handleSubmit(aplicarGracia) }}>
           <input type="hidden" name="client_id" value={cliente.client_id} />
           <div className="modal-body">
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+            <p className="text-sm-muted mb-3">
               Extiende el acceso de <strong>{cliente.nombre_empresa}</strong> sin registrar un pago.
             </p>
             <div className="grid-cols-2">

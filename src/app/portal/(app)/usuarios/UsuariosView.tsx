@@ -82,14 +82,14 @@ function UsuarioModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal" style={{ maxWidth: 480 }} role="dialog" aria-modal>
+      <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar usuario' : 'Nuevo usuario'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ padding: 'var(--space-5) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <div className="modal-body modal-body-form">
             {esEdicion && <input type="hidden" name="user_id" value={usuario.user_id} />}
 
             <div className="usr-form-grid">
@@ -148,11 +148,9 @@ function UsuarioModal({
             {/* Empresas asignadas — solo para operadores */}
             {rol === 'usuario' && (
               <div>
-                <label className="form-label" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
-                  Empresas con acceso
-                </label>
+                <label className="form-label">Empresas con acceso</label>
                 {empresas.filter(e => e.estado === 'ACTIVO').length === 0 ? (
-                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>No hay empresas activas.</p>
+                  <p className="text-sm-muted">No hay empresas activas.</p>
                 ) : (
                   <div className="usr-empresa-list">
                     {empresas.filter(e => e.estado === 'ACTIVO').map(emp => (
@@ -186,7 +184,7 @@ function UsuarioModal({
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} />{esEdicion ? 'Guardando…' : 'Creando…'}</>
+                ? <><span className="spinner spinner-sm" />{esEdicion ? 'Guardando…' : 'Creando…'}</>
                 : esEdicion ? 'Guardar cambios' : 'Crear usuario'}
             </button>
           </div>
@@ -210,12 +208,12 @@ function PasswordModal({ password, onClose }: { password: string; onClose: () =>
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal" style={{ maxWidth: 380 }} role="dialog" aria-modal>
+      <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Contraseña temporal</h2>
         </div>
-        <div className="modal-body" style={{ padding: 'var(--space-5) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+        <div className="modal-body modal-body-form">
+          <p className="text-sm-muted">
             Comparte esta contraseña con el usuario de forma segura. No se mostrará de nuevo.
           </p>
           <div className="usr-pwd-box">
@@ -272,7 +270,6 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
     })
   }
 
-  // Map empresa_id → nombre para mostrar
   const empresaMap = new Map(empresas.map(e => [e.empresa_id, e]))
 
   return (
@@ -303,7 +300,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
       {tab === 'usuarios' && (
         <div className="card card-table">
           {usuarios.length === 0 ? (
-            <div className="mon-empty" style={{ padding: 'var(--space-10)' }}>
+            <div className="mon-empty mon-empty-xl">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
               <p>No hay usuarios creados.</p>
             </div>
@@ -316,27 +313,27 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                     <th>Rol</th>
                     <th>Empresas</th>
                     <th>Estado</th>
-                    {!soloLectura && <th style={{ width: 100 }} />}
+                    {!soloLectura && <th className="usr-col-act" />}
                   </tr>
                 </thead>
                 <tbody>
                   {usuarios.map(u => (
-                    <tr key={u.user_id} style={{ opacity: u.estado === 'INACTIVO' ? 0.5 : 1 }}>
+                    <tr key={u.user_id} className={u.estado === 'INACTIVO' ? 'row-inactive' : ''}>
                       <td>
                         <div className="usr-cell-email">
                           <div className="usr-avatar">{(u.nombre || u.email).charAt(0).toUpperCase()}</div>
                           <div>
-                            {u.nombre && <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{u.nombre}</div>}
-                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{u.email}</div>
+                            {u.nombre && <div className="text-sm-bold">{u.nombre}</div>}
+                            <div className="text-xs-muted">{u.email}</div>
                           </div>
                         </div>
                       </td>
                       <td><RolBadge rol={u.rol} soloLectura={u.solo_lectura} /></td>
                       <td>
                         {u.rol === 'admin_empresa' ? (
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Todas</span>
+                          <span className="text-xs-muted">Todas</span>
                         ) : u.empresas.length === 0 ? (
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)' }}>Sin asignar</span>
+                          <span className="text-xs-error">Sin asignar</span>
                         ) : (
                           <div className="usr-empresas-list">
                             {u.empresas.slice(0, 2).map(id => (
@@ -357,7 +354,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                       </td>
                       {!soloLectura && (
                         <td>
-                          <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                          <div className="ter-actions">
                             <button
                               className="btn btn-secondary btn-xs"
                               onClick={() => abrirEditar(u)}
@@ -390,7 +387,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
 
       {/* ── Tab Roles ── */}
       {tab === 'roles' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+        <div className="usr-roles-wrap">
           <div className="card card-table">
             <div className="mon-card-header">
               <h2 className="mon-section-title">Tabla de permisos</h2>
@@ -400,16 +397,16 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                 <thead>
                   <tr>
                     <th>Acción</th>
-                    <th style={{ textAlign: 'center' }}>Administrador</th>
-                    <th style={{ textAlign: 'center' }}>Operador</th>
+                    <th className="text-center">Administrador</th>
+                    <th className="text-center">Operador</th>
                   </tr>
                 </thead>
                 <tbody>
                   {PERMISOS.map(p => (
                     <tr key={p.accion}>
-                      <td style={{ fontSize: 'var(--text-sm)' }}>{p.accion}</td>
-                      <td style={{ textAlign: 'center' }}>{p.admin  ? <IconCheck /> : <IconMinus />}</td>
-                      <td style={{ textAlign: 'center' }}>{p.operador ? <IconCheck /> : <IconMinus />}</td>
+                      <td>{p.accion}</td>
+                      <td className="text-center">{p.admin    ? <IconCheck /> : <IconMinus />}</td>
+                      <td className="text-center">{p.operador ? <IconCheck /> : <IconMinus />}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -417,11 +414,9 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
             </div>
           </div>
 
-          <div className="card" style={{ padding: 'var(--space-5) var(--space-6)' }}>
-            <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 700, marginBottom: 'var(--space-3)' }}>
-              Flag «Solo lectura»
-            </h3>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+          <div className="card modal-body-wide">
+            <h3 className="text-sm-bold mb-3">Flag «Solo lectura»</h3>
+            <p className="body-text">
               Se puede activar en cualquier rol. Un usuario con solo lectura puede navegar por todos los módulos
               a los que su rol le da acceso, pero no puede crear, editar ni eliminar ningún dato.
               Es ideal para socios, auditores o supervisores que necesitan visibilidad sin poder modificar.
@@ -465,4 +460,4 @@ function IconEdit()  { return <svg viewBox="0 0 24 24" fill="none" stroke="curre
 function IconKey()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> }
 function IconCheck() { return <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> }
 function IconMinus() { return <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" width="16" height="16"><line x1="5" y1="12" x2="19" y2="12"/></svg> }
-function IconInfo()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" style={{ flexShrink: 0, color: 'var(--color-primary)' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> }
+function IconInfo()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className="flex-shrink-0 text-primary"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> }

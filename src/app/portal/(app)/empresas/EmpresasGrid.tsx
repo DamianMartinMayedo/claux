@@ -18,7 +18,6 @@ interface Props {
   esAdmin:     boolean
 }
 
-// Conjunto de letras ya en uso (para feedback inmediato en el modal)
 function letrasOcupadas(empresas: Empresa[], excludeId?: string): Set<string> {
   const s = new Set<string>()
   for (const e of empresas) {
@@ -42,38 +41,25 @@ function EmpresaCard({
       <div className="emp-card-band" style={{ background: color }} />
       <div className="emp-card-body">
         <div className="emp-card-top">
-          <div
-            className="emp-avatar-lg"
-            style={empresa.logo_url
-              ? { background: 'var(--color-surface)', border: '1px solid var(--color-border)' }
-              : { background: color }}
-          >
-            {empresa.logo_url
-              ? <img src={empresa.logo_url} alt={empresa.nombre} onError={e => {
+          {empresa.logo_url
+            ? (
+              <div className="emp-avatar-lg emp-avatar-with-logo">
+                <img src={empresa.logo_url} alt={empresa.nombre} onError={e => {
                   const el = e.currentTarget
                   el.style.display = 'none'
                   el.parentElement!.style.background = color
                   el.parentElement!.textContent = inicial
                 }} />
-              : inicial}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              </div>
+            )
+            : <div className="emp-avatar-lg" style={{ background: color }}>{inicial}</div>
+          }
+          <div className="emp-card-top-right">
             {empresa.letra_facturacion && (
               <span
+                className="emp-letra-badge"
                 title={`Letra de facturación: ${empresa.letra_facturacion}`}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 24,
-                  height: 24,
-                  borderRadius: '6px',
-                  background: color,
-                  color: '#fff',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  letterSpacing: '0.02em',
-                }}
+                style={{ background: color }}
               >
                 {empresa.letra_facturacion}
               </span>
@@ -100,7 +86,7 @@ function EmpresaCard({
           {empresa.email && (
             <div className="emp-meta-row">
               <IconMail />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{empresa.email}</span>
+              <span className="text-truncate">{empresa.email}</span>
             </div>
           )}
           {empresa.moneda_funcional && (
@@ -113,7 +99,7 @@ function EmpresaCard({
       </div>
 
       <div className="emp-card-footer">
-        <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => onEditar(empresa)}>
+        <button className="btn btn-secondary btn-sm flex-1" onClick={() => onEditar(empresa)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -192,7 +178,6 @@ function EmpresaModal({
       const result = await guardarEmpresa(fd)
       if (!result.ok) { setError(result.error ?? 'Error inesperado.'); return }
 
-      // Subir logo si hay uno nuevo
       if (logoFile && result.empresa_id) {
         const logoFd = new FormData()
         logoFd.set('empresa_id', result.empresa_id)
@@ -212,8 +197,8 @@ function EmpresaModal({
   if (!state.open) return null
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal" style={{ maxWidth: 600 }} role="dialog" aria-modal>
+    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar empresa' : 'Nueva empresa'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar">
@@ -224,7 +209,7 @@ function EmpresaModal({
         </div>
 
         <form ref={formRef} onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ padding: 'var(--space-5) var(--space-6)' }}>
+          <div className="modal-body modal-body-wide">
             {state.empresa && <input type="hidden" name="empresa_id" value={state.empresa.empresa_id} />}
 
             <div className="emp-form-grid">
@@ -284,30 +269,22 @@ function EmpresaModal({
               {/* Letra de facturación */}
               <div className="input-group emp-full">
                 <label>Letra de facturación</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="emp-letra-input-row">
                   <input
-                    className="input"
-                    style={{
-                      width: 80,
-                      textAlign: 'center',
-                      fontSize: '18px',
-                      fontWeight: 700,
-                      letterSpacing: '0.05em',
-                      textTransform: 'uppercase',
-                      borderColor: letraDuplicada ? 'var(--color-error)' : undefined,
-                    }}
+                    className="input emp-letra-input"
+                    style={{ borderColor: letraDuplicada ? 'var(--color-error)' : undefined }}
                     maxLength={1}
                     value={letra}
                     onChange={e => setLetra(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
                     placeholder="—"
                   />
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                  <span className="emp-letra-hint">
                     Identifica esta empresa en los consecutivos de ofertas y facturas.<br />
                     Ej: letra <strong>M</strong> → facturas <strong>FM20260001</strong>, ofertas <strong>OFM20260001</strong>.
                   </span>
                 </div>
                 {letraDuplicada && (
-                  <span className="input-hint" style={{ color: 'var(--color-error)' }}>
+                  <span className="input-hint input-hint-danger">
                     Esta letra ya está en uso por otra empresa.
                   </span>
                 )}
@@ -349,8 +326,8 @@ function EmpresaModal({
                 >
                   <div className="logo-upload-preview">
                     {logoPreview
-                      ? <img src={logoPreview} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                      : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}>
+                      ? <img src={logoPreview} alt="Preview" />
+                      : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="22" height="22" className="text-muted">
                           <rect x="3" y="3" width="18" height="18" rx="2"/>
                           <circle cx="8.5" cy="8.5" r="1.5"/>
                           <polyline points="21 15 16 10 5 21"/>
@@ -359,25 +336,25 @@ function EmpresaModal({
                   <div className="logo-upload-info">
                     <strong>Haz clic para subir el logo</strong>
                     <span>PNG, JPG o WebP · Máx. 2 MB · Fondo transparente recomendado</span>
-                    {logoNombre && <span style={{ color: 'var(--color-primary)', fontWeight: 600, marginTop: 'var(--space-1)', display: 'block' }}>{logoNombre}</span>}
+                    {logoNombre && <span className="logo-filename">{logoNombre}</span>}
                   </div>
                 </div>
                 <input
                   ref={fileRef}
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
-                  style={{ display: 'none' }}
+                  className="hidden"
                   onChange={handleLogoChange}
                 />
                 {(logoPreview || (esEdicion && state.empresa?.logo_url)) && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', userSelect: 'none' }}>
+                  <label className="emp-logo-toggle">
                     <input
                       type="checkbox"
                       checked={mostrarLogo}
                       onChange={e => setMostrarLogo(e.target.checked)}
-                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                      className="emp-logo-checkbox"
                     />
-                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                    <span className="text-sm-muted">
                       Mostrar logo en documentos PDF
                     </span>
                   </label>
@@ -397,7 +374,7 @@ function EmpresaModal({
 
             </div>
 
-            {error && <div className="alert alert-error" style={{ marginTop: 'var(--space-4)' }}>{error}</div>}
+            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">
@@ -406,7 +383,7 @@ function EmpresaModal({
             </button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} />{esEdicion ? 'Guardando…' : 'Creando…'}</>
+                ? <><span className="spinner spinner-sm" />{esEdicion ? 'Guardando…' : 'Creando…'}</>
                 : esEdicion ? 'Guardar cambios' : 'Crear empresa'}
             </button>
           </div>
@@ -449,7 +426,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
           <p className="page-subtitle">
             Gestiona los datos fiscales y configuración de cada empresa.
             {maxEmpresas !== null && (
-              <span style={{ marginLeft: 'var(--space-3)', color: 'var(--color-text-muted)' }}>
+              <span className="emp-plan-count">
                 {init.length} / {maxEmpresas} empresas
               </span>
             )}
@@ -471,7 +448,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
       </div>
 
       {limiteAlcanzado && esAdmin && (
-        <div className="alert alert-warning" style={{ marginBottom: 'var(--space-5)' }}>
+        <div className="alert alert-warning mb-5">
           Has alcanzado el límite de <strong>{maxEmpresas}</strong> empresa{maxEmpresas === 1 ? '' : 's'} de tu plan. Actualiza tu suscripción para añadir más.
         </div>
       )}
@@ -486,7 +463,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Nueva empresa</span>
+            <span className="text-sm-bold">Nueva empresa</span>
           </button>
         )}
 
@@ -515,11 +492,11 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
 
 // ── Mini-iconos de meta ───────────────────────────────────────────────────────
 function IconLocation() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 12, height: 12, flexShrink: 0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" className="flex-shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
 }
 function IconMail() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 12, height: 12, flexShrink: 0 }}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" className="flex-shrink-0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
 }
 function IconCoin() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 12, height: 12, flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" className="flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
 }

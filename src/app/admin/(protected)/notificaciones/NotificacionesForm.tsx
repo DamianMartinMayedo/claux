@@ -67,12 +67,12 @@ export default function NotificacionesForm({ diasAviso }: { diasAviso: number })
         </div>
 
         {msg && (
-          <div className={`alert ${msg.ok ? 'alert-success' : 'alert-error'}`} style={{ marginTop: 'var(--space-4)' }}>
+          <div className={`alert ${msg.ok ? 'alert-success' : 'alert-error'} mt-4`}>
             {msg.text}
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-5)' }}>
+        <div className="form-actions-end mt-5">
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar cambios'}
           </button>
@@ -89,9 +89,9 @@ export default function NotificacionesForm({ diasAviso }: { diasAviso: number })
             </svg>
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div className="flex-center-2">
               <p className="notif-section-title">Configuración de email (SMTP)</p>
-              <span className="badge badge-neutral" style={{ fontSize: '10px' }}>Próximamente</span>
+              <span className="badge badge-neutral text-xs">Próximamente</span>
             </div>
             <p className="notif-section-sub">
               Servidor, puerto, usuario y contraseña para el envío de emails automáticos
@@ -113,9 +113,9 @@ export default function NotificacionesForm({ diasAviso }: { diasAviso: number })
             </svg>
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div className="flex-center-2">
               <p className="notif-section-title">Notificaciones automáticas a clientes</p>
-              <span className="badge badge-neutral" style={{ fontSize: '10px' }}>Próximamente</span>
+              <span className="badge badge-neutral text-xs">Próximamente</span>
             </div>
             <p className="notif-section-sub">
               Emails automáticos de bienvenida, aviso de vencimiento y confirmación de pago

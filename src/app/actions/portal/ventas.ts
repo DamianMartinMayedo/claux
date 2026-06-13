@@ -851,7 +851,6 @@ export async function duplicarOferta(
   if (error) return { ok: false, error: error.message }
 
   // Copiar líneas
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (linRes.data && linRes.data.length > 0) {
     await db.from('documento_lineas').insert(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

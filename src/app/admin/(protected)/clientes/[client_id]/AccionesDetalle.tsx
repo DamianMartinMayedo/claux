@@ -245,9 +245,9 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
   // ── Info del cliente (reutilizado en modales) ────────────────────────
   const clienteInfo = (
-    <div style={{ background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3) var(--space-4)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-4)' }}>
-      <strong style={{ display: 'block', fontWeight: 700, marginBottom: 2 }}>{cliente.nombre_empresa}</strong>
-      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>
+    <div className="info-box">
+      <strong className="info-box-title">{cliente.nombre_empresa}</strong>
+      <span className="text-xs-muted">
         {cliente.client_id} · Estado: <strong>{cliente.estado}</strong>
         {cliente.fecha_expiracion && (
           <> · Expira: <strong>{formatDateES(cliente.fecha_expiracion)}</strong></>
@@ -259,7 +259,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   // ── Modal: Período especial ──────────────────────────────────────────
   const modalGracia = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 480 }}>
+      <div className="modal modal-md">
         <div className="modal-header">
           <h2 className="modal-title">Aplicar período especial</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -287,11 +287,11 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
                   value={diasGracia}
                   onChange={(e) => onDiasChange(e.target.value)}
                 />
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Entre 1 y 180 días</span>
+                <span className="input-hint">Entre 1 y 180 días</span>
               </div>
               <div className="input-group">
                 <label>Acceso hasta</label>
-                <div className="input" style={{ background: 'var(--color-surface-2)', color: fechaCalculada === '—' ? 'var(--color-text-muted)' : 'var(--color-text)', cursor: 'default', display: 'flex', alignItems: 'center' }}>
+                <div className="input input-display" style={{ color: fechaCalculada === '—' ? 'var(--color-text-muted)' : 'var(--color-text)' }}>
                   {fechaCalculada}
                 </div>
               </div>
@@ -337,7 +337,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   const nuevoEstado = esActivo ? 'SUSPENDIDO' : 'ACTIVO'
   const modalEstado = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 420 }}>
+      <div className="modal modal-420">
         <div className="modal-header">
           <h2 className="modal-title">{esActivo ? 'Suspender cliente' : 'Reactivar cliente'}</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -348,14 +348,14 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
         </div>
         <div className="modal-body">
           {clienteInfo}
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+          <p className="text-sm-muted">
             {esActivo
               ? 'El cliente no podrá iniciar sesión mientras esté suspendido.'
               : 'El estado pasará a ACTIVO. Si la fecha de expiración ya venció, registra un pago para renovarla.'
             }
           </p>
           {advertencia && (
-            <div className="alert alert-error" style={{ marginTop: 'var(--space-3)' }}>
+            <div className="alert alert-error mt-3">
               ⚠ {advertencia}
             </div>
           )}
@@ -390,7 +390,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
   // ── Modal: Registrar pago ────────────────────────────────────────────
   const modalPago = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 540 }}>
+      <div className="modal modal-540">
         <div className="modal-header">
           <h2 className="modal-title">Registrar pago</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -405,8 +405,8 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
             {clienteInfo}
 
             {loadingPago && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
-                <span className="spinner" style={{ width: 14, height: 14 }} /> Cargando datos del plan…
+              <div className="loading-row">
+                <span className="spinner spinner-xs" /> Cargando datos del plan…
               </div>
             )}
 
@@ -450,7 +450,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
                 placeholder="0.00"
               />
               {prorata && (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <span className="input-hint">
                   Sugerido: ${prorata.suggestedNet.toFixed(2)} (precio plan ${prorata.planPrice.toFixed(2)} − crédito ${prorata.credit.toFixed(2)})
                 </span>
               )}
@@ -470,9 +470,7 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
                   onChange={(e) => onInicioChange(e.target.value)}
                 />
                 {fechaInicio && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                    {formatDateES(fechaInicio)}
-                  </span>
+                  <span className="input-hint">{formatDateES(fechaInicio)}</span>
                 )}
               </div>
               <div className="input-group">
@@ -487,17 +485,15 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
                   onChange={(e) => setFechaFin(e.target.value)}
                 />
                 {fechaFin && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                    {formatDateES(fechaFin)}
-                  </span>
+                  <span className="input-hint">{formatDateES(fechaFin)}</span>
                 )}
               </div>
             </div>
 
             {/* Alerta inicio temprano */}
             {alertaInicioTemprano && (
-              <div className="alert alert-warning" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start', marginTop: 'calc(var(--space-1) * -1)' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+              <div className="alert alert-warning alert-flex mt-neg-1">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
@@ -507,11 +503,11 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
 
             {/* Desglose pro-rata */}
             {prorata && (
-              <div className="info-banner" style={{ marginTop: 'var(--space-2)' }}>
+              <div className="info-banner mt-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div className="pro-rata-details">
                   <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
                   <span>Tarifa diaria período anterior: ${prorata.dailyRate.toFixed(4)}/día</span>
                   <span>Crédito por días ya pagados: −${prorata.credit.toFixed(2)}</span>
@@ -529,8 +525,8 @@ export default function AccionesDetalle({ cliente, planes }: Props) {
             </div>
 
             {advertencia && (
-              <div className="alert alert-warning" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+              <div className="alert alert-warning alert-flex">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>

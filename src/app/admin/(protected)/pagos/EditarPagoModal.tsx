@@ -89,11 +89,11 @@ export default function EditarPagoModal({
       className="modal-backdrop"
      
     >
-      <div className="modal" style={{ maxWidth: 520 }}>
+      <div className="modal modal-520">
         <div className="modal-header">
           <div>
             <h2 className="modal-title">Editar pago</h2>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
+            <p className="text-xs-muted">
               {pago.pago_id} · {clienteNombre}
             </p>
           </div>
@@ -170,7 +170,7 @@ export default function EditarPagoModal({
                   onChange={e => setFechaInicio(e.target.value)}
                 />
                 {fechaInicio && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                  <span className="text-xs-muted">
                     {formatDateES(fechaInicio)}
                   </span>
                 )}
@@ -187,7 +187,7 @@ export default function EditarPagoModal({
                   onChange={e => setFechaFin(e.target.value)}
                 />
                 {fechaFin && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                  <span className="text-xs-muted">
                     {formatDateES(fechaFin)}
                   </span>
                 )}

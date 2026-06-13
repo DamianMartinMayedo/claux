@@ -164,7 +164,7 @@ export default function ClientesTabla({
                 <th>Plan</th>
                 <th>Estado</th>
                 <th>Expiración</th>
-                <th style={{ textAlign: 'center' }}>Días</th>
+                <th className="text-center">Días</th>
               </tr>
             </thead>
             <tbody>
@@ -190,13 +190,8 @@ export default function ClientesTabla({
                       </span>
                     </td>
                     <td className="table-muted">{formatFecha(c.fecha_expiracion)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span style={{
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 700,
-                        color: DIAS_COLOR[dias.variant],
-                        letterSpacing: '0.02em',
-                      }}>
+                    <td className="text-center">
+                      <span className="dias-value" style={{ color: DIAS_COLOR[dias.variant] }}>
                         {dias.label}
                       </span>
                     </td>

@@ -1,4 +1,4 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { obtenerProductoDetalle } from '@/app/actions/portal/productos'
 import ProductoDetalle            from './ProductoDetalle'
 

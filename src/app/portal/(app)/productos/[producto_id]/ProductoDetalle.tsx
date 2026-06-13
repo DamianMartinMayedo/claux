@@ -29,56 +29,6 @@ function fmtDate(iso: string) {
   })
 }
 
-// ── Estilos reutilizables ─────────────────────────────────────────────────────
-
-const S = {
-  badgeProducto: {
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    background: '#e0f2fe', color: 'var(--color-primary-text)',
-  },
-  badgeServicio: {
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    background: '#f3e8ff', color: '#7c3aed',
-  },
-  badgeActivo: {
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    background: '#dcfce7', color: '#16a34a',
-  },
-  badgeInactivo: {
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', padding: '2px 10px', borderRadius: '999px',
-    background: 'var(--color-surface-2)', color: 'var(--color-text-muted)',
-  },
-  card: {
-    background: 'var(--color-surface)',
-    border:     '1px solid var(--color-border)',
-    borderRadius: '12px',
-    padding:    '20px',
-    marginBottom: '16px',
-  },
-  label: {
-    fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
-    marginBottom: '4px',
-  },
-  value: {
-    fontSize: '14px', color: 'var(--color-text)',
-  },
-  sectionTitle: {
-    fontSize: '13px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
-    marginBottom: '16px', paddingBottom: '8px',
-    borderBottom: '1px solid var(--color-border)',
-  },
-}
-
 // ── Componente Tab ────────────────────────────────────────────────────────────
 
 function Tab({ active, onClick, label, badge }: {
@@ -88,42 +38,22 @@ function Tab({ active, onClick, label, badge }: {
   badge?:  string | number
 }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '6px',
-        padding: '10px 18px',
-        fontSize: '13px', fontWeight: active ? 700 : 500,
-        color:   active ? 'var(--color-primary)' : 'var(--color-text-muted)',
-        borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-        borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-        background: 'transparent', borderRadius: '0',
-        cursor: 'pointer', transition: 'color 0.15s',
-        whiteSpace: 'nowrap',
-      }}
-    >
+    <button onClick={onClick} className={`detail-tab${active ? ' active' : ''}`}>
       {label}
       {badge !== undefined && (
-        <span style={{
-          fontSize: '10px', fontWeight: 700, padding: '1px 6px',
-          borderRadius: '999px',
-          background: active ? 'var(--color-primary)' : 'var(--color-border)',
-          color: active ? '#fff' : 'var(--color-text-muted)',
-        }}>
-          {badge}
-        </span>
+        <span className="detail-tab-count">{badge}</span>
       )}
     </button>
   )
 }
 
-// ── Campos info (grid de 2 col) ───────────────────────────────────────────────
+// ── Campos info ───────────────────────────────────────────────────────────────
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div style={S.label}>{label}</div>
-      <div style={S.value}>{value ?? <span style={{ color: 'var(--color-text-faint)' }}>—</span>}</div>
+      <div className="det-label">{label}</div>
+      <div className="det-value">{value ?? <span className="text-faint">—</span>}</div>
     </div>
   )
 }
@@ -135,62 +65,57 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
   const esServicio = producto.tipo === 'SERVICIO'
 
   return (
-    <div style={{ padding: '24px 0' }}>
+    <div className="det-tab-body">
       {/* Datos generales */}
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Datos generales</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+      <div className="det-card">
+        <div className="det-section-title">Datos generales</div>
+        <div className="det-field-grid">
           <Campo label="Nombre"      value={producto.nombre} />
-          <Campo label="Código"      value={<code style={{ fontFamily: 'monospace', color: 'var(--color-text)' }}>{producto.codigo}</code>} />
+          <Campo label="Código"      value={<code className="text-mono">{producto.codigo}</code>} />
           <Campo label="Tipo"        value={
-            <span style={esServicio ? S.badgeServicio : S.badgeProducto}>
+            <span className={`badge ${esServicio ? 'badge-purple' : 'badge-info'}`}>
               {esServicio ? 'Servicio' : 'Producto'}
             </span>
           } />
           <Campo label="Estado"      value={
-            <span style={producto.estado === 'ACTIVO' ? S.badgeActivo : S.badgeInactivo}>
+            <span className={`badge ${producto.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
               {producto.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
             </span>
           } />
           <Campo label="Unidad"      value={producto.unidad} />
           <Campo label="Categoría"   value={categoria?.nombre} />
           <Campo label="Proveedor"   value={proveedor ? (
-            <Link
-              href={`/portal/terceros/${proveedor.tercero_id}`}
-              style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-            >
+            <Link href={`/portal/terceros/${proveedor.tercero_id}`} className="link-primary">
               {proveedor.nombre}
             </Link>
           ) : null} />
           <Campo label="Cód. proveedor" value={producto.codigo_proveedor} />
         </div>
         {producto.descripcion && (
-          <div style={{ marginTop: '20px' }}>
-            <div style={S.label}>Descripción</div>
-            <div style={{ ...S.value, lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{producto.descripcion}</div>
+          <div className="mt-5">
+            <div className="det-label">Descripción</div>
+            <div className="det-value det-value-pre">{producto.descripcion}</div>
           </div>
         )}
       </div>
 
       {/* Stock (solo productos) */}
       {!esServicio && (
-        <div style={S.card}>
-          <div style={S.sectionTitle}>Inventario</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '20px' }}>
+        <div className="det-card">
+          <div className="det-section-title">Inventario</div>
+          <div className="det-field-grid-sm">
             <div>
-              <div style={S.label}>Stock actual</div>
-              <div style={{
-                fontSize: '28px', fontWeight: 800,
-                color: producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
-                  ? '#dc2626' : 'var(--color-text)',
-              }}>
+              <div className="det-label">Stock actual</div>
+              <div
+                className="det-stock-num"
+                style={{ color: producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
+                  ? 'var(--color-error)' : 'var(--color-text)' }}
+              >
                 {producto.stock_actual.toLocaleString('es-VE')}
-                <span style={{ fontSize: '14px', fontWeight: 500, marginLeft: '6px', color: 'var(--color-text-muted)' }}>
-                  {producto.unidad}
-                </span>
+                <span className="det-stock-unit">{producto.unidad}</span>
               </div>
               {producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#dc2626', marginTop: '4px' }}>
+                <div className="det-stock-alert">
                   <IconAlertTriangle /> Stock por debajo del mínimo
                 </div>
               )}
@@ -201,15 +126,14 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
       )}
 
       {/* Metadatos */}
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Registro</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+      <div className="det-card">
+        <div className="det-section-title">Registro</div>
+        <div className="det-field-grid">
           <Campo label="Creado"       value={fmtDate(producto.created_at)} />
           <Campo label="Actualizado"  value={fmtDate(producto.updated_at)} />
-          <Campo label="ID interno"   value={<code style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-text-faint)' }}>{producto.producto_id}</code>} />
+          <Campo label="ID interno"   value={<code className="code-id">{producto.producto_id}</code>} />
         </div>
       </div>
-
     </div>
   )
 }
@@ -226,29 +150,21 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
   ]))
 
   return (
-    <div style={{ padding: '24px 0' }}>
-      <div style={S.card}>
-        <div style={S.sectionTitle}>Tabla de precios y costos</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+    <div className="det-tab-body">
+      <div className="det-card">
+        <div className="det-section-title">Tabla de precios y costos</div>
+        <div className="overflow-x-auto">
+          <table className="prd-prices-table">
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
-                  Moneda
-                </th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
-                  Precio de venta
-                </th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
-                  Costo
-                </th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '12px', borderBottom: '2px solid var(--color-border)' }}>
-                  Margen
-                </th>
+                <th>Moneda</th>
+                <th className="text-align-right">Precio de venta</th>
+                <th className="text-align-right">Costo</th>
+                <th className="text-align-right">Margen</th>
               </tr>
             </thead>
             <tbody>
-              {allMonedas.map((mon, i) => {
+              {allMonedas.map((mon) => {
                 const precio = producto.precios[mon] ?? 0
                 const costo  = producto.costos[mon]  ?? 0
                 const margen = precio > 0 && costo > 0
@@ -256,28 +172,29 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
                   : null
 
                 return (
-                  <tr key={mon} style={{ background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-2)' }}>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '2px 10px', borderRadius: '6px',
-                        background: 'var(--color-surface-2)', fontWeight: 700, fontSize: '12px',
-                        fontFamily: 'monospace', letterSpacing: '0.04em',
-                      }}>
-                        {mon}
-                      </span>
+                  <tr key={mon}>
+                    <td>
+                      <span className="prd-moneda-badge">{mon}</span>
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>
-                      {precio > 0 ? fmt(precio, mon) : <span style={{ color: 'var(--color-text-faint)' }}>—</span>}
+                    <td className="ven-td-amt">
+                      {precio > 0 ? fmt(precio, mon) : <span className="text-faint">—</span>}
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      {costo > 0 ? fmt(costo, mon) : <span style={{ color: 'var(--color-text-faint)' }}>—</span>}
+                    <td className="text-align-right">
+                      {costo > 0 ? fmt(costo, mon) : <span className="text-faint">—</span>}
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <td className="text-align-right">
                       {margen !== null ? (
-                        <span style={{ color: parseFloat(margen) > 20 ? '#16a34a' : parseFloat(margen) > 0 ? '#ca8a04' : '#dc2626', fontWeight: 600 }}>
+                        <span
+                          className="prd-margen"
+                          style={{ color: parseFloat(margen) > 20
+                            ? 'var(--color-success)'
+                            : parseFloat(margen) > 0
+                              ? 'var(--color-warning)'
+                              : 'var(--color-error)' }}
+                        >
                           {margen}%
                         </span>
-                      ) : <span style={{ color: 'var(--color-text-faint)' }}>—</span>}
+                      ) : <span className="text-faint">—</span>}
                     </td>
                   </tr>
                 )
@@ -294,16 +211,10 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
 
 function TabMovimientos() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-        <IconBoxLg />
-      </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-        Movimientos de inventario
-      </div>
-      <div style={{ fontSize: '13px' }}>
-        Aquí se mostrarán entradas, salidas y ajustes de este producto.
-      </div>
+    <div className="det-empty">
+      <div className="det-empty-icon"><IconBoxLg /></div>
+      <div className="det-empty-title">Movimientos de inventario</div>
+      <div className="det-empty-text">Aquí se mostrarán entradas, salidas y ajustes de este producto.</div>
     </div>
   )
 }
@@ -312,16 +223,10 @@ function TabMovimientos() {
 
 function TabHistorialPrecios() {
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-text-faint)' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-        <IconTrendingUpLg />
-      </div>
-      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-        Historial de precios
-      </div>
-      <div style={{ fontSize: '13px' }}>
-        Aquí se mostrará la evolución de precios y costos en el tiempo.
-      </div>
+    <div className="det-empty">
+      <div className="det-empty-icon"><IconTrendingUpLg /></div>
+      <div className="det-empty-title">Historial de precios</div>
+      <div className="det-empty-text">Aquí se mostrará la evolución de precios y costos en el tiempo.</div>
     </div>
   )
 }
@@ -342,8 +247,8 @@ function StockModal({
   const [error,    setError]    = useState('')
   const [pending,  startT]      = useTransition()
 
-  const cantNum     = parseFloat(cantidad) || 0
-  const preview     = producto.stock_actual + cantNum
+  const cantNum = parseFloat(cantidad) || 0
+  const preview = producto.stock_actual + cantNum
 
   function handleSubmit() {
     if (!cantidad) { setError('Ingresa una cantidad.'); return }
@@ -356,81 +261,62 @@ function StockModal({
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-    }}>
-      <div style={{
-        background: 'var(--color-surface)', borderRadius: '16px', padding: '32px',
-        width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-      }}>
-        <h3 style={{ margin: '0 0 20px', fontSize: '18px', fontWeight: 700 }}>
-          Ajustar stock — {producto.nombre}
-        </h3>
+    <div className="modal-backdrop">
+      <div className="prd-stock-modal">
+        <h3>Ajustar stock — {producto.nombre}</h3>
 
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Stock actual</div>
-          <div style={{ fontSize: '24px', fontWeight: 700 }}>
+        <div className="prd-stock-current">
+          <div className="prd-stock-current-label">Stock actual</div>
+          <div className="prd-stock-current-val">
             {producto.stock_actual.toLocaleString('es-VE')} {producto.unidad}
           </div>
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-            Cantidad (+ entrada / − salida)
-          </label>
+        <div className="prd-stock-group">
+          <label>Cantidad (+ entrada / − salida)</label>
           <input
+            className="input"
             type="number" value={cantidad} onChange={e => setCantidad(e.target.value)}
             placeholder="ej: 10 o -5"
-            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
           />
         </div>
 
         {cantidad && !isNaN(parseFloat(cantidad)) && (
-          <div style={{
-            marginBottom: '16px', padding: '12px 16px', borderRadius: '8px',
-            background: preview < 0 ? '#fef2f2' : '#f0fdf4',
-            color: preview < 0 ? '#dc2626' : '#16a34a',
-            fontSize: '13px', fontWeight: 600,
-          }}>
+          <div
+            className="prd-stock-preview"
+            style={{
+              background: preview < 0 ? 'var(--color-error-bg)' : 'var(--color-success-bg)',
+              color: preview < 0 ? 'var(--color-error)' : 'var(--color-success)',
+            }}
+          >
             Stock resultante: {preview.toLocaleString('es-VE')} {producto.unidad}
-            {preview < 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconAlertTriangle /> Stock negativo no permitido</span>}
+            {preview < 0 && (
+              <span className="prd-stock-preview-inline">
+                <IconAlertTriangle /> Stock negativo no permitido
+              </span>
+            )}
           </div>
         )}
 
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-            Motivo del ajuste *
-          </label>
+        <div className="prd-stock-group mb-5">
+          <label>Motivo del ajuste *</label>
           <input
+            className="input"
             type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
             placeholder="ej: Conteo físico, devolución, etc."
-            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
           />
         </div>
 
         {error && (
-          <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#fef2f2', color: '#dc2626', fontSize: '13px', marginBottom: '16px' }}>
-            {error}
-          </div>
+          <div className="alert alert-error mb-4">{error}</div>
         )}
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={onClose}
-            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            Cancelar
-          </button>
+        <div className="prd-stock-footer">
+          <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
           <button
             onClick={handleSubmit}
             disabled={pending || preview < 0}
-            style={{
-              flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-              background: pending || preview < 0 ? 'var(--color-border)' : 'var(--color-primary)',
-              color: pending || preview < 0 ? 'var(--color-text-faint)' : '#fff',
-              fontSize: '14px', fontWeight: 600, cursor: pending || preview < 0 ? 'not-allowed' : 'pointer',
-            }}
+            className="btn btn-primary"
           >
             {pending ? 'Guardando…' : 'Confirmar ajuste'}
           </button>
@@ -484,71 +370,47 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
     <div className="view-container">
 
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
-        <Link href="/portal/productos" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
-          Productos
-        </Link>
+      <div className="breadcrumb">
+        <Link href="/portal/productos">Productos</Link>
         <span>›</span>
-        <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{producto.nombre}</span>
+        <span className="breadcrumb-current">{producto.nombre}</span>
       </div>
 
       {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        gap: '16px', flexWrap: 'wrap', marginBottom: '8px',
-      }}>
+      <div className="det-page-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800 }}>{producto.nombre}</h1>
-            <span style={esServicio ? S.badgeServicio : S.badgeProducto}>
+          <div className="det-title-group">
+            <h1 className="det-page-title">{producto.nombre}</h1>
+            <span className={`badge ${esServicio ? 'badge-purple' : 'badge-info'}`}>
               {esServicio ? 'Servicio' : 'Producto'}
             </span>
-            <span style={producto.estado === 'ACTIVO' ? S.badgeActivo : S.badgeInactivo}>
+            <span className={`badge ${producto.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
               {producto.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
-            <code style={{ fontFamily: 'monospace', color: '#0891b2', fontWeight: 600 }}>{producto.codigo}</code>
+          <div className="det-meta-row">
+            <code className="code-label">{producto.codigo}</code>
             {producto.codigo_proveedor && (
-              <span style={{ marginLeft: '12px' }}>Cód. proveedor: <strong>{producto.codigo_proveedor}</strong></span>
+              <span className="ml-3">Cód. proveedor: <strong>{producto.codigo_proveedor}</strong></span>
             )}
           </div>
         </div>
 
         {/* Acciones */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="det-actions">
           {!esServicio && producto.estado === 'ACTIVO' && (
-            <button
-              onClick={() => setShowStock(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                border: '1px solid #0ea5e9', background: '#e0f2fe', color: 'var(--color-primary-text)', cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => setShowStock(true)} className="btn btn-info">
               <IconLayers /> Ajustar stock
             </button>
           )}
-          <button
-            onClick={() => setShowEdit(true)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer',
-            }}
-          >
+          <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
             <IconEdit /> Editar
           </button>
           <button
             onClick={toggleEstado}
             disabled={pending}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-              border: '1px solid var(--color-border)', background: 'var(--color-surface)',
-              color: producto.estado === 'ACTIVO' ? '#dc2626' : '#16a34a',
-              cursor: pending ? 'not-allowed' : 'pointer',
-            }}
+            className="btn btn-secondary"
+            style={{ color: producto.estado === 'ACTIVO' ? 'var(--color-error)' : 'var(--color-success)' }}
           >
             {producto.estado === 'ACTIVO' ? <><IconArchive /> Archivar</> : <><IconRestore /> Restaurar</>}
           </button>
@@ -557,19 +419,11 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
       {/* Status message */}
       {statusMsg && (
-        <div style={{
-          padding: '10px 16px', borderRadius: '8px', background: '#f0fdf4',
-          color: '#16a34a', fontSize: '13px', fontWeight: 600, marginBottom: '16px',
-        }}>
-          {statusMsg}
-        </div>
+        <div className="alert alert-success mb-4">{statusMsg}</div>
       )}
 
       {/* Tabs */}
-      <div style={{
-        display: 'flex', gap: '0', borderBottom: '1px solid var(--color-border)',
-        overflowX: 'auto', marginBottom: '4px',
-      }}>
+      <div className="detail-tabs">
         <Tab active={tab === 'info'}        onClick={() => setTab('info')}        label="Información" />
         <Tab active={tab === 'precios'}     onClick={() => setTab('precios')}     label="Precios y costos" />
         {!esServicio && (
@@ -593,7 +447,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
         />
       )}
 
-      {/* Modal de edición — mismo formulario que en la lista */}
+      {/* Modal de edición */}
       {showEdit && (
         <ProductoFormModal
           producto={data.producto}
@@ -615,11 +469,10 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
 // ── Iconos (Feather, stroke, currentColor) ────────────────────────────────────
 
-function IconX()             { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
 function IconEdit()          { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
 function IconArchive()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> }
 function IconRestore()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> }
 function IconLayers()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> }
 function IconAlertTriangle() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> }
-function IconBoxLg()         { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconTrendingUpLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> }
+function IconBoxLg()         { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
+function IconTrendingUpLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> }

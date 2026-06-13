@@ -86,7 +86,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Fila 1: Total clientes · Activos · Suspendidos · Planes ── */}
-      <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="metrics-grid metrics-grid-4">
         <div className="metric-card">
           <div className="metric-icon metric-icon-primary">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon" style={{ background: '#FEE2E2', color: '#EF4444' }}>
+          <div className="metric-icon metric-icon-danger">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10"/>
               <line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/>
@@ -137,9 +137,9 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Fila 2: Próximos a vencer · Trial · Ingresos mes · Ingresos estimados ── */}
-      <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="metrics-grid metrics-grid-4">
         <div className="metric-card">
-          <div className="metric-icon" style={{ background: 'var(--color-amber-highlight)', color: 'var(--color-amber)' }}>
+          <div className="metric-icon metric-icon-amber-warm">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -163,7 +163,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon" style={{ background: 'var(--color-primary-highlight)', color: 'var(--color-primary)' }}>
+          <div className="metric-icon metric-icon-teal">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="2" y="5" width="20" height="14" rx="2"/>
               <line x1="2" y1="10" x2="22" y2="10"/>
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon" style={{ background: 'var(--color-primary-highlight)', color: 'var(--color-primary)' }}>
+          <div className="metric-icon metric-icon-teal">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
               <polyline points="17 6 23 6 23 12"/>

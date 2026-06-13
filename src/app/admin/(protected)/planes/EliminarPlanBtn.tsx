@@ -29,7 +29,7 @@ export default function EliminarPlanBtn({ planId, planNombre }: { planId: string
 
   const modal = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 420 }}>
+      <div className="modal modal-420">
         <div className="modal-header">
           <h2 className="modal-title">Eliminar plan</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -39,19 +39,19 @@ export default function EliminarPlanBtn({ planId, planNombre }: { planId: string
           </button>
         </div>
         <div className="modal-body">
-          <div className="alert alert-error" style={{ alignItems: 'flex-start' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+          <div className="alert alert-error alert-top">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
               <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
             <div>
-              <p style={{ fontWeight: 600, marginBottom: 4 }}>¿Eliminar «{planNombre}»?</p>
-              <p style={{ fontSize: 'var(--text-xs)' }}>
+              <p className="confirm-title">¿Eliminar «{planNombre}»?</p>
+              <p className="text-xs">
                 Esta acción es permanente. Solo puedes eliminar planes sin clientes asignados.
               </p>
             </div>
           </div>
-          {error && <div className="alert alert-error" style={{ marginTop: 0 }}>{error}</div>}
+          {error && <div className="alert alert-error mt-0">{error}</div>}
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={handleClose} disabled={loading}>Cancelar</button>

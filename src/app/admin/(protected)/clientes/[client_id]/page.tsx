@@ -3,14 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AccionesDetalle from './AccionesDetalle'
 import EditarClienteModal from './EditarClienteModal'
-
-const ESTADO_BADGE: Record<string, string> = {
-  ACTIVO:     'badge-success',
-  TRIAL:      'badge-info',
-  GRACIA:     'badge-warning',
-  SUSPENDIDO: 'badge-warning',
-  VENCIDO:    'badge-error',
-}
+import { ESTADO_BADGE } from '@/lib/badges'
 
 const METODO_LABEL: Record<string, string> = {
   tropipay:      'TropiPay',
@@ -122,7 +115,7 @@ export default async function ClienteDetallePage({
               {' · '}Válido hasta: <strong>{formatFecha(cliente.fecha_fin_gracia)}</strong>
             </span>
             {cliente.notas_gracia && (
-              <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', display: 'block', marginTop: 4 }}>
+              <span className="info-note">
                 {cliente.notas_gracia}
               </span>
             )}
@@ -191,13 +184,13 @@ export default async function ClienteDetallePage({
             <span className="detail-field-label">Último pago</span>
             <span className="detail-field-value">
               {ultimoPago ? (
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span className="pago-detalle-stack">
                   <span><strong>${ultimoPago.monto_usd?.toFixed(2)} USD</strong> · {METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo}</span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                  <span className="text-xs-muted">
                     Registrado: {formatFecha(ultimoPago.fecha)}
                   </span>
                   {ultimoPago.fecha_inicio_periodo && ultimoPago.fecha_fin_periodo && (
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                    <span className="text-xs-muted">
                       Período: {formatFecha(ultimoPago.fecha_inicio_periodo)} → {formatFecha(ultimoPago.fecha_fin_periodo)}
                     </span>
                   )}
@@ -229,14 +222,14 @@ export default async function ClienteDetallePage({
         </div>
 
         {!pagos || pagos.length === 0 ? (
-          <div className="table-empty" style={{ paddingTop: 'var(--space-6)', paddingBottom: 'var(--space-6)' }}>
+          <div className="table-empty table-empty-sm">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
             </svg>
             <p>Sin pagos registrados aún.</p>
           </div>
         ) : (
-          <div className="table-wrapper" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, marginTop: 0 }}>
+          <div className="table-wrapper table-wrapper-flush">
             <table className="table">
               <thead>
                 <tr>
@@ -258,7 +251,7 @@ export default async function ClienteDetallePage({
                         {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
                       </span>
                     </td>
-                    <td className="table-muted" style={{ fontSize: 'var(--text-xs)' }}>
+                    <td className="table-muted text-xs">
                       {p.fecha_inicio_periodo && p.fecha_fin_periodo
                         ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
                         : '—'}
@@ -266,7 +259,7 @@ export default async function ClienteDetallePage({
                     <td className="table-muted">
                       {planNombre[p.plan_id] ?? p.plan_id ?? '—'}
                     </td>
-                    <td className="table-muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--text-xs)' }}>
+                    <td className="table-muted td-notes">
                       {p.notas ?? '—'}
                     </td>
                   </tr>

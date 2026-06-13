@@ -13,7 +13,7 @@ export default async function NotificacionesPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 680 }}>
+      <div className="page-content-narrow">
         <NotificacionesForm diasAviso={diasAviso} />
       </div>
     </div>

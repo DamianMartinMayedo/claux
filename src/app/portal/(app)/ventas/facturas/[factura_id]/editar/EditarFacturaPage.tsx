@@ -168,11 +168,10 @@ export default function EditarFacturaPage({ data, resumen, empresasFull }: Props
 
       <div className="ven-nueva-header">
         <div>
-          <Link href={`/portal/ventas/facturas/${factura.factura_id}`}
-            style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+          <Link href={`/portal/ventas/facturas/${factura.factura_id}`} className="ven-breadcrumb-link">
             ← Volver a {factura.numero}
           </Link>
-          <h1 className="ven-nueva-title" style={{ marginTop: 4 }}>Editar factura</h1>
+          <h1 className="ven-nueva-title mt-1">Editar factura</h1>
         </div>
         <div className="ven-nueva-actions">
           {canPreview && (
@@ -183,7 +182,7 @@ export default function EditarFacturaPage({ data, resumen, empresasFull }: Props
           <Link href={`/portal/ventas/facturas/${factura.factura_id}`} className="btn btn-secondary">Cancelar</Link>
           <button type="submit" form="form-editar-factura" className="btn btn-primary" disabled={isPending}>
             {isPending
-              ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+              ? <><span className="spinner spinner-sm" /> Guardando…</>
               : 'Guardar cambios'}
           </button>
         </div>
@@ -195,7 +194,7 @@ export default function EditarFacturaPage({ data, resumen, empresasFull }: Props
           <div className="ven-form-grid">
             <div className="input-group">
               <label>Empresa</label>
-              <div className="input" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', cursor: 'default' }}>
+              <div className="input input-static">
                 {data.empresa.letra_facturacion} · {data.empresa.nombre}
               </div>
               <span className="input-hint">La empresa no se puede cambiar.</span>
@@ -254,7 +253,7 @@ export default function EditarFacturaPage({ data, resumen, empresasFull }: Props
           onNotasInternasChange={setNotasInternas}
         />
 
-        {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+        {error && <div className="alert alert-error mt-4">{error}</div>}
       </form>
 
       {previewOpen && canPreview && (

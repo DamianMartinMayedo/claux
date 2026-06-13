@@ -6,7 +6,7 @@ function getInitials(name: string): string {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
 }
 
-export default function Header({ email, displayName }: { email: string; displayName: string }) {
+export default function Header({ displayName }: { email: string; displayName: string }) {
   return (
     <header className="admin-header">
       <a href="/admin/dashboard" className="header-logo">

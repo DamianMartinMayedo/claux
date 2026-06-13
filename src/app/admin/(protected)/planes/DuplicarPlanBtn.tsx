@@ -102,11 +102,11 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
 
   const modal = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 600 }}>
+      <div className="modal modal-lg">
         <div className="modal-header">
           <div>
             <h2 className="modal-title">Duplicar plan</h2>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
+            <p className="text-xs-muted">
               Copia de «{plan.nombre}» · revisa y guarda para crear el nuevo plan
             </p>
           </div>
@@ -128,7 +128,7 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
                 value={nombre} onChange={e => setNombre(e.target.value)}
                 placeholder="Ej: Básico Mensual"
               />
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+              <span className="text-xs-muted">
                 El ID se genera automáticamente según nivel y modalidad (ej: BM002, PT003).
               </span>
             </div>
@@ -182,7 +182,7 @@ export default function DuplicarPlanBtn({ plan }: { plan: Plan }) {
                   value={maxEmpresas} onChange={e => setMaxEmpresas(e.target.value)} />
               </div>
               <div className="input-group">
-                <label>Máx. usuarios <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(-1 = ilimitado)</span></label>
+                <label>Máx. usuarios <span className="label-muted-hint">(-1 = ilimitado)</span></label>
                 <input className="input" type="number" min="-1"
                   value={maxUsuarios} onChange={e => setMaxUsuarios(e.target.value)} />
               </div>

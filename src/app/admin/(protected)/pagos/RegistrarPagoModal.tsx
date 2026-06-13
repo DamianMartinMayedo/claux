@@ -179,7 +179,7 @@ export default function RegistrarPagoModal({
 
   const modal = (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 560 }}>
+      <div className="modal modal-560">
         <div className="modal-header">
           <h2 className="modal-title">Registrar pago</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
@@ -210,7 +210,7 @@ export default function RegistrarPagoModal({
                 ))}
               </select>
               {loadingDefecto && (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <span className="text-xs-muted">
                   Cargando datos del plan...
                 </span>
               )}
@@ -257,7 +257,7 @@ export default function RegistrarPagoModal({
                 placeholder="0.00"
               />
               {prorata && (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <span className="text-xs-muted">
                   Sugerido: ${prorata.suggestedNet.toFixed(2)} (${prorata.planPrice.toFixed(2)} − crédito ${prorata.credit.toFixed(2)})
                 </span>
               )}
@@ -277,7 +277,7 @@ export default function RegistrarPagoModal({
                   onChange={(e) => onInicioChange(e.target.value)}
                 />
                 {fechaInicio && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                  <span className="text-xs-muted">
                     {formatDateES(fechaInicio)}
                   </span>
                 )}
@@ -294,7 +294,7 @@ export default function RegistrarPagoModal({
                   onChange={(e) => setFechaFin(e.target.value)}
                 />
                 {fechaFin && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                  <span className="text-xs-muted">
                     {formatDateES(fechaFin)}
                   </span>
                 )}
@@ -303,22 +303,22 @@ export default function RegistrarPagoModal({
 
             {/* Alerta inicio temprano */}
             {alertaInicioTemprano && (
-              <div className="alert alert-warning" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start', marginTop: 'calc(var(--space-1) * -1)' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+              <div className="alert alert-warning alert-flex mt-neg-1">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
-                <span style={{ fontSize: 'var(--text-xs)' }}>{alertaInicioTemprano}</span>
+                <span className="text-xs">{alertaInicioTemprano}</span>
               </div>
             )}
 
             {/* Desglose pro-rata */}
             {prorata && (
-              <div className="info-banner" style={{ marginTop: 'var(--space-2)' }}>
+              <div className="info-banner mt-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div className="pro-rata-details">
                   <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
                   <span>Tarifa diaria período anterior: ${prorata.dailyRate.toFixed(4)}/día</span>
                   <span>Crédito por días ya pagados: −${prorata.credit.toFixed(2)}</span>
@@ -334,12 +334,12 @@ export default function RegistrarPagoModal({
             </div>
 
             {advertencia && (
-              <div className="alert alert-warning" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+              <div className="alert alert-warning alert-flex">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
-                <span style={{ fontSize: 'var(--text-xs)' }}>{advertencia}</span>
+                <span className="text-xs">{advertencia}</span>
               </div>
             )}
             {error   && <div className="alert alert-error">{error}</div>}

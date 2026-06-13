@@ -29,11 +29,11 @@ const TIPO_ALMACEN_DESC: Record<TipoAlmacen, string> = {
   CONSIGNACION: 'Mercancía de terceros en custodia — tratamiento fiscal diferente',
 }
 
-const TIPO_STYLE: Record<TipoAlmacen, { bg: string; color: string }> = {
-  FISICO:       { bg: '#dbeafe', color: '#1d4ed8' },
-  VIRTUAL:      { bg: '#f3e8ff', color: '#7c3aed' },
-  TRANSITO:     { bg: '#fef3c7', color: '#92400e' },
-  CONSIGNACION: { bg: '#dcfce7', color: '#166534' },
+const TIPO_BADGE: Record<TipoAlmacen, string> = {
+  FISICO:       'badge-info',
+  VIRTUAL:      'badge-purple',
+  TRANSITO:     'badge-warning',
+  CONSIGNACION: 'badge-success',
 }
 
 // ── Modal de formulario ───────────────────────────────────────────────────────
@@ -81,26 +81,15 @@ function AlmacenModal({
             {/* ── Tipo ── */}
             <div className="ter-form-section">
               <span className="ter-form-section-title">Tipo de almacén</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="alm-tipo-grid">
                 {TIPOS.map(t => (
                   <button key={t} type="button"
                     onClick={() => setTipo(t)}
-                    style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                      gap: 4, padding: '12px 14px', textAlign: 'left',
-                      border: `2px solid ${tipo === t ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      borderRadius: 'var(--radius-lg)',
-                      background: tipo === t ? '#e0f5f4' : 'var(--color-surface)',
-                      cursor: 'pointer',
-                    }}>
-                    <span style={{
-                      fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-                      letterSpacing: '0.05em', padding: '2px 8px', borderRadius: '999px',
-                      background: TIPO_STYLE[t].bg, color: TIPO_STYLE[t].color,
-                    }}>
+                    className={`alm-tipo-btn${tipo === t ? ' active' : ''}`}>
+                    <span className={`badge ${TIPO_BADGE[t]}`}>
                       {TIPO_ALMACEN_LABEL[t]}
                     </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                    <span className="text-xs-hint">
                       {TIPO_ALMACEN_DESC[t]}
                     </span>
                   </button>
@@ -109,7 +98,7 @@ function AlmacenModal({
             </div>
 
             {/* ── Datos ── */}
-            <div className="ter-form-section" style={{ marginBottom: 0 }}>
+            <div className="ter-form-section mb-0">
               <span className="ter-form-section-title">Datos del almacén</span>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-4">
@@ -122,8 +111,7 @@ function AlmacenModal({
                   <label>Empresa <span className="required">*</span></label>
                   {empresas.length === 1 ? (
                     <>
-                      <input className="input" readOnly value={empresas[0].nombre}
-                        style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }} />
+                      <input className="input input-static" readOnly value={empresas[0].nombre} />
                       <input type="hidden" name="empresa_id" value={empresas[0].empresa_id} />
                     </>
                   ) : (
@@ -145,14 +133,14 @@ function AlmacenModal({
               </div>
             </div>
 
-            {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : 'Crear almacén'}
             </button>
           </div>
@@ -180,7 +168,7 @@ function ConfirmArchivar({
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
         <div className="modal-body">
-          <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+          <p className="modal-body-text">
             ¿Archivar <strong>{almacen.nombre}</strong>? No aparecerá en listas activas
             pero podrás restaurarlo cuando lo necesites.
           </p>
@@ -189,7 +177,7 @@ function ConfirmArchivar({
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
             {isPending
-              ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Archivando…</>
+              ? <><span className="spinner spinner-sm" /> Archivando…</>
               : 'Archivar'}
           </button>
         </div>
@@ -267,29 +255,16 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
 
       {/* ── Tarjetas resumen por tipo ── */}
       {activos > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        <div className="alm-stats-grid">
           {TIPOS.map(t => (
-            <div key={t} style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '14px 16px',
-            }}>
-              <div style={{ marginBottom: 6 }}>
-                <span style={{
-                  fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.06em', padding: '2px 8px', borderRadius: '999px',
-                  background: TIPO_STYLE[t].bg, color: TIPO_STYLE[t].color,
-                }}>
+            <div key={t} className="alm-stat-card">
+              <div className="alm-stat-badge">
+                <span className={`badge ${TIPO_BADGE[t]}`}>
                   {TIPO_ALMACEN_LABEL[t]}
                 </span>
               </div>
-              <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text)' }}>
-                {conteoTipo[t] ?? 0}
-              </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                almacén{(conteoTipo[t] ?? 0) !== 1 ? 'es' : ''}
-              </div>
+              <div className="alm-stat-count">{conteoTipo[t] ?? 0}</div>
+              <div className="alm-stat-label">almacén{(conteoTipo[t] ?? 0) !== 1 ? 'es' : ''}</div>
             </div>
           ))}
         </div>
@@ -326,7 +301,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
           <h2 className="mon-section-title">
             {verArchivados ? 'Almacenes archivados' : 'Almacenes activos'}
           </h2>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          <span className="text-xs-muted">
             {almacenesFiltrados.length} de {verArchivados ? archivados : activos}
           </span>
         </div>
@@ -350,7 +325,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                   <th>Tipo</th>
                   <th>Descripción</th>
                   <th>Estado</th>
-                  <th style={{ width: 80 }}></th>
+                  <th className="alm-col-act"></th>
                 </tr>
               </thead>
               <tbody>
@@ -358,41 +333,28 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                   <tr key={a.almacen_id} className={!a.activo ? 'ter-row-archivada' : ''}>
 
                     <td>
-                      <strong style={{ fontSize: 'var(--text-sm)' }}>{a.nombre}</strong>
-                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'monospace', marginTop: 1 }}>
-                        {a.almacen_id}
-                      </div>
+                      <strong>{a.nombre}</strong>
+                      <div className="alm-id-text">{a.almacen_id}</div>
                     </td>
 
                     {data.empresas.length > 1 && (
-                      <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                      <td className="text-sm-muted">
                         {data.empresa_nombres[a.empresa_id] ?? a.empresa_id}
                       </td>
                     )}
 
                     <td>
-                      <span style={{
-                        display: 'inline-block',
-                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-                        background: TIPO_STYLE[a.tipo].bg, color: TIPO_STYLE[a.tipo].color,
-                      }}>
+                      <span className={`badge ${TIPO_BADGE[a.tipo]}`}>
                         {TIPO_ALMACEN_LABEL[a.tipo]}
                       </span>
                     </td>
 
-                    <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', maxWidth: 280 }}>
+                    <td className="alm-desc-td">
                       {a.descripcion ?? '—'}
                     </td>
 
                     <td>
-                      <span style={{
-                        display: 'inline-block',
-                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-                        background: a.activo ? '#dcfce7' : 'var(--color-surface-2)',
-                        color:      a.activo ? '#16a34a' : 'var(--color-text-muted)',
-                      }}>
+                      <span className={`badge ${a.activo ? 'badge-success' : 'badge-neutral'}`}>
                         {a.activo ? 'Activo' : 'Archivado'}
                       </span>
                     </td>
@@ -427,14 +389,10 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
       </div>
 
       {/* ── Nota informativa ── */}
-      <div style={{
-        marginTop: 16, padding: '12px 16px', borderRadius: 'var(--radius-lg)',
-        background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-        fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.6,
-      }}>
-        <strong style={{ color: 'var(--color-text-muted)' }}>Nota:</strong> Los movimientos de inventario
+      <div className="alm-nota-info">
+        <strong className="text-muted">Nota:</strong> Los movimientos de inventario
         (entradas, salidas, ajustes y transferencias entre almacenes) se gestionan en el módulo{' '}
-        <strong style={{ color: 'var(--color-text-muted)' }}>Inventario</strong> dentro de Gestión.
+        <strong className="text-muted">Inventario</strong> dentro de Gestión.
       </div>
 
       {/* ── Modales ── */}
@@ -476,5 +434,5 @@ function IconRestore() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
 }
 function IconAlmacenLg() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
 }

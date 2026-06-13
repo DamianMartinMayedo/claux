@@ -1,12 +1,5 @@
 import type { PortalSession } from '@/lib/portal-auth'
-
-const ESTADO_BADGE: Record<string, { cls: string; label: string }> = {
-  ACTIVO:     { cls: 'badge-success', label: 'Activo' },
-  TRIAL:      { cls: 'badge-info',    label: 'Trial' },
-  GRACIA:     { cls: 'badge-warning', label: 'Gracia' },
-  SUSPENDIDO: { cls: 'badge-error',   label: 'Suspendido' },
-  VENCIDO:    { cls: 'badge-error',   label: 'Vencido' },
-}
+import { ESTADO_BADGE, ESTADO_LABEL } from '@/lib/badges'
 
 interface Props {
   session:       PortalSession
@@ -16,7 +9,8 @@ interface Props {
 }
 
 export default function PortalHeader({ session, nombreEmpresa, estado, planNombre }: Props) {
-  const estadoBadge = ESTADO_BADGE[estado] ?? { cls: 'badge-neutral', label: estado }
+  const estadoCls   = ESTADO_BADGE[estado]   ?? 'badge-neutral'
+  const estadoLabel = ESTADO_LABEL[estado]   ?? estado
   const inicial     = session.email.charAt(0).toUpperCase()
 
   return (
@@ -26,7 +20,7 @@ export default function PortalHeader({ session, nombreEmpresa, estado, planNombr
         <span className="portal-header-empresa">{nombreEmpresa}</span>
       </div>
       <div className="portal-header-right">
-        <span className={`badge ${estadoBadge.cls} badge-dot`}>{estadoBadge.label}</span>
+        <span className={`badge ${estadoCls} badge-dot`}>{estadoLabel}</span>
         <span className="portal-header-plan">{planNombre}</span>
         <div className="portal-header-user">
           <div className="portal-header-avatar">{inicial}</div>

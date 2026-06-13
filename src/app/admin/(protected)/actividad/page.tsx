@@ -13,14 +13,12 @@ export default async function ActividadPage() {
     .limit(200)
 
   return (
-    <div style={{ padding: 'var(--space-6)' }}>
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
-          Registro de actividad
-        </h1>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 4 }}>
-          Últimas 200 acciones registradas en el sistema
-        </p>
+    <div className="view-container">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Registro de actividad</h1>
+          <p className="page-subtitle">Últimas 200 acciones registradas en el sistema</p>
+        </div>
       </div>
 
       <ActividadTabla registros={registros ?? []} />

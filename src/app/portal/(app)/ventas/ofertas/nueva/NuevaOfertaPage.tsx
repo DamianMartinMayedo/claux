@@ -10,7 +10,6 @@ import { DocumentoLineasEditor }             from '../../_DocumentoLineasEditor'
 import { DocumentoPdf }                      from '../../_DocumentoPdf'
 import {
   CONDICION_PAGO_OPTIONS,
-  ESTADO_OFERTA_LABEL,
   calcularTotales,
   type AjusteInput,
   type LineaInput,
@@ -148,10 +147,10 @@ export default function NuevaOfertaPage({ resumen, empresasFull }: Props) {
       {/* ── Header ── */}
       <div className="ven-nueva-header">
         <div>
-          <Link href="/portal/ventas" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+          <Link href="/portal/ventas" className="ven-breadcrumb-link">
             ← Volver a Ventas
           </Link>
-          <h1 className="ven-nueva-title" style={{ marginTop: 4 }}>Nueva oferta comercial</h1>
+          <h1 className="ven-nueva-title mt-1">Nueva oferta comercial</h1>
         </div>
         <div className="ven-nueva-actions">
           {canPreview && (
@@ -162,16 +161,16 @@ export default function NuevaOfertaPage({ resumen, empresasFull }: Props) {
           <Link href="/portal/ventas" className="btn btn-secondary">Cancelar</Link>
           <button type="submit" form="form-nueva-oferta" className="btn btn-primary" disabled={isPending || sinLetra}>
             {isPending
-              ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+              ? <><span className="spinner spinner-sm" /> Guardando…</>
               : 'Guardar oferta'}
           </button>
         </div>
       </div>
 
       {sinLetra && (
-        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+        <div className="alert alert-warning mb-4">
           Ninguna de tus empresas tiene letra de facturación asignada. Ve a{' '}
-          <Link href="/portal/empresas" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Mis Empresas</Link>{' '}
+          <Link href="/portal/empresas" className="link-primary">Mis Empresas</Link>{' '}
           y asígnala antes de crear ofertas.
         </div>
       )}
@@ -202,7 +201,7 @@ export default function NuevaOfertaPage({ resumen, empresasFull }: Props) {
                 ))}
               </select>
               {empresa_id && clientesDeEmpresa.length === 0 && (
-                <span className="input-hint" style={{ color: 'var(--color-text-muted)' }}>
+                <span className="input-hint">
                   Esta empresa no tiene clientes. Crea uno en Terceros.
                 </span>
               )}
@@ -250,7 +249,7 @@ export default function NuevaOfertaPage({ resumen, empresasFull }: Props) {
           onNotasInternasChange={setNotasInternas}
         />
 
-        {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+        {error && <div className="alert alert-error mt-4">{error}</div>}
       </form>
 
       {/* ── Modal: vista previa ── */}

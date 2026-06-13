@@ -43,7 +43,7 @@ export default async function ConfiguracionPage() {
             <div>
               <p className="profile-name">{displayName}</p>
               <p className="profile-email">{user?.email}</p>
-              <span className="badge badge-info" style={{ marginTop: '0.5rem', display: 'inline-flex' }}>Super Admin</span>
+              <span className="badge badge-info mt-2">Super Admin</span>
             </div>
           </div>
 

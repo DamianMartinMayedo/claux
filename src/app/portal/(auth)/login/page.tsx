@@ -55,24 +55,19 @@ export default function PortalLoginPage() {
 
             <div className="form-group">
               <label className="form-label">Contraseña <span className="required">*</span></label>
-              <div style={{ position: 'relative' }}>
+              <div className="input-pwd-wrap">
                 <input
-                  className="form-input"
+                  className="form-input input-pwd"
                   type={showPass ? 'text' : 'password'}
                   name="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  style={{ paddingRight: '2.5rem' }}
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass(v => !v)}
-                  style={{
-                    position: 'absolute', right: 'var(--space-3)', top: '50%',
-                    transform: 'translateY(-50%)', background: 'none', border: 'none',
-                    padding: 0, color: 'var(--color-text-muted)', cursor: 'pointer',
-                  }}
+                  className="input-eye-btn"
                   aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
                   {showPass ? <IconEyeOff /> : <IconEye />}
@@ -88,14 +83,14 @@ export default function PortalLoginPage() {
               className="btn btn-primary btn-full btn-lg"
             >
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Entrando…</>
+                ? <><span className="spinner spinner-sm" /> Entrando…</>
                 : 'Iniciar sesión'}
             </button>
 
           </form>
         </div>
 
-        <p className="login-footer" style={{ textAlign: 'center', marginTop: 'var(--space-4)' }}>
+        <p className="login-footer">
           ¿Problemas de acceso?{' '}
           <a href="mailto:soporte@claux.app">soporte@claux.app</a>
         </p>

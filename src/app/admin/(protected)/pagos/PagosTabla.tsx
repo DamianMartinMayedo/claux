@@ -159,12 +159,12 @@ export default function PagosTabla({
                   </td>
                   <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
                   <td className="table-muted">{formatFecha(p.fecha)}</td>
-                  <td className="table-muted" style={{ fontSize: 'var(--text-xs)' }}>
+                  <td className="table-muted text-xs">
                     {p.fecha_inicio_periodo && p.fecha_fin_periodo
                       ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
                       : '—'}
                   </td>
-                  <td className="table-muted" style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--text-xs)' }}>
+                  <td className="table-muted td-notes">
                     {p.notas ?? '—'}
                   </td>
                   <td className="table-actions-right">

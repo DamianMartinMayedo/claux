@@ -3,7 +3,6 @@
 import { useMemo } from 'react'
 import {
   AJUSTE_TIPO_LABEL,
-  AJUSTE_TIPO_STYLE,
   calcularTotales,
   formatearMoneda,
   type AjusteInput,
@@ -197,7 +196,7 @@ export function DocumentoLineasEditor({
       <div className="ven-form-section">
         <div className="ven-section-header">
           <span className="ven-form-section-title">Descuentos, cargos e impuestos</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="ven-section-actions">
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => addAjuste('DESCUENTO')}>
               <IconPlus /> Descuento
             </button>
@@ -227,8 +226,7 @@ export function DocumentoLineasEditor({
             {ajustes.map((a, i) => (
               <div
                 key={i}
-                className="ven-ajuste-row"
-                style={{ borderLeftColor: AJUSTE_TIPO_STYLE[a.tipo].bg }}
+                className={`ven-ajuste-row ven-ajuste-row-${a.tipo.toLowerCase()}`}
               >
                 <input
                   className="input input-sm ven-aj-nombre"
@@ -312,13 +310,12 @@ export function DocumentoLineasEditor({
 
       {/* Notas internas — al fondo */}
       {onNotasInternasChange !== undefined && (
-        <div className="ven-form-section" style={{ marginTop: 'var(--space-3)' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+        <div className="ven-form-section mt-3">
+          <label className="label-secondary">
             Notas internas <span className="input-hint-inline">(no se imprimen)</span>
           </label>
           <textarea
-            className="input input-textarea"
-            style={{ marginTop: 'var(--space-2)' }}
+            className="input input-textarea mt-2"
             rows={2}
             value={notasInternas ?? ''}
             onChange={e => onNotasInternasChange(e.target.value)}

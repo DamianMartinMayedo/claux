@@ -17,37 +17,6 @@ import {
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from './_ProductoFormModal'
 
-// ── Estilos inline reutilizables ──────────────────────────────────────────────
-
-const S = {
-  // Tipo badge
-  badgeProducto: {
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-    background: '#e0f2fe', color: 'var(--color-primary-text)',
-  },
-  badgeServicio: {
-    display: 'inline-flex', alignItems: 'center',
-    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-    background: '#f3e8ff', color: '#7c3aed',
-  },
-  // Estado badge
-  badgeActiva: {
-    display: 'inline-block', fontSize: '11px', fontWeight: 700,
-    textTransform: 'uppercase' as const, letterSpacing: '0.04em',
-    padding: '2px 8px', borderRadius: '999px',
-    background: '#dcfce7', color: '#166534',
-  },
-  badgeInactiva: {
-    display: 'inline-block', fontSize: '11px', fontWeight: 700,
-    textTransform: 'uppercase' as const, letterSpacing: '0.04em',
-    padding: '2px 8px', borderRadius: '999px',
-    background: 'var(--color-surface-2)', color: 'var(--color-text-muted)',
-  },
-}
-
 // ── StockModal ────────────────────────────────────────────────────────────────
 
 function StockModal({ producto, onClose, onSaved }: {
@@ -83,10 +52,10 @@ function StockModal({ producto, onClose, onSaved }: {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
-            <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', marginBottom: 12 }}>{producto.nombre}</p>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 16 }}>
+            <p className="prd-stock-nombre">{producto.nombre}</p>
+            <div className="prd-stock-actual-row">
               <span>Stock actual</span>
-              <strong style={{ color: 'var(--color-text)' }}>{producto.stock_actual} {producto.unidad}</strong>
+              <strong>{producto.stock_actual} {producto.unidad}</strong>
             </div>
             <div className="input-group">
               <label>Cantidad <span className="required">*</span></label>
@@ -94,7 +63,7 @@ function StockModal({ producto, onClose, onSaved }: {
                 placeholder="+ entrada  /  – salida"
                 value={cantidad} onChange={e => setCantidad(e.target.value)} autoFocus />
               {!isNaN(cantNum) && cantNum !== 0 && (
-                <span className="input-hint" style={stockNuevo < 0 ? { color: 'var(--color-error)', fontWeight: 600 } : {}}>
+                <span className={`input-hint${stockNuevo < 0 ? ' prd-stock-warn' : ''}`}>
                   Stock resultante: <strong>{stockNuevo.toFixed(3)}</strong> {producto.unidad}
                 </span>
               )}
@@ -109,9 +78,7 @@ function StockModal({ producto, onClose, onSaved }: {
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
-              {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Aplicando…</>
-                : 'Aplicar ajuste'}
+              {isPending ? <><span className="spinner spinner-sm" /> Aplicando…</> : 'Aplicar ajuste'}
             </button>
           </div>
         </form>
@@ -166,7 +133,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : 'Crear categoría'}
             </button>
           </div>
@@ -189,7 +156,7 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
         <div className="modal-body">
-          <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+          <p className="modal-body-text">
             ¿Archivar <strong>{nombre}</strong>? No aparecerá en listas activas,
             pero podrás restaurarlo cuando lo necesites.
           </p>
@@ -197,9 +164,7 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
-            {isPending
-              ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Archivando…</>
-              : 'Archivar'}
+            {isPending ? <><span className="spinner spinner-sm" /> Archivando…</> : 'Archivar'}
           </button>
         </div>
       </div>
@@ -213,38 +178,10 @@ function Tab({ active, onClick, icon, label, count }: {
   active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count: number
 }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display:      'flex',
-        alignItems:   'center',
-        gap:          8,
-        padding:      '8px 20px',
-        border:       'none',
-        borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-        marginBottom: -2,
-        background:   'transparent',
-        fontSize:     'var(--text-sm)',
-        fontWeight:   600,
-        color:        active ? 'var(--color-primary)' : 'var(--color-text-muted)',
-        cursor:       'pointer',
-        whiteSpace:   'nowrap',
-        transition:   'color .15s, border-color .15s',
-      }}
-    >
+    <button onClick={onClick} className={`prd-tab${active ? ' active' : ''}`}>
       {icon}
       {label}
-      <span style={{
-        fontSize:     '11px',
-        fontWeight:   700,
-        background:   active ? 'var(--color-primary)' : 'var(--color-surface-2)',
-        color:        active ? '#fff' : 'var(--color-text-muted)',
-        borderRadius: '999px',
-        padding:      '1px 7px',
-        lineHeight:   '18px',
-      }}>
-        {count}
-      </span>
+      <span className="prd-tab-count">{count}</span>
     </button>
   )
 }
@@ -255,16 +192,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [tab,          setTab]          = useState<'productos' | 'categorias'>('productos')
-  const [productoModal,setProductoModal]= useState(false)
-  const [editProducto, setEditProducto] = useState<Producto | null>(null)
-  const [stockProducto,setStockProducto]= useState<Producto | null>(null)
-  const [confirmProd,  setConfirmProd]  = useState<Producto | null>(null)
-  const [search,         setSearch]         = useState('')
-  const [filtroTipo,     setFiltroTipo]     = useState<'TODOS' | TipoProducto>('TODOS')
-  const [filtroCat,      setFiltroCat]      = useState('')
-  const [filtroProv,     setFiltroProv]     = useState('')
-  const [verArchivados,  setVerArchivados]  = useState(false)
+  const [tab,           setTab]          = useState<'productos' | 'categorias'>('productos')
+  const [productoModal, setProductoModal] = useState(false)
+  const [editProducto,  setEditProducto]  = useState<Producto | null>(null)
+  const [stockProducto, setStockProducto] = useState<Producto | null>(null)
+  const [confirmProd,   setConfirmProd]   = useState<Producto | null>(null)
+  const [search,        setSearch]        = useState('')
+  const [filtroTipo,    setFiltroTipo]    = useState<'TODOS' | TipoProducto>('TODOS')
+  const [filtroCat,     setFiltroCat]     = useState('')
+  const [filtroProv,    setFiltroProv]    = useState('')
+  const [verArchivados, setVerArchivados] = useState(false)
 
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<Categoria | null>(null)
@@ -276,7 +213,6 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     return m
   }, [data.categorias])
 
-  // Conteo de productos activos por categoría (incluye '__sin_categoria__')
   const productosPorCategoria = useMemo(() => {
     const m: Record<string, number> = {}
     for (const p of data.productos) {
@@ -297,7 +233,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       if (filtroCat === '__sin_categoria__') {
         if (p.categoria_id) return false
       } else if (filtroCat && p.categoria_id !== filtroCat) return false
-      if (filtroProv && p.proveedor_id  !== filtroProv)    return false
+      if (filtroProv && p.proveedor_id !== filtroProv)     return false
       if (q) {
         const hay = [
           p.nombre, p.codigo, p.codigo_proveedor, p.descripcion, p.unidad,
@@ -309,15 +245,15 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     })
   }, [data.productos, search, filtroTipo, filtroCat, filtroProv, verArchivados, categoriaMap])
 
-  const activos    = data.productos.filter(p => p.estado === 'ACTIVO').length
-  const archivados = data.productos.filter(p => p.estado === 'INACTIVO').length
+  const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
+  const archivados        = data.productos.filter(p => p.estado === 'INACTIVO').length
   const categoriasActivas = data.categorias.filter(c => c.estado === 'ACTIVO')
 
-  function openCreate()          { setEditProducto(null); setProductoModal(true) }
-  function openEdit(p: Producto) { setEditProducto(p);    setProductoModal(true) }
-  function closeModal()          { setProductoModal(false); setEditProducto(null) }
-  function onSaved()             { closeModal(); router.refresh() }
-  function onStockSaved()        { setStockProducto(null); router.refresh() }
+  function openCreate()           { setEditProducto(null); setProductoModal(true) }
+  function openEdit(p: Producto)  { setEditProducto(p);    setProductoModal(true) }
+  function closeModal()           { setProductoModal(false); setEditProducto(null) }
+  function onSaved()              { closeModal(); router.refresh() }
+  function onStockSaved()         { setStockProducto(null); router.refresh() }
 
   function handleRestaurar(p: Producto) {
     startTransition(async () => { await restaurarProducto(p.producto_id); router.refresh() })
@@ -330,10 +266,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     })
   }
 
-  function openCreateCat()         { setEditCat(null); setCatModal(true) }
-  function openEditCat(c: Categoria){ setEditCat(c);   setCatModal(true) }
-  function closeCatModal()         { setCatModal(false); setEditCat(null) }
-  function onCatSaved()            { closeCatModal(); router.refresh() }
+  function openCreateCat()          { setEditCat(null); setCatModal(true) }
+  function openEditCat(c: Categoria) { setEditCat(c);   setCatModal(true) }
+  function closeCatModal()          { setCatModal(false); setEditCat(null) }
+  function onCatSaved()             { closeCatModal(); router.refresh() }
 
   function handleRestaurarCat(c: Categoria) {
     startTransition(async () => { await restaurarCategoria(c.categoria_id); router.refresh() })
@@ -362,8 +298,8 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       </div>
 
       {/* ── Tabs ── */}
-      <div style={{ display: 'flex', borderBottom: '2px solid var(--color-border)', marginBottom: 16 }}>
-        <Tab active={tab === 'productos'}  onClick={() => setTab('productos')}  icon={<IconBox />}  label="Productos y servicios" count={activos} />
+      <div className="prd-tabs">
+        <Tab active={tab === 'productos'}  onClick={() => setTab('productos')}  icon={<IconBox />} label="Productos y servicios" count={activos} />
         <Tab active={tab === 'categorias'} onClick={() => setTab('categorias')} icon={<IconTag />} label="Categorías" count={categoriasActivas.length} />
       </div>
 
@@ -416,7 +352,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           <div className="card card-table">
             <div className="mon-card-header">
               <h2 className="mon-section-title">{verArchivados ? 'Archivados' : 'Catálogo activo'}</h2>
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+              <span className="card-count">
                 {productosFiltrados.length} de {verArchivados ? archivados : activos}
               </span>
             </div>
@@ -439,7 +375,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                       <th>Categoría</th>
                       <th>Precios de venta</th>
                       <th>Stock</th>
-                      <th style={{ width: 104 }}></th>
+                      <th className="prd-col-act"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -451,56 +387,49 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           className={`table-row-clickable${p.estado === 'INACTIVO' ? ' ter-row-archivada' : ''}`}
                           onClick={() => router.push(`/portal/productos/${p.producto_id}`)}
                         >
-
-                          {/* Nombre — con enlace al detalle */}
+                          {/* Nombre */}
                           <td>
                             <Link
                               href={`/portal/productos/${p.producto_id}`}
-                              style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}
+                              className="table-name-link"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {p.nombre}
                             </Link>
                             {p.descripcion && (
-                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {p.descripcion}
-                              </div>
+                              <div className="table-cell-sub">{p.descripcion}</div>
                             )}
                           </td>
 
                           {/* Código */}
                           <td>
-                            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, fontFamily: 'monospace', color: 'var(--color-text)' }}>
-                              {p.codigo}
-                            </span>
+                            <span className="code-value">{p.codigo}</span>
                             {p.codigo_proveedor && (
-                              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                                {p.codigo_proveedor}
-                              </div>
+                              <div className="table-cell-secondary">{p.codigo_proveedor}</div>
                             )}
                           </td>
 
                           {/* Tipo */}
                           <td>
-                            <span style={p.tipo === 'PRODUCTO' ? S.badgeProducto : S.badgeServicio}>
+                            <span className={`badge ${p.tipo === 'PRODUCTO' ? 'badge-info' : 'badge-purple'}`}>
                               {p.tipo === 'PRODUCTO' ? 'Producto' : 'Servicio'}
                             </span>
                           </td>
 
                           {/* Categoría */}
-                          <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                          <td className="text-sm-muted">
                             {p.categoria_id ? (categoriaMap[p.categoria_id] ?? '—') : '—'}
                           </td>
 
                           {/* Precios */}
                           <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            <div className="prd-precios-cell">
                               {Object.entries(p.precios).length === 0
-                                ? <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                                ? <span className="text-muted">—</span>
                                 : Object.entries(p.precios).map(([m, v]) => (
-                                    <span key={m} style={{ fontSize: 'var(--text-xs)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    <span key={m} className="prd-precio-chip">
                                       {v.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                      <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>{m}</span>
+                                      <em>{m}</em>
                                     </span>
                                   ))}
                             </div>
@@ -509,18 +438,18 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           {/* Stock */}
                           <td>
                             {p.tipo === 'PRODUCTO' ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: stockBajo ? 'var(--color-error)' : 'inherit' }}>
+                              <div className="prd-stock-cell">
+                                <span className={`prd-stock-value${stockBajo ? ' prd-stock-low' : ''}`}>
                                   {p.stock_actual.toLocaleString('es-VE')}
                                 </span>
                                 {stockBajo && (
-                                  <span style={{ color: '#d97706', display: 'flex', alignItems: 'center' }} title={`Mínimo: ${p.stock_minimo}`}>
+                                  <span className="prd-stock-alert" title={`Mínimo: ${p.stock_minimo}`}>
                                     <IconAlertTriangle />
                                   </span>
                                 )}
                               </div>
                             ) : (
-                              <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>—</span>
+                              <span className="text-xs-muted">—</span>
                             )}
                           </td>
 
@@ -563,12 +492,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
       {/* ══ TAB CATEGORÍAS ══ */}
       {tab === 'categorias' && (
-        <div className="card card-table" style={{ marginTop: 16 }}>
+        <div className="card card-table mt-4">
           <div className="mon-card-header">
             <h2 className="mon-section-title">Categorías</h2>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              {data.categorias.length} total
-            </span>
+            <span className="card-count">{data.categorias.length} total</span>
           </div>
 
           {data.categorias.length === 0 ? (
@@ -583,9 +510,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                   <tr>
                     <th>Nombre</th>
                     <th>Descripción</th>
-                    <th style={{ width: 110, textAlign: 'center' }}>Productos</th>
+                    <th className="prd-cat-col-count text-center">Productos</th>
                     <th>Estado</th>
-                    <th style={{ width: 96 }}></th>
+                    <th className="prd-col-act-sm"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -593,32 +520,23 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                     const count = productosPorCategoria[c.categoria_id] ?? 0
                     return (
                       <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : ''}>
-                        <td><strong style={{ fontSize: 'var(--text-sm)' }}>{c.nombre}</strong></td>
-                        <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
-                          {c.descripcion ?? '—'}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td><strong className="text-sm-bold">{c.nombre}</strong></td>
+                        <td className="text-sm-muted">{c.descripcion ?? '—'}</td>
+                        <td className="text-center">
                           {count > 0 ? (
                             <button
+                              className="prd-cat-count-btn"
                               onClick={() => { setTab('productos'); setFiltroCat(c.categoria_id) }}
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                minWidth: 28, padding: '2px 10px', borderRadius: '999px',
-                                fontSize: '12px', fontWeight: 700,
-                                background: 'var(--color-info-bg)',
-                                color: 'var(--color-primary)',
-                                border: 'none', cursor: 'pointer',
-                              }}
                               title="Ver productos de esta categoría"
                             >
                               {count}
                             </button>
                           ) : (
-                            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>—</span>
+                            <span className="text-sm-muted">—</span>
                           )}
                         </td>
                         <td>
-                          <span style={c.estado === 'ACTIVO' ? S.badgeActiva : S.badgeInactiva}>
+                          <span className={`badge ${c.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
                             {c.estado === 'ACTIVO' ? 'Activa' : 'Archivada'}
                           </span>
                         </td>
@@ -642,37 +560,21 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
                   {/* Fila Sin categoría */}
                   {sinCategoriaCount > 0 && (
-                    <tr style={{ background: 'var(--color-surface-2, #f8fafc)' }}>
+                    <tr className="prd-cat-row-special">
                       <td>
-                        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                          Sin categoría
-                        </span>
+                        <span className="text-sm-muted text-italic">Sin categoría</span>
                       </td>
-                      <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
-                        Productos sin categoría asignada
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td className="text-sm-muted">Productos sin categoría asignada</td>
+                      <td className="text-center">
                         <button
+                          className="prd-cat-count-btn prd-cat-count-warn"
                           onClick={() => { setTab('productos'); setFiltroCat('__sin_categoria__') }}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            minWidth: 28, padding: '2px 10px', borderRadius: '999px',
-                            fontSize: '12px', fontWeight: 700,
-                            background: '#fef3c7', color: '#92400e',
-                            border: 'none', cursor: 'pointer',
-                          }}
                           title="Ver productos sin categoría"
                         >
                           {sinCategoriaCount}
                         </button>
                       </td>
-                      <td>
-                        <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
-                          letterSpacing: '0.04em', padding: '2px 8px', borderRadius: '999px',
-                          background: '#fef3c7', color: '#92400e', display: 'inline-block' }}>
-                          Revisar
-                        </span>
-                      </td>
+                      <td><span className="prd-cat-badge-revisar">Revisar</span></td>
                       <td />
                     </tr>
                   )}
@@ -716,9 +618,8 @@ function IconEdit()   { return <svg viewBox="0 0 24 24" fill="none" stroke="curr
 function IconArchive(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> }
 function IconRestore(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> }
 function IconBox()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconBoxLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" style={{ opacity: 0.25 }}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconZap()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
+function IconBoxLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" opacity="0.25"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
 function IconTag()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> }
-function IconTagLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" style={{ opacity: 0.25 }}><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> }
+function IconTagLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" opacity="0.25"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> }
 function IconLayers()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> }
 function IconAlertTriangle() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> }

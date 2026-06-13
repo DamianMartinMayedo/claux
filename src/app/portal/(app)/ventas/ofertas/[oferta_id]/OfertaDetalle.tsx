@@ -12,10 +12,9 @@ import {
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
 import {
   AJUSTE_TIPO_LABEL,
-  AJUSTE_TIPO_STYLE,
   CONDICION_PAGO_LABEL,
   ESTADO_OFERTA_LABEL,
-  ESTADO_OFERTA_STYLE,
+  ESTADO_OFERTA_BADGE,
   TRANSICIONES_OFERTA,
   formatearMoneda,
   type EstadoOferta,
@@ -26,7 +25,7 @@ interface Props {
   resumen: VentasResumenData
 }
 
-export default function OfertaDetalle({ data, resumen }: Props) {
+export default function OfertaDetalle({ data }: Props) {
   const router = useRouter()
   const [isPending,    startTransition] = useTransition()
   const [statusMsg,    setStatusMsg] = useState('')
@@ -89,18 +88,16 @@ export default function OfertaDetalle({ data, resumen }: Props) {
     <div className="view-container">
 
       {/* ── Breadcrumb ── */}
-      <div style={{ marginBottom: 12 }}>
-        <Link href="/portal/ventas" style={{
-          fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textDecoration: 'none',
-        }}>
+      <div className="ven-breadcrumb">
+        <Link href="/portal/ventas" className="ven-breadcrumb-link">
           ← Volver a Ventas
         </Link>
       </div>
 
       {/* ── Cabecera ── */}
-      <div className="page-header" style={{ alignItems: 'flex-start' }}>
+      <div className="page-header page-header-top">
         <div>
-          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1 className="page-title page-title-row">
             {oferta.numero}
             <BadgeOferta estado={oferta.estado} />
           </h1>
@@ -112,7 +109,7 @@ export default function OfertaDetalle({ data, resumen }: Props) {
             )}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="ven-btn-group">
           <Link href={`/portal/pdf/oferta/${oferta.oferta_id}`} target="_blank" className="btn btn-secondary">
             <IconPrinter /> Ver / Descargar PDF
           </Link>
@@ -128,7 +125,7 @@ export default function OfertaDetalle({ data, resumen }: Props) {
       </div>
 
       {statusMsg && (
-        <div className="alert alert-success" style={{ marginBottom: 16 }}>{statusMsg}</div>
+        <div className="alert alert-success mb-4">{statusMsg}</div>
       )}
 
       {/* ── Transiciones de estado ── */}
@@ -149,7 +146,7 @@ export default function OfertaDetalle({ data, resumen }: Props) {
       )}
 
       {factura && (
-        <div className="alert alert-success" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="alert alert-success mb-4 alert-between">
           <span>Esta oferta generó la factura <strong>{factura.numero}</strong>.</span>
           <Link href={`/portal/ventas/facturas/${factura.factura_id}`} className="btn btn-secondary btn-sm">
             Ir a la factura
@@ -193,7 +190,7 @@ export default function OfertaDetalle({ data, resumen }: Props) {
       </div>
 
       {/* ── Líneas y totales ── */}
-      <div className="card card-table" style={{ marginTop: 16 }}>
+      <div className="card card-table mt-4">
         <div className="mon-card-header">
           <h2 className="mon-section-title">Detalle</h2>
         </div>
@@ -202,26 +199,26 @@ export default function OfertaDetalle({ data, resumen }: Props) {
             <thead>
               <tr>
                 <th>Descripción</th>
-                <th style={{ textAlign: 'right' }}>Cantidad</th>
-                <th style={{ textAlign: 'right' }}>Precio unit.</th>
+                <th className="text-right">Cantidad</th>
+                <th className="text-right">Precio unit.</th>
                 {lineas.some(l => Number(l.descuento_pct) > 0) && (
-                  <th style={{ textAlign: 'right' }}>Dto. %</th>
+                  <th className="text-right">Dto. %</th>
                 )}
-                <th style={{ textAlign: 'right' }}>Total</th>
+                <th className="text-right">Total</th>
               </tr>
             </thead>
             <tbody>
               {lineas.map(l => (
                 <tr key={l.linea_id}>
                   <td>{l.descripcion}</td>
-                  <td style={{ textAlign: 'right' }}>{Number(l.cantidad)}</td>
-                  <td style={{ textAlign: 'right' }}>{formatearMoneda(Number(l.precio_unitario), oferta.moneda)}</td>
+                  <td className="text-right">{Number(l.cantidad)}</td>
+                  <td className="text-right">{formatearMoneda(Number(l.precio_unitario), oferta.moneda)}</td>
                   {lineas.some(x => Number(x.descuento_pct) > 0) && (
-                    <td style={{ textAlign: 'right', color: 'var(--color-text-muted)' }}>
+                    <td className="text-right text-muted">
                       {Number(l.descuento_pct) > 0 ? `${Number(l.descuento_pct)}%` : '—'}
                     </td>
                   )}
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatearMoneda(Number(l.total), oferta.moneda)}</td>
+                  <td className="ven-td-amt">{formatearMoneda(Number(l.total), oferta.moneda)}</td>
                 </tr>
               ))}
             </tbody>
@@ -236,7 +233,7 @@ export default function OfertaDetalle({ data, resumen }: Props) {
           {ajustes.map(a => (
             <div key={a.ajuste_id} className="ven-total-row ven-total-ajuste">
               <span>
-                <span className="ven-ajuste-tag-sm" style={{ background: AJUSTE_TIPO_STYLE[a.tipo].bg, color: AJUSTE_TIPO_STYLE[a.tipo].color }}>
+                <span className={`ven-ajuste-tag-sm ven-ajuste-tag-${a.tipo.toLowerCase()}`}>
                   {AJUSTE_TIPO_LABEL[a.tipo]}
                 </span>{' '}
                 {a.nombre}
@@ -283,14 +280,8 @@ export default function OfertaDetalle({ data, resumen }: Props) {
 }
 
 function BadgeOferta({ estado }: { estado: EstadoOferta }) {
-  const s = ESTADO_OFERTA_STYLE[estado]
   return (
-    <span style={{
-      display: 'inline-block', fontSize: '12px', fontWeight: 700,
-      textTransform: 'uppercase', letterSpacing: '0.05em',
-      padding: '4px 10px', borderRadius: '999px',
-      background: s.bg, color: s.color,
-    }}>
+    <span className={`badge ${ESTADO_OFERTA_BADGE[estado] ?? 'badge-neutral'}`}>
       {ESTADO_OFERTA_LABEL[estado]}
     </span>
   )

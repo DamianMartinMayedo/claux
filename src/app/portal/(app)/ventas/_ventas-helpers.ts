@@ -27,31 +27,25 @@ export const ESTADO_FACTURA_LABEL: Record<EstadoFactura, string> = {
   ANULADA:  'Anulada',
 }
 
-export const ESTADO_OFERTA_STYLE: Record<EstadoOferta, { bg: string; color: string }> = {
-  BORRADOR:  { bg: '#f1f5f9', color: '#475569' },
-  ENVIADA:   { bg: '#dbeafe', color: '#1d4ed8' },
-  APROBADA:  { bg: '#dcfce7', color: '#166534' },
-  RECHAZADA: { bg: '#fee2e2', color: '#b91c1c' },
-  CADUCADA:  { bg: '#fef3c7', color: '#92400e' },
+export const ESTADO_OFERTA_BADGE: Record<EstadoOferta, string> = {
+  BORRADOR:  'badge-neutral',
+  ENVIADA:   'badge-info',
+  APROBADA:  'badge-success',
+  RECHAZADA: 'badge-error',
+  CADUCADA:  'badge-warning',
 }
 
-export const ESTADO_FACTURA_STYLE: Record<EstadoFactura, { bg: string; color: string }> = {
-  BORRADOR: { bg: '#f1f5f9', color: '#475569' },
-  EMITIDA:  { bg: '#dbeafe', color: '#1d4ed8' },
-  COBRADA:  { bg: '#dcfce7', color: '#166534' },
-  ANULADA:  { bg: '#fee2e2', color: '#b91c1c' },
+export const ESTADO_FACTURA_BADGE: Record<EstadoFactura, string> = {
+  BORRADOR: 'badge-neutral',
+  EMITIDA:  'badge-info',
+  COBRADA:  'badge-success',
+  ANULADA:  'badge-error',
 }
 
 export const AJUSTE_TIPO_LABEL: Record<AjusteTipo, string> = {
   DESCUENTO: 'Descuento',
   CARGO:     'Cargo',
   IMPUESTO:  'Impuesto',
-}
-
-export const AJUSTE_TIPO_STYLE: Record<AjusteTipo, { bg: string; color: string }> = {
-  DESCUENTO: { bg: '#fef3c7', color: '#92400e' },
-  CARGO:     { bg: '#e0e7ff', color: '#3730a3' },
-  IMPUESTO:  { bg: '#fce7f3', color: '#9d174d' },
 }
 
 export const CONDICION_PAGO_LABEL: Record<string, string> = {

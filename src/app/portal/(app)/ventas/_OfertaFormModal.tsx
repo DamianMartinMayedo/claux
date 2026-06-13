@@ -133,7 +133,7 @@ export function OfertaFormModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-lg" role="dialog" aria-modal style={{ maxWidth: 1000 }}>
+      <div className="modal modal-1000" role="dialog" aria-modal>
 
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? `Editar oferta ${oferta.numero}` : 'Nueva oferta comercial'}</h2>
@@ -144,7 +144,7 @@ export function OfertaFormModal({
           <div className="modal-body">
 
             {sinLetra && (
-              <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+              <div className="alert alert-warning mb-4">
                 Ninguna de tus empresas tiene letra de facturación asignada. Ve a <strong>Mis Empresas</strong> y asígnala antes de crear ofertas.
               </div>
             )}
@@ -174,7 +174,7 @@ export function OfertaFormModal({
                     ))}
                   </select>
                   {empresa_id && clientesDeEmpresa.length === 0 && (
-                    <span className="input-hint" style={{ color: 'var(--color-text-muted)' }}>
+                    <span className="input-hint">
                       Esta empresa no tiene clientes. Crea uno en Terceros.
                     </span>
                   )}
@@ -231,14 +231,14 @@ export function OfertaFormModal({
               onAjustesChange={setAjustes}
             />
 
-            {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending || sinLetra}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : 'Crear oferta'}
             </button>
           </div>

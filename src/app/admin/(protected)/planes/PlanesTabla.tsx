@@ -4,19 +4,10 @@ import { useState, useMemo, Fragment } from 'react'
 import EditarPlanModal  from './EditarPlanModal'
 import DuplicarPlanBtn  from './DuplicarPlanBtn'
 import EliminarPlanBtn  from './EliminarPlanBtn'
+import { NIVEL_BADGE, NIVEL_LABEL, MODALIDAD_LABEL } from '@/lib/badges'
 
-const NIVEL_BADGE: Record<string, string> = {
-  basico: 'badge-info', profesional: 'badge-warning', empresarial: 'badge-neutral',
-}
-const NIVEL_LABEL: Record<string, string> = {
-  basico: 'Básico', profesional: 'Profesional', empresarial: 'Empresarial',
-}
-const ESTADO_BADGE: Record<string, string> = {
+const PLAN_ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', INACTIVO: 'badge-error', OCULTO: 'badge-warning',
-}
-const MODALIDAD_LABEL: Record<string, string> = {
-  mensual: 'Mensual', trimestral: 'Trimestral',
-  semestral: 'Semestral', anual: 'Anual', personalizado: 'Personalizado',
 }
 const MODULOS_LABEL: Record<string, string> = {
   ventas: 'Ventas', compras: 'Compras', tesoreria: 'Tesorería',
@@ -44,21 +35,6 @@ function parseModulos(raw: string | string[] | null): string[] {
   return raw.split(',').map(m => m.trim()).filter(Boolean)
 }
 
-function exportCSV(planes: Plan[]) {
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const headers = ['ID', 'Nombre', 'Nivel', 'Modalidad', 'Precio USD', 'Duración días',
-    'Días trial', 'Máx. empresas', 'Máx. usuarios', 'Módulos', 'Estado', 'Visible', 'Descripción']
-  const rows = planes.map(p => [
-    p.plan_id, p.nombre, p.nivel, p.modalidad, p.precio_usd, p.duracion_dias,
-    p.dias_trial, p.max_empresas, p.max_usuarios === -1 ? 'Ilimitado' : p.max_usuarios,
-    parseModulos(p.modulos).join(' | '), p.estado, p.visible ? 'Sí' : 'No', p.descripcion ?? '',
-  ])
-  const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = 'planes.csv'; a.click()
-  URL.revokeObjectURL(url)
-}
 
 export default function PlanesTabla({ planes }: { planes: Plan[] }) {
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -77,7 +53,7 @@ export default function PlanesTabla({ planes }: { planes: Plan[] }) {
       <table className="table">
         <thead>
           <tr>
-            <th style={{ width: 32 }} />
+            <th className="plan-expand-col" />
             <th>Plan</th>
             <th>Nivel</th>
             <th>Precio</th>
@@ -93,10 +69,9 @@ export default function PlanesTabla({ planes }: { planes: Plan[] }) {
             return (
               <Fragment key={p.plan_id}>
                 <tr className="plan-row-expandable" onClick={() => toggle(p.plan_id)}>
-                  <td style={{ paddingRight: 0 }}>
+                  <td className="plan-expand-td">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                      className={`plan-expand-chevron${isOpen ? ' expanded' : ''}`}
-                      style={{ display: 'block', margin: 'auto' }}>
+                      className={`plan-expand-chevron${isOpen ? ' expanded' : ''}`}>
                       <polyline points="9 18 15 12 9 6"/>
                     </svg>
                   </td>
@@ -112,7 +87,7 @@ export default function PlanesTabla({ planes }: { planes: Plan[] }) {
                   <td className="table-price">${p.precio_usd?.toFixed(2)}</td>
                   <td className="table-muted">{p.duracion_dias ?? '—'} días</td>
                   <td>
-                    <span className={`badge badge-dot ${ESTADO_BADGE[p.estado] ?? 'badge-neutral'}`}>
+                    <span className={`badge badge-dot ${PLAN_ESTADO_BADGE[p.estado] ?? 'badge-neutral'}`}>
                       {p.estado}
                     </span>
                   </td>
@@ -129,50 +104,50 @@ export default function PlanesTabla({ planes }: { planes: Plan[] }) {
                   <tr key={`${p.plan_id}-d`} className="plan-expand-row">
                     <td colSpan={7} className="plan-expand-cell">
                       <div className="plan-expand-panel">
-                        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'stretch', flexWrap: 'wrap' }}>
+                        <div className="plan-panel-row">
 
                           {/* 6 items de detalle en fila horizontal */}
-                          <div style={{ display: 'flex', gap: 'var(--space-6)', flexShrink: 0, flexWrap: 'wrap' }}>
+                          <div className="plan-panel-items">
                             {([
-                              ['ID técnico',    <span key="id" className="table-code-muted" style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>{p.plan_id}</span>],
+                              ['ID técnico',    <span key="id" className="table-code-muted">{p.plan_id}</span>],
                               ['Modalidad',     MODALIDAD_LABEL[p.modalidad] ?? p.modalidad ?? '—'],
                               ['Trial',         p.dias_trial ? `${p.dias_trial} días` : 'Sin trial'],
                               ['Máx. empresas', String(p.max_empresas ?? '—')],
                               ['Máx. usuarios', p.max_usuarios === -1 ? 'Ilimitado' : String(p.max_usuarios ?? '—')],
-                              ['Visible',       <span key="v" className={`badge ${p.visible ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: 'var(--text-xs)' }}>{p.visible ? 'Sí' : 'No'}</span>],
+                              ['Visible',       <span key="v" className={`badge text-xs ${p.visible ? 'badge-success' : 'badge-neutral'}`}>{p.visible ? 'Sí' : 'No'}</span>],
                             ] as [string, React.ReactNode][]).map(([label, value]) => (
-                              <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{label}</span>
-                                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{value}</span>
+                              <div key={label} className="plan-panel-item">
+                                <span className="plan-panel-label">{label}</span>
+                                <span className="plan-panel-value">{value}</span>
                               </div>
                             ))}
                           </div>
 
                           {/* Separador vertical */}
-                          <div style={{ width: 1, background: 'var(--color-border)', margin: '0 var(--space-4)', alignSelf: 'stretch', minHeight: 36 }} />
+                          <div className="plan-panel-sep" />
 
                           {/* Módulos a la derecha */}
-                          <div style={{ flex: 1, minWidth: 160 }}>
-                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', display: 'block', marginBottom: 'var(--space-2)' }}>
+                          <div className="plan-panel-mods">
+                            <span className="plan-panel-mods-label">
                               Módulos ({modulos.length})
                             </span>
                             {modulos.length > 0 ? (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              <div className="plan-mod-list">
                                 {modulos.map(m => (
-                                  <span key={m} className="badge badge-neutral" style={{ fontSize: 'var(--text-xs)' }}>
+                                  <span key={m} className="badge badge-neutral text-xs">
                                     {MODULOS_LABEL[m] ?? m}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>Sin módulos</span>
+                              <span className="text-sm-muted">Sin módulos</span>
                             )}
                           </div>
                         </div>
 
                         {/* Descripción en línea separada si existe */}
                         {p.descripcion && (
-                          <div style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--color-border)', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                          <div className="plan-panel-desc">
                             {p.descripcion}
                           </div>
                         )}

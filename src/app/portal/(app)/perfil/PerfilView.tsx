@@ -80,7 +80,7 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
       </div>
 
       {/* ── Datos de la cuenta ── */}
-      <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
+      <div className="card mb-5">
         <div className="prf-card-header">
           <h2 className="prf-section-title">Datos de la cuenta</h2>
           <span className="prf-client-id">{perfil.client_id}</span>
@@ -118,19 +118,19 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
       <div className="card">
         <div className="prf-card-header">
           <h2 className="prf-section-title">Mi usuario</h2>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <div className="prf-badge-row">
             <span className="usr-badge usr-badge-admin" style={perfil.rol !== 'admin_empresa' ? { background: 'var(--color-info-bg)', color: 'var(--color-primary)' } : {}}>
               {ROL_LABEL[perfil.rol] ?? perfil.rol}
             </span>
             {perfil.solo_lectura && (
-              <span className="usr-badge" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+              <span className="usr-badge usr-badge-readonly">
                 Solo lectura
               </span>
             )}
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: 'var(--space-4) var(--space-6) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <form onSubmit={handleSubmit} className="prf-form">
           {/* Email + Nombre */}
           <div className="prf-form-row">
             <div className="input-group">
@@ -189,10 +189,10 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
           {error   && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">Perfil actualizado correctamente.</div>}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="prf-form-submit">
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" style={{ borderTopColor: '#fff' }} /> Guardando…</>
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : 'Guardar cambios'}
             </button>
           </div>

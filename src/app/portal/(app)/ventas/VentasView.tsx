@@ -5,9 +5,9 @@ import { useRouter }            from 'next/navigation'
 import Link                     from 'next/link'
 import {
   ESTADO_OFERTA_LABEL,
-  ESTADO_OFERTA_STYLE,
+  ESTADO_OFERTA_BADGE,
   ESTADO_FACTURA_LABEL,
-  ESTADO_FACTURA_STYLE,
+  ESTADO_FACTURA_BADGE,
   formatearMoneda,
   type EstadoOferta,
   type EstadoFactura,
@@ -93,9 +93,9 @@ export default function VentasView({ data }: Props) {
 
       {/* ── Alertas de configuración ── */}
       {sinLetra && (
-        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+        <div className="alert alert-warning mb-4">
           Ninguna de tus empresas tiene <strong>letra de facturación</strong> asignada. Configúrala en{' '}
-          <Link href="/portal/empresas" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Mis Empresas</Link>{' '}
+          <Link href="/portal/empresas" className="link-primary">Mis Empresas</Link>{' '}
           para poder crear ofertas y facturas.
         </div>
       )}
@@ -149,7 +149,7 @@ export default function VentasView({ data }: Props) {
           <h2 className="mon-section-title">
             {tab === 'ofertas' ? 'Ofertas comerciales' : 'Facturas'}
           </h2>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          <span className="text-xs-muted">
             {tab === 'ofertas'
               ? `${ofertasFiltradas.length} de ${conteoOfertas}`
               : `${facturasFiltradas.length} de ${conteoFacturas}`}
@@ -216,7 +216,7 @@ function TablaOfertas({
             {mostrarEmpresa && <th>Empresa</th>}
             <th>Cliente</th>
             <th>Estado</th>
-            <th style={{ textAlign: 'right' }}>Total</th>
+            <th className="text-right">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -227,17 +227,17 @@ function TablaOfertas({
                   {o.numero}
                 </Link>
               </td>
-              <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+              <td className="text-sm-muted">
                 {fmtFecha(o.fecha_emision)}
               </td>
               {mostrarEmpresa && (
-                <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                <td className="text-sm-muted">
                   {empresaNombres[o.empresa_id] ?? o.empresa_id}
                 </td>
               )}
               <td>{clienteNombres[o.cliente_id] ?? o.cliente_id}</td>
               <td><BadgeOferta estado={o.estado} /></td>
-              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+              <td className="ven-td-amt">
                 {formatearMoneda(Number(o.total), o.moneda)}
               </td>
             </tr>
@@ -270,7 +270,7 @@ function TablaFacturas({
             <th>Cliente</th>
             <th>Vencimiento</th>
             <th>Estado</th>
-            <th style={{ textAlign: 'right' }}>Total</th>
+            <th className="text-right">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -281,20 +281,20 @@ function TablaFacturas({
                   {f.numero}
                 </Link>
               </td>
-              <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+              <td className="text-sm-muted">
                 {fmtFecha(f.fecha_emision)}
               </td>
               {mostrarEmpresa && (
-                <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+                <td className="text-sm-muted">
                   {empresaNombres[f.empresa_id] ?? f.empresa_id}
                 </td>
               )}
               <td>{clienteNombres[f.cliente_id] ?? f.cliente_id}</td>
-              <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+              <td className="text-sm-muted">
                 {f.fecha_vencimiento ? fmtFecha(f.fecha_vencimiento) : '—'}
               </td>
               <td><BadgeFactura estado={f.estado} /></td>
-              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+              <td className="ven-td-amt">
                 {formatearMoneda(Number(f.total), f.moneda)}
               </td>
             </tr>
@@ -308,28 +308,16 @@ function TablaFacturas({
 // ── Badges ────────────────────────────────────────────────────────────────────
 
 function BadgeOferta({ estado }: { estado: EstadoOferta }) {
-  const s = ESTADO_OFERTA_STYLE[estado]
   return (
-    <span style={{
-      display: 'inline-block', fontSize: '11px', fontWeight: 700,
-      textTransform: 'uppercase', letterSpacing: '0.04em',
-      padding: '2px 8px', borderRadius: '999px',
-      background: s.bg, color: s.color,
-    }}>
+    <span className={`badge ${ESTADO_OFERTA_BADGE[estado] ?? 'badge-neutral'}`}>
       {ESTADO_OFERTA_LABEL[estado]}
     </span>
   )
 }
 
 function BadgeFactura({ estado }: { estado: EstadoFactura }) {
-  const s = ESTADO_FACTURA_STYLE[estado]
   return (
-    <span style={{
-      display: 'inline-block', fontSize: '11px', fontWeight: 700,
-      textTransform: 'uppercase', letterSpacing: '0.04em',
-      padding: '2px 8px', borderRadius: '999px',
-      background: s.bg, color: s.color,
-    }}>
+    <span className={`badge ${ESTADO_FACTURA_BADGE[estado] ?? 'badge-neutral'}`}>
       {ESTADO_FACTURA_LABEL[estado]}
     </span>
   )
@@ -369,5 +357,5 @@ function IconPlus() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 }
 function IconDocLg() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" style={{ opacity: 0.2 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
 }
