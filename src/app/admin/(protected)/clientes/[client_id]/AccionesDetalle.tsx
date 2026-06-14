@@ -219,7 +219,12 @@ export default function AccionesDetalle({ cliente }: Props) {
   )
 
   const esActivo    = cliente.estado === 'ACTIVO' || cliente.estado === 'TRIAL'
-  const puedeGracia = ['VENCIDO', 'SUSPENDIDO', 'GRACIA'].includes(cliente.estado)
+  // No hay expiración automática: un cliente con el pago o el trial caducado sigue figurando
+  // ACTIVO/TRIAL por estado. Calculamos "vencido" por fecha para que el período de gracia se
+  // pueda aplicar al vencer (es manual: por si queremos regalar unos días a un cliente indeciso).
+  const hoyYMD = toYMD(new Date())
+  const vencidoPorFecha = !!cliente.fecha_expiracion && cliente.fecha_expiracion.split('T')[0] <= hoyYMD
+  const puedeGracia = vencidoPorFecha || ['VENCIDO', 'SUSPENDIDO', 'GRACIA'].includes(cliente.estado)
 
   // ── Info del cliente (reutilizado en modales) ────────────────────────
   const clienteInfo = (
@@ -294,7 +299,7 @@ export default function AccionesDetalle({ cliente }: Props) {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
-              <p>El cliente tendrá acceso durante este período <strong>sin registrar pago</strong>. Al vencer pasará a VENCIDO automáticamente.</p>
+              <p>El cliente tendrá acceso durante este período <strong>sin registrar pago</strong>. Al terminar, registra el pago o suspéndelo a mano (no hay vencimiento automático).</p>
             </div>
 
             {error   && <div className="alert alert-error">{error}</div>}

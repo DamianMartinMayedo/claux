@@ -20,26 +20,9 @@ sueltos que el cliente activa a la carta**, y el precio mensual de cada cliente 
 más los módulos que tenga encendidos. **Ya implementado**: los planes se eliminaron y el precio se calcula
 desde `modulos_catalogo` según `clients.modulos_activos` + tarifa, con ciclo mensual/anual.
 
-## 2. Lo que había antes (auditoría histórica, pre-migración 018)
+## 2. Contexto histórico (modelo de planes, eliminado)
 
-> Contexto de por qué se hizo el cambio. La tabla `plans` y la UI de planes descritas aquí **ya no existen**.
-
-- **Tabla `plans`** (creada a mano en Supabase, no está en `supabase/migrations/`). Columnas: `plan_id`
-  (PK, p.ej. `BM001`), `nombre`, `nivel` (basico/profesional/empresarial), `modalidad`, `precio_usd`,
-  `duracion_dias`, `dias_trial`, `max_empresas`, `max_usuarios`, `modulos`, `estado`, `visible`,
-  `descripcion`.
-- **`clients.plan_id`** es FK a `plans`. Cada cliente apunta a UN plan.
-- **El gating del portal NO depende del nombre del plan.** Depende 100% de la lista `plans.modulos`. Punto
-  único de lectura: `src/app/portal/(app)/layout.tsx` (líneas 26-36) lee `plans.modulos` → pasa
-  `modulosActivos: string[]` a `src/components/portal/PortalSidebar.tsx`, que en la línea 89 hace
-  `modulosActivos.includes(item.modulo)` para candar cada item. **Esto es una suerte**: cambiar de dónde
-  salen los módulos apenas toca una query.
-- **14 claves de módulo ERP** definidas hoy (y **duplicadas** en `NuevoPlanModal.tsx`,
-  `EditarPlanModal.tsx`, `DuplicarPlanBtn.tsx`): `ventas, compras, tesoreria, terceros,
-  contabilidad_simple, modulo_contable, inventario, rrhh, gestion_documental, rol_contador_externo,
-  multiempresa, presupuestos, crm, activos_fijos`.
-- **No hay planes sembrados**: se crean a mano desde `/admin/planes`.
-- **No existe** ningún módulo ni UI público de "menú/catálogo/reservas/citas": son trabajo futuro.
+El sistema arrancó con planes cerrados (tabla `plans`: Básico/Profesional/Empresarial; el gating leía `plans.modulos`). Todo eso se **eliminó** en la migración 018. Esta sección queda solo como nota de por qué se hizo el cambio; no describe nada vigente.
 
 ## 2.1 Frontera base/módulo (reenfoque junio 2026) — fuente canónica
 
@@ -104,54 +87,12 @@ modulos_catalogo (catálogo de lo que se vende)         clients (cada negocio)
 (sin FK). El histórico de `payments` conserva los importes pero no la etiqueta de plan. El gating ya no
 depende de planes.
 
-## 4. Migración SQL — APLICADA (017 + 018)
+## 4. Migraciones aplicadas (017 + 018 + 019)
 
 > ✅ Aplicada como `supabase/migrations/017_modulos_catalogo.sql` (catálogo + columnas de cliente) y
 > `supabase/migrations/018_eliminar_planes.sql` (elimina `plans`, añade `ciclo_facturacion`,
 > `payments.concepto` y los ajustes `pago_setup_usd_default`/`descuento_anual_pct`/`dias_trial_default`;
-> backfill de clientes sin módulos a `['base']`). El DDL de 017 se conserva abajo como referencia.
-
-```sql
--- ── 017: Catálogo de módulos + módulos por cliente (modelo à la carte) ──────────
-
--- 1. Catálogo de módulos vendibles
-CREATE TABLE IF NOT EXISTS modulos_catalogo (
-  clave                text PRIMARY KEY,           -- p.ej. 'catalogo_qr'
-  nombre               text NOT NULL,
-  descripcion          text,
-  precio_fundador_usd  numeric(10,2) NOT NULL DEFAULT 0,
-  precio_estandar_usd  numeric(10,2) NOT NULL DEFAULT 0,
-  es_base              boolean NOT NULL DEFAULT false,  -- la base obligatoria (siempre activa)
-  tipo                 text    NOT NULL DEFAULT 'modulo',  -- 'base' | 'modulo' | 'funcionalidad'
-  orden                int NOT NULL DEFAULT 0,
-  activo               boolean NOT NULL DEFAULT true
-);
-
--- 2. Módulos activos y precio compuesto por cliente
-ALTER TABLE clients
-  ADD COLUMN IF NOT EXISTS modulos_activos    text[]        NOT NULL DEFAULT '{}',
-  ADD COLUMN IF NOT EXISTS tarifa             text          NOT NULL DEFAULT 'estandar',  -- 'fundador'|'estandar'
-  ADD COLUMN IF NOT EXISTS precio_mensual_usd numeric(10,2) NOT NULL DEFAULT 0;
-
--- 3. Seed del catálogo (precios fundador / estándar de CONTEXTO §5 — AJUSTAR si cambian)
-INSERT INTO modulos_catalogo (clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo, orden) VALUES
-  ('base',            'Base contable',     'Ventas, gastos/cobros, cuentas por cobrar/pagar, tesorería, reportes, terceros, multimoneda', 20, 35, true,  'base',          10),
-  ('inventario',      'Inventario',        'Almacenes, productos, compras, movimientos, disponibilidad',                                  8,  14, false, 'modulo',        20),
-  ('rrhh',            'RRHH',              'Personal, contratos, bajas, turnos, nómina simple',                                           8,  14, false, 'modulo',        30),
-  ('multiempresa',    'Multiempresa',      'Varias empresas/locales con consolidación',                                                   12, 20, false, 'modulo',        40),
-  ('asistente_ia',    'Asistente IA',      'Chat con clientes, NL para reservas/pedidos, consultas del dueño, resumen semanal',           15, 25, false, 'modulo',        50),
-  ('catalogo_qr',     'Catálogo digital QR + mini-web', 'Carta/catálogo por QR, mini-web pública, multi-idioma opcional',                 10, 18, false, 'funcionalidad', 60),
-  ('reservas_citas',  'Reservas y citas + bot', 'Formulario, panel, bot de botones, notificaciones',                                      10, 18, false, 'funcionalidad', 70),
-  ('documentos_imprenta', 'Documentos de imprenta', 'El cliente envía sus documentos por correo antes de recogerlos',                     0,  0,  false, 'funcionalidad', 80)
-ON CONFLICT (clave) DO NOTHING;
-
--- 4. Grants a service_role (toda la app accede vía service_role; patrón de 011_grants_rls.sql)
-ALTER TABLE modulos_catalogo ENABLE ROW LEVEL SECURITY;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.modulos_catalogo TO service_role;
-
--- 5. Recargar caché de PostgREST
-notify pgrst, 'reload schema';
-```
+> backfill de clientes sin módulos a `['base']`) y `019_pago_estado.sql` (`payments.estado`). El DDL completo vive en esos ficheros; no se duplica aquí — precios y claves reales en la BD (`modulos_catalogo`), nunca hardcodear.
 
 > Las claves del seed son las del **modelo vigente** (§2.1). La frontera ya está resuelta: `base` absorbe
 > ventas/terceros/tesorería/gastos/cobros/CxC/CxP/reportes; `inventario` absorbe productos/almacenes/compras/

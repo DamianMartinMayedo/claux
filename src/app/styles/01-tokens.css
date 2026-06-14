@@ -1,0 +1,132 @@
+/* ═══════════════════════════════════════════════════
+   TOKENS DE DISEÑO — CLAUX Design System v1.0
+   ═══════════════════════════════════════════════════ */
+:root {
+  /* ── Primario — Teal CLAUX ── */
+  --color-primary:           #00AFAA;
+  --color-primary-hover:     #00928E;
+  --color-primary-active:    #007571;
+  --color-primary-dark:      #008C88;   /* alias legacy */
+  --color-primary-highlight: #C8ECEA;
+  --color-primary-subtle:    #E9F9F8;
+  --color-primary-text:      #00716D;   /* teal accesible para TEXTO sobre fondo claro (≥4.5:1) */
+
+  /* ── Secundario — Ámbar Caribe ── */
+  --color-amber:             #C97A0C;
+  --color-amber-hover:       #A86208;
+  --color-amber-active:      #864D06;
+  --color-amber-light:       #FEF3C7;   /* alias legacy */
+  --color-amber-highlight:   #F2E2C4;
+  --color-orange:            #D97706;
+  --color-orange-highlight:  #FFF7ED;
+
+  /* ── Superficies ── */
+  --color-bg:               #F5F4EF;
+  --color-surface:          #F8F7F2;
+  --color-surface-2:        #EFEDE8;
+  --color-surface-offset:   #EEEDE8;
+  --color-surface-offset-2: #E7E6E0;
+  --color-surface-dynamic:  #DDDBD4;
+  --color-divider:          #C7C5BC;
+
+  /* ── Texto (carbón cálido) ── */
+  --color-text:         #1C1B16;
+  --color-text-muted:   #5C5B52;   /* secundario, más nítido (~6:1) */
+  --color-text-faint:   #76746A;   /* terciario accesible (~4.3:1; antes #AEADA6 fallaba 2:1) */
+  --color-text-inv:     #F8F7F2;   /* texto sobre fondos oscuros */
+
+  /* ── Estados funcionales ── */
+  --color-success:      #2E7D32;
+  --color-success-bg:   #E8F5E9;
+  --color-error:        #B71C1C;
+  --color-error-bg:     #FFEBEE;
+  --color-warning:      #A86208;   /* texto de warning legible sobre claro y sobre warning-bg */
+  --color-warning-bg:   #FEF3C7;
+  --color-info:         #00716D;   /* teal de texto/icono en badges (sobre info-bg, accesible) */
+  --color-info-bg:      #E0F7F6;
+  --color-purple:       #7c3aed;   /* violet — badges VIRTUAL, etc. */
+  --color-purple-bg:    #f3e8ff;
+  --color-indigo:       #3730a3;   /* indigo — ajuste CARGO */
+  --color-indigo-bg:    #e0e7ff;
+  --color-rose:         #9d174d;   /* rose — ajuste IMPUESTO */
+  --color-rose-bg:      #fce7f3;
+
+  /* ── Bordes ── */
+  --color-border:       #D9D7D0;   /* más definido (antes #E8E7E2 casi invisible) */
+  --color-border-strong:#B8B5AC;   /* hover de bordes — más oscuro que --color-border */
+  --color-border-focus: #00AFAA;
+
+  --space-1:  0.25rem;  --space-2:  0.5rem;   --space-3:  0.75rem;
+  --space-4:  1rem;     --space-5:  1.25rem;  --space-6:  1.5rem;
+  --space-8:  2rem;     --space-10: 2.5rem;   --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-sm:   0.375rem;  --radius-md:   0.5rem;
+  --radius-lg:   0.75rem;   --radius-xl:   1rem;
+  --radius-2xl:  1.5rem;    --radius-full: 9999px;
+
+  --shadow-xs:  0 1px 2px rgba(28,27,22,0.04);
+  --shadow-sm:  0 1px 4px rgba(28,27,22,0.08);
+  --shadow-md:  0 4px 12px rgba(28,27,22,0.10);
+  --shadow-lg:  0 8px 24px rgba(28,27,22,0.12);
+  --shadow-xl:  0 16px 40px rgba(28,27,22,0.14);
+
+  --ease:       cubic-bezier(0.16, 1, 0.3, 1);
+  --duration:   180ms;
+  --transition: var(--duration) var(--ease);
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'Space Grotesk', system-ui, sans-serif;
+
+  --text-xs:   0.8125rem; --text-sm:   0.9375rem; --text-base: 1rem;   /* xs 13px · sm 15px (subida moderada) */
+  --text-lg:   1.125rem;  --text-xl:   1.25rem;   --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;  --text-4xl:  2.25rem;
+
+  --sidebar-w:   240px;
+  --header-h:    64px;
+  --content-max: 1200px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary:           #3FD4CF;
+    --color-primary-hover:     #2BBBB6;
+    --color-primary-dark:      #00AFAA;
+    --color-primary-highlight: #0D3533;
+    --color-primary-subtle:    #091F1E;
+    --color-primary-text:      #3FD4CF;   /* en dark el teal claro ya pasa como texto (~10:1) */
+    --color-bg:                #131210;
+    --color-surface:           #181714;
+    --color-surface-2:         #1E1D1A;
+    --color-surface-offset:    #252420;
+    --color-surface-offset-2:  #2A2925;
+    --color-divider:           #3A3833;
+    --color-text:              #F5F4EF;
+    --color-text-muted:        #A8A69C;
+    --color-text-faint:        #8E8C82;   /* legible en dark (antes #6A6960 ~3.2:1) */
+    --color-text-inv:          #1C1B16;
+    --color-success:           #66BB6A;
+    --color-success-bg:        #0D2B0F;
+    --color-error:             #EF5350;
+    --color-error-bg:          #2D0A0A;
+    --color-warning:           #E8A830;
+    --color-warning-bg:        #2D1E04;
+    --color-info:              #3FD4CF;
+    --color-info-bg:           #0A2625;
+    --color-purple:            #c4b5fd;
+    --color-purple-bg:         #1e1048;
+    --color-indigo:            #a5b4fc;
+    --color-indigo-bg:         #1e1b4b;
+    --color-rose:              #fda4af;
+    --color-rose-bg:           #2d0f1e;
+    --color-border:            #34322D;   /* bordes más definidos en dark */
+    --color-border-strong:     #504D45;   /* hover de bordes en dark */
+    --color-border-focus:      #3FD4CF;
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+    --shadow-xl: 0 16px 40px rgba(0,0,0,0.45);
+  }
+}
+

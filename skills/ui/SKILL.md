@@ -5,16 +5,16 @@ description: Reglas obligatorias de UI del design system de CLAUX. Usar SIEMPRE 
 
 # CLAUX UI — Design system y reglas de implementación
 
-Fuente de tokens y especificación visual completa: `docs/CLAUX-LEGACY.md` §8 (leer esa sección ante cualquier duda de valores). Hoja de estilos única: `src/app/globals.css`.
+Fuente de tokens y especificación visual completa: `docs/CLAUX-LEGACY.md` §8 (leer esa sección ante cualquier duda de valores). El CSS está **partido en parciales por orden de cascada** en `src/app/styles/` (`01-tokens`, `02-base-layout`, `03-components`, `04-responsive-dark`, `05-admin-paginas`, `06-portal`, `07-ventas-actividad`); `src/app/globals.css` solo los orquesta con `@import` (su orden = la cascada, no reordenar).
 
 ## Regla nº 1 — Prohibido el estilo inline
 
 Nunca escribas `style={{ ... }}` en JSX ni `style=""` en HTML. Sin excepciones de comodidad ("es solo un margen") — esa es exactamente la vía por la que el sistema se degrada.
 
 **Proceso obligatorio al necesitar un estilo:**
-1. **Busca** una clase existente: `grep -n "nombre-aproximado" src/app/globals.css`. El sistema ya tiene botones (`.btn`, `.btn-primary`, `.btn-ghost`), inputs (`.input`, `.input-label`), navegación, tablas, modales, badges y estados.
+1. **Busca** una clase existente: `grep -rn "nombre-aproximado" src/app/styles/`. El sistema ya tiene botones (`.btn`, `.btn-primary`, `.btn-ghost`), inputs (`.input`, `.input-label`), navegación, tablas, modales, badges y estados.
 2. **Reutiliza** si existe. **Extiende** con un modificador si casi existe (`.btn-danger` junto a `.btn-primary`).
-3. **Crea** la clase en `globals.css` solo si no hay nada: en la sección del componente correspondiente (o nueva sección con comentario separador `/* ── Componente ── */`), nombrada en kebab-case con prefijo del componente (`.reserva-card`, `.menu-item-precio`).
+3. **Crea** la clase en el parcial adecuado de `src/app/styles/` solo si no hay nada (el de su dominio: componentes genéricos → `03-components`, admin → `05-admin-paginas`, portal/módulos → `06`/`07`): en la sección del componente correspondiente (o nueva sección con comentario separador `/* ── Componente ── */`), nombrada en kebab-case con prefijo del componente (`.reserva-card`, `.menu-item-precio`).
 
 **Única excepción válida:** un valor que solo se conoce en runtime (ancho de una barra de progreso, color elegido por el tenant). Aun entonces, no se estila inline: se pasa como custom property y la clase lo consume:
 

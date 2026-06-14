@@ -14,12 +14,12 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 
 **Antes de escribir cualquier código**, lee completo [docs/CONTEXTO.md](docs/CONTEXTO.md). Es la fuente de verdad del producto, la arquitectura y las prioridades de construcción.
 
-> ## ⚠️ REGLA DE UI — INNEGOCIABLE (leer antes de tocar cualquier `.tsx` con JSX o `src/app/globals.css`)
+> ## ⚠️ REGLA DE UI — INNEGOCIABLE (leer antes de tocar cualquier `.tsx` con JSX o CSS en `src/app/styles/`)
 >
 > Toca UI ⇒ **lee primero [skills/ui/SKILL.md](skills/ui/SKILL.md)**. No es opcional ni "para tareas grandes": aplica aunque solo añadas un botón, cambies un color o ajustes un margen.
 >
 > - **Prohibido el estilo inline** (`style={{…}}`). Única excepción: un valor de runtime pasado como custom property (documentado en la skill).
-> - **Tokens y clases del design system siempre**: `var(--color-*)`, `var(--space-*)`, `var(--text-*)`, etc., y las clases de la hoja única `src/app/globals.css` (~3.200 líneas). Nada de hex/px mágicos.
+> - **Tokens y clases del design system siempre**: `var(--color-*)`, `var(--space-*)`, `var(--text-*)`, etc. El CSS vive en parciales por orden de cascada en `src/app/styles/` (orquestados por `src/app/globals.css`); localiza clases con `grep -rn "x" src/app/styles/`. Nada de hex/px mágicos.
 > - **Tailwind solo es reset**: prohibido usar clases utilitarias de Tailwind en el markup.
 > - Especificación visual completa (valores de tokens): `docs/CLAUX-LEGACY.md` §8.
 
@@ -27,7 +27,7 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 >
 > Toda tabla con página de detalle debe tener las filas clickables (navegar al detalle al pulsar cualquier celda).
 >
-> - Clase CSS canónica: **`table-row-clickable`** (definida en `globals.css` ~línea 441, con cursor:pointer + hover).
+> - Clase CSS canónica: **`table-row-clickable`** (en `src/app/styles/03-components.css`, con cursor:pointer + hover).
 > - Cada `<tr>` lleva `className="table-row-clickable"` + `onClick={() => router.push(...)}`.
 > - Las celdas con botones/acciones deben llevar **stopPropagation** en el contenedor: `<div className="ter-actions" onClick={(e) => e.stopPropagation()}>`.
 > - El `<Link>` del nombre también lleva `onClick={(e) => e.stopPropagation()}` para evitar doble navegación.
@@ -37,7 +37,7 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 
 | Tu tarea toca… | Lee (además de CONTEXTO.md) |
 |---|---|
-| Cualquier `.tsx`/JSX o `globals.css` | `skills/ui/SKILL.md` (obligatorio) + `docs/CLAUX-LEGACY.md` §8 si necesitas valores de tokens |
+| Cualquier `.tsx`/JSX o CSS (`src/app/styles/`) | `skills/ui/SKILL.md` (obligatorio) + `docs/CLAUX-LEGACY.md` §8 si necesitas valores de tokens |
 | Planes, módulos, precios, gating, admin de clientes | `docs/MODELO-MODULOS.md` |
 | Base de datos / queries / esquema | sección relevante de `docs/CLAUX-LEGACY.md` + `skills/supabase-postgres-best-practices` |
 | Lógica de negocio financiera (ventas, pagos, monedas) | sección relevante de `docs/CLAUX-LEGACY.md` |

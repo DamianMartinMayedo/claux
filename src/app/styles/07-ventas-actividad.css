@@ -1,0 +1,752 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   VENTAS (.ven-*)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tabs Ofertas | Facturas ──────────────────────────────────────────────── */
+.ven-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-5);
+}
+.ven-tab {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 10px 18px;
+  border: none; background: transparent; cursor: pointer;
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--transition), border-color var(--transition);
+}
+.ven-tab:hover { color: var(--color-text); }
+.ven-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+.ven-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 18px; padding: 0 6px;
+  font-size: 11px; font-weight: 700;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-full);
+}
+.ven-tab.active .ven-tab-count {
+  background: var(--color-primary); color: #fff;
+}
+
+/* ── Forms ─────────────────────────────────────────────────────────────────── */
+.ven-form-section {
+  margin-bottom: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+.ven-form-section:last-child { margin-bottom: 0; }
+.ven-form-section-title {
+  display: block;
+  font-size: var(--text-base); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.ven-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+.ven-col-full { grid-column: 1 / -1; }
+.ven-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+.ven-section-header .ven-form-section-title {
+  margin-bottom: 0; padding-bottom: 0; border-bottom: none;
+}
+
+/* ── Líneas editor ────────────────────────────────────────────────────────── */
+.ven-lineas-table {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.ven-lineas-head,
+.ven-lineas-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 90px 70px 100px 36px;
+  gap: var(--space-2);
+  align-items: center;
+}
+.ven-col-del { text-align: center; }
+.ven-lineas-head {
+  background: var(--color-surface-2);
+  padding: 8px 12px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--color-text-muted);
+}
+.ven-lineas-row {
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border);
+}
+.ven-col-num { text-align: right; }
+.ven-col-action { text-align: center; }
+.ven-input-num { text-align: right; }
+.ven-total-cell {
+  font-weight: 600; font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.ven-mt-4 { margin-top: var(--space-2); }
+.ven-empty-mini {
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ── Ajustes ──────────────────────────────────────────────────────────────── */
+.ven-ajustes-list { display: flex; flex-direction: column; gap: 4px; }
+
+/* Header row for ajustes */
+.ven-ajuste-head {
+  display: grid;
+  grid-template-columns: 1fr 72px 82px 110px 36px;
+  gap: var(--space-2);
+  padding: 4px 10px 4px 14px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--color-text-muted);
+}
+.ven-ajh-nombre { }
+.ven-ajh-modo   { text-align: center; }
+.ven-ajh-valor  { text-align: right; }
+.ven-ajh-monto  { text-align: right; }
+
+/* Data rows — same grid columns */
+.ven-ajuste-row {
+  display: grid;
+  grid-template-columns: 1fr 72px 82px 110px 36px;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 6px 10px 6px 10px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.ven-aj-nombre { }
+.ven-aj-modo   { }
+.ven-aj-valor  { }
+.ven-aj-monto  {
+  text-align: right;
+  font-size: var(--text-sm); font-weight: 600;
+  white-space: nowrap;
+}
+.ven-monto-neg { color: var(--color-error, #dc2626); }
+.ven-monto-pos { color: var(--color-success, #16a34a); }
+
+.ven-ajuste-tag-sm {
+  display: inline-block;
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; padding: 1px 6px; border-radius: var(--radius-full);
+  white-space: nowrap; margin-right: 4px;
+}
+.ven-ajuste-tag-descuento { background: var(--color-warning-bg); color: var(--color-warning); }
+.ven-ajuste-tag-cargo     { background: var(--color-indigo-bg);  color: var(--color-indigo); }
+.ven-ajuste-tag-impuesto  { background: var(--color-rose-bg);    color: var(--color-rose); }
+.ven-ajuste-row-descuento { border-left-color: var(--color-warning-bg); }
+.ven-ajuste-row-cargo     { border-left-color: var(--color-indigo-bg); }
+.ven-ajuste-row-impuesto  { border-left-color: var(--color-rose-bg); }
+
+/* ── Bottom row: totales + notas side by side ─────────────────────────────── */
+.ven-bottom-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-5);
+  align-items: start;
+  margin-top: var(--space-4);
+}
+@media (max-width: 760px) {
+  .ven-bottom-row { grid-template-columns: 1fr; }
+}
+.ven-notas-inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ven-notas-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.ven-notas-textarea {
+  flex: 1;
+  min-height: 90px;
+  resize: vertical;
+}
+
+/* ── Totales resumen ──────────────────────────────────────────────────────── */
+.ven-totales-resumen {
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  min-width: 280px;
+}
+.ven-totales-detalle {
+  margin-top: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  padding: var(--space-4) var(--space-5);
+}
+.ven-total-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0;
+  font-size: var(--text-sm);
+}
+.ven-total-ajuste { color: var(--color-text-muted); }
+.ven-total-final {
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* ── Detalle: info cards ──────────────────────────────────────────────────── */
+.ven-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.ven-info-card {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: box-shadow var(--transition);
+}
+.ven-info-card:first-child {
+  border-top: 3px solid var(--color-primary);
+}
+.ven-info-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.ven-info-nombre {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--text-base); font-weight: 700;
+  color: var(--color-text); margin-bottom: 6px;
+}
+.ven-info-line {
+  font-size: var(--text-sm); color: var(--color-text-muted);
+  line-height: 1.6;
+}
+.ven-letra-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px;
+  color: #fff; font-weight: 800; font-size: 13px;
+  letter-spacing: .02em; flex-shrink: 0;
+}
+
+/* ── Notas ────────────────────────────────────────────────────────────────── */
+.ven-notas {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-primary);
+}
+.ven-notas p {
+  margin: 6px 0 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+}
+
+/* ── Acciones de estado ───────────────────────────────────────────────────── */
+.ven-acciones-estado {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
+.ven-acciones-label {
+  font-size: var(--text-xs); font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+}
+
+/* ── Tabla rows ───────────────────────────────────────────────────────────── */
+/* Fila clickable: navega al detalle al pulsar cualquier celda.
+   Dentro de la fila, los botones/acciones deben llevar onClick={(e) => e.stopPropagation()}.
+   El Link del nombre también lleva stopPropagation para evitar doble navegación. */
+.ven-tr-clickable,
+.table-row-clickable { cursor: pointer; transition: background var(--transition); }
+.ven-tr-clickable:hover,
+.table-row-clickable:hover { background: var(--color-surface-2); }
+.ven-link-numero {
+  color: var(--color-primary);
+  font-weight: 600;
+  font-family: monospace;
+  font-size: 13px;
+  text-decoration: none;
+}
+.ven-link-numero:hover { text-decoration: underline; }
+.ven-breadcrumb      { margin-bottom: var(--space-3); }
+.ven-breadcrumb-link { font-size: var(--text-sm); color: var(--color-text-muted); text-decoration: none; }
+.ven-btn-group       { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ven-td-amt          { text-align: right; font-weight: 600; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PDF imprimible
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.pdf-page {
+  background: #fff;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 48px 32px;
+  font-family: var(--font-sans, system-ui), sans-serif;
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+.pdf-layout-body .pdf-page {
+  margin-top: 0;
+}
+@media print {
+  .pdf-page {
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}
+
+.pdf-toolbar {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 12px 24px;
+  background: #1f2937;
+  position: sticky; top: 0; z-index: 10;
+}
+.pdf-toolbar .btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.pdf-toolbar .btn-secondary {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border-color: rgba(255,255,255,0.2);
+}
+.pdf-toolbar .btn-secondary:hover {
+  background: rgba(255,255,255,0.25);
+}
+.pdf-toolbar-brand {
+  font-size: 13px; font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 0.03em;
+}
+.pdf-toolbar-actions { display: flex; gap: 8px; }
+
+.pdf-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #1f2937;
+  margin-bottom: 20px;
+}
+.pdf-empresa { display: flex; gap: 14px; align-items: flex-start; }
+.pdf-logo {
+  width: 60px; height: 60px; object-fit: contain; flex-shrink: 0;
+}
+.pdf-logo-fallback {
+  width: 60px; height: 60px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  color: #fff; font-weight: 800; font-size: 28px;
+}
+.pdf-empresa-nombre {
+  font-size: 15px; font-weight: 700; color: #1f2937;
+  margin-bottom: 4px;
+}
+.pdf-empresa-line {
+  font-size: 11px; color: #6b7280; line-height: 1.4;
+}
+.pdf-doc-block { text-align: right; min-width: 240px; }
+.pdf-doc-titulo {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: #6b7280;
+}
+.pdf-doc-numero {
+  font-family: monospace;
+  font-size: 22px; font-weight: 800;
+  color: #1f2937; margin: 4px 0 10px;
+}
+.pdf-doc-meta { font-size: 11px; color: #6b7280; line-height: 1.6; }
+.pdf-doc-meta span { font-weight: 600; color: #1f2937; }
+
+.pdf-cliente {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border-radius: 4px;
+}
+.pdf-section-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: #6b7280;
+  margin-bottom: 4px;
+}
+.pdf-cliente-nombre { font-size: 14px; font-weight: 700; color: #1f2937; }
+.pdf-line { font-size: 11px; color: #6b7280; line-height: 1.5; }
+
+.pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+.pdf-table th {
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 8px 10px;
+  text-align: left;
+}
+.pdf-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+.pdf-col-qty   { width: 12%; text-align: right; }
+.pdf-col-price { width: 18%; text-align: right; }
+.pdf-col-dto   { width: 8%;  text-align: right; }
+.pdf-td-amt    { text-align: right; font-weight: 600; }
+
+.pdf-totales {
+  max-width: 320px;
+  margin-left: auto;
+  margin-bottom: 20px;
+}
+.pdf-total-row {
+  display: flex; justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.pdf-total-final {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 2px solid #1f2937;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.pdf-notas {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: #fef3c7;
+  border-left: 3px solid #d97706;
+  border-radius: 4px;
+}
+.pdf-notas p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #78350f;
+  white-space: pre-wrap;
+}
+
+.pdf-footer {
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px; color: #9ca3af;
+  text-align: center;
+}
+
+/* ── Print rules: ocultar UI del portal al imprimir ───────────────────────── */
+@media print {
+  .portal-sidebar,
+  .portal-header,
+  .no-print,
+  .pdf-toolbar { display: none !important; }
+
+  .portal-main,
+  .view-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .pdf-page {
+    margin: 0; padding: 0;
+    max-width: none;
+    box-shadow: none;
+  }
+
+  body { background: #fff !important; }
+
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+}
+
+/* ── Ventas: mejoras ─────────────────────────────────────────────────────── */
+
+/* Hint de descuento importe bajo el total de línea */
+.ven-descuento-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* Notas internas — fondo diferenciado */
+.ven-notas-internas {
+  background: var(--color-amber-light, #fef3c7);
+  border-left-color: var(--color-amber, #C97A0C);
+}
+.ven-notas-internas .ven-info-label {
+  color: var(--color-amber, #C97A0C);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ven-notas-internas-badge {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--color-amber, #C97A0C);
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* input-hint inline (dentro de label) */
+.input-hint-inline {
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+
+/* ── Vista previa modal ──────────────────────────────────────────────────── */
+.ven-preview-modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-xl, 12px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  width: 90vw;
+  max-width: 920px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ven-preview-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.ven-preview-modal-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ven-preview-modal-body {
+  overflow-y: auto;
+  padding: var(--space-5);
+  background: #d1d5db;
+  flex: 1;
+}
+.ven-preview-scale {
+  transform: scale(0.60);
+  transform-origin: top left;
+  width: calc(100% / 0.60);
+}
+
+/* ── Nueva oferta/factura — page header ─────────────────────────────────── */
+.ven-nueva-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.ven-nueva-title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-top: 4px;
+}
+.ven-nueva-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: 4px;
+}
+
+/* ── PDF route wrapper ───────────────────────────────────────────────────── */
+.pdf-layout-body {
+  background: #d1d5db;
+  min-height: 100vh;
+  padding: 0 0 48px;
+}
+
+@media print {
+  .pdf-layout-body {
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  body { background: #fff !important; margin: 0 !important; }
+}
+
+/* ── PDF standalone page (legacy, keep for compat) ──────────────────────── */
+.pdf-standalone { background: #d1d5db; min-height: 100vh; padding: var(--space-6); }
+.pdf-standalone .pdf-page { max-width: 800px; margin: 0 auto; }
+@media print {
+  .pdf-standalone { background: #fff !important; padding: 0 !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MÓDULO ACTIVIDAD (admin)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.act-toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 20px; border-bottom: 1px solid var(--color-border); }
+.act-filters-group { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.act-filter-label  { font-size: 12px; font-weight: 600; color: var(--color-text-muted); margin-right: 2px; }
+.act-pills         { display: flex; gap: 4px; }
+.act-pill {
+  padding: 3px 12px; border-radius: 99px; font-size: 12px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--color-border); background: transparent;
+  color: var(--color-text-muted); transition: all 0.12s ease; line-height: 1.5;
+}
+.act-pill.active { font-weight: 600; border-color: var(--color-primary); background: var(--color-primary-highlight); color: var(--color-primary-active); }
+.act-search-wrap  { flex: 1; min-width: 200px; }
+.act-table-scroll { overflow-x: auto; }
+.act-col-date   { width: 155px; }
+.act-col-entity { width: 85px; }
+.act-col-action { width: 130px; }
+.act-col-user   { width: 200px; }
+.act-entity-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.act-badge-cliente { background: var(--color-info-bg);     color: var(--color-primary-text); }
+.act-badge-plan    { background: var(--color-warning-bg);  color: var(--color-warning); }
+.act-badge-pago    { background: var(--color-success-bg);  color: var(--color-success); }
+.act-badge-sistema { background: var(--color-surface-2);   color: var(--color-text-muted); }
+.act-date-cell   { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; }
+.act-action-cell { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; }
+.act-desc-cell   { font-size: var(--text-sm); }
+.act-entity-id   { font-size: 11px; color: var(--color-text-muted); margin-left: 6px; }
+.act-user-cell   { font-size: 12px; color: var(--color-text-muted); word-break: break-all; }
+.act-empty-td    { text-align: center; color: var(--color-text-muted); padding: var(--space-8); font-size: var(--text-sm); }
+.act-footer      { padding: 10px 20px; font-size: 12px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); }
+
+/* ── Dialog (confirm / alert) — sustituye estilos inline de Dialog.tsx ──────── */
+.modal-backdrop.dialog-top { z-index: 9999; }
+.modal-confirm { max-width: 440px; }
+.modal-alert   { max-width: 420px; }
+.dialog-title  { font-size: var(--text-base); display: flex; align-items: center; gap: var(--space-2); }
+.dialog-text   { margin: 0; color: var(--color-text-muted); line-height: 1.6; }
+.dialog-warn-icon { color: var(--color-error); flex-shrink: 0; }
+
+/* ── MÓDULO MÓDULOS CARD (admin detalle de cliente) ─────────────────── */
+.mod-grupo          { padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+.mod-grupo-label    { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-muted); margin-bottom: var(--space-2); }
+.mod-nombre         { flex: 1; }
+.mod-precio         { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
+.mod-locked         { opacity: .65; cursor: default; }
+.mod-tarifa-row     { display: flex; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+.mod-tarifa-opt     { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; user-select: none; }
+.mod-tarifa-opt input[type="radio"] { appearance: auto; width: auto; height: auto; border: none; cursor: pointer; }
+.mod-total-row      { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3) 0; }
+.mod-footer         { padding-top: var(--space-3); display: flex; justify-content: flex-end; }
+
+/* ── ADMIN MÓDULOS CATÁLOGO (/admin/modulos) ─────────────────────────── */
+.mod-tipo-badge     { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--text-xs); font-weight: 500; }
+.mod-tipo-base      { background: var(--color-primary-bg); color: var(--color-primary-text); }
+.mod-tipo-modulo    { background: var(--color-info-bg);    color: var(--color-info); }
+.mod-tipo-func      { background: var(--color-warning-bg); color: var(--color-warning); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   SWITCH (toggle on/off) — reutilizable
+   ───────────────────────────────────────────────────────────────────── */
+.switch { position: relative; display: inline-flex; flex-shrink: 0; width: 40px; height: 22px; }
+.switch input[type="checkbox"] {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  appearance: none; border: 0; background: transparent;
+  border-radius: var(--radius-full); cursor: pointer; z-index: 1;
+}
+.switch input[type="checkbox"]:checked            { background: transparent; border: 0; }
+.switch input[type="checkbox"]:checked::after     { content: none; }
+.switch input[type="checkbox"]:disabled           { cursor: default; }
+.switch-track {
+  position: absolute; inset: 0; border-radius: var(--radius-full);
+  background: var(--color-border); transition: background var(--transition); pointer-events: none;
+}
+.switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: var(--radius-full); background: var(--color-surface);
+  box-shadow: var(--shadow-sm); transition: transform var(--transition);
+}
+.switch input[type="checkbox"]:checked + .switch-track          { background: var(--color-primary); }
+.switch input[type="checkbox"]:checked + .switch-track::after   { transform: translateX(18px); }
+.switch input[type="checkbox"]:disabled + .switch-track         { opacity: .5; }
+.switch input[type="checkbox"]:focus-visible + .switch-track    { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   CONTROL SEGMENTADO (tarifa / ciclo)
+   ───────────────────────────────────────────────────────────────────── */
+.seg-field   { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; }
+.seg-field-label { font-size: var(--text-sm); color: var(--color-text-muted); }
+.seg { display: inline-flex; gap: var(--space-1); padding: var(--space-1); background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.seg-opt { position: relative; display: inline-flex; }
+.seg-opt input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg-opt span {
+  display: block; padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm);
+  font-size: var(--text-sm); color: var(--color-text-muted); white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+.seg-opt input[type="radio"]:checked + span        { background: var(--color-surface); color: var(--color-text); font-weight: 600; box-shadow: var(--shadow-xs); }
+.seg-opt input[type="radio"]:focus-visible + span  { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   MÓDULOS: lista con switch (admin)
+   ───────────────────────────────────────────────────────────────────── */
+.mod-list { display: flex; flex-direction: column; }
+.mod-list-label { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-muted); margin: var(--space-3) 0 var(--space-1); }
+.mod-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
+.mod-row:last-child { border-bottom: 0; }
+.mod-row-main  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.mod-row-name  { font-size: var(--text-sm); color: var(--color-text); font-weight: 500; }
+.mod-row-desc  { font-size: var(--text-xs); color: var(--color-text-muted); }
+.mod-row-price { font-size: var(--text-sm); color: var(--color-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mod-row-price-free { color: var(--color-success); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   RESUMEN DE PRECIO (mensual + anual)
+   ───────────────────────────────────────────────────────────────────── */
+.mod-precio-resumen { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-3) 0; }
+.mod-precio-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--color-surface-2); transition: border-color var(--transition), background var(--transition); }
+.mod-precio-card-active { border-color: var(--color-primary); background: var(--color-surface); box-shadow: var(--shadow-xs); }
+.mod-precio-label  { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); margin-bottom: var(--space-1); }
+.mod-precio-valor  { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.mod-precio-unidad { font-size: var(--text-sm); font-weight: 400; color: var(--color-text-muted); }
+.mod-precio-extra  { font-size: var(--text-xs); color: var(--color-success); margin-top: var(--space-1); }
+
+/* end */

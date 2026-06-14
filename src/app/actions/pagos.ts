@@ -212,7 +212,7 @@ export async function confirmarPago(pagoId: string) {
 
   const { data: pago } = await supabase
     .from('payments')
-    .select('client_id, concepto, monto_usd, estado')
+    .select('client_id, concepto, monto_usd, estado, fecha_fin_periodo')
     .eq('pago_id', pagoId)
     .single()
   if (!pago) return { ok: false as const, error: 'Pago no encontrado.' }
@@ -223,6 +223,22 @@ export async function confirmarPago(pagoId: string) {
     .update({ estado: 'confirmado' })
     .eq('pago_id', pagoId)
   if (error) return { ok: false as const, error: error.message }
+
+  // Si es pago de suscripción y el cliente está SUSPENDIDO (pendiente del primer cobro),
+  // activarlo y sincronizar fecha_expiracion con el período confirmado.
+  if (pago.concepto === 'suscripcion' && pago.fecha_fin_periodo) {
+    const { data: clienteActual } = await supabase
+      .from('clients')
+      .select('estado')
+      .eq('client_id', pago.client_id)
+      .single()
+    if (clienteActual?.estado === 'SUSPENDIDO') {
+      await supabase
+        .from('clients')
+        .update({ estado: 'ACTIVO', fecha_expiracion: pago.fecha_fin_periodo })
+        .eq('client_id', pago.client_id)
+    }
+  }
 
   const { data: { user } } = await supabase.auth.getUser()
   await logActividad(supabase, {

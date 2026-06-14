@@ -79,8 +79,9 @@ export async function crearCliente(formData: FormData) {
   const modulos_activos = modulosRaw.includes('base') ? modulosRaw : ['base', ...modulosRaw]
   const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
 
-  // Estado y vigencia: trial → días configurables; activo → duración del ciclo
-  const estadoInicial = es_trial ? 'TRIAL' : 'ACTIVO'
+  // Estado y vigencia: trial → TRIAL por días configurables; sin trial → SUSPENDIDO hasta que
+  // se confirme el primer pago de suscripción (confirmarPago lo pasa a ACTIVO).
+  const estadoInicial = es_trial ? 'TRIAL' : 'SUSPENDIDO'
   const diasVigencia  = es_trial
     ? (parseInt(await getSetting('dias_trial_default', '15'), 10) || 15)
     : diasCiclo(ciclo)

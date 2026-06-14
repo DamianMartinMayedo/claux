@@ -1,0 +1,173 @@
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE DESIGN
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    grid-row: 1;
+    grid-column: 1;
+    position: fixed;
+    left: 0;
+    top: var(--header-h);
+    width: var(--sidebar-w);
+    height: calc(100vh - var(--header-h));
+    z-index: 50;
+    border-right: 1px solid var(--color-border);
+    transform: translateX(-100%);
+    transition: transform var(--transition);
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-main {
+    grid-column: 1;
+  }
+
+  .view-container {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .page-title {
+    font-size: var(--text-xl);
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .metric-card {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .modal {
+    max-width: calc(100% - 2rem);
+    max-height: calc(100vh - 2rem);
+  }
+
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .table {
+    font-size: var(--text-xs);
+  }
+
+  .table th, .table td {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .filters-bar {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .filter-select,
+  .search-input {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .view-container {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .page-title {
+    font-size: var(--text-lg);
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: var(--space-4);
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  .metric-card {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .metric-value {
+    font-size: var(--text-2xl);
+  }
+
+  .table-wrapper {
+    border-radius: var(--radius-lg);
+  }
+
+  .input-group {
+    gap: var(--space-1);
+  }
+
+  .btn {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-xs);
+  }
+
+  .btn-lg {
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .card-body {
+    flex-direction: column;
+  }
+
+  .card-body a {
+    width: 100%;
+  }
+
+  .login-container {
+    padding: var(--space-4);
+  }
+
+  .login-header {
+    margin-bottom: var(--space-8);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   DARK MODE IMPROVEMENTS
+   ═══════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+  .search-input:focus {
+    box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
+  }
+
+  .code-block {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+
+  .spinner {
+    border-color: rgba(63, 212, 207, 0.2);
+    border-top-color: var(--color-primary);
+  }
+
+  .form-input {
+    background: var(--color-surface-2);
+  }
+
+  .form-input:focus {
+    box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
+  }
+}
+
