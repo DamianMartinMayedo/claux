@@ -6,6 +6,7 @@ import { suscripcionLabel }  from '@/lib/billing'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar         from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
+import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -52,6 +53,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   return (
     <div className="portal-shell">
+      <PortalRealtimeSync clientId={session.client_id} />
       <PortalHeader
         session={session}
         nombreEmpresa={cliente.nombre_empresa}
