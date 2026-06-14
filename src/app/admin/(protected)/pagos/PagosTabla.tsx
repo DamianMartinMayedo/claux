@@ -3,13 +3,14 @@
 import { useState, useMemo } from 'react'
 import EditarPagoModal  from './EditarPagoModal'
 import EliminarPagoBtn  from './EliminarPagoBtn'
+import ConfirmarPagoBtn from './ConfirmarPagoBtn'
 
 const METODO_LABEL: Record<string, string> = {
   tropipay: 'TropiPay', transferencia: 'Transferencia', efectivo: 'Efectivo',
 }
 
 type Pago = {
-  pago_id: string; client_id: string; concepto: string | null
+  pago_id: string; client_id: string; concepto: string | null; estado: string | null
   monto_usd: number; metodo: string; fecha: string
   fecha_inicio_periodo: string | null; fecha_fin_periodo: string | null
   notas: string | null
@@ -19,6 +20,10 @@ const POR_PAGINA = 10
 
 function conceptoLabel(concepto: string | null) {
   return concepto === 'configuracion' ? 'Configuración' : 'Suscripción'
+}
+
+function estadoLabel(estado: string | null) {
+  return estado === 'por_confirmar' ? 'Por confirmar' : 'Confirmado'
 }
 
 function formatFecha(fecha: string | null) {
@@ -32,11 +37,11 @@ function exportCSV(
   clienteNombre: Record<string, string>,
 ) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const headers = ['ID Pago', 'Cliente ID', 'Empresa', 'Concepto', 'Método',
+  const headers = ['ID Pago', 'Cliente ID', 'Empresa', 'Concepto', 'Estado', 'Método',
     'Monto USD', 'Fecha', 'Inicio período', 'Fin período', 'Notas']
   const rows = pagos.map(p => [
     p.pago_id, p.client_id, clienteNombre[p.client_id] ?? '',
-    conceptoLabel(p.concepto),
+    conceptoLabel(p.concepto), estadoLabel(p.estado),
     METODO_LABEL[p.metodo] ?? p.metodo,
     p.monto_usd, p.fecha ?? '',
     p.fecha_inicio_periodo ?? '', p.fecha_fin_periodo ?? '', p.notas ?? '',
@@ -57,6 +62,7 @@ export default function PagosTabla({
 }) {
   const [busqueda, setBusqueda]           = useState('')
   const [filtroConcepto, setFiltroConcepto] = useState('')
+  const [filtroEstado, setFiltroEstado]   = useState('')
   const [filtroMetodo, setFiltroMetodo]   = useState('')
   const [pagina, setPagina]               = useState(1)
 
@@ -67,10 +73,12 @@ export default function PagosTabla({
       const coincideBusqueda  = !q || nombre.includes(q) || p.client_id.toLowerCase().includes(q)
       const conceptoP = p.concepto === 'configuracion' ? 'configuracion' : 'suscripcion'
       const coincideConcepto  = !filtroConcepto || conceptoP === filtroConcepto
+      const estadoP = p.estado === 'por_confirmar' ? 'por_confirmar' : 'confirmado'
+      const coincideEstado    = !filtroEstado || estadoP === filtroEstado
       const coincideMetodo    = !filtroMetodo || p.metodo  === filtroMetodo
-      return coincideBusqueda && coincideConcepto && coincideMetodo
+      return coincideBusqueda && coincideConcepto && coincideEstado && coincideMetodo
     })
-  }, [pagos, busqueda, filtroConcepto, filtroMetodo, clienteNombre])
+  }, [pagos, busqueda, filtroConcepto, filtroEstado, filtroMetodo, clienteNombre])
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
   const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
@@ -98,6 +106,13 @@ export default function PagosTabla({
           <option value="">Todos los conceptos</option>
           <option value="suscripcion">Suscripción</option>
           <option value="configuracion">Configuración</option>
+        </select>
+
+        <select className="filter-select" value={filtroEstado}
+          onChange={e => resetPagina(() => setFiltroEstado(e.target.value))}>
+          <option value="">Todos los estados</option>
+          <option value="por_confirmar">Por confirmar</option>
+          <option value="confirmado">Confirmado</option>
         </select>
 
         <select className="filter-select" value={filtroMetodo}
@@ -134,6 +149,7 @@ export default function PagosTabla({
                 <th>ID</th>
                 <th>Cliente</th>
                 <th>Concepto</th>
+                <th>Estado</th>
                 <th>Método</th>
                 <th>Monto USD</th>
                 <th>Fecha</th>
@@ -156,6 +172,11 @@ export default function PagosTabla({
                     </span>
                   </td>
                   <td>
+                    <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
+                      {estadoLabel(p.estado)}
+                    </span>
+                  </td>
+                  <td>
                     <span className="badge badge-neutral">
                       {METODO_LABEL[p.metodo] ?? p.metodo}
                     </span>
@@ -172,6 +193,14 @@ export default function PagosTabla({
                   </td>
                   <td className="table-actions-right">
                     <div className="table-actions-group">
+                      {p.estado === 'por_confirmar' && (
+                        <ConfirmarPagoBtn
+                          pagoId={p.pago_id}
+                          clienteNombre={clienteNombre[p.client_id] ?? p.client_id}
+                          monto={p.monto_usd}
+                          concepto={p.concepto}
+                        />
+                      )}
                       <EditarPagoModal
                         pago={p}
                         clienteNombre={clienteNombre[p.client_id] ?? p.client_id}

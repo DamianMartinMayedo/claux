@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
 import { addDays, toDateStr } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
-import { diasCiclo } from '@/lib/billing'
+import { diasCiclo, importeCiclo } from '@/lib/billing'
 
 // ── Utilidades de seguridad ──────────────────────────────────────────
 async function hashPassword(password: string, salt: string): Promise<string> {
@@ -118,32 +118,60 @@ export async function crearCliente(formData: FormData) {
     description: `Creó cliente ${nombre_empresa} (${client_id}) — ${modulos_activos.length} módulo(s) · tarifa ${tarifa}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — Estado: ${estadoInicial}`,
   })
 
-  // Pago único de configuración (opcional, relevante a nivel contable)
+  // ── Pre-crear los cobros esperados como "por confirmar" ──────────────
+  // Configuración (pago único, si > 0) + primera suscripción (si no es trial).
+  // Se confirman cuando el cliente paga de verdad; solo entonces cuentan como ingreso.
+  const descuentoAnual   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const montoSuscripcion = es_trial ? 0 : importeCiclo(precio_mensual_usd, ciclo, descuentoAnual)
+
+  // Numerador correlativo de pago_id (puede crear hasta 2 pagos)
+  const { data: ultPago } = await supabase
+    .from('payments').select('pago_id').order('pago_id', { ascending: false }).limit(1).maybeSingle()
+  let pagoNum = 1
+  if (ultPago?.pago_id) {
+    const mm = ultPago.pago_id.match(/PAG-(\d+)/)
+    if (mm) pagoNum = parseInt(mm[1], 10) + 1
+  }
+  const nuevoPagoId = () => `PAG-${String(pagoNum++).padStart(4, '0')}`
+
+  const pagosPre: Record<string, unknown>[] = []
   if (pago_setup_usd > 0) {
-    const { data: ultimoPago } = await supabase
-      .from('payments').select('pago_id').order('pago_id', { ascending: false }).limit(1).maybeSingle()
-    let nextNum = 1
-    if (ultimoPago?.pago_id) {
-      const match = ultimoPago.pago_id.match(/PAG-(\d+)/)
-      if (match) nextNum = parseInt(match[1], 10) + 1
-    }
-    const pago_id = `PAG-${String(nextNum).padStart(4, '0')}`
-    await supabase.from('payments').insert({
-      pago_id,
+    pagosPre.push({
+      pago_id:  nuevoPagoId(),
       client_id,
       monto_usd: pago_setup_usd,
       metodo:    'transferencia',
       concepto:  'configuracion',
+      estado:    'por_confirmar',
       fecha:     toDateStr(hoy),
       notas:     'Pago único de configuración inicial',
     })
-    await logActividad(supabase, {
-      user_email:  user?.email ?? 'sistema',
-      entity:      'pago',
-      entity_id:   pago_id,
-      action:      'registrar',
-      description: `Registró pago de configuración ${pago_id} — Cliente: ${client_id} — $${pago_setup_usd.toFixed(2)}`,
+  }
+  if (montoSuscripcion > 0) {
+    pagosPre.push({
+      pago_id:  nuevoPagoId(),
+      client_id,
+      monto_usd: montoSuscripcion,
+      metodo:    'transferencia',
+      concepto:  'suscripcion',
+      estado:    'por_confirmar',
+      fecha:     toDateStr(hoy),
+      fecha_inicio_periodo: toDateStr(hoy),
+      fecha_fin_periodo:    toDateStr(fechaExpiracion),
+      notas:     `Primer cobro de suscripción (${ciclo})`,
     })
+  }
+  if (pagosPre.length > 0) {
+    await supabase.from('payments').insert(pagosPre)
+    for (const p of pagosPre) {
+      await logActividad(supabase, {
+        user_email:  user?.email ?? 'sistema',
+        entity:      'pago',
+        entity_id:   p.pago_id as string,
+        action:      'registrar',
+        description: `Pre-creó pago ${p.pago_id} (${p.concepto}, por confirmar) — Cliente: ${client_id} — $${Number(p.monto_usd).toFixed(2)}`,
+      })
+    }
   }
 
   // Crear usuario admin inicial del cliente

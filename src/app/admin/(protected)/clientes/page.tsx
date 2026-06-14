@@ -48,7 +48,7 @@ export default async function ClientesPage() {
           </div>
         </div>
       ) : (
-        <ClientesTabla clientes={clientes} />
+        <ClientesTabla clientes={clientes} descuentoAnualPct={descuentoAnual} />
       )}
     </div>
   )

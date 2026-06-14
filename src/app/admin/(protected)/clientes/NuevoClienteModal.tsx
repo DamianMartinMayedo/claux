@@ -240,8 +240,8 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
                 </div>
 
                 <label className="checkbox-group">
-                  <input type="checkbox" name="es_trial" value="true" defaultChecked />
-                  <span className="checkbox-label">Iniciar con período de prueba gratuita</span>
+                  <input type="checkbox" name="es_trial" value="true" />
+                  <span className="checkbox-label">Iniciar con período de prueba gratuita (sin cobro)</span>
                 </label>
 
                 <div className="input-group">

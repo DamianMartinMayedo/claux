@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { suscripcionLabel } from '@/lib/billing'
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info', GRACIA: 'badge-warning',
@@ -73,8 +74,10 @@ function exportCSV(clientes: Cliente[]) {
 
 export default function ClientesTabla({
   clientes,
+  descuentoAnualPct,
 }: {
   clientes: Cliente[]
+  descuentoAnualPct: number
 }) {
   const router = useRouter()
   const [busqueda, setBusqueda]         = useState('')
@@ -150,7 +153,7 @@ export default function ClientesTabla({
               <tr>
                 <th>Empresa</th>
                 <th>Email</th>
-                <th>Precio/mes</th>
+                <th>Suscripción</th>
                 <th>Estado</th>
                 <th>Expiración</th>
                 <th className="text-center">Días</th>
@@ -173,7 +176,7 @@ export default function ClientesTabla({
                     </td>
                     <td className="table-muted">{c.email_admin}</td>
                     <td className="table-muted">
-                      ${Number(c.precio_mensual_usd ?? 0).toFixed(2)} · {cicloLabel(c.ciclo_facturacion)}
+                      {suscripcionLabel(Number(c.precio_mensual_usd ?? 0), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct)}
                     </td>
                     <td>
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>

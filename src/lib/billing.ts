@@ -33,3 +33,16 @@ export function importeCiclo(precioMensual: number, ciclo: string, descuentoAnua
 export function cicloLabel(ciclo: string): string {
   return ciclo === 'anual' ? 'Anual' : 'Mensual'
 }
+
+/**
+ * Etiqueta del precio de la suscripción según el ciclo.
+ * - mensual: "$35.00/mes"
+ * - anual:   "$378.00/año" (el total anual ya con descuento; nunca "/mes · Anual").
+ */
+export function suscripcionLabel(precioMensual: number, ciclo: string, descuentoAnualPct: number): string {
+  const m = Number(precioMensual) || 0
+  if (ciclo === 'anual') {
+    return `$${importeCiclo(m, 'anual', descuentoAnualPct).toFixed(2)}/año`
+  }
+  return `$${m.toFixed(2)}/mes`
+}

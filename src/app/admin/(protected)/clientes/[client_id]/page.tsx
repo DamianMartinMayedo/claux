@@ -4,8 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import AccionesDetalle from './AccionesDetalle'
 import EditarClienteModal from './EditarClienteModal'
 import ModulosCard from './ModulosCard'
+import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { getSetting } from '@/app/actions/settings'
+import { suscripcionLabel } from '@/lib/billing'
 
 const METODO_LABEL: Record<string, string> = {
   tropipay:      'TropiPay',
@@ -54,10 +56,14 @@ export default async function ClienteDetallePage({
   if (!cliente) notFound()
 
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
-  const cicloLabel  = cliente.ciclo_facturacion === 'anual' ? 'Anual' : 'Mensual'
   const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
-  const totalPagado = (pagos ?? []).reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
-  const ultimoPago  = pagos?.[0] ?? null
+  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuentoAnual)
+  const confirmados = (pagos ?? []).filter(p => p.estado !== 'por_confirmar')
+  const totalPagado = confirmados.reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
+  const pendienteConfirmar = (pagos ?? [])
+    .filter(p => p.estado === 'por_confirmar')
+    .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
+  const ultimoPago  = confirmados[0] ?? null
   const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
 
   return (
@@ -78,7 +84,7 @@ export default async function ClienteDetallePage({
           <h1 className="page-title">{cliente.nombre_empresa}</h1>
           <div className="detail-badges">
             <span className="badge badge-neutral">
-              ${precioMes.toFixed(2)}/mes · {cicloLabel}
+              {suscripcion}
             </span>
             <span className={`badge badge-dot ${ESTADO_BADGE[cliente.estado] ?? 'badge-neutral'}`}>
               {cliente.estado}
@@ -143,7 +149,7 @@ export default async function ClienteDetallePage({
           <div className="detail-field">
             <span className="detail-field-label">Suscripción</span>
             <span className="detail-field-value">
-              ${precioMes.toFixed(2)}/mes · {cicloLabel}
+              {suscripcion}
             </span>
           </div>
           <div className="detail-field">
@@ -177,11 +183,19 @@ export default async function ClienteDetallePage({
           <h2 className="detail-section-title">Resumen de pagos</h2>
 
           <div className="detail-field">
-            <span className="detail-field-label">Total pagado</span>
+            <span className="detail-field-label">Total cobrado (confirmado)</span>
             <span className="detail-field-value detail-field-value-large">
               ${totalPagado.toFixed(2)} USD
             </span>
           </div>
+          {pendienteConfirmar > 0 && (
+            <div className="detail-field">
+              <span className="detail-field-label">Pendiente por confirmar</span>
+              <span className="detail-field-value">
+                <span className="badge badge-warning">${pendienteConfirmar.toFixed(2)} USD</span>
+              </span>
+            </div>
+          )}
           <div className="detail-field">
             <span className="detail-field-label">Último pago</span>
             <span className="detail-field-value">
@@ -250,10 +264,12 @@ export default async function ClienteDetallePage({
                 <tr>
                   <th>Fecha</th>
                   <th>Monto</th>
-                  <th>Método</th>
                   <th>Concepto</th>
+                  <th>Estado</th>
+                  <th>Método</th>
                   <th>Período cubierto</th>
                   <th>Notas</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -262,13 +278,18 @@ export default async function ClienteDetallePage({
                     <td className="table-muted">{formatFecha(p.fecha)}</td>
                     <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
                     <td>
-                      <span className="badge badge-neutral">
-                        {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
+                      <span className={`badge ${p.concepto === 'configuracion' ? 'badge-info' : 'badge-neutral'}`}>
+                        {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
                       </span>
                     </td>
                     <td>
-                      <span className={`badge ${p.concepto === 'configuracion' ? 'badge-info' : 'badge-neutral'}`}>
-                        {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
+                      <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
+                        {p.estado === 'por_confirmar' ? 'Por confirmar' : 'Confirmado'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge badge-neutral">
+                        {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
                       </span>
                     </td>
                     <td className="table-muted text-xs">
@@ -278,6 +299,16 @@ export default async function ClienteDetallePage({
                     </td>
                     <td className="table-muted td-notes">
                       {p.notas ?? '—'}
+                    </td>
+                    <td className="table-actions-right">
+                      {p.estado === 'por_confirmar' && (
+                        <ConfirmarPagoBtn
+                          pagoId={p.pago_id}
+                          clienteNombre={cliente.nombre_empresa}
+                          monto={p.monto_usd ?? 0}
+                          concepto={p.concepto}
+                        />
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -1,6 +1,8 @@
 import { redirect }       from 'next/navigation'
 import { getPortalSession } from '@/app/actions/portal/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSetting }        from '@/app/actions/settings'
+import { suscripcionLabel }  from '@/lib/billing'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar         from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
@@ -26,9 +28,10 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     ? (cliente.modulos_activos.includes('base') ? cliente.modulos_activos : ['base', ...cliente.modulos_activos])
     : ['base']
 
-  // Etiqueta de suscripción para el header (precio mensual + ciclo)
-  const precioMes  = Number(cliente.precio_mensual_usd ?? 0)
-  const suscripcion = `$${precioMes.toFixed(2)}/mes${cliente.ciclo_facturacion === 'anual' ? ' · anual' : ''}`
+  // Etiqueta de suscripción para el header (importe real según el ciclo)
+  const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
+  const descuento   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento)
 
   const bloqueado = ['SUSPENDIDO', 'VENCIDO'].includes(cliente.estado)
 

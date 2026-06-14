@@ -40,7 +40,7 @@ export default async function DashboardPage() {
       .lte('fecha_expiracion', fechaAvisoStr),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'SUSPENDIDO'),
     supabase.from('clients').select('precio_mensual_usd').in('estado', ['ACTIVO', 'TRIAL']),
-    supabase.from('payments').select('monto_usd, fecha'),
+    supabase.from('payments').select('monto_usd, fecha, estado'),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)
     supabase.from('clients')
       .select('client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia')
@@ -62,10 +62,12 @@ export default async function DashboardPage() {
 
   // Ingresos del mes actual
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
-  const ingresosMes = (pagosData ?? [])
+  // Solo los pagos confirmados cuentan como ingreso
+  const confirmadosData = (pagosData ?? []).filter(p => p.estado !== 'por_confirmar')
+  const ingresosMes = confirmadosData
     .filter(p => p.fecha?.startsWith(mesActual))
     .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
-  const totalPagos = pagosData?.length ?? 0
+  const totalPagos = confirmadosData.length
 
   return (
     <div className="view-container">

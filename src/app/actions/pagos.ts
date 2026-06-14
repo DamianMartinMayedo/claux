@@ -154,6 +154,7 @@ export async function registrarPago(formData: FormData) {
     pago_id,
     client_id,
     concepto:            'suscripcion',
+    estado:              'confirmado',
     monto_usd,
     metodo,
     fecha:               toDateStr(new Date()),
@@ -200,6 +201,43 @@ export async function registrarPago(formData: FormData) {
     nueva_expiracion: fecha_fin_periodo,
     advertencia_gap,
   }
+}
+
+// ── Confirmar pago (por_confirmar → confirmado) ──────────────────────
+// Marca como cobrado un pago pendiente (p. ej. los pre-creados al dar de alta).
+// Solo entonces cuenta como ingreso. No cambia fechas del cliente (la vigencia se fija
+// al crear/cobrar); confirmar es el reconocimiento contable de que el dinero entró.
+export async function confirmarPago(pagoId: string) {
+  const supabase = await createClient()
+
+  const { data: pago } = await supabase
+    .from('payments')
+    .select('client_id, concepto, monto_usd, estado')
+    .eq('pago_id', pagoId)
+    .single()
+  if (!pago) return { ok: false as const, error: 'Pago no encontrado.' }
+  if (pago.estado === 'confirmado') return { ok: true as const, yaConfirmado: true }
+
+  const { error } = await supabase
+    .from('payments')
+    .update({ estado: 'confirmado' })
+    .eq('pago_id', pagoId)
+  if (error) return { ok: false as const, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'pago',
+    entity_id:   pagoId,
+    action:      'confirmar',
+    description: `Confirmó pago ${pagoId} (${pago.concepto}) — Cliente: ${pago.client_id} — $${Number(pago.monto_usd).toFixed(2)}`,
+  })
+
+  revalidatePath('/admin/pagos')
+  revalidatePath('/admin/clientes')
+  revalidatePath(`/admin/clientes/${pago.client_id}`)
+  revalidatePath('/admin/dashboard')
+  return { ok: true as const }
 }
 
 // ── Editar pago ──────────────────────────────────────────────────────
