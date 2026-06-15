@@ -1218,23 +1218,4 @@
   display: flex; flex-direction: column;
 }
 
-/* Documento imprimible (oculto fuera de pantalla; lo renderiza html2pdf).
-   Colores fijos claros a propósito: el PDF debe ser legible en cualquier tema. */
-.rep-print {
-  position: absolute; left: -10000px; top: 0; width: 760px;
-  background: #ffffff; color: #1c1b16; padding: 32px;
-  font-size: 13px; line-height: 1.5;
-}
-.rep-print-head { border-bottom: 2px solid #1c1b16; padding-bottom: 12px; margin-bottom: 20px; }
-.rep-print-brand { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #0d9488; }
-.rep-print-title { font-size: 22px; font-weight: 700; margin: 4px 0; color: #1c1b16; }
-.rep-print-meta { display: flex; justify-content: space-between; font-size: 12px; color: #6b6862; }
-.rep-print-h2 { font-size: 15px; font-weight: 700; margin: 22px 0 10px; color: #1c1b16; }
-.rep-print-empty { font-size: 12px; color: #6b6862; }
-.rep-print-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-.rep-print-table th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6862; border-bottom: 1px solid #d8d5cc; padding: 4px 6px; }
-.rep-print-table td { padding: 4px 6px; border-bottom: 1px solid #eceae3; }
-.rep-print-num { text-align: right; font-variant-numeric: tabular-nums; }
-.rep-print-section td { font-weight: 700; color: #1c1b16; border-bottom: 1px solid #d8d5cc; padding-top: 8px; }
-.rep-print-total td { font-weight: 700; color: #0d9488; border-top: 2px solid #1c1b16; border-bottom: none; padding-top: 8px; }
 

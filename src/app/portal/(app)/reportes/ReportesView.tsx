@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
 
@@ -8,6 +8,19 @@ import type { ReportesData }       from '@/app/actions/portal/reportes'
 
 const ORIGEN_LABEL: Record<string, string> = {
   MANUAL: 'Manual', COBRO: 'Cobros', PAGO: 'Pagos', TRANSFERENCIA: 'Transferencias',
+}
+
+// Interfaz mínima de jsPDF (su .d.ts empaquetado no es un módulo ES y TS lo rechaza).
+interface JsPdfDoc {
+  internal: { pageSize: { getWidth(): number; getHeight(): number } }
+  setFont(family: string, style: string): void
+  setFontSize(n: number): void
+  setTextColor(r: number, g: number, b: number): void
+  setDrawColor(r: number, g: number, b: number): void
+  text(text: string, x: number, y: number, opts?: { align?: string }): void
+  line(x1: number, y1: number, x2: number, y2: number): void
+  addPage(): void
+  save(filename: string): void
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,7 +52,6 @@ export default function ReportesView({ data }: { data: ReportesData }) {
     q ? cats.filter(c => c.categoria.toLowerCase().includes(q)) : cats
 
   // ── Descarga ──────────────────────────────────────────────────────────────
-  const printRef = useRef<HTMLDivElement>(null)
   const [menuOpen,    setMenuOpen]    = useState(false)
   const [descargando, setDescargando] = useState(false)
 
@@ -48,19 +60,98 @@ export default function ReportesView({ data }: { data: ReportesData }) {
     : 'Todas las empresas'
   const nombreArchivo = `reportes_${data.desde}_${data.hasta}`
 
+  // PDF construido con texto real (jsPDF), no una captura de la página.
   async function descargarPDF() {
     setMenuOpen(false)
-    if (descargando || !printRef.current) return
+    if (descargando) return
     setDescargando(true)
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-      await html2pdf().set({
-        margin:      [8, 8, 8, 8],
-        filename:    `${nombreArchivo}.pdf`,
-        image:       { type: 'jpeg', quality: 0.97 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      }).from(printRef.current).save()
+      // jsPDF empaqueta un .d.ts que TS no reconoce como módulo: casteamos a la interfaz mínima.
+      const mod = await import('jspdf') as unknown as { jsPDF: new (o: object) => JsPdfDoc }
+      const doc: JsPdfDoc = new mod.jsPDF({ unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+      const M = 16
+      const right = pageW - M
+      let y = M
+
+      const TEAL: [number, number, number] = [13, 148, 136]
+      const DARK: [number, number, number] = [28, 27, 22]
+      const GRAY: [number, number, number] = [107, 104, 98]
+
+      const ensure = (space: number) => { if (y + space > pageH - M) { doc.addPage(); y = M } }
+      const row = (
+        label: string, amount: string,
+        opts: { bold?: boolean; color?: [number, number, number]; indent?: boolean; gap?: number } = {},
+      ) => {
+        ensure(7)
+        doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
+        doc.setFontSize(10)
+        const c = opts.color ?? DARK
+        doc.setTextColor(c[0], c[1], c[2])
+        doc.text(label, opts.indent ? M + 4 : M, y)
+        if (amount) doc.text(amount, right, y, { align: 'right' })
+        y += opts.gap ?? 6
+      }
+      const heading = (text: string) => {
+        ensure(12)
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
+        doc.setTextColor(DARK[0], DARK[1], DARK[2])
+        doc.text(text, M, y); y += 7
+      }
+      const monedaHead = (m: string) => {
+        ensure(9)
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+        doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
+        doc.text(m, M, y); doc.text('Importe', right, y, { align: 'right' })
+        y += 2
+        doc.setDrawColor(216, 213, 204); doc.line(M, y, right, y)
+        y += 5
+      }
+      const totalRow = (label: string, amount: string) => {
+        ensure(8)
+        doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.line(M, y - 1, right, y - 1)
+        row(label, amount, { bold: true, color: TEAL, gap: 9 })
+      }
+
+      // Cabecera
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+      doc.setTextColor(TEAL[0], TEAL[1], TEAL[2]); doc.text('CLAUX', M, y); y += 6
+      doc.setFontSize(18); doc.setTextColor(DARK[0], DARK[1], DARK[2])
+      doc.text('Reportes financieros', M, y); y += 6
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
+      doc.text(empresaNombre, M, y)
+      doc.text(`${formatFechaCorta(data.desde)} - ${formatFechaCorta(data.hasta)}`, right, y, { align: 'right' })
+      y += 3
+      doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.line(M, y, right, y); y += 9
+
+      // Estado de resultados
+      heading('Estado de resultados')
+      if (data.resultado.length === 0) row('Sin ingresos ni gastos en el período.', '', { color: GRAY })
+      for (const r of data.resultado) {
+        monedaHead(r.moneda)
+        row('Ingresos', formatMonto(r.total_ingresos), { bold: true })
+        row('Ventas (facturas)', formatMonto(r.ventas), { indent: true })
+        row('Cobros directos', formatMonto(r.cobros_directos), { indent: true })
+        row('Gastos', formatMonto(r.total_gastos), { bold: true })
+        for (const g of r.gastos_por_categoria) row(g.categoria, formatMonto(g.monto), { indent: true })
+        totalRow('Resultado neto', formatMonto(r.neto))
+      }
+
+      // Flujo de caja
+      y += 2
+      heading('Flujo de caja')
+      if (data.flujo.length === 0) row('Sin movimientos de efectivo en el período.', '', { color: GRAY })
+      for (const f of data.flujo) {
+        monedaHead(f.moneda)
+        row('Entradas', formatMonto(f.entradas), { bold: true })
+        for (const e of f.detalle_entradas) row(ORIGEN_LABEL[e.origen] ?? e.origen, formatMonto(e.monto), { indent: true })
+        row('Salidas', formatMonto(f.salidas), { bold: true })
+        for (const s of f.detalle_salidas) row(ORIGEN_LABEL[s.origen] ?? s.origen, formatMonto(s.monto), { indent: true })
+        totalRow('Flujo neto', formatMonto(f.neto))
+      }
+
+      doc.save(`${nombreArchivo}.pdf`)
     } finally {
       setDescargando(false)
     }
@@ -272,47 +363,6 @@ export default function ReportesView({ data }: { data: ReportesData }) {
           )}
         </>
       )}
-
-      {/* Documento imprimible (oculto fuera de pantalla; lo consume html2pdf) */}
-      <div className="rep-print" ref={printRef} aria-hidden="true">
-        <div className="rep-print-head">
-          <div className="rep-print-brand">CLAUX</div>
-          <h1 className="rep-print-title">Reportes financieros</h1>
-          <div className="rep-print-meta">
-            <span>{empresaNombre}</span>
-            <span>{formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}</span>
-          </div>
-        </div>
-
-        <h2 className="rep-print-h2">Estado de resultados</h2>
-        {data.resultado.length === 0 ? <p className="rep-print-empty">Sin ingresos ni gastos en el período.</p> : data.resultado.map(r => (
-          <table className="rep-print-table" key={`pr-${r.moneda}`}>
-            <thead><tr><th>{r.moneda}</th><th className="rep-print-num">Importe</th></tr></thead>
-            <tbody>
-              <tr className="rep-print-section"><td>Ingresos</td><td className="rep-print-num">{formatMonto(r.total_ingresos)}</td></tr>
-              <tr><td>Ventas (facturas)</td><td className="rep-print-num">{formatMonto(r.ventas)}</td></tr>
-              <tr><td>Cobros directos</td><td className="rep-print-num">{formatMonto(r.cobros_directos)}</td></tr>
-              <tr className="rep-print-section"><td>Gastos</td><td className="rep-print-num">{formatMonto(r.total_gastos)}</td></tr>
-              {r.gastos_por_categoria.map(g => <tr key={g.categoria}><td>{g.categoria}</td><td className="rep-print-num">{formatMonto(g.monto)}</td></tr>)}
-              <tr className="rep-print-total"><td>Resultado neto</td><td className="rep-print-num">{formatMonto(r.neto)}</td></tr>
-            </tbody>
-          </table>
-        ))}
-
-        <h2 className="rep-print-h2">Flujo de caja</h2>
-        {data.flujo.length === 0 ? <p className="rep-print-empty">Sin movimientos de efectivo en el período.</p> : data.flujo.map(f => (
-          <table className="rep-print-table" key={`pf-${f.moneda}`}>
-            <thead><tr><th>{f.moneda}</th><th className="rep-print-num">Importe</th></tr></thead>
-            <tbody>
-              <tr className="rep-print-section"><td>Entradas</td><td className="rep-print-num">{formatMonto(f.entradas)}</td></tr>
-              {f.detalle_entradas.map(e => <tr key={e.origen}><td>{ORIGEN_LABEL[e.origen] ?? e.origen}</td><td className="rep-print-num">{formatMonto(e.monto)}</td></tr>)}
-              <tr className="rep-print-section"><td>Salidas</td><td className="rep-print-num">{formatMonto(f.salidas)}</td></tr>
-              {f.detalle_salidas.map(s => <tr key={s.origen}><td>{ORIGEN_LABEL[s.origen] ?? s.origen}</td><td className="rep-print-num">{formatMonto(s.monto)}</td></tr>)}
-              <tr className="rep-print-total"><td>Flujo neto</td><td className="rep-print-num">{formatMonto(f.neto)}</td></tr>
-            </tbody>
-          </table>
-        ))}
-      </div>
     </div>
   )
 }
