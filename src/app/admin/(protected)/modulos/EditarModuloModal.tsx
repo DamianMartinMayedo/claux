@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { editarModulo } from '@/app/actions/modulos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { useToast } from '@/app/contexts/ToastContext'
 
 function slugify(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -41,10 +42,9 @@ type Modulo = {
 
 export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
   const router = useRouter()
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [success, setSuccess] = useState('')
   const [paginas, setPaginas] = useState<Pagina[]>(() => ensurePages(modulo.paginas))
   const [nuevaRuta, setNuevaRuta]   = useState('')
   const [nuevoLabel, setNuevoLabel] = useState('')
@@ -64,7 +64,7 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleClose = useCallback(() => {
-    setOpen(false); setError(''); setSuccess(''); setAddError('')
+    setOpen(false); setAddError('')
     setNuevaRuta(''); setNuevoLabel(''); setRouteEdited(false)
     setPaginas(ensurePages(modulo.paginas))
     setEditTipo(modulo.tipo)
@@ -117,16 +117,14 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError(''); setLoading(true)
-
+    setLoading(true)
     const fd = new FormData(formRef.current!)
     fd.set('paginas', JSON.stringify(paginas))
     fd.set('tipo', editTipo)
-
     const res = await editarModulo(fd)
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-    setSuccess('Guardado')
+    if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+    toastSuccess('Módulo guardado')
     setTimeout(() => { handleClose(); router.refresh() }, 600)
   }
 
@@ -259,9 +257,6 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
                 </div>
               </div>
             )}
-
-            {error   && <div className="alert alert-error mt-3">{error}</div>}
-            {success && <div className="alert alert-success mt-3">{success}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>

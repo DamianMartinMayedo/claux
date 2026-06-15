@@ -7,6 +7,7 @@ import { crearCliente } from '@/app/actions/clientes'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 import { importeCiclo } from '@/lib/billing'
+import { useToast } from '@/app/contexts/ToastContext'
 
 type ModuloCatalogo = {
   clave: string
@@ -25,7 +26,7 @@ type Props = {
 }
 
 const GRUPOS: { label: string; tipo: string }[] = [
-  { label: 'Base contable',       tipo: 'base' },
+  { label: 'Contabilidad',       tipo: 'base' },
   { label: 'Módulos adicionales', tipo: 'modulo' },
   { label: 'Funcionalidades',     tipo: 'funcionalidad' },
 ]
@@ -33,8 +34,8 @@ const GRUPOS: { label: string; tipo: string }[] = [
 export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnualPct }: Props) {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string } | null>(null)
+  const { success: toastSuccess, error: toastError } = useToast()
   const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
@@ -60,7 +61,6 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
 
   const handleClose = useCallback(() => {
     setOpen(false)
-    setError('')
     if (resultado) {
       setResultado(null)
       router.refresh()
@@ -73,17 +73,15 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
     setSeleccionados([baseClave])
     setTarifa('estandar')
     setCiclo('mensual')
-    setError('')
     setOpen(true)
   }
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault()
-    setError('')
     setLoading(true)
     const res = await crearCliente(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
+    if (!res.ok) { toastError(res.error ?? 'Error desconocido'); return }
     setResultado({ client_id: res.client_id!, passwordTemporal: res.passwordTemporal! })
   }
 
@@ -249,7 +247,6 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
                   <textarea name="notas" className="input" rows={2} placeholder="Opcional" />
                 </div>
 
-                {error && <div className="alert alert-error">{error}</div>}
               </div>
 
               <div className="modal-footer">

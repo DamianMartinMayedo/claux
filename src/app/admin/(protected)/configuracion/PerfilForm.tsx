@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/app/contexts/ToastContext'
 
 export default function PerfilForm({
   initialName,
@@ -14,33 +15,31 @@ export default function PerfilForm({
 }) {
   const [name, setName]           = useState(initialName)
   const [saving, setSaving]       = useState(false)
-  const [savedOk, setSavedOk]     = useState(false)
   const [sending, setSending]     = useState(false)
   const [sentOk, setSentOk]       = useState(false)
-  const [error, setError]         = useState('')
+  const { success: toastSuccess, error: toastError } = useToast()
 
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault()
-    setSaving(true); setError(''); setSavedOk(false)
+    setSaving(true)
     const supabase = createClient()
     const { error: err } = await supabase.auth.updateUser({
       data: { full_name: name.trim() },
     })
     setSaving(false)
-    if (err) { setError(err.message); return }
-    setSavedOk(true)
-    setTimeout(() => setSavedOk(false), 3000)
+    if (err) { toastError(err.message); return }
+    toastSuccess('Nombre actualizado correctamente.')
   }
 
   async function handleSendReset() {
-    setSending(true); setError(''); setSentOk(false)
+    setSending(true); setSentOk(false)
     const supabase = createClient()
     const origin   = window.location.origin
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${origin}/admin/reset-password`,
     })
     setSending(false)
-    if (err) { setError(err.message); return }
+    if (err) { toastError(err.message); return }
     setSentOk(true)
   }
 
@@ -74,7 +73,6 @@ export default function PerfilForm({
             {sending ? 'Enviando…' : 'Enviar enlace de cambio de contraseña'}
           </button>
         )}
-        {error && <div className="alert alert-error mt-3">{error}</div>}
       </div>
     )
   }
@@ -96,8 +94,6 @@ export default function PerfilForm({
         <input className="form-input input-disabled" value={email} disabled />
         <p className="form-hint">El email no se puede cambiar desde aquí.</p>
       </div>
-      {error   && <div className="alert alert-error   mt-4">{error}</div>}
-      {savedOk && <div className="alert alert-success mt-4">Nombre actualizado correctamente.</div>}
       <button type="submit" className="btn btn-primary mt-5" disabled={saving}>
         {saving ? 'Guardando...' : 'Guardar cambios'}
       </button>

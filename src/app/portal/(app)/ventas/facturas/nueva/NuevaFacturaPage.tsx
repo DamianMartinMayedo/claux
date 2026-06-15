@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition, useMemo } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
 import { guardarFactura }                    from '@/app/actions/portal/ventas'
@@ -25,7 +29,6 @@ interface Props {
 export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState('')
 
   const empresasConLetra = resumen.empresas.filter(e => !!e.letra_facturacion)
   const sinLetra         = resumen.empresas.length > 0 && empresasConLetra.length === 0
@@ -128,11 +131,10 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
 
-    if (lineas.length === 0)                      { setError('Añade al menos una línea.'); return }
-    if (lineas.some(l => !l.descripcion.trim()))  { setError('Toda línea debe tener una descripción.'); return }
-    if (ajustes.some(a => !a.nombre.trim()))      { setError('Todo ajuste debe tener un nombre.'); return }
+    if (lineas.length === 0)                      { toastError('Añade al menos una línea.'); return }
+    if (lineas.some(l => !l.descripcion.trim()))  { toastError('Toda línea debe tener una descripción.'); return }
+    if (ajustes.some(a => !a.nombre.trim()))      { toastError('Todo ajuste debe tener un nombre.'); return }
 
     const fd = new FormData()
     fd.set('empresa_id',        empresa_id)
@@ -148,7 +150,7 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
 
     startTransition(async () => {
       const res = await guardarFactura(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.push(`/portal/ventas/facturas/${res.factura_id}`)
     })
   }
@@ -269,7 +271,6 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
           onNotasInternasChange={setNotasInternas}
         />
 
-        {error && <div className="alert alert-error mt-4">{error}</div>}
       </form>
 
       {/* ── Modal: vista previa ── */}

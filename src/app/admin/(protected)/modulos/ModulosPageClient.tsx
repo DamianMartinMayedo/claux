@@ -4,6 +4,7 @@ import { useState } from 'react'
 import EditarModuloModal from './EditarModuloModal'
 import NuevoModuloModal  from './NuevoModuloModal'
 import { reordenarModulos } from '@/app/actions/modulos'
+import { useToast } from '@/app/contexts/ToastContext'
 
 const TIPO_LABEL: Record<string, string> = {
   base:          'Base',
@@ -38,9 +39,11 @@ function countPaginas(paginas: Pagina[] | null | undefined): number {
 }
 
 export default function ModulosPageClient({ modulos: initial }: { modulos: Modulo[] }) {
-  const [modulos, setModulos] = useState(initial)
+  const [modulos, setModulos] = useState<Modulo[]>(() => initial.map(m => ({ ...m })))
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [hasDragged, setHasDragged] = useState(false)
+  const { success: toastSuccess, loading: toastLoading } = useToast()
 
   function handleDragStart(index: number) { setDragIndex(index) }
   function handleDragOver(e: React.DragEvent, index: number) {
@@ -51,16 +54,21 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
     reordered.splice(index, 0, moved)
     setModulos(reordered)
     setDragIndex(index)
+    setHasDragged(true)
   }
   function handleDragEnd() { setDragIndex(null) }
 
   async function saveOrder() {
+    const ld = toastLoading('Guardando orden…')
     setSaving(true)
     await reordenarModulos(modulos.map(m => m.clave))
+    setHasDragged(false)
     setSaving(false)
+    await ld.dismiss()
+    toastSuccess('Orden guardado')
   }
 
-  const orderChanged = modulos.some((m, i) => m !== initial[i])
+  const showSave = hasDragged && !saving
 
   return (
     <div className="view-container">
@@ -71,9 +79,9 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
             Gestiona módulos y funcionalidades. Arrastra para reordenar. Edita para cambiar precios y páginas internas.
           </p>
         </div>
-        <div className="mod-cat-actions">
-          {orderChanged && (
-            <button className="btn btn-primary btn-sm" onClick={saveOrder} disabled={saving}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {showSave && (
+            <button className="btn btn-secondary" onClick={saveOrder} disabled={saving}>
               {saving ? 'Guardando…' : 'Guardar orden'}
             </button>
           )}

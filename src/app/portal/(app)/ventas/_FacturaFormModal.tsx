@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { guardarFactura }           from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }    from './_DocumentoLineasEditor'
 import {
@@ -42,7 +46,6 @@ export function FacturaFormModal({
   onClose, onSaved,
 }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [error,    setError]    = useState('')
 
   const isEdit = !!factura
 
@@ -106,11 +109,10 @@ export function FacturaFormModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
 
-    if (lineas.length === 0)                      { setError('Añade al menos una línea.'); return }
-    if (lineas.some(l => !l.descripcion.trim()))  { setError('Toda línea debe tener una descripción.'); return }
-    if (ajustes.some(a => !a.nombre.trim()))      { setError('Todo ajuste debe tener un nombre.'); return }
+    if (lineas.length === 0)                      { toastError('Añade al menos una línea.'); return }
+    if (lineas.some(l => !l.descripcion.trim()))  { toastError('Toda línea debe tener una descripción.'); return }
+    if (ajustes.some(a => !a.nombre.trim()))      { toastError('Todo ajuste debe tener un nombre.'); return }
 
     const fd = new FormData()
     if (factura) fd.set('factura_id', factura.factura_id)
@@ -127,7 +129,7 @@ export function FacturaFormModal({
 
     startTransition(async () => {
       const res = await guardarFactura(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved(res.factura_id!)
     })
   }
@@ -227,7 +229,6 @@ export function FacturaFormModal({
               onAjustesChange={setAjustes}
             />
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">

@@ -4,6 +4,7 @@ import { isAuthBypassed, DEV_ADMIN } from '@/lib/dev-auth'
 import Sidebar from '@/components/admin/Sidebar'
 import Header from '@/components/admin/Header'
 import { desactivarClientesVencidos } from '@/app/actions/clientes'
+import AdminToastWrapper from '@/components/admin/AdminToastWrapper'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -25,7 +26,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="admin-shell">
       <Header email={user.email ?? ''} displayName={displayName} />
       <Sidebar />
-      <div className="admin-main">{children}</div>
+      <div className="admin-main">
+        <AdminToastWrapper>{children}</AdminToastWrapper>
+      </div>
     </div>
   )
 }

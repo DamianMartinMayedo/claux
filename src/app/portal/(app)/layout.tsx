@@ -7,6 +7,7 @@ import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar         from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
 import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
+import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -73,9 +74,11 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         catalogo={(catalogo ?? []) as any}
       />
       <main className="portal-main">
+        <PortalToastWrapper>
         {bloqueado
           ? <BloqueadoScreen estado={cliente.estado} />
           : children}
+        </PortalToastWrapper>
       </main>
     </div>
   )

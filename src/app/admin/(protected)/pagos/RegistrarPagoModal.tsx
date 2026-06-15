@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { useToast } from '@/app/contexts/ToastContext'
 
 type Cliente = {
   client_id: string
@@ -75,11 +76,10 @@ export default function RegistrarPagoModal({
   descuentoAnualPct: number
   preselectedClientId?: string
 }) {
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]               = useState(false)
   const [loading, setLoading]         = useState(false)
   const [loadingDefecto, setLoadingDefecto] = useState(false)
-  const [error, setError]             = useState('')
-  const [success, setSuccess]         = useState('')
   const [advertencia, setAdvertencia] = useState('')
   const mounted = useMounted()
 
@@ -129,13 +129,13 @@ export default function RegistrarPagoModal({
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault()
-    setError(''); setAdvertencia('')
+    setAdvertencia('')
     setLoading(true)
     const res = await registrarPago(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-    setSuccess(`Pago ${res.pago_id} registrado · Vence: ${formatDateES(res.nueva_expiracion)}`)
+    if (!res.ok) { toastError(res.error ?? 'Error desconocido'); return }
     if (res.advertencia_gap) setAdvertencia(res.advertencia_gap)
+    toastSuccess(`Pago ${res.pago_id} registrado`)
     setTimeout(() => { handleClose(); router.refresh() }, res.advertencia_gap ? 3000 : 1400)
   }
 
@@ -145,7 +145,7 @@ export default function RegistrarPagoModal({
   }
 
   const handleClose = useCallback(() => {
-    setOpen(false); setError(''); setSuccess(''); setAdvertencia('')
+    setOpen(false); setAdvertencia('')
     setMontoSugerido(''); setMontoBase(0); setFechaInicio(''); setFechaFin('')
     setCiclo('mensual'); setFechaExpActual(null); setUltimoPago(null)
     setClienteId(preselectedClientId ?? '')
@@ -312,13 +312,12 @@ export default function RegistrarPagoModal({
                 <span className="text-xs">{advertencia}</span>
               </div>
             )}
-            {error   && <div className="alert alert-error">{error}</div>}
-            {success && <div className="alert alert-success">{success}</div>}
+
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading || loadingDefecto || !!success}>
+            <button type="submit" className="btn btn-primary" disabled={loading || loadingDefecto}>
               {loading ? <><span className="spinner" /> Registrando...</> : 'Registrar pago'}
             </button>
           </div>

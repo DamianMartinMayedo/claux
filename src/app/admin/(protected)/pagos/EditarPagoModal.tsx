@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarPago } from '@/app/actions/pagos'
+import { useToast } from '@/app/contexts/ToastContext'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 
@@ -37,10 +38,9 @@ export default function EditarPagoModal({
 }) {
   const esConfiguracion = pago.concepto === 'configuracion'
 
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]     = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]   = useState('')
-  const [success, setSuccess] = useState('')
   const mounted = useMounted()
 
   const [monto, setMonto]         = useState(String(pago.monto_usd))
@@ -53,7 +53,7 @@ export default function EditarPagoModal({
   const router  = useRouter()
 
   const handleClose = useCallback(() => {
-    setOpen(false); setError(''); setSuccess('')
+    setOpen(false); 
   }, [])
 
   useModalKeyboard(open, handleClose)
@@ -65,19 +65,19 @@ export default function EditarPagoModal({
     setFechaInicio(toYMD(pago.fecha_inicio_periodo))
     setFechaFin(toYMD(pago.fecha_fin_periodo))
     setNotas(pago.notas ?? '')
-    setError(''); setSuccess('')
+    
     setOpen(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError(''); setLoading(true)
+    setLoading(true)
     const res = await editarPago(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-    setSuccess(res.esUltimo
-      ? 'Pago actualizado · Expiración del cliente sincronizada.'
-      : 'Pago actualizado correctamente.')
+    if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+    toastSuccess(res.esUltimo
+      ? 'Pago actualizado · Expiración sincronizada'
+      : 'Pago actualizado')
     setTimeout(() => { handleClose(); router.refresh() }, 1400)
   }
 
@@ -198,15 +198,13 @@ export default function EditarPagoModal({
               />
             </div>
 
-            {error   && <div className="alert alert-error">{error}</div>}
-            {success && <div className="alert alert-success">{success}</div>}
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn-primary" disabled={loading || !!success}>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar cambios'}
             </button>
           </div>

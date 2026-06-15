@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }               from 'next/navigation'
 import {
   crearUsuario,
@@ -56,7 +60,6 @@ function UsuarioModal({
 }) {
   const esEdicion = !!usuario
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const [rol,       setRol]          = useState<UsuarioPortal['rol']>(usuario?.rol ?? 'usuario')
   const [empresasSel, setEmpresasSel] = useState<string[]>(usuario?.empresas ?? [])
 
@@ -68,14 +71,13 @@ function UsuarioModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('rol', rol)
     empresasSel.forEach(id => fd.append('empresas', id))
 
     startTransition(async () => {
       const result = esEdicion ? await editarUsuario(fd) : await crearUsuario(fd)
-      if (!result.ok) { setError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       onSaved('passwordTemporal' in result ? (result.passwordTemporal as string | undefined) : undefined)
     })
   }
@@ -177,7 +179,6 @@ function UsuarioModal({
               </div>
             )}
 
-            {error && <div className="alert alert-error">{error}</div>}
           </div>
 
           <div className="modal-footer">

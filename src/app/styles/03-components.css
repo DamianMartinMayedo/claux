@@ -177,6 +177,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 .card-lg { padding: var(--space-8); }
 /* Card que contiene tabla al ras — sin padding, el table-wrapper queda sin borde propio */
 .card-table { padding: 0 !important; overflow: hidden; }
+.card-table .card-header { padding: var(--space-5) var(--space-6) var(--space-4); margin-bottom: 0; }
 .card-table > .table-wrapper,
 .card-table .mon-card-header + .table-wrapper { border: none; box-shadow: none; border-radius: 0; }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
@@ -282,6 +283,47 @@ textarea.input { resize: vertical; min-height: 80px; }
 .btn-primary .spinner,
 .btn-primary .spinner-sm { border-color: rgba(255,255,255,0.25); border-top-color: white; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════
+   TOAST — notificaciones flotantes
+   ═══════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed; top: var(--space-6); left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: var(--space-2);
+  max-width: 520px; width: calc(100% - 2 * var(--space-6));
+  pointer-events: none;
+}
+.toast-alert {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-5); border-radius: var(--radius-lg);
+  font-size: var(--text-sm); font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  animation: toast-in 280ms var(--ease);
+  cursor: pointer; pointer-events: auto;
+}
+.toast-spinner { flex-shrink: 0; animation: spin 0.8s linear infinite; }
+.toast-message { flex: 1; line-height: 1.4; }
+
+.toast-success { background: var(--color-success-bg); color: var(--color-success); border: 1px solid rgba(46,125,50,0.2); }
+.toast-error   { background: var(--color-error-bg);   color: var(--color-error);   border: 1px solid rgba(183,28,28,0.2); }
+.toast-warning { background: var(--color-warning-bg); color: var(--color-warning); border: 1px solid rgba(168,98,8,0.2); }
+.toast-info    { background: var(--color-info-bg);    color: var(--color-info);    border: 1px solid rgba(0,113,109,0.2); }
+.toast-loading { background: var(--color-surface);    color: var(--color-text);    border: 1px solid var(--color-border); box-shadow: var(--shadow-md); }
+
+.toast-exit { animation: toast-out 220ms ease-in forwards; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-alert { animation: none; }
+  .toast-exit  { animation: none; }
+}
 
 /* ═══════════════════════════════════════════════════
    UTILITY CLASSES

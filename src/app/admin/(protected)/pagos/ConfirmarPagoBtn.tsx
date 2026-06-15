@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { confirmarPago } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { useToast } from '@/app/contexts/ToastContext'
 
 export default function ConfirmarPagoBtn({
   pagoId,
@@ -18,20 +19,21 @@ export default function ConfirmarPagoBtn({
   monto: number
   concepto: string | null
 }) {
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
   const mounted = useMounted()
   const router = useRouter()
 
-  const handleClose = useCallback(() => { setOpen(false); setError('') }, [])
+  const handleClose = useCallback(() => { setOpen(false) }, [])
   useModalKeyboard(open, handleClose)
 
   async function handleConfirm() {
-    setLoading(true); setError('')
+    setLoading(true)
     const res = await confirmarPago(pagoId)
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error al confirmar'); return }
+    if (!res.ok) { toastError(res.error ?? 'Error al confirmar'); return }
+    toastSuccess('Pago confirmado')
     handleClose()
     router.refresh()
   }
@@ -58,8 +60,6 @@ export default function ConfirmarPagoBtn({
               A partir de aquí cuenta como ingreso. Hazlo solo cuando hayas verificado el dinero.
             </span>
           </div>
-
-          {error && <div className="alert alert-error mt-3">{error}</div>}
         </div>
 
         <div className="modal-footer">
@@ -78,7 +78,7 @@ export default function ConfirmarPagoBtn({
     <>
       <button
         className="btn btn-primary btn-sm"
-        onClick={() => { setError(''); setOpen(true) }}
+        onClick={() => setOpen(true)}
         title="Confirmar cobro"
       >
         Confirmar

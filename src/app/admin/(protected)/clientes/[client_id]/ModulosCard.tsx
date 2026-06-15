@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { setModulosCliente } from '@/app/actions/clientes'
 import { importeCiclo } from '@/lib/billing'
+import { useToast } from '@/app/contexts/ToastContext'
 
 type ModuloCatalogo = {
   clave: string
@@ -25,7 +26,7 @@ type Props = {
 }
 
 const GRUPOS: { label: string; tipo: string }[] = [
-  { label: 'Base contable',       tipo: 'base' },
+  { label: 'Contabilidad',       tipo: 'base' },
   { label: 'Módulos adicionales', tipo: 'modulo' },
   { label: 'Funcionalidades',     tipo: 'funcionalidad' },
   { label: 'Addons',              tipo: 'addon' },
@@ -44,9 +45,8 @@ export default function ModulosCard({
   )
   const [tarifa, setTarifa] = useState(tarifaInicial || 'estandar')
   const [ciclo, setCiclo]   = useState(cicloInicial || 'mensual')
-  const [error, setError]   = useState('')
-  const [success, setSuccess] = useState('')
   const [isPending, startTransition] = useTransition()
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
 
@@ -56,7 +56,7 @@ export default function ModulosCard({
   const precioAnual = importeCiclo(precioMensual, 'anual', descuentoAnualPct)
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
 
-  function clear() { setSuccess(''); setError('') }
+  function clear() {}
 
   function toggle(clave: string, esBase: boolean) {
     if (esBase) return // base: siempre activa
@@ -68,7 +68,7 @@ export default function ModulosCard({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    clear()
+    const ld = toastLoading('Guardando módulos…')
     const fd = new FormData()
     fd.append('client_id', client_id)
     fd.append('tarifa', tarifa)
@@ -77,8 +77,9 @@ export default function ModulosCard({
 
     startTransition(async () => {
       const res = await setModulosCliente(fd)
-      if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-      setSuccess(`Guardado · $${(res.precio_mensual_usd ?? 0).toFixed(2)}/mes`)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+      toastSuccess(`Módulos actualizados · $${(res.precio_mensual_usd ?? 0).toFixed(2)}/mes`)
     })
   }
 
@@ -169,8 +170,6 @@ export default function ModulosCard({
           </div>
         </div>
 
-        {error   && <div className="alert alert-error mt-3">{error}</div>}
-        {success && <div className="alert alert-success mt-3">{success}</div>}
 
         <div className="mod-footer">
           <button type="submit" className="btn btn-primary btn-sm" disabled={isPending}>

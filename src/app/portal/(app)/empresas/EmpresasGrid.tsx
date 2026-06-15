@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition, useRef, useCallback } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter } from 'next/navigation'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
 
@@ -128,7 +132,6 @@ function EmpresaModal({
   onSaved:  () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,       setError]       = useState('')
   const [color,       setColor]       = useState(state.empresa?.color ?? COLORES[0])
   const [letra,       setLetra]       = useState((state.empresa?.letra_facturacion ?? '').toUpperCase())
   const [mostrarLogo, setMostrarLogo] = useState(state.empresa?.mostrar_logo ?? true)
@@ -152,7 +155,7 @@ function EmpresaModal({
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 2 * 1024 * 1024) {
-      setError('El logo no puede superar 2 MB.')
+      toastError('El logo no puede superar 2 MB.')
       return
     }
     setLogoFile(file)
@@ -164,9 +167,8 @@ function EmpresaModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     if (letraDuplicada) {
-      setError(`La letra "${letra}" ya está asignada a otra empresa. Elige una distinta.`)
+      toastError(`La letra "${letra}" ya está asignada a otra empresa. Elige una distinta.`)
       return
     }
     const fd = new FormData(e.currentTarget)
@@ -176,7 +178,7 @@ function EmpresaModal({
 
     startTransition(async () => {
       const result = await guardarEmpresa(fd)
-      if (!result.ok) { setError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
 
       if (logoFile && result.empresa_id) {
         const logoFd = new FormData()
@@ -184,7 +186,7 @@ function EmpresaModal({
         logoFd.set('logo', logoFile)
         const logoResult = await subirLogoEmpresa(logoFd)
         if (!logoResult.ok) {
-          setError(`Empresa guardada, pero el logo no se pudo subir: ${logoResult.error}`)
+          toastError(`Empresa guardada, pero el logo no se pudo subir: ${logoResult.error}`)
           onSaved()
           return
         }
@@ -374,7 +376,6 @@ function EmpresaModal({
 
             </div>
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">

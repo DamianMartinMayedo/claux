@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
+import { useToast } from '@/app/contexts/ToastContext'
 
 type Props = {
   setupDefault:   number
@@ -14,19 +15,17 @@ export default function FacturacionForm({ setupDefault, descuentoAnual, diasTria
   const [descuento, setDescuento] = useState(String(descuentoAnual))
   const [trial, setTrial]         = useState(String(diasTrial))
   const [loading, setLoading]     = useState(false)
-  const [msg, setMsg]             = useState('')
-  const [error, setError]         = useState('')
+  const { success: toastSuccess, error: toastError } = useToast()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setMsg(''); setError('')
+    setLoading(true)
     const r1 = await guardarSetting('pago_setup_usd_default', String(parseFloat(setup) || 0))
     const r2 = await guardarSetting('descuento_anual_pct',    String(parseInt(descuento, 10) || 0))
     const r3 = await guardarSetting('dias_trial_default',     String(parseInt(trial, 10) || 0))
     setLoading(false)
-    if (!r1.ok || !r2.ok || !r3.ok) { setError('No se pudo guardar algún ajuste.'); return }
-    setMsg('Ajustes de facturación guardados')
-    setTimeout(() => setMsg(''), 2000)
+    if (!r1.ok || !r2.ok || !r3.ok) { toastError('No se pudo guardar algún ajuste.'); return }
+    toastSuccess('Ajustes de facturación guardados')
   }
 
   return (
@@ -52,9 +51,6 @@ export default function FacturacionForm({ setupDefault, descuentoAnual, diasTria
           <span className="input-hint">Vigencia inicial de un cliente en trial.</span>
         </div>
       </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-      {msg   && <div className="alert alert-success">{msg}</div>}
 
       <button type="submit" className="btn btn-primary" disabled={loading}>
         {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar ajustes'}

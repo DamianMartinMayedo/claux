@@ -1,6 +1,8 @@
 'use client'
 
+import { useToast } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
 import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
 import {
@@ -23,7 +25,6 @@ function StockModal({ producto, onClose, onSaved }: {
   producto: Producto; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,    setError]         = useState('')
   const [cantidad, setCantidad]      = useState('')
   const [motivo,   setMotivo]        = useState('')
 
@@ -32,13 +33,12 @@ function StockModal({ producto, onClose, onSaved }: {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    if (!cantidad || isNaN(parseFloat(cantidad))) return setError('Ingresa una cantidad válida.')
-    if (parseFloat(cantidad) === 0)               return setError('La cantidad no puede ser cero.')
-    if (!motivo.trim())                           return setError('El motivo del ajuste es obligatorio.')
+    if (!cantidad || isNaN(parseFloat(cantidad))) return toastError('Ingresa una cantidad válida.')
+    if (parseFloat(cantidad) === 0)               return toastError('La cantidad no puede ser cero.')
+    if (!motivo.trim())                           return toastError('El motivo del ajuste es obligatorio.')
     startTransition(async () => {
       const res = await ajustarStock(producto.producto_id, parseFloat(cantidad), motivo)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -73,7 +73,6 @@ function StockModal({ producto, onClose, onSaved }: {
               <input className="input" placeholder="Ej: Compra, Ajuste de inventario, Merma…"
                 value={motivo} onChange={e => setMotivo(e.target.value)} />
             </div>
-            {error && <div className="alert alert-error">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -93,16 +92,14 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
   categoria: Categoria | null; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const isEdit = !!categoria
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     startTransition(async () => {
       const res = await guardarCategoria(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -127,7 +124,6 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
               <textarea className="input input-textarea" name="descripcion" rows={2}
                 defaultValue={categoria?.descripcion ?? ''} placeholder="Descripción opcional…" />
             </div>
-            {error && <div className="alert alert-error">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>

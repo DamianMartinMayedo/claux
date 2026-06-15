@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import {
   guardarProducto,
   type Producto,
@@ -139,7 +143,6 @@ export function ProductoFormModal({
   onSaved:     () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const [tipo,      setTipo]         = useState<TipoProducto>(producto?.tipo ?? 'PRODUCTO')
   const [precios,   setPrecios]      = useState<PrecioRow[]>(() => objToRows(producto?.precios ?? {}))
   const [costos,    setCostos]       = useState<PrecioRow[]>(() => objToRows(producto?.costos  ?? {}))
@@ -150,14 +153,13 @@ export function ProductoFormModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('tipo',    tipo)
     fd.set('precios', JSON.stringify(rowsToObj(precios)))
     fd.set('costos',  JSON.stringify(rowsToObj(costos)))
     startTransition(async () => {
       const res = await guardarProducto(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -275,7 +277,6 @@ export function ProductoFormModal({
               </div>
             )}
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">

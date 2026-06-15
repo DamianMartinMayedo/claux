@@ -1,6 +1,8 @@
 'use client'
 
+import { useToast } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
+  const { error: toastError } = useToast()
 import { useRouter }                        from 'next/navigation'
 import Link                                 from 'next/link'
 import {
@@ -45,7 +47,6 @@ function PagoModal({
   onChanged: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState('')
 
   const esCobro       = modo === 'COBRAR'
   const cuentasCompat = cuentas.filter(c => c.moneda === doc.moneda)
@@ -53,23 +54,21 @@ function PagoModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('doc_tipo', doc.doc_tipo)
     fd.set('doc_id', doc.doc_id)
     fd.set('cuenta_id', cuentaId)
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
   }
 
   function handleAnular(movimiento_id: string) {
-    setError('')
     startTransition(async () => {
       const res = await anularPagoDoc(movimiento_id)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
   }
@@ -144,7 +143,6 @@ function PagoModal({
             </div>
           )}
 
-          {error && <div className="alert alert-error mt-3">{error}</div>}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>

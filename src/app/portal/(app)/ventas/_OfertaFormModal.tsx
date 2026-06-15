@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { guardarOferta }            from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }    from './_DocumentoLineasEditor'
 import {
@@ -41,7 +45,6 @@ export function OfertaFormModal({
   onClose, onSaved,
 }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [error,    setError]    = useState('')
 
   const isEdit = !!oferta
 
@@ -96,18 +99,17 @@ export function OfertaFormModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
 
     if (lineas.length === 0) {
-      setError('Añade al menos una línea.')
+      toastError('Añade al menos una línea.')
       return
     }
     if (lineas.some(l => !l.descripcion.trim())) {
-      setError('Toda línea debe tener una descripción.')
+      toastError('Toda línea debe tener una descripción.')
       return
     }
     if (ajustes.some(a => !a.nombre.trim())) {
-      setError('Todo ajuste debe tener un nombre.')
+      toastError('Todo ajuste debe tener un nombre.')
       return
     }
 
@@ -126,7 +128,7 @@ export function OfertaFormModal({
 
     startTransition(async () => {
       const res = await guardarOferta(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved(res.oferta_id!)
     })
   }
@@ -231,7 +233,6 @@ export function OfertaFormModal({
               onAjustesChange={setAjustes}
             />
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">

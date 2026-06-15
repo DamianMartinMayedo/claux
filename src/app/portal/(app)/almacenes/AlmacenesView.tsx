@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition, useMemo } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }                         from 'next/navigation'
 import {
   guardarAlmacen,
@@ -47,19 +51,17 @@ function AlmacenModal({
   onSaved:  () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const [tipo,      setTipo]         = useState<TipoAlmacen>(almacen?.tipo ?? 'FISICO')
 
   const isEdit = !!almacen
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
     startTransition(async () => {
       const res = await guardarAlmacen(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -133,7 +135,6 @@ function AlmacenModal({
               </div>
             </div>
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">

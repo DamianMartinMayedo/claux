@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useToast } from '@/app/contexts/ToastContext'
 import {
   guardarTercero,
   type Tercero,
@@ -201,8 +202,8 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
   onClose:      () => void
   onSaved:      (terceroId?: string) => void
 }) {
+  const { error: toastError } = useToast()
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const [viaP,      setViaP]         = useState<ViaPago | null>(tercero?.via_primaria   ?? null)
   const [viaS,      setViaS]         = useState<ViaPago | null>(tercero?.via_secundaria ?? null)
 
@@ -212,13 +213,12 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     if (viaP) fd.set('via_primaria',   JSON.stringify(viaP))
     if (viaS) fd.set('via_secundaria', JSON.stringify(viaS))
     startTransition(async () => {
       const res = await guardarTercero(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved(res.tercero_id)
     })
   }
@@ -412,7 +412,6 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
               </div>
             </div>
 
-            {error && <div className="alert alert-error">{error}</div>}
           </div>
 
           <div className="modal-footer">

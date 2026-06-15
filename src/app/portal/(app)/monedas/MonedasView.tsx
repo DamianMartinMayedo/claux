@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition, useEffect } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter } from 'next/navigation'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
 import {
@@ -44,7 +48,6 @@ function MonedaModal({
 }) {
   const catalogoArr = [...CATALOGO_MONEDAS]
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const [catalogo,  setCatalogo]     = useState<string>(() => {
     if (!moneda) return 'USD'
     const hit = catalogoArr.find(c => c.codigo === moneda.codigo)
@@ -68,11 +71,10 @@ function MonedaModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     startTransition(async () => {
       const result = await guardarMoneda(fd)
-      if (!result.ok) { setError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -162,7 +164,6 @@ function MonedaModal({
 
             </div>
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
 
           <div className="modal-footer">
@@ -191,7 +192,6 @@ function ParModal({
   onSaved: (tasa?: number, fecha?: string) => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,  setError]   = useState('')
   const [fuente, setFuente]  = useState<Par['fuente']>(par.fuente)
   const [tasa,   setTasa]    = useState(par.tasa?.toString() ?? '')
 
@@ -204,7 +204,6 @@ function ParModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData()
     fd.set('par_id', par.par_id.toString())
     fd.set('fuente', fuente)
@@ -212,7 +211,7 @@ function ParModal({
 
     startTransition(async () => {
       const result = await guardarPar(fd)
-      if (!result.ok) { setError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       onSaved(result.tasa, result.fecha)
     })
   }
@@ -275,7 +274,6 @@ function ParModal({
               </div>
             )}
 
-            {error && <div className="alert alert-error">{error}</div>}
           </div>
 
           <div className="modal-footer">
@@ -306,15 +304,13 @@ function ConsolidacionModal({
   onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
   const [sel,       setSel]          = useState(actual)
 
   function handleConfirm() {
     if (sel === actual) { onClose(); return }
-    setError('')
     startTransition(async () => {
       const result = await cambiarMonedaConsolidacion(sel)
-      if (!result.ok) { setError(result.error ?? 'Error.'); return }
+      if (!result.ok) { toastError(result.error ?? 'Error.'); return }
       onSaved()
     })
   }
@@ -342,7 +338,6 @@ function ConsolidacionModal({
               </label>
             ))}
           </div>
-          {error && <div className="alert alert-error mt-4">{error}</div>}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>

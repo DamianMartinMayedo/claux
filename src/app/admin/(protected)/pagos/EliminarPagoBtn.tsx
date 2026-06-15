@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { eliminarPago } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { useToast } from '@/app/contexts/ToastContext'
 
 export default function EliminarPagoBtn({
   pagoId,
@@ -14,21 +15,22 @@ export default function EliminarPagoBtn({
   pagoId: string
   clienteNombre: string
 }) {
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
   const mounted = useMounted()
   const router = useRouter()
 
-  const handleClose = useCallback(() => { setOpen(false); setError('') }, [])
+  const handleClose = useCallback(() => { setOpen(false) }, [])
 
   useModalKeyboard(open, handleClose)
 
   async function handleConfirm() {
-    setLoading(true); setError('')
+    setLoading(true)
     const res = await eliminarPago(pagoId)
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error al eliminar'); return }
+    if (!res.ok) { toastError(res.error ?? 'Error al eliminar'); return }
+    toastSuccess('Pago eliminado')
     handleClose()
     router.refresh()
   }
@@ -63,11 +65,6 @@ export default function EliminarPagoBtn({
             </div>
           </div>
 
-          {error && (
-            <div className="alert alert-error mt-0">
-              {error}
-            </div>
-          )}
         </div>
 
         <div className="modal-footer">
@@ -86,7 +83,7 @@ export default function EliminarPagoBtn({
     <>
       <button
         className="btn-icon btn-icon-danger"
-        onClick={() => { setError(''); setOpen(true) }}
+        onClick={() => setOpen(true)}
         title="Eliminar pago"
         aria-label="Eliminar pago"
       >

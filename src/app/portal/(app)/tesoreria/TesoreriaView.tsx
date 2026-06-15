@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition, useMemo } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }                        from 'next/navigation'
 import {
   guardarCuenta,
@@ -59,18 +63,16 @@ function CuentaModal({
   onSaved:  () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState('')
   const [tipo,  setTipo]  = useState<TipoCuenta>(cuenta?.tipo ?? 'CAJA')
   const isEdit = !!cuenta
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
     startTransition(async () => {
       const res = await guardarCuenta(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -161,7 +163,6 @@ function CuentaModal({
               </div>
             </div>
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -186,7 +187,6 @@ function MovimientoModal({
   onSaved:       () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState('')
   const [tipo,  setTipo]  = useState<TipoMovimiento>('INGRESO')
   const [cuentaId, setCuentaId] = useState(cuentaInicial ?? cuentas[0]?.cuenta_id ?? '')
 
@@ -194,13 +194,12 @@ function MovimientoModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
     fd.set('cuenta_id', cuentaId)
     startTransition(async () => {
       const res = await registrarMovimiento(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -264,7 +263,6 @@ function MovimientoModal({
               </div>
             </div>
 
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -288,7 +286,6 @@ function TransferenciaModal({
   onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError]     = useState('')
   const [origen, setOrigen]   = useState(cuentas[0]?.cuenta_id ?? '')
   const [destino, setDestino] = useState(cuentas[1]?.cuenta_id ?? '')
 
@@ -296,13 +293,12 @@ function TransferenciaModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('cuenta_origen', origen)
     fd.set('cuenta_destino', destino)
     startTransition(async () => {
       const res = await registrarTransferencia(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -358,7 +354,6 @@ function TransferenciaModal({
               </svg>
               <p>Por ahora solo entre cuentas de la <strong>misma moneda</strong>. El cambio de divisa (con tasa) llegará más adelante.</p>
             </div>
-            {error && <div className="alert alert-error mt-3">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>

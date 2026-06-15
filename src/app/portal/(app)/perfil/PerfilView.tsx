@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
 
@@ -40,14 +44,10 @@ function fmt(dateStr: string | null) {
 export default function PerfilView({ perfil }: { perfil: PerfilData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [error,     setError]        = useState('')
-  const [success,   setSuccess]      = useState(false)
   const [showPwd,   setShowPwd]      = useState(false)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
-    setSuccess(false)
 
     const fd = new FormData(e.currentTarget)
 
@@ -55,14 +55,13 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
     const nueva    = (fd.get('password_nueva')    as string) ?? ''
     const confirma = (fd.get('password_confirma') as string) ?? ''
     if (nueva && nueva !== confirma) {
-      setError('Las contraseñas nuevas no coinciden.')
+      toastError('Las contraseñas nuevas no coinciden.')
       return
     }
 
     startTransition(async () => {
       const result = await actualizarMiPerfil(fd)
-      if (!result.ok) { setError(result.error ?? 'Error inesperado.'); return }
-      setSuccess(true)
+      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       setShowPwd(false)
       router.refresh()
     })
@@ -186,8 +185,6 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
             </div>
           )}
 
-          {error   && <div className="alert alert-error">{error}</div>}
-          {success && <div className="alert alert-success">Perfil actualizado correctamente.</div>}
 
           <div className="prf-form-submit">
             <button type="submit" className="btn btn-primary" disabled={isPending}>

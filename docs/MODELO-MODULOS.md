@@ -95,7 +95,7 @@ páginas internas tiene. Fuente canónica de esta clasificación.
 
 | Tipo | Sidebar | Páginas internas | Ejemplo | ¿Se muestra si no contratado? |
 |---|---|---|---|---|
-| **`base`** | Grupo colapsable «Contabilidad», siempre expandido | Sí (`paginas` JSONB) | Base contable | Siempre visible, todas las páginas activas |
+| **`base`** | Grupo colapsable «Contabilidad», siempre expandido | Sí (`paginas` JSONB) | Contabilidad | Siempre visible, todas las páginas activas |
 | **`modulo`** | Grupo colapsable con nombre del módulo | Sí (`paginas` JSONB) | Inventario, RRHH, Asistente IA | Visible pero bloqueado (candado, href=`#`) |
 | **`funcionalidad`** | Items standalone (sin grupo) | No (ruta única) | Catálogo QR, Reservas y citas, Docs imprenta | **Oculto** por completo si no está activo |
 | **`addon`** | **No genera items** en el sidebar | No | Multiempresa, Usuarios extra, Estadísticas premium | El gating se hace en la página afectada |

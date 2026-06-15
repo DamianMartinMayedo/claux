@@ -5,23 +5,25 @@ import { createPortal } from 'react-dom'
 import { crearModulo } from '@/app/actions/modulos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { useToast } from '@/app/contexts/ToastContext'
 
 export default function NuevoModuloModal() {
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
   const formRef               = useRef<HTMLFormElement>(null)
   const mounted               = useMounted()
 
-  const handleClose = useCallback(() => { setOpen(false); setError('') }, [])
+  const handleClose = useCallback(() => { setOpen(false) }, [])
   useModalKeyboard(open, handleClose)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError(''); setLoading(true)
+    setLoading(true)
     const res = await crearModulo(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
+    if (!res.ok) { toastError(res.error ?? 'Error al crear'); return }
+    toastSuccess('Módulo creado')
     handleClose()
   }
 
@@ -77,7 +79,6 @@ export default function NuevoModuloModal() {
               </svg>
               <p>Las páginas internas (módulo) o rutas (funcionalidad) se crean con el asistente de IA. Desde aquí solo gestionas el catálogo.</p>
             </div>
-            {error && <div className="alert alert-error mt-3">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>

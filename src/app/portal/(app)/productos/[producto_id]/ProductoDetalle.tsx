@@ -1,6 +1,8 @@
 'use client'
 
+import { useToast } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
 import {
@@ -244,18 +246,17 @@ function StockModal({
 }) {
   const [cantidad, setCantidad] = useState('')
   const [motivo,   setMotivo]   = useState('')
-  const [error,    setError]    = useState('')
   const [pending,  startT]      = useTransition()
 
   const cantNum = parseFloat(cantidad) || 0
   const preview = producto.stock_actual + cantNum
 
   function handleSubmit() {
-    if (!cantidad) { setError('Ingresa una cantidad.'); return }
-    if (!motivo.trim()) { setError('El motivo es obligatorio.'); return }
+    if (!cantidad) { toastError('Ingresa una cantidad.'); return }
+    if (!motivo.trim()) { toastError('El motivo es obligatorio.'); return }
     startT(async () => {
       const res = await ajustarStock(producto.producto_id, cantNum, motivo.trim())
-      if (!res.ok) { setError(res.error ?? 'Error'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error'); return }
       onSaved(res.stock_nuevo!)
     })
   }
@@ -306,10 +307,6 @@ function StockModal({
             placeholder="ej: Conteo físico, devolución, etc."
           />
         </div>
-
-        {error && (
-          <div className="alert alert-error mb-4">{error}</div>
-        )}
 
         <div className="prd-stock-footer">
           <button onClick={onClose} className="btn btn-secondary">Cancelar</button>

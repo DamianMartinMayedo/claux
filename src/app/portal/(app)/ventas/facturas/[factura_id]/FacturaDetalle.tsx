@@ -1,6 +1,8 @@
 'use client'
 
+import { useToast } from '@/app/contexts/ToastContext'
 import { useState, useTransition }   from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
 import {
@@ -312,7 +314,6 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
-  const [error, setError]         = useState('')
 
   const cuentasCompat = cobros.cuentas.filter(c => c.moneda === cobros.moneda)
   const [cuentaId, setCuentaId]   = useState(cuentasCompat[0]?.cuenta_id ?? '')
@@ -320,14 +321,13 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('doc_tipo', 'FACTURA')
     fd.set('doc_id', cobros.factura_id)
     fd.set('cuenta_id', cuentaId)
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       setModalOpen(false); router.refresh()
     })
   }
@@ -335,7 +335,7 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
   function handleAnular(movimiento_id: string) {
     startTransition(async () => {
       const res = await anularPagoDoc(movimiento_id)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.refresh()
     })
   }
@@ -416,7 +416,6 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
                     </div>
                   </div>
                 )}
-                {error && <div className="alert alert-error mt-3">{error}</div>}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia, editarCliente } from '@/app/actions/clientes'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { useToast } from '@/app/contexts/ToastContext'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
 
 const MOTIVOS_GRACIA = [
@@ -93,11 +94,10 @@ function addDaysES(days: number): string {
 }
 
 export default function AccionesHeader({ cliente }: Props) {
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [modal, setModal]         = useState<ModalType>(null)
   const [loading, setLoading]     = useState(false)
   const [loadingPago, setLoadingPago] = useState(false)
-  const [error, setError]         = useState('')
-  const [success, setSuccess]     = useState('')
   const [advertencia, setAdvertencia] = useState('')
   const [menuMovilOpen, setMenuMovilOpen] = useState(false)
   const mounted = useMounted()
@@ -123,10 +123,9 @@ export default function AccionesHeader({ cliente }: Props) {
   const router        = useRouter()
 
   const [editLoading, setEditLoading] = useState(false)
-  const [editError, setEditError]     = useState('')
 
   const handleClose = useCallback(() => {
-    setModal(null); setError(''); setSuccess(''); setAdvertencia('')
+    setModal(null); setAdvertencia('')
     setDiasGracia(''); setFechaCalculada('—')
     setFechaInicio(''); setFechaFin(''); setMontoSugerido(''); setMontoBase(0)
     setDuracionDias(30); setCiclo('mensual'); setUltimoPago(null)
@@ -184,17 +183,16 @@ export default function AccionesHeader({ cliente }: Props) {
 
   function openEditar() {
     setMenuMovilOpen(false)
-    setEditError('')
     setModal('editar')
   }
 
   async function handleEditar(e: { preventDefault(): void }) {
     e.preventDefault()
-    setEditError('')
     setEditLoading(true)
     const res = await editarCliente(new FormData(formEditarRef.current!))
     setEditLoading(false)
-    if (!res.ok) { setEditError(res.error ?? 'Error desconocido'); return }
+    if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+    toastSuccess('Cliente actualizado')
     handleClose()
     router.refresh()
   }
@@ -207,38 +205,37 @@ export default function AccionesHeader({ cliente }: Props) {
   }
 
   async function handleSuspender() {
-    setError(''); setAdvertencia('')
+    setAdvertencia('')
     setLoading(true)
     const fd = new FormData()
     fd.append('client_id', cliente.client_id)
     fd.append('estado', 'DESACTIVADO')
     const res = await cambiarEstadoCliente(fd)
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-    setSuccess('Cliente suspendido')
+    if (!res.ok) { toastError(res.error ?? 'Error al suspender'); return }
+    toastSuccess('Cliente desactivado')
     setTimeout(() => { handleClose(); router.refresh() }, 1200)
   }
 
   async function handleGracia(e: { preventDefault(): void }) {
     e.preventDefault()
-    setError('')
     setLoading(true)
     const res = await aplicarGracia(new FormData(formGraciaRef.current!))
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-    setSuccess(`Período especial aplicado hasta ${formatDateES(res.hasta ?? '')}`)
+    if (!res.ok) { toastError(res.error ?? 'Error al aplicar período'); return }
+    toastSuccess(`Período especial aplicado hasta ${formatDateES(res.hasta ?? '')}`)
     setTimeout(() => { handleClose(); router.refresh() }, 1400)
   }
 
   async function handlePago(e: { preventDefault(): void }) {
     e.preventDefault()
-    setError(''); setAdvertencia('')
+    setAdvertencia('')
     setLoading(true)
     const res = await registrarPago(new FormData(formPagoRef.current!))
     setLoading(false)
-    if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
+    if (!res.ok) { toastError(res.error ?? 'Error al registrar pago'); return }
     if (res.advertencia_gap) setAdvertencia(res.advertencia_gap)
-    setSuccess(`Pago ${res.pago_id} registrado. Suscripción renovada hasta ${formatDateES(res.nueva_expiracion ?? '')}`)
+    toastSuccess(`Pago ${res.pago_id} registrado`)
     setTimeout(() => { handleClose(); router.refresh() }, res.advertencia_gap ? 2500 : 1500)
   }
 
@@ -326,8 +323,6 @@ export default function AccionesHeader({ cliente }: Props) {
               <textarea name="notas" className="input" rows={2} placeholder="Ej: cliente solicitó extensión hasta cobro de factura pendiente" />
             </div>
 
-            {error   && <div className="alert alert-error">{error}</div>}
-            {success && <div className="alert alert-success">{success}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
@@ -356,26 +351,16 @@ export default function AccionesHeader({ cliente }: Props) {
           <p className="text-sm-muted">
             El cliente no podrá iniciar sesión mientras esté suspendido. Para reactivarlo, registra un pago o concede un período especial.
           </p>
-          {error   && <div className="alert alert-error">{error}</div>}
-          {success && <div className="alert alert-success">{success}</div>}
         </div>
         <div className="modal-footer">
-          {!success ? (
-            <>
-              <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-              <button
-                className="btn btn-danger"
-                onClick={handleSuspender}
-                disabled={loading}
-              >
-                {loading ? <><span className="spinner" /> Desactivando...</> : 'Desactivar'}
-              </button>
-            </>
-          ) : (
-            <button className="btn btn-primary" onClick={() => { handleClose(); router.refresh() }}>
-              Cerrar
-            </button>
-          )}
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button
+            className="btn btn-danger"
+            onClick={handleSuspender}
+            disabled={loading}
+          >
+            {loading ? <><span className="spinner" /> Desactivando...</> : 'Desactivar'}
+          </button>
         </div>
       </div>
     </div>
@@ -504,12 +489,10 @@ export default function AccionesHeader({ cliente }: Props) {
                 <span>{advertencia}</span>
               </div>
             )}
-            {error   && <div className="alert alert-error">{error}</div>}
-            {success && <div className="alert alert-success">{success}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading || loadingPago || !!success}>
+            <button type="submit" className="btn btn-primary" disabled={loading || loadingPago}>
               {loading ? <><span className="spinner" /> Registrando...</> : 'Registrar pago'}
             </button>
           </div>
@@ -549,7 +532,6 @@ export default function AccionesHeader({ cliente }: Props) {
               <label>Notas internas</label>
               <textarea name="notas" className="input" rows={3} defaultValue={cliente.notas ?? ''} />
             </div>
-            {editError && <div className="alert alert-error">{editError}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>

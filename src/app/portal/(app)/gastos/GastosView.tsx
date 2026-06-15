@@ -1,6 +1,10 @@
 'use client'
 
+'use client'
+
 import { useState, useTransition, useMemo } from 'react'
+  const { success: toastSuccess, error: toastError } = useToast()
+import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }                        from 'next/navigation'
 import {
   guardarGastoCobro,
@@ -55,7 +59,6 @@ function RegistroModal({
   onSaved:     () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState('')
   const isEdit = !!registro
   const tipo   = registro?.tipo ?? tipoInicial
 
@@ -66,12 +69,11 @@ function RegistroModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
     startTransition(async () => {
       const res = await guardarGastoCobro(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
   }
@@ -181,7 +183,6 @@ function RegistroModal({
                   defaultValue={registro?.notas ?? ''} placeholder="Referencia, observaciones…" />
               </div>
             </div>
-            {error && <div className="alert alert-error mt-4">{error}</div>}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -206,7 +207,6 @@ function LiquidarModal({
   onChanged: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState('')
 
   const esGasto         = registro.tipo === 'GASTO'
   const cuentasCompat   = cuentas.filter(c => c.moneda === registro.moneda)
@@ -214,22 +214,20 @@ function LiquidarModal({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError('')
     const fd = new FormData(e.currentTarget)
     fd.set('registro_id', registro.registro_id)
     fd.set('cuenta_id', cuentaId)
     startTransition(async () => {
       const res = await registrarLiquidacion(fd)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
   }
 
   function handleAnular(movimiento_id: string) {
-    setError('')
     startTransition(async () => {
       const res = await anularLiquidacion(movimiento_id)
-      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
   }
@@ -307,7 +305,6 @@ function LiquidarModal({
             </div>
           )}
 
-          {error && <div className="alert alert-error mt-3">{error}</div>}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
