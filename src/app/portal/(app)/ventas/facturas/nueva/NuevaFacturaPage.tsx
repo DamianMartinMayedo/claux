@@ -8,6 +8,7 @@ import type { VentasResumenData }            from '@/app/actions/portal/ventas'
 import type { Empresa }                      from '@/app/actions/portal/empresas'
 import { DocumentoLineasEditor }             from '../../_DocumentoLineasEditor'
 import { DocumentoPdf }                      from '../../_DocumentoPdf'
+import CrearTerceroInline                    from '@/components/portal/CrearTerceroInline'
 import {
   CONDICION_PAGO_OPTIONS,
   calcularFechaVencimiento,
@@ -212,9 +213,15 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
                 ))}
               </select>
               {empresa_id && clientesDeEmpresa.length === 0 && (
-                <span className="input-hint">
-                  Esta empresa no tiene clientes. Crea uno en Terceros.
-                </span>
+                <div className="crear-tercero-empty">
+                  <span className="input-hint">Esta empresa no tiene clientes.</span>
+                  <CrearTerceroInline
+                    empresas={resumen.empresas.filter(e => e.empresa_id === empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
+                    defaultTipo="CLIENTE"
+                    label="Crear cliente"
+                    onCreated={(id) => { if (id) onClienteChange(id) }}
+                  />
+                </div>
               )}
             </div>
 

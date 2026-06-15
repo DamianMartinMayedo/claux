@@ -13,6 +13,7 @@ import {
   type EstadoRegistro,
   type GastosCobrosPageData,
 } from '@/app/actions/portal/gastos'
+import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,16 @@ function RegistroModal({
                   <option value="">— Sin {tipo === 'GASTO' ? 'proveedor' : 'cliente'} —</option>
                   {terceros.map(t => <option key={t.tercero_id} value={t.tercero_id}>{t.nombre}</option>)}
                 </select>
+                {terceros.length === 0 && (
+                  <div className="crear-tercero-empty">
+                    <span className="input-hint">No tienes {tipo === 'GASTO' ? 'proveedores' : 'clientes'} todavía.</span>
+                    <CrearTerceroInline
+                      empresas={data.empresas}
+                      defaultTipo={tipo === 'GASTO' ? 'PROVEEDOR' : 'CLIENTE'}
+                      label={tipo === 'GASTO' ? 'Crear proveedor' : 'Crear cliente'}
+                    />
+                  </div>
+                )}
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Categoría</label>

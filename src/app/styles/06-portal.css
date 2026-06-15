@@ -1218,4 +1218,13 @@
   display: flex; flex-direction: column;
 }
 
+/* ── Crear cliente/proveedor en el sitio (facturas, gastos…) ─────────────── */
+.crear-tercero-empty { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-1); }
+.crear-tercero-link {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--color-primary-text); font-weight: 600; font-size: var(--text-sm);
+}
+.crear-tercero-link:hover { text-decoration: underline; }
+
 

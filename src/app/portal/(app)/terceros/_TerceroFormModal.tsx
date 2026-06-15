@@ -194,11 +194,12 @@ function IconFileLink() { return <svg viewBox="0 0 24 24" fill="none" stroke="cu
 
 // ── TerceroFormModal ──────────────────────────────────────────────────────────
 
-export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
-  tercero:  Tercero | null
-  empresas: { empresa_id: string; nombre: string }[]
-  onClose:  () => void
-  onSaved:  () => void
+export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSaved }: {
+  tercero:      Tercero | null
+  empresas:     { empresa_id: string; nombre: string }[]
+  defaultTipo?: 'CLIENTE' | 'PROVEEDOR' | 'AMBOS'
+  onClose:      () => void
+  onSaved:      (terceroId?: string) => void
 }) {
   const [isPending, startTransition] = useTransition()
   const [error,     setError]        = useState('')
@@ -218,7 +219,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
     startTransition(async () => {
       const res = await guardarTercero(fd)
       if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
-      onSaved()
+      onSaved(res.tercero_id)
     })
   }
 
@@ -243,7 +244,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-2">
                   <label>Tipo <span className="required">*</span></label>
-                  <select className="input" name="tipo" defaultValue={tercero?.tipo ?? 'CLIENTE'} required>
+                  <select className="input" name="tipo" defaultValue={tercero?.tipo ?? defaultTipo ?? 'CLIENTE'} required>
                     <option value="CLIENTE">Cliente</option>
                     <option value="PROVEEDOR">Proveedor</option>
                     <option value="AMBOS">Ambos</option>

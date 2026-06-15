@@ -39,7 +39,6 @@ export default function VentasView({ data }: Props) {
   const empresasConLetra = data.empresas.filter(e => !!e.letra_facturacion)
   const sinSetupEmpresas = data.empresas.length === 0
   const sinLetra         = data.empresas.length > 0 && empresasConLetra.length === 0
-  const sinClientes      = data.clientes.length === 0
 
   return (
     <div className="view-container">
@@ -53,15 +52,11 @@ export default function VentasView({ data }: Props) {
           </p>
         </div>
         {tab === 'ofertas' ? (
-          sinSetupEmpresas || sinLetra || sinClientes ? (
+          sinSetupEmpresas || sinLetra ? (
             <button
               className="btn btn-primary"
               disabled
-              title={
-                sinSetupEmpresas ? 'Primero crea una empresa.'
-                : sinLetra       ? 'Asigna letra de facturación a alguna empresa.'
-                : 'Primero registra un cliente en Terceros.'
-              }
+              title={sinSetupEmpresas ? 'Primero crea una empresa.' : 'Asigna letra de facturación a alguna empresa.'}
             >
               <IconPlus /> Nueva oferta
             </button>
@@ -71,15 +66,11 @@ export default function VentasView({ data }: Props) {
             </Link>
           )
         ) : (
-          sinSetupEmpresas || sinLetra || sinClientes ? (
+          sinSetupEmpresas || sinLetra ? (
             <button
               className="btn btn-primary"
               disabled
-              title={
-                sinSetupEmpresas ? 'Primero crea una empresa.'
-                : sinLetra       ? 'Asigna letra de facturación a alguna empresa.'
-                : 'Primero registra un cliente en Terceros.'
-              }
+              title={sinSetupEmpresas ? 'Primero crea una empresa.' : 'Asigna letra de facturación a alguna empresa.'}
             >
               <IconPlus /> Nueva factura
             </button>
