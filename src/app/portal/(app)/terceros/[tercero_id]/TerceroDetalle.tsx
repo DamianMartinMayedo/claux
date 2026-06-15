@@ -328,7 +328,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
 
       {/* Breadcrumb */}
       <div className="breadcrumb">
-        <Link href="/portal/terceros">Terceros</Link>
+        <Link href="/portal/terceros">Clientes y proveedores</Link>
         <span>›</span>
         <span className="breadcrumb-current">{tercero.nombre}</span>
       </div>

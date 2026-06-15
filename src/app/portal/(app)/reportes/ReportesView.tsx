@@ -32,6 +32,11 @@ export default function ReportesView({ data }: { data: ReportesData }) {
   const [desde,   setDesde]   = useState(data.desde)
   const [hasta,   setHasta]   = useState(data.hasta)
   const [empresa, setEmpresa] = useState(data.empresa_id)
+  const [query,   setQuery]   = useState('')
+
+  const q = query.trim().toLowerCase()
+  const filtrarCategorias = (cats: { categoria: string; monto: number }[]) =>
+    q ? cats.filter(c => c.categoria.toLowerCase().includes(q)) : cats
 
   function navegar(d: string, h: string, e: string) {
     const params = new URLSearchParams({ desde: d, hasta: h })
@@ -59,34 +64,42 @@ export default function ReportesView({ data }: { data: ReportesData }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Reportes financieros</h1>
-          <p className="page-subtitle">
-            Estado de resultados (devengado) y flujo de caja (efectivo) ·
-            {' '}{formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}
-          </p>
+          <p className="page-subtitle">Estado de resultados (devengado) y flujo de caja (efectivo) del período seleccionado.</p>
         </div>
       </div>
 
-      {/* Controles de período */}
-      <div className="rep-controls">
-        <div className="rep-presets">
-          <button className="cxx-chip" onClick={() => preset('mes')} disabled={isPending}>Este mes</button>
-          <button className="cxx-chip" onClick={() => preset('mes_pasado')} disabled={isPending}>Mes pasado</button>
-          <button className="cxx-chip" onClick={() => preset('anio')} disabled={isPending}>Este año</button>
+      {/* Fila de filtros: buscador + accesos rápidos de período */}
+      <div className="ter-toolbar">
+        <div className="ter-search-wrap">
+          <IconSearch />
+          <input
+            type="search"
+            className="ter-search"
+            placeholder="Buscar categoría de gasto…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
         </div>
-        <div className="rep-rango">
-          <input className="input ter-filter-select" type="date" value={desde} onChange={e => setDesde(e.target.value)} />
-          <span className="rep-rango-sep">–</span>
-          <input className="input ter-filter-select" type="date" value={hasta} onChange={e => setHasta(e.target.value)} />
-          {data.empresas.length > 1 && (
-            <select className="input ter-filter-select" value={empresa} onChange={e => setEmpresa(e.target.value)}>
-              <option value="">Todas las empresas</option>
-              {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-            </select>
-          )}
-          <button className="btn btn-primary btn-sm" onClick={aplicar} disabled={isPending}>
-            {isPending ? <><span className="spinner spinner-sm" /> …</> : 'Aplicar'}
-          </button>
-        </div>
+        <button className="cxx-chip" onClick={() => preset('mes')} disabled={isPending}>Este mes</button>
+        <button className="cxx-chip" onClick={() => preset('mes_pasado')} disabled={isPending}>Mes pasado</button>
+        <button className="cxx-chip" onClick={() => preset('anio')} disabled={isPending}>Este año</button>
+      </div>
+
+      {/* Fila de rango de fechas + empresa */}
+      <div className="ter-toolbar rep-rango-row">
+        <input className="input ter-filter-select" type="date" value={desde} onChange={e => setDesde(e.target.value)} />
+        <span className="rep-rango-sep">–</span>
+        <input className="input ter-filter-select" type="date" value={hasta} onChange={e => setHasta(e.target.value)} />
+        {data.empresas.length > 1 && (
+          <select className="input ter-filter-select" value={empresa} onChange={e => setEmpresa(e.target.value)}>
+            <option value="">Todas las empresas</option>
+            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+          </select>
+        )}
+        <button className="btn btn-primary btn-sm" onClick={aplicar} disabled={isPending}>
+          {isPending ? <><span className="spinner spinner-sm" /> …</> : 'Aplicar'}
+        </button>
+        <span className="rep-periodo-actual">{formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}</span>
       </div>
 
       {sinDatos ? (
@@ -120,9 +133,13 @@ export default function ReportesView({ data }: { data: ReportesData }) {
                     <div className="rep-line rep-line-head"><span>Gastos</span><strong>{formatMonto(r.total_gastos)}</strong></div>
                     {r.gastos_por_categoria.length === 0
                       ? <div className="rep-line rep-sub"><span>Sin gastos</span><span>—</span></div>
-                      : r.gastos_por_categoria.map(g => (
-                          <div key={g.categoria} className="rep-line rep-sub"><span>{g.categoria}</span><span>{formatMonto(g.monto)}</span></div>
-                        ))}
+                      : (() => {
+                          const cats = filtrarCategorias(r.gastos_por_categoria)
+                          if (cats.length === 0) return <div className="rep-line rep-sub"><span>Sin coincidencias</span><span>—</span></div>
+                          return cats.map(g => (
+                            <div key={g.categoria} className="rep-line rep-sub"><span>{g.categoria}</span><span>{formatMonto(g.monto)}</span></div>
+                          ))
+                        })()}
                   </div>
                 </div>
               ))}
@@ -169,4 +186,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
 
 function IconChart() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+}
+function IconSearch() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 }

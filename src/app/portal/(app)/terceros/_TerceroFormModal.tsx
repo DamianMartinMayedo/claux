@@ -227,7 +227,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
       <div className="modal modal-xl" role="dialog" aria-modal>
 
         <div className="modal-header">
-          <h2 className="modal-title">{isEdit ? 'Editar tercero' : 'Nuevo tercero'}</h2>
+          <h2 className="modal-title">{isEdit ? 'Editar' : 'Nuevo cliente o proveedor'}</h2>
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
 
@@ -419,7 +419,7 @@ export function TerceroFormModal({ tercero, empresas, onClose, onSaved }: {
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
                 ? <><span className="spinner spinner-sm" /> Guardando…</>
-                : isEdit ? 'Guardar cambios' : 'Crear tercero'}
+                : isEdit ? 'Guardar cambios' : 'Crear'}
             </button>
           </div>
         </form>

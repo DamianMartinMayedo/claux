@@ -58,7 +58,7 @@ function ConfirmArchivar({
     <div className="modal-backdrop open">
       <div className="modal modal-440" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">Archivar tercero</h2>
+          <h2 className="modal-title">Archivar</h2>
           <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
         </div>
         <div className="modal-body">
@@ -146,11 +146,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
       {/* ── Cabecera ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Terceros</h1>
-          <p className="page-subtitle">Clientes, proveedores y contactos comerciales.</p>
+          <h1 className="page-title">Clientes y proveedores</h1>
+          <p className="page-subtitle">Tus clientes, proveedores y contactos comerciales.</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus /> Nuevo tercero
+          <IconPlus /> Nuevo cliente o proveedor
         </button>
       </div>
 
@@ -193,7 +193,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">
-            {verArchivados ? 'Archivados' : 'Terceros activos'}
+            {verArchivados ? 'Archivados' : 'Activos'}
           </h2>
           <span className="text-xs-muted">
             {tercerosFiltrados.length} de {verArchivados ? archivados : activos}
@@ -205,7 +205,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             <IconUsers />
             <p>
               {data.terceros.length === 0
-                ? 'Aún no hay terceros registrados. Crea el primero.'
+                ? 'Aún no hay clientes ni proveedores. Crea el primero.'
                 : 'No hay resultados para los filtros seleccionados.'}
             </p>
           </div>

@@ -581,19 +581,17 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
       )}
 
       {/* Movimientos */}
-      <div className="tes-section-header tes-section-header-mt">
-        <h2 className="tes-section-title">Movimientos</h2>
-        <div className="ter-toolbar tes-mov-toolbar">
-          <select className="input ter-filter-select" value={filtroCuenta} onChange={e => setFiltroCuenta(e.target.value)}>
-            <option value="">Todas las cuentas</option>
-            {data.cuentas.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
-          </select>
-          <select className="input ter-filter-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
-            <option value="">Ingresos y egresos</option>
-            <option value="INGRESO">Solo ingresos</option>
-            <option value="EGRESO">Solo egresos</option>
-          </select>
-        </div>
+      <h2 className="tes-section-title tes-section-header-mt tes-mov-titulo">Movimientos</h2>
+      <div className="ter-toolbar">
+        <select className="input ter-filter-select" value={filtroCuenta} onChange={e => setFiltroCuenta(e.target.value)}>
+          <option value="">Todas las cuentas</option>
+          {data.cuentas.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
+        </select>
+        <select className="input ter-filter-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
+          <option value="">Ingresos y egresos</option>
+          <option value="INGRESO">Solo ingresos</option>
+          <option value="EGRESO">Solo egresos</option>
+        </select>
       </div>
 
       <div className="card card-table">

@@ -38,7 +38,7 @@ function buildNav(rol: Rol): NavGroup[] {
         { href: '/portal/cxp',        label: 'Cuentas por pagar',   icon: <IconCxP /> },
         { href: '/portal/tesoreria',  label: 'Tesorería',           icon: <IconTesoreria /> },
         { href: '/portal/reportes',   label: 'Reportes',            icon: <IconReportes /> },
-        { href: '/portal/terceros',   label: 'Terceros',            icon: <IconTerceros /> },
+        { href: '/portal/terceros',   label: 'Clientes y proveedores', icon: <IconTerceros /> },
         { href: '/portal/monedas',    label: 'Monedas y Tasas',     icon: <IconMonedas /> },
       ],
     },

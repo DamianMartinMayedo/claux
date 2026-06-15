@@ -1109,6 +1109,7 @@
 .tes-section-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
 .tes-section-header-mt { margin-top: var(--space-6); }
 .tes-section-title { font-size: var(--text-lg); font-weight: 700; color: var(--color-text); }
+.tes-mov-titulo { margin-bottom: var(--space-3); }
 
 /* Tarjetas de cuenta */
 .tes-cuentas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
@@ -1132,7 +1133,6 @@
 .tes-tipo-egreso.active { border-color: var(--color-error); background: var(--color-error-bg); color: var(--color-error); }
 
 /* Tabla de movimientos */
-.tes-mov-toolbar { margin: 0; }
 .tes-col-monto { text-align: right; }
 .tes-monto-cell { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tes-monto-in { color: var(--color-success); }
@@ -1185,10 +1185,9 @@
    REPORTES FINANCIEROS — estado de resultados + flujo de caja
    ════════════════════════════════════════════════════════════════════════ */
 
-.rep-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-5); }
-.rep-presets { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.rep-rango { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.rep-rango-row { align-items: center; margin-top: calc(-1 * var(--space-2)); }
 .rep-rango-sep { color: var(--color-text-muted); }
+.rep-periodo-actual { margin-left: auto; font-size: var(--text-sm); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 .rep-titulo { margin-bottom: var(--space-3); }
 .rep-titulo-mt { margin-top: var(--space-6); }
 .rep-nota { font-size: var(--text-sm); color: var(--color-text-muted); margin: calc(-1 * var(--space-2)) 0 var(--space-3); }
