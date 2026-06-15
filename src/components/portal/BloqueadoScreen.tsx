@@ -1,5 +1,5 @@
 const MENSAJES: Record<string, { titulo: string; texto: string }> = {
-  SUSPENDIDO: {
+  DESACTIVADO: {
     titulo: 'Cuenta suspendida',
     texto:  'Tu suscripción ha sido suspendida. Contacta con soporte para regularizar tu situación y recuperar el acceso.',
   },

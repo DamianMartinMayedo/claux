@@ -38,7 +38,7 @@ export default async function DashboardPage() {
       .in('estado', ['ACTIVO', 'TRIAL'])
       .gte('fecha_expiracion', fechaHoyStr)
       .lte('fecha_expiracion', fechaAvisoStr),
-    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'SUSPENDIDO'),
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'DESACTIVADO'),
     supabase.from('clients').select('precio_mensual_usd').in('estado', ['ACTIVO', 'TRIAL']),
     supabase.from('payments').select('monto_usd, fecha, estado'),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)

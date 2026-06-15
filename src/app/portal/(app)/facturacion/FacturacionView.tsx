@@ -9,7 +9,7 @@ const ESTADO_LABEL: Record<string, string> = {
   TRIAL:      'Período de prueba',
   GRACIA:     'Período especial',
   VENCIDO:    'Vencido',
-  SUSPENDIDO: 'Suspendido',
+  DESACTIVADO: 'Desactivado',
 }
 
 const METODO_LABEL: Record<string, string> = {
@@ -56,7 +56,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
     data.estado === 'ACTIVO'                              ? 'prf-badge-activo'   :
     data.estado === 'TRIAL'                               ? 'prf-badge-trial'    :
     data.estado === 'GRACIA'                              ? 'prf-badge-gracia'   :
-    ['VENCIDO', 'SUSPENDIDO'].includes(data.estado)       ? 'prf-badge-vencido'  : ''
+    ['VENCIDO', 'DESACTIVADO'].includes(data.estado)       ? 'prf-badge-vencido'  : ''
 
   return (
     <div className="view-container">

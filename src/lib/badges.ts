@@ -1,9 +1,9 @@
-// Subscription state badges (ACTIVO, TRIAL, GRACIA, SUSPENDIDO, VENCIDO)
+// Subscription state badges (ACTIVO, TRIAL, GRACIA, DESACTIVADO, VENCIDO)
 export const ESTADO_BADGE: Record<string, string> = {
   ACTIVO:     'badge-success',
   TRIAL:      'badge-info',
   GRACIA:     'badge-warning',
-  SUSPENDIDO: 'badge-warning',
+  DESACTIVADO: 'badge-warning',
   VENCIDO:    'badge-error',
 }
 
@@ -11,7 +11,7 @@ export const ESTADO_LABEL: Record<string, string> = {
   ACTIVO:     'Activo',
   TRIAL:      'Trial',
   GRACIA:     'Gracia',
-  SUSPENDIDO: 'Suspendido',
+  DESACTIVADO: 'Desactivado',
   VENCIDO:    'Vencido',
 }
 

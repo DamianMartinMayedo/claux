@@ -28,7 +28,7 @@ function calcDias(c: ClienteAlerta): { label: string; color: string } {
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info',
-  GRACIA: 'badge-warning', SUSPENDIDO: 'badge-warning', VENCIDO: 'badge-error',
+  GRACIA: 'badge-warning', DESACTIVADO: 'badge-warning', VENCIDO: 'badge-error',
 }
 
 function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {

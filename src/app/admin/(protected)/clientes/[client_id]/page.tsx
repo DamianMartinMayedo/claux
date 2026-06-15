@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import AccionesDetalle from './AccionesDetalle'
-import EditarClienteModal from './EditarClienteModal'
+import AccionesHeader from './AccionesHeader'
 import ModulosCard from './ModulosCard'
 import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
 import { ESTADO_BADGE } from '@/lib/badges'
@@ -26,7 +25,6 @@ const MOTIVOS_GRACIA: Record<string, string> = {
 
 function formatFecha(fecha: string | null | undefined) {
   if (!fecha) return '—'
-  // Parseo seguro sin desfase de timezone (YYYY-MM-DD → no usar new Date(str) directamente)
   const [y, m, d] = fecha.split('T')[0].split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
@@ -67,7 +65,7 @@ export default async function ClienteDetallePage({
   const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
 
   return (
-    <div className="view-container">
+    <div className="view-container detail-page">
 
       {/* ── Breadcrumb ── */}
       <nav className="breadcrumb" aria-label="Ruta de navegación">
@@ -78,7 +76,7 @@ export default async function ClienteDetallePage({
         <span className="breadcrumb-current">{cliente.nombre_empresa}</span>
       </nav>
 
-      {/* ── Header ── */}
+      {/* ── Header con título + badges (izquierda) y acciones (derecha) ── */}
       <div className="detail-header">
         <div className="detail-header-info">
           <h1 className="page-title">{cliente.nombre_empresa}</h1>
@@ -91,24 +89,21 @@ export default async function ClienteDetallePage({
             </span>
           </div>
         </div>
-        <EditarClienteModal cliente={{
-          client_id:       cliente.client_id,
-          nombre_empresa:  cliente.nombre_empresa,
-          nombre_contacto: cliente.nombre_contacto,
-          email_admin:     cliente.email_admin,
-          notas:           cliente.notas,
-        }} />
+        <div className="detail-header-buttons">
+          {/* Orden acordado: Editar, Suspender/Reactivar, Período especial, Registrar pago */}
+          <AccionesHeader
+            cliente={{
+              client_id:        cliente.client_id,
+              nombre_empresa:   cliente.nombre_empresa,
+              estado:           cliente.estado,
+              fecha_expiracion: cliente.fecha_expiracion,
+              nombre_contacto:  cliente.nombre_contacto,
+              email_admin:      cliente.email_admin,
+              notas:            cliente.notas,
+            }}
+          />
+        </div>
       </div>
-
-      {/* ── Barra de acciones (Client Component) ── */}
-      <AccionesDetalle
-        cliente={{
-          client_id:        cliente.client_id,
-          nombre_empresa:   cliente.nombre_empresa,
-          estado:           cliente.estado,
-          fecha_expiracion: cliente.fecha_expiracion,
-        }}
-      />
 
       {/* ── Banner período especial ── */}
       {tieneGracia && (
@@ -131,13 +126,11 @@ export default async function ClienteDetallePage({
         </div>
       )}
 
-      {/* ── Grid de datos ── */}
-      <div className="detail-grid">
+      {/* ── Información del cliente (ancho completo, grid horizontal) ── */}
+      <div className="card">
+        <h2 className="detail-section-title">Información del cliente</h2>
 
-        {/* Información del cliente */}
-        <div className="card">
-          <h2 className="detail-section-title">Información del cliente</h2>
-
+        <div className="detail-info-grid">
           <div className="detail-field">
             <span className="detail-field-label">Email administrador</span>
             <span className="detail-field-value">{cliente.email_admin}</span>
@@ -170,10 +163,89 @@ export default async function ClienteDetallePage({
             <span className="detail-field-label">Expiración</span>
             <span className="detail-field-value">{formatFecha(cliente.fecha_expiracion)}</span>
           </div>
-          {cliente.notas && (
-            <div className="detail-field">
-              <span className="detail-field-label">Notas internas</span>
-              <span className="detail-field-value">{cliente.notas}</span>
+        </div>
+
+        {cliente.notas && (
+          <div className="detail-field" style={{ marginTop: 'var(--space-4)' }}>
+            <span className="detail-field-label">Notas internas</span>
+            <span className="detail-field-value">{cliente.notas}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Módulos contratados ── */}
+      {catalogo && catalogo.length > 0 && (
+        <ModulosCard
+          client_id={client_id}
+          modulosActivos={Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []}
+          tarifa={cliente.tarifa ?? 'estandar'}
+          ciclo={cliente.ciclo_facturacion ?? 'mensual'}
+          precioMensual={Number(cliente.precio_mensual_usd ?? 0)}
+          descuentoAnualPct={descuentoAnual}
+          catalogo={catalogo}
+        />
+      )}
+
+      {/* ── Grid 2 columnas: Historial de pagos (izq) + Resumen de pagos (der) ── */}
+      <div className="detail-grid">
+
+        {/* Historial de pagos */}
+        <div className="card">
+          <div className="card-header">
+            <h2 className="card-title">Historial de pagos</h2>
+            <span className="badge badge-neutral">
+              {pagos?.length ?? 0} pago{pagos?.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {!pagos || pagos.length === 0 ? (
+            <div className="table-empty table-empty-sm">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+              <p>Sin pagos registrados aún.</p>
+            </div>
+          ) : (
+            <div className="table-wrapper table-wrapper-flush">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Método</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagos.map(p => (
+                    <tr key={p.pago_id}>
+                      <td className="table-muted">{formatFecha(p.fecha)}</td>
+                      <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
+                      <td>
+                        <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
+                          {p.estado === 'por_confirmar' ? 'Por confirmar' : 'Confirmado'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge badge-neutral">
+                          {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
+                        </span>
+                      </td>
+                      <td className="table-actions-right">
+                        {p.estado === 'por_confirmar' && (
+                          <ConfirmarPagoBtn
+                            pagoId={p.pago_id}
+                            clienteNombre={cliente.nombre_empresa}
+                            monto={p.monto_usd ?? 0}
+                            concepto={p.concepto}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -226,96 +298,6 @@ export default async function ClienteDetallePage({
           </div>
         </div>
 
-      </div>
-
-      {/* ── Módulos contratados ── */}
-      {catalogo && catalogo.length > 0 && (
-        <ModulosCard
-          client_id={client_id}
-          modulosActivos={Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []}
-          tarifa={cliente.tarifa ?? 'estandar'}
-          ciclo={cliente.ciclo_facturacion ?? 'mensual'}
-          precioMensual={Number(cliente.precio_mensual_usd ?? 0)}
-          descuentoAnualPct={descuentoAnual}
-          catalogo={catalogo}
-        />
-      )}
-
-      {/* ── Historial de pagos ── */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Historial de pagos</h2>
-          <span className="badge badge-neutral">
-            {pagos?.length ?? 0} pago{pagos?.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-
-        {!pagos || pagos.length === 0 ? (
-          <div className="table-empty table-empty-sm">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
-            </svg>
-            <p>Sin pagos registrados aún.</p>
-          </div>
-        ) : (
-          <div className="table-wrapper table-wrapper-flush">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Monto</th>
-                  <th>Concepto</th>
-                  <th>Estado</th>
-                  <th>Método</th>
-                  <th>Período cubierto</th>
-                  <th>Notas</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {pagos.map(p => (
-                  <tr key={p.pago_id}>
-                    <td className="table-muted">{formatFecha(p.fecha)}</td>
-                    <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
-                    <td>
-                      <span className={`badge ${p.concepto === 'configuracion' ? 'badge-info' : 'badge-neutral'}`}>
-                        {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
-                        {p.estado === 'por_confirmar' ? 'Por confirmar' : 'Confirmado'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="badge badge-neutral">
-                        {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
-                      </span>
-                    </td>
-                    <td className="table-muted text-xs">
-                      {p.fecha_inicio_periodo && p.fecha_fin_periodo
-                        ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
-                        : '—'}
-                    </td>
-                    <td className="table-muted td-notes">
-                      {p.notas ?? '—'}
-                    </td>
-                    <td className="table-actions-right">
-                      {p.estado === 'por_confirmar' && (
-                        <ConfirmarPagoBtn
-                          pagoId={p.pago_id}
-                          clienteNombre={cliente.nombre_empresa}
-                          monto={p.monto_usd ?? 0}
-                          concepto={p.concepto}
-                        />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
     </div>

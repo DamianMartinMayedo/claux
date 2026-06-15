@@ -35,7 +35,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento)
 
   // Bloqueo basado en estado Y en fecha, sin depender de expiración automática:
-  // · SUSPENDIDO → siempre bloqueado (nunca han pagado o el admin los suspendió)
+  // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
   // · VENCIDO    → siempre bloqueado (estado legado; ya no se genera automáticamente)
   // · Fecha expirada → bloqueado, salvo que estén en GRACIA con fecha_fin_gracia vigente
   const hoy = new Date().toISOString().split('T')[0]
@@ -47,7 +47,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     !!cliente.fecha_expiracion &&
     cliente.fecha_expiracion.split('T')[0] < hoy
   const bloqueado =
-    cliente.estado === 'SUSPENDIDO' ||
+    cliente.estado === 'DESACTIVADO' ||
     cliente.estado === 'VENCIDO' ||
     (expiradoPorFecha && !enGraciaActiva)
 

@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { cambiarEstadoCliente, aplicarGracia } from '@/app/actions/clientes'
+import { cambiarEstadoCliente, aplicarGracia, editarCliente } from '@/app/actions/clientes'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
@@ -29,10 +29,13 @@ type Props = {
     nombre_empresa: string
     estado: string
     fecha_expiracion: string | null
+    nombre_contacto?: string | null
+    email_admin?: string
+    notas?: string | null
   }
 }
 
-type ModalType = 'gracia' | 'estado' | 'pago' | null
+type ModalType = 'gracia' | 'estado' | 'pago' | 'editar' | null
 
 // ── Utilidades de fecha ─────────────────────────────────────────────
 function parseYMD(dateStr: string): Date {
@@ -57,7 +60,6 @@ function daysBetween(fromStr: string, toStr: string): number {
   return Math.round((parseYMD(toStr).getTime() - parseYMD(fromStr).getTime()) / 86_400_000)
 }
 
-// Calcula el pro-rata dado los valores necesarios (función pura, sin estado)
 function calcProrata(
   fechaInicio: string,
   fechaExpActual: string | null,
@@ -76,7 +78,6 @@ function calcProrata(
   return { overlapDays, dailyRate, credit, planPrice, suggestedNet }
 }
 
-// Formatea YYYY-MM-DD → "04 de mayo de 2026" (sin depender del timezone del browser)
 function formatDateES(dateStr: string): string {
   if (!dateStr) return '—'
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -85,20 +86,20 @@ function formatDateES(dateStr: string): string {
   })
 }
 
-// Calcula fecha N días desde hoy en formato europeo (para el campo "Acceso hasta" de gracia)
 function addDaysES(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() + days)
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
-export default function AccionesDetalle({ cliente }: Props) {
+export default function AccionesHeader({ cliente }: Props) {
   const [modal, setModal]         = useState<ModalType>(null)
   const [loading, setLoading]     = useState(false)
   const [loadingPago, setLoadingPago] = useState(false)
   const [error, setError]         = useState('')
   const [success, setSuccess]     = useState('')
   const [advertencia, setAdvertencia] = useState('')
+  const [menuMovilOpen, setMenuMovilOpen] = useState(false)
   const mounted = useMounted()
 
   // Gracia
@@ -117,7 +118,12 @@ export default function AccionesDetalle({ cliente }: Props) {
 
   const formGraciaRef = useRef<HTMLFormElement>(null)
   const formPagoRef   = useRef<HTMLFormElement>(null)
+  const formEditarRef = useRef<HTMLFormElement>(null)
+  const menuMovilRef  = useRef<HTMLDivElement>(null)
   const router        = useRouter()
+
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError]     = useState('')
 
   const handleClose = useCallback(() => {
     setModal(null); setError(''); setSuccess(''); setAdvertencia('')
@@ -128,14 +134,28 @@ export default function AccionesDetalle({ cliente }: Props) {
 
   useModalKeyboard(!!modal, handleClose)
 
+  // Cerrar menú móvil al hacer clic fuera
+  const handleClickOutsideMenu = useCallback((e: MouseEvent) => {
+    if (menuMovilRef.current && !menuMovilRef.current.contains(e.target as Node)) {
+      setMenuMovilOpen(false)
+    }
+  }, [])
+
+  useState(() => {
+    if (typeof window !== 'undefined') {
+      document.addEventListener('mousedown', handleClickOutsideMenu)
+      return () => document.removeEventListener('mousedown', handleClickOutsideMenu)
+    }
+  })
+
   function onDiasChange(val: string) {
     setDiasGracia(val)
     const n = parseInt(val)
     setFechaCalculada((!isNaN(n) && n >= 1 && n <= 180) ? addDaysES(n) : '—')
   }
 
-  // ── Abre el modal de pago y carga los datos por defecto ──────────────
   async function openPago() {
+    setMenuMovilOpen(false)
     setModal('pago')
     setLoadingPago(true)
     const res = await obtenerDatosPagoDefecto(cliente.client_id)
@@ -152,35 +172,53 @@ export default function AccionesDetalle({ cliente }: Props) {
     }
   }
 
-  // ── Cambio de fecha inicio: recalcula fecha fin y pro-rata ───────────
+  function openEstado() {
+    setMenuMovilOpen(false)
+    setModal('estado')
+  }
+
+  function openGracia() {
+    setMenuMovilOpen(false)
+    setModal('gracia')
+  }
+
+  function openEditar() {
+    setMenuMovilOpen(false)
+    setEditError('')
+    setModal('editar')
+  }
+
+  async function handleEditar(e: { preventDefault(): void }) {
+    e.preventDefault()
+    setEditError('')
+    setEditLoading(true)
+    const res = await editarCliente(new FormData(formEditarRef.current!))
+    setEditLoading(false)
+    if (!res.ok) { setEditError(res.error ?? 'Error desconocido'); return }
+    handleClose()
+    router.refresh()
+  }
+
   function onInicioChange(val: string) {
     setFechaInicio(val)
     if (val && duracionDias) setFechaFin(addDays(val, duracionDias))
-    // Recalcular monto con nuevo inicio (pro-rata sobre el precio del período)
     const pr = calcProrata(val, fechaExpActual, ultimoPago, montoBase)
     setMontoSugerido(pr ? String(pr.suggestedNet.toFixed(2)) : String(montoBase.toFixed(2)))
   }
 
-  // ── Suspender / Reactivar ────────────────────────────────────────────
-  async function handleEstado(nuevoEstado: 'ACTIVO' | 'SUSPENDIDO') {
+  async function handleSuspender() {
     setError(''); setAdvertencia('')
     setLoading(true)
     const fd = new FormData()
     fd.append('client_id', cliente.client_id)
-    fd.append('estado', nuevoEstado)
+    fd.append('estado', 'DESACTIVADO')
     const res = await cambiarEstadoCliente(fd)
     setLoading(false)
     if (!res.ok) { setError(res.error ?? 'Error desconocido'); return }
-    if (res.advertencia) {
-      setAdvertencia(res.advertencia)
-      setSuccess(nuevoEstado === 'ACTIVO' ? 'Cliente reactivado' : 'Cliente suspendido')
-      return
-    }
-    setSuccess(nuevoEstado === 'ACTIVO' ? 'Cliente reactivado' : 'Cliente suspendido')
+    setSuccess('Cliente suspendido')
     setTimeout(() => { handleClose(); router.refresh() }, 1200)
   }
 
-  // ── Gracia submit ────────────────────────────────────────────────────
   async function handleGracia(e: { preventDefault(): void }) {
     e.preventDefault()
     setError('')
@@ -192,7 +230,6 @@ export default function AccionesDetalle({ cliente }: Props) {
     setTimeout(() => { handleClose(); router.refresh() }, 1400)
   }
 
-  // ── Pago submit ──────────────────────────────────────────────────────
   async function handlePago(e: { preventDefault(): void }) {
     e.preventDefault()
     setError(''); setAdvertencia('')
@@ -205,12 +242,10 @@ export default function AccionesDetalle({ cliente }: Props) {
     setTimeout(() => { handleClose(); router.refresh() }, res.advertencia_gap ? 2500 : 1500)
   }
 
-  // ── Alertas calculadas del modal de pago ────────────────────────────
   const alertaInicioTemprano = (fechaInicio && fechaExpActual && fechaInicio < fechaExpActual)
     ? `Se recomienda que el inicio del nuevo período (${formatDateES(fechaInicio)}) sea igual o posterior a la expiración actual (${formatDateES(fechaExpActual)}).`
     : null
 
-  // Pro-rata para mostrar el desglose en la UI (monto ya se auto-aplicó en los handlers)
   const prorata = calcProrata(
     fechaInicio,
     fechaExpActual,
@@ -219,14 +254,10 @@ export default function AccionesDetalle({ cliente }: Props) {
   )
 
   const esActivo    = cliente.estado === 'ACTIVO' || cliente.estado === 'TRIAL'
-  // No hay expiración automática: un cliente con el pago o el trial caducado sigue figurando
-  // ACTIVO/TRIAL por estado. Calculamos "vencido" por fecha para que el período de gracia se
-  // pueda aplicar al vencer (es manual: por si queremos regalar unos días a un cliente indeciso).
   const hoyYMD = toYMD(new Date())
   const vencidoPorFecha = !!cliente.fecha_expiracion && cliente.fecha_expiracion.split('T')[0] <= hoyYMD
-  const puedeGracia = vencidoPorFecha || ['VENCIDO', 'SUSPENDIDO', 'GRACIA'].includes(cliente.estado)
+  const puedeGracia = vencidoPorFecha || ['VENCIDO', 'DESACTIVADO', 'GRACIA'].includes(cliente.estado)
 
-  // ── Info del cliente (reutilizado en modales) ────────────────────────
   const clienteInfo = (
     <div className="info-box">
       <strong className="info-box-title">{cliente.nombre_empresa}</strong>
@@ -239,7 +270,7 @@ export default function AccionesDetalle({ cliente }: Props) {
     </div>
   )
 
-  // ── Modal: Período especial ──────────────────────────────────────────
+  // ── Modales (sin cambios respecto a la versión anterior) ──
   const modalGracia = (
     <div className="modal-backdrop">
       <div className="modal modal-md">
@@ -295,13 +326,6 @@ export default function AccionesDetalle({ cliente }: Props) {
               <textarea name="notas" className="input" rows={2} placeholder="Ej: cliente solicitó extensión hasta cobro de factura pendiente" />
             </div>
 
-            <div className="info-banner">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              <p>El cliente tendrá acceso durante este período <strong>sin registrar pago</strong>. Al terminar, registra el pago o suspéndelo a mano (no hay vencimiento automático).</p>
-            </div>
-
             {error   && <div className="alert alert-error">{error}</div>}
             {success && <div className="alert alert-success">{success}</div>}
           </div>
@@ -316,13 +340,11 @@ export default function AccionesDetalle({ cliente }: Props) {
     </div>
   )
 
-  // ── Modal: Confirmar Suspender / Reactivar ───────────────────────────
-  const nuevoEstado = esActivo ? 'SUSPENDIDO' : 'ACTIVO'
-  const modalEstado = (
+  const modalSuspender = (
     <div className="modal-backdrop">
       <div className="modal modal-420">
         <div className="modal-header">
-          <h2 className="modal-title">{esActivo ? 'Suspender cliente' : 'Reactivar cliente'}</h2>
+          <h2 className="modal-title">Desactivar cliente</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -332,16 +354,8 @@ export default function AccionesDetalle({ cliente }: Props) {
         <div className="modal-body">
           {clienteInfo}
           <p className="text-sm-muted">
-            {esActivo
-              ? 'El cliente no podrá iniciar sesión mientras esté suspendido.'
-              : 'El estado pasará a ACTIVO. Si la fecha de expiración ya venció, registra un pago para renovarla.'
-            }
+            El cliente no podrá iniciar sesión mientras esté suspendido. Para reactivarlo, registra un pago o concede un período especial.
           </p>
-          {advertencia && (
-            <div className="alert alert-error mt-3">
-              ⚠ {advertencia}
-            </div>
-          )}
           {error   && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
         </div>
@@ -350,14 +364,11 @@ export default function AccionesDetalle({ cliente }: Props) {
             <>
               <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
               <button
-                className={`btn ${esActivo ? 'btn-danger' : 'btn-primary'}`}
-                onClick={() => handleEstado(nuevoEstado as 'ACTIVO' | 'SUSPENDIDO')}
+                className="btn btn-danger"
+                onClick={handleSuspender}
                 disabled={loading}
               >
-                {loading
-                  ? <><span className="spinner" /> {esActivo ? 'Suspendiendo...' : 'Reactivando...'}</>
-                  : esActivo ? 'Suspender' : 'Reactivar'
-                }
+                {loading ? <><span className="spinner" /> Desactivando...</> : 'Desactivar'}
               </button>
             </>
           ) : (
@@ -370,7 +381,6 @@ export default function AccionesDetalle({ cliente }: Props) {
     </div>
   )
 
-  // ── Modal: Registrar pago ────────────────────────────────────────────
   const modalPago = (
     <div className="modal-backdrop">
       <div className="modal modal-540">
@@ -393,7 +403,6 @@ export default function AccionesDetalle({ cliente }: Props) {
               </div>
             )}
 
-            {/* Ciclo (informativo) + Método */}
             <div className="grid-cols-2">
               <div className="input-group">
                 <label>Ciclo</label>
@@ -411,7 +420,6 @@ export default function AccionesDetalle({ cliente }: Props) {
               </div>
             </div>
 
-            {/* Monto (fijado por la configuración del cliente, no editable) */}
             <div className="input-group">
               <label>Monto USD a cobrar</label>
               <div className="input input-display">${(parseFloat(montoSugerido) || 0).toFixed(2)}</div>
@@ -422,7 +430,6 @@ export default function AccionesDetalle({ cliente }: Props) {
               </span>
             </div>
 
-            {/* Período */}
             <div className="grid-cols-2">
               <div className="input-group">
                 <label>Inicio período <span className="required">*</span></label>
@@ -456,7 +463,6 @@ export default function AccionesDetalle({ cliente }: Props) {
               </div>
             </div>
 
-            {/* Alerta inicio temprano */}
             {alertaInicioTemprano && (
               <div className="alert alert-warning alert-flex mt-neg-1">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
@@ -467,7 +473,6 @@ export default function AccionesDetalle({ cliente }: Props) {
               </div>
             )}
 
-            {/* Desglose pro-rata */}
             {prorata && (
               <div className="info-banner mt-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -493,7 +498,7 @@ export default function AccionesDetalle({ cliente }: Props) {
             {advertencia && (
               <div className="alert alert-warning alert-flex">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
                 <span>{advertencia}</span>
@@ -513,52 +518,152 @@ export default function AccionesDetalle({ cliente }: Props) {
     </div>
   )
 
+  // ── Modal: Editar cliente ──
+  const modalEditar = (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <div className="modal-header">
+          <h2 className="modal-title">Editar cliente</h2>
+          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <form ref={formEditarRef} onSubmit={handleEditar}>
+          <input type="hidden" name="client_id" value={cliente.client_id} />
+          <div className="modal-body">
+            <div className="input-group">
+              <label>Nombre de la empresa <span className="required">*</span></label>
+              <input name="nombre_empresa" className="input" required defaultValue={cliente.nombre_empresa} />
+            </div>
+            <div className="input-group">
+              <label>Nombre del contacto</label>
+              <input name="nombre_contacto" className="input" defaultValue={cliente.nombre_contacto ?? ''} />
+            </div>
+            <div className="input-group">
+              <label>Email del administrador <span className="required">*</span></label>
+              <input name="email_admin" type="email" className="input" required defaultValue={cliente.email_admin} />
+            </div>
+            <div className="input-group">
+              <label>Notas internas</label>
+              <textarea name="notas" className="input" rows={3} defaultValue={cliente.notas ?? ''} />
+            </div>
+            {editError && <div className="alert alert-error">{editError}</div>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={editLoading}>
+              {editLoading ? <><span className="spinner" /> Guardando…</> : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+
   const activeModal = modal === 'gracia' ? modalGracia
-    : modal === 'estado' ? modalEstado
+    : modal === 'estado' ? modalSuspender
     : modal === 'pago'   ? modalPago
+    : modal === 'editar' ? modalEditar
     : null
+
+  // ── Botones sueltos (orden acordado: Editar, Suspender, Período especial, Registrar pago) ──
+  const btnEditar = (
+    <button
+      className="btn btn-secondary btn-sm header-action"
+      onClick={openEditar}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Editar
+    </button>
+  )
+
+  const btnSuspender = esActivo ? (
+    <button
+      className="btn btn-danger btn-sm header-action"
+      onClick={openEstado}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+      </svg>
+      Suspender
+    </button>
+  ) : null
+
+  const btnGracia = puedeGracia ? (
+    <button
+      className="btn btn-secondary btn-sm header-action"
+      onClick={openGracia}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      Período especial
+    </button>
+  ) : null
+
+  const btnPago = (
+    <button
+      className="btn btn-primary btn-sm header-action"
+      onClick={openPago}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <line x1="12" y1="1" x2="12" y2="23"/>
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      </svg>
+      Registrar pago
+    </button>
+  )
 
   return (
     <>
-      <div className="client-actions-bar">
-        {puedeGracia && (
-          <>
-            <button className="btn btn-secondary btn-sm" onClick={() => setModal('gracia')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              Período especial
-            </button>
-            <div className="client-actions-divider" />
-          </>
-        )}
+      {/* Desktop: botones sueltos en fila horizontal. Móvil: dropdown con los 3 puntos */}
+      <div className="detail-header-actions">
+        {btnEditar}
+        {btnSuspender}
+        {btnGracia}
+        {btnPago}
 
-        {esActivo ? (
-          <button className="btn btn-danger btn-sm" onClick={() => setModal('estado')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+        {/* Dropdown móvil */}
+        <div className="detail-header-actions-mobile" ref={menuMovilRef}>
+          <button
+            className="btn-icon"
+            onClick={() => setMenuMovilOpen(v => !v)}
+            aria-label="Más opciones"
+            title="Más opciones"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="5" r="1.5"/>
+              <circle cx="12" cy="12" r="1.5"/>
+              <circle cx="12" cy="19" r="1.5"/>
             </svg>
-            Suspender
           </button>
-        ) : (
-          <button className="btn btn-secondary btn-sm" onClick={() => setModal('estado')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            Reactivar
-          </button>
-        )}
-
-        <div className="client-actions-divider" />
-
-        <button className="btn btn-primary btn-sm" onClick={openPago}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="1" x2="12" y2="23"/>
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-          Registrar pago
-        </button>
+          {menuMovilOpen && (
+            <div className="detail-header-actions-dropdown">
+              <button className="dropdown-item" onClick={openEditar}>
+                Editar
+              </button>
+              {esActivo && (
+                <button className="dropdown-item" onClick={openEstado}>
+                  Suspender
+                </button>
+              )}
+              {puedeGracia && (
+                <button className="dropdown-item" onClick={openGracia}>
+                  Período especial
+                </button>
+              )}
+              <button className="dropdown-item" onClick={openPago}>
+                Registrar pago
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {mounted && activeModal && createPortal(activeModal, document.body)}

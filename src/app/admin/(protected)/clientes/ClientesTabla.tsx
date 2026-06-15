@@ -7,7 +7,7 @@ import { suscripcionLabel } from '@/lib/billing'
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info', GRACIA: 'badge-warning',
-  SUSPENDIDO: 'badge-warning', VENCIDO: 'badge-error',
+  DESACTIVADO: 'badge-warning', VENCIDO: 'badge-error',
 }
 
 type Cliente = {
@@ -15,6 +15,7 @@ type Cliente = {
   email_admin: string; estado: string
   precio_mensual_usd: number | null; ciclo_facturacion: string | null
   fecha_expiracion: string | null; fecha_inicio: string | null
+  fecha_fin_gracia: string | null
   created_at: string | null; notas: string | null
 }
 
@@ -32,11 +33,14 @@ function formatFecha(fecha: string | null) {
 
 type DiasInfo = { label: string; variant: 'error' | 'warning' | 'success' | 'muted' }
 
-function calcDiasRestantes(fechaExp: string | null, estado: string): DiasInfo {
-  if (estado === 'SUSPENDIDO') return { label: '—', variant: 'muted' }
-  if (!fechaExp)               return { label: '—', variant: 'muted' }
+function calcDiasRestantes(fechaExp: string | null, estado: string, fechaFinGracia: string | null = null): DiasInfo {
+  if (estado === 'DESACTIVADO') return { label: '—', variant: 'muted' }
+  
+  // Para clientes en GRACIA, usar fecha_fin_gracia si existe
+  const fechaCalcular = (estado === 'GRACIA' && fechaFinGracia) ? fechaFinGracia : fechaExp
+  if (!fechaCalcular)    return { label: '—', variant: 'muted' }
 
-  const [y, m, d] = fechaExp.split('T')[0].split('-').map(Number)
+  const [y, m, d] = fechaCalcular.split('T')[0].split('-').map(Number)
   const exp = new Date(y, m - 1, d)
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const dias = Math.ceil((exp.getTime() - hoy.getTime()) / 86_400_000)
@@ -62,11 +66,11 @@ function exportCSV(clientes: Cliente[]) {
   const rows = clientes.map(c => [
     c.client_id, c.nombre_empresa, c.nombre_contacto ?? '', c.email_admin,
     Number(c.precio_mensual_usd ?? 0).toFixed(2), cicloLabel(c.ciclo_facturacion), c.estado,
-    c.fecha_expiracion ?? '', calcDiasRestantes(c.fecha_expiracion, c.estado).label,
+    c.fecha_expiracion ?? '', calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia).label,
     c.fecha_inicio ?? c.created_at ?? '', c.notas ?? '',
   ])
   const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = 'clientes.csv'; a.click()
   URL.revokeObjectURL(url)
@@ -123,7 +127,7 @@ export default function ClientesTabla({
           <option value="ACTIVO">Activo</option>
           <option value="TRIAL">Trial</option>
           <option value="GRACIA">Período especial</option>
-          <option value="SUSPENDIDO">Suspendido</option>
+          <option value="DESACTIVADO">Suspendido</option>
           <option value="VENCIDO">Vencido</option>
         </select>
 
@@ -161,7 +165,7 @@ export default function ClientesTabla({
             </thead>
             <tbody>
               {paginados.map(c => {
-                const dias = calcDiasRestantes(c.fecha_expiracion, c.estado)
+                const dias = calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia)
                 return (
                   <tr key={c.client_id} className="table-row-clickable" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}>
                     <td>

@@ -11,7 +11,7 @@ const ESTADO_LABEL: Record<string, string> = {
   TRIAL:      'Período de prueba',
   GRACIA:     'Período especial',
   VENCIDO:    'Vencido',
-  SUSPENDIDO: 'Suspendido',
+  DESACTIVADO: 'Desactivado',
 }
 
 const ROL_LABEL: Record<string, string> = {
@@ -24,7 +24,7 @@ function EstadoBadge({ estado }: { estado: string }) {
     estado === 'ACTIVO'                    ? 'prf-badge-activo'   :
     estado === 'TRIAL'                     ? 'prf-badge-trial'    :
     estado === 'GRACIA'                    ? 'prf-badge-gracia'   :
-    ['VENCIDO', 'SUSPENDIDO'].includes(estado) ? 'prf-badge-vencido' : ''
+    ['VENCIDO', 'DESACTIVADO'].includes(estado) ? 'prf-badge-vencido' : ''
   return <span className={`prf-badge ${cls}`}>{ESTADO_LABEL[estado] ?? estado}</span>
 }
 

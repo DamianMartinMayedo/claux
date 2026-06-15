@@ -79,9 +79,9 @@ export async function crearCliente(formData: FormData) {
   const modulos_activos = modulosRaw.includes('base') ? modulosRaw : ['base', ...modulosRaw]
   const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
 
-  // Estado y vigencia: trial → TRIAL por días configurables; sin trial → SUSPENDIDO hasta que
+  // Estado y vigencia: trial → TRIAL por días configurables; sin trial → DESACTIVADO hasta que
   // se confirme el primer pago de suscripción (confirmarPago lo pasa a ACTIVO).
-  const estadoInicial = es_trial ? 'TRIAL' : 'SUSPENDIDO'
+  const estadoInicial = es_trial ? 'TRIAL' : 'DESACTIVADO'
   const diasVigencia  = es_trial
     ? (parseInt(await getSetting('dias_trial_default', '15'), 10) || 15)
     : diasCiclo(ciclo)
@@ -199,23 +199,16 @@ export async function crearCliente(formData: FormData) {
   return { ok: true, client_id, passwordTemporal }
 }
 
-// ── Cambiar estado (ACTIVO ↔ SUSPENDIDO) ────────────────────────────
+// ── Desactivar cliente ───────────────────────────────────────────────
 export async function cambiarEstadoCliente(formData: FormData) {
   const supabase = await createClient()
 
   const client_id    = formData.get('client_id') as string
   const nuevo_estado = formData.get('estado')    as string
 
-  if (!client_id || !['ACTIVO', 'SUSPENDIDO'].includes(nuevo_estado)) {
+  if (!client_id || nuevo_estado !== 'DESACTIVADO') {
     return { ok: false, error: 'Datos inválidos.' }
   }
-
-  // Leer fecha_expiracion actual para generar advertencia al reactivar
-  const { data: clienteActual } = await supabase
-    .from('clients')
-    .select('fecha_expiracion')
-    .eq('client_id', client_id)
-    .single()
 
   const { error } = await supabase
     .from('clients')
@@ -224,28 +217,19 @@ export async function cambiarEstadoCliente(formData: FormData) {
 
   if (error) return { ok: false, error: error.message }
 
-  // Advertencia: reactivado pero la fecha de expiración ya venció
-  let advertencia: string | null = null
-  if (nuevo_estado === 'ACTIVO' && clienteActual?.fecha_expiracion) {
-    const exp = new Date(clienteActual.fecha_expiracion)
-    if (exp < new Date()) {
-      advertencia = 'El cliente fue reactivado pero su fecha de expiración ya venció. Registra un pago para renovarla.'
-    }
-  }
-
   const { data: { user: u3 } } = await supabase.auth.getUser()
   await logActividad(supabase, {
     user_email:  u3?.email ?? 'sistema',
     entity:      'cliente',
     entity_id:   client_id,
-    action:      'cambiar_estado',
-    description: `Cambió estado del cliente ${client_id} a ${nuevo_estado}`,
+    action:      'suspender',
+    description: `Desactivó manualmente al cliente ${client_id}`,
   })
 
   revalidatePath('/admin/clientes')
   revalidatePath(`/admin/clientes/${client_id}`)
   revalidatePath('/admin/dashboard')
-  return { ok: true as const, advertencia }
+  return { ok: true as const }
 }
 
 // ── Aplicar período especial (GRACIA) ────────────────────────────────
@@ -377,4 +361,81 @@ export async function editarCliente(formData: FormData) {
   revalidatePath('/admin/clientes')
   revalidatePath(`/admin/clientes/${client_id}`)
   return { ok: true as const }
+}
+
+// ── Desactivar clientes vencidos automáticamente ────────────────────
+// Busca clientes con período de gracia vencido o fecha de expiración pasada
+// y los suspende automáticamente. Se ejecuta al cargar el admin.
+export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendidos: number }> {
+  const supabase = await createClient()
+  const hoy = toDateStr(new Date())
+
+  // 1. Clientes con GRACIA vencida → DESACTIVADO
+  const { data: graciaVencidos, error: errGracia } = await supabase
+    .from('clients')
+    .select('client_id, nombre_empresa')
+    .eq('estado', 'GRACIA')
+    .lt('fecha_fin_gracia', hoy)
+
+  if (!errGracia && graciaVencidos && graciaVencidos.length > 0) {
+    const clientIds = graciaVencidos.map(c => c.client_id)
+    await supabase
+      .from('clients')
+      .update({
+        estado:           'DESACTIVADO',
+        fecha_fin_gracia: null,
+        motivo_gracia:    null,
+        notas_gracia:     null,
+      })
+      .in('client_id', clientIds)
+
+    // Log de auditoría
+    const { data: { user } } = await supabase.auth.getUser()
+    for (const c of graciaVencidos) {
+      await logActividad(supabase, {
+        user_email:  user?.email ?? 'sistema',
+        entity:      'cliente',
+        entity_id:   c.client_id,
+        action:      'suspender',
+        description: `Desactivó automáticamente al cliente ${c.client_id} (${c.nombre_empresa}) — período de gracia vencido`,
+      })
+    }
+  }
+
+  // 2. Clientes con ACTIVO/TRIAL y fecha_expiracion < hoy → DESACTIVADO
+  const { data: expVencidos, error: errExp } = await supabase
+    .from('clients')
+    .select('client_id, nombre_empresa')
+    .in('estado', ['ACTIVO', 'TRIAL'])
+    .lt('fecha_expiracion', hoy)
+
+  if (!errExp && expVencidos && expVencidos.length > 0) {
+    const clientIds = expVencidos.map(c => c.client_id)
+    await supabase
+      .from('clients')
+      .update({ estado: 'DESACTIVADO' })
+      .in('client_id', clientIds)
+
+    // Log de auditoría
+    const { data: { user } } = await supabase.auth.getUser()
+    for (const c of expVencidos) {
+      await logActividad(supabase, {
+        user_email:  user?.email ?? 'sistema',
+        entity:      'cliente',
+        entity_id:   c.client_id,
+        action:      'suspender',
+        description: `Desactivó automáticamente al cliente ${c.client_id} (${c.nombre_empresa}) — fecha de expiración vencida`,
+      })
+    }
+  }
+
+  const totalSuspendidos = (graciaVencidos?.length ?? 0) + (expVencidos?.length ?? 0)
+
+  // Revalidar paths si hubo cambios
+  if (totalSuspendidos > 0) {
+    revalidatePath('/admin/clientes')
+    revalidatePath('/admin/dashboard')
+  }
+
+  return { ok: true, suspendidos: totalSuspendidos }
 }

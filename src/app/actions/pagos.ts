@@ -74,7 +74,7 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
 // ── Registrar pago ───────────────────────────────────────────────────
 // Lógica del original:
 // - Actualiza fecha_expiracion del cliente a fecha_fin_periodo
-// - Reactiva si estaba VENCIDO, SUSPENDIDO, TRIAL o GRACIA
+// - Reactiva si estaba VENCIDO, DESACTIVADO, TRIAL o GRACIA
 // - Limpia campos de gracia si los había
 // - Detecta gap entre expiración actual y inicio del período (advierte pero no bloquea)
 // - Cambia plan si viene uno nuevo
@@ -166,7 +166,7 @@ export async function registrarPago(formData: FormData) {
 
   // ── Actualizar cliente ───────────────────────────────────────────
   // Reactivar si estaba en cualquier estado no-activo (igual que el original)
-  const estadosReactivar = ['VENCIDO', 'SUSPENDIDO', 'TRIAL', 'GRACIA']
+  const estadosReactivar = ['VENCIDO', 'DESACTIVADO', 'TRIAL', 'GRACIA']
   const nuevoEstado = estadosReactivar.includes(cliente.estado) ? 'ACTIVO' : cliente.estado
 
   await supabase
@@ -224,7 +224,7 @@ export async function confirmarPago(pagoId: string) {
     .eq('pago_id', pagoId)
   if (error) return { ok: false as const, error: error.message }
 
-  // Si es pago de suscripción y el cliente está SUSPENDIDO (pendiente del primer cobro),
+  // Si es pago de suscripción y el cliente está DESACTIVADO (pendiente del primer cobro),
   // activarlo y sincronizar fecha_expiracion con el período confirmado.
   if (pago.concepto === 'suscripcion' && pago.fecha_fin_periodo) {
     const { data: clienteActual } = await supabase
@@ -232,7 +232,7 @@ export async function confirmarPago(pagoId: string) {
       .select('estado')
       .eq('client_id', pago.client_id)
       .single()
-    if (clienteActual?.estado === 'SUSPENDIDO') {
+    if (clienteActual?.estado === 'DESACTIVADO') {
       await supabase
         .from('clients')
         .update({ estado: 'ACTIVO', fecha_expiracion: pago.fecha_fin_periodo })
