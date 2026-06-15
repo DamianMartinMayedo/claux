@@ -802,6 +802,7 @@
 .ter-action-btn:hover                     { background: var(--color-surface-2); color: var(--color-text); }
 .ter-action-btn.ter-action-danger:hover   { background: var(--color-error-bg); color: var(--color-error); }
 .ter-action-btn.ter-action-restore:hover  { background: var(--color-success-bg); color: var(--color-success); }
+.ter-action-btn.ter-action-money:hover    { background: var(--color-primary-subtle); color: var(--color-primary-text); }
 
 
 
@@ -1140,4 +1141,25 @@
 .tes-mov-cat { font-size: var(--text-xs); color: var(--color-text-muted); }
 .tes-origen-badge { font-size: 10px; }
 .tes-nowrap { white-space: nowrap; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   GASTOS Y COBROS (base contable)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Tarjetas de pendientes (por pagar / por cobrar) */
+.gc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+.gc-stat-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-4); border-left: 3px solid var(--color-border); }
+.gc-stat-pagar  { border-left-color: var(--color-error); }
+.gc-stat-cobrar { border-left-color: var(--color-success); }
+.gc-stat-label { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-2); }
+.gc-stat-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--text-base); font-variant-numeric: tabular-nums; padding: 2px 0; }
+.gc-stat-line span { color: var(--color-text-muted); font-size: var(--text-sm); }
+.gc-stat-empty { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Liquidación: formulario e historial dentro del modal */
+.gc-liq-form { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-divider); }
+.gc-liq-historial { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-divider); display: flex; flex-direction: column; gap: var(--space-1); }
+.gc-liq-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
+.gc-liq-cuenta { flex: 1; font-size: var(--text-sm); color: var(--color-text); }
+.gc-liq-monto { font-weight: 700; font-variant-numeric: tabular-nums; }
 
