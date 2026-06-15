@@ -46,14 +46,24 @@ export default function ReportesView({ data }: { data: ReportesData }) {
 
   function aplicar() { navegar(desde, hasta, empresa) }
 
-  function preset(tipo: 'mes' | 'mes_pasado' | 'anio') {
+  function rangoPreset(tipo: 'mes' | 'mes_pasado' | 'anio'): { d: string; h: string } {
     const now = new Date()
     let d: Date, h: Date
-    if (tipo === 'mes')         { d = new Date(now.getFullYear(), now.getMonth(), 1);     h = new Date(now.getFullYear(), now.getMonth() + 1, 0) }
+    if (tipo === 'mes')             { d = new Date(now.getFullYear(), now.getMonth(), 1);     h = new Date(now.getFullYear(), now.getMonth() + 1, 0) }
     else if (tipo === 'mes_pasado') { d = new Date(now.getFullYear(), now.getMonth() - 1, 1); h = new Date(now.getFullYear(), now.getMonth(), 0) }
-    else                        { d = new Date(now.getFullYear(), 0, 1);                  h = new Date(now.getFullYear(), 11, 31) }
-    const ds = fmt(d), hs = fmt(h)
-    setDesde(ds); setHasta(hs); navegar(ds, hs, empresa)
+    else                            { d = new Date(now.getFullYear(), 0, 1);                  h = new Date(now.getFullYear(), 11, 31) }
+    return { d: fmt(d), h: fmt(h) }
+  }
+
+  function preset(tipo: 'mes' | 'mes_pasado' | 'anio') {
+    const { d, h } = rangoPreset(tipo)
+    setDesde(d); setHasta(h); navegar(d, h, empresa)
+  }
+
+  // ¿Qué preset coincide con el período aplicado? (para resaltar el botón activo)
+  const presetActivo = (tipo: 'mes' | 'mes_pasado' | 'anio') => {
+    const { d, h } = rangoPreset(tipo)
+    return data.desde === d && data.hasta === h
   }
 
   const sinDatos = data.resultado.length === 0 && data.flujo.length === 0
@@ -80,9 +90,9 @@ export default function ReportesView({ data }: { data: ReportesData }) {
             onChange={e => setQuery(e.target.value)}
           />
         </div>
-        <button className="cxx-chip" onClick={() => preset('mes')} disabled={isPending}>Este mes</button>
-        <button className="cxx-chip" onClick={() => preset('mes_pasado')} disabled={isPending}>Mes pasado</button>
-        <button className="cxx-chip" onClick={() => preset('anio')} disabled={isPending}>Este año</button>
+        <button className={`cxx-chip${presetActivo('mes') ? ' active' : ''}`} onClick={() => preset('mes')} disabled={isPending}>Este mes</button>
+        <button className={`cxx-chip${presetActivo('mes_pasado') ? ' active' : ''}`} onClick={() => preset('mes_pasado')} disabled={isPending}>Mes pasado</button>
+        <button className={`cxx-chip${presetActivo('anio') ? ' active' : ''}`} onClick={() => preset('anio')} disabled={isPending}>Este año</button>
       </div>
 
       {/* Fila de rango de fechas + empresa */}
