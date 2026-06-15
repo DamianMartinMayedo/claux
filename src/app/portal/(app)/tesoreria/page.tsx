@@ -1,5 +1,11 @@
-import EnConstruccion from '@/components/portal/EnConstruccion'
+import { notFound }         from 'next/navigation'
+import { obtenerTesoreria } from '@/app/actions/portal/tesoreria'
+import TesoreriaView        from './TesoreriaView'
 
-export default function TesoreriaPage() {
-  return <EnConstruccion titulo="Tesorería" subtitulo="Caja, banco y movimientos de tesorería." />
+export const dynamic = 'force-dynamic'
+
+export default async function TesoreriaPage() {
+  const data = await obtenerTesoreria()
+  if (!data) notFound()
+  return <TesoreriaView data={data} />
 }

@@ -1090,3 +1090,54 @@
 .prd-tipo-desc { font-weight: 400; font-size: var(--text-xs); opacity: 0.8; }
 .prd-tipo-hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
 
+/* ════════════════════════════════════════════════════════════════════════
+   TESORERÍA (base contable) — cuentas, saldos y movimientos
+   ════════════════════════════════════════════════════════════════════════ */
+
+.tes-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Saldos por moneda */
+.tes-saldos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+.tes-saldo-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-4); }
+.tes-saldo-moneda { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); }
+.tes-saldo-monto { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); margin-top: var(--space-1); font-variant-numeric: tabular-nums; }
+.tes-saldo-neg { color: var(--color-error); }
+.tes-saldo-label { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+
+/* Cabeceras de sección */
+.tes-section-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.tes-section-header-mt { margin-top: var(--space-6); }
+.tes-section-title { font-size: var(--text-lg); font-weight: 700; color: var(--color-text); }
+
+/* Tarjetas de cuenta */
+.tes-cuentas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.tes-cuenta-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.tes-cuenta-archivada { opacity: 0.6; }
+.tes-cuenta-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.tes-cuenta-nombre { font-weight: 700; font-size: var(--text-base); color: var(--color-text); margin-bottom: var(--space-1); }
+.tes-cuenta-empresa { font-size: var(--text-xs); color: var(--color-text-muted); margin-left: var(--space-2); }
+.tes-cuenta-saldo { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.tes-cuenta-saldo-mon { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
+.tes-cuenta-meta { display: flex; gap: var(--space-3); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tes-meta-in { color: var(--color-success); }
+.tes-meta-out { color: var(--color-error); }
+.tes-meta-num { color: var(--color-text-muted); margin-left: auto; }
+.tes-cuenta-mov-btn { align-self: flex-start; }
+
+/* Toggle tipo de movimiento (ingreso / egreso) */
+.tes-tipo-toggle { display: flex; gap: var(--space-2); }
+.tes-tipo-opt { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--space-2); padding: 10px; border: 2px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; font-weight: 600; font-size: var(--text-sm); }
+.tes-tipo-ingreso.active { border-color: var(--color-success); background: var(--color-success-bg); color: var(--color-success); }
+.tes-tipo-egreso.active { border-color: var(--color-error); background: var(--color-error-bg); color: var(--color-error); }
+
+/* Tabla de movimientos */
+.tes-mov-toolbar { margin: 0; }
+.tes-col-monto { text-align: right; }
+.tes-monto-cell { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tes-monto-in { color: var(--color-success); }
+.tes-monto-out { color: var(--color-error); }
+.tes-mov-sub { display: flex; align-items: center; gap: var(--space-2); margin-top: 2px; }
+.tes-mov-cat { font-size: var(--text-xs); color: var(--color-text-muted); }
+.tes-origen-badge { font-size: 10px; }
+.tes-nowrap { white-space: nowrap; }
+

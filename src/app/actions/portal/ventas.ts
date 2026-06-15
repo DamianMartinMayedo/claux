@@ -4,6 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { tieneModulo }       from '@/lib/modulos'
 import {
   calcularTotales,
   formatoNumero,
@@ -193,6 +194,16 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
     }
   }
 
+  // Gate por módulo Inventario: el selector de productos es una conveniencia de
+  // llenado rápido. Sin Inventario, las líneas se rellenan con texto libre (la base
+  // funciona sola); con Inventario, se ofrece el datalist de productos.
+  const { data: clienteRow } = await db
+    .from('clients')
+    .select('modulos_activos')
+    .eq('client_id', session.client_id)
+    .single()
+  const tieneInventario = tieneModulo(clienteRow?.modulos_activos, 'inventario')
+
   const [ofRes, faRes, cliRes, prodRes, monRes] = await Promise.all([
     db.from('ofertas').select('*')
       .eq('client_id', session.client_id)
@@ -209,11 +220,13 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
       .in('tipo', ['CLIENTE', 'AMBOS'])
       .eq('activo', true)
       .order('nombre'),
-    db.from('products')
-      .select('producto_id, codigo, nombre, unidad, precios')
-      .eq('client_id', session.client_id)
-      .eq('estado', 'ACTIVO')
-      .order('nombre'),
+    tieneInventario
+      ? db.from('products')
+          .select('producto_id, codigo, nombre, unidad, precios')
+          .eq('client_id', session.client_id)
+          .eq('estado', 'ACTIVO')
+          .order('nombre')
+      : Promise.resolve({ data: [] as VentasResumenData['productos'] }),
     db.from('monedas')
       .select('codigo')
       .eq('client_id', session.client_id)
