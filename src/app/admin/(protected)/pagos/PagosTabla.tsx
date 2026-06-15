@@ -29,7 +29,7 @@ function estadoLabel(estado: string | null) {
 function formatFecha(fecha: string | null) {
   if (!fecha) return '—'
   const [y, m, d] = fecha.split('T')[0].split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${String(y).slice(-2)}`
 }
 
 function exportCSV(
@@ -38,13 +38,13 @@ function exportCSV(
 ) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const headers = ['ID Pago', 'Cliente ID', 'Empresa', 'Concepto', 'Estado', 'Método',
-    'Monto USD', 'Fecha', 'Inicio período', 'Fin período', 'Notas']
+    'Monto USD', 'Fecha', 'Inicio período', 'Fin período']
   const rows = pagos.map(p => [
     p.pago_id, p.client_id, clienteNombre[p.client_id] ?? '',
     conceptoLabel(p.concepto), estadoLabel(p.estado),
     METODO_LABEL[p.metodo] ?? p.metodo,
     p.monto_usd, p.fecha ?? '',
-    p.fecha_inicio_periodo ?? '', p.fecha_fin_periodo ?? '', p.notas ?? '',
+    p.fecha_inicio_periodo ?? '', p.fecha_fin_periodo ?? '',
   ])
   const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
@@ -153,8 +153,7 @@ export default function PagosTabla({
                 <th>Método</th>
                 <th>Monto USD</th>
                 <th>Fecha</th>
-                <th>Período cubierto</th>
-                <th>Notas</th>
+                <th>Período</th>
                 <th />
               </tr>
             </thead>
@@ -187,9 +186,6 @@ export default function PagosTabla({
                     {p.fecha_inicio_periodo && p.fecha_fin_periodo
                       ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
                       : '—'}
-                  </td>
-                  <td className="table-muted td-notes">
-                    {p.notas ?? '—'}
                   </td>
                   <td className="table-actions-right">
                     <div className="table-actions-group">

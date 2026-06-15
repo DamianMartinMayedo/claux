@@ -77,9 +77,10 @@ modulos_catalogo (catálogo de lo que se vende)         clients (cada negocio)
 │ precio_fundador_usd    10.00             │           │                   reservas_citas]│
 │ precio_estandar_usd    18.00             │           │ tarifa           'fundador'     │
 │ es_base          (bool) false            │           │ precio_mensual_usd  30.00       │
-│ tipo             'funcionalidad'         │           │ ciclo_facturacion 'mensual'     │
-│ orden            (int)  20               │           │ plan_id          (NULL, inerte) │
-│ activo           (bool) true             │           └─────────────────────────────────┘
+│ tipo  'base|modulo|funcionalidad|addon'  │           │ ciclo_facturacion 'mensual'     │
+│ paginas (JSONB)  [{ruta,label,orden}]    │           │ plan_id          (NULL, inerte) │
+│ orden            (int)  20               │           └─────────────────────────────────┘
+│ activo           (bool) true             │
 └─────────────────────────────────────────┘
 ```
 
@@ -87,12 +88,58 @@ modulos_catalogo (catálogo de lo que se vende)         clients (cada negocio)
 (sin FK). El histórico de `payments` conserva los importes pero no la etiqueta de plan. El gating ya no
 depende de planes.
 
-## 4. Migraciones aplicadas (017 + 018 + 019)
+### 3.1 Taxonomía de tipos (`modulos_catalogo.tipo`)
+
+Cada fila del catálogo tiene un `tipo` que determina cómo se comporta en el sidebar del portal y qué
+páginas internas tiene. Fuente canónica de esta clasificación.
+
+| Tipo | Sidebar | Páginas internas | Ejemplo | ¿Se muestra si no contratado? |
+|---|---|---|---|---|
+| **`base`** | Grupo colapsable «Contabilidad», siempre expandido | Sí (`paginas` JSONB) | Base contable | Siempre visible, todas las páginas activas |
+| **`modulo`** | Grupo colapsable con nombre del módulo | Sí (`paginas` JSONB) | Inventario, RRHH, Asistente IA | Visible pero bloqueado (candado, href=`#`) |
+| **`funcionalidad`** | Items standalone (sin grupo) | No (ruta única) | Catálogo QR, Reservas y citas, Docs imprenta | **Oculto** por completo si no está activo |
+| **`addon`** | **No genera items** en el sidebar | No | Multiempresa, Usuarios extra, Estadísticas premium | El gating se hace en la página afectada |
+
+**Detalle de cada tipo:**
+
+- **`base`**: La base contable obligatoria. Siempre activa (`es_base = true`). Sus páginas internas son las de Contabilidad (Ventas, Gastos, Tesorería, etc.). No se puede cambiar de tipo ni desactivar.
+- **`modulo`**: Capacidad ERP contratable. Agrupa varias páginas internas bajo un grupo colapsable. Si no está contratado, el grupo se muestra con candado (upsell visual).
+- **`funcionalidad`**: Feature de sector (restaurante, peluquería, etc.). Item standalone en el sidebar, fuera de grupos. Si no está contratado, **no aparece** en el menú. Las rutas están protegidas por `requireModulo()`.
+- **`addon`**: Desbloquea capacidad extra en una página existente o añade una feature transversal (más empresas, más usuarios, dashboards avanzados). **No genera navegación propia**. El gating se aplica en la página afectada (ej: `empresas/page.tsx` verifica `multiempresa`). En el catálogo del admin aparece como un toggle más con su precio. Siempre se muestra en el panel de activación del cliente.
+
+### 3.2 Sidebar dirigido por datos (`paginas` JSONB) — y sus límites
+
+Cada fila del catálogo lleva una columna **`paginas`** (JSONB: `[{ruta, label, orden}]`, migración **024**) con
+las páginas internas del módulo. El `PortalSidebar` renderiza la navegación a partir de ahí: permite **renombrar
+y reordenar** entradas del menú desde el admin sin desplegar. Sirve además como **herramienta de planificación**
+(declarar las páginas de un módulo antes de construirlo).
+
+**Límite importante — qué sigue siendo código, no dato:**
+- La **`ruta`** apunta a un `page.tsx` real; el **icono** se resuelve por un `ICON_MAP` en `PortalSidebar`; el
+  **`page.tsx`** lo crea el desarrollador. Por tanto **crear un módulo desde el admin es media operación**: el
+  precio/tipo quedan en datos, pero la página real, su ruta y su icono son código. Una `ruta` apuntando a un
+  `page.tsx` inexistente da 404. Regla práctica: no editar `ruta` a mano salvo que el `page.tsx` exista.
+- **Ocultar en el sidebar NO es control de acceso.** Cada ruta gateada se protege en servidor con
+  `requireModulo('<clave>')` al inicio de su `page.tsx` (redirige a `/portal/dashboard` si el cliente no lo tiene).
+  Lo tienen: catálogo QR, reservas, docs imprenta, IA, productos/almacenes/compras/movimientos (`inventario`),
+  RRHH. La base no necesita guard (siempre activa); `empresas` es accesible (editas tu empresa) y el alta de la
+  2.ª empresa la limita el addon `multiempresa` dentro de la página.
+
+> Nota de diseño: la columna `paginas` añade una capa (BD → sidebar) cuyo único beneficio real es renombrar/reordenar
+> sin desplegar; ruta + icono + página viven en código igualmente. Si en el futuro estorba, revertir a un nav
+> definido en código es viable (el render de grupos colapsables se conserva).
+
+## 4. Migraciones aplicadas (017 → 025)
 
 > ✅ Aplicada como `supabase/migrations/017_modulos_catalogo.sql` (catálogo + columnas de cliente) y
 > `supabase/migrations/018_eliminar_planes.sql` (elimina `plans`, añade `ciclo_facturacion`,
 > `payments.concepto` y los ajustes `pago_setup_usd_default`/`descuento_anual_pct`/`dias_trial_default`;
 > backfill de clientes sin módulos a `['base']`) y `019_pago_estado.sql` (`payments.estado`). El DDL completo vive en esos ficheros; no se duplica aquí — precios y claves reales en la BD (`modulos_catalogo`), nunca hardcodear.
+>
+> Posteriores al sistema à la carte: **`024_modulos_paginas_jsonb.sql`** (columna `paginas` para el sidebar
+> dirigido por datos, §3.2) y **`025_addon_tipo.sql`** (añade el tipo `addon` al check constraint y reclasifica
+> `multiempresa` como addon, §3.1). Se numeraron 024/025 (no 018/019, que ya estaban ocupadas por las anteriores)
+> para no colisionar con el historial ya aplicado.
 
 > Las claves del seed son las del **modelo vigente** (§2.1). La frontera ya está resuelta: `base` absorbe
 > ventas/terceros/tesorería/gastos/cobros/CxC/CxP/reportes; `inventario` absorbe productos/almacenes/compras/
@@ -160,7 +207,7 @@ por caso de uso. Cómo funciona:
 
 ## 8. Estado de implementación
 
-**Hecho (migraciones 017 + 018):**
+**Hecho (migraciones 017–025):**
 - [x] **017** aplicada: `modulos_catalogo` (`tipo`) + columnas `clients.modulos_activos`/`tarifa`/`precio_mensual_usd`; seed de 8 filas.
 - [x] **Gating** del portal lee `clients.modulos_activos` (`layout.tsx`).
 - [x] **Sidebar** reestructurado a la frontera nueva (Contabilidad/base, Inventario, RRHH, Multiempresa, IA, Funcionalidades); item Contabilidad (`modulo_contable`) retirado.
@@ -171,11 +218,13 @@ por caso de uso. Cómo funciona:
 - [x] **Planes eliminados (018)**: tabla `plans` borrada, `plan_id` vaciado, `/admin/planes` + `planes-constants.ts` + `cambiarPlan` retirados.
 - [x] **Ciclo de facturación** `clients.ciclo_facturacion` (mensual/anual con descuento configurable); importe del cobro derivado en `obtenerDatosPagoDefecto`.
 - [x] **Pago de configuración** `payments.concepto` (`suscripcion`|`configuracion`); registrado opcionalmente al crear cliente; ajustes en `/admin/configuracion`.
+- [x] **Tipo `addon`** (025): cuarto tipo del catálogo; `multiempresa` reclasificado como addon (sin item de sidebar, gating en la página). Toggle en `ModulosCard` con grupo «Addons».
+- [x] **Sidebar dirigido por datos** (024): columna `paginas` (JSONB); el sidebar renderiza grupos colapsables desde el catálogo. Caveats y guards en §3.2.
+- [x] **Guards de ruta** `requireModulo()` en todas las rutas gateadas: catálogo QR, reservas, docs imprenta, IA, `inventario` (productos/almacenes/compras/movimientos) y RRHH. (Ocultar en el sidebar no protege; el guard sí.)
+- [x] **Base contable completa (Fase 4)**: Tesorería, Gastos/Cobros, CxC/CxP y Reportes financieros construidos; selector de productos del editor de líneas gateado por `inventario`.
 
 **Pendiente:**
-- [ ] **Completar la base contable**: Tesorería, Gastos/Cobros, Cuentas por cobrar/pagar y Reportes financieros (reutilizando patrones de Ventas).
-- [ ] **Gatear el selector de productos** del editor de líneas (`_DocumentoLineasEditor`) por el módulo `inventario` (sin módulo → entrada manual).
-- [ ] **Build-out de módulos**: Inventario (compras/movimientos), RRHH, Asistente IA; funcionalidades por sector (catálogo QR, reservas, documentos imprenta).
+- [ ] **Build-out de módulos**: Inventario (compras/movimientos reales), RRHH, Asistente IA; funcionalidades por sector (catálogo QR, reservas, documentos imprenta).
 
 ## 9. Discrepancias detectadas (registro, con recomendación)
 

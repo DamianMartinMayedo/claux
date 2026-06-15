@@ -14,11 +14,18 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const { data: cliente } = await db
-    .from('clients')
-    .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
-    .eq('client_id', session.client_id)
-    .single()
+  const [{ data: cliente }, { data: catalogo }] = await Promise.all([
+    db
+      .from('clients')
+      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
+      .eq('client_id', session.client_id)
+      .single(),
+    db
+      .from('modulos_catalogo')
+      .select('clave, nombre, tipo, paginas, orden')
+      .eq('activo', true)
+      .order('orden'),
+  ])
 
   if (!cliente) redirect('/portal/login')
 
@@ -63,6 +70,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       <PortalSidebar
         rol={session.rol}
         modulosActivos={modulosActivos}
+        catalogo={(catalogo ?? []) as any}
       />
       <main className="portal-main">
         {bloqueado

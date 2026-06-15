@@ -64,7 +64,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       {/* ── Cabecera ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Facturación</h1>
+          <h1 className="page-title">Suscripción</h1>
           <p className="page-subtitle">Estado de tu suscripción e historial de pagos.</p>
         </div>
       </div>

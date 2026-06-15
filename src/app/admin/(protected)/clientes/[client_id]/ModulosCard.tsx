@@ -28,6 +28,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
   { label: 'Base contable',       tipo: 'base' },
   { label: 'Módulos adicionales', tipo: 'modulo' },
   { label: 'Funcionalidades',     tipo: 'funcionalidad' },
+  { label: 'Addons',              tipo: 'addon' },
 ]
 
 export default function ModulosCard({

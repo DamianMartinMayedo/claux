@@ -81,3 +81,23 @@ export async function getPortalSession(): Promise<PortalSession | null> {
   if (!token) return devPortalSession()
   return verifyPortalToken(token)
 }
+
+// ── Requerir módulo activo ──────────────────────────────────────────
+// Para páginas de funcionalidades: si el cliente no tiene el módulo contratado,
+// redirige a /portal/dashboard.
+export async function requireModulo(modulo: string): Promise<PortalSession> {
+  const session = await getPortalSession()
+  if (!session) redirect('/portal/login')
+
+  const db = createAdminClient()
+  const { data: cliente } = await db
+    .from('clients')
+    .select('modulos_activos')
+    .eq('client_id', session.client_id)
+    .single()
+
+  const activos: string[] = Array.isArray(cliente?.modulos_activos) ? cliente.modulos_activos : []
+  if (!activos.includes(modulo)) redirect('/portal/dashboard')
+
+  return session
+}

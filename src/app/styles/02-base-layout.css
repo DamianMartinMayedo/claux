@@ -152,6 +152,36 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: var(--color-text-muted);
   padding: var(--space-3) var(--space-3) var(--space-2);
 }
+.nav-section-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-family: var(--font-body);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding-right: var(--space-2);
+  transition: color var(--transition);
+}
+.nav-section-collapse:hover { color: var(--color-text); }
+.nav-chevron {
+  width: 14px; height: 14px;
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.nav-chevron-open { transform: rotate(180deg); }
+
+/* Collapse wrapper */
+.nav-collapse-wrapper {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.nav-collapse-open { max-height: 800px; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-collapse-wrapper { transition: none; }
+  .nav-chevron { transition: none; }
+}
 .nav-item {
   display: flex;
   align-items: center;
