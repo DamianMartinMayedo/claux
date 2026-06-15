@@ -1,5 +1,11 @@
-import EnConstruccion from '@/components/portal/EnConstruccion'
+import { notFound }                from 'next/navigation'
+import { obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
+import CuentasView                 from '@/components/portal/CuentasView'
 
-export default function CxPPage() {
-  return <EnConstruccion titulo="Cuentas por pagar" subtitulo="Gastos y compras pendientes de pago." />
+export const dynamic = 'force-dynamic'
+
+export default async function CxPPage() {
+  const data = await obtenerCuentasPorPagar()
+  if (!data) notFound()
+  return <CuentasView data={data} />
 }

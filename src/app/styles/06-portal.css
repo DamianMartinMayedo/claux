@@ -1163,3 +1163,21 @@
 .gc-liq-cuenta { flex: 1; font-size: var(--text-sm); color: var(--color-text); }
 .gc-liq-monto { font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* ════════════════════════════════════════════════════════════════════════
+   CUENTAS POR COBRAR / PAGAR — chips de antigüedad (aging)
+   ════════════════════════════════════════════════════════════════════════ */
+
+.cxx-chips { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.cxx-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; font-size: var(--text-sm); font-weight: 600; transition: background var(--transition), color var(--transition), border-color var(--transition); }
+.cxx-chip:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+.cxx-chip.active { border-color: var(--color-primary); background: var(--color-primary-subtle); color: var(--color-primary-text); }
+.cxx-chip-count { font-size: var(--text-xs); font-weight: 700; background: var(--color-surface-offset); color: var(--color-text-muted); padding: 1px 7px; border-radius: var(--radius-full); }
+.cxx-chip.active .cxx-chip-count { background: var(--color-primary); color: var(--color-text-inv); }
+.cxx-empresa { margin-left: auto; }
+.cxx-dias { margin-left: var(--space-2); }
+
+/* Panel de cobros en el detalle de factura */
+.gc-fac-cobros { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
+.gc-fac-empty { margin: 0; }
+.gc-fac-cobrar { align-self: flex-start; margin-top: var(--space-3); }
+

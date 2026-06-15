@@ -1,0 +1,328 @@
+'use client'
+
+import { useState, useTransition, useMemo } from 'react'
+import { useRouter }                        from 'next/navigation'
+import Link                                 from 'next/link'
+import {
+  registrarPagoDoc,
+  anularPagoDoc,
+  type CuentasPageData,
+  type DocumentoPendiente,
+  type Tramo,
+} from '@/app/actions/portal/cobranza'
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+const TRAMO_LABEL: Record<Tramo, string> = {
+  AL_DIA: 'Al día', V_1_30: '1–30 días', V_31_60: '31–60 días', V_60: '+60 días',
+}
+const TRAMO_BADGE: Record<Tramo, string> = {
+  AL_DIA: 'badge-neutral', V_1_30: 'badge-warning', V_31_60: 'badge-warning', V_60: 'badge-error',
+}
+const TRAMOS: Tramo[] = ['AL_DIA', 'V_1_30', 'V_31_60', 'V_60']
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatMonto(n: number): string {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function formatFecha(f: string | null): string {
+  if (!f) return '—'
+  const [y, m, d] = f.split('T')[0].split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+// ── Modal: registrar cobro / pago + historial ───────────────────────────────────
+
+function PagoModal({
+  doc, cuentas, modo, onClose, onChanged,
+}: {
+  doc:      DocumentoPendiente
+  cuentas:  CuentasPageData['cuentas']
+  modo:     CuentasPageData['modo']
+  onClose:  () => void
+  onChanged: () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
+
+  const esCobro       = modo === 'COBRAR'
+  const cuentasCompat = cuentas.filter(c => c.moneda === doc.moneda)
+  const [cuentaId, setCuentaId] = useState(cuentasCompat[0]?.cuenta_id ?? '')
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+    const fd = new FormData(e.currentTarget)
+    fd.set('doc_tipo', doc.doc_tipo)
+    fd.set('doc_id', doc.doc_id)
+    fd.set('cuenta_id', cuentaId)
+    startTransition(async () => {
+      const res = await registrarPagoDoc(fd)
+      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      onChanged()
+    })
+  }
+
+  function handleAnular(movimiento_id: string) {
+    setError('')
+    startTransition(async () => {
+      const res = await anularPagoDoc(movimiento_id)
+      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      onChanged()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-md" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">{esCobro ? 'Registrar cobro' : 'Registrar pago'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+        </div>
+        <div className="modal-body">
+
+          <div className="info-box">
+            <strong className="info-box-title">{doc.numero}</strong>
+            <span className="text-xs-muted">
+              {doc.tercero_nombre ? `${doc.tercero_nombre} · ` : ''}
+              Total {formatMonto(doc.monto)} {doc.moneda} ·
+              <strong> Pendiente {formatMonto(doc.saldo)} {doc.moneda}</strong>
+            </span>
+          </div>
+
+          {doc.saldo > 0.005 ? (
+            cuentasCompat.length === 0 ? (
+              <div className="alert alert-warning mt-3">
+                No tienes cuentas en {doc.moneda}. Crea una en Tesorería para registrar el {esCobro ? 'cobro' : 'pago'}.
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="gc-liq-form">
+                <div className="ter-form-grid">
+                  <div className="input-group ter-col-full">
+                    <label>Cuenta <span className="required">*</span></label>
+                    <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
+                      {cuentasCompat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
+                    </select>
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label>Monto ({doc.moneda}) <span className="required">*</span></label>
+                    <input className="input" name="monto" type="number" min="0" step="0.01" required
+                      defaultValue={doc.saldo.toFixed(2)} />
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label>Fecha <span className="required">*</span></label>
+                    <input className="input" name="fecha" type="date" defaultValue={hoyISO()} required />
+                  </div>
+                  <div className="input-group ter-col-full">
+                    <label>Notas</label>
+                    <input className="input" name="notas" placeholder="Referencia…" />
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending}>
+                  {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : esCobro ? 'Registrar cobro' : 'Registrar pago'}
+                </button>
+              </form>
+            )
+          ) : (
+            <div className="alert alert-success mt-3">{esCobro ? 'Cobrado' : 'Pagado'} por completo.</div>
+          )}
+
+          {doc.liquidaciones.length > 0 && (
+            <div className="gc-liq-historial">
+              <span className="ter-form-section-title">{esCobro ? 'Cobros' : 'Pagos'} registrados</span>
+              {doc.liquidaciones.map(l => (
+                <div key={l.movimiento_id} className="gc-liq-row">
+                  <span className="text-sm-muted tes-nowrap">{formatFecha(l.fecha)}</span>
+                  <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
+                  <span className="gc-liq-monto">{formatMonto(l.monto)} {doc.moneda}</span>
+                  <button className="ter-action-btn ter-action-danger" title="Anular"
+                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><IconTrash /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {error && <div className="alert alert-error mt-3">{error}</div>}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Vista principal ─────────────────────────────────────────────────────────────
+
+export default function CuentasView({ data }: { data: CuentasPageData }) {
+  const router = useRouter()
+  const esCobro = data.modo === 'COBRAR'
+
+  const [pagoDoc,      setPagoDoc]      = useState<DocumentoPendiente | null>(null)
+  const [filtroTramo,  setFiltroTramo]  = useState<Tramo | ''>('')
+  const [filtroEmpresa, setFiltroEmpresa] = useState('')
+
+  const documentos = useMemo(() => {
+    return data.documentos.filter(d => {
+      if (filtroTramo   && d.tramo      !== filtroTramo)   return false
+      if (filtroEmpresa && d.empresa_id !== filtroEmpresa) return false
+      return true
+    })
+  }, [data.documentos, filtroTramo, filtroEmpresa])
+
+  // Total pendiente por moneda
+  const porMoneda = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const d of data.documentos) m.set(d.moneda, (m.get(d.moneda) ?? 0) + d.saldo)
+    return Array.from(m.entries()).map(([moneda, saldo]) => ({ moneda, saldo })).sort((a, b) => a.moneda.localeCompare(b.moneda))
+  }, [data.documentos])
+
+  // Conteo por tramo
+  const conteoTramo = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const d of data.documentos) m[d.tramo] = (m[d.tramo] ?? 0) + 1
+    return m
+  }, [data.documentos])
+
+  // Re-sincroniza el doc abierto tras refresh
+  const pagoVivo = pagoDoc
+    ? data.documentos.find(d => d.doc_id === pagoDoc.doc_id) ?? null
+    : null
+
+  function onChanged() { router.refresh() }
+
+  const titulo   = esCobro ? 'Cuentas por cobrar' : 'Cuentas por pagar'
+  const subtitulo = esCobro
+    ? 'Facturas emitidas y cobros pendientes, ordenados por antigüedad.'
+    : 'Gastos pendientes de pago, ordenados por antigüedad.'
+
+  return (
+    <div className="view-container">
+
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{titulo}</h1>
+          <p className="page-subtitle">{subtitulo}</p>
+        </div>
+      </div>
+
+      {/* Totales por moneda */}
+      {porMoneda.length > 0 && (
+        <div className="tes-saldos-grid">
+          {porMoneda.map(s => (
+            <div key={s.moneda} className="tes-saldo-card">
+              <div className="tes-saldo-moneda">{s.moneda}</div>
+              <div className="tes-saldo-monto">{formatMonto(s.saldo)}</div>
+              <div className="tes-saldo-label">{esCobro ? 'por cobrar' : 'por pagar'}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Chips de antigüedad */}
+      {data.documentos.length > 0 && (
+        <div className="cxx-chips">
+          <button className={`cxx-chip${filtroTramo === '' ? ' active' : ''}`} onClick={() => setFiltroTramo('')}>
+            Todos <span className="cxx-chip-count">{data.documentos.length}</span>
+          </button>
+          {TRAMOS.map(t => (
+            (conteoTramo[t] ?? 0) > 0 && (
+              <button key={t} className={`cxx-chip${filtroTramo === t ? ' active' : ''}`} onClick={() => setFiltroTramo(t)}>
+                {TRAMO_LABEL[t]} <span className="cxx-chip-count">{conteoTramo[t]}</span>
+              </button>
+            )
+          ))}
+          {data.empresas.length > 1 && (
+            <select className="input ter-filter-select cxx-empresa" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
+              <option value="">Todas las empresas</option>
+              {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Tabla */}
+      <div className="card card-table">
+        {documentos.length === 0 ? (
+          <div className="mon-empty">
+            <IconCheck />
+            <p>{data.documentos.length === 0
+              ? (esCobro ? 'No hay nada pendiente de cobro. Todo al día.' : 'No hay nada pendiente de pago. Todo al día.')
+              : 'No hay documentos para los filtros seleccionados.'}</p>
+          </div>
+        ) : (
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Documento</th>
+                  <th>{esCobro ? 'Cliente' : 'Proveedor'}</th>
+                  <th>Vencimiento</th>
+                  <th className="tes-col-monto">Total</th>
+                  <th className="tes-col-monto">Pendiente</th>
+                  <th className="alm-col-act"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {documentos.map(d => (
+                  <tr key={d.doc_id}>
+                    <td>
+                      <strong>{d.numero}</strong>
+                      <div className="tes-mov-sub">
+                        <span className="badge badge-neutral tes-origen-badge">{d.doc_tipo === 'FACTURA' ? 'Factura' : 'Directo'}</span>
+                        <span className="tes-mov-cat">{formatFecha(d.fecha)}</span>
+                      </div>
+                    </td>
+                    <td className="text-sm-muted">{d.tercero_nombre ?? '—'}</td>
+                    <td className="tes-nowrap">
+                      {formatFecha(d.vencimiento)}
+                      {d.dias_vencido != null && (
+                        <span className={`badge ${TRAMO_BADGE[d.tramo]} cxx-dias`}>{d.dias_vencido} d</span>
+                      )}
+                    </td>
+                    <td className="tes-col-monto tes-monto-cell">{formatMonto(d.monto)} {d.moneda}</td>
+                    <td className="tes-col-monto tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
+                    <td>
+                      <div className="ter-actions">
+                        <button className="ter-action-btn ter-action-money" title={esCobro ? 'Cobrar' : 'Pagar'}
+                          onClick={() => setPagoDoc(d)}><IconMoney /></button>
+                        {d.ref_url && d.doc_tipo === 'FACTURA' && (
+                          <Link className="ter-action-btn" title="Ver factura" href={d.ref_url}><IconExternal /></Link>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {pagoVivo && (
+        <PagoModal doc={pagoVivo} cuentas={data.cuentas} modo={data.modo}
+          onClose={() => setPagoDoc(null)} onChanged={onChanged} />
+      )}
+    </div>
+  )
+}
+
+// ── Iconos ────────────────────────────────────────────────────────────────────
+
+function IconX() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+}
+function IconTrash() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/></svg>
+}
+function IconMoney() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+}
+function IconExternal() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+}
+function IconCheck() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+}

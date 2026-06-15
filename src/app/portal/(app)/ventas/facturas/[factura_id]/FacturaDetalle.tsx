@@ -9,6 +9,11 @@ import {
   type FacturaDetalleData,
   type VentasResumenData,
 } from '@/app/actions/portal/ventas'
+import {
+  registrarPagoDoc,
+  anularPagoDoc,
+  type CobrosFacturaData,
+} from '@/app/actions/portal/cobranza'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
 import {
   AJUSTE_TIPO_LABEL,
@@ -23,9 +28,10 @@ import {
 interface Props {
   data:    FacturaDetalleData
   resumen: VentasResumenData
+  cobros:  CobrosFacturaData | null
 }
 
-export default function FacturaDetalle({ data }: Props) {
+export default function FacturaDetalle({ data, cobros }: Props) {
   const router = useRouter()
   const [isPending,   startTransition] = useTransition()
   const [statusMsg,   setStatusMsg] = useState('')
@@ -258,6 +264,11 @@ export default function FacturaDetalle({ data }: Props) {
         </div>
       </div>
 
+      {/* ── Cobros (solo facturas emitidas/cobradas) ── */}
+      {cobros && (factura.estado === 'EMITIDA' || factura.estado === 'COBRADA') && (
+        <CobrosFacturaCard cobros={cobros} numero={factura.numero} />
+      )}
+
       {factura.notas && (
         <div className="ven-notas">
           <div className="ven-info-label">Notas</div>
@@ -293,6 +304,136 @@ function BadgeFactura({ estado }: { estado: EstadoFactura }) {
       {ESTADO_FACTURA_LABEL[estado]}
     </span>
   )
+}
+
+// ── Panel de cobros de la factura ───────────────────────────────────────────────
+
+function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; numero: string }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [error, setError]         = useState('')
+
+  const cuentasCompat = cobros.cuentas.filter(c => c.moneda === cobros.moneda)
+  const [cuentaId, setCuentaId]   = useState(cuentasCompat[0]?.cuenta_id ?? '')
+  const puedeCobrar = cobros.estado === 'EMITIDA' && cobros.saldo > 0.005
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+    const fd = new FormData(e.currentTarget)
+    fd.set('doc_tipo', 'FACTURA')
+    fd.set('doc_id', cobros.factura_id)
+    fd.set('cuenta_id', cuentaId)
+    startTransition(async () => {
+      const res = await registrarPagoDoc(fd)
+      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      setModalOpen(false); router.refresh()
+    })
+  }
+
+  function handleAnular(movimiento_id: string) {
+    startTransition(async () => {
+      const res = await anularPagoDoc(movimiento_id)
+      if (!res.ok) { setError(res.error ?? 'Error inesperado.'); return }
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="card card-table mt-4">
+      <div className="mon-card-header">
+        <h2 className="mon-section-title">Cobros</h2>
+        <span className={`badge ${cobros.saldo > 0.005 ? 'badge-warning' : 'badge-success'}`}>
+          {cobros.saldo > 0.005
+            ? `Pendiente ${formatearMoneda(cobros.saldo, cobros.moneda)}`
+            : 'Cobrada por completo'}
+        </span>
+      </div>
+
+      <div className="gc-fac-cobros">
+        {cobros.liquidaciones.length === 0 ? (
+          <p className="text-sm-muted gc-fac-empty">Sin cobros registrados.</p>
+        ) : (
+          cobros.liquidaciones.map(l => (
+            <div key={l.movimiento_id} className="gc-liq-row">
+              <span className="text-sm-muted tes-nowrap">{fmtFecha(l.fecha)}</span>
+              <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
+              <span className="gc-liq-monto">{formatearMoneda(l.monto, cobros.moneda)}</span>
+              <button className="ter-action-btn ter-action-danger" title="Anular cobro"
+                onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><IconTrashSm /></button>
+            </div>
+          ))
+        )}
+
+        {puedeCobrar && (
+          <button className="btn btn-primary btn-sm gc-fac-cobrar" onClick={() => setModalOpen(true)}>
+            Registrar cobro
+          </button>
+        )}
+      </div>
+
+      {modalOpen && (
+        <div className="modal-backdrop open">
+          <div className="modal modal-md" role="dialog" aria-modal>
+            <div className="modal-header">
+              <h2 className="modal-title">Registrar cobro · {numero}</h2>
+              <button type="button" className="modal-close" onClick={() => setModalOpen(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body">
+                <div className="info-box">
+                  <span className="text-xs-muted">
+                    Total {formatearMoneda(cobros.total, cobros.moneda)} ·
+                    <strong> Pendiente {formatearMoneda(cobros.saldo, cobros.moneda)}</strong>
+                  </span>
+                </div>
+                {cuentasCompat.length === 0 ? (
+                  <div className="alert alert-warning mt-3">
+                    No tienes cuentas en {cobros.moneda}. Crea una en Tesorería para registrar el cobro.
+                  </div>
+                ) : (
+                  <div className="ter-form-grid mt-3">
+                    <div className="input-group ter-col-full">
+                      <label>Cuenta <span className="required">*</span></label>
+                      <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
+                        {cuentasCompat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
+                      </select>
+                    </div>
+                    <div className="input-group ter-col-span-3">
+                      <label>Monto ({cobros.moneda}) <span className="required">*</span></label>
+                      <input className="input" name="monto" type="number" min="0" step="0.01" required defaultValue={cobros.saldo.toFixed(2)} />
+                    </div>
+                    <div className="input-group ter-col-span-3">
+                      <label>Fecha <span className="required">*</span></label>
+                      <input className="input" name="fecha" type="date" required defaultValue={new Date().toISOString().split('T')[0]} />
+                    </div>
+                    <div className="input-group ter-col-full">
+                      <label>Notas</label>
+                      <input className="input" name="notas" placeholder="Referencia del cobro…" />
+                    </div>
+                  </div>
+                )}
+                {error && <div className="alert alert-error mt-3">{error}</div>}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={isPending || cuentasCompat.length === 0}>
+                  {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar cobro'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IconTrashSm() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/></svg>
 }
 
 function fmtFecha(iso: string): string {
