@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { eliminarPago } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
-import { useToast } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 
 export default function EliminarPagoBtn({
   pagoId,
@@ -15,7 +15,6 @@ export default function EliminarPagoBtn({
   pagoId: string
   clienteNombre: string
 }) {
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const mounted = useMounted()

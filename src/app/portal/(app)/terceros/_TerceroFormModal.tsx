@@ -1,5 +1,6 @@
 'use client'
 
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
 import {
@@ -202,7 +203,6 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
   onClose:      () => void
   onSaved:      (terceroId?: string) => void
 }) {
-  const { error: toastError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [viaP,      setViaP]         = useState<ViaPago | null>(tercero?.via_primaria   ?? null)
   const [viaS,      setViaS]         = useState<ViaPago | null>(tercero?.via_secundaria ?? null)

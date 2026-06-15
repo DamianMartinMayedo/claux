@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
-import { useToast } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 
 type Cliente = {
   client_id: string
@@ -76,7 +76,6 @@ export default function RegistrarPagoModal({
   descuentoAnualPct: number
   preselectedClientId?: string
 }) {
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]               = useState(false)
   const [loading, setLoading]         = useState(false)
   const [loadingDefecto, setLoadingDefecto] = useState(false)

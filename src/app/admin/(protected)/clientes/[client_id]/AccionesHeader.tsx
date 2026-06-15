@@ -94,12 +94,12 @@ function addDaysES(days: number): string {
 }
 
 export default function AccionesHeader({ cliente }: Props) {
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [modal, setModal]         = useState<ModalType>(null)
   const [loading, setLoading]     = useState(false)
   const [loadingPago, setLoadingPago] = useState(false)
   const [advertencia, setAdvertencia] = useState('')
   const [menuMovilOpen, setMenuMovilOpen] = useState(false)
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const mounted = useMounted()
 
   // Gracia

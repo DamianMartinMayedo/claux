@@ -8,8 +8,8 @@ import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 
 export default function NuevoModuloModal() {
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]       = useState(false)
+  const { success: toastSuccess, error: toastError } = useToast()
   const [loading, setLoading] = useState(false)
   const formRef               = useRef<HTMLFormElement>(null)
   const mounted               = useMounted()

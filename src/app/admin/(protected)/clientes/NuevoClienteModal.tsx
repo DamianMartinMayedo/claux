@@ -1,5 +1,6 @@
 'use client'
 
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -35,7 +36,6 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string } | null>(null)
-  const { success: toastSuccess, error: toastError } = useToast()
   const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()

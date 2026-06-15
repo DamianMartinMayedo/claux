@@ -1,8 +1,8 @@
 'use client'
 
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useToast } from '@/app/contexts/ToastContext'
 import { useState, useTransition }   from 'react'
-  const { success: toastSuccess, error: toastError } = useToast()
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
 import {

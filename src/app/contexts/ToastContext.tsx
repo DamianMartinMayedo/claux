@@ -27,6 +27,14 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null)
 
+// ── Funciones standalone (no requieren hook) ──
+let _addToast: ((type: ToastType, message: string, autoHide?: boolean) => number) | null = null
+
+export function toastSuccess(message: string) { _addToast?.('success', message) }
+export function toastError(message: string)   { _addToast?.('error', message) }
+export function toastWarning(message: string) { _addToast?.('warning', message) }
+export function toastInfo(message: string)    { _addToast?.('info', message) }
+
 let nextId = 0
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -56,6 +64,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
     return id
   }, [removeToast])
+
+  // Sincronizar con el singleton para llamadas standalone
+  _addToast = addToast
 
   const toast: ToastContextType = {
     success: (msg: string) => addToast('success', msg),

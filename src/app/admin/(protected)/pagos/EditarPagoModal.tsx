@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarPago } from '@/app/actions/pagos'
-import { useToast } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 
@@ -38,7 +38,6 @@ export default function EditarPagoModal({
 }) {
   const esConfiguracion = pago.concepto === 'configuracion'
 
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [open, setOpen]     = useState(false)
   const [loading, setLoading] = useState(false)
   const mounted = useMounted()

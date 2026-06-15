@@ -1,5 +1,6 @@
 'use client'
 
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -15,7 +16,6 @@ export default function FacturacionForm({ setupDefault, descuentoAnual, diasTria
   const [descuento, setDescuento] = useState(String(descuentoAnual))
   const [trial, setTrial]         = useState(String(diasTrial))
   const [loading, setLoading]     = useState(false)
-  const { success: toastSuccess, error: toastError } = useToast()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

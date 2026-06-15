@@ -42,7 +42,7 @@ type Modulo = {
 
 export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
   const router = useRouter()
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
+  const { success: toastSuccess, error: toastError } = useToast()
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [paginas, setPaginas] = useState<Pagina[]>(() => ensurePages(modulo.paginas))
