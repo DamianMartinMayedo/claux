@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter }               from 'next/navigation'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
 
@@ -37,6 +37,71 @@ export default function ReportesView({ data }: { data: ReportesData }) {
   const q = query.trim().toLowerCase()
   const filtrarCategorias = (cats: { categoria: string; monto: number }[]) =>
     q ? cats.filter(c => c.categoria.toLowerCase().includes(q)) : cats
+
+  // ── Descarga ──────────────────────────────────────────────────────────────
+  const printRef = useRef<HTMLDivElement>(null)
+  const [menuOpen,    setMenuOpen]    = useState(false)
+  const [descargando, setDescargando] = useState(false)
+
+  const empresaNombre = data.empresa_id
+    ? (data.empresas.find(e => e.empresa_id === data.empresa_id)?.nombre ?? '')
+    : 'Todas las empresas'
+  const nombreArchivo = `reportes_${data.desde}_${data.hasta}`
+
+  async function descargarPDF() {
+    setMenuOpen(false)
+    if (descargando || !printRef.current) return
+    setDescargando(true)
+    try {
+      const html2pdf = (await import('html2pdf.js')).default
+      await html2pdf().set({
+        margin:      [8, 8, 8, 8],
+        filename:    `${nombreArchivo}.pdf`,
+        image:       { type: 'jpeg', quality: 0.97 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      }).from(printRef.current).save()
+    } finally {
+      setDescargando(false)
+    }
+  }
+
+  function descargarCSV() {
+    setMenuOpen(false)
+    const num = (n: number) => n.toFixed(2).replace('.', ',')
+    const rows: string[] = []
+    rows.push('Reportes financieros')
+    rows.push(`Período;${data.desde};${data.hasta}`)
+    rows.push(`Empresa;${empresaNombre}`)
+    rows.push('')
+    rows.push('ESTADO DE RESULTADOS')
+    rows.push('Moneda;Concepto;Importe')
+    for (const r of data.resultado) {
+      rows.push(`${r.moneda};Ventas (facturas);${num(r.ventas)}`)
+      rows.push(`${r.moneda};Cobros directos;${num(r.cobros_directos)}`)
+      rows.push(`${r.moneda};Total ingresos;${num(r.total_ingresos)}`)
+      for (const g of r.gastos_por_categoria) rows.push(`${r.moneda};Gasto: ${g.categoria};${num(g.monto)}`)
+      rows.push(`${r.moneda};Total gastos;${num(r.total_gastos)}`)
+      rows.push(`${r.moneda};Resultado neto;${num(r.neto)}`)
+    }
+    rows.push('')
+    rows.push('FLUJO DE CAJA')
+    rows.push('Moneda;Movimiento;Origen;Importe')
+    for (const f of data.flujo) {
+      for (const e of f.detalle_entradas) rows.push(`${f.moneda};Entrada;${ORIGEN_LABEL[e.origen] ?? e.origen};${num(e.monto)}`)
+      rows.push(`${f.moneda};Total entradas;;${num(f.entradas)}`)
+      for (const s of f.detalle_salidas) rows.push(`${f.moneda};Salida;${ORIGEN_LABEL[s.origen] ?? s.origen};${num(s.monto)}`)
+      rows.push(`${f.moneda};Total salidas;;${num(f.salidas)}`)
+      rows.push(`${f.moneda};Flujo neto;;${num(f.neto)}`)
+    }
+    // BOM para que Excel (ES) respete acentos; separador ; para locale español
+    const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `${nombreArchivo}.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
 
   function navegar(d: string, h: string, e: string) {
     const params = new URLSearchParams({ desde: d, hasta: h })
@@ -76,6 +141,23 @@ export default function ReportesView({ data }: { data: ReportesData }) {
           <h1 className="page-title">Reportes financieros</h1>
           <p className="page-subtitle">Estado de resultados (devengado) y flujo de caja (efectivo) del período seleccionado.</p>
         </div>
+        {!sinDatos && (
+          <div className="rep-dl">
+            <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} disabled={descargando}>
+              <IconDownload /> {descargando ? 'Generando…' : 'Descargar'}
+              <IconChevron />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="rep-dl-overlay" onClick={() => setMenuOpen(false)} />
+                <div className="rep-dl-menu">
+                  <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
+                  <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Fila de filtros: buscador + accesos rápidos de período */}
@@ -190,10 +272,57 @@ export default function ReportesView({ data }: { data: ReportesData }) {
           )}
         </>
       )}
+
+      {/* Documento imprimible (oculto fuera de pantalla; lo consume html2pdf) */}
+      <div className="rep-print" ref={printRef} aria-hidden="true">
+        <div className="rep-print-head">
+          <div className="rep-print-brand">CLAUX</div>
+          <h1 className="rep-print-title">Reportes financieros</h1>
+          <div className="rep-print-meta">
+            <span>{empresaNombre}</span>
+            <span>{formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}</span>
+          </div>
+        </div>
+
+        <h2 className="rep-print-h2">Estado de resultados</h2>
+        {data.resultado.length === 0 ? <p className="rep-print-empty">Sin ingresos ni gastos en el período.</p> : data.resultado.map(r => (
+          <table className="rep-print-table" key={`pr-${r.moneda}`}>
+            <thead><tr><th>{r.moneda}</th><th className="rep-print-num">Importe</th></tr></thead>
+            <tbody>
+              <tr className="rep-print-section"><td>Ingresos</td><td className="rep-print-num">{formatMonto(r.total_ingresos)}</td></tr>
+              <tr><td>Ventas (facturas)</td><td className="rep-print-num">{formatMonto(r.ventas)}</td></tr>
+              <tr><td>Cobros directos</td><td className="rep-print-num">{formatMonto(r.cobros_directos)}</td></tr>
+              <tr className="rep-print-section"><td>Gastos</td><td className="rep-print-num">{formatMonto(r.total_gastos)}</td></tr>
+              {r.gastos_por_categoria.map(g => <tr key={g.categoria}><td>{g.categoria}</td><td className="rep-print-num">{formatMonto(g.monto)}</td></tr>)}
+              <tr className="rep-print-total"><td>Resultado neto</td><td className="rep-print-num">{formatMonto(r.neto)}</td></tr>
+            </tbody>
+          </table>
+        ))}
+
+        <h2 className="rep-print-h2">Flujo de caja</h2>
+        {data.flujo.length === 0 ? <p className="rep-print-empty">Sin movimientos de efectivo en el período.</p> : data.flujo.map(f => (
+          <table className="rep-print-table" key={`pf-${f.moneda}`}>
+            <thead><tr><th>{f.moneda}</th><th className="rep-print-num">Importe</th></tr></thead>
+            <tbody>
+              <tr className="rep-print-section"><td>Entradas</td><td className="rep-print-num">{formatMonto(f.entradas)}</td></tr>
+              {f.detalle_entradas.map(e => <tr key={e.origen}><td>{ORIGEN_LABEL[e.origen] ?? e.origen}</td><td className="rep-print-num">{formatMonto(e.monto)}</td></tr>)}
+              <tr className="rep-print-section"><td>Salidas</td><td className="rep-print-num">{formatMonto(f.salidas)}</td></tr>
+              {f.detalle_salidas.map(s => <tr key={s.origen}><td>{ORIGEN_LABEL[s.origen] ?? s.origen}</td><td className="rep-print-num">{formatMonto(s.monto)}</td></tr>)}
+              <tr className="rep-print-total"><td>Flujo neto</td><td className="rep-print-num">{formatMonto(f.neto)}</td></tr>
+            </tbody>
+          </table>
+        ))}
+      </div>
     </div>
   )
 }
 
+function IconDownload() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+}
+function IconChevron() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><polyline points="6 9 12 15 18 9"/></svg>
+}
 function IconChart() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
 }
