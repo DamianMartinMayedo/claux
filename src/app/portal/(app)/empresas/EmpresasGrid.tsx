@@ -1,8 +1,7 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useRef, useCallback } from 'react'
-import { useToast } from '@/app/contexts/ToastContext'
+import { toastError } from '@/app/contexts/ToastContext'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
 import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
@@ -139,12 +138,6 @@ function EmpresaModal({
   const esEdicion = !!state.empresa
   const ocupadas  = letrasOcupadas(empresas, state.empresa?.empresa_id)
   const letraDuplicada = !!letra && ocupadas.has(letra)
-
-  const resetLogo = useCallback(() => {
-    setLogoPreview(state.empresa?.logo_url ?? null)
-    setLogoFile(null)
-    setLogoNombre('')
-  }, [state.empresa])
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]

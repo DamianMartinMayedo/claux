@@ -81,21 +81,18 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
 
   // Tras hidratar: leer preferencias guardadas y habilitar la animación de colapso.
   // Sincronizar con datos solo-cliente (localStorage) tras montar es intencional.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const stored = readCollapsed()
     if (!('base' in stored)) stored['base'] = false // Contabilidad expandida por defecto
     setCollapsed(stored)
     setHasHydrated(true)
   }, [])
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   function toggleGroup(key: string) {
     setCollapsed(prev => { const next = { ...prev, [key]: !prev[key] }; saveCollapsed(next); return next })
   }
 
   // Auto-expandir el grupo que contiene la ruta activa (sync navegación → UI; intencional).
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     for (const m of catalogo) {
       const pages = (m.tipo === 'modulo' || m.tipo === 'base') ? (m.paginas ?? []) : []
@@ -109,8 +106,10 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
     if (cfgActive && collapsed['configuracion']) {
       setCollapsed(prev => { const next = { ...prev, configuracion: false }; saveCollapsed(next); return next })
     }
+    // Intencional: solo reacciona a la navegación. Incluir collapsed/catalogo/rol
+    // dispararía el efecto en cada toggle y rompería el colapso manual.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleLogout() { setShowLogoutDialog(true) }
   function confirmLogout() { startTransition(() => { logoutCliente() }) }

@@ -1,8 +1,7 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
-import { useToast } from '@/app/contexts/ToastContext'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
 import { guardarOferta }                     from '@/app/actions/portal/ventas'

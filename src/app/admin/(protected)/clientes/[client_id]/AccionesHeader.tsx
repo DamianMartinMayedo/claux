@@ -100,7 +100,7 @@ export default function AccionesHeader({ cliente }: Props) {
   const [loadingPago, setLoadingPago] = useState(false)
   const [advertencia, setAdvertencia] = useState('')
   const [menuMovilOpen, setMenuMovilOpen] = useState(false)
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
+  const { success: toastSuccess, error: toastError } = useToast()
   const mounted = useMounted()
 
   // Gracia

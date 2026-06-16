@@ -40,7 +40,7 @@ function countPaginas(paginas: Pagina[] | null | undefined): number {
 
 export default function ModulosPageClient({ modulos: initial }: { modulos: Modulo[] }) {
   const [modulos, setModulos] = useState<Modulo[]>(() => initial.map(m => ({ ...m })))
-  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
+  const { success: toastSuccess, loading: toastLoading } = useToast()
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasDragged, setHasDragged] = useState(false)

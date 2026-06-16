@@ -3,7 +3,6 @@
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
-import { useToast } from '@/app/contexts/ToastContext'
 
 type Props = {
   setupDefault:   number

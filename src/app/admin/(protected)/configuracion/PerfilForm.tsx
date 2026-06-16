@@ -4,7 +4,6 @@ import { Mail } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useToast } from '@/app/contexts/ToastContext'
 
 export default function PerfilForm({
   initialName,

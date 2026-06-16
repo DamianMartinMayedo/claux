@@ -1,8 +1,7 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
-import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
 import { Lock } from 'lucide-react'

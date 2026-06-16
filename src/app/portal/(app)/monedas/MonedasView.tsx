@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Pencil, RefreshCw, Star, ArrowRight, Info } from 'lucide-react'
