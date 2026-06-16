@@ -5,6 +5,7 @@ import { useToast } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
 import Link                                 from 'next/link'
+import { Check, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
 import {
   registrarPagoDoc,
   anularPagoDoc,
@@ -78,7 +79,7 @@ function PagoModal({
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esCobro ? 'Registrar cobro' : 'Registrar pago'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
 
@@ -137,7 +138,7 @@ function PagoModal({
                   <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
                   <span className="gc-liq-monto">{formatMonto(l.monto)} {doc.moneda}</span>
                   <button className="ter-action-btn ter-action-danger" title="Anular"
-                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><IconTrash /></button>
+                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                 </div>
               ))}
             </div>
@@ -245,7 +246,7 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
       <div className="card card-table">
         {documentos.length === 0 ? (
           <div className="mon-empty">
-            <IconCheck />
+            <Check size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.documentos.length === 0
               ? (esCobro ? 'No hay nada pendiente de cobro. Todo al día.' : 'No hay nada pendiente de pago. Todo al día.')
               : 'No hay documentos para los filtros seleccionados.'}</p>
@@ -285,9 +286,9 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
                     <td>
                       <div className="ter-actions">
                         <button className="ter-action-btn ter-action-money" title={esCobro ? 'Cobrar' : 'Pagar'}
-                          onClick={() => setPagoDoc(d)}><IconMoney /></button>
+                          onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /></button>
                         {d.ref_url && d.doc_tipo === 'FACTURA' && (
-                          <Link className="ter-action-btn" title="Ver factura" href={d.ref_url}><IconExternal /></Link>
+                          <Link className="ter-action-btn" title="Ver factura" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /></Link>
                         )}
                       </div>
                     </td>
@@ -307,20 +308,3 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-
-function IconX() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-}
-function IconTrash() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/></svg>
-}
-function IconMoney() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-}
-function IconExternal() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-}
-function IconCheck() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-}

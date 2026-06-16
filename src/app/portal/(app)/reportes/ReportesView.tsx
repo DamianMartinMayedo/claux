@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
+import { Download, ChevronDown, BarChart3, Search } from 'lucide-react'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -235,8 +236,8 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         {!sinDatos && (
           <div className="rep-dl">
             <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} disabled={descargando}>
-              <IconDownload /> {descargando ? 'Generando…' : 'Descargar'}
-              <IconChevron />
+              <Download size={14} /> {descargando ? 'Generando…' : 'Descargar'}
+              <ChevronDown size={13} />
             </button>
             {menuOpen && (
               <>
@@ -254,7 +255,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
       {/* Fila de filtros: buscador + accesos rápidos de período */}
       <div className="ter-toolbar">
         <div className="ter-search-wrap">
-          <IconSearch />
+          <Search size={15} />
           <input
             type="search"
             className="ter-search"
@@ -287,7 +288,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
 
       {sinDatos ? (
         <div className="card mon-empty">
-          <IconChart />
+          <BarChart3 size={40} strokeWidth={1} opacity={0.2} />
           <p>No hay movimientos ni documentos en este período.</p>
         </div>
       ) : (
@@ -365,17 +366,4 @@ export default function ReportesView({ data }: { data: ReportesData }) {
       )}
     </div>
   )
-}
-
-function IconDownload() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-}
-function IconChevron() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><polyline points="6 9 12 15 18 9"/></svg>
-}
-function IconChart() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-}
-function IconSearch() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 }

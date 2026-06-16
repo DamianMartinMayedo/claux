@@ -12,6 +12,7 @@ import {
   type TercerosPageData,
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal, VIA_BADGE } from './_TerceroFormModal'
+import { Archive, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ function ConfirmArchivar({
       <div className="modal modal-440" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Archivar</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
@@ -150,14 +151,14 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <p className="page-subtitle">Tus clientes, proveedores y contactos comerciales.</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>
-          <IconPlus /> Nuevo cliente o proveedor
+          <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
         </button>
       </div>
 
       {/* ── Toolbar ── */}
       <div className="ter-toolbar">
         <div className="ter-search-wrap">
-          <IconSearch />
+          <Search size={16} strokeWidth={2} />
           <input
             type="search"
             className="ter-search"
@@ -202,7 +203,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
 
         {tercerosFiltrados.length === 0 ? (
           <div className="mon-empty">
-            <IconUsers />
+            <Users size={36} strokeWidth={1} opacity={0.25} />
             <p>
               {data.terceros.length === 0
                 ? 'Aún no hay clientes ni proveedores. Crea el primero.'
@@ -266,10 +267,10 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                             </span>
                           : null}
                         {t.telefono && (
-                          <span className="ter-contacto-item"><IconPhone /> {t.telefono}</span>
+                          <span className="ter-contacto-item"><Phone size={11} strokeWidth={2} /> {t.telefono}</span>
                         )}
                         {t.email && (
-                          <span className="ter-contacto-item"><IconMail /> {t.email}</span>
+                          <span className="ter-contacto-item"><Mail size={11} strokeWidth={2} /> {t.email}</span>
                         )}
                         {!t.representante && !t.telefono && !t.email && (
                           <span className="text-muted">—</span>
@@ -302,24 +303,24 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                             className="ter-action-btn"
                             title="Ver contrato"
                           >
-                            <IconFileLink />
+                            <FileText size={15} strokeWidth={2} />
                           </a>
                         )}
                         {t.activo ? (
                           <>
                             <button className="ter-action-btn" title="Editar"
                               onClick={() => openEdit(t)}>
-                              <IconEdit />
+                              <Pencil size={15} strokeWidth={2} />
                             </button>
                             <button className="ter-action-btn ter-action-danger" title="Archivar"
                               onClick={() => setConfirmTercero(t)} disabled={isPending}>
-                              <IconArchive />
+                              <Archive size={15} strokeWidth={2} />
                             </button>
                           </>
                         ) : (
                           <button className="ter-action-btn ter-action-restore" title="Restaurar"
                             onClick={() => handleRestaurar(t)} disabled={isPending}>
-                            <IconRestore />
+                            <RotateCcw size={15} strokeWidth={2} />
                           </button>
                         )}
                       </div>
@@ -353,35 +354,3 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-
-function IconPlus() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-}
-function IconX() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-}
-function IconSearch() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-}
-function IconEdit() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-}
-function IconArchive() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-}
-function IconRestore() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-}
-function IconUsers() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" opacity="0.25"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-}
-function IconPhone() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.37 2 2 0 013.6 1.21h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.77a16 16 0 006.29 6.29l1.63-1.63a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-}
-function IconMail() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-}
-function IconFileLink() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-}

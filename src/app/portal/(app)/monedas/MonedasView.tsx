@@ -1,11 +1,9 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect } from 'react'
-import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter } from 'next/navigation'
+import { X, Plus, Pencil, RefreshCw, Star, ArrowRight, Info } from 'lucide-react'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
 import {
   guardarMoneda,
@@ -84,7 +82,7 @@ function MonedaModal({
       <div className="modal modal-440" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar moneda' : 'Añadir moneda'}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -223,7 +221,7 @@ function ParModal({
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Configurar par</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -232,7 +230,7 @@ function ParModal({
             {/* Identificación del par */}
             <div className="par-modal-id">
               <span className="par-cod">{par.origen}</span>
-              <IconArrow />
+              <ArrowRight size={18} strokeWidth={2} />
               <span className="par-cod">{par.destino}</span>
             </div>
 
@@ -264,7 +262,7 @@ function ParModal({
               </div>
             ) : (
               <div className="par-auto-info">
-                <IconInfo />
+                <Info size={16} strokeWidth={2} className="text-primary flex-shrink-0" />
                 <span>
                   Al guardar se consultará <strong>{FUENTE_LABEL[fuente]}</strong> y se actualizará la tasa.
                   {par.tasa != null && (
@@ -320,7 +318,7 @@ function ConsolidacionModal({
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Moneda de consolidación</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
         </div>
         <div className="modal-body modal-body-wide">
           <p className="text-sm-muted mb-4">
@@ -416,11 +414,11 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
         </div>
         <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={handleActualizarAuto} disabled={autoPending}>
-            {autoPending ? <><span className="spinner spinner-sm" /> Actualizando…</> : <><IconRefresh /> Actualizar automáticas</>}
+            {autoPending ? <><span className="spinner spinner-sm" /> Actualizando…</> : <><RefreshCw size={15} strokeWidth={2} /> Actualizar automáticas</>}
           </button>
           {esAdmin && (
             <button className="btn btn-primary" onClick={() => { setMonedaEdit(null); setModalKind('moneda') }}>
-              <IconPlus /> Nueva moneda
+              <Plus size={16} strokeWidth={2} /> Nueva moneda
             </button>
           )}
         </div>
@@ -438,14 +436,14 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
             <h2 className="mon-section-title">Monedas activas</h2>
             {esAdmin && monedaConsolidacion && (
               <button className="btn btn-secondary btn-sm" onClick={() => setModalKind('consolidacion')}>
-                <IconStar /> Consolidación
+                <Star size={13} strokeWidth={2} /> Consolidación
               </button>
             )}
           </div>
 
           {initMonedas.length === 0 ? (
             <div className="mon-empty">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <Info size={36} strokeWidth={1} />
               <p>No hay monedas. Añade la primera.</p>
             </div>
           ) : (
@@ -467,7 +465,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                       onClick={() => { setMonedaEdit(m); setModalKind('moneda') }}
                       title="Editar"
                     >
-                      <IconEdit />
+                      <Pencil size={13} strokeWidth={2} />
                     </button>
                   )}
                 </li>
@@ -507,7 +505,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                       <td>
                         <span className="mon-par">
                           <strong>{p.origen}</strong>
-                          <IconArrowSm />
+                          <ArrowRight size={12} strokeWidth={2} className="text-muted flex-shrink-0" />
                           <strong>{p.destino}</strong>
                         </span>
                       </td>
@@ -531,7 +529,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                               setModalKind('par')
                             }}
                           >
-                            <IconEdit />
+                            <Pencil size={13} strokeWidth={2} />
                           </button>
                         </td>
                       )}
@@ -563,13 +561,3 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
     </div>
   )
 }
-
-// ── Iconos ────────────────────────────────────────────────────────────────────
-function IconX()       { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
-function IconPlus()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> }
-function IconEdit()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
-function IconRefresh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> }
-function IconStar()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> }
-function IconArrow()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> }
-function IconArrowSm() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" className="text-muted flex-shrink-0"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> }
-function IconInfo()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className="text-primary flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> }

@@ -1,3 +1,4 @@
+import { ChevronRight, Clock, CreditCard } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -70,9 +71,7 @@ export default async function ClienteDetallePage({
       {/* ── Breadcrumb ── */}
       <nav className="breadcrumb" aria-label="Ruta de navegación">
         <Link href="/admin/clientes">Clientes</Link>
-        <svg className="breadcrumb-sep" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
+        <ChevronRight className="breadcrumb-sep" />
         <span className="breadcrumb-current">{cliente.nombre_empresa}</span>
       </nav>
 
@@ -108,9 +107,7 @@ export default async function ClienteDetallePage({
       {/* ── Banner período especial ── */}
       {tieneGracia && (
         <div className="info-banner info-banner-gracia">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
+          <Clock aria-hidden />
           <div>
             <strong>Período especial activo</strong>
             <span>
@@ -200,9 +197,7 @@ export default async function ClienteDetallePage({
 
           {!pagos || pagos.length === 0 ? (
             <div className="table-empty table-empty-sm">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
-              </svg>
+              <CreditCard size={36} strokeWidth={1.5} />
               <p>Sin pagos registrados aún.</p>
             </div>
           ) : (

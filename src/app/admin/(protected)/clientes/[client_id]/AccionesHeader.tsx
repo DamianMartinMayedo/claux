@@ -1,5 +1,6 @@
 'use client'
 
+import { AlertTriangle, Ban, Clock, DollarSign, Info, MoreVertical, Pencil, X } from 'lucide-react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -272,9 +273,7 @@ export default function AccionesHeader({ cliente }: Props) {
         <div className="modal-header">
           <h2 className="modal-title">Aplicar período especial</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <X size={18} />
           </button>
         </div>
         <form ref={formGraciaRef} onSubmit={handleGracia}>
@@ -339,9 +338,7 @@ export default function AccionesHeader({ cliente }: Props) {
         <div className="modal-header">
           <h2 className="modal-title">Desactivar cliente</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <X size={18} />
           </button>
         </div>
         <div className="modal-body">
@@ -370,9 +367,7 @@ export default function AccionesHeader({ cliente }: Props) {
         <div className="modal-header">
           <h2 className="modal-title">Registrar pago</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <X size={18} />
           </button>
         </div>
         <form ref={formPagoRef} onSubmit={handlePago}>
@@ -448,19 +443,14 @@ export default function AccionesHeader({ cliente }: Props) {
 
             {alertaInicioTemprano && (
               <div className="alert alert-warning alert-flex mt-neg-1">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
+                <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
                 <span>{alertaInicioTemprano}</span>
               </div>
             )}
 
             {prorata && (
               <div className="info-banner mt-2">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
+                <Info aria-hidden />
                 <div className="pro-rata-details">
                   <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
                   <span>Tarifa diaria período anterior: ${prorata.dailyRate.toFixed(4)}/día</span>
@@ -480,10 +470,7 @@ export default function AccionesHeader({ cliente }: Props) {
 
             {advertencia && (
               <div className="alert alert-warning alert-flex">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
+                <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
                 <span>{advertencia}</span>
               </div>
             )}
@@ -506,9 +493,7 @@ export default function AccionesHeader({ cliente }: Props) {
         <div className="modal-header">
           <h2 className="modal-title">Editar cliente</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <X size={18} />
           </button>
         </div>
         <form ref={formEditarRef} onSubmit={handleEditar}>
@@ -554,10 +539,7 @@ export default function AccionesHeader({ cliente }: Props) {
       className="btn btn-secondary btn-sm header-action"
       onClick={openEditar}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-      </svg>
+      <Pencil size={14} />
       Editar
     </button>
   )
@@ -567,10 +549,7 @@ export default function AccionesHeader({ cliente }: Props) {
       className="btn btn-danger btn-sm header-action"
       onClick={openEstado}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-      </svg>
+      <Ban size={14} />
       Suspender
     </button>
   ) : null
@@ -580,9 +559,7 @@ export default function AccionesHeader({ cliente }: Props) {
       className="btn btn-secondary btn-sm header-action"
       onClick={openGracia}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-      </svg>
+      <Clock size={14} />
       Período especial
     </button>
   ) : null
@@ -592,10 +569,7 @@ export default function AccionesHeader({ cliente }: Props) {
       className="btn btn-primary btn-sm header-action"
       onClick={openPago}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <line x1="12" y1="1" x2="12" y2="23"/>
-        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-      </svg>
+      <DollarSign size={14} />
       Registrar pago
     </button>
   )
@@ -617,11 +591,7 @@ export default function AccionesHeader({ cliente }: Props) {
             aria-label="Más opciones"
             title="Más opciones"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="5" r="1.5"/>
-              <circle cx="12" cy="12" r="1.5"/>
-              <circle cx="12" cy="19" r="1.5"/>
-            </svg>
+            <MoreVertical size={18} />
           </button>
           {menuMovilOpen && (
             <div className="detail-header-actions-dropdown">

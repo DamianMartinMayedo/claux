@@ -1,6 +1,7 @@
 'use client'
 
 import type { FacturacionData } from '@/app/actions/portal/facturacion'
+import { Receipt } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
 
         {data.pagos.length === 0 ? (
           <div className="mon-empty">
-            <IconReceipt />
+            <Receipt size={36} strokeWidth={1} opacity={0.25} />
             <p>No hay pagos registrados aún.</p>
           </div>
         ) : (
@@ -169,15 +170,3 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-function IconReceipt() {
-  return (
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.25">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
-      <line x1="10" y1="9" x2="8" y2="9"/>
-    </svg>
-  )
-}

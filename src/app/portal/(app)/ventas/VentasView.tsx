@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo }   from 'react'
 import { useRouter }            from 'next/navigation'
 import Link                   from 'next/link'
-import { Plus, FileText } from 'lucide-react'
+import { FileText, Plus } from 'lucide-react'
 import {
   ESTADO_OFERTA_LABEL,
   ESTADO_OFERTA_BADGE,
@@ -59,11 +59,11 @@ export default function VentasView({ data }: Props) {
               disabled
               title={sinSetupEmpresas ? 'Primero crea una empresa.' : 'Asigna letra de facturación a alguna empresa.'}
             >
-              <IconPlus /> Nueva oferta
+              <Plus size={18} strokeWidth={2} /> Nueva oferta
             </button>
           ) : (
             <Link href="/portal/ventas/ofertas/nueva" className="btn btn-primary">
-              <IconPlus /> Nueva oferta
+              <Plus size={18} strokeWidth={2} /> Nueva oferta
             </Link>
           )
         ) : (
@@ -73,11 +73,11 @@ export default function VentasView({ data }: Props) {
               disabled
               title={sinSetupEmpresas ? 'Primero crea una empresa.' : 'Asigna letra de facturación a alguna empresa.'}
             >
-              <IconPlus /> Nueva factura
+              <Plus size={18} strokeWidth={2} /> Nueva factura
             </button>
           ) : (
             <Link href="/portal/ventas/facturas/nueva" className="btn btn-primary">
-              <IconPlus /> Nueva factura
+              <Plus size={18} strokeWidth={2} /> Nueva factura
             </Link>
           )
         )}
@@ -151,7 +151,7 @@ export default function VentasView({ data }: Props) {
         {tab === 'ofertas' ? (
           ofertasFiltradas.length === 0 ? (
             <div className="mon-empty">
-              <IconDocLg />
+              <FileText size={18} strokeWidth={2} />
               <p>{conteoOfertas === 0
                 ? 'Aún no has creado ninguna oferta. Crea la primera para empezar.'
                 : 'No hay ofertas que coincidan con los filtros.'}</p>
@@ -167,7 +167,7 @@ export default function VentasView({ data }: Props) {
         ) : (
           facturasFiltradas.length === 0 ? (
             <div className="mon-empty">
-              <IconDocLg />
+              <FileText size={18} strokeWidth={2} />
               <p>{conteoFacturas === 0
                 ? 'Aún no has emitido ninguna factura. Crea una directa o aprueba una oferta.'
                 : 'No hay facturas que coincidan con los filtros.'}</p>
@@ -345,9 +345,3 @@ function filtrarFacturas(
   })
 }
 
-function IconPlus() {
-  return <Plus size={14} strokeWidth={2.5} />
-}
-function IconDocLg() {
-  return <FileText size={40} strokeWidth={1} style={{ opacity: 0.2 }} />
-}

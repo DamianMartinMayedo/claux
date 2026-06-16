@@ -1,7 +1,5 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -18,6 +16,7 @@ import {
   type GastosCobrosPageData,
 } from '@/app/actions/portal/gastos'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
+import { DollarSign, Pencil, Plus, Receipt, Trash2, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -87,7 +86,7 @@ function RegistroModal({
       <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{titulo}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           {registro && <input type="hidden" name="registro_id" value={registro.registro_id} />}
@@ -237,7 +236,7 @@ function LiquidarModal({
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esGasto ? 'Pagar gasto' : 'Registrar cobro'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
 
@@ -299,7 +298,7 @@ function LiquidarModal({
                   <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
                   <span className="gc-liq-monto">{formatMonto(l.monto)} {registro.moneda}</span>
                   <button className="ter-action-btn ter-action-danger" title="Anular"
-                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><IconTrash /></button>
+                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                 </div>
               ))}
             </div>
@@ -329,7 +328,7 @@ function ConfirmEliminar({
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Eliminar {registro.tipo === 'GASTO' ? 'gasto' : 'cobro'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">¿Eliminar <strong>{registro.descripcion}</strong> ({formatMonto(registro.monto)} {registro.moneda})?</p>
@@ -418,8 +417,8 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
           <p className="page-subtitle">Ingresos y egresos directos (no facturados). Los pagos se reflejan en Tesorería.</p>
         </div>
         <div className="tes-header-actions">
-          <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')}><IconPlus /> Nuevo cobro</button>
-          <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')}><IconPlus /> Nuevo gasto</button>
+          <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
+          <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
         </div>
       </div>
 
@@ -470,7 +469,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
       <div className="card card-table">
         {registros.length === 0 ? (
           <div className="mon-empty">
-            <IconReceipt />
+            <Receipt size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.registros.length === 0
               ? 'Aún no hay gastos ni cobros. Registra el primero para llevar tus ingresos y egresos directos.'
               : 'No hay registros para los filtros seleccionados.'}</p>
@@ -507,10 +506,10 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                     <td>
                       <div className="ter-actions">
                         <button className="ter-action-btn ter-action-money" title={r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
-                          onClick={() => setLiquidar(r)}><IconMoney /></button>
-                        <button className="ter-action-btn" title="Editar" onClick={() => openEdit(r)}><IconEdit /></button>
+                          onClick={() => setLiquidar(r)}><DollarSign size={15} strokeWidth={2} /></button>
+                        <button className="ter-action-btn" title="Editar" onClick={() => openEdit(r)}><Pencil size={15} strokeWidth={2} /></button>
                         <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setConfirmDel(r)} disabled={isPending}><IconTrash /></button>
+                          onClick={() => setConfirmDel(r)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                       </div>
                     </td>
                   </tr>
@@ -538,23 +537,3 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-
-function IconPlus() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-}
-function IconX() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-}
-function IconEdit() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-}
-function IconTrash() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/></svg>
-}
-function IconMoney() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-}
-function IconReceipt() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-}

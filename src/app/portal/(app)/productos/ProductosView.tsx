@@ -18,6 +18,7 @@ import {
   type ProductosPageData,
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from './_ProductoFormModal'
+import { AlertTriangle, Archive, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, X } from 'lucide-react'
 
 // ── StockModal ────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ function StockModal({ producto, onClose, onSaved }: {
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Ajuste de stock</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
@@ -109,7 +110,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar categoría' : 'Nueva categoría'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           {categoria && <input type="hidden" name="categoria_id" value={categoria.categoria_id} />}
@@ -149,7 +150,7 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Archivar</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
@@ -288,15 +289,15 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           <p className="page-subtitle">Catálogo de bienes y servicios del cliente.</p>
         </div>
         {tab === 'productos'
-          ? <button className="btn btn-primary" onClick={openCreate}><IconPlus /> Nuevo</button>
-          : <button className="btn btn-primary" onClick={openCreateCat}><IconPlus /> Nueva categoría</button>
+          ? <button className="btn btn-primary" onClick={openCreate}><Plus size={14} strokeWidth={2.5} /> Nuevo</button>
+          : <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
         }
       </div>
 
       {/* ── Tabs ── */}
       <div className="prd-tabs">
-        <Tab active={tab === 'productos'}  onClick={() => setTab('productos')}  icon={<IconBox />} label="Productos y servicios" count={activos} />
-        <Tab active={tab === 'categorias'} onClick={() => setTab('categorias')} icon={<IconTag />} label="Categorías" count={categoriasActivas.length} />
+        <Tab active={tab === 'productos'}  onClick={() => setTab('productos')}  icon={<Package size={15} strokeWidth={2} />} label="Productos y servicios" count={activos} />
+        <Tab active={tab === 'categorias'} onClick={() => setTab('categorias')} icon={<Tag size={15} strokeWidth={2} />} label="Categorías" count={categoriasActivas.length} />
       </div>
 
       {/* ══ TAB PRODUCTOS ══ */}
@@ -305,7 +306,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           {/* Toolbar */}
           <div className="ter-toolbar">
             <div className="ter-search-wrap">
-              <IconSearch />
+              <Search size={16} strokeWidth={2} />
               <input type="search" className="ter-search"
                 placeholder="Buscar por nombre, código, categoría…"
                 value={search} onChange={e => setSearch(e.target.value)} />
@@ -355,7 +356,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
             {productosFiltrados.length === 0 ? (
               <div className="mon-empty">
-                <IconBoxLg />
+                <Package size={36} strokeWidth={1} opacity={0.25} />
                 <p>{data.productos.length === 0
                   ? 'Aún no hay productos en el catálogo. Crea el primero.'
                   : 'No hay resultados para los filtros seleccionados.'}</p>
@@ -440,7 +441,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                 </span>
                                 {stockBajo && (
                                   <span className="prd-stock-alert" title={`Mínimo: ${p.stock_minimo}`}>
-                                    <IconAlertTriangle />
+                                    <AlertTriangle size={13} strokeWidth={2} />
                                   </span>
                                 )}
                               </div>
@@ -456,21 +457,21 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                 <>
                                   {p.tipo === 'PRODUCTO' && (
                                     <button className="ter-action-btn" title="Ajustar stock" onClick={() => setStockProducto(p)}>
-                                      <IconLayers />
+                                      <Layers size={15} strokeWidth={2} />
                                     </button>
                                   )}
                                   <button className="ter-action-btn" title="Editar" onClick={() => openEdit(p)}>
-                                    <IconEdit />
+                                    <Pencil size={15} strokeWidth={2} />
                                   </button>
                                   <button className="ter-action-btn ter-action-danger" title="Archivar"
                                     onClick={() => setConfirmProd(p)} disabled={isPending}>
-                                    <IconArchive />
+                                    <Archive size={15} strokeWidth={2} />
                                   </button>
                                 </>
                               ) : (
                                 <button className="ter-action-btn ter-action-restore" title="Restaurar"
                                   onClick={() => handleRestaurar(p)} disabled={isPending}>
-                                  <IconRestore />
+                                  <RotateCcw size={15} strokeWidth={2} />
                                 </button>
                               )}
                             </div>
@@ -496,7 +497,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
           {data.categorias.length === 0 ? (
             <div className="mon-empty">
-              <IconTagLg />
+              <Tag size={36} strokeWidth={1} opacity={0.25} />
               <p>Aún no hay categorías. Crea la primera para organizar tu catálogo.</p>
             </div>
           ) : (
@@ -540,13 +541,13 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           <div className="ter-actions">
                             {c.estado === 'ACTIVO' ? (
                               <>
-                                <button className="ter-action-btn" title="Editar" onClick={() => openEditCat(c)}><IconEdit /></button>
+                                <button className="ter-action-btn" title="Editar" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /></button>
                                 <button className="ter-action-btn ter-action-danger" title="Archivar"
-                                  onClick={() => setConfirmCat(c)} disabled={isPending}><IconArchive /></button>
+                                  onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /></button>
                               </>
                             ) : (
                               <button className="ter-action-btn ter-action-restore" title="Restaurar"
-                                onClick={() => handleRestaurarCat(c)} disabled={isPending}><IconRestore /></button>
+                                onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /></button>
                             )}
                           </div>
                         </td>
@@ -605,17 +606,3 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-
-function IconPlus()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> }
-function IconX()      { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
-function IconSearch() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> }
-function IconEdit()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
-function IconArchive(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> }
-function IconRestore(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> }
-function IconBox()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconBoxLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" opacity="0.25"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconTag()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> }
-function IconTagLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="36" height="36" opacity="0.25"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> }
-function IconLayers()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> }
-function IconAlertTriangle() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> }

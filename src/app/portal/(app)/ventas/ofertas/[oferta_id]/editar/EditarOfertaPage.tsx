@@ -1,7 +1,5 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -12,6 +10,7 @@ import type { VentasResumenData, OfertaDetalleData } from '@/app/actions/portal/
 import type { Empresa }                      from '@/app/actions/portal/empresas'
 import { DocumentoLineasEditor }             from '../../../_DocumentoLineasEditor'
 import { DocumentoPdf }                      from '../../../_DocumentoPdf'
+import { Eye, X } from 'lucide-react'
 import {
   CONDICION_PAGO_OPTIONS,
   calcularTotales,
@@ -174,7 +173,7 @@ export default function EditarOfertaPage({ data, resumen, empresasFull }: Props)
         <div className="ven-nueva-actions">
           {canPreview && (
             <button type="button" className="btn btn-secondary" onClick={() => setPreviewOpen(true)}>
-              <IconEye /> Vista previa
+              <Eye size={13} strokeWidth={2} /> Vista previa
             </button>
           )}
           <Link href={`/portal/ventas/ofertas/${oferta.oferta_id}`} className="btn btn-secondary">Cancelar</Link>
@@ -257,11 +256,9 @@ export default function EditarOfertaPage({ data, resumen, empresasFull }: Props)
         <div className="modal-backdrop open">
           <div className="ven-preview-modal" role="dialog" aria-modal>
             <div className="ven-preview-modal-header">
-              <span className="ven-preview-modal-title"><IconEye /> Vista previa</span>
+              <span className="ven-preview-modal-title"><Eye size={13} strokeWidth={2} /> Vista previa</span>
               <button className="modal-close" onClick={() => setPreviewOpen(false)} aria-label="Cerrar">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
+                <X size={18} />
               </button>
             </div>
             <div className="ven-preview-modal-body">
@@ -291,6 +288,3 @@ export default function EditarOfertaPage({ data, resumen, empresasFull }: Props)
   )
 }
 
-function IconEye() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-}

@@ -1,5 +1,6 @@
 'use client'
 
+import { Download, Search, User } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -110,9 +111,7 @@ export default function ClientesTabla({
       {/* Filtros */}
       <div className="filters-bar">
         <div className="search-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
+          <Search />
           <input
             type="search" className="search-input"
             placeholder="Buscar por empresa, email o ID…"
@@ -132,10 +131,7 @@ export default function ClientesTabla({
         </select>
 
         <button className="btn btn-secondary" onClick={() => exportCSV(filtrados)}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
+          <Download size={14} />
           Exportar CSV
         </button>
       </div>
@@ -143,10 +139,7 @@ export default function ClientesTabla({
       {filtrados.length === 0 ? (
         <div className="table-wrapper">
           <div className="table-empty">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-            </svg>
+            <User size={40} strokeWidth={1.5} />
             <p>No se encontraron clientes con los filtros aplicados.</p>
           </div>
         </div>

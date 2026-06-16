@@ -13,6 +13,7 @@ import {
   type Producto,
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from '../_ProductoFormModal'
+import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 
 // ── Helpers de formato ────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
               </div>
               {producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0 && (
                 <div className="det-stock-alert">
-                  <IconAlertTriangle /> Stock por debajo del mínimo
+                  <AlertTriangle size={13} strokeWidth={2} /> Stock por debajo del mínimo
                 </div>
               )}
             </div>
@@ -214,7 +215,7 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
 function TabMovimientos() {
   return (
     <div className="det-empty">
-      <div className="det-empty-icon"><IconBoxLg /></div>
+      <div className="det-empty-icon"><Package size={40} strokeWidth={1} opacity={0.2} /></div>
       <div className="det-empty-title">Movimientos de inventario</div>
       <div className="det-empty-text">Aquí se mostrarán entradas, salidas y ajustes de este producto.</div>
     </div>
@@ -226,7 +227,7 @@ function TabMovimientos() {
 function TabHistorialPrecios() {
   return (
     <div className="det-empty">
-      <div className="det-empty-icon"><IconTrendingUpLg /></div>
+      <div className="det-empty-icon"><TrendingUp size={40} strokeWidth={1} opacity={0.2} /></div>
       <div className="det-empty-title">Historial de precios</div>
       <div className="det-empty-text">Aquí se mostrará la evolución de precios y costos en el tiempo.</div>
     </div>
@@ -293,7 +294,7 @@ function StockModal({
             Stock resultante: {preview.toLocaleString('es-VE')} {producto.unidad}
             {preview < 0 && (
               <span className="prd-stock-preview-inline">
-                <IconAlertTriangle /> Stock negativo no permitido
+                <AlertTriangle size={13} strokeWidth={2} /> Stock negativo no permitido
               </span>
             )}
           </div>
@@ -397,11 +398,11 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
         <div className="det-actions">
           {!esServicio && producto.estado === 'ACTIVO' && (
             <button onClick={() => setShowStock(true)} className="btn btn-info">
-              <IconLayers /> Ajustar stock
+              <Layers size={14} strokeWidth={2} /> Ajustar stock
             </button>
           )}
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
-            <IconEdit /> Editar
+            <Pencil size={14} strokeWidth={2} /> Editar
           </button>
           <button
             onClick={toggleEstado}
@@ -409,7 +410,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
             className="btn btn-secondary"
             style={{ color: producto.estado === 'ACTIVO' ? 'var(--color-error)' : 'var(--color-success)' }}
           >
-            {producto.estado === 'ACTIVO' ? <><IconArchive /> Archivar</> : <><IconRestore /> Restaurar</>}
+            {producto.estado === 'ACTIVO' ? <><Archive size={14} strokeWidth={2} /> Archivar</> : <><RotateCcw size={14} strokeWidth={2} /> Restaurar</>}
           </button>
         </div>
       </div>
@@ -464,12 +465,3 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
   )
 }
 
-// ── Iconos (Feather, stroke, currentColor) ────────────────────────────────────
-
-function IconEdit()          { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
-function IconArchive()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> }
-function IconRestore()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> }
-function IconLayers()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> }
-function IconAlertTriangle() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> }
-function IconBoxLg()         { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconTrendingUpLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> }

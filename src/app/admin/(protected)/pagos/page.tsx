@@ -1,3 +1,4 @@
+import { CreditCard } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
 import RegistrarPagoModal from './RegistrarPagoModal'
@@ -31,10 +32,7 @@ export default async function PagosPage() {
       {!pagos || pagos.length === 0 ? (
         <div className="table-wrapper">
           <div className="table-empty">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="2" y="5" width="20" height="14" rx="2"/>
-              <line x1="2" y1="10" x2="22" y2="10"/>
-            </svg>
+            <CreditCard size={40} strokeWidth={1.5} />
             <h3 className="table-empty-title">Sin pagos registrados</h3>
             <p>Registra el primer pago con el botón de arriba.</p>
           </div>

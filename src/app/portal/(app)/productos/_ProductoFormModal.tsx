@@ -1,10 +1,9 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
+import { Package, X, Zap } from 'lucide-react'
 import {
   guardarProducto,
   type Producto,
@@ -126,10 +125,6 @@ export function UnidadSelect({ defaultValue }: { defaultValue?: string }) {
 
 // ── Iconos locales ────────────────────────────────────────────────────────────
 
-function IconX()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
-function IconBox() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconZap() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
-
 // ── ProductoFormModal ─────────────────────────────────────────────────────────
 
 export function ProductoFormModal({
@@ -170,7 +165,7 @@ export function ProductoFormModal({
 
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar producto' : 'Nuevo producto / servicio'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -187,7 +182,7 @@ export function ProductoFormModal({
                     onClick={() => !isEdit && setTipo(t)}
                     disabled={isEdit}
                     className={`prd-tipo-btn${tipo === t ? ' active' : ''}`}>
-                    {t === 'PRODUCTO' ? <IconBox /> : <IconZap />}
+                    {t === 'PRODUCTO' ? <Package size={15} strokeWidth={2} /> : <Zap size={16} strokeWidth={2} />}
                     <span className="prd-tipo-labels">
                       <span className="prd-tipo-name">
                         {t === 'PRODUCTO' ? 'Producto' : 'Servicio'}

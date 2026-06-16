@@ -1,11 +1,9 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
-import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }                        from 'next/navigation'
+import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, Info, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
 import {
   guardarCuenta,
   archivarCuenta,
@@ -82,7 +80,7 @@ function CuentaModal({
       <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar cuenta' : 'Nueva cuenta'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           {cuenta && <input type="hidden" name="cuenta_id" value={cuenta.cuenta_id} />}
@@ -209,7 +207,7 @@ function MovimientoModal({
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Registrar movimiento</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
@@ -218,11 +216,11 @@ function MovimientoModal({
             <div className="tes-tipo-toggle">
               <button type="button" className={`tes-tipo-opt tes-tipo-ingreso${tipo === 'INGRESO' ? ' active' : ''}`}
                 onClick={() => setTipo('INGRESO')}>
-                <IconArrowDown /> Ingreso
+                <ArrowDown size={14} strokeWidth={2.5} /> Ingreso
               </button>
               <button type="button" className={`tes-tipo-opt tes-tipo-egreso${tipo === 'EGRESO' ? ' active' : ''}`}
                 onClick={() => setTipo('EGRESO')}>
-                <IconArrowUp /> Egreso
+                <ArrowUp size={14} strokeWidth={2.5} /> Egreso
               </button>
             </div>
 
@@ -308,7 +306,7 @@ function TransferenciaModal({
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Transferencia entre cuentas</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
@@ -349,9 +347,7 @@ function TransferenciaModal({
               </div>
             </div>
             <div className="info-banner mt-3">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
+              <Info aria-hidden />
               <p>Por ahora solo entre cuentas de la <strong>misma moneda</strong>. El cambio de divisa (con tasa) llegará más adelante.</p>
             </div>
           </div>
@@ -383,7 +379,7 @@ function ConfirmEliminar({
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Eliminar movimiento</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
@@ -480,16 +476,16 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
         </div>
         <div className="tes-header-actions">
           <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }}>
-            <IconPlus /> Nueva cuenta
+            <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
           </button>
           {cuentasActivas.length >= 2 && (
             <button className="btn btn-secondary" onClick={() => setTransferModal(true)}>
-              <IconTransfer /> Transferencia
+              <ArrowRightLeft size={14} /> Transferencia
             </button>
           )}
           {hayCuentasActivas && (
             <button className="btn btn-primary" onClick={() => openMovimiento(null)}>
-              <IconPlus /> Registrar movimiento
+              <Plus size={14} strokeWidth={2.5} /> Registrar movimiento
             </button>
           )}
         </div>
@@ -521,7 +517,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
 
       {cuentasVista.length === 0 ? (
         <div className="card mon-empty">
-          <IconWallet />
+          <Wallet size={40} strokeWidth={1} opacity={0.2} />
           <p>
             {data.cuentas.length === 0
               ? 'Aún no hay cuentas. Crea tu primera caja o cuenta de banco para empezar a registrar movimientos.'
@@ -544,13 +540,13 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
                   {c.activa ? (
                     <>
                       <button className="ter-action-btn" title="Editar"
-                        onClick={() => { setEditCuenta(c); setCuentaModal(true) }}><IconEdit /></button>
+                        onClick={() => { setEditCuenta(c); setCuentaModal(true) }}><Pencil size={15} /></button>
                       <button className="ter-action-btn ter-action-danger" title="Archivar"
-                        onClick={() => setConfirmCuenta(c)} disabled={isPending}><IconArchive /></button>
+                        onClick={() => setConfirmCuenta(c)} disabled={isPending}><Archive size={15} /></button>
                     </>
                   ) : (
                     <button className="ter-action-btn ter-action-restore" title="Restaurar"
-                      onClick={() => handleRestaurar(c)} disabled={isPending}><IconRestore /></button>
+                      onClick={() => handleRestaurar(c)} disabled={isPending}><RotateCcw size={15} /></button>
                   )}
                 </div>
               </div>
@@ -567,7 +563,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
 
               {c.activa && (
                 <button className="btn btn-secondary btn-sm tes-cuenta-mov-btn" onClick={() => openMovimiento(c.cuenta_id)}>
-                  <IconPlus /> Movimiento
+                  <Plus size={14} strokeWidth={2.5} /> Movimiento
                 </button>
               )}
             </div>
@@ -592,7 +588,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
       <div className="card card-table">
         {movimientosFiltrados.length === 0 ? (
           <div className="mon-empty">
-            <IconList />
+            <List size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.movimientos.length === 0 ? 'Sin movimientos todavía.' : 'No hay movimientos para los filtros seleccionados.'}</p>
           </div>
         ) : (
@@ -625,7 +621,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
                     <td>
                       <div className="ter-actions">
                         <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setConfirmMov(m)} disabled={isPending}><IconTrash /></button>
+                          onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -676,7 +672,7 @@ function ConfirmArchivarCuenta({
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Archivar cuenta</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
@@ -693,40 +689,4 @@ function ConfirmArchivarCuenta({
       </div>
     </div>
   )
-}
-
-// ── Iconos ────────────────────────────────────────────────────────────────────
-
-function IconPlus() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-}
-function IconX() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-}
-function IconEdit() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-}
-function IconArchive() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-}
-function IconRestore() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-}
-function IconTrash() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/></svg>
-}
-function IconTransfer() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-}
-function IconArrowDown() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-}
-function IconArrowUp() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-}
-function IconWallet() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>
-}
-function IconList() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
 }

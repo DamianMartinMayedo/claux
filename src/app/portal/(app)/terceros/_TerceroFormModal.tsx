@@ -3,6 +3,7 @@
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
+import { ArrowRightLeft, FileText, X } from 'lucide-react'
 import {
   guardarTercero,
   type Tercero,
@@ -190,10 +191,6 @@ export function ViasPagoEditor({ value, onChange, label, optional = false }: {
 
 // ── Iconos locales ────────────────────────────────────────────────────────────
 
-function IconX()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
-function IconSwap()     { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg> }
-function IconFileLink() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg> }
-
 // ── TerceroFormModal ──────────────────────────────────────────────────────────
 
 export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSaved }: {
@@ -229,7 +226,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
 
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar' : 'Nuevo cliente o proveedor'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><IconX /></button>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -358,7 +355,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                 <div className="via-pago-swap-line" />
                 <button type="button" className="via-pago-swap-btn" onClick={handleSwap}
                   title="Intercambiar vía principal y secundaria">
-                  <IconSwap /> Intercambiar
+                  <ArrowRightLeft size={13} strokeWidth={2} /> Intercambiar
                 </button>
                 <div className="via-pago-swap-line" />
               </div>
@@ -390,7 +387,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                       ? <>PDF del contrato{' '}
                           <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer"
                             className="ter-contrato-link">
-                            <IconFileLink /> Ver contrato actual
+                            <FileText size={15} strokeWidth={2} /> Ver contrato actual
                           </a>
                         </>
                       : 'PDF del contrato (opcional)'}

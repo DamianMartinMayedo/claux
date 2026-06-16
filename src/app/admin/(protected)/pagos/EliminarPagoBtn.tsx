@@ -1,5 +1,6 @@
 'use client'
 
+import { AlertTriangle, Trash2, X } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -43,18 +44,13 @@ export default function EliminarPagoBtn({
         <div className="modal-header">
           <h2 className="modal-title">Eliminar pago</h2>
           <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <X size={18} />
           </button>
         </div>
 
         <div className="modal-body">
           <div className="alert alert-error alert-top">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-px">
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
+            <AlertTriangle size={18} className="flex-shrink-0 mt-px" />
             <div>
               <p className="confirm-title">¿Eliminar {pagoId}?</p>
               <p className="text-xs">
@@ -86,12 +82,7 @@ export default function EliminarPagoBtn({
         title="Eliminar pago"
         aria-label="Eliminar pago"
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6"/><path d="M14 11v6"/>
-          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-        </svg>
+        <Trash2 size={15} />
       </button>
       {mounted && open && createPortal(modal, document.body)}
     </>

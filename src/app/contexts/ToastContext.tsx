@@ -1,5 +1,6 @@
 'use client'
 
+import { LoaderCircle } from 'lucide-react'
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -82,10 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   function dismissToast(id: number) { removeToast(id) }
 
   const Spinner = () => (
-    <svg className="toast-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-    </svg>
+    <LoaderCircle size={14} strokeWidth={2.5} className="toast-spinner" />
   )
 
   return (

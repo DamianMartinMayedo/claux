@@ -1,5 +1,6 @@
 'use client'
 
+import { Check, Plus, X } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -91,9 +92,7 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
         {resultado ? (
           <div className="modal-body modal-body-success">
             <div className="success-icon-circle">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
+              <Check size={28} strokeWidth={2.5} />
             </div>
             <div className="text-center">
               <h2 className="modal-title modal-success-title">Cliente creado</h2>
@@ -118,9 +117,7 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
             <div className="modal-header">
               <h2 className="modal-title">Nuevo cliente</h2>
               <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
+                <X size={18} />
               </button>
             </div>
 
@@ -268,9 +265,7 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
   return (
     <>
       <button className="btn btn-primary" onClick={handleOpen}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+        <Plus size={16} />
         Nuevo cliente
       </button>
 

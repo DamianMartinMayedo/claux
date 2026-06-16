@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
   calcularTotales,
@@ -99,7 +100,7 @@ export function DocumentoLineasEditor({
         <div className="ven-section-header">
           <span className="ven-form-section-title">Líneas</span>
           <button type="button" className="btn btn-secondary btn-sm" onClick={addLinea}>
-            <IconPlus /> Añadir línea
+            <Plus size={12} strokeWidth={2.5} /> Añadir línea
           </button>
         </div>
 
@@ -183,7 +184,7 @@ export function DocumentoLineasEditor({
                     onClick={() => removeLinea(i)}
                     title="Eliminar línea"
                   >
-                    <IconTrash />
+                    <Trash2 size={13} strokeWidth={2} />
                   </button>
                 </div>
               </div>
@@ -198,13 +199,13 @@ export function DocumentoLineasEditor({
           <span className="ven-form-section-title">Descuentos, cargos e impuestos</span>
           <div className="ven-section-actions">
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => addAjuste('DESCUENTO')}>
-              <IconPlus /> Descuento
+              <Plus size={12} strokeWidth={2.5} /> Descuento
             </button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => addAjuste('CARGO')}>
-              <IconPlus /> Cargo
+              <Plus size={12} strokeWidth={2.5} /> Cargo
             </button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => addAjuste('IMPUESTO')}>
-              <IconPlus /> Impuesto
+              <Plus size={12} strokeWidth={2.5} /> Impuesto
             </button>
           </div>
         </div>
@@ -261,7 +262,7 @@ export function DocumentoLineasEditor({
                   onClick={() => removeAjuste(i)}
                   title="Eliminar ajuste"
                 >
-                  <IconTrash />
+                  <Trash2 size={13} strokeWidth={2} />
                 </button>
               </div>
             ))}
@@ -328,9 +329,3 @@ export function DocumentoLineasEditor({
   )
 }
 
-function IconPlus() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-}
-function IconTrash() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/></svg>
-}

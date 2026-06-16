@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle, Clock, CreditCard, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting }   from '@/app/actions/settings'
 import ProximosVencer   from './ProximosVencer'
@@ -82,11 +83,7 @@ export default async function DashboardPage() {
       <div className="metrics-grid metrics-grid-4">
         <div className="metric-card">
           <div className="metric-icon metric-icon-primary">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
+            <Users size={20} />
           </div>
           <p className="metric-label">Total clientes</p>
           <p className="metric-value">{totalClientes ?? 0}</p>
@@ -95,10 +92,7 @@ export default async function DashboardPage() {
 
         <div className="metric-card">
           <div className="metric-icon metric-icon-success">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
+            <CheckCircle size={20} />
           </div>
           <p className="metric-label">Clientes activos</p>
           <p className="metric-value">{clientesActivos ?? 0}</p>
@@ -107,10 +101,7 @@ export default async function DashboardPage() {
 
         <div className="metric-card">
           <div className="metric-icon metric-icon-danger">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/>
-            </svg>
+            <PauseCircle size={20} />
           </div>
           <p className="metric-label">Suspendidos</p>
           <p className="metric-value">{suspendidos ?? 0}</p>
@@ -119,9 +110,7 @@ export default async function DashboardPage() {
 
         <div className="metric-card">
           <div className="metric-icon metric-icon-amber">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
+            <Star size={20} />
           </div>
           <p className="metric-label">Módulos activos</p>
           <p className="metric-value">{totalModulos ?? 0}</p>
@@ -133,10 +122,7 @@ export default async function DashboardPage() {
       <div className="metrics-grid metrics-grid-4">
         <div className="metric-card">
           <div className="metric-icon metric-icon-amber-warm">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
+            <AlertTriangle size={20} />
           </div>
           <p className="metric-label">Próximos a vencer</p>
           <p className="metric-value">{proximosVencer ?? 0}</p>
@@ -145,10 +131,7 @@ export default async function DashboardPage() {
 
         <div className="metric-card">
           <div className="metric-icon metric-icon-warning">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
+            <Clock size={20} />
           </div>
           <p className="metric-label">En periodo trial</p>
           <p className="metric-value">{enTrial ?? 0}</p>
@@ -157,10 +140,7 @@ export default async function DashboardPage() {
 
         <div className="metric-card">
           <div className="metric-icon metric-icon-teal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="5" width="20" height="14" rx="2"/>
-              <line x1="2" y1="10" x2="22" y2="10"/>
-            </svg>
+            <CreditCard size={20} />
           </div>
           <p className="metric-label">Ingresos este mes</p>
           <p className="metric-value">${ingresosMes.toFixed(0)}</p>
@@ -169,10 +149,7 @@ export default async function DashboardPage() {
 
         <div className="metric-card">
           <div className="metric-icon metric-icon-teal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-              <polyline points="17 6 23 6 23 12"/>
-            </svg>
+            <TrendingUp size={20} />
           </div>
           <p className="metric-label">Ingresos estimados</p>
           <p className="metric-value">${ingresosEstimados.toFixed(0)}</p>

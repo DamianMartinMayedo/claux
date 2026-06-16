@@ -1,7 +1,5 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -13,7 +11,7 @@ import {
   type UsuarioPortal,
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
-
+import { Check, Info, Key, Minus, Pencil, Plus, User, X } from 'lucide-react'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ROL_LABEL: Record<string, string> = {
@@ -87,7 +85,7 @@ function UsuarioModal({
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar usuario' : 'Nuevo usuario'}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><IconX /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -174,7 +172,7 @@ function UsuarioModal({
 
             {!esEdicion && (
               <div className="usr-pwd-info">
-                <IconInfo />
+                <Info size={16} strokeWidth={2} />
                 <span>Se generará una contraseña temporal automáticamente. Podrás copiarla al crear el usuario.</span>
               </div>
             )}
@@ -282,7 +280,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
         </div>
         {!soloLectura && (
           <button className="btn btn-primary" onClick={abrirNuevo}>
-            <IconPlus /> Nuevo usuario
+            <Plus size={16} strokeWidth={2} /> Nuevo usuario
           </button>
         )}
       </div>
@@ -302,7 +300,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
         <div className="card card-table">
           {usuarios.length === 0 ? (
             <div className="mon-empty mon-empty-xl">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              <User size={40} strokeWidth={1} />
               <p>No hay usuarios creados.</p>
             </div>
           ) : (
@@ -362,7 +360,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                               disabled={u.user_id === sessionUserId}
                               title="Editar"
                             >
-                              <IconEdit />
+                              <Pencil size={13} strokeWidth={2} />
                             </button>
                             <button
                               className="btn btn-secondary btn-xs"
@@ -372,7 +370,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                             >
                               {resetPending && resetTarget === u.user_id
                                 ? <span className="spinner spinner-sm" />
-                                : <IconKey />}
+                                : <Key size={13} strokeWidth={2} />}
                             </button>
                           </div>
                         </td>
@@ -406,8 +404,8 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                   {PERMISOS.map(p => (
                     <tr key={p.accion}>
                       <td>{p.accion}</td>
-                      <td className="text-center">{p.admin    ? <IconCheck /> : <IconMinus />}</td>
-                      <td className="text-center">{p.operador ? <IconCheck /> : <IconMinus />}</td>
+                      <td className="text-center">{p.admin    ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
+                      <td className="text-center">{p.operador ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -454,11 +452,3 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-function IconX()     { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
-function IconPlus()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> }
-function IconEdit()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
-function IconKey()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> }
-function IconCheck() { return <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> }
-function IconMinus() { return <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" width="16" height="16"><line x1="5" y1="12" x2="19" y2="12"/></svg> }
-function IconInfo()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className="flex-shrink-0 text-primary"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> }

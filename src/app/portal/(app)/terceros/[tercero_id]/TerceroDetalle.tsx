@@ -11,6 +11,7 @@ import {
   type ViaPago,
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal } from '../_TerceroFormModal'
+import { Activity, Archive, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -213,7 +214,7 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
               <div>
                 <div className="det-label">Documento</div>
                 <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer" className="det-link-icon">
-                  <IconFileLink /> Ver contrato
+                  <FileText size={13} strokeWidth={2} /> Ver contrato
                 </a>
               </div>
             )}
@@ -248,7 +249,7 @@ function TabProductos({ count }: { count: number }) {
   return (
     <div className="det-tab-body">
       <div className="det-empty">
-        <div className="det-empty-icon"><IconBoxLg /></div>
+        <div className="det-empty-icon"><Package size={40} strokeWidth={1} opacity={0.2} /></div>
         {count === 0 ? (
           <>
             <div className="det-empty-title">Sin productos asignados</div>
@@ -273,7 +274,7 @@ function TabProductos({ count }: { count: number }) {
 function TabCuentasPorPagar() {
   return (
     <div className="det-empty">
-      <div className="det-empty-icon"><IconCreditCardLg /></div>
+      <div className="det-empty-icon"><CreditCard size={40} strokeWidth={1} opacity={0.2} /></div>
       <div className="det-empty-title">Cuentas por pagar</div>
       <div className="det-empty-text">Aquí se mostrarán las facturas y saldos pendientes con este proveedor.</div>
     </div>
@@ -285,7 +286,7 @@ function TabCuentasPorPagar() {
 function TabHistorial() {
   return (
     <div className="det-empty">
-      <div className="det-empty-icon"><IconActivityLg /></div>
+      <div className="det-empty-icon"><Activity size={40} strokeWidth={1} opacity={0.2} /></div>
       <div className="det-empty-title">Historial de transacciones</div>
       <div className="det-empty-text">Aquí se mostrará el historial de ventas y compras con este contacto.</div>
     </div>
@@ -347,10 +348,10 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
           </div>
           <div className="det-meta-row">
             {tercero.identificacion && <span>RIF/CI: <strong>{tercero.identificacion}</strong></span>}
-            {tercero.telefono       && <span className="det-meta-inline"><IconPhone />{tercero.telefono}</span>}
+            {tercero.telefono       && <span className="det-meta-inline"><Phone size={11} strokeWidth={2} />{tercero.telefono}</span>}
             {tercero.email          && (
               <a href={`mailto:${tercero.email}`} className="det-meta-inline link-primary">
-                <IconMail />{tercero.email}
+                <Mail size={11} strokeWidth={2} />{tercero.email}
               </a>
             )}
           </div>
@@ -359,7 +360,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
         {/* Acciones */}
         <div className="det-actions">
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
-            <IconEdit /> Editar
+            <Pencil size={14} strokeWidth={2} /> Editar
           </button>
           <button
             onClick={toggleActivo}
@@ -367,7 +368,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
             className="btn btn-secondary"
             style={{ color: tercero.activo ? 'var(--color-error)' : 'var(--color-success)' }}
           >
-            {tercero.activo ? <><IconArchive /> Archivar</> : <><IconRestore /> Restaurar</>}
+            {tercero.activo ? <><Archive size={14} strokeWidth={2} /> Archivar</> : <><RotateCcw size={14} strokeWidth={2} /> Restaurar</>}
           </button>
         </div>
       </div>
@@ -417,14 +418,3 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   )
 }
 
-// ── Iconos (Feather, stroke, currentColor) ────────────────────────────────────
-
-function IconEdit()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
-function IconArchive()     { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> }
-function IconRestore()     { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> }
-function IconPhone()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.37 2 2 0 013.6 1.21h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.77a16 16 0 006.29 6.29l1.63-1.63a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg> }
-function IconMail()        { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> }
-function IconFileLink()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> }
-function IconBoxLg()       { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
-function IconCreditCardLg(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> }
-function IconActivityLg()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" width="40" height="40" opacity="0.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> }

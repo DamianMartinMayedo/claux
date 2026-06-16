@@ -1,12 +1,11 @@
 'use client'
 
-'use client'
-
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
+import { Lock } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +155,7 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
                 className="btn btn-secondary btn-sm"
                 onClick={() => setShowPwd(true)}
               >
-                <IconLock /> Cambiar contraseña
+                <Lock size={14} strokeWidth={2} /> Cambiar contraseña
               </button>
             </div>
           ) : (
@@ -185,7 +184,6 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
             </div>
           )}
 
-
           <div className="prf-form-submit">
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending
@@ -200,12 +198,3 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
   )
 }
 
-// ── Iconos ────────────────────────────────────────────────────────────────────
-function IconLock() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-      <path d="M7 11V7a5 5 0 0110 0v4"/>
-    </svg>
-  )
-}

@@ -1,5 +1,6 @@
 'use client'
 
+import { CreditCard, Download, Search } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import EditarPagoModal  from './EditarPagoModal'
 import EliminarPagoBtn  from './EliminarPagoBtn'
@@ -90,9 +91,7 @@ export default function PagosTabla({
       {/* Filtros */}
       <div className="filters-bar">
         <div className="search-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
+          <Search />
           <input
             type="search" className="search-input"
             placeholder="Buscar por empresa o ID cliente…"
@@ -124,10 +123,7 @@ export default function PagosTabla({
         </select>
 
         <button className="btn btn-secondary" onClick={() => exportCSV(filtrados, clienteNombre)}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
+          <Download size={14} />
           Exportar CSV
         </button>
       </div>
@@ -135,9 +131,7 @@ export default function PagosTabla({
       {filtrados.length === 0 ? (
         <div className="table-wrapper">
           <div className="table-empty">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-            </svg>
+            <CreditCard size={40} strokeWidth={1.5} />
             <p>No se encontraron pagos con los filtros aplicados.</p>
           </div>
         </div>

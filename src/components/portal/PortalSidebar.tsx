@@ -72,17 +72,23 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   // ── Colapso de grupos ──
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    const stored = readCollapsed()
-    if (!('base' in stored)) stored['base'] = false // Contabilidad siempre expandido
-    return stored
-  })
+  // Estado inicial DETERMINISTA: idéntico en el servidor y en el primer render del
+  // cliente (base expandido, resto colapsado) → evita el hydration mismatch. Las
+  // preferencias persistidas en localStorage se aplican tras montar (useEffect).
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ base: false })
   const [hasHydrated, setHasHydrated] = useState(false)
   const contentRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
-  // Flag de hidratación (evita animar el colapso en el primer render). Patrón estándar.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setHasHydrated(true) }, [])
+  // Tras hidratar: leer preferencias guardadas y habilitar la animación de colapso.
+  // Sincronizar con datos solo-cliente (localStorage) tras montar es intencional.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const stored = readCollapsed()
+    if (!('base' in stored)) stored['base'] = false // Contabilidad expandida por defecto
+    setCollapsed(stored)
+    setHasHydrated(true)
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function toggleGroup(key: string) {
     setCollapsed(prev => { const next = { ...prev, [key]: !prev[key] }; saveCollapsed(next); return next })

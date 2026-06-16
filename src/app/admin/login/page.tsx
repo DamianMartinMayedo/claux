@@ -1,5 +1,6 @@
 'use client'
 
+import { Mail } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -94,10 +95,7 @@ export default function LoginPage() {
                 <div className="mt-4">
                   <div className="reset-sent-box">
                     <div className="reset-sent-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                        <polyline points="22,6 12,13 2,6"/>
-                      </svg>
+                      <Mail size={20} />
                     </div>
                     <div>
                       <p className="reset-sent-title">Enlace enviado</p>
