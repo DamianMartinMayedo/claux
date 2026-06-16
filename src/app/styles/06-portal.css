@@ -1227,4 +1227,5 @@
 }
 .crear-tercero-link:hover { text-decoration: underline; }
 
-
+/* ── RRHH (Personal y nómina) ────────────────────────────────────────────── */
+.rrhh-tabs { margin-bottom: var(--space-4); }
