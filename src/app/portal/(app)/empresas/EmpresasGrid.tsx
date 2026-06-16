@@ -2,6 +2,7 @@
 
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
 import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
@@ -45,7 +46,7 @@ function EmpresaCard({
           {empresa.logo_url
             ? (
               <div className="emp-avatar-lg emp-avatar-with-logo">
-                <img src={empresa.logo_url} alt={empresa.nombre} onError={e => {
+                <Image src={empresa.logo_url} alt={empresa.nombre} width={48} height={48} onError={e => {
                   const el = e.currentTarget
                   el.style.display = 'none'
                   el.parentElement!.style.background = color
@@ -314,7 +315,7 @@ function EmpresaModal({
                 >
                   <div className="logo-upload-preview">
                     {logoPreview
-                      ? <img src={logoPreview} alt="Preview" />
+                      ? <Image src={logoPreview} alt="Preview" width={56} height={56} unoptimized />
                       : <ImageIcon size={22} strokeWidth={1.5} className="text-muted" />}
                   </div>
                   <div className="logo-upload-info">
