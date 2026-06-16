@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia, editarCliente } from '@/app/actions/clientes'
@@ -140,12 +140,10 @@ export default function AccionesHeader({ cliente }: Props) {
     }
   }, [])
 
-  useState(() => {
-    if (typeof window !== 'undefined') {
-      document.addEventListener('mousedown', handleClickOutsideMenu)
-      return () => document.removeEventListener('mousedown', handleClickOutsideMenu)
-    }
-  })
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutsideMenu)
+    return () => document.removeEventListener('mousedown', handleClickOutsideMenu)
+  }, [handleClickOutsideMenu])
 
   function onDiasChange(val: string) {
     setDiasGracia(val)

@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSetting }        from '@/app/actions/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import PortalHeader          from '@/components/portal/PortalHeader'
-import PortalSidebar         from '@/components/portal/PortalSidebar'
+import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
 import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
 import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
@@ -71,7 +71,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       <PortalSidebar
         rol={session.rol}
         modulosActivos={modulosActivos}
-        catalogo={(catalogo ?? []) as any}
+        catalogo={(catalogo ?? []) as CatalogoItem[]}
       />
       <main className="portal-main">
         <PortalToastWrapper>
