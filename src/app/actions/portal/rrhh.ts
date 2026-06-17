@@ -40,6 +40,20 @@ export interface EmpleadoConEstado extends Empleado {
   estado: EstadoEmpleado
 }
 
+export interface Contrato {
+  contrato_id:   string
+  client_id:     string
+  empleado_id:   string
+  tipo_contrato: TipoContrato
+  fecha_inicio:  string
+  fecha_fin:     string | null
+  salario_base:  number
+  moneda:        string
+  periodicidad:  Periodicidad
+  notas:         string | null
+  created_at:    string
+}
+
 export type EstadoNomina = 'BORRADOR' | 'CONFIRMADA'
 
 export interface NominaLinea {
@@ -78,6 +92,7 @@ export interface NominaConLineas extends Nomina {
 
 export interface RrhhPageData {
   empleados:       EmpleadoConEstado[]
+  contratos:       Contrato[]
   nominas:         NominaConLineas[]
   empresas:        { empresa_id: string; nombre: string }[]
   monedas:         string[]
@@ -98,6 +113,7 @@ function corto(): string {
   return crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()
 }
 function generarEmpleadoId(): string { return `PER-${corto()}` }
+function generarContratoId():  string { return `CON-${corto()}` }
 function generarNominaId():   string { return `NOM-${corto()}` }
 function generarLineaId():    string { return `NLN-${corto()}` }
 function generarGastoId():    string { return `GAS-${corto()}` }
@@ -120,7 +136,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes] = await Promise.all([
+  const [empRes, monRes, nomRes, nlnRes, conRes] = await Promise.all([
     db.from('empleados').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -138,6 +154,10 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     db.from('nomina_lineas').select('*')
       .eq('client_id', session.client_id)
       .order('empleado_nombre', { ascending: true }),
+    db.from('contratos').select('*')
+      .eq('client_id', session.client_id)
+      .order('fecha_inicio', { ascending: false })
+      .order('created_at', { ascending: false }),
   ])
 
   const empleados = ((empRes.data ?? []) as Empleado[]).map(e => ({
@@ -145,6 +165,12 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     salario_base: Number(e.salario_base),
     estado:       estadoDe(e.fecha_baja),
   }))
+  const empleadoIds = new Set(empleados.map(e => e.empleado_id))
+
+  // Contratos de los empleados accesibles (historial)
+  const contratos = ((conRes.data ?? []) as Contrato[])
+    .filter(c => empleadoIds.has(c.empleado_id))
+    .map(c => ({ ...c, salario_base: Number(c.salario_base) }))
 
   // Nóminas con sus líneas y el estado de pago del gasto enlazado
   const nominasRaw = (nomRes.data ?? []) as Nomina[]
@@ -201,6 +227,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
 
   return {
     empleados,
+    contratos,
     nominas,
     empresas:       empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     monedas:        ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
@@ -261,14 +288,29 @@ export async function guardarEmpleado(
 
   if (!empleado_id) {
     if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
+    const nuevoId = generarEmpleadoId()
     const { error } = await db.from('empleados').insert({
-      empleado_id: generarEmpleadoId(),
+      empleado_id: nuevoId,
       client_id:   session.client_id,
       empresa_id,
       moneda,
       ...campos,
     })
     if (error) return { ok: false, error: error.message }
+
+    // Contrato inicial (historial) — espejo del snapshot recién creado
+    await db.from('contratos').insert({
+      contrato_id:   generarContratoId(),
+      client_id:     session.client_id,
+      empleado_id:   nuevoId,
+      tipo_contrato,
+      fecha_inicio:  fecha_alta,
+      fecha_fin:     null,
+      salario_base,
+      moneda,
+      periodicidad,
+      notas:         'Contrato inicial',
+    })
   } else {
     // Editar — la moneda no se cambia (la nómina quedaría inconsistente).
     const { error } = await db.from('empleados')
@@ -343,6 +385,132 @@ export async function eliminarEmpleado(empleado_id: string): Promise<{ ok: boole
 
   const { error } = await db.from('empleados').delete()
     .eq('empleado_id', empleado_id)
+    .eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/rrhh')
+  return { ok: true }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// CONTRATOS (historial)
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ── Nuevo contrato ───────────────────────────────────────────────────────────────
+// Cierra el contrato vigente, abre uno nuevo y actualiza el snapshot del empleado
+// (lo que lee la nómina). La moneda no cambia (se hereda del empleado).
+
+export async function guardarContrato(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const empleado_id  = (formData.get('empleado_id')  as string)?.trim()
+  const tipo_raw     = (formData.get('tipo_contrato') as string)?.trim() as TipoContrato
+  const fecha_inicio = (formData.get('fecha_inicio') as string)?.trim() || hoy()
+  const periodi_raw  = (formData.get('periodicidad') as string)?.trim() as Periodicidad
+  const salarioRaw   = parseFloat(formData.get('salario_base') as string)
+  const notas        = (formData.get('notas')        as string)?.trim() || null
+
+  if (!empleado_id) return { ok: false, error: 'Empleado no válido.' }
+
+  const tipo_contrato = TIPOS_CONTRATO.includes(tipo_raw)    ? tipo_raw    : 'INDEFINIDO'
+  const periodicidad  = PERIODICIDADES.includes(periodi_raw) ? periodi_raw : 'MENSUAL'
+  const salario_base  = isNaN(salarioRaw) || salarioRaw < 0 ? 0 : salarioRaw
+
+  const db = createAdminClient()
+
+  const { data: empleado } = await db.from('empleados')
+    .select('moneda')
+    .eq('empleado_id', empleado_id)
+    .eq('client_id', session.client_id)
+    .single()
+  if (!empleado) return { ok: false, error: 'Empleado no encontrado.' }
+
+  // Cerrar el contrato vigente
+  await db.from('contratos')
+    .update({ fecha_fin: fecha_inicio })
+    .eq('client_id', session.client_id)
+    .eq('empleado_id', empleado_id)
+    .is('fecha_fin', null)
+
+  const { error } = await db.from('contratos').insert({
+    contrato_id:  generarContratoId(),
+    client_id:    session.client_id,
+    empleado_id,
+    tipo_contrato,
+    fecha_inicio,
+    fecha_fin:    null,
+    salario_base,
+    moneda:       empleado.moneda,
+    periodicidad,
+    notas,
+  })
+  if (error) return { ok: false, error: error.message }
+
+  // Actualizar el snapshot del empleado (lo que usa la nómina)
+  await db.from('empleados')
+    .update({ tipo_contrato, salario_base, periodicidad, updated_at: new Date().toISOString() })
+    .eq('empleado_id', empleado_id)
+    .eq('client_id', session.client_id)
+
+  revalidatePath('/portal/rrhh')
+  return { ok: true }
+}
+
+// ── Eliminar contrato ────────────────────────────────────────────────────────────
+// Si era el vigente, reabre el anterior y restaura el snapshot del empleado.
+
+export async function eliminarContrato(contrato_id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+
+  const { data: contrato } = await db.from('contratos')
+    .select('empleado_id, fecha_fin')
+    .eq('contrato_id', contrato_id)
+    .eq('client_id', session.client_id)
+    .single()
+  if (!contrato) return { ok: false, error: 'Contrato no encontrado.' }
+
+  const eraVigente = contrato.fecha_fin === null
+
+  if (eraVigente) {
+    // Buscar el contrato anterior (el más reciente de los restantes)
+    const { data: previos } = await db.from('contratos')
+      .select('*')
+      .eq('client_id', session.client_id)
+      .eq('empleado_id', contrato.empleado_id)
+      .neq('contrato_id', contrato_id)
+      .order('fecha_inicio', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const previo = (previos ?? [])[0] as Contrato | undefined
+    if (!previo) {
+      return { ok: false, error: 'Es el único contrato del empleado. Edita el empleado en Personal o dalo de baja.' }
+    }
+    // Reabrir el anterior y restaurar el snapshot
+    await db.from('contratos')
+      .update({ fecha_fin: null })
+      .eq('contrato_id', previo.contrato_id)
+      .eq('client_id', session.client_id)
+    await db.from('empleados')
+      .update({
+        tipo_contrato: previo.tipo_contrato,
+        salario_base:  previo.salario_base,
+        periodicidad:  previo.periodicidad,
+        updated_at:    new Date().toISOString(),
+      })
+      .eq('empleado_id', contrato.empleado_id)
+      .eq('client_id', session.client_id)
+  }
+
+  const { error } = await db.from('contratos').delete()
+    .eq('contrato_id', contrato_id)
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 

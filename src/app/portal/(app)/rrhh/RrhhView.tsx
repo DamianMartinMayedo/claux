@@ -21,6 +21,7 @@ import {
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
 import { Check, CircleCheck, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, Wallet, X } from 'lucide-react'
+import ContratosTab from './ContratosTab'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -597,7 +598,7 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [tab, setTab] = useState<'personal' | 'nomina'>('personal')
+  const [tab, setTab] = useState<'personal' | 'contratos' | 'nomina'>('personal')
 
   const [modalEmpleado, setModalEmpleado] = useState(false)
   const [editEmpleado,  setEditEmpleado]  = useState<Empleado | null>(null)
@@ -685,9 +686,10 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
           <p className="page-subtitle">Empleados, contratos y bajas. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
         </div>
         <div className="tes-header-actions">
-          {tab === 'personal' ? (
+          {tab === 'personal' && (
             <button className="btn btn-primary" onClick={openNuevo}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
-          ) : (
+          )}
+          {tab === 'nomina' && (
             <button className="btn btn-primary" onClick={() => setModalNuevaNomina(true)} disabled={data.empresas.length === 0}>
               <Plus size={14} strokeWidth={2.5} /> Nueva nómina
             </button>
@@ -702,12 +704,16 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
           <span>Personal</span>
         </label>
         <label className="seg-opt">
+          <input type="radio" name="rrhh-tab" value="contratos" checked={tab === 'contratos'} onChange={() => setTab('contratos')} />
+          <span>Contratos</span>
+        </label>
+        <label className="seg-opt">
           <input type="radio" name="rrhh-tab" value="nomina" checked={tab === 'nomina'} onChange={() => setTab('nomina')} />
           <span>Nómina</span>
         </label>
       </div>
 
-      {tab === 'personal' ? (
+      {tab === 'personal' && (
         <>
           {/* Toolbar */}
           <div className="ter-toolbar">
@@ -801,7 +807,11 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
             )}
           </div>
         </>
-      ) : (
+      )}
+
+      {tab === 'contratos' && <ContratosTab data={data} />}
+
+      {tab === 'nomina' && (
         <div className="card card-table">
           {data.nominas.length === 0 ? (
             <div className="mon-empty">
