@@ -210,7 +210,6 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
           <Campo label="Teléfono"        value={empleado.telefono} />
           <Campo label="Email"           value={empleado.email} />
           <Campo label="Dirección"       value={empleado.direccion} />
-          <Campo label="Turno"           value={empleado.turno} />
           <Campo label="Tipo de contrato" value={TIPO_CONTRATO_LABEL[empleado.tipo_contrato]} />
           <Campo label="Periodicidad"    value={PERIODICIDAD_LABEL[empleado.periodicidad]} />
           <Campo label="Salario base"    value={empleado.salario_base > 0 ? `${formatMonto(empleado.salario_base)} ${empleado.moneda}` : null} />

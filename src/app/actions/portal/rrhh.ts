@@ -571,17 +571,34 @@ export async function crearNomina(
 
   const db = createAdminClient()
 
+  // Evitar duplicados: una nómina por empresa y período
+  const { count: yaExiste } = await db.from('nominas')
+    .select('nomina_id', { count: 'exact', head: true })
+    .eq('client_id', session.client_id)
+    .eq('empresa_id', empresa_id)
+    .eq('periodo', periodo)
+  if ((yaExiste ?? 0) > 0) {
+    return { ok: false, error: `Ya existe una nómina de ${periodo} para esta empresa.` }
+  }
+
+  // Incluir a quien trabajó (aunque sea parte) en el período: alta ≤ fin del mes
+  // y (sigue activo o se dio de baja dentro/después del inicio del período).
+  const [yy, mm]    = periodo.split('-').map(Number)
+  const periodStart = `${periodo}-01`
+  const periodEnd   = `${periodo}-${String(new Date(yy, mm, 0).getDate()).padStart(2, '0')}`
+
   const { data: empData } = await db.from('empleados')
     .select('empleado_id, nombre, apellidos, cargo, salario_base')
     .eq('client_id', session.client_id)
     .eq('empresa_id', empresa_id)
     .eq('moneda', moneda)
-    .is('fecha_baja', null)
+    .lte('fecha_alta', periodEnd)
+    .or(`fecha_baja.is.null,fecha_baja.gte.${periodStart}`)
     .order('nombre')
   const activos = (empData ?? []) as { empleado_id: string; nombre: string; apellidos: string | null; cargo: string | null; salario_base: number }[]
 
   if (!activos.length) {
-    return { ok: false, error: `No hay empleados activos en esa empresa con salario en ${moneda}.` }
+    return { ok: false, error: `No hay personal en esa empresa con salario en ${moneda} para ${periodo}.` }
   }
 
   const nomina_id = generarNominaId()
@@ -680,7 +697,66 @@ export async function guardarLineaNomina(
     .eq('nomina_id', linea.nomina_id)
     .eq('client_id', session.client_id)
 
-  revalidatePath('/portal/rrhh')
+  revalidatePath('/portal/nomina')
+  return { ok: true }
+}
+
+// ── Aplicar un concepto a TODAS las líneas (bono/deducción, fijo o %) ────────────
+// Ahorra teclear: suma el mismo bono o deducción a cada empleado de la nómina.
+
+export async function aplicarConceptoNomina(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const nomina_id = (formData.get('nomina_id') as string)?.trim()
+  const concepto  = (formData.get('concepto')  as string)?.trim()   // BONO | DEDUCCION
+  const modo      = (formData.get('modo')      as string)?.trim()   // FIJO | PORCENTAJE
+  const valor     = parseFloat(formData.get('valor') as string)
+
+  if (!nomina_id)                              return { ok: false, error: 'Nómina no válida.' }
+  if (concepto !== 'BONO' && concepto !== 'DEDUCCION') return { ok: false, error: 'Concepto no válido.' }
+  if (modo !== 'FIJO' && modo !== 'PORCENTAJE')        return { ok: false, error: 'Modo no válido.' }
+  if (isNaN(valor) || valor <= 0)              return { ok: false, error: 'El valor debe ser positivo.' }
+
+  const db = createAdminClient()
+
+  const { data: nomina } = await db.from('nominas')
+    .select('estado')
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', session.client_id)
+    .single()
+  if (!nomina)                      return { ok: false, error: 'Nómina no encontrada.' }
+  if (nomina.estado !== 'BORRADOR') return { ok: false, error: 'La nómina ya está confirmada.' }
+
+  const { data: lineas } = await db.from('nomina_lineas')
+    .select('linea_id, devengado, deducciones')
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', session.client_id)
+
+  let total = 0
+  for (const l of (lineas ?? []) as { linea_id: string; devengado: number; deducciones: number }[]) {
+    let dev = Number(l.devengado)
+    let ded = Number(l.deducciones)
+    const monto = modo === 'PORCENTAJE' ? (dev * valor) / 100 : valor
+    if (concepto === 'BONO') dev += monto
+    else                     ded = Math.min(dev, ded + monto)
+    const neto = Math.max(0, dev - ded)
+    total += neto
+    await db.from('nomina_lineas')
+      .update({ devengado: dev, deducciones: ded, neto })
+      .eq('linea_id', l.linea_id)
+      .eq('client_id', session.client_id)
+  }
+
+  await db.from('nominas')
+    .update({ total, updated_at: new Date().toISOString() })
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', session.client_id)
+
+  revalidatePath('/portal/nomina')
   return { ok: true }
 }
 

@@ -26,7 +26,6 @@ const PERIODICIDAD_LABEL: Record<Periodicidad, string> = {
 }
 const TIPOS_CONTRATO: TipoContrato[]  = ['INDEFINIDO', 'TEMPORAL', 'POR_OBRA', 'PRACTICAS']
 const PERIODICIDADES:  Periodicidad[] = ['MENSUAL', 'QUINCENAL', 'SEMANAL', 'POR_HORA']
-const TURNOS_SUGERIDOS = ['Mañana', 'Tarde', 'Noche', 'Rotativo']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -138,14 +137,6 @@ export function EmpleadoModal({
                   {PERIODICIDADES.map(p => <option key={p} value={p}>{PERIODICIDAD_LABEL[p]}</option>)}
                 </select>
               </div>
-              <div className="input-group ter-col-span-2">
-                <label>Turno</label>
-                <input className="input" name="turno" list="rrhh-turnos" defaultValue={empleado?.turno ?? ''} placeholder="Mañana, Rotativo…" />
-                <datalist id="rrhh-turnos">
-                  {Array.from(new Set([...TURNOS_SUGERIDOS, ...data.turnos])).map(c => <option key={c} value={c} />)}
-                </datalist>
-              </div>
-
               <div className="input-group ter-col-span-2">
                 <label>Fecha de alta <span className="required">*</span></label>
                 <input className="input" name="fecha_alta" type="date" required
@@ -402,7 +393,6 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                       <strong>{nombreCompleto(e)}</strong>
                       <div className="tes-mov-sub">
                         {e.documento && <span className="tes-mov-cat">{e.documento}</span>}
-                        {e.turno && <span className="badge badge-neutral tes-origen-badge">{e.turno}</span>}
                       </div>
                     </td>
                     <td>

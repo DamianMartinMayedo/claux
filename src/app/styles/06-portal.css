@@ -1237,6 +1237,14 @@
   font-size: var(--text-sm); color: var(--color-text-muted);
 }
 .nom-total strong { font-size: var(--text-lg); color: var(--color-text); }
+.nom-aplicar {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2); border-radius: var(--radius-md);
+}
+.nom-aplicar-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
+.nom-aplicar-sel { max-width: 160px; padding: 6px 9px; font-size: var(--text-sm); }
+.nom-aplicar-val { max-width: 110px; padding: 6px 9px; font-size: var(--text-sm); }
 /* Turnos */
 .rrhh-card-gap { margin-bottom: var(--space-4); }
 .ter-card-head { padding: var(--space-4) var(--space-4) 0; }

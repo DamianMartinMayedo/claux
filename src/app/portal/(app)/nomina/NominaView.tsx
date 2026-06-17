@@ -6,6 +6,7 @@ import { useRouter }               from 'next/navigation'
 import {
   crearNomina,
   guardarLineaNomina,
+  aplicarConceptoNomina,
   confirmarNomina,
   eliminarNomina,
   type NominaConLineas,
@@ -28,6 +29,11 @@ function formatPeriodo(periodo: string): string {
 }
 function mesActual(): string {
   return new Date().toISOString().slice(0, 7)
+}
+function siguienteMes(periodo: string): string {
+  const [y, m] = periodo.split('-').map(Number)
+  const d = new Date(y, m, 1)   // m (1-based) como índice 0-based = mes siguiente
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 // ── Modal: nueva nómina ──────────────────────────────────────────────────────────
@@ -59,13 +65,23 @@ function NuevaNominaModal({
   const monedasDisp = (opciones.get(empresaId) ?? []).slice().sort()
   const [moneda, setMoneda]       = useState(monedasDisp[0] ?? '')
 
+  // Sugerir el mes siguiente a la última nómina de la empresa (o el actual)
+  const sugerir = (id: string) => {
+    const ps = data.nominas.filter(n => n.empresa_id === id).map(n => n.periodo).sort()
+    const last = ps[ps.length - 1]
+    return last ? siguienteMes(last) : mesActual()
+  }
+  const [periodo, setPeriodo] = useState(sugerir(empresaId))
+
   function cambiarEmpresa(id: string) {
     setEmpresaId(id)
     const ms = (opciones.get(id) ?? []).slice().sort()
     setMoneda(ms[0] ?? '')
+    setPeriodo(sugerir(id))
   }
 
-  const sinDatos = empresasDisp.length === 0
+  const duplicada = data.nominas.some(n => n.empresa_id === empresaId && n.periodo === periodo)
+  const sinDatos  = empresasDisp.length === 0
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -102,7 +118,8 @@ function NuevaNominaModal({
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-3">
                   <label>Período <span className="required">*</span></label>
-                  <input className="input" name="periodo" type="month" required defaultValue={mesActual()} />
+                  <input className="input" name="periodo" type="month" required value={periodo} onChange={e => setPeriodo(e.target.value)} />
+                  {duplicada && <span className="input-hint input-hint-danger">Ya hay una nómina de este período para la empresa.</span>}
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Fecha <span className="required">*</span></label>
@@ -136,7 +153,7 @@ function NuevaNominaModal({
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={isPending || !empresaId || !moneda}>
+              <button type="submit" className="btn btn-primary" disabled={isPending || !empresaId || !moneda || duplicada}>
                 {isPending ? <><span className="spinner spinner-sm" /> Creando…</> : 'Crear borrador'}
               </button>
             </div>
@@ -194,6 +211,49 @@ function LineaEditableRow({
   )
 }
 
+// ── Aplicar un bono/deducción a TODAS las líneas ────────────────────────────────
+
+function AplicarATodas({
+  nominaId, moneda, onChanged,
+}: {
+  nominaId:  string
+  moneda:    string
+  onChanged: () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const form = e.currentTarget
+    const fd = new FormData(form)
+    fd.set('nomina_id', nominaId)
+    startTransition(async () => {
+      const res = await aplicarConceptoNomina(fd)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      form.reset()
+      onChanged()
+    })
+  }
+
+  return (
+    <form className="nom-aplicar" onSubmit={handleSubmit}>
+      <span className="nom-aplicar-label">Aplicar a todas</span>
+      <select className="input nom-aplicar-sel" name="concepto" defaultValue="DEDUCCION" aria-label="Concepto">
+        <option value="DEDUCCION">Deducción</option>
+        <option value="BONO">Bono</option>
+      </select>
+      <select className="input nom-aplicar-sel" name="modo" defaultValue="FIJO" aria-label="Modo">
+        <option value="FIJO">Fijo ({moneda})</option>
+        <option value="PORCENTAJE">% del devengado</option>
+      </select>
+      <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="0.01" placeholder="0.00" required aria-label="Valor" />
+      <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
+        {isPending ? <span className="spinner spinner-sm" /> : 'Aplicar'}
+      </button>
+    </form>
+  )
+}
+
 // ── Modal: detalle de nómina (líneas + confirmar) ────────────────────────────────
 
 function NominaDetalleModal({
@@ -227,6 +287,10 @@ function NominaDetalleModal({
                   : `Gasto registrado · Pagado ${formatMonto(nomina.pagado)} · Pendiente ${formatMonto(nomina.saldo_pendiente)} ${nomina.moneda} (págalo desde Tesorería).`}
             </span>
           </div>
+
+          {esBorrador && nomina.lineas.length > 0 && (
+            <AplicarATodas nominaId={nomina.nomina_id} moneda={nomina.moneda} onChanged={onChanged} />
+          )}
 
           {nomina.lineas.length === 0 ? (
             <div className="mon-empty"><Wallet size={32} strokeWidth={1} opacity={0.2} /><p>Esta nómina no tiene líneas.</p></div>
