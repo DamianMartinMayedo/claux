@@ -23,6 +23,7 @@ import {
 import { Check, CircleCheck, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, Wallet, X } from 'lucide-react'
 import ContratosTab from './ContratosTab'
 import TurnosTab    from './TurnosTab'
+import ReportesTab  from './ReportesTab'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -599,7 +600,7 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [tab, setTab] = useState<'personal' | 'contratos' | 'turnos' | 'nomina'>('personal')
+  const [tab, setTab] = useState<'personal' | 'contratos' | 'turnos' | 'nomina' | 'reportes'>('personal')
 
   const [modalEmpleado, setModalEmpleado] = useState(false)
   const [editEmpleado,  setEditEmpleado]  = useState<Empleado | null>(null)
@@ -683,8 +684,8 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
       {/* Cabecera */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Personal y nómina</h1>
-          <p className="page-subtitle">Empleados, contratos y bajas. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
+          <h1 className="page-title">Recursos humanos</h1>
+          <p className="page-subtitle">Personal, contratos, turnos, nómina y reportes. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
         </div>
         <div className="tes-header-actions">
           {tab === 'personal' && (
@@ -715,6 +716,10 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
         <label className="seg-opt">
           <input type="radio" name="rrhh-tab" value="nomina" checked={tab === 'nomina'} onChange={() => setTab('nomina')} />
           <span>Nómina</span>
+        </label>
+        <label className="seg-opt">
+          <input type="radio" name="rrhh-tab" value="reportes" checked={tab === 'reportes'} onChange={() => setTab('reportes')} />
+          <span>Reportes</span>
         </label>
       </div>
 
@@ -865,6 +870,8 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
           )}
         </div>
       )}
+
+      {tab === 'reportes' && <ReportesTab data={data} />}
 
       {/* Modales */}
       {modalEmpleado && (

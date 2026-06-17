@@ -1249,3 +1249,5 @@
 .turno-grid-emp { position: sticky; left: 0; z-index: 1; background: var(--color-surface); min-width: 150px; }
 .turno-cell-wrap { display: flex; align-items: center; gap: var(--space-1); }
 .turno-grid-select { min-width: 92px; padding: 5px 8px; font-size: var(--text-xs); }
+/* Reportes */
+.rrhh-kpi-value { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; font-variant-numeric: tabular-nums; }
