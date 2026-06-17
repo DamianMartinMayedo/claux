@@ -1,7 +1,7 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import { useRouter }               from 'next/navigation'
 import {
   crearNomina,
@@ -41,9 +41,37 @@ function NuevaNominaModal({
 }) {
   const [isPending, startTransition] = useTransition()
 
+  // Solo combinaciones empresa→moneda que SÍ pueden generar nómina (empleados activos).
+  // Así el usuario no "adivina": elige entre lo que de verdad tiene personal.
+  const opciones = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const e of data.empleados) {
+      if (e.estado !== 'ACTIVO') continue
+      const arr = m.get(e.empresa_id) ?? []
+      if (!arr.includes(e.moneda)) arr.push(e.moneda)
+      m.set(e.empresa_id, arr)
+    }
+    return m
+  }, [data.empleados])
+
+  const empresasDisp = data.empresas.filter(e => opciones.has(e.empresa_id))
+  const [empresaId, setEmpresaId] = useState(empresasDisp[0]?.empresa_id ?? '')
+  const monedasDisp = (opciones.get(empresaId) ?? []).slice().sort()
+  const [moneda, setMoneda]       = useState(monedasDisp[0] ?? '')
+
+  function cambiarEmpresa(id: string) {
+    setEmpresaId(id)
+    const ms = (opciones.get(id) ?? []).slice().sort()
+    setMoneda(ms[0] ?? '')
+  }
+
+  const sinDatos = empresasDisp.length === 0
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    fd.set('empresa_id', empresaId)
+    fd.set('moneda', moneda)
     startTransition(async () => {
       const res = await crearNomina(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -58,59 +86,62 @@ function NuevaNominaModal({
           <h2 className="modal-title">Nueva nómina</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <p className="modal-body-text">Se creará un borrador con una línea por cada empleado activo de la empresa cuyo salario esté en la moneda elegida. Podrás ajustar el devengado y las deducciones antes de confirmar.</p>
-            <div className="ter-form-grid">
-              <div className="input-group ter-col-span-3">
-                <label>Período <span className="required">*</span></label>
-                <input className="input" name="periodo" type="month" required defaultValue={mesActual()} />
-              </div>
-              <div className="input-group ter-col-span-3">
-                <label>Fecha <span className="required">*</span></label>
-                <input className="input" name="fecha" type="date" required defaultValue={hoyISO()} />
-              </div>
-              <div className="input-group ter-col-span-3">
-                <label>Empresa <span className="required">*</span></label>
-                {data.empresas.length === 1 ? (
-                  <>
-                    <input className="input input-static" readOnly value={data.empresas[0].nombre} />
-                    <input type="hidden" name="empresa_id" value={data.empresas[0].empresa_id} />
-                  </>
-                ) : (
-                  <select className="input" name="empresa_id" defaultValue="" required>
-                    <option value="" disabled>Selecciona…</option>
-                    {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-                  </select>
-                )}
-              </div>
-              <div className="input-group ter-col-span-3">
-                <label>Moneda <span className="required">*</span></label>
-                {data.monedas.length === 0 ? (
-                  <>
-                    <input className="input input-static" readOnly value="Sin monedas activas" />
-                    <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
-                  </>
-                ) : (
-                  <select className="input" name="moneda" defaultValue="" required>
-                    <option value="" disabled>Selecciona…</option>
-                    {data.monedas.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                )}
-              </div>
-              <div className="input-group ter-col-full">
-                <label>Notas</label>
-                <input className="input" name="notas" placeholder="Quincena, observaciones…" />
+        {sinDatos ? (
+          <>
+            <div className="modal-body">
+              <div className="alert alert-warning">No hay empleados activos con salario en ninguna empresa. Da de alta personal (con su salario) antes de generar una nómina.</div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="modal-body">
+              <p className="modal-body-text">Se creará un borrador con una línea por cada empleado activo de la empresa y moneda elegidas. Solo se muestran las que tienen personal.</p>
+              <div className="ter-form-grid">
+                <div className="input-group ter-col-span-3">
+                  <label>Período <span className="required">*</span></label>
+                  <input className="input" name="periodo" type="month" required defaultValue={mesActual()} />
+                </div>
+                <div className="input-group ter-col-span-3">
+                  <label>Fecha <span className="required">*</span></label>
+                  <input className="input" name="fecha" type="date" required defaultValue={hoyISO()} />
+                </div>
+                <div className="input-group ter-col-span-3">
+                  <label>Empresa <span className="required">*</span></label>
+                  {empresasDisp.length === 1 ? (
+                    <input className="input input-static" readOnly value={empresasDisp[0].nombre} />
+                  ) : (
+                    <select className="input" value={empresaId} onChange={e => cambiarEmpresa(e.target.value)} required>
+                      {empresasDisp.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+                    </select>
+                  )}
+                </div>
+                <div className="input-group ter-col-span-3">
+                  <label>Moneda <span className="required">*</span></label>
+                  {monedasDisp.length === 1 ? (
+                    <input className="input input-static" readOnly value={monedasDisp[0]} />
+                  ) : (
+                    <select className="input" value={moneda} onChange={e => setMoneda(e.target.value)} required>
+                      {monedasDisp.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  )}
+                </div>
+                <div className="input-group ter-col-full">
+                  <label>Notas</label>
+                  <input className="input" name="notas" placeholder="Quincena, observaciones…" />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending || data.monedas.length === 0}>
-              {isPending ? <><span className="spinner spinner-sm" /> Creando…</> : 'Crear borrador'}
-            </button>
-          </div>
-        </form>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={isPending || !empresaId || !moneda}>
+                {isPending ? <><span className="spinner spinner-sm" /> Creando…</> : 'Crear borrador'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )

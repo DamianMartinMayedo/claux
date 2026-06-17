@@ -10,7 +10,7 @@ import {
   Wallet, FileText, Users, DollarSign, Package, Warehouse, ShoppingBag,
   Boxes, UserCircle, Building2, User, UsersRound, CreditCard, HelpCircle,
   QrCode, Calendar, Printer, Sparkles, Lock, Circle, ChevronDown, LogOut,
-  FileSignature, CalendarClock, Banknote, BarChart3,
+  CalendarClock, Banknote, BarChart3,
 } from 'lucide-react'
 
 type Rol = 'admin_empresa' | 'usuario'
@@ -231,7 +231,6 @@ const ICON: Record<string, React.ReactNode> = {
   '/portal/compras':     <ShoppingBag size={18} strokeWidth={2} />,
   '/portal/inventario':  <Boxes size={18} strokeWidth={2} />,
   '/portal/rrhh':          <UserCircle size={18} strokeWidth={2} />,
-  '/portal/contratos':     <FileSignature size={18} strokeWidth={2} />,
   '/portal/turnos':        <CalendarClock size={18} strokeWidth={2} />,
   '/portal/nomina':        <Banknote size={18} strokeWidth={2} />,
   '/portal/rrhh-reportes': <BarChart3 size={18} strokeWidth={2} />,

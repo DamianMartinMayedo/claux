@@ -51,6 +51,8 @@ export interface Contrato {
   moneda:        string
   periodicidad:  Periodicidad
   notas:         string | null
+  pdf_url:       string | null
+  pdf_nombre:    string | null
   created_at:    string
 }
 
@@ -110,7 +112,6 @@ export interface TurnoAsignacion {
 
 export interface RrhhPageData {
   empleados:       EmpleadoConEstado[]
-  contratos:       Contrato[]
   nominas:         NominaConLineas[]
   turnos_catalogo: Turno[]
   asignaciones:    TurnoAsignacion[]
@@ -158,7 +159,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes, conRes, turRes, tasRes] = await Promise.all([
+  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes] = await Promise.all([
     db.from('empleados').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -176,10 +177,6 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     db.from('nomina_lineas').select('*')
       .eq('client_id', session.client_id)
       .order('empleado_nombre', { ascending: true }),
-    db.from('contratos').select('*')
-      .eq('client_id', session.client_id)
-      .order('fecha_inicio', { ascending: false })
-      .order('created_at', { ascending: false }),
     db.from('turnos').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -194,11 +191,6 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     estado:       estadoDe(e.fecha_baja),
   }))
   const empleadoIds = new Set(empleados.map(e => e.empleado_id))
-
-  // Contratos de los empleados accesibles (historial)
-  const contratos = ((conRes.data ?? []) as Contrato[])
-    .filter(c => empleadoIds.has(c.empleado_id))
-    .map(c => ({ ...c, salario_base: Number(c.salario_base) }))
 
   // Turnos (catálogo) y asignaciones de los empleados accesibles
   const turnos_catalogo = (turRes.data ?? []) as Turno[]
@@ -260,7 +252,6 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
 
   return {
     empleados,
-    contratos,
     nominas,
     turnos_catalogo,
     asignaciones,
@@ -332,20 +323,6 @@ export async function guardarEmpleado(
       ...campos,
     })
     if (error) return { ok: false, error: error.message }
-
-    // Contrato inicial (historial) — espejo del snapshot recién creado
-    await db.from('contratos').insert({
-      contrato_id:   generarContratoId(),
-      client_id:     session.client_id,
-      empleado_id:   nuevoId,
-      tipo_contrato,
-      fecha_inicio:  fecha_alta,
-      fecha_fin:     null,
-      salario_base,
-      moneda,
-      periodicidad,
-      notas:         'Contrato inicial',
-    })
   } else {
     // Editar — la moneda no se cambia (la nómina quedaría inconsistente).
     const { error } = await db.from('empleados')
@@ -431,9 +408,11 @@ export async function eliminarEmpleado(empleado_id: string): Promise<{ ok: boole
 // CONTRATOS (historial)
 // ════════════════════════════════════════════════════════════════════════════════
 
-// ── Nuevo contrato ───────────────────────────────────────────────────────────────
-// Cierra el contrato vigente, abre uno nuevo y actualiza el snapshot del empleado
-// (lo que lee la nómina). La moneda no cambia (se hereda del empleado).
+// ── Guardar contrato (documento del empleado, PDF opcional) ─────────────────────
+// Los contratos son documentos externos: NO cierran a otros ni tocan el salario
+// del empleado (la nómina usa empleados.salario_base). Pueden coexistir varios.
+
+const PDF_MAX = 10 * 1024 * 1024
 
 export async function guardarContrato(
   formData: FormData,
@@ -445,9 +424,11 @@ export async function guardarContrato(
   const empleado_id  = (formData.get('empleado_id')  as string)?.trim()
   const tipo_raw     = (formData.get('tipo_contrato') as string)?.trim() as TipoContrato
   const fecha_inicio = (formData.get('fecha_inicio') as string)?.trim() || hoy()
+  const fecha_fin    = (formData.get('fecha_fin')    as string)?.trim() || null
   const periodi_raw  = (formData.get('periodicidad') as string)?.trim() as Periodicidad
   const salarioRaw   = parseFloat(formData.get('salario_base') as string)
   const notas        = (formData.get('notas')        as string)?.trim() || null
+  const file         = formData.get('pdf') as File | null
 
   if (!empleado_id) return { ok: false, error: 'Empleado no válido.' }
 
@@ -464,39 +445,44 @@ export async function guardarContrato(
     .single()
   if (!empleado) return { ok: false, error: 'Empleado no encontrado.' }
 
-  // Cerrar el contrato vigente
-  await db.from('contratos')
-    .update({ fecha_fin: fecha_inicio })
-    .eq('client_id', session.client_id)
-    .eq('empleado_id', empleado_id)
-    .is('fecha_fin', null)
+  const contrato_id = generarContratoId()
+
+  // PDF adjunto (opcional)
+  let pdf_url:    string | null = null
+  let pdf_nombre: string | null = null
+  if (file && file.size > 0) {
+    if (file.type !== 'application/pdf') return { ok: false, error: 'El contrato debe ser un archivo PDF.' }
+    if (file.size > PDF_MAX)             return { ok: false, error: 'El PDF no puede superar los 10 MB.' }
+    const path   = `${session.client_id}/${empleado_id}/${contrato_id}.pdf`
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const { error: upErr } = await db.storage.from('contratos')
+      .upload(path, buffer, { contentType: 'application/pdf', upsert: true })
+    if (upErr) return { ok: false, error: upErr.message }
+    pdf_url    = db.storage.from('contratos').getPublicUrl(path).data.publicUrl
+    pdf_nombre = file.name
+  }
 
   const { error } = await db.from('contratos').insert({
-    contrato_id:  generarContratoId(),
-    client_id:    session.client_id,
+    contrato_id,
+    client_id:   session.client_id,
     empleado_id,
     tipo_contrato,
     fecha_inicio,
-    fecha_fin:    null,
+    fecha_fin,
     salario_base,
-    moneda:       empleado.moneda,
+    moneda:      empleado.moneda,
     periodicidad,
     notas,
+    pdf_url,
+    pdf_nombre,
   })
   if (error) return { ok: false, error: error.message }
 
-  // Actualizar el snapshot del empleado (lo que usa la nómina)
-  await db.from('empleados')
-    .update({ tipo_contrato, salario_base, periodicidad, updated_at: new Date().toISOString() })
-    .eq('empleado_id', empleado_id)
-    .eq('client_id', session.client_id)
-
-  revalidatePath('/portal/rrhh')
+  revalidatePath(`/portal/rrhh/${empleado_id}`)
   return { ok: true }
 }
 
 // ── Eliminar contrato ────────────────────────────────────────────────────────────
-// Si era el vigente, reabre el anterior y restaura el snapshot del empleado.
 
 export async function eliminarContrato(contrato_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -506,51 +492,51 @@ export async function eliminarContrato(contrato_id: string): Promise<{ ok: boole
   const db = createAdminClient()
 
   const { data: contrato } = await db.from('contratos')
-    .select('empleado_id, fecha_fin')
+    .select('empleado_id')
     .eq('contrato_id', contrato_id)
     .eq('client_id', session.client_id)
     .single()
   if (!contrato) return { ok: false, error: 'Contrato no encontrado.' }
 
-  const eraVigente = contrato.fecha_fin === null
-
-  if (eraVigente) {
-    // Buscar el contrato anterior (el más reciente de los restantes)
-    const { data: previos } = await db.from('contratos')
-      .select('*')
-      .eq('client_id', session.client_id)
-      .eq('empleado_id', contrato.empleado_id)
-      .neq('contrato_id', contrato_id)
-      .order('fecha_inicio', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const previo = (previos ?? [])[0] as Contrato | undefined
-    if (!previo) {
-      return { ok: false, error: 'Es el único contrato del empleado. Edita el empleado en Personal o dalo de baja.' }
-    }
-    // Reabrir el anterior y restaurar el snapshot
-    await db.from('contratos')
-      .update({ fecha_fin: null })
-      .eq('contrato_id', previo.contrato_id)
-      .eq('client_id', session.client_id)
-    await db.from('empleados')
-      .update({
-        tipo_contrato: previo.tipo_contrato,
-        salario_base:  previo.salario_base,
-        periodicidad:  previo.periodicidad,
-        updated_at:    new Date().toISOString(),
-      })
-      .eq('empleado_id', contrato.empleado_id)
-      .eq('client_id', session.client_id)
-  }
+  // Borra el PDF adjunto si existe (best-effort)
+  await db.storage.from('contratos')
+    .remove([`${session.client_id}/${contrato.empleado_id}/${contrato_id}.pdf`])
 
   const { error } = await db.from('contratos').delete()
     .eq('contrato_id', contrato_id)
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/portal/rrhh')
+  revalidatePath(`/portal/rrhh/${contrato.empleado_id}`)
   return { ok: true }
+}
+
+// ── Detalle de un empleado (datos + sus contratos) ──────────────────────────────
+
+export interface EmpleadoDetalleData {
+  data:      RrhhPageData
+  empleado:  EmpleadoConEstado
+  contratos: Contrato[]
+}
+
+export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<EmpleadoDetalleData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const data = await obtenerRrhh()
+  if (!data) return null
+  const empleado = data.empleados.find(e => e.empleado_id === empleado_id)
+  if (!empleado) return null
+
+  const db = createAdminClient()
+  const { data: cons } = await db.from('contratos').select('*')
+    .eq('client_id', session.client_id)
+    .eq('empleado_id', empleado_id)
+    .order('fecha_inicio', { ascending: false })
+    .order('created_at', { ascending: false })
+  const contratos = ((cons ?? []) as Contrato[]).map(c => ({ ...c, salario_base: Number(c.salario_base) }))
+
+  return { data, empleado, contratos }
 }
 
 // ════════════════════════════════════════════════════════════════════════════════

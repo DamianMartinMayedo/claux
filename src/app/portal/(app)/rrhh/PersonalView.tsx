@@ -45,7 +45,7 @@ function nombreCompleto(e: Empleado): string {
 
 // ── Modal: crear / editar empleado ──────────────────────────────────────────────
 
-function EmpleadoModal({
+export function EmpleadoModal({
   empleado, data, onClose, onSaved,
 }: {
   empleado: Empleado | null
@@ -202,7 +202,7 @@ function EmpleadoModal({
 
 // ── Modal: dar de baja ───────────────────────────────────────────────────────────
 
-function BajaModal({
+export function BajaModal({
   empleado, onClose, onSaved,
 }: {
   empleado: EmpleadoConEstado
@@ -260,7 +260,7 @@ function BajaModal({
 
 // ── Confirmación eliminar ───────────────────────────────────────────────────────
 
-function ConfirmEliminar({
+export function ConfirmEliminar({
   empleado, onConfirm, onClose, isPending,
 }: {
   empleado:  EmpleadoConEstado
@@ -396,7 +396,8 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
               </thead>
               <tbody>
                 {empleados.map(e => (
-                  <tr key={e.empleado_id}>
+                  <tr key={e.empleado_id} className="table-row-clickable"
+                    onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}>
                     <td>
                       <strong>{nombreCompleto(e)}</strong>
                       <div className="tes-mov-sub">
@@ -424,7 +425,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                       )}
                     </td>
                     <td>
-                      <div className="ter-actions">
+                      <div className="ter-actions" onClick={ev => ev.stopPropagation()}>
                         <button className="ter-action-btn" title="Editar" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /></button>
                         {e.estado === 'ACTIVO' ? (
                           <button className="ter-action-btn" title="Dar de baja" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /></button>
