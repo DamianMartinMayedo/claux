@@ -146,9 +146,9 @@ function CeldaTurno({
   )
 }
 
-// ── Pestaña Turnos ───────────────────────────────────────────────────────────────
+// ── Página: Turnos ───────────────────────────────────────────────────────────────
 
-export default function TurnosTab({ data }: { data: RrhhPageData }) {
+export default function TurnosView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
   const [empresaId, setEmpresaId] = useState(data.empresas[0]?.empresa_id ?? '')
   const [modalTurno, setModalTurno] = useState<Turno | null>(null)
@@ -182,7 +182,14 @@ export default function TurnosTab({ data }: { data: RrhhPageData }) {
   }
 
   return (
-    <>
+    <div className="view-container">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Turnos</h1>
+          <p className="page-subtitle">Catálogo de turnos por empresa y planificación semanal del personal.</p>
+        </div>
+      </div>
+
       <div className="ter-toolbar">
         {data.empresas.length > 1 && (
           <select className="input ter-filter-select" value={empresaId} onChange={e => setEmpresaId(e.target.value)}>
@@ -299,6 +306,6 @@ export default function TurnosTab({ data }: { data: RrhhPageData }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }

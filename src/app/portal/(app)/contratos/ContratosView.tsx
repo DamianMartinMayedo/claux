@@ -183,9 +183,9 @@ function ContratosEmpleadoModal({
   )
 }
 
-// ── Pestaña Contratos ────────────────────────────────────────────────────────────
+// ── Página: Contratos ────────────────────────────────────────────────────────────
 
-export default function ContratosTab({ data }: { data: RrhhPageData }) {
+export default function ContratosView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
   const [search,       setSearch]       = useState('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
@@ -217,7 +217,14 @@ export default function ContratosTab({ data }: { data: RrhhPageData }) {
   const empleadoAbierto = abiertoId ? data.empleados.find(e => e.empleado_id === abiertoId) ?? null : null
 
   return (
-    <>
+    <div className="view-container">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Contratos</h1>
+          <p className="page-subtitle">Historial de contratos por empleado: renovaciones y cambios de salario.</p>
+        </div>
+      </div>
+
       <div className="ter-toolbar">
         <div className="ter-search-wrap">
           <Search size={16} strokeWidth={2} />
@@ -237,7 +244,7 @@ export default function ContratosTab({ data }: { data: RrhhPageData }) {
           <div className="mon-empty">
             <FileText size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.empleados.length === 0
-              ? 'Aún no hay empleados. Da de alta personal en la pestaña Personal; su contrato inicial se crea automáticamente.'
+              ? 'Aún no hay empleados. Da de alta personal en Personal; su contrato inicial se crea automáticamente.'
               : 'No hay empleados para los filtros seleccionados.'}</p>
           </div>
         ) : (
@@ -291,6 +298,6 @@ export default function ContratosTab({ data }: { data: RrhhPageData }) {
           onChanged={() => router.refresh()}
         />
       )}
-    </>
+    </div>
   )
 }

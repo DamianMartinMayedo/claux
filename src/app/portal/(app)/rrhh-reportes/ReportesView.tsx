@@ -21,9 +21,9 @@ function porMoneda(entries: { moneda: string; monto: number }[]): { moneda: stri
   return Array.from(m.entries()).map(([moneda, monto]) => ({ moneda, monto })).sort((a, b) => a.moneda.localeCompare(b.moneda))
 }
 
-// ── Pestaña Reportes ─────────────────────────────────────────────────────────────
+// ── Página: Reportes de RRHH ─────────────────────────────────────────────────────
 
-export default function ReportesTab({ data }: { data: RrhhPageData }) {
+export default function ReportesView({ data }: { data: RrhhPageData }) {
   const anioActual = String(new Date().getFullYear())
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [anio, setAnio] = useState(anioActual)
@@ -105,7 +105,14 @@ export default function ReportesTab({ data }: { data: RrhhPageData }) {
   const sinDatos = data.empleados.length === 0
 
   return (
-    <>
+    <div className="view-container">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Reportes de personal</h1>
+          <p className="page-subtitle">Plantilla, altas y bajas, y coste de personal por período.</p>
+        </div>
+      </div>
+
       <div className="ter-toolbar">
         {data.empresas.length > 1 && (
           <select className="input ter-filter-select" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
@@ -197,6 +204,6 @@ export default function ReportesTab({ data }: { data: RrhhPageData }) {
           </div>
         </>
       )}
-    </>
+    </div>
   )
 }
