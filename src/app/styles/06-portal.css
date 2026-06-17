@@ -1228,7 +1228,7 @@
 .crear-tercero-link:hover { text-decoration: underline; }
 
 /* ── RRHH (Personal y nómina) ────────────────────────────────────────────── */
-.rrhh-tabs { margin-bottom: var(--space-4); }
+.rrhh-tabs { margin-bottom: var(--space-4); overflow-x: auto; }
 .nom-input { max-width: 120px; padding: 6px 9px; font-size: var(--text-sm); }
 .nom-total {
   display: flex; align-items: center; justify-content: space-between;
@@ -1237,3 +1237,15 @@
   font-size: var(--text-sm); color: var(--color-text-muted);
 }
 .nom-total strong { font-size: var(--text-lg); color: var(--color-text); }
+/* Turnos */
+.rrhh-card-gap { margin-bottom: var(--space-4); }
+.ter-card-head { padding: var(--space-4) var(--space-4) 0; }
+.turno-name { display: flex; align-items: center; gap: var(--space-2); }
+.turno-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  background: var(--turno-color, var(--color-text-muted));
+}
+.turno-grid th { white-space: nowrap; }
+.turno-grid-emp { position: sticky; left: 0; z-index: 1; background: var(--color-surface); min-width: 150px; }
+.turno-cell-wrap { display: flex; align-items: center; gap: var(--space-1); }
+.turno-grid-select { min-width: 92px; padding: 5px 8px; font-size: var(--text-xs); }

@@ -90,10 +90,30 @@ export interface NominaConLineas extends Nomina {
   saldo_pendiente: number
 }
 
+export interface Turno {
+  turno_id:    string
+  client_id:   string
+  empresa_id:  string
+  nombre:      string
+  hora_inicio: string | null
+  hora_fin:    string | null
+  color:       string | null
+  activo:      boolean
+}
+
+export interface TurnoAsignacion {
+  asignacion_id: string
+  empleado_id:   string
+  dia_semana:    number   // 1=Lunes … 7=Domingo
+  turno_id:      string
+}
+
 export interface RrhhPageData {
   empleados:       EmpleadoConEstado[]
   contratos:       Contrato[]
   nominas:         NominaConLineas[]
+  turnos_catalogo: Turno[]
+  asignaciones:    TurnoAsignacion[]
   empresas:        { empresa_id: string; nombre: string }[]
   monedas:         string[]
   cargos:          string[]
@@ -112,11 +132,13 @@ const EPS = 0.005
 function corto(): string {
   return crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()
 }
-function generarEmpleadoId(): string { return `PER-${corto()}` }
-function generarContratoId():  string { return `CON-${corto()}` }
-function generarNominaId():   string { return `NOM-${corto()}` }
-function generarLineaId():    string { return `NLN-${corto()}` }
-function generarGastoId():    string { return `GAS-${corto()}` }
+function generarEmpleadoId():   string { return `PER-${corto()}` }
+function generarContratoId():   string { return `CON-${corto()}` }
+function generarNominaId():     string { return `NOM-${corto()}` }
+function generarLineaId():      string { return `NLN-${corto()}` }
+function generarGastoId():      string { return `GAS-${corto()}` }
+function generarTurnoId():      string { return `TUR-${corto()}` }
+function generarAsignacionId(): string { return `TAS-${corto()}` }
 
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
@@ -136,7 +158,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes, conRes] = await Promise.all([
+  const [empRes, monRes, nomRes, nlnRes, conRes, turRes, tasRes] = await Promise.all([
     db.from('empleados').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -158,6 +180,12 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       .eq('client_id', session.client_id)
       .order('fecha_inicio', { ascending: false })
       .order('created_at', { ascending: false }),
+    db.from('turnos').select('*')
+      .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
+      .order('nombre', { ascending: true }),
+    db.from('turno_asignaciones').select('*')
+      .eq('client_id', session.client_id),
   ])
 
   const empleados = ((empRes.data ?? []) as Empleado[]).map(e => ({
@@ -171,6 +199,11 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const contratos = ((conRes.data ?? []) as Contrato[])
     .filter(c => empleadoIds.has(c.empleado_id))
     .map(c => ({ ...c, salario_base: Number(c.salario_base) }))
+
+  // Turnos (catálogo) y asignaciones de los empleados accesibles
+  const turnos_catalogo = (turRes.data ?? []) as Turno[]
+  const asignaciones = ((tasRes.data ?? []) as TurnoAsignacion[])
+    .filter(a => empleadoIds.has(a.empleado_id))
 
   // Nóminas con sus líneas y el estado de pago del gasto enlazado
   const nominasRaw = (nomRes.data ?? []) as Nomina[]
@@ -229,6 +262,8 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     empleados,
     contratos,
     nominas,
+    turnos_catalogo,
+    asignaciones,
     empresas:       empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     monedas:        ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
     cargos:         datalist(empleados.map(e => e.cargo)),
@@ -759,5 +794,121 @@ export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; 
   revalidatePath('/portal/rrhh')
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/cxp')
+  return { ok: true }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// TURNOS (catálogo + planificador semanal)
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ── Guardar turno (crear / editar catálogo) ─────────────────────────────────────
+
+export async function guardarTurno(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const turno_id    = (formData.get('turno_id')    as string)?.trim()
+  const empresa_id  = (formData.get('empresa_id')  as string)?.trim()
+  const nombre      = (formData.get('nombre')      as string)?.trim()
+  const hora_inicio = (formData.get('hora_inicio') as string)?.trim() || null
+  const hora_fin    = (formData.get('hora_fin')    as string)?.trim() || null
+  const color       = (formData.get('color')       as string)?.trim() || null
+
+  if (!nombre)     return { ok: false, error: 'El nombre del turno es obligatorio.' }
+  if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
+
+  const empresas = await obtenerEmpresas()
+  if (!empresas.some(e => e.empresa_id === empresa_id)) {
+    return { ok: false, error: 'Empresa no válida.' }
+  }
+
+  const db = createAdminClient()
+
+  if (!turno_id) {
+    const { error } = await db.from('turnos').insert({
+      turno_id: generarTurnoId(),
+      client_id: session.client_id,
+      empresa_id, nombre, hora_inicio, hora_fin, color,
+      activo: true,
+      updated_at: new Date().toISOString(),
+    })
+    if (error) return { ok: false, error: error.message }
+  } else {
+    const { error } = await db.from('turnos')
+      .update({ nombre, hora_inicio, hora_fin, color, updated_at: new Date().toISOString() })
+      .eq('turno_id', turno_id)
+      .eq('client_id', session.client_id)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/portal/rrhh')
+  return { ok: true }
+}
+
+// ── Eliminar turno (borra también sus asignaciones) ─────────────────────────────
+
+export async function eliminarTurno(turno_id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+  await db.from('turno_asignaciones').delete()
+    .eq('client_id', session.client_id).eq('turno_id', turno_id)
+  const { error } = await db.from('turnos').delete()
+    .eq('turno_id', turno_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/rrhh')
+  return { ok: true }
+}
+
+// ── Asignar turno a (empleado, día) ─────────────────────────────────────────────
+// turno_id vacío → libera la celda. Un turno por empleado y día (reemplaza).
+
+export async function asignarTurno(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const empleado_id = (formData.get('empleado_id') as string)?.trim()
+  const diaRaw      = parseInt(formData.get('dia_semana') as string, 10)
+  const turno_id    = (formData.get('turno_id')    as string)?.trim() || ''
+
+  if (!empleado_id)                       return { ok: false, error: 'Empleado no válido.' }
+  if (isNaN(diaRaw) || diaRaw < 1 || diaRaw > 7) return { ok: false, error: 'Día no válido.' }
+
+  const db = createAdminClient()
+
+  // Reemplazo: borra la asignación previa de esa celda
+  await db.from('turno_asignaciones').delete()
+    .eq('client_id', session.client_id)
+    .eq('empleado_id', empleado_id)
+    .eq('dia_semana', diaRaw)
+
+  if (turno_id) {
+    const { data: turno } = await db.from('turnos')
+      .select('turno_id')
+      .eq('turno_id', turno_id)
+      .eq('client_id', session.client_id)
+      .single()
+    if (!turno) return { ok: false, error: 'Turno no encontrado.' }
+
+    const { error } = await db.from('turno_asignaciones').insert({
+      asignacion_id: generarAsignacionId(),
+      client_id:     session.client_id,
+      empleado_id,
+      dia_semana:    diaRaw,
+      turno_id,
+    })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/portal/rrhh')
   return { ok: true }
 }

@@ -22,6 +22,7 @@ import {
 } from '@/app/actions/portal/rrhh'
 import { Check, CircleCheck, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, Wallet, X } from 'lucide-react'
 import ContratosTab from './ContratosTab'
+import TurnosTab    from './TurnosTab'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -598,7 +599,7 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [tab, setTab] = useState<'personal' | 'contratos' | 'nomina'>('personal')
+  const [tab, setTab] = useState<'personal' | 'contratos' | 'turnos' | 'nomina'>('personal')
 
   const [modalEmpleado, setModalEmpleado] = useState(false)
   const [editEmpleado,  setEditEmpleado]  = useState<Empleado | null>(null)
@@ -708,6 +709,10 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
           <span>Contratos</span>
         </label>
         <label className="seg-opt">
+          <input type="radio" name="rrhh-tab" value="turnos" checked={tab === 'turnos'} onChange={() => setTab('turnos')} />
+          <span>Turnos</span>
+        </label>
+        <label className="seg-opt">
           <input type="radio" name="rrhh-tab" value="nomina" checked={tab === 'nomina'} onChange={() => setTab('nomina')} />
           <span>Nómina</span>
         </label>
@@ -810,6 +815,8 @@ export default function RrhhView({ data }: { data: RrhhPageData }) {
       )}
 
       {tab === 'contratos' && <ContratosTab data={data} />}
+
+      {tab === 'turnos' && <TurnosTab data={data} />}
 
       {tab === 'nomina' && (
         <div className="card card-table">
