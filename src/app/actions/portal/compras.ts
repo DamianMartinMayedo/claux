@@ -81,6 +81,10 @@ function generarCompraId(): string {
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
 }
+// Redondeo a 2 decimales evitando drift de coma flotante en importes.
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100
+}
 
 // Reserva el siguiente correlativo de compra para (empresa, año) → COM-AAAA-####
 async function siguienteNumeroCompra(
@@ -132,32 +136,41 @@ export async function obtenerCompras(): Promise<ComprasPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [compRes, provRes, almRes, prodRes, monRes] = await Promise.all([
+  const [compRes, form] = await Promise.all([
     db.from('compras').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
       .order('created_at', { ascending: false }),
+    cargarFormCompra(db, session.client_id, idsFiltro, empresas),
+  ])
+
+  return {
+    compras: (compRes.data ?? []) as Compra[],
+    ...form,
+  }
+}
+
+// Datos de formulario compartidos por el listado y el detalle (evita refetch de
+// la lista completa en el detalle): proveedores, almacenes, productos
+// seleccionables y monedas, con sus mapas de nombres.
+async function cargarFormCompra(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, idsFiltro: string[],
+  empresas: { empresa_id: string; nombre: string }[],
+): Promise<Omit<ComprasPageData, 'compras'>> {
+  const [provRes, almRes, prodRes, monRes] = await Promise.all([
     db.from('third_parties')
       .select('tercero_id, nombre, empresa_id, moneda_defecto')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .in('tipo', ['PROVEEDOR', 'AMBOS'])
-      .eq('activo', true)
-      .order('nombre'),
+      .eq('client_id', client_id).in('empresa_id', idsFiltro)
+      .in('tipo', ['PROVEEDOR', 'AMBOS']).eq('activo', true).order('nombre'),
     db.from('almacenes')
       .select('almacen_id, nombre, empresa_id')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .eq('activo', true)
-      .order('nombre'),
+      .eq('client_id', client_id).in('empresa_id', idsFiltro).eq('activo', true).order('nombre'),
     db.from('products')
       .select('producto_id, codigo, nombre, unidad, costos')
-      .eq('client_id', session.client_id)
-      .eq('estado', 'ACTIVO')
-      .eq('tipo', 'PRODUCTO')   // solo productos con stock; servicios → texto libre en la línea
-      .order('nombre'),
+      .eq('client_id', client_id).eq('estado', 'ACTIVO').eq('tipo', 'PRODUCTO').order('nombre'),
     db.from('monedas')
-      .select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo'),
+      .select('codigo').eq('client_id', client_id).eq('activa', true).order('codigo'),
   ])
 
   const proveedores = (provRes.data ?? []) as ComprasPageData['proveedores']
@@ -179,7 +192,6 @@ export async function obtenerCompras(): Promise<ComprasPageData | null> {
   for (const a of almacenes) almacen_nombres[a.almacen_id] = a.nombre
 
   return {
-    compras: (compRes.data ?? []) as Compra[],
     proveedores, almacenes, productos,
     monedas: monedas.length ? monedas : ['USD'],
     empresa_nombres, proveedor_nombres, almacen_nombres,
@@ -192,17 +204,23 @@ export async function obtenerCompraDetalle(compra_id: string): Promise<CompraDet
   const session = await getPortalSession()
   if (!session) return null
 
-  const db = createAdminClient()
-  const page = await obtenerCompras()
-  if (!page) return null
+  const db          = createAdminClient()
+  const empresas    = await obtenerEmpresas()
+  const empresa_ids = empresas.map(e => e.empresa_id)
+  const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const { data: compra } = await db.from('compras').select('*')
-    .eq('compra_id', compra_id).eq('client_id', session.client_id).single()
+  const [compraRes, lineasRes, form] = await Promise.all([
+    db.from('compras').select('*')
+      .eq('compra_id', compra_id).eq('client_id', session.client_id).maybeSingle(),
+    db.from('compra_lineas').select('*')
+      .eq('compra_id', compra_id).eq('client_id', session.client_id).order('orden'),
+    cargarFormCompra(db, session.client_id, idsFiltro, empresas),
+  ])
+
+  const compra = compraRes.data as Compra | null
   if (!compra) return null
 
-  const { data: lineasRaw } = await db.from('compra_lineas').select('*')
-    .eq('compra_id', compra_id).eq('client_id', session.client_id).order('orden')
-  const lineas = (lineasRaw ?? []).map((l: Record<string, unknown>) => ({
+  const lineas = ((lineasRes.data ?? []) as Record<string, unknown>[]).map(l => ({
     linea_id:       Number(l.linea_id),
     compra_id:      l.compra_id as string,
     orden:          Number(l.orden),
@@ -223,15 +241,15 @@ export async function obtenerCompraDetalle(compra_id: string): Promise<CompraDet
   }
 
   return {
-    compra:         compra as Compra,
+    compra,
     lineas,
-    proveedor:      compra.proveedor_id ? { tercero_id: compra.proveedor_id, nombre: page.proveedor_nombres[compra.proveedor_id] ?? compra.proveedor_id } : null,
-    almacen:        { almacen_id: compra.almacen_id, nombre: page.almacen_nombres[compra.almacen_id] ?? compra.almacen_id },
-    empresa_nombre: page.empresa_nombres[compra.empresa_id] ?? compra.empresa_id,
-    proveedores:    page.proveedores,
-    almacenes:      page.almacenes,
-    productos:      page.productos,
-    monedas:        page.monedas,
+    proveedor:      compra.proveedor_id ? { tercero_id: compra.proveedor_id, nombre: form.proveedor_nombres[compra.proveedor_id] ?? compra.proveedor_id } : null,
+    almacen:        { almacen_id: compra.almacen_id, nombre: form.almacen_nombres[compra.almacen_id] ?? compra.almacen_id },
+    empresa_nombre: form.empresa_nombres[compra.empresa_id] ?? compra.empresa_id,
+    proveedores:    form.proveedores,
+    almacenes:      form.almacenes,
+    productos:      form.productos,
+    monedas:        form.monedas,
     pagado,
     saldo:          Math.max(0, Number(compra.total) - pagado),
   }
@@ -266,7 +284,7 @@ export async function guardarCompra(
   if (!alm) return { ok: false, error: 'Almacén no válido.' }
   const empresa_id = alm.empresa_id as string
 
-  const total = lineas.reduce((s, l) => s + l.cantidad * l.costo_unitario, 0)
+  const total = round2(lineas.reduce((s, l) => s + l.cantidad * l.costo_unitario, 0))
 
   // ── Editar (solo BORRADOR) ──
   if (compra_id_form) {
@@ -298,7 +316,7 @@ export async function guardarCompra(
         compra_id: compra_id_form, client_id: session.client_id, orden: i,
         producto_id: l.producto_id, descripcion: l.descripcion,
         cantidad: l.cantidad, costo_unitario: l.costo_unitario,
-        total: l.cantidad * l.costo_unitario,
+        total: round2(l.cantidad * l.costo_unitario),
       })),
     )
     if (linErr) return { ok: false, error: linErr.message }
