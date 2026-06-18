@@ -13,7 +13,8 @@ import {
   type NominaLinea,
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
-import { Check, CircleCheck, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
+import { registrarLiquidacion } from '@/app/actions/portal/gastos'
+import { Check, CircleCheck, DollarSign, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -257,12 +258,13 @@ function AplicarATodas({
 // ── Modal: detalle de nómina (líneas + confirmar) ────────────────────────────────
 
 function NominaDetalleModal({
-  nomina, onClose, onChanged, onConfirmar,
+  nomina, onClose, onChanged, onConfirmar, onPagar,
 }: {
   nomina:      NominaConLineas
   onClose:     () => void
   onChanged:   () => void
   onConfirmar: () => void
+  onPagar:     () => void
 }) {
   const esBorrador = nomina.estado === 'BORRADOR'
 
@@ -331,11 +333,15 @@ function NominaDetalleModal({
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
-          {esBorrador && (
+          {esBorrador ? (
             <button type="button" className="btn btn-primary" onClick={onConfirmar}>
               <CircleCheck size={15} strokeWidth={2} /> Confirmar nómina
             </button>
-          )}
+          ) : nomina.gasto_id && nomina.saldo_pendiente > 0.005 ? (
+            <button type="button" className="btn btn-primary" onClick={onPagar}>
+              <DollarSign size={15} strokeWidth={2} /> Pagar
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -411,6 +417,81 @@ function ConfirmEliminarNomina({
   )
 }
 
+// ── Modal: pagar nómina (liquidación en Tesorería del gasto de salarios) ─────────
+
+function PagarNominaModal({
+  nomina, cuentas, onClose, onPaid,
+}: {
+  nomina:  NominaConLineas
+  cuentas: RrhhPageData['cuentas']
+  onClose: () => void
+  onPaid:  () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const compat = cuentas.filter(c => c.moneda === nomina.moneda)
+  const [cuentaId, setCuentaId] = useState(compat[0]?.cuenta_id ?? '')
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('registro_id', nomina.gasto_id ?? '')
+    fd.set('cuenta_id', cuentaId)
+    startTransition(async () => {
+      const res = await registrarLiquidacion(fd)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      onPaid()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-md" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Pagar nómina {formatPeriodo(nomina.periodo)}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="info-box">
+            <strong className="info-box-title">Salarios · {formatPeriodo(nomina.periodo)}</strong>
+            <span className="text-xs-muted">
+              Total {formatMonto(nomina.total)} {nomina.moneda} · Pagado {formatMonto(nomina.pagado)} ·
+              <strong> Pendiente {formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong>
+            </span>
+          </div>
+          {compat.length === 0 ? (
+            <div className="alert alert-warning mt-3">No tienes cuentas en {nomina.moneda}. Crea una en Tesorería para registrar el pago.</div>
+          ) : (
+            <form onSubmit={handleSubmit} className="gc-liq-form">
+              <div className="ter-form-grid">
+                <div className="input-group ter-col-full">
+                  <label>Cuenta <span className="required">*</span></label>
+                  <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
+                    {compat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
+                  </select>
+                </div>
+                <div className="input-group ter-col-span-3">
+                  <label>Monto ({nomina.moneda}) <span className="required">*</span></label>
+                  <input className="input" name="monto" type="number" min="0" step="0.01" required defaultValue={nomina.saldo_pendiente.toFixed(2)} />
+                </div>
+                <div className="input-group ter-col-span-3">
+                  <label>Fecha <span className="required">*</span></label>
+                  <input className="input" name="fecha" type="date" required defaultValue={hoyISO()} />
+                </div>
+              </div>
+              <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending}>
+                {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar pago'}
+              </button>
+            </form>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página: Nómina ───────────────────────────────────────────────────────────────
 
 export default function NominaView({ data }: { data: RrhhPageData }) {
@@ -421,6 +502,7 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
   const [detalleNominaId,  setDetalleNominaId]  = useState<string | null>(null)
   const [confirmarNom,     setConfirmarNom]     = useState<NominaConLineas | null>(null)
   const [delNomina,        setDelNomina]        = useState<NominaConLineas | null>(null)
+  const [pagar,            setPagar]            = useState<NominaConLineas | null>(null)
 
   // Re-sincroniza la nómina abierta en el detalle tras un refresh
   const detalleVivo = detalleNominaId
@@ -515,7 +597,8 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
         <NominaDetalleModal nomina={detalleVivo}
           onClose={() => setDetalleNominaId(null)}
           onChanged={() => router.refresh()}
-          onConfirmar={() => setConfirmarNom(detalleVivo)} />
+          onConfirmar={() => setConfirmarNom(detalleVivo)}
+          onPagar={() => { setPagar(detalleVivo); setDetalleNominaId(null) }} />
       )}
       {confirmarNom && (
         <ConfirmarNominaModal nomina={confirmarNom} onConfirm={doConfirmarNomina}
@@ -524,6 +607,10 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
       {delNomina && (
         <ConfirmEliminarNomina nomina={delNomina} onConfirm={doEliminarNomina}
           onClose={() => setDelNomina(null)} isPending={isPending} />
+      )}
+      {pagar && (
+        <PagarNominaModal nomina={pagar} cuentas={data.cuentas}
+          onClose={() => setPagar(null)} onPaid={() => { setPagar(null); router.refresh() }} />
       )}
     </div>
   )

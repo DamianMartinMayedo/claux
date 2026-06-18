@@ -15,7 +15,7 @@ import {
   type Periodicidad,
 } from '@/app/actions/portal/rrhh'
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
-import { FileText, Pencil, Plus, RotateCcw, Trash2, UserMinus, X } from 'lucide-react'
+import { FileText, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
 
 // ── Constantes / helpers ────────────────────────────────────────────────────────
 
@@ -37,14 +37,19 @@ function formatFecha(f: string | null): string {
   const [y, m, d] = f.split('T')[0].split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+function formatPeriodo(periodo: string): string {
+  const [y, m] = periodo.split('-').map(Number)
+  if (!y || !m) return periodo
+  const s = new Date(y, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
 
 // ── Modal: nuevo contrato (documento + PDF opcional) ─────────────────────────────
 
 function NuevoContratoModal({
-  empleadoId, moneda, onClose, onSaved,
+  empleadoId, onClose, onSaved,
 }: {
   empleadoId: string
-  moneda:     string
   onClose:    () => void
   onSaved:    () => void
 }) {
@@ -90,11 +95,6 @@ function NuevoContratoModal({
               <div className="input-group ter-col-span-2">
                 <label>Fin</label>
                 <input className="input" name="fecha_fin" type="date" />
-              </div>
-              <div className="input-group ter-col-span-2">
-                <label>Salario ({moneda})</label>
-                <input className="input" name="salario_base" type="number" min="0" step="0.01" placeholder="0.00" />
-                <span className="input-hint">Informativo. La nómina usa el salario del empleado.</span>
               </div>
               <div className="input-group ter-col-full">
                 <label>PDF del contrato</label>
@@ -146,6 +146,12 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
   const esActivo = empleado.estado === 'ACTIVO'
+
+  // Nómina de este trabajador: su línea en cada nómina donde aparece
+  const miNomina = data.nominas.flatMap(n => {
+    const l = n.lineas.find(x => x.empleado_id === empleado.empleado_id)
+    return l ? [{ nomina: n, linea: l }] : []
+  })
 
   function refrescar() { router.refresh() }
 
@@ -245,7 +251,6 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                 <tr>
                   <th>Tipo</th>
                   <th>Vigencia</th>
-                  <th className="tes-col-monto">Salario</th>
                   <th>Documento</th>
                   <th className="alm-col-act"></th>
                 </tr>
@@ -258,7 +263,6 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                       <div className="text-sm-muted">{PERIODICIDAD_LABEL[c.periodicidad]}{c.notas ? ` · ${c.notas}` : ''}</div>
                     </td>
                     <td className="text-sm-muted tes-nowrap">{formatFecha(c.fecha_inicio)} – {c.fecha_fin ? formatFecha(c.fecha_fin) : 'sin fin'}</td>
-                    <td className="tes-col-monto tes-monto-cell">{c.salario_base > 0 ? `${formatMonto(c.salario_base)} ${c.moneda}` : '—'}</td>
                     <td>
                       {c.pdf_url
                         ? <a href={c.pdf_url} target="_blank" rel="noopener noreferrer" className="link-primary det-meta-inline"><FileText size={14} strokeWidth={2} /> Ver PDF</a>
@@ -269,6 +273,46 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                         <button className="ter-action-btn ter-action-danger" title="Eliminar contrato"
                           onClick={() => setDelContrato(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                       </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Nómina del trabajador */}
+      <div className="det-card">
+        <div className="card-header"><h2 className="card-title">Nómina</h2></div>
+        {miNomina.length === 0 ? (
+          <div className="mon-empty">
+            <Wallet size={36} strokeWidth={1} opacity={0.2} />
+            <p>Este empleado aún no aparece en ninguna nómina. La nómina general se monta en la página Nómina.</p>
+          </div>
+        ) : (
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Período</th>
+                  <th className="tes-col-monto">Devengado</th>
+                  <th className="tes-col-monto">Deducciones</th>
+                  <th className="tes-col-monto">Neto</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {miNomina.map(({ nomina, linea }) => (
+                  <tr key={nomina.nomina_id}>
+                    <td><strong>{formatPeriodo(nomina.periodo)}</strong></td>
+                    <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.devengado)} {nomina.moneda}</td>
+                    <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.deducciones)}</td>
+                    <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.neto)} {nomina.moneda}</td>
+                    <td>
+                      <span className={`badge ${nomina.estado === 'BORRADOR' ? 'badge-warning' : (nomina.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
+                        {nomina.estado === 'BORRADOR' ? 'Borrador' : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -291,7 +335,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
           onClose={() => setShowDelete(false)} isPending={isPending} />
       )}
       {showNuevo && (
-        <NuevoContratoModal empleadoId={empleado.empleado_id} moneda={empleado.moneda}
+        <NuevoContratoModal empleadoId={empleado.empleado_id}
           onClose={() => setShowNuevo(false)} onSaved={() => { setShowNuevo(false); refrescar() }} />
       )}
       {delContrato && (

@@ -115,6 +115,7 @@ export interface RrhhPageData {
   nominas:         NominaConLineas[]
   turnos_catalogo: Turno[]
   asignaciones:    TurnoAsignacion[]
+  cuentas:         { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }[]
   empresas:        { empresa_id: string; nombre: string }[]
   monedas:         string[]
   cargos:          string[]
@@ -159,7 +160,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes] = await Promise.all([
+  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes, cuRes] = await Promise.all([
     db.from('empleados').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -183,6 +184,11 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       .order('nombre', { ascending: true }),
     db.from('turno_asignaciones').select('*')
       .eq('client_id', session.client_id),
+    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa')
+      .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
+      .eq('activa', true)
+      .order('nombre'),
   ])
 
   const empleados = ((empRes.data ?? []) as Empleado[]).map(e => ({
@@ -250,11 +256,15 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_nombres: Record<string, string> = {}
   for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
 
+  const cuentas = ((cuRes.data ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean }[])
+    .map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda }))
+
   return {
     empleados,
     nominas,
     turnos_catalogo,
     asignaciones,
+    cuentas,
     empresas:       empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     monedas:        ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
     cargos:         datalist(empleados.map(e => e.cargo)),
