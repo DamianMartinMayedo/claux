@@ -4,11 +4,12 @@ import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
-  Plus, X, Package,
+  Plus, X, Package, RefreshCw,
   ArrowDownToLine, ArrowUpFromLine, Settings2, ArrowRightLeft,
 } from 'lucide-react'
 import {
   registrarMovimiento,
+  reconciliarStock,
   type MovimientosPageData,
   type Movimiento,
 } from '@/app/actions/portal/inventario'
@@ -200,9 +201,21 @@ function MovimientoModal({
 export default function MovimientosView({ data }: { data: MovimientosPageData }) {
   const router = useRouter()
   const [modalOpen,   setModalOpen]   = useState(false)
+  const [showRecalc,  setShowRecalc]  = useState(false)
   const [filtroTipo,  setFiltroTipo]  = useState('')
   const [filtroAlm,   setFiltroAlm]   = useState('')
   const [, startTransition]           = useTransition()
+  const [recalcPending, startRecalc]  = useTransition()
+
+  function doRecalcular() {
+    startRecalc(async () => {
+      const res = await reconciliarStock()
+      if (!res.ok) { toastError(res.error ?? 'Error'); return }
+      toastSuccess(`Stock recalculado (${res.productos ?? 0} productos)`)
+      setShowRecalc(false)
+      router.refresh()
+    })
+  }
 
   const filtrados = useMemo(() => {
     return data.movimientos.filter(m => {
@@ -229,10 +242,16 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
           <h1 className="page-title">Movimientos</h1>
           <p className="page-subtitle">Entradas, salidas, ajustes y transferencias de stock entre almacenes.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalOpen(true)}
-          disabled={data.almacenes.length === 0 || data.productos.length === 0}>
-          <Plus size={14} strokeWidth={2.5} /> Nuevo movimiento
-        </button>
+        <div className="det-actions">
+          <button className="btn btn-secondary" onClick={() => setShowRecalc(true)} disabled={recalcPending}
+            title="Reconstruye el stock a partir del historial de movimientos">
+            <RefreshCw size={14} strokeWidth={2} /> Recalcular stock
+          </button>
+          <button className="btn btn-primary" onClick={() => setModalOpen(true)}
+            disabled={data.almacenes.length === 0 || data.productos.length === 0}>
+            <Plus size={14} strokeWidth={2.5} /> Nuevo movimiento
+          </button>
+        </div>
       </div>
 
       {(data.almacenes.length === 0 || data.productos.length === 0) && (
@@ -322,6 +341,29 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
 
       {modalOpen && (
         <MovimientoModal data={data} onClose={() => setModalOpen(false)} onSaved={onSaved} />
+      )}
+
+      {showRecalc && (
+        <div className="modal-backdrop open">
+          <div className="modal modal-sm" role="dialog" aria-modal>
+            <div className="modal-header">
+              <h2 className="modal-title">Recalcular stock</h2>
+              <button type="button" className="modal-close" onClick={() => setShowRecalc(false)}><X size={16} strokeWidth={2} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-body-text">
+                Reconstruye el stock de todos los productos a partir del historial de movimientos
+                (la fuente de verdad). Úsalo si sospechas un descuadre. No crea ni borra movimientos.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowRecalc(false)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={doRecalcular} disabled={recalcPending}>
+                {recalcPending ? <><span className="spinner spinner-sm" /> Recalculando…</> : 'Recalcular'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

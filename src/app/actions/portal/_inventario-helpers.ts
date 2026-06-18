@@ -1,7 +1,11 @@
-// Helpers de stock compartidos por inventario.ts (movimientos manuales) y
-// compras.ts (entradas al confirmar). NO es 'use server': son funciones
-// internas que operan sobre un cliente admin ya creado, nunca se exponen al
-// navegador (por eso pueden recibir el `db` como argumento).
+// Helpers de stock compartidos por inventario.ts (movimientos manuales),
+// compras.ts y productos.ts. NO es 'use server': son funciones internas que
+// operan sobre un cliente admin ya creado, nunca se exponen al navegador.
+//
+// La mutación de stock vive en funciones Postgres ATÓMICAS (migración 037):
+// inv_aplicar_movimiento corre en una sola transacción y usa incrementos
+// atómicos, así que aquí solo invocamos el RPC. stockEnAlmacen es una lectura
+// para validaciones amables previas (best-effort); la garantía real la da la BD.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
@@ -9,8 +13,16 @@ type Db = any
 export type TipoMovimiento = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'TRANSFERENCIA'
 export type OrigenMovimiento = 'MANUAL' | 'COMPRA' | 'VENTA'
 
-export function generarMovimientoInvId(): string {
-  return `MVI-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
+// Traduce los códigos de RAISE EXCEPTION de las funciones plpgsql a mensajes
+// amables. Si no reconoce el mensaje, lo devuelve tal cual.
+export function traducirErrorInventario(msg: string): string {
+  if (msg.includes('STOCK_NEGATIVO'))       return 'No hay stock suficiente en el almacén para este movimiento.'
+  if (msg.includes('STOCK_CONSUMIDO'))      return 'No se puede anular: parte del stock de esta compra ya fue consumido. Ajusta el stock antes de anular.'
+  if (msg.includes('COMPRA_NO_ENCONTRADA')) return 'Compra no encontrada.'
+  if (msg.includes('COMPRA_NO_BORRADOR'))   return 'La compra ya está confirmada o anulada.'
+  if (msg.includes('COMPRA_NO_CONFIRMADA')) return 'Solo se pueden anular compras confirmadas.'
+  if (msg.includes('COMPRA_SIN_IMPORTE'))   return 'La compra no tiene importe.'
+  return msg
 }
 
 // Stock actual de un producto en un almacén concreto (0 si no hay fila).
@@ -24,40 +36,6 @@ export async function stockEnAlmacen(
     .eq('almacen_id', almacen_id)
     .maybeSingle()
   return Number(data?.cantidad ?? 0)
-}
-
-// Suma un delta (puede ser negativo) al stock de (producto, almacén). Devuelve
-// el nuevo valor. Upsert sobre la PK (producto_id, almacen_id).
-async function sumarStockAlmacen(
-  db: Db, client_id: string, producto_id: string, almacen_id: string, delta: number,
-): Promise<number> {
-  const actual = await stockEnAlmacen(db, producto_id, almacen_id)
-  const nuevo  = actual + delta
-  const { error } = await db.from('stock_almacenes').upsert({
-    client_id, producto_id, almacen_id,
-    cantidad:   nuevo,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'producto_id,almacen_id' })
-  if (error) throw new Error(`stock_almacenes: ${error.message}`)
-  return nuevo
-}
-
-// Suma un delta al stock global del producto (products.stock_actual).
-async function sumarStockGlobal(
-  db: Db, client_id: string, producto_id: string, delta: number,
-): Promise<void> {
-  const { data: prod } = await db
-    .from('products')
-    .select('stock_actual')
-    .eq('producto_id', producto_id)
-    .eq('client_id', client_id)
-    .single()
-  const nuevo = (Number(prod?.stock_actual ?? 0)) + delta
-  const { error } = await db.from('products')
-    .update({ stock_actual: nuevo, updated_at: new Date().toISOString() })
-    .eq('producto_id', producto_id)
-    .eq('client_id', client_id)
-  if (error) throw new Error(`products.stock_actual: ${error.message}`)
 }
 
 export interface MovimientoInput {
@@ -75,44 +53,35 @@ export interface MovimientoInput {
   referencia_id?:     string | null
 }
 
-// Registra un movimiento: inserta la fila en el ledger y aplica los deltas de
-// stock (por almacén + global). NO valida disponibilidad — eso es del llamador.
-//   ENTRADA       → +cantidad en almacen_id              · global +cantidad
-//   SALIDA        → −cantidad en almacen_id              · global −cantidad
-//   AJUSTE        → +cantidad (signed) en almacen_id     · global +cantidad
-//   TRANSFERENCIA → −cantidad en almacen_id, +cantidad en almacen_destino_id · global 0
-export async function aplicarMovimiento(db: Db, m: MovimientoInput): Promise<string> {
-  const movimiento_id = generarMovimientoInvId()
+export interface MovimientoResult {
+  movimiento_id: string
+  stock_global:  number   // products.stock_actual resultante
+  stock_almacen: number   // cantidad resultante en el almacén origen
+}
 
-  const { error: insErr } = await db.from('movimientos_inventario').insert({
-    movimiento_id,
-    client_id:          m.client_id,
-    empresa_id:         m.empresa_id,
-    fecha:              m.fecha,
-    tipo:               m.tipo,
-    producto_id:        m.producto_id,
-    almacen_id:         m.almacen_id,
-    almacen_destino_id: m.almacen_destino_id ?? null,
-    cantidad:           m.cantidad,
-    costo_unitario:     m.costo_unitario ?? null,
-    motivo:             m.motivo ?? null,
-    origen:             m.origen ?? 'MANUAL',
-    referencia_id:      m.referencia_id ?? null,
+// Registra un movimiento de forma atómica (ledger + stock por almacén + global)
+// vía la función Postgres inv_aplicar_movimiento. Lanza si la BD señala error
+// (p. ej. STOCK_NEGATIVO por una carrera de concurrencia).
+export async function aplicarMovimiento(db: Db, m: MovimientoInput): Promise<MovimientoResult> {
+  const { data, error } = await db.rpc('inv_aplicar_movimiento', {
+    p_client_id:          m.client_id,
+    p_empresa_id:         m.empresa_id,
+    p_fecha:              m.fecha,
+    p_tipo:               m.tipo,
+    p_producto_id:        m.producto_id,
+    p_almacen_id:         m.almacen_id,
+    p_almacen_destino_id: m.almacen_destino_id ?? null,
+    p_cantidad:           m.cantidad,
+    p_costo_unitario:     m.costo_unitario ?? null,
+    p_motivo:             m.motivo ?? null,
+    p_origen:             m.origen ?? 'MANUAL',
+    p_referencia_id:      m.referencia_id ?? null,
   })
-  if (insErr) throw new Error(`movimientos_inventario: ${insErr.message}`)
-
-  if (m.tipo === 'TRANSFERENCIA') {
-    await sumarStockAlmacen(db, m.client_id, m.producto_id, m.almacen_id, -m.cantidad)
-    await sumarStockAlmacen(db, m.client_id, m.producto_id, m.almacen_destino_id as string, m.cantidad)
-    // global: neto cero
-  } else if (m.tipo === 'SALIDA') {
-    await sumarStockAlmacen(db, m.client_id, m.producto_id, m.almacen_id, -m.cantidad)
-    await sumarStockGlobal(db, m.client_id, m.producto_id, -m.cantidad)
-  } else {
-    // ENTRADA o AJUSTE: cantidad es el delta con su signo (ENTRADA siempre >0)
-    await sumarStockAlmacen(db, m.client_id, m.producto_id, m.almacen_id, m.cantidad)
-    await sumarStockGlobal(db, m.client_id, m.producto_id, m.cantidad)
+  if (error) throw new Error(traducirErrorInventario(error.message))
+  const r = (data ?? {}) as { movimiento_id: string; stock_global: number; stock_almacen: number }
+  return {
+    movimiento_id: r.movimiento_id,
+    stock_global:  Number(r.stock_global),
+    stock_almacen: Number(r.stock_almacen),
   }
-
-  return movimiento_id
 }

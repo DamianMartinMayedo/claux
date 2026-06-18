@@ -288,8 +288,9 @@ export async function ajustarStock(
   if (disp + cantidad < 0)
     return { ok: false, error: `El ajuste dejaría el stock negativo. Disponible en ${alm.nombre}: ${disp}.` }
 
+  let stock_nuevo = 0
   try {
-    await aplicarMovimiento(db, {
+    const res = await aplicarMovimiento(db, {
       client_id:  session.client_id,
       empresa_id: alm.empresa_id,
       fecha:      new Date().toISOString().split('T')[0],
@@ -300,16 +301,15 @@ export async function ajustarStock(
       motivo:     motivo.trim(),
       origen:     'MANUAL',
     })
+    stock_nuevo = res.stock_global
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al ajustar el stock.' }
   }
 
-  const { data: updated } = await db.from('products')
-    .select('stock_actual').eq('producto_id', producto_id).eq('client_id', session.client_id).single()
   revalidatePath('/portal/productos')
   revalidatePath(`/portal/productos/${producto_id}`)
   revalidatePath('/portal/inventario')
-  return { ok: true, stock_nuevo: Number(updated?.stock_actual ?? 0) }
+  return { ok: true, stock_nuevo }
 }
 
 // ── Guardar categoría ─────────────────────────────────────────────────────────

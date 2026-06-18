@@ -182,7 +182,7 @@ export async function registrarMovimiento(
   }
 
   try {
-    const movimiento_id = await aplicarMovimiento(db, {
+    const res = await aplicarMovimiento(db, {
       client_id:          session.client_id,
       empresa_id:         alm.empresa_id,
       fecha,
@@ -197,8 +197,27 @@ export async function registrarMovimiento(
     })
     revalidatePath('/portal/inventario')
     revalidatePath('/portal/productos')
-    return { ok: true, movimiento_id }
+    return { ok: true, movimiento_id: res.movimiento_id }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al registrar el movimiento.' }
   }
+}
+
+// ── Reconciliar stock desde el ledger ───────────────────────────────────────────
+// Reconstruye stock_almacenes y products.stock_actual a partir de
+// movimientos_inventario (la fuente de verdad). Red de seguridad ante cualquier
+// descuadre. Atómico vía la función Postgres inv_recalcular_stock.
+
+export async function reconciliarStock(): Promise<{ ok: boolean; error?: string; productos?: number }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('inv_recalcular_stock', { p_client_id: session.client_id })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/inventario')
+  revalidatePath('/portal/productos')
+  return { ok: true, productos: Number((data as { productos?: number } | null)?.productos ?? 0) }
 }

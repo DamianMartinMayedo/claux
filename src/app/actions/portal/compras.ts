@@ -4,7 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
-import { aplicarMovimiento, stockEnAlmacen } from './_inventario-helpers'
+import { traducirErrorInventario } from './_inventario-helpers'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -75,13 +75,8 @@ export interface CompraDetalleData {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const EPS = 0.005
-
 function generarCompraId(): string {
   return `CMP-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-function generarGastoId(): string {
-  return `GAS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
@@ -334,7 +329,10 @@ export async function guardarCompra(
   return { ok: true, compra_id }
 }
 
-// ── Confirmar: sube stock + crea GASTO 'Compras' ────────────────────────────────
+// ── Confirmar: sube stock + crea GASTO 'Compras' (atómico vía Postgres) ─────────
+// Todo ocurre en una sola transacción (inv_confirmar_compra): si algo falla,
+// ROLLBACK total. Los servicios de las líneas no generan stock pero sí cuentan
+// en el gasto. Concurrencia segura (incrementos atómicos).
 
 export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -342,70 +340,10 @@ export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean;
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
   const db = createAdminClient()
-
-  const { data: compra } = await db.from('compras').select('*')
-    .eq('compra_id', compra_id).eq('client_id', session.client_id).single()
-  if (!compra)                      return { ok: false, error: 'Compra no encontrada.' }
-  if (compra.estado !== 'BORRADOR') return { ok: false, error: 'La compra ya está confirmada o anulada.' }
-
-  const { data: lineas } = await db.from('compra_lineas').select('*')
-    .eq('compra_id', compra_id).eq('client_id', session.client_id).order('orden')
-  if (!lineas || lineas.length === 0) return { ok: false, error: 'La compra no tiene líneas.' }
-
-  const total = lineas.reduce((s: number, l: { cantidad: number; costo_unitario: number }) =>
-    s + Number(l.cantidad) * Number(l.costo_unitario), 0)
-  if (total <= EPS) return { ok: false, error: 'La compra no tiene importe.' }
-
-  // 1. Crear el GASTO 'Compras' (fluye a CxP / Tesorería / Reportes)
-  const gasto_id = generarGastoId()
-  const { error: gErr } = await db.from('gastos_cobros').insert({
-    registro_id: gasto_id,
-    client_id:   session.client_id,
-    empresa_id:  compra.empresa_id,
-    tipo:        'GASTO',
-    fecha:       compra.fecha,
-    tercero_id:  compra.proveedor_id,
-    categoria:   'Compras',
-    descripcion: `Compra ${compra.numero}`,
-    moneda:      compra.moneda,
-    monto:       total,
-    notas:       `Compra ${compra_id}`,
-    updated_at:  new Date().toISOString(),
+  const { error } = await db.rpc('inv_confirmar_compra', {
+    p_compra_id: compra_id, p_client_id: session.client_id,
   })
-  if (gErr) return { ok: false, error: `No se pudo crear el gasto: ${gErr.message}` }
-
-  // 2. Entradas de stock por línea (producto) hacia el almacén de la compra
-  try {
-    for (const l of lineas as { producto_id: string | null; cantidad: number; costo_unitario: number }[]) {
-      if (!l.producto_id) continue   // líneas de texto libre no afectan stock
-      await aplicarMovimiento(db, {
-        client_id:      session.client_id,
-        empresa_id:     compra.empresa_id,
-        fecha:          compra.fecha,
-        tipo:           'ENTRADA',
-        producto_id:    l.producto_id,
-        almacen_id:     compra.almacen_id,
-        cantidad:       Number(l.cantidad),
-        costo_unitario: Number(l.costo_unitario),
-        motivo:         `Compra ${compra.numero}`,
-        origen:         'COMPRA',
-        referencia_id:  compra_id,
-      })
-    }
-  } catch (e) {
-    // revertir el gasto si falla el stock
-    await db.from('gastos_cobros').delete().eq('registro_id', gasto_id).eq('client_id', session.client_id)
-    return { ok: false, error: e instanceof Error ? e.message : 'Error al actualizar el stock.' }
-  }
-
-  // 3. Marcar confirmada
-  const { error: upErr } = await db.from('compras')
-    .update({ estado: 'CONFIRMADA', gasto_id, total, updated_at: new Date().toISOString() })
-    .eq('compra_id', compra_id).eq('client_id', session.client_id)
-  if (upErr) {
-    await db.from('gastos_cobros').delete().eq('registro_id', gasto_id).eq('client_id', session.client_id)
-    return { ok: false, error: upErr.message }
-  }
+  if (error) return { ok: false, error: traducirErrorInventario(error.message) }
 
   revalidatePath('/portal/compras')
   revalidatePath(`/portal/compras/${compra_id}`)
@@ -416,7 +354,7 @@ export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean;
   return { ok: true }
 }
 
-// ── Anular: revierte stock + elimina el gasto y sus pagos ───────────────────────
+// ── Anular: revierte stock + elimina el gasto y sus pagos (atómico) ─────────────
 
 export async function anularCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -424,57 +362,10 @@ export async function anularCompra(compra_id: string): Promise<{ ok: boolean; er
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
   const db = createAdminClient()
-
-  const { data: compra } = await db.from('compras').select('*')
-    .eq('compra_id', compra_id).eq('client_id', session.client_id).single()
-  if (!compra)                       return { ok: false, error: 'Compra no encontrada.' }
-  if (compra.estado !== 'CONFIRMADA') return { ok: false, error: 'Solo se pueden anular compras confirmadas.' }
-
-  const { data: lineas } = await db.from('compra_lineas').select('*')
-    .eq('compra_id', compra_id).eq('client_id', session.client_id)
-
-  // Validar que el stock alcanza para revertir cada entrada
-  for (const l of (lineas ?? []) as { producto_id: string | null; cantidad: number }[]) {
-    if (!l.producto_id) continue
-    const disp = await stockEnAlmacen(db, l.producto_id, compra.almacen_id)
-    if (Number(l.cantidad) > disp + EPS) {
-      return { ok: false, error: 'No se puede anular: parte del stock de esta compra ya fue consumido. Ajusta el stock antes de anular.' }
-    }
-  }
-
-  // Revertir stock (salidas que compensan las entradas de la compra)
-  try {
-    for (const l of (lineas ?? []) as { producto_id: string | null; cantidad: number }[]) {
-      if (!l.producto_id) continue
-      await aplicarMovimiento(db, {
-        client_id:     session.client_id,
-        empresa_id:    compra.empresa_id,
-        fecha:         hoy(),
-        tipo:          'SALIDA',
-        producto_id:   l.producto_id,
-        almacen_id:    compra.almacen_id,
-        cantidad:      Number(l.cantidad),
-        motivo:        `Anulación compra ${compra.numero}`,
-        origen:        'COMPRA',
-        referencia_id: compra_id,
-      })
-    }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error al revertir el stock.' }
-  }
-
-  // Eliminar el gasto y sus liquidaciones (pagos)
-  if (compra.gasto_id) {
-    await db.from('movimientos_tesoreria').delete()
-      .eq('client_id', session.client_id).eq('referencia_id', compra.gasto_id).in('origen', ['PAGO', 'COBRO'])
-    await db.from('gastos_cobros').delete()
-      .eq('registro_id', compra.gasto_id).eq('client_id', session.client_id)
-  }
-
-  const { error: upErr } = await db.from('compras')
-    .update({ estado: 'ANULADA', gasto_id: null, updated_at: new Date().toISOString() })
-    .eq('compra_id', compra_id).eq('client_id', session.client_id)
-  if (upErr) return { ok: false, error: upErr.message }
+  const { error } = await db.rpc('inv_anular_compra', {
+    p_compra_id: compra_id, p_client_id: session.client_id,
+  })
+  if (error) return { ok: false, error: traducirErrorInventario(error.message) }
 
   revalidatePath('/portal/compras')
   revalidatePath(`/portal/compras/${compra_id}`)
