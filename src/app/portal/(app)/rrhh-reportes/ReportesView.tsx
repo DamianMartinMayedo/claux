@@ -2,7 +2,20 @@
 
 import { useMemo, useState } from 'react'
 import { type RrhhPageData } from '@/app/actions/portal/rrhh'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Download, ChevronDown } from 'lucide-react'
+
+// Interfaz mínima de jsPDF (su .d.ts empaquetado no es un módulo ES y TS lo rechaza).
+interface JsPdfDoc {
+  internal: { pageSize: { getWidth(): number; getHeight(): number } }
+  setFont(family: string, style: string): void
+  setFontSize(n: number): void
+  setTextColor(r: number, g: number, b: number): void
+  setDrawColor(r: number, g: number, b: number): void
+  text(text: string, x: number, y: number, opts?: { align?: string }): void
+  line(x1: number, y1: number, x2: number, y2: number): void
+  addPage(): void
+  save(filename: string): void
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +117,104 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
 
   const sinDatos = data.empleados.length === 0
 
+  // ── Descarga ──────────────────────────────────────────────────────────────
+  const [menuOpen,    setMenuOpen]    = useState(false)
+  const [descargando, setDescargando] = useState(false)
+
+  const empresaNombre = filtroEmpresa
+    ? (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? '')
+    : 'Todas las empresas'
+  const nombreArchivo = `reportes_rrhh_${anio}`
+  const lineaMoneda = (ms: { moneda: string; monto: number }[]) =>
+    ms.length ? ms.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ') : '—'
+
+  async function descargarPDF() {
+    setMenuOpen(false)
+    if (descargando) return
+    setDescargando(true)
+    try {
+      const mod = await import('jspdf') as unknown as { jsPDF: new (o: object) => JsPdfDoc }
+      const doc: JsPdfDoc = new mod.jsPDF({ unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+      const M = 16, right = pageW - M
+      let y = M
+      const TEAL: [number, number, number] = [13, 148, 136]
+      const DARK: [number, number, number] = [28, 27, 22]
+      const GRAY: [number, number, number] = [107, 104, 98]
+
+      const ensure = (s: number) => { if (y + s > pageH - M) { doc.addPage(); y = M } }
+      const row = (label: string, amount: string, opts: { bold?: boolean; color?: [number, number, number]; indent?: boolean } = {}) => {
+        ensure(7)
+        doc.setFont('helvetica', opts.bold ? 'bold' : 'normal'); doc.setFontSize(10)
+        const c = opts.color ?? DARK; doc.setTextColor(c[0], c[1], c[2])
+        doc.text(label, opts.indent ? M + 4 : M, y)
+        if (amount) doc.text(amount, right, y, { align: 'right' })
+        y += 6
+      }
+      const heading = (text: string) => {
+        ensure(12); doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
+        doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text(text, M, y); y += 7
+      }
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+      doc.setTextColor(TEAL[0], TEAL[1], TEAL[2]); doc.text('CLAUX', M, y); y += 6
+      doc.setFontSize(18); doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text('Reportes de personal', M, y); y += 6
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
+      doc.text(empresaNombre, M, y); doc.text(`Año ${anio}`, right, y, { align: 'right' }); y += 3
+      doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.line(M, y, right, y); y += 9
+
+      heading('Resumen')
+      row('Plantilla activa', String(plantilla))
+      row(`Altas en ${anio}`, String(altas))
+      row(`Bajas en ${anio}`, String(bajas))
+      for (const c of costeAnual) row(`Coste de personal (${c.moneda})`, formatMonto(c.monto), { bold: true, color: TEAL })
+
+      y += 2; heading(`Coste de personal por mes · ${anio}`)
+      if (costePorMes.length === 0) row('Sin nóminas confirmadas en el período.', '', { color: GRAY })
+      for (const r of costePorMes) row(formatMes(r.periodo), lineaMoneda(r.monedas))
+
+      y += 2; heading('Plantilla por departamento')
+      for (const d of porDepto) row(`${d.departamento} (${d.activos})`, lineaMoneda(d.coste))
+
+      doc.save(`${nombreArchivo}.pdf`)
+    } finally {
+      setDescargando(false)
+    }
+  }
+
+  function descargarCSV() {
+    setMenuOpen(false)
+    const num = (n: number) => n.toFixed(2).replace('.', ',')
+    const rows: string[] = []
+    rows.push('Reportes de personal')
+    rows.push(`Empresa;${empresaNombre}`)
+    rows.push(`Año;${anio}`)
+    rows.push('')
+    rows.push('RESUMEN')
+    rows.push(`Plantilla activa;${plantilla}`)
+    rows.push(`Altas;${altas}`)
+    rows.push(`Bajas;${bajas}`)
+    for (const c of costeAnual) rows.push(`Coste de personal (${c.moneda});${num(c.monto)}`)
+    rows.push('')
+    rows.push('COSTE POR MES')
+    rows.push('Mes;Moneda;Importe')
+    for (const r of costePorMes) for (const m of r.monedas) rows.push(`${formatMes(r.periodo)};${m.moneda};${num(m.monto)}`)
+    rows.push('')
+    rows.push('POR DEPARTAMENTO')
+    rows.push('Departamento;Activos;Moneda;Coste')
+    for (const d of porDepto) {
+      if (d.coste.length === 0) rows.push(`${d.departamento};${d.activos};;`)
+      for (const m of d.coste) rows.push(`${d.departamento};${d.activos};${m.moneda};${num(m.monto)}`)
+    }
+    const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `${nombreArchivo}.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="view-container">
       <div className="page-header">
@@ -111,6 +222,23 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
           <h1 className="page-title">Reportes de personal</h1>
           <p className="page-subtitle">Plantilla, altas y bajas, y coste de personal por período.</p>
         </div>
+        {!sinDatos && (
+          <div className="rep-dl">
+            <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} disabled={descargando}>
+              <Download size={14} /> {descargando ? 'Generando…' : 'Descargar'}
+              <ChevronDown size={13} />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="rep-dl-overlay" onClick={() => setMenuOpen(false)} />
+                <div className="rep-dl-menu">
+                  <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
+                  <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="ter-toolbar">
@@ -156,6 +284,10 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
                     <div key={c.moneda} className="gc-stat-line"><span>{c.moneda}</span><strong>{formatMonto(c.monto)}</strong></div>
                   ))}
             </div>
+          </div>
+
+          <div className="info-box">
+            <span className="text-xs-muted">El coste de personal son las nóminas <strong>confirmadas</strong> del período; coincide con los gastos de categoría <strong>«Salarios»</strong> de Reportes financieros (Tesorería refleja lo realmente pagado).</span>
           </div>
 
           {/* Coste por mes */}
