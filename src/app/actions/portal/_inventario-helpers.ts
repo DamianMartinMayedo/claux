@@ -22,6 +22,7 @@ export function traducirErrorInventario(msg: string): string {
   if (msg.includes('COMPRA_NO_BORRADOR'))   return 'La compra ya está confirmada o anulada.'
   if (msg.includes('COMPRA_NO_CONFIRMADA')) return 'Solo se pueden anular compras confirmadas.'
   if (msg.includes('COMPRA_SIN_IMPORTE'))   return 'La compra no tiene importe.'
+  if (msg.includes('COMPRA_PAGADA'))        return 'No se puede anular: la compra tiene pagos registrados. Anula primero el pago en Cuentas por pagar / Tesorería.'
   return msg
 }
 

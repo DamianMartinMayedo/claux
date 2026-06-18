@@ -230,8 +230,9 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
       {showAnular && (
         <ConfirmModal titulo="Anular compra" confirmLabel="Anular compra" danger
           isPending={isPending} onConfirm={doAnular} onClose={() => setShowAnular(false)}>
-          Se revertirá el stock ingresado y se eliminará el gasto asociado (y sus pagos, si los hubiera).
-          Esta acción no se puede deshacer. ¿Anular <strong>{compra.numero}</strong>?
+          Se revertirá el stock ingresado y se eliminará el gasto asociado en Cuentas por pagar.
+          Si la compra tiene pagos registrados, primero debes anularlos. Esta acción no se puede
+          deshacer. ¿Anular <strong>{compra.numero}</strong>?
         </ConfirmModal>
       )}
       {showDelete && (

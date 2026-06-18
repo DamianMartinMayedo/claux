@@ -154,6 +154,7 @@ export async function obtenerCompras(): Promise<ComprasPageData | null> {
       .select('producto_id, codigo, nombre, unidad, costos')
       .eq('client_id', session.client_id)
       .eq('estado', 'ACTIVO')
+      .eq('tipo', 'PRODUCTO')   // solo productos con stock; servicios → texto libre en la línea
       .order('nombre'),
     db.from('monedas')
       .select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo'),
@@ -270,12 +271,23 @@ export async function guardarCompra(
   // ── Editar (solo BORRADOR) ──
   if (compra_id_form) {
     const { data: existente } = await db.from('compras')
-      .select('estado').eq('compra_id', compra_id_form).eq('client_id', session.client_id).single()
+      .select('estado, empresa_id, numero').eq('compra_id', compra_id_form).eq('client_id', session.client_id).single()
     if (!existente)                      return { ok: false, error: 'Compra no encontrada.' }
     if (existente.estado !== 'BORRADOR') return { ok: false, error: 'Solo se pueden editar compras en borrador.' }
 
+    // #7: si cambia la empresa (por cambio de almacén), re-numerar para que el
+    // correlativo COM-AAAA-#### siga siendo coherente por empresa.
+    let numero = existente.numero as string
+    if (empresa_id !== existente.empresa_id) {
+      try {
+        numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, new Date(fecha).getFullYear())
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
+      }
+    }
+
     const { error: upErr } = await db.from('compras').update({
-      almacen_id, proveedor_id, moneda, fecha, notas, total, empresa_id,
+      almacen_id, proveedor_id, moneda, fecha, notas, total, empresa_id, numero,
       updated_at: new Date().toISOString(),
     }).eq('compra_id', compra_id_form).eq('client_id', session.client_id)
     if (upErr) return { ok: false, error: upErr.message }
