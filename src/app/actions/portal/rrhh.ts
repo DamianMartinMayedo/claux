@@ -56,6 +56,19 @@ export interface Contrato {
   created_at:    string
 }
 
+export type TipoConcepto = 'BONO' | 'DEDUCCION'
+export type ModoConcepto = 'FIJO' | 'PORCENTAJE'
+
+export interface ConceptoEmpleado {
+  concepto_id: string
+  empleado_id: string
+  nombre:      string
+  tipo:        TipoConcepto
+  modo:        ModoConcepto
+  valor:       number
+  activo:      boolean
+}
+
 export type EstadoNomina = 'BORRADOR' | 'CONFIRMADA'
 
 export interface NominaLinea {
@@ -141,6 +154,7 @@ function generarLineaId():      string { return `NLN-${corto()}` }
 function generarGastoId():      string { return `GAS-${corto()}` }
 function generarTurnoId():      string { return `TUR-${corto()}` }
 function generarAsignacionId(): string { return `TAS-${corto()}` }
+function generarConceptoId():   string { return `CPT-${corto()}` }
 
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
@@ -527,6 +541,7 @@ export interface EmpleadoDetalleData {
   data:      RrhhPageData
   empleado:  EmpleadoConEstado
   contratos: Contrato[]
+  conceptos: ConceptoEmpleado[]
 }
 
 export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<EmpleadoDetalleData | null> {
@@ -539,14 +554,81 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   if (!empleado) return null
 
   const db = createAdminClient()
-  const { data: cons } = await db.from('contratos').select('*')
-    .eq('client_id', session.client_id)
-    .eq('empleado_id', empleado_id)
-    .order('fecha_inicio', { ascending: false })
-    .order('created_at', { ascending: false })
-  const contratos = ((cons ?? []) as Contrato[]).map(c => ({ ...c, salario_base: Number(c.salario_base) }))
+  const [consRes, cptRes] = await Promise.all([
+    db.from('contratos').select('*')
+      .eq('client_id', session.client_id)
+      .eq('empleado_id', empleado_id)
+      .order('fecha_inicio', { ascending: false })
+      .order('created_at', { ascending: false }),
+    db.from('conceptos_empleado').select('*')
+      .eq('client_id', session.client_id)
+      .eq('empleado_id', empleado_id)
+      .order('created_at', { ascending: true }),
+  ])
+  const contratos = ((consRes.data ?? []) as Contrato[]).map(c => ({ ...c, salario_base: Number(c.salario_base) }))
+  const conceptos = ((cptRes.data ?? []) as ConceptoEmpleado[]).map(c => ({ ...c, valor: Number(c.valor) }))
 
-  return { data, empleado, contratos }
+  return { data, empleado, contratos, conceptos }
+}
+
+// ── Conceptos recurrentes del empleado (bonos/deducciones fijos) ─────────────────
+
+export async function guardarConceptoEmpleado(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const empleado_id = (formData.get('empleado_id') as string)?.trim()
+  const nombre      = (formData.get('nombre')      as string)?.trim()
+  const tipo        = (formData.get('tipo')        as string)?.trim()
+  const modo        = (formData.get('modo')        as string)?.trim()
+  const valorRaw    = parseFloat(formData.get('valor') as string)
+
+  if (!empleado_id)                       return { ok: false, error: 'Empleado no válido.' }
+  if (!nombre)                            return { ok: false, error: 'El nombre del concepto es obligatorio.' }
+  if (tipo !== 'BONO' && tipo !== 'DEDUCCION')   return { ok: false, error: 'Tipo no válido.' }
+  if (modo !== 'FIJO' && modo !== 'PORCENTAJE')  return { ok: false, error: 'Modo no válido.' }
+  if (isNaN(valorRaw) || valorRaw <= 0)   return { ok: false, error: 'El valor debe ser positivo.' }
+
+  const db = createAdminClient()
+  const { data: emp } = await db.from('empleados').select('empleado_id')
+    .eq('empleado_id', empleado_id).eq('client_id', session.client_id).single()
+  if (!emp) return { ok: false, error: 'Empleado no encontrado.' }
+
+  const { error } = await db.from('conceptos_empleado').insert({
+    concepto_id: generarConceptoId(),
+    client_id:   session.client_id,
+    empleado_id,
+    nombre,
+    tipo,
+    modo,
+    valor:       valorRaw,
+    activo:      true,
+  })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/portal/rrhh/${empleado_id}`)
+  return { ok: true }
+}
+
+export async function eliminarConceptoEmpleado(concepto_id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+  const { data: cpt } = await db.from('conceptos_empleado').select('empleado_id')
+    .eq('concepto_id', concepto_id).eq('client_id', session.client_id).single()
+  if (!cpt) return { ok: false, error: 'Concepto no encontrado.' }
+
+  const { error } = await db.from('conceptos_empleado').delete()
+    .eq('concepto_id', concepto_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/portal/rrhh/${cpt.empleado_id}`)
+  return { ok: true }
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -612,7 +694,46 @@ export async function crearNomina(
   }
 
   const nomina_id = generarNominaId()
-  const total     = activos.reduce((s, e) => s + Number(e.salario_base), 0)
+
+  // Conceptos recurrentes activos de cada empleado → se aplican solos a su línea
+  const empIds = activos.map(e => e.empleado_id)
+  const { data: cptData } = await db.from('conceptos_empleado')
+    .select('empleado_id, tipo, modo, valor')
+    .eq('client_id', session.client_id)
+    .in('empleado_id', empIds.length ? empIds : ['__none__'])
+    .eq('activo', true)
+  const cptPorEmp = new Map<string, { tipo: string; modo: string; valor: number }[]>()
+  for (const c of (cptData ?? []) as { empleado_id: string; tipo: string; modo: string; valor: number }[]) {
+    const arr = cptPorEmp.get(c.empleado_id) ?? []
+    arr.push({ tipo: c.tipo, modo: c.modo, valor: Number(c.valor) })
+    cptPorEmp.set(c.empleado_id, arr)
+  }
+
+  const lineas = activos.map(e => {
+    const base = Number(e.salario_base)
+    let devengado   = base
+    let deducciones = 0
+    for (const c of cptPorEmp.get(e.empleado_id) ?? []) {
+      const monto = c.modo === 'PORCENTAJE' ? (base * c.valor) / 100 : c.valor
+      if (c.tipo === 'BONO') devengado += monto
+      else                   deducciones += monto
+    }
+    deducciones = Math.min(devengado, deducciones)
+    const neto  = Math.max(0, devengado - deducciones)
+    return {
+      linea_id:        generarLineaId(),
+      nomina_id,
+      client_id:       session.client_id,
+      empleado_id:     e.empleado_id,
+      empleado_nombre: [e.nombre, e.apellidos].filter(Boolean).join(' '),
+      cargo:           e.cargo,
+      salario_base:    base,
+      devengado,
+      deducciones,
+      neto,
+    }
+  })
+  const total = lineas.reduce((s, l) => s + l.neto, 0)
 
   const { error: nomErr } = await db.from('nominas').insert({
     nomina_id,
@@ -627,22 +748,6 @@ export async function crearNomina(
     updated_at: new Date().toISOString(),
   })
   if (nomErr) return { ok: false, error: nomErr.message }
-
-  const lineas = activos.map(e => {
-    const base = Number(e.salario_base)
-    return {
-      linea_id:        generarLineaId(),
-      nomina_id,
-      client_id:       session.client_id,
-      empleado_id:     e.empleado_id,
-      empleado_nombre: [e.nombre, e.apellidos].filter(Boolean).join(' '),
-      cargo:           e.cargo,
-      salario_base:    base,
-      devengado:       base,
-      deducciones:     0,
-      neto:            base,
-    }
-  })
   const { error: linErr } = await db.from('nomina_lineas').insert(lineas)
   if (linErr) {
     await db.from('nominas').delete().eq('nomina_id', nomina_id).eq('client_id', session.client_id)

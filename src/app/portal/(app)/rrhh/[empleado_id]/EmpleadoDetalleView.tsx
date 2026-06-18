@@ -9,8 +9,11 @@ import {
   eliminarEmpleado,
   guardarContrato,
   eliminarContrato,
+  guardarConceptoEmpleado,
+  eliminarConceptoEmpleado,
   type EmpleadoDetalleData,
   type Contrato,
+  type ConceptoEmpleado,
   type TipoContrato,
   type Periodicidad,
 } from '@/app/actions/portal/rrhh'
@@ -130,11 +133,101 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
+// ── Conceptos recurrentes (bonos/deducciones fijos) ─────────────────────────────
+
+function ConceptosSection({
+  empleadoId, moneda, conceptos, onChanged,
+}: {
+  empleadoId: string
+  moneda:     string
+  conceptos:  ConceptoEmpleado[]
+  onChanged:  () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [delId, setDelId] = useState<string | null>(null)
+
+  function handleAdd(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const form = e.currentTarget
+    const fd = new FormData(form)
+    fd.set('empleado_id', empleadoId)
+    startTransition(async () => {
+      const res = await guardarConceptoEmpleado(fd)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      form.reset()
+      onChanged()
+    })
+  }
+
+  function handleDel(id: string) {
+    startTransition(async () => {
+      const res = await eliminarConceptoEmpleado(id)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelId(null); return }
+      setDelId(null); onChanged()
+    })
+  }
+
+  return (
+    <div className="det-card">
+      <div className="card-header"><h2 className="card-title">Conceptos recurrentes</h2></div>
+      <p className="text-sm-muted mb-3">Bonos y deducciones fijos del trabajador. Se aplican solos al generar la nómina.</p>
+
+      <form className="nom-aplicar" onSubmit={handleAdd}>
+        <input className="input nom-aplicar-val" name="nombre" placeholder="Nombre (ej: Transporte)" required aria-label="Nombre del concepto" />
+        <select className="input nom-aplicar-sel" name="tipo" defaultValue="DEDUCCION" aria-label="Tipo">
+          <option value="DEDUCCION">Deducción</option>
+          <option value="BONO">Bono</option>
+        </select>
+        <select className="input nom-aplicar-sel" name="modo" defaultValue="FIJO" aria-label="Modo">
+          <option value="FIJO">Fijo ({moneda})</option>
+          <option value="PORCENTAJE">% del salario</option>
+        </select>
+        <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="0.01" placeholder="0.00" required aria-label="Valor" />
+        <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
+          {isPending ? <span className="spinner spinner-sm" /> : <><Plus size={14} strokeWidth={2.5} /> Añadir</>}
+        </button>
+      </form>
+
+      {conceptos.length > 0 && (
+        <div className="table-wrapper mt-3">
+          <table className="table">
+            <thead>
+              <tr><th>Concepto</th><th>Tipo</th><th className="tes-col-monto">Valor</th><th className="alm-col-act"></th></tr>
+            </thead>
+            <tbody>
+              {conceptos.map(c => (
+                <tr key={c.concepto_id}>
+                  <td><strong>{c.nombre}</strong></td>
+                  <td><span className={`badge ${c.tipo === 'BONO' ? 'badge-success' : 'badge-warning'}`}>{c.tipo === 'BONO' ? 'Bono' : 'Deducción'}</span></td>
+                  <td className="tes-col-monto tes-monto-cell">{c.modo === 'PORCENTAJE' ? `${c.valor}%` : `${c.valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${moneda}`}</td>
+                  <td>
+                    <div className="ter-actions">
+                      {delId === c.concepto_id ? (
+                        <>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDel(c.concepto_id)} disabled={isPending}>Confirmar</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setDelId(null)} disabled={isPending}>No</button>
+                        </>
+                      ) : (
+                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
+                          onClick={() => setDelId(c.concepto_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Vista de detalle del empleado ────────────────────────────────────────────────
 
 export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDetalleData }) {
   const router = useRouter()
-  const { data, empleado, contratos } = detalle
+  const { data, empleado, contratos, conceptos } = detalle
   const [isPending, startTransition] = useTransition()
 
   const [showEdit,    setShowEdit]    = useState(false)
@@ -281,6 +374,10 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
           </div>
         )}
       </div>
+
+      {/* Conceptos recurrentes */}
+      <ConceptosSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
+        conceptos={conceptos} onChanged={refrescar} />
 
       {/* Nómina del trabajador */}
       <div className="det-card">
