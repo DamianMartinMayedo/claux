@@ -19,6 +19,8 @@
 .btn-ghost:hover:not(:disabled)     { background: var(--color-surface-offset); color: var(--color-text); }
 .btn-danger    { background: var(--color-error-bg); color: var(--color-error); border-color: transparent; }
 .btn-danger:hover:not(:disabled)    { background: var(--color-error); color: #fff; }
+.btn-danger-text { background: var(--color-surface); color: var(--color-error); border-color: var(--color-border); }
+.btn-danger-text:hover:not(:disabled) { background: var(--color-error-bg); border-color: var(--color-error); color: var(--color-error); }
 .btn-success   { background: var(--color-success-bg); color: var(--color-success); border-color: transparent; }
 .btn-success:hover:not(:disabled)   { background: var(--color-success); color: #fff; }
 .btn-info      { background: var(--color-info-bg); color: var(--color-primary-text); border-color: transparent; }
@@ -262,6 +264,8 @@ textarea.input { resize: vertical; min-height: 80px; }
 .prd-stock-group { margin-bottom: var(--space-4); }
 .prd-stock-group label { display: block; font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
 .prd-stock-preview { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-4); }
+.prd-stock-preview-ok  { background: var(--color-success-bg); color: var(--color-success); }
+.prd-stock-preview-neg { background: var(--color-error-bg);   color: var(--color-error); }
 .prd-stock-preview-inline { display: inline-flex; align-items: center; gap: var(--space-1); }
 .prd-stock-footer { display: flex; gap: var(--space-2); }
 .prd-stock-footer .btn { flex: 1; }

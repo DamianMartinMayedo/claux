@@ -1,7 +1,7 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
 import {
@@ -9,10 +9,26 @@ import {
   restaurarProducto,
   ajustarStock,
   type ProductoDetalleData,
-  type Producto,
+  type MovimientoProducto,
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from '../_ProductoFormModal'
 import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
+
+// ── Config de movimientos ───────────────────────────────────────────────────────
+
+const MOV_TIPO_LABEL: Record<MovimientoProducto['tipo'], string> = {
+  ENTRADA: 'Entrada', SALIDA: 'Salida', AJUSTE: 'Ajuste', TRANSFERENCIA: 'Transferencia',
+}
+const MOV_TIPO_BADGE: Record<MovimientoProducto['tipo'], string> = {
+  ENTRADA: 'badge-success', SALIDA: 'badge-warning', AJUSTE: 'badge-info', TRANSFERENCIA: 'badge-purple',
+}
+function signoMov(m: MovimientoProducto): { txt: string; cls: string } {
+  const n = Math.abs(m.cantidad).toLocaleString('es-VE')
+  if (m.tipo === 'ENTRADA') return { txt: `+${n}`, cls: 'mov-cant-pos' }
+  if (m.tipo === 'SALIDA')  return { txt: `−${n}`, cls: 'mov-cant-neg' }
+  if (m.tipo === 'AJUSTE')  return { txt: m.cantidad >= 0 ? `+${n}` : `−${n}`, cls: m.cantidad >= 0 ? 'mov-cant-pos' : 'mov-cant-neg' }
+  return { txt: n, cls: 'mov-cant-neutral' }
+}
 
 // ── Helpers de formato ────────────────────────────────────────────────────────
 
@@ -63,8 +79,9 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
 // ── Tab: Información ──────────────────────────────────────────────────────────
 
 function TabInfo({ data }: { data: ProductoDetalleData }) {
-  const { producto, categoria, proveedor } = data
+  const { producto, categoria, proveedor, stock_por_almacen } = data
   const esServicio = producto.tipo === 'SERVICIO'
+  const stockBajo  = producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
 
   return (
     <div className="det-tab-body">
@@ -107,16 +124,12 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
           <div className="det-section-title">Inventario</div>
           <div className="det-field-grid-sm">
             <div>
-              <div className="det-label">Stock actual</div>
-              <div
-                className="det-stock-num"
-                style={{ color: producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
-                  ? 'var(--color-error)' : 'var(--color-text)' }}
-              >
+              <div className="det-label">Stock total</div>
+              <div className={`det-stock-num${stockBajo ? ' det-stock-num-low' : ''}`}>
                 {producto.stock_actual.toLocaleString('es-VE')}
                 <span className="det-stock-unit">{producto.unidad}</span>
               </div>
-              {producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0 && (
+              {stockBajo && (
                 <div className="det-stock-alert">
                   <AlertTriangle size={13} strokeWidth={2} /> Stock por debajo del mínimo
                 </div>
@@ -124,6 +137,19 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
             </div>
             <Campo label="Stock mínimo" value={`${producto.stock_minimo.toLocaleString('es-VE')} ${producto.unidad}`} />
           </div>
+
+          {stock_por_almacen.length > 0 ? (
+            <div className="det-stock-almacenes">
+              {stock_por_almacen.map(s => (
+                <div key={s.almacen_id} className="det-stock-alm-row">
+                  <span>{s.nombre}</span>
+                  <strong>{s.cantidad.toLocaleString('es-VE')} {producto.unidad}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs-hint mt-2">Sin stock asignado a almacenes todavía. Usa «Ajustar stock» o confirma una compra.</div>
+          )}
         </div>
       )}
 
@@ -211,12 +237,61 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
 
 // ── Tab: Movimientos (placeholder) ────────────────────────────────────────────
 
-function TabMovimientos() {
+function TabMovimientos({ data }: { data: ProductoDetalleData }) {
+  const { movimientos, almacen_nombres, producto } = data
+
+  if (movimientos.length === 0) {
+    return (
+      <div className="det-empty">
+        <div className="det-empty-icon"><Package size={40} strokeWidth={1} opacity={0.2} /></div>
+        <div className="det-empty-title">Sin movimientos</div>
+        <div className="det-empty-text">Aquí se mostrarán entradas, salidas, ajustes y transferencias de este producto.</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="det-empty">
-      <div className="det-empty-icon"><Package size={40} strokeWidth={1} opacity={0.2} /></div>
-      <div className="det-empty-title">Movimientos de inventario</div>
-      <div className="det-empty-text">Aquí se mostrarán entradas, salidas y ajustes de este producto.</div>
+    <div className="det-tab-body">
+      <div className="det-card">
+        <div className="det-section-title">Movimientos</div>
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Almacén</th>
+                <th className="text-align-right">Cantidad</th>
+                <th>Motivo</th>
+                <th>Origen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movimientos.map(m => {
+                const s = signoMov(m)
+                return (
+                  <tr key={m.movimiento_id}>
+                    <td className="text-sm-muted">{fmtDate(m.fecha)}</td>
+                    <td><span className={`badge ${MOV_TIPO_BADGE[m.tipo]}`}>{MOV_TIPO_LABEL[m.tipo]}</span></td>
+                    <td className="text-sm-muted">
+                      {m.tipo === 'TRANSFERENCIA' && m.almacen_destino_id
+                        ? `${almacen_nombres[m.almacen_id] ?? m.almacen_id} → ${almacen_nombres[m.almacen_destino_id] ?? m.almacen_destino_id}`
+                        : (almacen_nombres[m.almacen_id] ?? m.almacen_id)}
+                    </td>
+                    <td className={`text-align-right ${s.cls}`}>{s.txt} {producto.unidad}</td>
+                    <td className="text-sm-muted">{m.motivo ?? '—'}</td>
+                    <td>
+                      {m.origen === 'MANUAL'
+                        ? <span className="text-xs-muted">Manual</span>
+                        : <span className="badge badge-neutral">{m.origen === 'COMPRA' ? 'Compra' : 'Venta'}</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
@@ -236,29 +311,49 @@ function TabHistorialPrecios() {
 // ── Modal de ajuste de stock ──────────────────────────────────────────────────
 
 function StockModal({
-  producto,
+  data,
   onClose,
   onSaved,
 }: {
-  producto: Producto
+  data:     ProductoDetalleData
   onClose:  () => void
-  onSaved:  (nuevoStock: number) => void
+  onSaved:  () => void
 }) {
-  const [cantidad, setCantidad] = useState('')
-  const [motivo,   setMotivo]   = useState('')
-  const [pending,  startT]      = useTransition()
+  const { producto, almacenes, stock_por_almacen } = data
+  const [almacenId, setAlmacenId] = useState(almacenes[0]?.almacen_id ?? '')
+  const [cantidad,  setCantidad]  = useState('')
+  const [motivo,    setMotivo]    = useState('')
+  const [pending,   startT]       = useTransition()
 
-  const cantNum = parseFloat(cantidad) || 0
-  const preview = producto.stock_actual + cantNum
+  const cantNum   = parseFloat(cantidad) || 0
+  const actualAlm = stock_por_almacen.find(s => s.almacen_id === almacenId)?.cantidad ?? 0
+  const preview   = actualAlm + cantNum
 
   function handleSubmit() {
-    if (!cantidad) { toastError('Ingresa una cantidad.'); return }
+    if (!almacenId)     { toastError('Selecciona un almacén.'); return }
+    if (!cantidad)      { toastError('Ingresa una cantidad.'); return }
     if (!motivo.trim()) { toastError('El motivo es obligatorio.'); return }
     startT(async () => {
-      const res = await ajustarStock(producto.producto_id, cantNum, motivo.trim())
+      const res = await ajustarStock(producto.producto_id, almacenId, cantNum, motivo.trim())
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
-      onSaved(res.stock_nuevo!)
+      onSaved()
     })
+  }
+
+  if (almacenes.length === 0) {
+    return (
+      <div className="modal-backdrop">
+        <div className="prd-stock-modal">
+          <h3>Ajustar stock — {producto.nombre}</h3>
+          <p className="modal-body-text">
+            Necesitas al menos un almacén para ajustar el stock. Crea uno en <strong>Almacenes</strong>.
+          </p>
+          <div className="prd-stock-footer">
+            <button onClick={onClose} className="btn btn-secondary">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -266,30 +361,28 @@ function StockModal({
       <div className="prd-stock-modal">
         <h3>Ajustar stock — {producto.nombre}</h3>
 
+        <div className="prd-stock-group">
+          <label htmlFor="stk-alm">Almacén</label>
+          <select id="stk-alm" className="input" value={almacenId} onChange={e => setAlmacenId(e.target.value)}>
+            {almacenes.map(a => <option key={a.almacen_id} value={a.almacen_id}>{a.nombre}</option>)}
+          </select>
+        </div>
+
         <div className="prd-stock-current">
-          <div className="prd-stock-current-label">Stock actual</div>
+          <div className="prd-stock-current-label">Stock actual en este almacén</div>
           <div className="prd-stock-current-val">
-            {producto.stock_actual.toLocaleString('es-VE')} {producto.unidad}
+            {actualAlm.toLocaleString('es-VE')} {producto.unidad}
           </div>
         </div>
 
         <div className="prd-stock-group">
-          <label>Cantidad (+ entrada / − salida)</label>
-          <input
-            className="input"
-            type="number" value={cantidad} onChange={e => setCantidad(e.target.value)}
-            placeholder="ej: 10 o -5"
-          />
+          <label htmlFor="stk-cant">Cantidad (+ entrada / − salida)</label>
+          <input id="stk-cant" className="input" type="number" step="any"
+            value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="ej: 10 o -5" />
         </div>
 
         {cantidad && !isNaN(parseFloat(cantidad)) && (
-          <div
-            className="prd-stock-preview"
-            style={{
-              background: preview < 0 ? 'var(--color-error-bg)' : 'var(--color-success-bg)',
-              color: preview < 0 ? 'var(--color-error)' : 'var(--color-success)',
-            }}
-          >
+          <div className={`prd-stock-preview ${preview < 0 ? 'prd-stock-preview-neg' : 'prd-stock-preview-ok'}`}>
             Stock resultante: {preview.toLocaleString('es-VE')} {producto.unidad}
             {preview < 0 && (
               <span className="prd-stock-preview-inline">
@@ -300,21 +393,14 @@ function StockModal({
         )}
 
         <div className="prd-stock-group mb-5">
-          <label>Motivo del ajuste *</label>
-          <input
-            className="input"
-            type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
-            placeholder="ej: Conteo físico, devolución, etc."
-          />
+          <label htmlFor="stk-motivo">Motivo del ajuste *</label>
+          <input id="stk-motivo" className="input" type="text"
+            value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="ej: Conteo físico, devolución, etc." />
         </div>
 
         <div className="prd-stock-footer">
           <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
-          <button
-            onClick={handleSubmit}
-            disabled={pending || preview < 0}
-            className="btn btn-primary"
-          >
+          <button onClick={handleSubmit} disabled={pending || preview < 0} className="btn btn-primary">
             {pending ? 'Guardando…' : 'Confirmar ajuste'}
           </button>
         </div>
@@ -336,17 +422,17 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
   const [pending,     startT]         = useTransition()
   const router = useRouter()
 
+  // Mantener el estado local sincronizado con los datos refrescados por router.refresh()
+  useEffect(() => { setData(initialData) }, [initialData])
+
   const { producto } = data
   const esServicio   = producto.tipo === 'SERVICIO'
 
-  function handleSaved(nuevoStock: number) {
-    setData(prev => ({
-      ...prev,
-      producto: { ...prev.producto, stock_actual: nuevoStock },
-    }))
+  function handleSaved() {
     setShowStock(false)
     setStatusMsg('Stock actualizado')
     setTimeout(() => setStatusMsg(''), 3000)
+    router.refresh()
   }
 
   function toggleEstado() {
@@ -432,13 +518,13 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
       {/* Contenido del tab */}
       {tab === 'info'        && <TabInfo     data={data} />}
       {tab === 'precios'     && <TabPrecios  data={data} />}
-      {tab === 'movimientos' && <TabMovimientos />}
+      {tab === 'movimientos' && <TabMovimientos data={data} />}
       {tab === 'historial'   && <TabHistorialPrecios />}
 
       {/* Modal de ajuste de stock */}
       {showStock && (
         <StockModal
-          producto={data.producto}
+          data={data}
           onClose={() => setShowStock(false)}
           onSaved={handleSaved}
         />

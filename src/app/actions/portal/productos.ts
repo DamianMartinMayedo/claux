@@ -3,6 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
+import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export interface ProductosPageData {
   categorias:  Categoria[]
   proveedores: { tercero_id: string; nombre: string }[]
   monedas:     string[]   // códigos de monedas activas del cliente, ej: ['USD','VES']
+  almacenes:   { almacen_id: string; nombre: string }[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -88,7 +90,7 @@ export async function obtenerProductos(): Promise<ProductosPageData | null> {
 
   const db = createAdminClient()
 
-  const [prodRes, catRes, provRes, monRes] = await Promise.all([
+  const [prodRes, catRes, provRes, monRes, almRes] = await Promise.all([
     db.from('products')
       .select('*')
       .eq('client_id', session.client_id)
@@ -108,6 +110,11 @@ export async function obtenerProductos(): Promise<ProductosPageData | null> {
       .eq('client_id', session.client_id)
       .eq('activa', true)
       .order('codigo'),
+    db.from('almacenes')
+      .select('almacen_id, nombre')
+      .eq('client_id', session.client_id)
+      .eq('activo', true)
+      .order('nombre'),
   ])
 
   const productos = (prodRes.data ?? []).map((p: Record<string, unknown>) => ({
@@ -125,6 +132,7 @@ export async function obtenerProductos(): Promise<ProductosPageData | null> {
     categorias:  (catRes.data  ?? []) as Categoria[],
     proveedores: (provRes.data ?? []) as { tercero_id: string; nombre: string }[],
     monedas:     monedas.length ? monedas : ['USD'],   // fallback si no hay monedas configuradas
+    almacenes:   (almRes.data  ?? []) as { almacen_id: string; nombre: string }[],
   }
 }
 
@@ -247,10 +255,11 @@ export async function restaurarProducto(
   return { ok: true }
 }
 
-// ── Ajuste de stock ───────────────────────────────────────────────────────────
+// ── Ajuste de stock (por almacén, vía movimiento AJUSTE) ────────────────────────
 
 export async function ajustarStock(
   producto_id: string,
+  almacen_id:  string,
   cantidad:    number,
   motivo:      string,
 ): Promise<{ ok: boolean; error?: string; stock_nuevo?: number }> {
@@ -258,6 +267,7 @@ export async function ajustarStock(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
+  if (!almacen_id) return { ok: false, error: 'Selecciona un almacén.' }
   if (isNaN(cantidad) || cantidad === 0)
     return { ok: false, error: 'La cantidad debe ser un número distinto de cero.' }
   if (!motivo?.trim())
@@ -265,31 +275,41 @@ export async function ajustarStock(
 
   const db = createAdminClient()
 
-  const { data: prod } = await db
-    .from('products')
-    .select('stock_actual, tipo')
-    .eq('producto_id', producto_id)
-    .eq('client_id', session.client_id)
-    .single()
-
-  if (!prod)                  return { ok: false, error: 'Producto no encontrado.' }
+  const { data: prod } = await db.from('products')
+    .select('tipo').eq('producto_id', producto_id).eq('client_id', session.client_id).single()
+  if (!prod)                    return { ok: false, error: 'Producto no encontrado.' }
   if (prod.tipo === 'SERVICIO') return { ok: false, error: 'Los servicios no tienen stock.' }
 
-  const stock_anterior = Number(prod.stock_actual) || 0
-  const stock_nuevo    = stock_anterior + cantidad
+  const { data: alm } = await db.from('almacenes')
+    .select('empresa_id, nombre').eq('almacen_id', almacen_id).eq('client_id', session.client_id).single()
+  if (!alm) return { ok: false, error: 'Almacén no válido.' }
 
-  if (stock_nuevo < 0)
-    return { ok: false, error: `Stock insuficiente. Actual: ${stock_anterior}.` }
+  const disp = await stockEnAlmacen(db, producto_id, almacen_id)
+  if (disp + cantidad < 0)
+    return { ok: false, error: `El ajuste dejaría el stock negativo. Disponible en ${alm.nombre}: ${disp}.` }
 
-  const { error } = await db
-    .from('products')
-    .update({ stock_actual: stock_nuevo, updated_at: new Date().toISOString() })
-    .eq('producto_id', producto_id)
-    .eq('client_id', session.client_id)
+  try {
+    await aplicarMovimiento(db, {
+      client_id:  session.client_id,
+      empresa_id: alm.empresa_id,
+      fecha:      new Date().toISOString().split('T')[0],
+      tipo:       'AJUSTE',
+      producto_id,
+      almacen_id,
+      cantidad,                 // delta con signo
+      motivo:     motivo.trim(),
+      origen:     'MANUAL',
+    })
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al ajustar el stock.' }
+  }
 
-  if (error) return { ok: false, error: 'Error al ajustar stock.' }
+  const { data: updated } = await db.from('products')
+    .select('stock_actual').eq('producto_id', producto_id).eq('client_id', session.client_id).single()
   revalidatePath('/portal/productos')
-  return { ok: true, stock_nuevo }
+  revalidatePath(`/portal/productos/${producto_id}`)
+  revalidatePath('/portal/inventario')
+  return { ok: true, stock_nuevo: Number(updated?.stock_actual ?? 0) }
 }
 
 // ── Guardar categoría ─────────────────────────────────────────────────────────
@@ -380,13 +400,28 @@ export async function restaurarCategoria(
 
 // ── Detalle de producto ───────────────────────────────────────────────────────
 
+export interface MovimientoProducto {
+  movimiento_id:      string
+  fecha:              string
+  tipo:               TipoMovimiento
+  almacen_id:         string
+  almacen_destino_id: string | null
+  cantidad:           number
+  motivo:             string | null
+  origen:             'MANUAL' | 'COMPRA' | 'VENTA'
+}
+
 export interface ProductoDetalleData {
-  producto:    Producto
-  categoria:   Categoria | null
-  proveedor:   { tercero_id: string; nombre: string } | null
-  monedas:     string[]
-  categorias:  Categoria[]
-  proveedores: { tercero_id: string; nombre: string }[]
+  producto:          Producto
+  categoria:         Categoria | null
+  proveedor:         { tercero_id: string; nombre: string } | null
+  monedas:           string[]
+  categorias:        Categoria[]
+  proveedores:       { tercero_id: string; nombre: string }[]
+  almacenes:         { almacen_id: string; nombre: string; empresa_id: string }[]
+  stock_por_almacen: { almacen_id: string; nombre: string; cantidad: number }[]
+  movimientos:       MovimientoProducto[]
+  almacen_nombres:   Record<string, string>
 }
 
 export async function obtenerProductoDetalle(
@@ -397,7 +432,7 @@ export async function obtenerProductoDetalle(
 
   const db = createAdminClient()
 
-  const [prodRes, catRes, provRes, monRes] = await Promise.all([
+  const [prodRes, catRes, provRes, monRes, almRes, stkRes, movRes] = await Promise.all([
     db.from('products')
       .select('*')
       .eq('producto_id', producto_id)
@@ -418,6 +453,21 @@ export async function obtenerProductoDetalle(
       .eq('client_id', session.client_id)
       .eq('activa', true)
       .order('codigo'),
+    db.from('almacenes')
+      .select('almacen_id, nombre, empresa_id')
+      .eq('client_id', session.client_id)
+      .eq('activo', true)
+      .order('nombre'),
+    db.from('stock_almacenes')
+      .select('almacen_id, cantidad')
+      .eq('client_id', session.client_id)
+      .eq('producto_id', producto_id),
+    db.from('movimientos_inventario')
+      .select('movimiento_id, fecha, tipo, almacen_id, almacen_destino_id, cantidad, motivo, origen')
+      .eq('client_id', session.client_id)
+      .eq('producto_id', producto_id)
+      .order('created_at', { ascending: false })
+      .limit(100),
   ])
 
   if (!prodRes.data) return null
@@ -443,6 +493,30 @@ export async function obtenerProductoDetalle(
     ? (proveedores.find(p => p.tercero_id === producto.proveedor_id) ?? null)
     : null
 
+  const almacenes = (almRes.data ?? []) as { almacen_id: string; nombre: string; empresa_id: string }[]
+  const almacen_nombres: Record<string, string> = {}
+  for (const a of almacenes) almacen_nombres[a.almacen_id] = a.nombre
+
+  const stock_por_almacen = ((stkRes.data ?? []) as { almacen_id: string; cantidad: number }[])
+    .map(s => ({
+      almacen_id: s.almacen_id,
+      nombre:     almacen_nombres[s.almacen_id] ?? s.almacen_id,
+      cantidad:   Number(s.cantidad),
+    }))
+    .filter(s => Math.abs(s.cantidad) > 0.0005)
+    .sort((a, b) => b.cantidad - a.cantidad)
+
+  const movimientos = ((movRes.data ?? []) as Record<string, unknown>[]).map(m => ({
+    movimiento_id:      m.movimiento_id as string,
+    fecha:              m.fecha as string,
+    tipo:               m.tipo as MovimientoProducto['tipo'],
+    almacen_id:         m.almacen_id as string,
+    almacen_destino_id: (m.almacen_destino_id as string) ?? null,
+    cantidad:           Number(m.cantidad),
+    motivo:             (m.motivo as string) ?? null,
+    origen:             m.origen as MovimientoProducto['origen'],
+  })) as MovimientoProducto[]
+
   return {
     producto,
     categoria,
@@ -450,5 +524,9 @@ export async function obtenerProductoDetalle(
     monedas: monedas.length ? monedas : ['USD'],
     categorias,
     proveedores,
+    almacenes,
+    stock_por_almacen,
+    movimientos,
+    almacen_nombres,
   }
 }

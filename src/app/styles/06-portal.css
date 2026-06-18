@@ -1259,3 +1259,36 @@
 .turno-grid-select { min-width: 92px; padding: 5px 8px; font-size: var(--text-xs); }
 /* Reportes */
 .rrhh-kpi-value { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ── Inventario · compras (editor de líneas, 5 columnas) ───────────────────── */
+.cmp-lineas-head,
+.cmp-lineas-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 110px 110px 36px;
+  gap: var(--space-2);
+  align-items: center;
+}
+.cmp-lineas-head {
+  background: var(--color-surface-2);
+  padding: 8px 12px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--color-text-muted);
+}
+.cmp-lineas-row {
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Inventario · movimientos (cantidad con signo) ─────────────────────────── */
+.mov-cant-pos     { color: var(--color-success); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mov-cant-neg     { color: var(--color-error);   font-weight: 600; font-variant-numeric: tabular-nums; }
+.mov-cant-neutral { color: var(--color-text);    font-weight: 600; font-variant-numeric: tabular-nums; }
+.det-stock-almacenes { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.det-stock-alm-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2); border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.det-stock-alm-row strong { font-variant-numeric: tabular-nums; }
+.det-stock-num.det-stock-num-low { color: var(--color-error); }

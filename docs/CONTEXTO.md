@@ -26,7 +26,14 @@ El desarrollo NO parte de cero. El repositorio existente (`DamianMartinMayedo/cl
 - **Nómina simple** (`/portal/nomina` → `NominaView`, `nominas` BORRADOR/CONFIRMADA + `nomina_lineas`): devengado/deducciones/neto por empleado. **Integración con la base contable:** al CONFIRMAR se registra un GASTO «Salarios» en `gastos_cobros` (monto = Σ netos) que fluye a CxP, Tesorería y Reportes por la liquidación unificada; la nómina guarda `gasto_id` y deja de ser editable.
 - **Reportes** (`/portal/rrhh-reportes` → `ReportesView`): analítica en cliente (sin tabla) sobre empleados+nóminas: plantilla activa, altas/bajas del año, coste de personal por moneda/mes/departamento.
 
-RRHH depende de la base, nunca a la inversa. Cada página carga vía `obtenerRrhh()` y se gatea con `requireModulo('rrhh')`. Migraciones 027–031.
+RRHH depende de la base, nunca a la inversa. Cada página carga vía `obtenerRrhh()` y se gatea con `requireModulo('rrhh')`. Migraciones 027–034.
+
+**Módulo Inventario construido (Fase 5):** completadas las dos piezas que faltaban (**Compras** y **Movimientos**) sobre lo ya existente (Productos y Almacenes). Cuatro páginas planas del sidebar (`modulos_catalogo.paginas`), gateadas con `requireModulo('inventario')`. Acciones en `inventario.ts` (movimientos), `compras.ts` y el helper compartido `_inventario-helpers.ts` (stock):
+- **Stock por almacén:** el stock dejó de ser un único número global. Se guarda por `(producto, almacén)` en `stock_almacenes`; `products.stock_actual` pasa a ser el total (suma) que mantienen los movimientos. Un libro `movimientos_inventario` es la fuente de cada cambio: ENTRADA / SALIDA / AJUSTE (±) / TRANSFERENCIA entre almacenes.
+- **Movimientos** (`/portal/inventario` → `MovimientosView`): alta manual de los cuatro tipos con validación de disponibilidad, y el historial. El «Ajustar stock» de la ficha de producto pasa por aquí (movimiento AJUSTE sobre un almacén); la ficha muestra el desglose por almacén y los movimientos del producto.
+- **Compras** (`/portal/compras` → `ComprasView` + detalle, tablas `compras` + `compra_lineas`, numeración `COM-AAAA-####`): documento cabecera+líneas (estados BORRADOR/CONFIRMADA/ANULADA). **Integración con la base contable (espejo de la nómina):** al CONFIRMAR sube el stock (ENTRADA por línea hacia el almacén) y crea un GASTO «Compras» en `gastos_cobros` (monto = total) que fluye a CxP/Tesorería/Reportes por la liquidación unificada; guarda `gasto_id`. Anular revierte el stock y elimina el gasto y sus pagos.
+
+Inventario depende de la base, nunca a la inversa (su selector de productos ya era la conveniencia que la base aprovecha en las líneas de venta). Migraciones 035–036.
 
 **Independencia de módulos (regla transversal):** cada módulo funciona solo; la base opera al 100% sin ninguno. La interacción es aditiva en una dirección: si el cliente tiene un módulo, aparecen conveniencias de llenado rápido en otros módulos que lo aprovechan (ej.: el selector de productos en las líneas de documentos solo se carga si `inventario` está activo — sin él, texto libre). Nunca a la inversa. Helper: `src/lib/modulos.ts` (`tieneModulo`).
 
@@ -122,6 +129,6 @@ La auditoría (sección 2), el cascarón multi-tenant y el admin interno ya exis
 6. Reservas: formulario público + panel en el portal + notificación Telegram al dueño.
 7. Bot de Telegram de botones (reservar, catálogo, horarios, ubicación) con enrutado multi-tenant por token.
 8. Landing de CLAUX + formulario de diagnóstico + informe (embudo).
-9. Build-out de los módulos restantes: ~~**RRHH**~~ **(HECHO — Fase 5: Personal + Nómina simple integrada con la base contable vía gasto «Salarios»)**; pendientes **Inventario** (compras/movimientos), **Multiempresa** (consolidación + gating de pago) y add-on **IA** v1 (motor híbrido + DeepSeek + límites por tenant).
+9. Build-out de los módulos restantes: ~~**RRHH**~~ **(HECHO — Fase 5: Personal + Nómina simple integrada con la base contable vía gasto «Salarios»)**; ~~**Inventario**~~ **(HECHO — Fase 5: stock por almacén + Movimientos + Compras integradas vía gasto «Compras»)**; pendientes **Multiempresa** (consolidación + gating de pago) y add-on **IA** v1 (motor híbrido + DeepSeek + límites por tenant).
 
 Regla general: ante la duda entre hacerlo perfecto o hacerlo vendible, vendible — pero nunca a costa de los principios de la sección 3, que son los que evitan rehacer la casa después.

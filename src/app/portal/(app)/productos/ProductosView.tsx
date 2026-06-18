@@ -21,10 +21,11 @@ import { AlertTriangle, Archive, Layers, Package, Pencil, Plus, RotateCcw, Searc
 
 // ── StockModal ────────────────────────────────────────────────────────────────
 
-function StockModal({ producto, onClose, onSaved }: {
-  producto: Producto; onClose: () => void; onSaved: () => void
+function StockModal({ producto, almacenes, onClose, onSaved }: {
+  producto: Producto; almacenes: { almacen_id: string; nombre: string }[]; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  const [almacenId, setAlmacenId]    = useState(almacenes[0]?.almacen_id ?? '')
   const [cantidad, setCantidad]      = useState('')
   const [motivo,   setMotivo]        = useState('')
 
@@ -33,11 +34,12 @@ function StockModal({ producto, onClose, onSaved }: {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!almacenId)                               return toastError('Selecciona un almacén.')
     if (!cantidad || isNaN(parseFloat(cantidad))) return toastError('Ingresa una cantidad válida.')
     if (parseFloat(cantidad) === 0)               return toastError('La cantidad no puede ser cero.')
     if (!motivo.trim())                           return toastError('El motivo del ajuste es obligatorio.')
     startTransition(async () => {
-      const res = await ajustarStock(producto.producto_id, parseFloat(cantidad), motivo)
+      const res = await ajustarStock(producto.producto_id, almacenId, parseFloat(cantidad), motivo)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -54,9 +56,19 @@ function StockModal({ producto, onClose, onSaved }: {
           <div className="modal-body">
             <p className="prd-stock-nombre">{producto.nombre}</p>
             <div className="prd-stock-actual-row">
-              <span>Stock actual</span>
+              <span>Stock total</span>
               <strong>{producto.stock_actual} {producto.unidad}</strong>
             </div>
+            {almacenes.length === 0 ? (
+              <p className="input-hint prd-stock-warn">Necesitas un almacén para ajustar el stock. Crea uno en Almacenes.</p>
+            ) : (
+              <div className="input-group">
+                <label htmlFor="prd-stk-alm">Almacén <span className="required">*</span></label>
+                <select id="prd-stk-alm" className="input" value={almacenId} onChange={e => setAlmacenId(e.target.value)}>
+                  {almacenes.map(a => <option key={a.almacen_id} value={a.almacen_id}>{a.nombre}</option>)}
+                </select>
+              </div>
+            )}
             <div className="input-group">
               <label>Cantidad <span className="required">*</span></label>
               <input className="input" type="number" step="0.001"
@@ -76,7 +88,7 @@ function StockModal({ producto, onClose, onSaved }: {
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending}>
+            <button type="submit" className="btn btn-primary" disabled={isPending || almacenes.length === 0}>
               {isPending ? <><span className="spinner spinner-sm" /> Aplicando…</> : 'Aplicar ajuste'}
             </button>
           </div>
@@ -588,7 +600,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           onClose={closeModal} onSaved={onSaved} />
       )}
       {stockProducto && (
-        <StockModal producto={stockProducto} onClose={() => setStockProducto(null)} onSaved={onStockSaved} />
+        <StockModal producto={stockProducto} almacenes={data.almacenes} onClose={() => setStockProducto(null)} onSaved={onStockSaved} />
       )}
       {confirmProd && (
         <ConfirmArchivar nombre={confirmProd.nombre} onConfirm={confirmarArchivar}
