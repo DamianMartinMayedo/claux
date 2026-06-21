@@ -57,6 +57,7 @@ export async function crearCliente(formData: FormData) {
   const es_trial        = formData.get('es_trial') === 'true'
   const tarifa          = (formData.get('tarifa') as string ?? 'estandar').trim()
   const ciclo           = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
+  const sector          = (formData.get('sector') as string ?? '').trim() || null
   const pagoSetupRaw    = parseFloat(formData.get('pago_setup_usd') as string ?? '0')
   const pago_setup_usd  = isNaN(pagoSetupRaw) ? 0 : pagoSetupRaw
 
@@ -98,6 +99,7 @@ export async function crearCliente(formData: FormData) {
     nombre_empresa,
     nombre_contacto: nombre_contacto || null,
     email_admin,
+    sector,
     modulos_activos,
     tarifa,
     ciclo_facturacion: ciclo,

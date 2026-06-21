@@ -7,12 +7,17 @@ import ClientesTabla     from './ClientesTabla'
 export default async function ClientesPage() {
   const supabase = await createClient()
 
-  const [{ data: clientes }, { data: catalogo }] = await Promise.all([
+  const [{ data: clientes }, { data: catalogo }, { data: plantillas }] = await Promise.all([
     supabase.from('clients').select('*').order('created_at', { ascending: false }),
     supabase
       .from('modulos_catalogo')
       .select('clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo')
       .eq('activo', true)
+      .order('orden'),
+    supabase
+      .from('plantillas_sector')
+      .select('sector, nombre, modulos')
+      .eq('activa', true)
       .order('orden'),
   ])
 
@@ -31,6 +36,7 @@ export default async function ClientesPage() {
         </div>
         <NuevoClienteModal
           catalogo={catalogo ?? []}
+          plantillas={plantillas ?? []}
           setupDefault={setupDefault}
           descuentoAnualPct={descuentoAnual}
         />

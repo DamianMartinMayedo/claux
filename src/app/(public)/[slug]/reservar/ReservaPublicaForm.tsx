@@ -21,9 +21,18 @@ interface Slot {
   disponible: boolean
 }
 
-function generarSlots(franjas: FranjaPublica[]): Slot[] {
+function isodowDe(fecha: string): number {
+  const [y, m, d] = fecha.split('-').map(Number)
+  const dow = new Date(y, m - 1, d).getDay() // 0=Dom … 6=Sáb
+  return dow === 0 ? 7 : dow                  // 1=Lun … 7=Dom
+}
+
+function generarSlots(franjas: FranjaPublica[], fecha: string): Slot[] {
+  const isodow = isodowDe(fecha)
   const slots: Slot[] = []
   for (const f of franjas) {
+    // Respetar los días de la semana del turno (NULL/vacío = todos los días)
+    if (f.dias_semana && f.dias_semana.length > 0 && !f.dias_semana.includes(isodow)) continue
     if (f.hora_inicio && f.hora_fin) {
       const [hIni, mIni] = f.hora_inicio.split(':').map(Number)
       const [hFin, mFin] = f.hora_fin.split(':').map(Number)
@@ -59,7 +68,7 @@ export default function ReservaPublicaForm({
   const [telefono, setTelefono] = useState('')
   const [notas, setNotas] = useState('')
 
-  const slotsBase = useMemo(() => generarSlots(franjas), [franjas])
+  const slotsBase = useMemo(() => generarSlots(franjas, fecha), [franjas, fecha])
   const [slots, setSlots] = useState<Slot[]>([])
   const [consultado, setConsultado] = useState(false)
   const [loadingDisp, setLoadingDisp] = useState(false)

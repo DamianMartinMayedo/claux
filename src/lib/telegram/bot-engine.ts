@@ -2,6 +2,8 @@
 // Lógica de botones, sin IA. La IA es capa opcional (add-on).
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
+import { notificarReservaNueva } from '@/lib/reservas/estado'
 
 export interface BotContext {
   client_id: string
@@ -41,8 +43,8 @@ export async function cargarSesion(clientId: string, chatId: string): Promise<Se
   const db = createAdminClient()
   const { data } = await db.from('telegram_sessions')
     .select('paso, datos')
-    .eq('session_id', chatId)
     .eq('client_id', clientId)
+    .eq('chat_id', chatId)
     .maybeSingle()
   return {
     paso: (data?.paso as PasoReserva) ?? null,
@@ -53,15 +55,20 @@ export async function cargarSesion(clientId: string, chatId: string): Promise<Se
 export async function guardarSesion(clientId: string, chatId: string, paso: PasoReserva | null, datos: DatosReserva) {
   const db = createAdminClient()
   await db.from('telegram_sessions')
-    .upsert({ session_id: chatId, client_id: clientId, chat_id: chatId, paso, datos, updated_at: new Date().toISOString() })
-    .eq('session_id', chatId)
+    .upsert({ client_id: clientId, chat_id: chatId, paso, datos, updated_at: new Date().toISOString() },
+            { onConflict: 'client_id,chat_id' })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const SALUDOS = ['hola', 'buenas', 'buenos días', 'buenas tardes', 'buenas noches', 'saludos', 'hey', 'ola']
 
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function hoyISO(): string { return hoyEnTz() } // hoy en la zona del negocio (America/Havana)
+function isodowDe(fecha: string): number {
+  const [y, m, d] = fecha.split('-').map(Number)
+  const dow = new Date(y, m - 1, d).getDay() // 0=Dom … 6=Sáb
+  return dow === 0 ? 7 : dow                  // 1=Lun … 7=Dom
+}
 function formatFechaStr(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
@@ -70,19 +77,20 @@ function formatHora(h: string): string { return h.substring(0, 5) }
 
 function parseFecha(texto: string): string | null {
   const t = texto.trim().toLowerCase()
-  const hoy = new Date()
-  if (t === 'hoy') return hoyISO()
-  if (t === 'mañana') { const d = new Date(hoy); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
-  if (t === 'pasado mañana' || t === 'pasado') { const d = new Date(hoy); d.setDate(d.getDate() + 2); return d.toISOString().split('T')[0] }
+  const hoyStr = hoyISO() // YYYY-MM-DD en la zona del negocio
+  if (t === 'hoy') return hoyStr
+  if (t === 'mañana') return sumarDias(hoyStr, 1)
+  if (t === 'pasado mañana' || t === 'pasado') return sumarDias(hoyStr, 2)
   const m1 = t.match(/^(\d{1,2})[/-](\d{1,2})$/)
   if (m1) {
     const dd = parseInt(m1[1]), mm = parseInt(m1[2])
-    const f = new Date(hoy.getFullYear(), mm - 1, dd)
-    if (f.getMonth() === mm - 1 && f.getDate() === dd) return f.toISOString().split('T')[0]
+    const year = parseInt(hoyStr.split('-')[0], 10)
+    const f = new Date(Date.UTC(year, mm - 1, dd))
+    if (f.getUTCMonth() === mm - 1 && f.getUTCDate() === dd) return f.toISOString().split('T')[0]
   }
   const m2 = t.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (m2) {
-    const f = new Date(parseInt(m2[1]), parseInt(m2[2]) - 1, parseInt(m2[3]))
+    const f = new Date(Date.UTC(parseInt(m2[1]), parseInt(m2[2]) - 1, parseInt(m2[3])))
     if (!isNaN(f.getTime())) return t
   }
   return null
@@ -159,7 +167,7 @@ function promptFecha(): BotResponse {
 async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
   const db = createAdminClient()
   const { data: franjas } = await db.from('reserva_franjas')
-    .select('franja_id, nombre, hora_inicio, hora_fin, duracion_minutos')
+    .select('franja_id, nombre, hora_inicio, hora_fin, duracion_minutos, dias_semana')
     .eq('client_id', ctx.client_id)
     .eq('activa', true)
     .order('hora_inicio')
@@ -171,14 +179,17 @@ async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva
 
   const slots: { hora: string; franja_id: string; franja_nombre: string }[] = []
   const fecha = datos.fecha!
-  for (const f of (franjas as { franja_id: string; nombre: string; hora_inicio: string | null; hora_fin: string | null; duracion_minutos: number }[])) {
+  const isodow = isodowDe(fecha)
+  for (const f of (franjas as { franja_id: string; nombre: string; hora_inicio: string | null; hora_fin: string | null; duracion_minutos: number; dias_semana: number[] | null }[])) {
+    // Respetar los días de la semana del turno (NULL/vacío = todos los días)
+    if (f.dias_semana && f.dias_semana.length > 0 && !f.dias_semana.includes(isodow)) continue
     if (!f.hora_inicio || !f.hora_fin) continue
     const [hIni, mIni] = f.hora_inicio.split(':').map(Number)
     const [hFin, mFin] = f.hora_fin.split(':').map(Number)
     const ini = hIni * 60 + mIni
     const fin = hFin * 60 + mFin
-    const ahora = new Date()
-    const minsAhora = ahora.getHours() * 60 + ahora.getMinutes()
+    const [hAhora, mAhora] = ahoraEnTz().split(':').map(Number) // ahora en la zona del negocio
+    const minsAhora = hAhora * 60 + mAhora
     for (let t = ini; t < fin; t += 30) {
       if (fecha === hoyISO() && t <= minsAhora) continue
       const hh = String(Math.floor(t / 60)).padStart(2, '0')
@@ -323,7 +334,7 @@ export async function manejarPasoReserva(
     }
 
     const { data: cliente } = await db.from('clients')
-      .select('bot_config')
+      .select('bot_config, nombre_empresa')
       .eq('client_id', ctx.client_id)
       .single()
     const botCfg = (cliente?.bot_config as Record<string, unknown>) ?? {}
@@ -355,6 +366,33 @@ export async function manejarPasoReserva(
     if (!result.ok) {
       return { texto: `❌ ${result.error ?? 'Error al crear la reserva.'}`, markup: tecladoPrincipal() }
     }
+
+    // Guardar el chat del cliente para poder avisarle de cambios de estado
+    await db.from('reservas')
+      .update({ telegram_chat_id: chatId })
+      .eq('reserva_id', reservaId)
+      .eq('client_id', ctx.client_id)
+
+    // Avisar al dueño de la reserva nueva (con botones Confirmar/Rechazar si está pendiente)
+    await notificarReservaNueva(
+      {
+        token:  ctx.token,
+        activo: true,
+        notificar_owner_chat_id: typeof botCfg.notificar_owner_chat_id === 'string' ? botCfg.notificar_owner_chat_id : null,
+      },
+      {
+        reserva_id:       reservaId,
+        fecha:            datos.fecha!,
+        hora:             datos.hora!,
+        personas:         datos.personas!,
+        nombre_cliente:   datos.nombre!,
+        telefono:         null,
+        notas:            null,
+        estado:           confirmAuto ? 'CONFIRMADA' : 'PENDIENTE',
+        telegram_chat_id: chatId,
+      },
+      (cliente?.nombre_empresa as string) ?? ctx.nombre_empresa,
+    )
 
     const estado = confirmAuto ? 'confirmada' : 'pendiente de confirmación'
     return {

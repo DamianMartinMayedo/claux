@@ -2,12 +2,13 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
+import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-export type EstadoReserva = 'PENDIENTE' | 'CONFIRMADA' | 'RECHAZADA' | 'NO_SHOW' | 'CANCELADA'
 export type CanalReserva   = 'web' | 'bot' | 'manual'
 
 export interface ReservaFranja {
@@ -54,6 +55,8 @@ export interface BotConfig {
   webhook_registrado:       boolean
   notificar_owner_chat_id:  string | null
   confirmacion_automatica:  boolean
+  webhook_secret:           string | null
+  codigo_vinculo:           string | null
 }
 
 export interface ReservaPageData {
@@ -72,13 +75,10 @@ function corto(): string {
 function generarFranjaId():  string { return `FRA-${corto()}` }
 function generarReservaId(): string { return `RES-${corto()}` }
 
-function hoy(): string {
-  return new Date().toISOString().split('T')[0]
-}
-function horaAhora(): string {
-  const d = new Date()
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
+// "Hoy" y "ahora" en la zona del negocio (America/Havana), no en UTC ni en la
+// hora del servidor (España/EEUU). Ver src/lib/fecha-tz.ts.
+function hoy(): string { return hoyEnTz() }
+function horaAhora(): string { return ahoraEnTz() }
 
 const BOT_CONFIG_DEFAULTS: BotConfig = {
   token:                   null,
@@ -87,6 +87,8 @@ const BOT_CONFIG_DEFAULTS: BotConfig = {
   webhook_registrado:      false,
   notificar_owner_chat_id: null,
   confirmacion_automatica: false,
+  webhook_secret:          null,
+  codigo_vinculo:          null,
 }
 
 function parseBotConfig(raw: unknown): BotConfig {
@@ -100,6 +102,8 @@ function parseBotConfig(raw: unknown): BotConfig {
       webhook_registrado:      typeof c.webhook_registrado       === 'boolean' ? c.webhook_registrado     : false,
       notificar_owner_chat_id: typeof c.notificar_owner_chat_id  === 'string'  ? c.notificar_owner_chat_id : null,
       confirmacion_automatica: typeof c.confirmacion_automatica  === 'boolean' ? c.confirmacion_automatica : false,
+      webhook_secret:          typeof c.webhook_secret           === 'string'  ? c.webhook_secret          : null,
+      codigo_vinculo:          typeof c.codigo_vinculo           === 'string'  ? c.codigo_vinculo          : null,
     }
   } catch {
     return { ...BOT_CONFIG_DEFAULTS }
@@ -242,57 +246,30 @@ export async function modificarReserva(
   if (fecha < hoy())                                       return { ok: false, error: 'No se puede poner una fecha pasada.' }
   if (fecha === hoy() && hora <= horaAhora())              return { ok: false, error: 'Esa hora ya pasó hoy.' }
 
-  const { data: franja } = await db.from('reserva_franjas')
-    .select('capacidad, duracion_minutos')
-    .eq('franja_id', franja_id)
-    .eq('client_id', session.client_id)
-    .single()
-  if (!franja) return { ok: false, error: 'Turno no encontrado.' }
+  // Función atómica: lock por (negocio, franja, fecha) + reglas (día de la semana,
+  // capacidad por solapamiento excluyendo la propia reserva) + update, en una sola
+  // transacción. Evita la carrera del check-then-write anterior.
+  const { data, error } = await db.rpc('res_modificar_reserva', {
+    p_client_id:      session.client_id,
+    p_reserva_id:     reserva_id,
+    p_franja_id:      franja_id,
+    p_fecha:          fecha,
+    p_hora:           hora,
+    p_personas:       personas,
+    p_nombre_cliente: nombre_cliente,
+    p_telefono:       telefono,
+    p_notas:          notas,
+  })
 
-  const duracion = Number(franja.duracion_minutos) || 60
-  const horaLim  = new Date(`1970-01-01T${hora}`)
-  horaLim.setMinutes(horaLim.getMinutes() + duracion)
-  const horaFin  = horaLim.toTimeString().substring(0, 8)
-
-  // Comprobar solapamiento (excluyendo la propia reserva)
-  const { data: ocupantes } = await db.from('reservas')
-    .select('personas')
-    .eq('client_id', session.client_id)
-    .eq('franja_id', franja_id)
-    .eq('fecha', fecha)
-    .in('estado', ['PENDIENTE', 'CONFIRMADA'])
-    .neq('reserva_id', reserva_id)
-    .lt('hora', horaFin)
-    .gt('hora_fin', hora)
-
-  const totalOcupado = (ocupantes ?? []).reduce((s: number, r: { personas: number }) => s + Number(r.personas), 0)
-  if (totalOcupado + personas > Number(franja.capacidad)) {
-    return { ok: false, error: 'No hay capacidad suficiente para los nuevos datos.' }
-  }
-
-  const { error } = await db.from('reservas')
-    .update({
-      franja_id, fecha, hora, hora_fin: horaFin, personas,
-      nombre_cliente, telefono, notas,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('reserva_id', reserva_id)
-    .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
+  const result = data as { ok: boolean; error?: string }
+  if (!result.ok) return { ok: false, error: result.error ?? 'Error al modificar la reserva.' }
 
   revalidatePath('/portal/reservas')
   return { ok: true }
 }
 
 // ── Cambiar estado de una reserva ─────────────────────────────────────────────
-
-const CAMBIOS_VALIDOS: Record<EstadoReserva, EstadoReserva[]> = {
-  PENDIENTE:   ['CONFIRMADA', 'RECHAZADA', 'CANCELADA'],
-  CONFIRMADA:  ['NO_SHOW', 'CANCELADA'],
-  RECHAZADA:   [],
-  NO_SHOW:     [],
-  CANCELADA:   [],
-}
 
 export async function cambiarEstadoReserva(
   reserva_id: string,
@@ -304,24 +281,20 @@ export async function cambiarEstadoReserva(
 
   const db = createAdminClient()
 
-  const { data: reserva } = await db.from('reservas')
-    .select('estado')
-    .eq('reserva_id', reserva_id)
+  // bot_config + nombre para avisar al cliente por Telegram si procede
+  const { data: cli } = await db.from('clients')
+    .select('bot_config, nombre_empresa')
     .eq('client_id', session.client_id)
     .single()
-  if (!reserva) return { ok: false, error: 'Reserva no encontrada.' }
+  const botCfg = parseBotConfig(cli?.bot_config)
 
-  const estadoActual = reserva.estado as EstadoReserva
-  const permitidos = CAMBIOS_VALIDOS[estadoActual]
-  if (!permitidos || !permitidos.includes(nuevoEstado)) {
-    return { ok: false, error: `No se puede pasar de «${estadoActual}» a «${nuevoEstado}».` }
-  }
-
-  const { error } = await db.from('reservas')
-    .update({ estado: nuevoEstado, updated_at: new Date().toISOString() })
-    .eq('reserva_id', reserva_id)
-    .eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
+  // Transición validada (máquina de estados) + aviso al cliente (canal bot)
+  const r = await transicionarEstado(
+    db, session.client_id, reserva_id, nuevoEstado,
+    (cli?.nombre_empresa as string) ?? 'Tu reserva',
+    { token: botCfg.token, activo: botCfg.activo },
+  )
+  if (!r.ok) return r
 
   revalidatePath('/portal/reservas')
   return { ok: true }
@@ -448,20 +421,28 @@ export async function guardarBotConfig(
     .single()
   const actual = parseBotConfig(cliente?.bot_config)
 
+  // Secreto del webhook (verifica el origen de los updates) y código para que el
+  // dueño vincule su chat (/start <codigo>). Se generan una vez y persisten.
+  const webhookSecret = actual.webhook_secret ?? crypto.randomUUID().replace(/-/g, '')
+  const codigoVinculo = actual.codigo_vinculo ?? corto()
+
   const nuevaConfig = {
     ...actual,
     token,
     nombre: nombre || actual.nombre,
     activo: token ? true : activo,
     confirmacion_automatica: confirmacionAutomatica,
+    webhook_secret: token ? webhookSecret : actual.webhook_secret,
+    codigo_vinculo: token ? codigoVinculo : actual.codigo_vinculo,
   }
 
-  // Si no cambió nada, no tocamos la BD
+  // Si no cambió nada y el webhook ya tiene secreto registrado, no tocamos la BD
   if (
     nuevaConfig.token === actual.token &&
     nuevaConfig.nombre === actual.nombre &&
     nuevaConfig.activo === actual.activo &&
-    nuevaConfig.confirmacion_automatica === actual.confirmacion_automatica
+    nuevaConfig.confirmacion_automatica === actual.confirmacion_automatica &&
+    actual.webhook_secret
   ) {
     return { ok: true }
   }
@@ -471,18 +452,24 @@ export async function guardarBotConfig(
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 
-  // Registrar webhook en Telegram si hay token
+  // Registrar webhook en Telegram con secret_token (POST, no en la query string)
   if (token) {
     const baseUrl = process.env.TELEGRAM_WEBHOOK_BASE_URL || 'https://claux.app'
     const webhookUrl = `${baseUrl}/api/telegram/webhook/${token}`
     try {
-      const whRes = await fetch(
-        `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`,
-      )
+      const whRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          url:             webhookUrl,
+          secret_token:    nuevaConfig.webhook_secret,
+          allowed_updates: ['message', 'callback_query'],
+        }),
+      })
       const whData = await whRes.json() as { ok?: boolean; description?: string }
       nuevaConfig.webhook_registrado = !!whData.ok
       if (!whData.ok) return { ok: false, error: `Error al registrar el webhook: ${whData.description}` }
-    } catch (e) {
+    } catch {
       return { ok: false, error: 'No se pudo conectar con Telegram para registrar el webhook.' }
     }
     // Actualizar estado del webhook
@@ -542,6 +529,13 @@ export async function eliminarBotConfig(): Promise<{ ok: boolean; error?: string
 
   const actual = parseBotConfig(cliente?.bot_config)
 
+  // Quitar el webhook en Telegram (best-effort) antes de borrar la config
+  if (actual.token) {
+    try {
+      await fetch(`https://api.telegram.org/bot${actual.token}/deleteWebhook`, { method: 'POST' })
+    } catch { /* no-op */ }
+  }
+
   const nuevaConfig = {
     ...actual,
     token: null,
@@ -549,6 +543,8 @@ export async function eliminarBotConfig(): Promise<{ ok: boolean; error?: string
     activo: false,
     webhook_registrado: false,
     notificar_owner_chat_id: null,
+    webhook_secret: null,
+    codigo_vinculo: null,
   }
 
   const { error } = await db.from('clients')
@@ -622,9 +618,9 @@ export async function crearReservaPublica(
 
   const db = createAdminClient()
 
-  // Confirmación automática
+  // Confirmación automática + datos para notificar al dueño
   const { data: cliente } = await db.from('clients')
-    .select('bot_config')
+    .select('bot_config, nombre_empresa')
     .eq('client_id', client_id)
     .single()
   const botCfg = parseBotConfig(cliente?.bot_config)
@@ -650,6 +646,18 @@ export async function crearReservaPublica(
   const result = data as { ok: boolean; error?: string }
   if (!result.ok) return { ok: false, error: result.error ?? 'Error al crear la reserva.' }
 
+  // Avisar al dueño por Telegram (no-op si no hay bot activo / sin chat vinculado)
+  await notificarReservaNueva(
+    { token: botCfg.token, activo: botCfg.activo, notificar_owner_chat_id: botCfg.notificar_owner_chat_id },
+    {
+      reserva_id: reservaId, fecha, hora: horaVal, personas,
+      nombre_cliente, telefono, notas,
+      estado: botCfg.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE',
+      telegram_chat_id: null,
+    },
+    (cliente?.nombre_empresa as string) ?? 'Tu negocio',
+  )
+
   return { ok: true, reserva_id: reservaId }
 }
 
@@ -662,6 +670,7 @@ export interface FranjaPublica {
   hora_fin:         string | null
   capacidad:        number
   duracion_minutos: number
+  dias_semana:      number[] | null
 }
 
 export interface NegocioPublico {
@@ -684,7 +693,7 @@ export async function obtenerReservasPublicas(slug: string): Promise<{
   if (!cliente) return { negocio: null, franjas: [], client_id: null }
 
   const { data: franjas } = await db.from('reserva_franjas')
-    .select('franja_id, nombre, hora_inicio, hora_fin, capacidad, duracion_minutos')
+    .select('franja_id, nombre, hora_inicio, hora_fin, capacidad, duracion_minutos, dias_semana')
     .eq('client_id', cliente.client_id)
     .eq('activa', true)
     .order('hora_inicio', { ascending: true, nullsFirst: true })

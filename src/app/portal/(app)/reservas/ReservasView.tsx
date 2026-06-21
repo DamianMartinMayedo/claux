@@ -17,8 +17,8 @@ import {
   type ReservaFranja,
   type ReservaConFranja,
   type ReservaPageData,
-  type EstadoReserva,
 } from '@/app/actions/portal/reservas'
+import { type EstadoReserva } from '@/lib/reservas/estado'
 import { Calendar, Check, Copy, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -980,6 +980,20 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                 </tbody>
               </table>
             </div>
+
+            {!data.bot_config.notificar_owner_chat_id ? (
+              <div className="info-box">
+                <strong className="info-box-title">Vincula tu chat para recibir avisos</strong>
+                <span className="text-xs-muted">
+                  Abre tu bot en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                  Recibirás ahí cada reserva nueva, con botones para confirmarla o rechazarla.
+                </span>
+              </div>
+            ) : (
+              <div className="info-box">
+                <span className="text-xs-muted">✓ Chat del dueño vinculado · recibes los avisos de reservas nuevas.</span>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -988,7 +1002,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <span className="text-xs-muted">
                 Abre <strong>@BotFather</strong> en Telegram, crea un bot con <code>/newbot</code> y pega aquí el token.
                 El nombre de usuario debe terminar en <strong>_bot</strong> (ej: LaBodeguita_bot).
-                Luego envía <code>/start</code> a tu bot desde tu Telegram personal para vincularlo.
+                Tras guardar verás un código para vincular tu chat y recibir los avisos de reservas.
               </span>
             </div>
 

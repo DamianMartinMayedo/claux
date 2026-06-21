@@ -185,11 +185,20 @@ la decide la plantilla del sector:
 | Clave interna (estable) | Etiqueta en restaurante | Etiqueta en otros sectores |
 |---|---|---|
 | `catalogo_qr` | "Menú" | "Catálogo", "Servicios", "Carta de tratamientos"… |
-| `reservas_citas` | "Reservas" (mesas) | "Citas" (peluquería), "Clases" (gimnasio)… |
+| `reservas_citas` (modo *aforo*) | "Reservas" (mesas) | "Reservas", "Clases" (gimnasio)… |
+| `agenda` (modo *agenda*) | — | "Citas" (peluquería/clínica), "Reservas" (alquiler de cancha)… |
 
-Regla: **el código usa la clave; la etiqueta se resuelve por sector** (tabla/constante de plantillas, a
-crear en implementación). Nunca poner "menu" en una clave, ruta de BD o flag. Las 14 claves ERP actuales no
-se renombran (es arriesgado y no aportan al cambio).
+> **Decisión de producto (junio 2026): reservas y citas son DOS funcionalidades contratables por separado**,
+> no un único módulo con dos modos. `reservas_citas` cubre el *aforo* (capacidad por franja: mesas/personas);
+> el nuevo `agenda` cubre la *agenda por recurso/profesional* (1 cita por recurso y slot, con servicios de
+> duración). Cada negocio contrata la que aplica; gating independiente. Esto sustituye la idea previa de un
+> único `reservas_citas` con etiqueta por sector. `reservas_citas` **no se renombra** (hay datos en
+> `clients.modulos_activos`); la nueva clave `agenda` evita colisión.
+
+Regla: **el código usa la clave; la etiqueta se resuelve por sector**. Mecanismo **ya implementado**: tabla
+`plantillas_sector` (etiquetas + módulos sugeridos por sector) + `clients.sector` + helper `src/lib/sector.ts`
+(`etiquetasDe`) y la server action `obtenerEtiquetasNegocio()`. Nunca poner "menu"/"mesa" en una clave, ruta
+de BD o flag. Las 14 claves ERP actuales no se renombran (es arriesgado y no aportan al cambio).
 
 ## 7. La IA es UN módulo, no features sueltos
 

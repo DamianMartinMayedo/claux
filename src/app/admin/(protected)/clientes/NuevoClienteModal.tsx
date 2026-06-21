@@ -20,8 +20,15 @@ type ModuloCatalogo = {
   tipo: string
 }
 
+type PlantillaSector = {
+  sector:  string
+  nombre:  string
+  modulos: string[]
+}
+
 type Props = {
   catalogo:          ModuloCatalogo[]
+  plantillas:        PlantillaSector[]
   setupDefault:      number
   descuentoAnualPct: number
 }
@@ -32,7 +39,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
   { label: 'Funcionalidades',     tipo: 'funcionalidad' },
 ]
 
-export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnualPct }: Props) {
+export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, descuentoAnualPct }: Props) {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string } | null>(null)
@@ -42,8 +49,17 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
 
   const baseClave = catalogo.find(m => m.es_base)?.clave ?? 'base'
   const [seleccionados, setSeleccionados] = useState<string[]>([baseClave])
+  const [sector, setSector] = useState('')
   const [tarifa, setTarifa] = useState('estandar')
   const [ciclo, setCiclo]   = useState('mensual')
+
+  // Al elegir un sector, preselecciona los módulos recomendados (base siempre).
+  function elegirSector(s: string) {
+    setSector(s)
+    const pl = plantillas.find(p => p.sector === s)
+    const sugeridos = pl ? pl.modulos.filter(c => c !== baseClave && catalogo.some(m => m.clave === c)) : []
+    setSeleccionados([baseClave, ...sugeridos])
+  }
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
   const precioMensual = catalogo
@@ -71,6 +87,7 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
 
   function handleOpen() {
     setSeleccionados([baseClave])
+    setSector('')
     setTarifa('estandar')
     setCiclo('mensual')
     setOpen(true)
@@ -136,6 +153,16 @@ export default function NuevoClienteModal({ catalogo, setupDefault, descuentoAnu
                     <label>Email del administrador <span className="required">*</span></label>
                     <input name="email_admin" type="email" className="input" required placeholder="admin@empresa.com" />
                   </div>
+                </div>
+
+                {/* Sector del negocio: preselecciona módulos recomendados y adapta etiquetas */}
+                <div className="input-group">
+                  <label>Sector del negocio</label>
+                  <select name="sector" className="input" value={sector} onChange={e => elegirSector(e.target.value)}>
+                    <option value="">Sin especificar</option>
+                    {plantillas.map(p => <option key={p.sector} value={p.sector}>{p.nombre}</option>)}
+                  </select>
+                  <span className="input-hint">Activa los módulos recomendados y adapta las etiquetas (Reservas/Citas, Mesa/Profesional…).</span>
                 </div>
 
                 {/* Tarifa */}
