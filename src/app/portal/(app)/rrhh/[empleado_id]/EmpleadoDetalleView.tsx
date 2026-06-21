@@ -1,7 +1,7 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import Link                        from 'next/link'
 import { useRouter }               from 'next/navigation'
 import {
@@ -11,14 +11,24 @@ import {
   eliminarContrato,
   guardarConceptoEmpleado,
   eliminarConceptoEmpleado,
+  confirmarNomina,
   type EmpleadoDetalleData,
   type Contrato,
   type ConceptoEmpleado,
   type TipoContrato,
   type Periodicidad,
+  type NominaConLineas,
 } from '@/app/actions/portal/rrhh'
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { FileText, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import {
+  NominaDetalleModal,
+  ConfirmarNominaModal,
+  PagarNominaModal,
+  formatMonto,
+  hoyISO as hoyISOShared,
+  formatPeriodo,
+} from '../../_shared/NominaDetalleModal'
 
 // ── Constantes / helpers ────────────────────────────────────────────────────────
 
@@ -31,20 +41,11 @@ const PERIODICIDAD_LABEL: Record<Periodicidad, string> = {
 const TIPOS_CONTRATO: TipoContrato[]  = ['INDEFINIDO', 'TEMPORAL', 'POR_OBRA', 'PRACTICAS']
 const PERIODICIDADES:  Periodicidad[] = ['MENSUAL', 'QUINCENAL', 'SEMANAL', 'POR_HORA']
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function hoyISO(): string { return hoyISOShared() }
 function formatFecha(f: string | null): string {
   if (!f) return '—'
   const [y, m, d] = f.split('T')[0].split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-function formatPeriodo(periodo: string): string {
-  const [y, m] = periodo.split('-').map(Number)
-  if (!y || !m) return periodo
-  const s = new Date(y, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 // ── Modal: nuevo contrato (documento + PDF opcional) ─────────────────────────────
@@ -230,11 +231,14 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const { data, empleado, contratos, conceptos } = detalle
   const [isPending, startTransition] = useTransition()
 
-  const [showEdit,    setShowEdit]    = useState(false)
-  const [showBaja,    setShowBaja]    = useState(false)
-  const [showDelete,  setShowDelete]  = useState(false)
-  const [showNuevo,   setShowNuevo]   = useState(false)
-  const [delContrato, setDelContrato] = useState<Contrato | null>(null)
+  const [showEdit,      setShowEdit]      = useState(false)
+  const [showBaja,      setShowBaja]      = useState(false)
+  const [showDelete,    setShowDelete]    = useState(false)
+  const [showNuevo,     setShowNuevo]     = useState(false)
+  const [delContrato,   setDelContrato]   = useState<Contrato | null>(null)
+  const [detalleNominaId, setDetalleNominaId] = useState<string | null>(null)
+  const [confirmarNom,  setConfirmarNom]  = useState<NominaConLineas | null>(null)
+  const [pagarNom,      setPagarNom]      = useState<NominaConLineas | null>(null)
 
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
@@ -246,7 +250,20 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
     return l ? [{ nomina: n, linea: l }] : []
   })
 
+  const detalleVivo = useMemo(() =>
+    detalleNominaId ? data.nominas.find(n => n.nomina_id === detalleNominaId) ?? null : null,
+    [detalleNominaId, data.nominas])
+
   function refrescar() { router.refresh() }
+
+  function doConfirmarNomina() {
+    if (!confirmarNom) return
+    startTransition(async () => {
+      const res = await confirmarNomina(confirmarNom.nomina_id)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      setConfirmarNom(null); router.refresh()
+    })
+  }
 
   function reactivar() {
     startTransition(async () => {
@@ -381,7 +398,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
       {/* Nómina del trabajador */}
       <div className="det-card">
-        <div className="card-header"><h2 className="card-title">Nómina</h2></div>
+        <div className="card-header"><h2 className="card-title">Sus nóminas</h2></div>
         {miNomina.length === 0 ? (
           <div className="mon-empty">
             <Wallet size={36} strokeWidth={1} opacity={0.2} />
@@ -401,7 +418,8 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
               </thead>
               <tbody>
                 {miNomina.map(({ nomina, linea }) => (
-                  <tr key={nomina.nomina_id}>
+                  <tr key={nomina.nomina_id} className="table-row-clickable"
+                    onClick={() => setDetalleNominaId(nomina.nomina_id)}>
                     <td><strong>{formatPeriodo(nomina.periodo)}</strong></td>
                     <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.devengado)} {nomina.moneda}</td>
                     <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.deducciones)}</td>
@@ -453,6 +471,21 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
             </div>
           </div>
         </div>
+      )}
+      {detalleVivo && (
+        <NominaDetalleModal nomina={detalleVivo}
+          onClose={() => setDetalleNominaId(null)}
+          onChanged={() => router.refresh()}
+          onConfirmar={() => setConfirmarNom(detalleVivo)}
+          onPagar={() => { setPagarNom(detalleVivo); setDetalleNominaId(null) }} />
+      )}
+      {confirmarNom && (
+        <ConfirmarNominaModal nomina={confirmarNom} onConfirm={doConfirmarNomina}
+          onClose={() => setConfirmarNom(null)} isPending={isPending} />
+      )}
+      {pagarNom && (
+        <PagarNominaModal nomina={pagarNom} cuentas={data.cuentas}
+          onClose={() => setPagarNom(null)} onPaid={() => { setPagarNom(null); router.refresh() }} />
       )}
     </div>
   )

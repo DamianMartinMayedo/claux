@@ -18,6 +18,7 @@ export interface PerfilData {
   estado:           string
   suscripcion:      string
   fecha_expiracion: string | null
+  slug:             string | null
   // Mi usuario (editable)
   user_id:      string
   email:        string
@@ -36,7 +37,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   const [{ data: cliente }, { data: usuario }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
+      .select('nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, slug')
       .eq('client_id', session.client_id)
       .single(),
     db.from('client_users')
@@ -59,6 +60,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
     estado:           cliente.estado,
     suscripcion,
     fecha_expiracion: cliente.fecha_expiracion,
+    slug:             cliente.slug ?? null,
     user_id:          session.user_id,
     email:            session.email,
     nombre:           usuario.nombre,
@@ -79,8 +81,29 @@ export async function actualizarMiPerfil(formData: FormData): Promise<{
   const nombre          = ((formData.get('nombre')          as string) ?? '').trim() || null
   const password_actual = ((formData.get('password_actual') as string) ?? '').trim()
   const password_nueva  = ((formData.get('password_nueva')  as string) ?? '').trim()
+  const slugRaw         = ((formData.get('slug')            as string) ?? '').trim()
 
   const db = createAdminClient()
+
+  // Validar slug (opcional)
+  let slug: string | null = null
+  if (slugRaw) {
+    slug = slugRaw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    if (!slug || slug.length < 2) return { ok: false, error: 'El identificador público debe tener al menos 2 caracteres válidos.' }
+    // Verificar unicidad
+    const { data: existente } = await db.from('clients')
+      .select('client_id')
+      .eq('slug', slug)
+      .neq('client_id', session.client_id)
+      .maybeSingle()
+    if (existente) return { ok: false, error: 'Ese identificador ya está en uso. Elige otro.' }
+  }
+
+  // Actualizar slug en clients
+  const { error: slugErr } = await db.from('clients')
+    .update({ slug })
+    .eq('client_id', session.client_id)
+  if (slugErr) return { ok: false, error: slugErr.message }
 
   if (password_nueva) {
     // Validaciones de contraseña

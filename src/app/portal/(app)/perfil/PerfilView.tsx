@@ -4,7 +4,7 @@ import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
-import { Lock } from 'lucide-react'
+import { Lock, Globe } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -143,6 +143,24 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
                 defaultValue={perfil.nombre ?? ''}
                 placeholder="Tu nombre completo"
               />
+            </div>
+          </div>
+
+          {/* Slug público */}
+          <div className="prf-form-row">
+            <div className="input-group">
+              <label>Identificador público (URL)</label>
+              <input
+                className="input"
+                name="slug"
+                defaultValue={perfil.slug ?? ''}
+                placeholder="la-bodeguita"
+              />
+              <span className="input-hint">
+                {perfil.slug
+                  ? <>Tu página pública: <strong>claux.app/{perfil.slug}/reservar</strong></>
+                  : 'Define un identificador para compartir tu enlace de reservas (ej: la-bodeguita). Solo letras, números y guiones.'}
+              </span>
             </div>
           </div>
 
