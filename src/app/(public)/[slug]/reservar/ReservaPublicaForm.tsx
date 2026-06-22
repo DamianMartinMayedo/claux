@@ -68,6 +68,7 @@ export default function ReservaPublicaForm({
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [notas, setNotas] = useState('')
+  const [hp, setHp] = useState('')   // honeypot anti-bots
 
   const slotsBase = useMemo(() => generarSlots(franjas, fecha), [franjas, fecha])
   const [slots, setSlots] = useState<Slot[]>([])
@@ -132,6 +133,7 @@ export default function ReservaPublicaForm({
     fd.set('nombre', nombre)
     fd.set('telefono', telefono)
     fd.set('notas', notas)
+    fd.set('hp', hp)
     startTransition(async () => {
       const res = await crearReservaPublica(fd)
       if (!res.ok) { setError(res.error ?? 'Error al crear la reserva.'); return }
@@ -260,6 +262,9 @@ export default function ReservaPublicaForm({
                       <input className="rp-input" value={notas} onChange={e => setNotas(e.target.value)}
                         placeholder="Alergias, ocasión especial…" />
                     </div>
+
+                    <input type="text" className="rp-hp" name="hp" tabIndex={-1} autoComplete="off"
+                      aria-hidden="true" value={hp} onChange={e => setHp(e.target.value)} />
 
                     {error && <div className="rp-error">{error}</div>}
 

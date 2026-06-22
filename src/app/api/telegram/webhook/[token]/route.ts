@@ -71,6 +71,16 @@ export async function POST(
     }
   }
 
+  // 4a. Rate limit por chat (evita que un solo usuario inunde el bot)
+  const chatIdRaw = String(
+    (body.callback_query as TgCallback | undefined)?.message?.chat?.id ??
+    (body.message as TgMessage | undefined)?.chat?.id ?? '',
+  )
+  if (chatIdRaw) {
+    const { data: permitido } = await db.rpc('rl_hit', { p_key: `wh:${cliente.client_id}:${chatIdRaw}`, p_max: 25, p_window: 60 })
+    if (permitido === false) return NextResponse.json({ ok: true, throttled: true })
+  }
+
   // 4b. Limpieza ocasional de sesiones viejas (>1 día)
   if (Math.random() < 0.1) {
     const corte = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()

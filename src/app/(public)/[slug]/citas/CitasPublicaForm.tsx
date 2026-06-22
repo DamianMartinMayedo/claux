@@ -41,6 +41,7 @@ export default function CitasPublicaForm({
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [notas, setNotas] = useState('')
+  const [hp, setHp] = useState('')   // honeypot anti-bots
   const [tokenCita, setTokenCita] = useState<string | null>(null)
   const [error, setError] = useState('')
 
@@ -94,6 +95,7 @@ export default function CitasPublicaForm({
     fd.set('nombre', nombre)
     fd.set('telefono', telefono)
     fd.set('notas', notas)
+    fd.set('hp', hp)
     startTransition(async () => {
       const res = await crearCitaPublica(fd)
       if (!res.ok) { setError(res.error ?? 'No se pudo reservar la cita.'); return }
@@ -233,6 +235,8 @@ export default function CitasPublicaForm({
                     <label className="rp-label">Notas</label>
                     <input className="rp-input" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Algo que debamos saber…" />
                   </div>
+                  <input type="text" className="rp-hp" name="hp" tabIndex={-1} autoComplete="off"
+                    aria-hidden="true" value={hp} onChange={e => setHp(e.target.value)} />
                   {error && <div className="rp-error">{error}</div>}
                   <button type="submit" className="rp-btn-primary" disabled={isPending}>
                     {isPending ? <Loader2 size={16} className="rp-spin" /> : <Check size={16} />}

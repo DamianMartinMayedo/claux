@@ -6,6 +6,7 @@ import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
 import { enviarMensaje } from '@/lib/telegram/enviar'
+import { rateLimitOk } from '@/lib/rate-limit'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
@@ -445,6 +446,14 @@ export async function guardarSlug(
 export async function crearReservaPublica(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string; reserva_id?: string; token?: string }> {
+  // Honeypot: campo oculto que solo rellenan los bots → fingir éxito sin crear nada
+  if ((formData.get('hp') as string)?.trim()) return { ok: true }
+
+  // Rate limit por IP (anti-spam de reservas)
+  if (!await rateLimitOk('reserva_crear', 5, 300)) {
+    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+  }
+
   const client_id = (formData.get('client_id')  as string)?.trim()
   const franja_id = (formData.get('franja_id')  as string)?.trim()
   const fecha     = (formData.get('fecha')      as string)?.trim()
@@ -563,6 +572,8 @@ export async function obtenerDisponibilidadPublica(
   fecha: string,
   hora?: string,
 ): Promise<{ disponibles: number }> {
+  // Límite generoso para lecturas públicas de disponibilidad (anti-scraping)
+  if (!await rateLimitOk('disp_reserva', 90, 60)) return { disponibles: 0 }
   const db = createAdminClient()
 
   const { data: franja } = await db.from('reserva_franjas')
@@ -657,6 +668,9 @@ export async function obtenerReservaPublicaPorToken(token: string): Promise<Rese
 
 export async function cancelarReservaPublica(token: string): Promise<{ ok: boolean; error?: string }> {
   if (!token) return { ok: false, error: 'Enlace no válido.' }
+  if (!await rateLimitOk('reserva_cancelar', 10, 300)) {
+    return { ok: false, error: 'Demasiados intentos. Espera unos minutos.' }
+  }
   const db = createAdminClient()
 
   const { data: r } = await db.from('reservas')

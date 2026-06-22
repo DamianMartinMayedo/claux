@@ -177,6 +177,12 @@
 .rp-spin { animation: rp-spin .8s linear infinite; }
 @keyframes rp-spin { to { transform: rotate(360deg) } }
 
+/* Honeypot anti-bots: fuera de pantalla, invisible para usuarios reales */
+.rp-hp {
+  position: absolute !important; left: -9999px !important;
+  width: 1px; height: 1px; opacity: 0; pointer-events: none;
+}
+
 /* ── Citas: selección por pasos (servicio / profesional) ── */
 .rp-step-label {
   font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;

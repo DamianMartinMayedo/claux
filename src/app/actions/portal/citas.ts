@@ -6,6 +6,7 @@ import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
+import { rateLimitOk } from '@/lib/rate-limit'
 import { getPortalSession }  from './auth'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -432,6 +433,7 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
 export async function obtenerSlotsCita(
   client_id: string, servicio_id: string, recurso_id: string | null, fecha: string,
 ): Promise<SlotCita[]> {
+  if (!await rateLimitOk('slots_cita', 90, 60)) return []
   const db = createAdminClient()
   const { data, error } = await db.rpc('res_slots_cita', {
     p_client_id: client_id, p_servicio_id: servicio_id, p_recurso_id: recurso_id, p_fecha: fecha,
@@ -441,6 +443,14 @@ export async function obtenerSlotsCita(
 }
 
 export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
+  // Honeypot: campo oculto que solo rellenan los bots → fingir éxito sin crear nada
+  if ((formData.get('hp') as string)?.trim()) return { ok: true }
+
+  // Rate limit por IP (anti-spam de citas)
+  if (!await rateLimitOk('cita_crear', 5, 300)) {
+    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+  }
+
   const client_id      = (formData.get('client_id')   as string)?.trim()
   const servicio_id    = (formData.get('servicio_id') as string)?.trim()
   const recurso_id     = (formData.get('recurso_id')  as string)?.trim()
