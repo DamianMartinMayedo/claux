@@ -8,6 +8,7 @@ import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo } from '@/lib/modulos'
+import { type Cierre } from './reservas'
 import { getPortalSession }  from './auth'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export interface CitasPageData {
   bot_config:  BotConfig
   rrhh_activo: boolean
   empleados:   EmpleadoRRHH[]   // del módulo RRHH (vacío si no está activo)
+  cierres:     Cierre[]         // festivos/cierres del negocio (compartidos con Reservas)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -173,6 +175,10 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     }))
   }
 
+  const { data: cierresData } = await db.from('reserva_cierres')
+    .select('cierre_id, fecha_desde, fecha_hasta, motivo')
+    .eq('client_id', cid).gte('fecha_hasta', hoy()).order('fecha_desde')
+
   return {
     client_id:   cid,
     citas,
@@ -183,6 +189,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     bot_config:  parseBotConfig(cliRes.data?.bot_config_citas),
     rrhh_activo,
     empleados,
+    cierres:     (cierresData ?? []) as Cierre[],
   }
 }
 

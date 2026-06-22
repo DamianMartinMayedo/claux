@@ -51,12 +51,20 @@ export interface ReservaConFranja extends Reserva {
   franja_hora_fin:    string | null
 }
 
+export interface Cierre {
+  cierre_id:   string
+  fecha_desde: string
+  fecha_hasta: string
+  motivo:      string | null
+}
+
 export interface ReservaPageData {
   reservas:   ReservaConFranja[]
   franjas:    ReservaFranja[]
   bot_config: BotConfig
   slug:       string | null
   empresas:   { empresa_id: string; nombre: string }[]
+  cierres:    Cierre[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -66,6 +74,17 @@ function corto(): string {
 }
 function generarFranjaId():  string { return `FRA-${corto()}` }
 function generarReservaId(): string { return `RES-${corto()}` }
+function generarCierreId():  string { return `CIE-${corto()}` }
+
+// Cierres/festivos vigentes (hoy en adelante) del negocio
+async function cargarCierres(db: ReturnType<typeof createAdminClient>, client_id: string): Promise<Cierre[]> {
+  const { data } = await db.from('reserva_cierres')
+    .select('cierre_id, fecha_desde, fecha_hasta, motivo')
+    .eq('client_id', client_id)
+    .gte('fecha_hasta', hoyEnTz())
+    .order('fecha_desde')
+  return (data ?? []) as Cierre[]
+}
 
 // "Hoy" y "ahora" en la zona del negocio (America/Havana), no en UTC ni en la
 // hora del servidor (España/EEUU). Ver src/lib/fecha-tz.ts.
@@ -116,8 +135,9 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
 
   const bot_config = parseBotConfig(cliRes.data?.bot_config)
   const slug       = (cliRes.data?.slug as string) ?? null
+  const cierres    = await cargarCierres(db, session.client_id)
 
-  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })) }
+  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })), cierres }
 }
 
 // ── Crear reserva (manual, desde el panel) ────────────────────────────────────
@@ -441,6 +461,46 @@ export async function guardarSlug(
   return { ok: true }
 }
 
+// ── Cierres / festivos (compartidos por Reservas y Citas) ──────────────────────
+
+export async function guardarCierre(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const desde    = (formData.get('fecha_desde') as string)?.trim()
+  const hastaRaw = (formData.get('fecha_hasta') as string)?.trim()
+  const motivo   = (formData.get('motivo')      as string)?.trim() || null
+  if (!desde) return { ok: false, error: 'La fecha es obligatoria.' }
+  const hasta = hastaRaw || desde
+  if (hasta < desde) return { ok: false, error: 'La fecha final no puede ser anterior a la inicial.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('reserva_cierres').insert({
+    cierre_id: generarCierreId(), client_id: session.client_id, fecha_desde: desde, fecha_hasta: hasta, motivo,
+  })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/reservas')
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
+export async function eliminarCierre(cierre_id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('reserva_cierres').delete()
+    .eq('cierre_id', cierre_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/reservas')
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
 // ── Reserva pública (sin sesión de portal, desde el formulario web) ───────────
 
 export async function crearReservaPublica(
@@ -575,6 +635,11 @@ export async function obtenerDisponibilidadPublica(
   // Límite generoso para lecturas públicas de disponibilidad (anti-scraping)
   if (!await rateLimitOk('disp_reserva', 90, 60)) return { disponibles: 0 }
   const db = createAdminClient()
+
+  // Negocio cerrado ese día (festivo/cierre) → sin disponibilidad
+  const { data: cerr } = await db.from('reserva_cierres').select('cierre_id')
+    .eq('client_id', client_id).lte('fecha_desde', fecha).gte('fecha_hasta', fecha).limit(1)
+  if (cerr && cerr.length > 0) return { disponibles: 0 }
 
   const { data: franja } = await db.from('reserva_franjas')
     .select('capacidad, duracion_minutos')

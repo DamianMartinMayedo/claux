@@ -12,6 +12,7 @@ import {
   type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita,
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
+import CierresSection from '@/components/portal/CierresSection'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import { CalendarDays, Check, Copy, Download, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
@@ -955,6 +956,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           </>
         )}
       </div>
+
+      {/* Cierres y festivos */}
+      <CierresSection cierres={data.cierres} />
 
       </>
       )}
