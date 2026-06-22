@@ -1341,3 +1341,19 @@
 /* ── Reservas · Config padding ── */
 .res-conf-pad { padding: var(--space-4) var(--space-6); }
 .res-conf-pad-top { padding-top: var(--space-2); }
+
+/* ── Citas · Lista de checks (servicios que presta un recurso) ── */
+.cita-chk-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.cita-chk-item { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; }
+
+/* ── Citas · Horario semanal por recurso ── */
+.cita-hor-grid { display: flex; flex-direction: column; gap: var(--space-2); }
+.cita-hor-row {
+  display: grid; grid-template-columns: 3rem 1fr auto 1fr;
+  align-items: center; gap: var(--space-2);
+}
+.cita-hor-day { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
+.cita-hor-sep { font-size: var(--text-sm); color: var(--color-text-muted); text-align: center; }
+
+/* ── Citas · Precio del servicio en celda ── */
+.cita-precio { font-variant-numeric: tabular-nums; }

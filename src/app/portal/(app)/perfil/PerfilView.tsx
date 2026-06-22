@@ -146,24 +146,6 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
             </div>
           </div>
 
-          {/* Slug público */}
-          <div className="prf-form-row">
-            <div className="input-group">
-              <label>Identificador público (URL)</label>
-              <input
-                className="input"
-                name="slug"
-                defaultValue={perfil.slug ?? ''}
-                placeholder="la-bodeguita"
-              />
-              <span className="input-hint">
-                {perfil.slug
-                  ? <>Tu página pública: <strong>claux.app/{perfil.slug}/reservar</strong></>
-                  : 'Define un identificador para compartir tu enlace de reservas (ej: la-bodeguita). Solo letras, números y guiones.'}
-              </span>
-            </div>
-          </div>
-
           {/* Toggle cambiar contraseña */}
           {!showPwd ? (
             <div>

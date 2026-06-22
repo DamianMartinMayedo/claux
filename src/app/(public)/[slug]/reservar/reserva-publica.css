@@ -151,3 +151,21 @@
 
 .rp-spin { animation: rp-spin .8s linear infinite; }
 @keyframes rp-spin { to { transform: rotate(360deg) } }
+
+/* ── Citas: selección por pasos (servicio / profesional) ── */
+.rp-step-label {
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--rp-text-muted); margin: 0 0 8px;
+}
+.rp-opt-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.rp-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 14px 16px; text-align: left;
+  background: var(--rp-bg); border: 2px solid var(--rp-border);
+  border-radius: 12px; cursor: pointer; font-family: var(--rp-font); color: var(--rp-text);
+  transition: border-color .15s;
+}
+.rp-opt:hover { border-color: var(--rp-primary); }
+.rp-opt-active { border-color: var(--rp-primary); }
+.rp-opt-main { font-size: 15px; font-weight: 600; }
+.rp-opt-meta { font-size: 13px; color: var(--rp-text-muted); white-space: nowrap; }

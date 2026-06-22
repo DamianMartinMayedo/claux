@@ -4,6 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
+import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
@@ -48,17 +49,6 @@ export interface ReservaConFranja extends Reserva {
   franja_hora_fin:    string | null
 }
 
-export interface BotConfig {
-  token:                    string | null
-  nombre:                   string | null
-  activo:                   boolean
-  webhook_registrado:       boolean
-  notificar_owner_chat_id:  string | null
-  confirmacion_automatica:  boolean
-  webhook_secret:           string | null
-  codigo_vinculo:           string | null
-}
-
 export interface ReservaPageData {
   reservas:   ReservaConFranja[]
   franjas:    ReservaFranja[]
@@ -79,36 +69,6 @@ function generarReservaId(): string { return `RES-${corto()}` }
 // hora del servidor (España/EEUU). Ver src/lib/fecha-tz.ts.
 function hoy(): string { return hoyEnTz() }
 function horaAhora(): string { return ahoraEnTz() }
-
-const BOT_CONFIG_DEFAULTS: BotConfig = {
-  token:                   null,
-  nombre:                  null,
-  activo:                  false,
-  webhook_registrado:      false,
-  notificar_owner_chat_id: null,
-  confirmacion_automatica: false,
-  webhook_secret:          null,
-  codigo_vinculo:          null,
-}
-
-function parseBotConfig(raw: unknown): BotConfig {
-  if (!raw || typeof raw !== 'object') return { ...BOT_CONFIG_DEFAULTS }
-  const c = raw as Record<string, unknown>
-  try {
-    return {
-      token:                   typeof c.token                    === 'string' ? c.token                    : null,
-      nombre:                  typeof c.nombre                   === 'string' ? c.nombre                   : null,
-      activo:                  typeof c.activo                   === 'boolean' ? c.activo                 : false,
-      webhook_registrado:      typeof c.webhook_registrado       === 'boolean' ? c.webhook_registrado     : false,
-      notificar_owner_chat_id: typeof c.notificar_owner_chat_id  === 'string'  ? c.notificar_owner_chat_id : null,
-      confirmacion_automatica: typeof c.confirmacion_automatica  === 'boolean' ? c.confirmacion_automatica : false,
-      webhook_secret:          typeof c.webhook_secret           === 'string'  ? c.webhook_secret          : null,
-      codigo_vinculo:          typeof c.codigo_vinculo           === 'string'  ? c.codigo_vinculo          : null,
-    }
-  } catch {
-    return { ...BOT_CONFIG_DEFAULTS }
-  }
-}
 
 function formatFecha(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
@@ -405,79 +365,13 @@ export async function guardarBotConfig(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
-  const token                = (formData.get('token')                 as string)?.trim() || null
-  const nombre               = (formData.get('nombre')                as string)?.trim() || null
-  const activo               = formData.get('activo')              === 'true'
-  const confirmacionAutomatica = formData.get('confirmacion_automatica') === 'true'
-
-  if (activo && !token) return { ok: false, error: 'El token del bot es obligatorio para activarlo.' }
-
-  const db = createAdminClient()
-
-  // Leer config actual para no pisar campos que no vienen en el form
-  const { data: cliente } = await db.from('clients')
-    .select('bot_config')
-    .eq('client_id', session.client_id)
-    .single()
-  const actual = parseBotConfig(cliente?.bot_config)
-
-  // Secreto del webhook (verifica el origen de los updates) y código para que el
-  // dueño vincule su chat (/start <codigo>). Se generan una vez y persisten.
-  const webhookSecret = actual.webhook_secret ?? crypto.randomUUID().replace(/-/g, '')
-  const codigoVinculo = actual.codigo_vinculo ?? corto()
-
-  const nuevaConfig = {
-    ...actual,
-    token,
-    nombre: nombre || actual.nombre,
-    activo: token ? true : activo,
-    confirmacion_automatica: confirmacionAutomatica,
-    webhook_secret: token ? webhookSecret : actual.webhook_secret,
-    codigo_vinculo: token ? codigoVinculo : actual.codigo_vinculo,
-  }
-
-  // Si no cambió nada y el webhook ya tiene secreto registrado, no tocamos la BD
-  if (
-    nuevaConfig.token === actual.token &&
-    nuevaConfig.nombre === actual.nombre &&
-    nuevaConfig.activo === actual.activo &&
-    nuevaConfig.confirmacion_automatica === actual.confirmacion_automatica &&
-    actual.webhook_secret
-  ) {
-    return { ok: true }
-  }
-
-  const { error } = await db.from('clients')
-    .update({ bot_config: nuevaConfig })
-    .eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-
-  // Registrar webhook en Telegram con secret_token (POST, no en la query string)
-  if (token) {
-    const baseUrl = process.env.TELEGRAM_WEBHOOK_BASE_URL || 'https://claux.app'
-    const webhookUrl = `${baseUrl}/api/telegram/webhook/${token}`
-    try {
-      const whRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          url:             webhookUrl,
-          secret_token:    nuevaConfig.webhook_secret,
-          allowed_updates: ['message', 'callback_query'],
-        }),
-      })
-      const whData = await whRes.json() as { ok?: boolean; description?: string }
-      nuevaConfig.webhook_registrado = !!whData.ok
-      if (!whData.ok) return { ok: false, error: `Error al registrar el webhook: ${whData.description}` }
-    } catch {
-      return { ok: false, error: 'No se pudo conectar con Telegram para registrar el webhook.' }
-    }
-    // Actualizar estado del webhook
-    await db.from('clients')
-      .update({ bot_config: nuevaConfig })
-      .eq('client_id', session.client_id)
-  }
-
+  const r = await guardarBotConfigCol(createAdminClient(), session.client_id, 'bot_config', {
+    token:                  (formData.get('token')  as string)?.trim() || null,
+    nombre:                 (formData.get('nombre') as string)?.trim() || null,
+    activo:                 formData.get('activo') === 'true',
+    confirmacionAutomatica: formData.get('confirmacion_automatica') === 'true',
+  })
+  if (!r.ok) return r
   revalidatePath('/portal/reservas')
   return { ok: true }
 }
@@ -491,24 +385,8 @@ export async function toggleActivoBot(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
-  const db = createAdminClient()
-
-  const { data: cliente } = await db.from('clients')
-    .select('bot_config')
-    .eq('client_id', session.client_id)
-    .single()
-
-  const actual = parseBotConfig(cliente?.bot_config)
-
-  if (!actual.token) return { ok: false, error: 'No hay un bot configurado.' }
-
-  const nuevaConfig = { ...actual, activo }
-
-  const { error } = await db.from('clients')
-    .update({ bot_config: nuevaConfig })
-    .eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-
+  const r = await toggleActivoBotCol(createAdminClient(), session.client_id, 'bot_config', activo)
+  if (!r.ok) return r
   revalidatePath('/portal/reservas')
   return { ok: true }
 }
@@ -520,38 +398,8 @@ export async function eliminarBotConfig(): Promise<{ ok: boolean; error?: string
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
-  const db = createAdminClient()
-
-  const { data: cliente } = await db.from('clients')
-    .select('bot_config')
-    .eq('client_id', session.client_id)
-    .single()
-
-  const actual = parseBotConfig(cliente?.bot_config)
-
-  // Quitar el webhook en Telegram (best-effort) antes de borrar la config
-  if (actual.token) {
-    try {
-      await fetch(`https://api.telegram.org/bot${actual.token}/deleteWebhook`, { method: 'POST' })
-    } catch { /* no-op */ }
-  }
-
-  const nuevaConfig = {
-    ...actual,
-    token: null,
-    nombre: null,
-    activo: false,
-    webhook_registrado: false,
-    notificar_owner_chat_id: null,
-    webhook_secret: null,
-    codigo_vinculo: null,
-  }
-
-  const { error } = await db.from('clients')
-    .update({ bot_config: nuevaConfig })
-    .eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-
+  const r = await eliminarBotConfigCol(createAdminClient(), session.client_id, 'bot_config')
+  if (!r.ok) return r
   revalidatePath('/portal/reservas')
   return { ok: true }
 }

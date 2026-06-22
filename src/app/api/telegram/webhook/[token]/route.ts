@@ -8,6 +8,14 @@ interface TgChat { id?: number | string }
 interface TgMessage { chat?: TgChat; text?: string }
 interface TgCallback { id?: string; data?: string; message?: TgMessage }
 
+// El bot de Citas aún no tiene flujo conversacional de reserva: responde con el
+// enlace a la mini-web de citas (el de Reservas sí usa el motor `manejarMensaje`).
+function fallbackCitas(slug: string | null): string {
+  return slug
+    ? `Para pedir una cita, entra aquí:\nclaux.app/${slug}/citas`
+    : 'Para pedir una cita, contacta con el negocio.'
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
@@ -15,13 +23,31 @@ export async function POST(
   const { token } = await params
   const db = createAdminClient()
 
-  // 1. Resolver el negocio por token (índice funcional bot_config->>'token')
-  const { data: cliente } = await db.from('clients')
-    .select('client_id, nombre_empresa, slug, bot_config')
-    .eq('bot_config->>token', token)
-    .maybeSingle()
+  // 1. Resolver el negocio por token. Reservas y Citas tienen bots INDEPENDIENTES
+  //    (columnas `bot_config` / `bot_config_citas`); probamos ambas por su índice.
+  let cliente: { client_id: string; nombre_empresa: string | null; slug: string | null } | null = null
+  let cfg: Record<string, unknown> = {}
+  let columna: 'bot_config' | 'bot_config_citas' = 'bot_config'
+  let modulo: 'reservas' | 'citas' = 'reservas'
 
-  const cfg = ((cliente?.bot_config as Record<string, unknown>) ?? {})
+  const rRes = await db.from('clients')
+    .select('client_id, nombre_empresa, slug, bot_config')
+    .eq('bot_config->>token', token).maybeSingle()
+  if (rRes.data) {
+    cliente = { client_id: rRes.data.client_id, nombre_empresa: rRes.data.nombre_empresa, slug: rRes.data.slug }
+    cfg = (rRes.data.bot_config as Record<string, unknown>) ?? {}
+    columna = 'bot_config'; modulo = 'reservas'
+  } else {
+    const rCit = await db.from('clients')
+      .select('client_id, nombre_empresa, slug, bot_config_citas')
+      .eq('bot_config_citas->>token', token).maybeSingle()
+    if (rCit.data) {
+      cliente = { client_id: rCit.data.client_id, nombre_empresa: rCit.data.nombre_empresa, slug: rCit.data.slug }
+      cfg = (rCit.data.bot_config_citas as Record<string, unknown>) ?? {}
+      columna = 'bot_config_citas'; modulo = 'citas'
+    }
+  }
+
   if (!cliente || cfg.activo !== true) {
     return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
   }
@@ -93,11 +119,16 @@ export async function POST(
       return NextResponse.json({ ok: r.ok })
     }
 
-    // 5b. Flujo conversacional normal
+    // 5b. Flujo conversacional normal (solo Reservas)
     try {
-      const respuesta = await manejarMensaje(ctx, data, chat_id)
-      await answerCallback(token, cqId, '✓')
-      await enviarMensaje(token, chat_id, respuesta.texto, respuesta.markup)
+      if (modulo === 'citas') {
+        await answerCallback(token, cqId, '✓')
+        await enviarMensaje(token, chat_id, fallbackCitas(ctx.slug))
+      } else {
+        const respuesta = await manejarMensaje(ctx, data, chat_id)
+        await answerCallback(token, cqId, '✓')
+        await enviarMensaje(token, chat_id, respuesta.texto, respuesta.markup)
+      }
     } catch (e) {
       console.error('Callback error:', e)
       return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
@@ -122,10 +153,16 @@ export async function POST(
   if (codigo && startMatch && startMatch[1].trim() === codigo) {
     if (!cfg.notificar_owner_chat_id) {
       await db.from('clients')
-        .update({ bot_config: { ...cfg, notificar_owner_chat_id: chat_id } })
+        .update({ [columna]: { ...cfg, notificar_owner_chat_id: chat_id } })
         .eq('client_id', cliente.client_id)
     }
-    await enviarMensaje(token, chat_id, '✅ Bot vinculado. Aquí recibirás los avisos de reservas nuevas.')
+    await enviarMensaje(token, chat_id, `✅ Bot vinculado. Aquí recibirás los avisos de ${modulo === 'citas' ? 'citas' : 'reservas'} nuevas.`)
+    return NextResponse.json({ ok: true })
+  }
+
+  // Citas aún no tiene flujo conversacional de reserva
+  if (modulo === 'citas') {
+    await enviarMensaje(token, chat_id, fallbackCitas(ctx.slug))
     return NextResponse.json({ ok: true })
   }
 
