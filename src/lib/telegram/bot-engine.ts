@@ -45,6 +45,7 @@ export async function cargarSesion(clientId: string, chatId: string): Promise<Se
     .select('paso, datos')
     .eq('client_id', clientId)
     .eq('chat_id', chatId)
+    .eq('modulo', 'reservas')
     .maybeSingle()
   return {
     paso: (data?.paso as PasoReserva) ?? null,
@@ -55,8 +56,8 @@ export async function cargarSesion(clientId: string, chatId: string): Promise<Se
 export async function guardarSesion(clientId: string, chatId: string, paso: PasoReserva | null, datos: DatosReserva) {
   const db = createAdminClient()
   await db.from('telegram_sessions')
-    .upsert({ client_id: clientId, chat_id: chatId, paso, datos, updated_at: new Date().toISOString() },
-            { onConflict: 'client_id,chat_id' })
+    .upsert({ client_id: clientId, chat_id: chatId, modulo: 'reservas', paso, datos, updated_at: new Date().toISOString() },
+            { onConflict: 'client_id,chat_id,modulo' })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -69,13 +70,13 @@ function isodowDe(fecha: string): number {
   const dow = new Date(y, m - 1, d).getDay() // 0=Dom … 6=Sáb
   return dow === 0 ? 7 : dow                  // 1=Lun … 7=Dom
 }
-function formatFechaStr(f: string): string {
+export function formatFechaStr(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
 }
-function formatHora(h: string): string { return h.substring(0, 5) }
+export function formatHora(h: string): string { return h.substring(0, 5) }
 
-function parseFecha(texto: string): string | null {
+export function parseFecha(texto: string): string | null {
   const t = texto.trim().toLowerCase()
   const hoyStr = hoyISO() // YYYY-MM-DD en la zona del negocio
   if (t === 'hoy') return hoyStr

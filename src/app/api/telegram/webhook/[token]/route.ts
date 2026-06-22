@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { manejarMensaje, type BotContext } from '@/lib/telegram/bot-engine'
+import { manejarMensajeCitas } from '@/lib/telegram/bot-engine-citas'
 import { enviarMensaje, answerCallback } from '@/lib/telegram/enviar'
 import { transicionarEstado, type EstadoReserva } from '@/lib/reservas/estado'
 
 interface TgChat { id?: number | string }
 interface TgMessage { chat?: TgChat; text?: string }
 interface TgCallback { id?: string; data?: string; message?: TgMessage }
-
-// El bot de Citas aún no tiene flujo conversacional de reserva: responde con el
-// enlace a la mini-web de citas (el de Reservas sí usa el motor `manejarMensaje`).
-function fallbackCitas(slug: string | null): string {
-  return slug
-    ? `Para pedir una cita, entra aquí:\nclaux.app/${slug}/citas`
-    : 'Para pedir una cita, contacta con el negocio.'
-}
 
 export async function POST(
   req: NextRequest,
@@ -119,16 +112,13 @@ export async function POST(
       return NextResponse.json({ ok: r.ok })
     }
 
-    // 5b. Flujo conversacional normal (solo Reservas)
+    // 5b. Flujo conversacional (según la funcionalidad del bot)
     try {
-      if (modulo === 'citas') {
-        await answerCallback(token, cqId, '✓')
-        await enviarMensaje(token, chat_id, fallbackCitas(ctx.slug))
-      } else {
-        const respuesta = await manejarMensaje(ctx, data, chat_id)
-        await answerCallback(token, cqId, '✓')
-        await enviarMensaje(token, chat_id, respuesta.texto, respuesta.markup)
-      }
+      const respuesta = modulo === 'citas'
+        ? await manejarMensajeCitas(ctx, data, chat_id)
+        : await manejarMensaje(ctx, data, chat_id)
+      await answerCallback(token, cqId, '✓')
+      await enviarMensaje(token, chat_id, respuesta.texto, respuesta.markup)
     } catch (e) {
       console.error('Callback error:', e)
       return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
@@ -160,13 +150,9 @@ export async function POST(
     return NextResponse.json({ ok: true })
   }
 
-  // Citas aún no tiene flujo conversacional de reserva
-  if (modulo === 'citas') {
-    await enviarMensaje(token, chat_id, fallbackCitas(ctx.slug))
-    return NextResponse.json({ ok: true })
-  }
-
-  const respuesta = await manejarMensaje(ctx, texto, chat_id)
+  const respuesta = modulo === 'citas'
+    ? await manejarMensajeCitas(ctx, texto, chat_id)
+    : await manejarMensaje(ctx, texto, chat_id)
   await enviarMensaje(token, chat_id, respuesta.texto, respuesta.markup)
   return NextResponse.json({ ok: true })
 }
