@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
+import { enviarMensaje } from '@/lib/telegram/enviar'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
@@ -443,7 +444,7 @@ export async function guardarSlug(
 
 export async function crearReservaPublica(
   formData: FormData,
-): Promise<{ ok: boolean; error?: string; reserva_id?: string }> {
+): Promise<{ ok: boolean; error?: string; reserva_id?: string; token?: string }> {
   const client_id = (formData.get('client_id')  as string)?.trim()
   const franja_id = (formData.get('franja_id')  as string)?.trim()
   const fecha     = (formData.get('fecha')      as string)?.trim()
@@ -506,7 +507,10 @@ export async function crearReservaPublica(
     (cliente?.nombre_empresa as string) ?? 'Tu negocio',
   )
 
-  return { ok: true, reserva_id: reservaId }
+  // Token público para que el cliente pueda gestionar/cancelar su reserva
+  const { data: tk } = await db.from('reservas').select('token').eq('reserva_id', reservaId).single()
+
+  return { ok: true, reserva_id: reservaId, token: (tk?.token as string) ?? undefined }
 }
 
 // ── Datos públicos para el formulario de reservas ──────────────────────────────
@@ -587,4 +591,110 @@ export async function obtenerDisponibilidadPublica(
 
   const ocupado = (ocupantes ?? []).reduce((s: number, r: { personas: number }) => s + Number(r.personas), 0)
   return { disponibles: Math.max(0, Number(franja.capacidad) - ocupado) }
+}
+
+// ── Gestión pública por token (cancelar reserva/cita sin cuenta) ───────────────
+
+export interface ReservaPublicaToken {
+  token:          string
+  tipo:           'reserva' | 'cita'
+  negocio:        string
+  slug:           string | null
+  fecha:          string
+  hora:           string | null
+  hora_fin:       string | null
+  personas:       number
+  nombre_cliente: string
+  detalle:        string          // turno, o "servicio · recurso"
+  estado:         EstadoReserva
+  cancelable:     boolean
+}
+
+export async function obtenerReservaPublicaPorToken(token: string): Promise<ReservaPublicaToken | null> {
+  if (!token) return null
+  const db = createAdminClient()
+
+  const { data: r } = await db.from('reservas')
+    .select('client_id, franja_id, recurso_id, servicio_id, fecha, hora, hora_fin, personas, nombre_cliente, estado, token')
+    .eq('token', token)
+    .maybeSingle()
+  if (!r) return null
+
+  const { data: cli } = await db.from('clients')
+    .select('nombre_empresa, slug').eq('client_id', r.client_id).single()
+
+  const esCita = !!r.recurso_id
+  let detalle = '—'
+  if (esCita) {
+    const [srv, rec] = await Promise.all([
+      r.servicio_id ? db.from('servicios').select('nombre').eq('servicio_id', r.servicio_id).maybeSingle() : Promise.resolve({ data: null }),
+      db.from('recursos').select('nombre').eq('recurso_id', r.recurso_id).maybeSingle(),
+    ])
+    detalle = [srv.data?.nombre, rec.data?.nombre].filter(Boolean).join(' · ') || '—'
+  } else if (r.franja_id) {
+    const { data: fr } = await db.from('reserva_franjas').select('nombre').eq('franja_id', r.franja_id).maybeSingle()
+    detalle = fr?.nombre ?? '—'
+  }
+
+  const estado = r.estado as EstadoReserva
+  const cancelable = (estado === 'PENDIENTE' || estado === 'CONFIRMADA') && r.fecha >= hoy()
+
+  return {
+    token:          r.token as string,
+    tipo:           esCita ? 'cita' : 'reserva',
+    negocio:        (cli?.nombre_empresa as string) ?? 'Negocio',
+    slug:           (cli?.slug as string) ?? null,
+    fecha:          r.fecha as string,
+    hora:           (r.hora as string) ?? null,
+    hora_fin:       (r.hora_fin as string) ?? null,
+    personas:       Number(r.personas),
+    nombre_cliente: r.nombre_cliente as string,
+    detalle,
+    estado,
+    cancelable,
+  }
+}
+
+export async function cancelarReservaPublica(token: string): Promise<{ ok: boolean; error?: string }> {
+  if (!token) return { ok: false, error: 'Enlace no válido.' }
+  const db = createAdminClient()
+
+  const { data: r } = await db.from('reservas')
+    .select('reserva_id, client_id, recurso_id, fecha, hora, personas, nombre_cliente, estado')
+    .eq('token', token)
+    .maybeSingle()
+  if (!r) return { ok: false, error: 'Reserva no encontrada.' }
+
+  const estado = r.estado as EstadoReserva
+  if (estado !== 'PENDIENTE' && estado !== 'CONFIRMADA') {
+    return { ok: false, error: 'Esta reserva ya no se puede cancelar.' }
+  }
+  if ((r.fecha as string) < hoy()) {
+    return { ok: false, error: 'No se puede cancelar una reserva pasada.' }
+  }
+
+  const { error } = await db.from('reservas')
+    .update({ estado: 'CANCELADA', updated_at: new Date().toISOString() })
+    .eq('reserva_id', r.reserva_id)
+    .eq('client_id', r.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  // Avisar al dueño por su bot (independiente por funcionalidad: Citas usa
+  // bot_config_citas; Reservas usa bot_config). No-op si no hay bot/chat.
+  const esCita = !!r.recurso_id
+  const columna = esCita ? 'bot_config_citas' : 'bot_config'
+  const { data: cli } = await db.from('clients').select(`${columna}, nombre_empresa`).eq('client_id', r.client_id).single()
+  const botCfg = parseBotConfig((cli as Record<string, unknown> | null)?.[columna])
+  if (botCfg.token && botCfg.activo && botCfg.notificar_owner_chat_id) {
+    const [y, m, d] = (r.fecha as string).split('-')
+    const hhmm = r.hora ? (r.hora as string).substring(0, 5) : '—'
+    const texto = [
+      `🚫 ${esCita ? 'Cita' : 'Reserva'} cancelada por el cliente — ${(cli?.nombre_empresa as string) ?? ''}`.trim(),
+      `📅 ${d}/${m}/${y}  🕐 ${hhmm}`,
+      `👥 ${Number(r.personas)}  ·  ${r.nombre_cliente as string}`,
+    ].join('\n')
+    await enviarMensaje(botCfg.token, botCfg.notificar_owner_chat_id, texto)
+  }
+
+  return { ok: true }
 }

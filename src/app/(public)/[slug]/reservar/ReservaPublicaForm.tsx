@@ -52,11 +52,12 @@ function generarSlots(franjas: FranjaPublica[], fecha: string): Slot[] {
 }
 
 export default function ReservaPublicaForm({
-  franjas, clientId, negocio,
+  franjas, clientId, negocio, slug,
 }: {
   franjas:  FranjaPublica[]
   clientId: string
   negocio:  { nombre: string }
+  slug:     string
 }) {
   const [isPending, startTransition] = useTransition()
 
@@ -74,6 +75,7 @@ export default function ReservaPublicaForm({
   const [loadingDisp, setLoadingDisp] = useState(false)
   const [mostrandoForm, setMostrandoForm] = useState(false)
   const [listo, setListo] = useState(false)
+  const [tokenRes, setTokenRes] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   // Filtrar slots pasados cuando se consulta para hoy
@@ -133,6 +135,7 @@ export default function ReservaPublicaForm({
     startTransition(async () => {
       const res = await crearReservaPublica(fd)
       if (!res.ok) { setError(res.error ?? 'Error al crear la reserva.'); return }
+      setTokenRes(res.token ?? null)
       setListo(true)
     })
   }
@@ -161,6 +164,9 @@ export default function ReservaPublicaForm({
                 <span className="rp-resumen-hora">{formatHora(hora)} · {personas} persona{personas !== 1 ? 's' : ''}</span>
               </div>
               <p className="rp-hint">Te contactaremos para confirmar.</p>
+              {tokenRes && (
+                <a className="rp-manage-link" href={`/${slug}/r/${tokenRes}`}>Gestionar o cancelar mi reserva</a>
+              )}
             </div>
           ) : (
             <>

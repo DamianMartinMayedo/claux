@@ -87,6 +87,26 @@
 .rp-btn-primary:hover:not(:disabled) { background: var(--rp-primary-hover); }
 .rp-btn-primary:disabled { opacity: .6; cursor: default; }
 
+/* Botón secundario y de peligro (gestión por el cliente) */
+.rp-btn-secondary, .rp-btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px; font-size: 15px; font-weight: 600;
+  font-family: var(--rp-font); border: none; border-radius: 12px; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.rp-btn-secondary { background: var(--rp-bg); color: var(--rp-text); border: 1px solid var(--rp-border); }
+.rp-btn-secondary:hover:not(:disabled) { border-color: var(--rp-text-muted); }
+.rp-btn-danger { background: var(--rp-error); color: #fff; }
+.rp-btn-danger:hover:not(:disabled) { background: #b91c1c; }
+.rp-btn-secondary:disabled, .rp-btn-danger:disabled { opacity: .6; cursor: default; }
+.rp-confirm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Estado (badge) */
+.rp-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.rp-badge-ok      { background: #dcfce7; color: #166534; }
+.rp-badge-warn    { background: #fef9c3; color: #854d0e; }
+.rp-badge-neutral { background: var(--rp-bg); color: var(--rp-text-muted); border: 1px solid var(--rp-border); }
+
 /* Turnos section */
 .rp-turnos-section { margin-top: 24px; }
 .rp-turnos-day { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
@@ -145,6 +165,11 @@
 }
 .rp-resumen strong { color: var(--rp-text); }
 .rp-resumen-hora { color: var(--rp-text-muted); }
+.rp-manage-link {
+  display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600;
+  color: var(--rp-primary); text-decoration: none;
+}
+.rp-manage-link:hover { text-decoration: underline; }
 
 /* Turno form section */
 .rp-turno-form-section { margin-top: 24px; }

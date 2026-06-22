@@ -16,13 +16,14 @@ function hoyISO(): string { return new Date().toISOString().split('T')[0] }
 type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'ok'
 
 export default function CitasPublicaForm({
-  clientId, negocio, servicios, recursos, etiquetas,
+  clientId, negocio, servicios, recursos, etiquetas, slug,
 }: {
   clientId:  string
   negocio:   { nombre: string }
   servicios: ServicioPublico[]
   recursos:  RecursoPublico[]
   etiquetas: EtiquetasSector
+  slug:      string
 }) {
   const [isPending, startTransition] = useTransition()
   const et = etiquetas
@@ -40,6 +41,7 @@ export default function CitasPublicaForm({
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [notas, setNotas] = useState('')
+  const [tokenCita, setTokenCita] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   const servicio = servicios.find(s => s.servicio_id === servicioId) ?? null
@@ -95,6 +97,7 @@ export default function CitasPublicaForm({
     startTransition(async () => {
       const res = await crearCitaPublica(fd)
       if (!res.ok) { setError(res.error ?? 'No se pudo reservar la cita.'); return }
+      setTokenCita(res.token ?? null)
       setPaso('ok')
     })
   }
@@ -122,6 +125,9 @@ export default function CitasPublicaForm({
               <span className="rp-resumen-hora">{formatFecha(fecha)} · {hora}</span>
             </div>
             <p className="rp-hint">Te contactaremos para confirmar.</p>
+            {tokenCita && (
+              <a className="rp-manage-link" href={`/${slug}/r/${tokenCita}`}>Gestionar o cancelar mi cita</a>
+            )}
           </div>
         ) : servicios.length === 0 ? (
           <p className="rp-hint">Este negocio aún no tiene servicios disponibles para reservar.</p>

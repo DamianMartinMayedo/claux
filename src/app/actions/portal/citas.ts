@@ -440,7 +440,7 @@ export async function obtenerSlotsCita(
   return data as SlotCita[]
 }
 
-export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
   const client_id      = (formData.get('client_id')   as string)?.trim()
   const servicio_id    = (formData.get('servicio_id') as string)?.trim()
   const recurso_id     = (formData.get('recurso_id')  as string)?.trim()
@@ -483,7 +483,10 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
     (cli?.nombre_empresa as string) ?? 'Tu negocio',
   )
 
-  return { ok: true }
+  // Token público para que el cliente pueda gestionar/cancelar su cita
+  const { data: tk } = await db.from('reservas').select('token').eq('reserva_id', reservaId).single()
+
+  return { ok: true, token: (tk?.token as string) ?? undefined }
 }
 
 // ── Bot de Telegram de Citas (independiente del de Reservas) ───────────────────

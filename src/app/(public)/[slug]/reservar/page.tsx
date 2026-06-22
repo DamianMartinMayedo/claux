@@ -21,6 +21,7 @@ export default async function ReservaPublicaPage({ params }: Props) {
         franjas={data.franjas}
         clientId={data.client_id}
         negocio={data.negocio}
+        slug={slug}
       />
     </div>
   )
