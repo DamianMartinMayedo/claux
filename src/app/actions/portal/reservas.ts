@@ -58,6 +58,12 @@ export interface Cierre {
   motivo:      string | null
 }
 
+export interface ReglasReserva {
+  antelacion_min_horas: number
+  ventana_max_dias:     number
+  max_personas:         number
+}
+
 export interface ReservaPageData {
   reservas:   ReservaConFranja[]
   franjas:    ReservaFranja[]
@@ -65,6 +71,18 @@ export interface ReservaPageData {
   slug:       string | null
   empresas:   { empresa_id: string; nombre: string }[]
   cierres:    Cierre[]
+  reglas:     ReglasReserva
+}
+
+const REGLAS_DEFAULT: ReglasReserva = { antelacion_min_horas: 0, ventana_max_dias: 0, max_personas: 0 }
+
+function parseReglas(c: Record<string, unknown> | null | undefined): ReglasReserva {
+  if (!c) return { ...REGLAS_DEFAULT }
+  return {
+    antelacion_min_horas: Number(c.reserva_antelacion_min_horas ?? 0) || 0,
+    ventana_max_dias:     Number(c.reserva_ventana_max_dias ?? 0) || 0,
+    max_personas:         Number(c.reserva_max_personas ?? 0) || 0,
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -112,7 +130,7 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
       .eq('client_id', session.client_id)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false }),
-    db.from('clients').select('bot_config, slug')
+    db.from('clients').select('bot_config, slug, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
       .eq('client_id', session.client_id)
       .single(),
   ])
@@ -136,8 +154,9 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
   const bot_config = parseBotConfig(cliRes.data?.bot_config)
   const slug       = (cliRes.data?.slug as string) ?? null
   const cierres    = await cargarCierres(db, session.client_id)
+  const reglas     = parseReglas(cliRes.data as Record<string, unknown> | null)
 
-  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })), cierres }
+  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })), cierres, reglas }
 }
 
 // ── Crear reserva (manual, desde el panel) ────────────────────────────────────
@@ -501,6 +520,31 @@ export async function eliminarCierre(cierre_id: string): Promise<{ ok: boolean; 
   return { ok: true }
 }
 
+// ── Reglas de reserva (config de negocio, compartida con Citas) ────────────────
+
+export async function guardarReglas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const ent = (k: string) => {
+    const n = parseInt(formData.get(k) as string, 10)
+    return isNaN(n) || n < 0 ? 0 : n
+  }
+
+  const db = createAdminClient()
+  const { error } = await db.from('clients').update({
+    reserva_antelacion_min_horas: ent('antelacion_min_horas'),
+    reserva_ventana_max_dias:     ent('ventana_max_dias'),
+    reserva_max_personas:         ent('max_personas'),
+  }).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/reservas')
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
 // ── Reserva pública (sin sesión de portal, desde el formulario web) ───────────
 
 export async function crearReservaPublica(
@@ -603,15 +647,16 @@ export async function obtenerReservasPublicas(slug: string): Promise<{
   negocio:  NegocioPublico | null
   franjas:  FranjaPublica[]
   client_id: string | null
+  reglas:   ReglasReserva
 }> {
   const db = createAdminClient()
 
   const { data: cliente } = await db.from('clients')
-    .select('client_id, nombre_empresa, slug')
+    .select('client_id, nombre_empresa, slug, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
     .eq('slug', slug)
     .single()
 
-  if (!cliente) return { negocio: null, franjas: [], client_id: null }
+  if (!cliente) return { negocio: null, franjas: [], client_id: null, reglas: { ...REGLAS_DEFAULT } }
 
   const { data: franjas } = await db.from('reserva_franjas')
     .select('franja_id, nombre, hora_inicio, hora_fin, capacidad, duracion_minutos, dias_semana')
@@ -623,6 +668,7 @@ export async function obtenerReservasPublicas(slug: string): Promise<{
     negocio:  { nombre: cliente.nombre_empresa, slug: cliente.slug },
     franjas:  ((franjas ?? []) as FranjaPublica[]).map(f => ({ ...f, capacidad: Number(f.capacidad), duracion_minutos: Number(f.duracion_minutos) })),
     client_id: cliente.client_id,
+    reglas:   parseReglas(cliente as Record<string, unknown>),
   }
 }
 

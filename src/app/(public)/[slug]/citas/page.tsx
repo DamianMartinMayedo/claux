@@ -24,6 +24,7 @@ export default async function CitasPublicaPage({ params }: Props) {
         recursos={data.recursos}
         etiquetas={data.etiquetas}
         slug={slug}
+        reglas={data.reglas}
       />
     </div>
   )

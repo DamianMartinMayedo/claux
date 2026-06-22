@@ -5,10 +5,15 @@ import {
   crearReservaPublica,
   obtenerDisponibilidadPublica,
   type FranjaPublica,
+  type ReglasReserva,
 } from '@/app/actions/portal/reservas'
 import { Calendar, Check, Loader2 } from 'lucide-react'
 
 function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function sumarDiasISO(dias: number): string {
+  const d = new Date(); d.setDate(d.getDate() + dias)
+  return d.toISOString().split('T')[0]
+}
 function horaActual(): string {
   const d = new Date()
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -52,14 +57,17 @@ function generarSlots(franjas: FranjaPublica[], fecha: string): Slot[] {
 }
 
 export default function ReservaPublicaForm({
-  franjas, clientId, negocio, slug,
+  franjas, clientId, negocio, slug, reglas,
 }: {
   franjas:  FranjaPublica[]
   clientId: string
   negocio:  { nombre: string }
   slug:     string
+  reglas:   ReglasReserva
 }) {
   const [isPending, startTransition] = useTransition()
+  const maxPersonas = reglas.max_personas > 0 ? reglas.max_personas : 20
+  const fechaMax    = reglas.ventana_max_dias > 0 ? sumarDiasISO(reglas.ventana_max_dias) : undefined
 
   const [fecha, setFecha] = useState(hoyISO())
   const [personas, setPersonas] = useState(2)
@@ -179,14 +187,14 @@ export default function ReservaPublicaForm({
                   <div className="rp-field">
                     <label className="rp-label">Día</label>
                     <input type="date" className="rp-input" value={fecha}
-                      min={hoyISO()} onChange={e => setFecha(e.target.value)} />
+                      min={hoyISO()} max={fechaMax} onChange={e => setFecha(e.target.value)} />
                   </div>
                   <div className="rp-field">
                     <label className="rp-label">Personas</label>
                     <div className="rp-stepper">
                       <button type="button" className="rp-btn-stepper" onClick={() => setPersonas(p => Math.max(1, p - 1))}>−</button>
                       <span className="rp-stepper-val">{personas}</span>
-                      <button type="button" className="rp-btn-stepper" onClick={() => setPersonas(p => Math.min(20, p + 1))}>+</button>
+                      <button type="button" className="rp-btn-stepper" onClick={() => setPersonas(p => Math.min(maxPersonas, p + 1))}>+</button>
                     </div>
                   </div>
                 </div>

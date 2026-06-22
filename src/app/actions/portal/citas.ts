@@ -8,7 +8,7 @@ import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo } from '@/lib/modulos'
-import { type Cierre } from './reservas'
+import { type Cierre, type ReglasReserva } from './reservas'
 import { getPortalSession }  from './auth'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -77,6 +77,15 @@ export interface CitasPageData {
   rrhh_activo: boolean
   empleados:   EmpleadoRRHH[]   // del módulo RRHH (vacío si no está activo)
   cierres:     Cierre[]         // festivos/cierres del negocio (compartidos con Reservas)
+  reglas:      ReglasReserva    // antelación/ventana (compartidas con Reservas)
+}
+
+function reglasDe(c: Record<string, unknown> | null | undefined): ReglasReserva {
+  return {
+    antelacion_min_horas: Number(c?.reserva_antelacion_min_horas ?? 0) || 0,
+    ventana_max_dias:     Number(c?.reserva_ventana_max_dias ?? 0) || 0,
+    max_personas:         Number(c?.reserva_max_personas ?? 0) || 0,
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,7 +125,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     db.from('recurso_horarios').select('recurso_id, dia_semana, hora_inicio, hora_fin').eq('client_id', cid),
     db.from('reservas').select('*').eq('client_id', cid).not('recurso_id', 'is', null)
       .order('fecha', { ascending: false }).order('hora', { ascending: true }),
-    db.from('clients').select('slug, sector, bot_config_citas, modulos_activos').eq('client_id', cid).single(),
+    db.from('clients').select('slug, sector, bot_config_citas, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas').eq('client_id', cid).single(),
   ])
 
   const servicios: Servicio[] = ((srvRes.data ?? []) as Servicio[]).map(s => ({
@@ -190,6 +199,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     rrhh_activo,
     empleados,
     cierres:     (cierresData ?? []) as Cierre[],
+    reglas:      reglasDe(cliRes.data as Record<string, unknown> | null),
   }
 }
 
@@ -470,19 +480,20 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
   recursos:  RecursoPublico[]
   etiquetas: EtiquetasSector
   client_id: string | null
+  reglas:    ReglasReserva
 }> {
   const db = createAdminClient()
 
   const { data: cli } = await db.from('clients')
-    .select('client_id, nombre_empresa, sector, modulos_activos')
+    .select('client_id, nombre_empresa, sector, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
     .eq('slug', slug).single()
 
-  if (!cli) return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null }
+  if (!cli) return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null, reglas: reglasDe(null) }
 
   // Gating: el negocio debe tener la funcionalidad de citas contratada
   const modulos = Array.isArray(cli.modulos_activos) ? cli.modulos_activos as string[] : []
   if (!modulos.includes('agenda')) {
-    return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null }
+    return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null, reglas: reglasDe(null) }
   }
 
   const [srvRes, recRes, rsRes] = await Promise.all([
@@ -503,6 +514,7 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
     recursos:  ((recRes.data ?? []) as { recurso_id: string; nombre: string }[]).map(r => ({ recurso_id: r.recurso_id, nombre: r.nombre, servicio_ids: linkPorRecurso.get(r.recurso_id) ?? [] })),
     etiquetas: await etiquetasDeSector(db, (cli.sector as string) ?? null),
     client_id: cli.client_id,
+    reglas:    reglasDe(cli as Record<string, unknown>),
   }
 }
 

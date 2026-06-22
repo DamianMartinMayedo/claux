@@ -9,14 +9,19 @@ import {
   type SlotCita,
 } from '@/app/actions/portal/citas'
 import type { EtiquetasSector } from '@/lib/sector'
+import type { ReglasReserva } from '@/app/actions/portal/reservas'
 import { Calendar, Check, Loader2 } from 'lucide-react'
 
 function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function sumarDiasISO(dias: number): string {
+  const d = new Date(); d.setDate(d.getDate() + dias)
+  return d.toISOString().split('T')[0]
+}
 
 type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'ok'
 
 export default function CitasPublicaForm({
-  clientId, negocio, servicios, recursos, etiquetas, slug,
+  clientId, negocio, servicios, recursos, etiquetas, slug, reglas,
 }: {
   clientId:  string
   negocio:   { nombre: string }
@@ -24,9 +29,11 @@ export default function CitasPublicaForm({
   recursos:  RecursoPublico[]
   etiquetas: EtiquetasSector
   slug:      string
+  reglas:    ReglasReserva
 }) {
   const [isPending, startTransition] = useTransition()
   const et = etiquetas
+  const fechaMax = reglas.ventana_max_dias > 0 ? sumarDiasISO(reglas.ventana_max_dias) : undefined
 
   const [paso, setPaso] = useState<Paso>('servicio')
   const [servicioId, setServicioId] = useState('')
@@ -183,7 +190,7 @@ export default function CitasPublicaForm({
                 </button>
                 <div className="rp-field">
                   <label className="rp-label">Día</label>
-                  <input type="date" className="rp-input" value={fecha} min={hoyISO()}
+                  <input type="date" className="rp-input" value={fecha} min={hoyISO()} max={fechaMax}
                     onChange={e => { setFecha(e.target.value); setConsultado(false); setSlots([]) }} />
                 </div>
                 <button type="button" className="rp-btn-primary" onClick={cargarHorarios} disabled={loadingSlots}>

@@ -13,6 +13,7 @@ import {
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
 import CierresSection from '@/components/portal/CierresSection'
+import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import { CalendarDays, Check, Copy, Download, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
@@ -956,6 +957,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           </>
         )}
       </div>
+
+      {/* Reglas de reserva (antelación/ventana; compartidas con Reservas) */}
+      <ReglasReservaSection reglas={data.reglas} />
 
       {/* Cierres y festivos */}
       <CierresSection cierres={data.cierres} />

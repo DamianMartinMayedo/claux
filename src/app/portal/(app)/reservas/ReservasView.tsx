@@ -20,6 +20,7 @@ import {
 } from '@/app/actions/portal/reservas'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import CierresSection from '@/components/portal/CierresSection'
+import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import { Calendar, Check, Copy, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -1029,6 +1030,9 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           </>
         )}
       </div>
+
+      {/* Reglas de reserva */}
+      <ReglasReservaSection reglas={data.reglas} mostrarMaxPersonas />
 
       {/* Cierres y festivos */}
       <CierresSection cierres={data.cierres} />
