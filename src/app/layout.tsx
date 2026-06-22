@@ -2,8 +2,21 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'CLAUX — Panel de Control',
-  description: 'Sistema de gestión CLAUX',
+  title: {
+    default: 'CLAUX — Digitaliza tu negocio en Cuba',
+    template: '%s | CLAUX',
+  },
+  description:
+    'SaaS todo en uno para digitalizar negocios locales cubanos. Contabilidad, menú digital QR, reservas, inventario y RRHH. Sin complicaciones, desde cualquier móvil.',
+  keywords: ['CLAUX', 'ERP', 'SaaS', 'Cuba', 'restaurantes', 'menú QR', 'reservas', 'contabilidad', 'PYMES'],
+  authors: [{ name: 'CLAUX' }],
+  openGraph: {
+    title: 'CLAUX — Digitaliza tu negocio en Cuba',
+    description:
+      'SaaS todo en uno para digitalizar negocios locales cubanos. Contabilidad, menú digital QR, reservas, inventario y RRHH.',
+    type: 'website',
+    locale: 'es_ES',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
