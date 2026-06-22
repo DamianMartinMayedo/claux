@@ -37,6 +37,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
   { label: 'Contabilidad',       tipo: 'base' },
   { label: 'Módulos adicionales', tipo: 'modulo' },
   { label: 'Funcionalidades',     tipo: 'funcionalidad' },
+  { label: 'Addons',              tipo: 'addon' },
 ]
 
 export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, descuentoAnualPct }: Props) {

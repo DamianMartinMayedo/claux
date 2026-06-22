@@ -228,16 +228,19 @@ export function DiagnosticoForm() {
             Así te recomendamos los módulos que mejor se adaptan a tu sector.
           </p>
           <div className="dg-options">
-            {SECTORES.map((s) => (
-              <div
-                key={s.id}
-                className={`dg-option-card ${sector === s.id ? 'selected' : ''}`}
-                onClick={() => { setSector(s.id); setErrores({}) }}
-              >
-                {s.icon}
-                <span className="dg-option-card-label">{s.label}</span>
-              </div>
-            ))}
+            {SECTORES.map((s) => {
+              const Icon = s.icon
+              return (
+                <div
+                  key={s.id}
+                  className={`dg-option-card ${sector === s.id ? 'selected' : ''}`}
+                  onClick={() => { setSector(s.id); setErrores({}) }}
+                >
+                  <Icon />
+                  <span className="dg-option-card-label">{s.label}</span>
+                </div>
+              )
+            })}
           </div>
           {errores.sector && <p className="dg-form-error mt-3">{errores.sector}</p>}
           <div className="dg-form-actions dg-form-actions-end">
