@@ -13,11 +13,11 @@ export interface EtiquetasSector {
 
 // Valores por defecto (negocio sin sector asignado). Se eligen palabras que un
 // dueño entiende sin jerga; el sector concreto las sobreescribe (Barbero, Cabina,
-// Cancha…). "Recurso" era jerga técnica → "Profesional" como genérico humano.
+// Cancha…). Genérico = "Personal" (cercano y alineado con la lista de RRHH).
 export const ETIQUETAS_DEFAULT: EtiquetasSector = {
   reservas:   'Reservas',
-  recurso:    'Profesional',
-  recurso_pl: 'Profesionales',
+  recurso:    'Personal',
+  recurso_pl: 'Personal',
   servicio:   'Servicio',
   catalogo:   'Catálogo',
 }

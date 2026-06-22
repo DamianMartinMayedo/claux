@@ -5,7 +5,7 @@ import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   guardarServicio, eliminarServicio,
-  guardarRecurso, eliminarRecurso,
+  guardarRecurso, eliminarRecurso, importarPersonalRRHH,
   crearCitaManual, cambiarEstadoCita,
   guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas,
   obtenerSlotsCita,
@@ -13,7 +13,7 @@ import {
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
 import { type EstadoReserva } from '@/lib/reservas/estado'
-import { CalendarDays, Check, Copy, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import { CalendarDays, Check, Copy, Download, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -149,6 +149,8 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="ter-form-grid">
+              {/* Preserva el vínculo con RRHH al editar un recurso importado */}
+              <input type="hidden" name="empleado_id" defaultValue={recurso?.empleado_id ?? ''} />
               <div className="input-group ter-col-span-3">
                 <label>Nombre <span className="required">*</span></label>
                 <input className="input" name="nombre" required autoFocus={!isEdit}
@@ -540,6 +542,14 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       toastSuccess(`${et.recurso} eliminado.`); setDelRecurso(null); router.refresh()
     })
   }
+  function doImportarRRHH() {
+    startTransition(async () => {
+      const res = await importarPersonalRRHH()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(res.importados ? `${res.importados} importado${res.importados !== 1 ? 's' : ''} de RRHH.` : 'No hay personal nuevo que importar.')
+      router.refresh()
+    })
+  }
   function handleSlugSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -604,6 +614,11 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <Plus size={14} strokeWidth={2.5} /> Nueva cita
             </button>
           )}
+          {activeTab === 'recursos' && data.rrhh_activo && data.empleados.some(e => !e.ya_importado) && (
+            <button className="btn btn-secondary" onClick={doImportarRRHH} disabled={isPending}>
+              <Download size={14} strokeWidth={2.5} /> Importar de RRHH
+            </button>
+          )}
           {activeTab === 'recursos' && (
             <button className="btn btn-primary" onClick={() => { setEditRecurso(null); setShowRecurso(true) }}>
               <Plus size={14} strokeWidth={2.5} /> Nuevo {et.recurso.toLowerCase()}
@@ -636,7 +651,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         <input type="date" className="input ter-filter-select" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} />
         <input type="date" className="input ter-filter-select" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} />
         <select className="input ter-filter-select" value={filtroRecurso} onChange={e => setFiltroRecurso(e.target.value)}>
-          <option value="">Todos los {et.recurso_pl.toLowerCase()}</option>
+          <option value="">Todos</option>
           {data.recursos.map(r => <option key={r.recurso_id} value={r.recurso_id}>{r.nombre}</option>)}
         </select>
         <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>

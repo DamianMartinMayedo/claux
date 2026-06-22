@@ -7,6 +7,7 @@ import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
+import { tieneModulo } from '@/lib/modulos'
 import { getPortalSession }  from './auth'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -30,8 +31,15 @@ export interface Recurso {
   nombre:       string
   tipo:         string | null
   activo:       boolean
+  empleado_id:  string | null  // vínculo opcional con un empleado de RRHH
   servicio_ids: string[]      // servicios que presta (vacío = todos)
   horarios:     RecursoHorario[]
+}
+
+export interface EmpleadoRRHH {
+  empleado_id:  string
+  nombre:       string
+  ya_importado: boolean
 }
 
 export interface Cita {
@@ -58,13 +66,15 @@ export interface CitaConDetalle extends Cita {
 }
 
 export interface CitasPageData {
-  client_id:  string
-  citas:      CitaConDetalle[]
-  recursos:   Recurso[]
-  servicios:  Servicio[]
-  slug:       string | null
-  etiquetas:  EtiquetasSector
-  bot_config: BotConfig
+  client_id:   string
+  citas:       CitaConDetalle[]
+  recursos:    Recurso[]
+  servicios:   Servicio[]
+  slug:        string | null
+  etiquetas:   EtiquetasSector
+  bot_config:  BotConfig
+  rrhh_activo: boolean
+  empleados:   EmpleadoRRHH[]   // del módulo RRHH (vacío si no está activo)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -104,7 +114,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     db.from('recurso_horarios').select('recurso_id, dia_semana, hora_inicio, hora_fin').eq('client_id', cid),
     db.from('reservas').select('*').eq('client_id', cid).not('recurso_id', 'is', null)
       .order('fecha', { ascending: false }).order('hora', { ascending: true }),
-    db.from('clients').select('slug, sector, bot_config_citas').eq('client_id', cid).single(),
+    db.from('clients').select('slug, sector, bot_config_citas, modulos_activos').eq('client_id', cid).single(),
   ])
 
   const servicios: Servicio[] = ((srvRes.data ?? []) as Servicio[]).map(s => ({
@@ -126,11 +136,12 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     horPorRecurso.set(row.recurso_id, arr)
   }
 
-  const recursos: Recurso[] = ((recRes.data ?? []) as { recurso_id: string; nombre: string; tipo: string | null; activo: boolean }[]).map(r => ({
+  const recursos: Recurso[] = ((recRes.data ?? []) as { recurso_id: string; nombre: string; tipo: string | null; activo: boolean; empleado_id: string | null }[]).map(r => ({
     recurso_id:   r.recurso_id,
     nombre:       r.nombre,
     tipo:         r.tipo,
     activo:       r.activo,
+    empleado_id:  r.empleado_id ?? null,
     servicio_ids: linkPorRecurso.get(r.recurso_id) ?? [],
     horarios:     (horPorRecurso.get(r.recurso_id) ?? []).sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio)),
   }))
@@ -146,14 +157,32 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     }
   })
 
+  // RRHH (llenado rápido): si el módulo está activo, ofrecemos su lista de empleados
+  // para importarlos como personal. Citas no depende de RRHH (sigue funcionando manual).
+  const rrhh_activo = tieneModulo(cliRes.data?.modulos_activos, 'rrhh')
+  let empleados: EmpleadoRRHH[] = []
+  if (rrhh_activo) {
+    const yaLinked = new Set(recursos.map(r => r.empleado_id).filter(Boolean) as string[])
+    const { data: emps } = await db.from('empleados')
+      .select('empleado_id, nombre, apellidos')
+      .eq('client_id', cid).is('fecha_baja', null).order('nombre')
+    empleados = ((emps ?? []) as { empleado_id: string; nombre: string; apellidos: string | null }[]).map(e => ({
+      empleado_id:  e.empleado_id,
+      nombre:       [e.nombre, e.apellidos].filter(Boolean).join(' '),
+      ya_importado: yaLinked.has(e.empleado_id),
+    }))
+  }
+
   return {
-    client_id:  cid,
+    client_id:   cid,
     citas,
     recursos,
     servicios,
-    slug:       (cliRes.data?.slug as string) ?? null,
-    etiquetas:  await etiquetasDeSector(db, (cliRes.data?.sector as string) ?? null),
-    bot_config: parseBotConfig(cliRes.data?.bot_config_citas),
+    slug:        (cliRes.data?.slug as string) ?? null,
+    etiquetas:   await etiquetasDeSector(db, (cliRes.data?.sector as string) ?? null),
+    bot_config:  parseBotConfig(cliRes.data?.bot_config_citas),
+    rrhh_activo,
+    empleados,
   }
 }
 
@@ -223,10 +252,11 @@ export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean;
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
-  const recurso_id = (formData.get('recurso_id') as string)?.trim()
-  const nombre     = (formData.get('nombre')     as string)?.trim()
-  const tipo       = (formData.get('tipo')       as string)?.trim() || null
-  const activo     = formData.get('activo') === 'true'
+  const recurso_id  = (formData.get('recurso_id')  as string)?.trim()
+  const nombre      = (formData.get('nombre')      as string)?.trim()
+  const tipo        = (formData.get('tipo')        as string)?.trim() || null
+  const empleado_id = (formData.get('empleado_id') as string)?.trim() || null
+  const activo      = formData.get('activo') === 'true'
 
   if (!nombre) return { ok: false, error: 'El nombre es obligatorio.' }
 
@@ -248,11 +278,11 @@ export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean;
   const id = recurso_id || generarRecursoId()
 
   if (!recurso_id) {
-    const { error } = await db.from('recursos').insert({ recurso_id: id, client_id: session.client_id, nombre, tipo, activo })
+    const { error } = await db.from('recursos').insert({ recurso_id: id, client_id: session.client_id, nombre, tipo, activo, empleado_id })
     if (error) return { ok: false, error: error.message }
   } else {
     const { error } = await db.from('recursos')
-      .update({ nombre, tipo, activo, updated_at: new Date().toISOString() })
+      .update({ nombre, tipo, activo, empleado_id, updated_at: new Date().toISOString() })
       .eq('recurso_id', id).eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
   }
@@ -297,6 +327,45 @@ export async function eliminarRecurso(recurso_id: string): Promise<{ ok: boolean
 
   revalidatePath('/portal/citas')
   return { ok: true }
+}
+
+// ── Importar personal desde RRHH (llenado rápido; módulo independiente) ─────────
+
+export async function importarPersonalRRHH(): Promise<{ ok: boolean; error?: string; importados?: number }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+
+  // Gating: solo si el negocio tiene el módulo RRHH contratado
+  const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
+  if (!tieneModulo(cli?.modulos_activos, 'rrhh')) return { ok: false, error: 'El módulo de RRHH no está activo.' }
+
+  // Empleados activos (fecha_baja IS NULL) que aún no estén vinculados a un recurso
+  const [{ data: emps }, { data: recs }] = await Promise.all([
+    db.from('empleados').select('empleado_id, nombre, apellidos, cargo').eq('client_id', session.client_id).is('fecha_baja', null),
+    db.from('recursos').select('empleado_id').eq('client_id', session.client_id).not('empleado_id', 'is', null),
+  ])
+  const yaLinked = new Set(((recs ?? []) as { empleado_id: string }[]).map(r => r.empleado_id))
+  const nuevos = ((emps ?? []) as { empleado_id: string; nombre: string; apellidos: string | null; cargo: string | null }[])
+    .filter(e => !yaLinked.has(e.empleado_id))
+
+  if (nuevos.length === 0) return { ok: true, importados: 0 }
+
+  const rows = nuevos.map(e => ({
+    recurso_id:  generarRecursoId(),
+    client_id:   session.client_id,
+    nombre:      [e.nombre, e.apellidos].filter(Boolean).join(' '),
+    tipo:        e.cargo ?? null,
+    activo:      true,
+    empleado_id: e.empleado_id,
+  }))
+  const { error } = await db.from('recursos').insert(rows)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/citas')
+  return { ok: true, importados: nuevos.length }
 }
 
 // ── Crear cita (manual, desde el panel) ────────────────────────────────────────

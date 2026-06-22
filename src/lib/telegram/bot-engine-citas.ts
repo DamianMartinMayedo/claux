@@ -267,7 +267,7 @@ async function promptRecurso(ctx: BotContext, chatId: string, datos: DatosCita, 
 
   if (aptos.length === 0) {
     await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: `No hay ${et.recurso_pl.toLowerCase()} disponibles para ese ${et.servicio.toLowerCase()}.`, markup: tecladoPrincipal() }
+    return { texto: `No hay disponibilidad de ${et.recurso_pl.toLowerCase()} para ese ${et.servicio.toLowerCase()}.`, markup: tecladoPrincipal() }
   }
   if (aptos.length === 1) {
     // Solo uno: lo elegimos y pasamos a fecha
