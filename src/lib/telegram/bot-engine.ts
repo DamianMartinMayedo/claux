@@ -138,7 +138,7 @@ export async function manejarMensaje(
 
 function bienvenida(ctx: BotContext): BotResponse {
   return {
-    texto: `¡Bienvenido a ${ctx.nombre_empresa}! 🍽️\n\n¿Qué quieres hacer?`,
+    texto: `¡Bienvenido a ${ctx.nombre_empresa}!\n\n¿Qué quieres hacer?`,
     markup: tecladoPrincipal(),
   }
 }
@@ -442,7 +442,7 @@ function mostrarUbicacion(ctx: BotContext): BotResponse {
 
 function mostrarAyuda(ctx: BotContext): BotResponse {
   return {
-    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n• Reservar mesa\n• Ver la carta\n• Consultar horarios\n• Ver la ubicación`,
+    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n• Hacer una reserva\n• Ver la carta\n• Consultar horarios\n• Ver la ubicación`,
     markup: tecladoPrincipal(),
   }
 }
@@ -452,7 +452,7 @@ function mostrarAyuda(ctx: BotContext): BotResponse {
 function tecladoPrincipal(): ReplyMarkup {
   return {
     inline_keyboard: [
-      [{ text: '🍽️ Reservar', callback_data: 'reservar' }, { text: '📋 Carta', callback_data: 'carta' }],
+      [{ text: '📅 Reservar', callback_data: 'reservar' }, { text: '📋 Carta', callback_data: 'carta' }],
       [{ text: '🕐 Horarios', callback_data: 'horarios' }, { text: '📍 Ubicación', callback_data: 'ubicacion' }],
     ],
   }

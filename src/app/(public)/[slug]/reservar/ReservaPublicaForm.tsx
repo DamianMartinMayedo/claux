@@ -172,7 +172,7 @@ export default function ReservaPublicaForm({
             </div>
           ) : (
             <>
-              <p className="rp-subtitle">Reserva tu mesa</p>
+              <p className="rp-subtitle">Haz tu reserva</p>
 
               <form onSubmit={handleVerTurnos}>
                 <div className="rp-inline-fields">
