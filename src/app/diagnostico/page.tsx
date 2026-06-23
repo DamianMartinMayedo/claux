@@ -1,46 +1,34 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
+import { PublicHeader, PublicFooter } from '@/components/publico/Chrome'
 import { DiagnosticoForm } from './DiagnosticoForm'
 
 export const metadata: Metadata = {
   title: 'Diagnóstico gratuito para tu negocio',
   description:
-    'Responde 4 preguntas y descubre qué módulos de CLAUX necesita tu negocio. Sin compromiso, en 2 minutos.',
+    'Responde 4 preguntas y descubre qué módulos de CLAUX encajan con tu negocio. Sin compromiso, en 2 minutos.',
+  alternates: { canonical: '/diagnostico' },
   openGraph: {
     title: 'CLAUX — Diagnóstico gratuito para tu negocio',
-    description:
-      'Responde 4 preguntas y descubre qué módulos de CLAUX necesita tu negocio.',
+    description: 'Responde 4 preguntas y descubre qué módulos de CLAUX encajan con tu negocio.',
+    url: '/diagnostico',
   },
 }
 
-export default function DiagnosticoPage() {
+// ISR: las opciones (sectores y módulos) salen del catálogo real; revalidamos
+// para reflejar cambios del admin sin redeploy.
+export const revalidate = 3600
+
+export default async function DiagnosticoPage() {
+  const { modulos, sectores, necesidades } = await obtenerCatalogoPublico()
+
   return (
     <div>
-      <header className="ld-header">
-        <Link href="/landing" className="ld-header-logo">
-          <div className="ld-header-logo-icon">C</div>
-          <span className="ld-header-logo-text">CLAUX</span>
-        </Link>
-        <nav className="ld-header-nav">
-          <a href="/admin/login" className="btn btn-ghost btn-sm">
-            Acceso clientes
-          </a>
-        </nav>
-      </header>
-
+      <PublicHeader />
       <div className="dg-container">
-        <DiagnosticoForm />
+        <DiagnosticoForm modulos={modulos} sectores={sectores} necesidades={necesidades} />
       </div>
-
-      <footer className="ld-footer">
-        <div className="ld-header-logo">
-          <div className="ld-header-logo-icon">C</div>
-          <span className="ld-header-logo-text">CLAUX</span>
-        </div>
-        <p className="mt-3">
-          Hecho para negocios cubanos. Simple, rápido, sin complicaciones.
-        </p>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

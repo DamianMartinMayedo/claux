@@ -2,18 +2,21 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
+  // Base para canonical y OG (relativos). Configurable por entorno; el equipo
+  // puede fijar NEXT_PUBLIC_SITE_URL al dominio de producción.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.app'),
   title: {
-    default: 'CLAUX — Digitaliza tu negocio en Cuba',
+    default: 'CLAUX — Digitaliza tu negocio',
     template: '%s | CLAUX',
   },
   description:
-    'SaaS todo en uno para digitalizar negocios locales cubanos. Contabilidad, menú digital QR, reservas, inventario y RRHH. Sin complicaciones, desde cualquier móvil.',
-  keywords: ['CLAUX', 'ERP', 'SaaS', 'Cuba', 'restaurantes', 'menú QR', 'reservas', 'contabilidad', 'PYMES'],
+    'SaaS todo en uno para digitalizar tu negocio. Contabilidad, menú digital QR, reservas, inventario y RRHH. Activas solo los módulos que necesitas.',
+  keywords: ['CLAUX', 'ERP', 'SaaS', 'restaurantes', 'menú QR', 'reservas', 'contabilidad', 'digitalización', 'PYMES'],
   authors: [{ name: 'CLAUX' }],
   openGraph: {
-    title: 'CLAUX — Digitaliza tu negocio en Cuba',
+    title: 'CLAUX — Digitaliza tu negocio',
     description:
-      'SaaS todo en uno para digitalizar negocios locales cubanos. Contabilidad, menú digital QR, reservas, inventario y RRHH.',
+      'SaaS todo en uno para digitalizar tu negocio. Contabilidad, menú digital QR, reservas, inventario y RRHH.',
     type: 'website',
     locale: 'es_ES',
   },

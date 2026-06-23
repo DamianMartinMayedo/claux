@@ -17,8 +17,13 @@ export async function guardarDiagnostico(
 ): Promise<{ ok: boolean; error?: string }> {
   const { nombre, telefono, email, sector, necesidades, modoActual, modulosRec } = input
 
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
   if (!nombre.trim() || !telefono.trim() || !email.trim() || !sector || !modoActual) {
     return { ok: false, error: 'Faltan datos obligatorios.' }
+  }
+  if (!EMAIL_RE.test(email.trim())) {
+    return { ok: false, error: 'Correo no válido.' }
   }
 
   const db = createAdminClient()

@@ -80,7 +80,14 @@
 
   --text-xs:   0.8125rem; --text-sm:   0.9375rem; --text-base: 1rem;   /* xs 13px · sm 15px (subida moderada) */
   --text-lg:   1.125rem;  --text-xl:   1.25rem;   --text-2xl:  1.5rem;
-  --text-3xl:  1.875rem;  --text-4xl:  2.25rem;
+  --text-3xl:  1.875rem;  --text-4xl:  2.25rem;   --text-5xl:  3rem;
+  --text-hero: clamp(2.5rem, 1.3rem + 5vw, 4rem); /* titular de landing, fluido */
+
+  /* ── Degradado de marca (landing / acentos) ── */
+  --gradient-brand: linear-gradient(100deg, var(--color-primary) 0%, var(--color-amber) 100%);
+  /* Banda oscura para secciones (IA, CTA): lineal ~30°, texto en blanco.
+     Tonos estables en claro/oscuro (active no cambia por tema) → contraste seguro. */
+  --gradient-band: linear-gradient(30deg, var(--color-primary-active) 0%, var(--color-amber-active) 135%);
 
   --sidebar-w:   240px;
   --header-h:    64px;
@@ -122,6 +129,9 @@
     --color-border:            #34322D;   /* bordes más definidos en dark */
     --color-border-strong:     #504D45;   /* hover de bordes en dark */
     --color-border-focus:      #3FD4CF;
+    /* En oscuro, el ámbar de marca se sustituye por el ámbar claro para que el
+       degradado de texto del hero conserve contraste sobre fondo oscuro. */
+    --gradient-brand: linear-gradient(100deg, var(--color-primary) 0%, var(--color-warning) 100%);
     --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
     --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
