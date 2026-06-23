@@ -12,10 +12,14 @@ import type { EtiquetasSector } from '@/lib/sector'
 import type { ReglasReserva } from '@/app/actions/portal/reservas'
 import { Calendar, Check, Loader2 } from 'lucide-react'
 
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// Fechas en calendario LOCAL (sin toISOString/UTC) → correctas en cualquier zona.
+function ymd(dt: Date): string {
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+function hoyISO(): string { return ymd(new Date()) }
 function sumarDiasISO(dias: number): string {
   const d = new Date(); d.setDate(d.getDate() + dias)
-  return d.toISOString().split('T')[0]
+  return ymd(d)
 }
 
 type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'ok'

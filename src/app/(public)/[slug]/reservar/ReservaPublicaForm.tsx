@@ -11,11 +11,15 @@ import {
 } from '@/app/actions/portal/reservas'
 import { Check, Loader2, Search } from 'lucide-react'
 
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// Fechas en calendario LOCAL (sin toISOString/UTC) para que "Hoy"/"Mañana" y las
+// comparaciones sean correctas en cualquier zona horaria.
+function ymd(dt: Date): string {
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+function hoyISO(): string { return ymd(new Date()) }
 function sumarDiasISO(base: string, dias: number): string {
   const [y, m, d] = base.split('-').map(Number)
-  const dt = new Date(y, m - 1, d); dt.setDate(dt.getDate() + dias)
-  return dt.toISOString().split('T')[0]
+  return ymd(new Date(y, m - 1, d + dias))
 }
 function formatFecha(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
