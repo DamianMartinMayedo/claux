@@ -4,8 +4,11 @@
   --rp-bg: #faf7f2;
   --rp-card-bg: #fff;
   --rp-text: #1a1a1a;
-  --rp-text-muted: #6b6b6b;
+  --rp-text-muted: #595959;
   --rp-border: #e5e0d8;
+  --rp-error-bg: #fef2f2;
+  --rp-ok-bg: #dcfce7;  --rp-ok-fg: #166534;
+  --rp-warn-bg: #fef9c3; --rp-warn-fg: #854d0e;
   --rp-primary: #0d9488;
   --rp-primary-hover: #0f766e;
   --rp-success: #16a34a;
@@ -29,6 +32,9 @@
     --rp-text: #e5e5e5;
     --rp-text-muted: #a3a3a3;
     --rp-border: #404040;
+    --rp-error-bg: #3b1d1d;
+    --rp-ok-bg: #14331f;  --rp-ok-fg: #86efac;
+    --rp-warn-bg: #3a3414; --rp-warn-fg: #fde68a;
   }
 }
 
@@ -69,11 +75,12 @@
 /* Stepper */
 .rp-stepper { display: flex; align-items: center; gap: 12px; }
 .rp-btn-stepper {
-  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--rp-border);
+  width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--rp-border);
   background: var(--rp-bg); font-size: 18px; font-weight: 600;
   color: var(--rp-text); cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-family: var(--rp-font);
+  font-family: var(--rp-font); transition: transform 140ms cubic-bezier(0.23,1,0.32,1), border-color .15s;
 }
+.rp-btn-stepper:active { transform: scale(0.94); }
 .rp-stepper-val { font-size: 18px; font-weight: 700; min-width: 20px; text-align: center; }
 
 /* Buttons */
@@ -82,9 +89,13 @@
   width: 100%; padding: 13px; font-size: 15px; font-weight: 600;
   font-family: var(--rp-font);
   background: var(--rp-primary); color: #fff; border: none;
-  border-radius: 12px; cursor: pointer; transition: background .15s;
+  border-radius: 12px; cursor: pointer;
+  transition: background .15s, transform 140ms cubic-bezier(0.23,1,0.32,1);
 }
-.rp-btn-primary:hover:not(:disabled) { background: var(--rp-primary-hover); }
+@media (hover: hover) and (pointer: fine) {
+  .rp-btn-primary:hover:not(:disabled) { background: var(--rp-primary-hover); }
+}
+.rp-btn-primary:active:not(:disabled) { transform: scale(0.98); }
 .rp-btn-primary:disabled { opacity: .6; cursor: default; }
 
 /* Botón secundario y de peligro (gestión por el cliente) */
@@ -95,16 +106,19 @@
   transition: background .15s, border-color .15s;
 }
 .rp-btn-secondary { background: var(--rp-bg); color: var(--rp-text); border: 1px solid var(--rp-border); }
-.rp-btn-secondary:hover:not(:disabled) { border-color: var(--rp-text-muted); }
 .rp-btn-danger { background: var(--rp-error); color: #fff; }
-.rp-btn-danger:hover:not(:disabled) { background: #b91c1c; }
+@media (hover: hover) and (pointer: fine) {
+  .rp-btn-secondary:hover:not(:disabled) { border-color: var(--rp-text-muted); }
+  .rp-btn-danger:hover:not(:disabled) { background: #b91c1c; }
+}
+.rp-btn-secondary:active:not(:disabled), .rp-btn-danger:active:not(:disabled) { transform: scale(0.98); }
 .rp-btn-secondary:disabled, .rp-btn-danger:disabled { opacity: .6; cursor: default; }
 .rp-confirm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 /* Estado (badge) */
 .rp-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.rp-badge-ok      { background: #dcfce7; color: #166534; }
-.rp-badge-warn    { background: #fef9c3; color: #854d0e; }
+.rp-badge-ok      { background: var(--rp-ok-bg);   color: var(--rp-ok-fg); }
+.rp-badge-warn    { background: var(--rp-warn-bg); color: var(--rp-warn-fg); }
 .rp-badge-neutral { background: var(--rp-bg); color: var(--rp-text-muted); border: 1px solid var(--rp-border); }
 
 /* Turnos section */
@@ -128,11 +142,13 @@
   padding: 14px 8px; text-align: center;
   background: var(--rp-bg); border: 2px solid var(--rp-border);
   border-radius: 12px; cursor: pointer; font-family: var(--rp-font);
-  transition: border-color .15s;
+  transition: border-color .15s, transform 140ms cubic-bezier(0.23,1,0.32,1);
 }
-.rp-turno:hover:not(:disabled) { border-color: var(--rp-primary); }
-.rp-turno-full { opacity: .35; cursor: default; }
-.rp-turno-full:hover { border-color: var(--rp-border); }
+@media (hover: hover) and (pointer: fine) {
+  .rp-turno:hover:not(:disabled) { border-color: var(--rp-primary); }
+}
+.rp-turno:active:not(:disabled) { transform: scale(0.96); }
+.rp-turno-full { opacity: .4; cursor: default; }
 
 .rp-turno-hora-main { font-size: 18px; font-weight: 700; line-height: 1.2; }
 .rp-turno-estado { font-size: 11px; font-weight: 600; }
@@ -151,7 +167,7 @@
 /* Error */
 .rp-error {
   padding: 10px 14px; font-size: 13px; color: var(--rp-error);
-  background: #fef2f2; border-radius: 10px;
+  background: var(--rp-error-bg); border-radius: 10px;
 }
 
 /* Success */
@@ -194,9 +210,36 @@
   width: 100%; padding: 14px 16px; text-align: left;
   background: var(--rp-bg); border: 2px solid var(--rp-border);
   border-radius: 12px; cursor: pointer; font-family: var(--rp-font); color: var(--rp-text);
-  transition: border-color .15s;
+  transition: border-color .15s, transform 140ms cubic-bezier(0.23,1,0.32,1);
 }
-.rp-opt:hover { border-color: var(--rp-primary); }
+@media (hover: hover) and (pointer: fine) {
+  .rp-opt:hover { border-color: var(--rp-primary); }
+}
+.rp-opt:active { transform: scale(0.99); }
 .rp-opt-active { border-color: var(--rp-primary); }
 .rp-opt-main { font-size: 15px; font-weight: 600; }
 .rp-opt-meta { font-size: 13px; color: var(--rp-text-muted); white-space: nowrap; }
+
+/* ── Controles: día (chips) + personas ── */
+.rp-controls { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+.rp-day-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.rp-chip {
+  padding: 10px 16px; border-radius: 999px; border: 1px solid var(--rp-border);
+  background: var(--rp-bg); color: var(--rp-text); font-weight: 600; font-size: 14px;
+  cursor: pointer; font-family: var(--rp-font);
+  transition: background .15s, border-color .15s, color .15s, transform 140ms cubic-bezier(0.23,1,0.32,1);
+}
+.rp-chip-active { background: var(--rp-primary); color: #fff; border-color: var(--rp-primary); }
+.rp-chip:active { transform: scale(0.96); }
+.rp-day-date { flex: 1; min-width: 130px; }
+
+/* Carga / vacío de huecos */
+.rp-slots-loading { display: flex; justify-content: center; padding: 28px 0; color: var(--rp-text-muted); }
+.rp-empty { display: flex; flex-direction: column; gap: 12px; }
+
+/* Movimiento reducido: conserva color/opacidad, quita transforms */
+@media (prefers-reduced-motion: reduce) {
+  .rp-btn-primary:active, .rp-btn-secondary:active, .rp-btn-danger:active,
+  .rp-turno:active, .rp-chip:active, .rp-btn-stepper:active, .rp-opt:active { transform: none; }
+  .rp-spin { animation-duration: 1.2s; }
+}

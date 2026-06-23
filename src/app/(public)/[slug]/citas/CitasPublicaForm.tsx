@@ -50,6 +50,7 @@ export default function CitasPublicaForm({
   const [notas, setNotas] = useState('')
   const [hp, setHp] = useState('')   // honeypot anti-bots
   const [tokenCita, setTokenCita] = useState<string | null>(null)
+  const [estadoFinal, setEstadoFinal] = useState<'CONFIRMADA' | 'PENDIENTE'>('PENDIENTE')
   const [error, setError] = useState('')
 
   const servicio = servicios.find(s => s.servicio_id === servicioId) ?? null
@@ -107,6 +108,7 @@ export default function CitasPublicaForm({
       const res = await crearCitaPublica(fd)
       if (!res.ok) { setError(res.error ?? 'No se pudo reservar la cita.'); return }
       setTokenCita(res.token ?? null)
+      setEstadoFinal(res.estado === 'CONFIRMADA' ? 'CONFIRMADA' : 'PENDIENTE')
       setPaso('ok')
     })
   }
@@ -128,12 +130,12 @@ export default function CitasPublicaForm({
         {paso === 'ok' ? (
           <div className="rp-success">
             <Check size={40} strokeWidth={2} className="rp-success-icon" />
-            <p className="rp-subtitle">¡Cita solicitada!</p>
+            <p className="rp-subtitle">{estadoFinal === 'CONFIRMADA' ? '¡Cita confirmada!' : '¡Cita recibida!'}</p>
             <div className="rp-resumen">
               <span><strong>{servicio?.nombre}</strong></span>
               <span className="rp-resumen-hora">{formatFecha(fecha)} · {hora}</span>
             </div>
-            <p className="rp-hint">Te contactaremos para confirmar.</p>
+            <p className="rp-hint">{estadoFinal === 'CONFIRMADA' ? '¡Te esperamos!' : 'Te avisaremos en cuanto la confirmemos.'}</p>
             {tokenCita && (
               <a className="rp-manage-link" href={`/${slug}/r/${tokenCita}`}>Gestionar o cancelar mi cita</a>
             )}

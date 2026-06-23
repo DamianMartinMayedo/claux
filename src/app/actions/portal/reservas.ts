@@ -549,7 +549,7 @@ export async function guardarReglas(formData: FormData): Promise<{ ok: boolean; 
 
 export async function crearReservaPublica(
   formData: FormData,
-): Promise<{ ok: boolean; error?: string; reserva_id?: string; token?: string }> {
+): Promise<{ ok: boolean; error?: string; reserva_id?: string; token?: string; estado?: EstadoReserva }> {
   // Honeypot: campo oculto que solo rellenan los bots → fingir éxito sin crear nada
   if ((formData.get('hp') as string)?.trim()) return { ok: true }
 
@@ -623,7 +623,12 @@ export async function crearReservaPublica(
   // Token público para que el cliente pueda gestionar/cancelar su reserva
   const { data: tk } = await db.from('reservas').select('token').eq('reserva_id', reservaId).single()
 
-  return { ok: true, reserva_id: reservaId, token: (tk?.token as string) ?? undefined }
+  return {
+    ok: true,
+    reserva_id: reservaId,
+    token: (tk?.token as string) ?? undefined,
+    estado: botCfg.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE',
+  }
 }
 
 // ── Datos públicos para el formulario de reservas ──────────────────────────────
@@ -713,6 +718,38 @@ export async function obtenerDisponibilidadPublica(
 
   const ocupado = (ocupantes ?? []).reduce((s: number, r: { personas: number }) => s + Number(r.personas), 0)
   return { disponibles: Math.max(0, Number(franja.capacidad) - ocupado) }
+}
+
+// ── Disponibilidad de aforo en 1 query (mini-web pública) ──────────────────────
+
+export interface SlotAforo {
+  hora:      string   // HH:MM
+  franja_id: string
+  libre:     boolean
+}
+
+export async function obtenerSlotsAforo(
+  client_id: string, fecha: string, personas: number,
+): Promise<SlotAforo[]> {
+  if (!await rateLimitOk('slots_aforo', 90, 60)) return []
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('res_slots_aforo', {
+    p_client_id: client_id, p_fecha: fecha, p_personas: personas < 1 ? 1 : personas,
+  })
+  if (error || !Array.isArray(data)) return []
+  return data as SlotAforo[]
+}
+
+export async function obtenerProximoDiaAforo(
+  client_id: string, personas: number, desde: string,
+): Promise<{ fecha: string | null }> {
+  if (!await rateLimitOk('slots_aforo', 90, 60)) return { fecha: null }
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('res_proximo_dia_aforo', {
+    p_client_id: client_id, p_personas: personas < 1 ? 1 : personas, p_desde: desde, p_dias: 60,
+  })
+  if (error) return { fecha: null }
+  return { fecha: (data as string | null) ?? null }
 }
 
 // ── Gestión pública por token (cancelar reserva/cita sin cuenta) ───────────────
