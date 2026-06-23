@@ -4,7 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
-import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
+import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo } from '@/lib/modulos'
@@ -100,6 +100,11 @@ function generarReservaId():  string { return `RES-${corto()}` }
 
 function hoy(): string { return hoyEnTz() }
 function horaAhora(): string { return ahoraEnTz() }
+
+// Validación básica de correo (el navegador ya aplica type="email").
+function emailValido(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
 
 function hhmm(t: string | null): string { return t ? t.substring(0, 5) : '' }
 
@@ -546,6 +551,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   const hora           = (formData.get('hora')        as string)?.trim()
   const nombre_cliente = (formData.get('nombre')      as string)?.trim()
   const telefono       = (formData.get('telefono')    as string)?.trim() || null
+  const email          = (formData.get('email')       as string)?.trim() || ''
   const notas          = (formData.get('notas')       as string)?.trim() || null
 
   if (!client_id)      return { ok: false, error: 'Negocio no identificado.' }
@@ -554,6 +560,8 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   if (!fecha)          return { ok: false, error: 'Fecha obligatoria.' }
   if (!hora)           return { ok: false, error: 'Hora obligatoria.' }
   if (!nombre_cliente) return { ok: false, error: 'Nombre obligatorio.' }
+  if (!email)          return { ok: false, error: 'Correo obligatorio.' }
+  if (!emailValido(email)) return { ok: false, error: 'Correo no válido.' }
   if (fecha < hoy())   return { ok: false, error: 'No se puede reservar en una fecha pasada.' }
   if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige otra.' }
 
@@ -573,6 +581,9 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   if (error) return { ok: false, error: error.message }
   const result = data as { ok: boolean; error?: string }
   if (!result.ok) return { ok: false, error: result.error ?? 'Error al reservar la cita.' }
+
+  // Correo del cliente: se guarda tras la inserción atómica (no es columna de la RPC).
+  await db.from('reservas').update({ email }).eq('reserva_id', reservaId)
 
   await notificarReservaNueva(
     { token: bot.token, activo: bot.activo, notificar_owner_chat_id: bot.notificar_owner_chat_id },
@@ -604,6 +615,17 @@ export async function guardarBotConfigCitas(formData: FormData): Promise<{ ok: b
     activo:                 formData.get('activo') === 'true',
     confirmacionAutomatica: formData.get('confirmacion_automatica') === 'true',
   })
+  if (!r.ok) return r
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
+export async function guardarConfirmacionCitas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const r = await guardarConfirmacionCol(createAdminClient(), session.client_id, 'bot_config_citas', activa)
   if (!r.ok) return r
   revalidatePath('/portal/citas')
   return { ok: true }

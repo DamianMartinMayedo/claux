@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect, useRef } from 'react'
 import {
   crearCitaPublica,
   obtenerSlotsCita,
@@ -10,7 +10,7 @@ import {
 } from '@/app/actions/portal/citas'
 import type { EtiquetasSector } from '@/lib/sector'
 import type { ReglasReserva } from '@/app/actions/portal/reservas'
-import { Calendar, Check, Loader2 } from 'lucide-react'
+import { Check, Loader2, ChevronRight } from 'lucide-react'
 
 // Fechas en calendario LOCAL (sin toISOString/UTC) → correctas en cualquier zona.
 function ymd(dt: Date): string {
@@ -21,8 +21,12 @@ function sumarDiasISO(dias: number): string {
   const d = new Date(); d.setDate(d.getDate() + dias)
   return ymd(d)
 }
+function formatFechaCorta(f: string): string {
+  const [y, m, d] = f.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+}
 
-type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'ok'
+type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'revisar' | 'ok'
 
 export default function CitasPublicaForm({
   clientId, negocio, servicios, recursos, etiquetas, slug, reglas,
@@ -47,10 +51,11 @@ export default function CitasPublicaForm({
   const [hora, setHora] = useState('')
   const [horaRecurso, setHoraRecurso] = useState('')  // recurso concreto del hueco elegido
   const [loadingSlots, setLoadingSlots] = useState(false)
-  const [consultado, setConsultado] = useState(false)
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
+  const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
   const [hp, setHp] = useState('')   // honeypot anti-bots
   const [tokenCita, setTokenCita] = useState<string | null>(null)
@@ -83,20 +88,34 @@ export default function CitasPublicaForm({
     setPaso('horario')
   }
 
-  function cargarHorarios() {
-    setLoadingSlots(true); setError(''); setConsultado(true); setHora(''); setHoraRecurso('')
+  // Auto-carga de horarios al entrar al paso y al cambiar día/profesional/servicio
+  // (debounced), igual que la mini-web de Reservas: sin botón "Ver horarios".
+  useEffect(() => {
+    if (paso !== 'horario' || !servicioId) return
+    if (debounce.current) clearTimeout(debounce.current)
+    setLoadingSlots(true); setError(''); setHora(''); setHoraRecurso('')
     const recursoParam = recursoSel === 'any' ? null : recursoSel
-    obtenerSlotsCita(clientId, servicioId, recursoParam, fecha)
-      .then(s => { setSlots(s); setLoadingSlots(false) })
-      .catch(() => { setError('No se pudieron cargar los horarios.'); setLoadingSlots(false) })
-  }
+    debounce.current = setTimeout(() => {
+      obtenerSlotsCita(clientId, servicioId, recursoParam, fecha)
+        .then(s => { setSlots(s); setLoadingSlots(false) })
+        .catch(() => { setError('No se pudieron cargar los horarios.'); setLoadingSlots(false) })
+    }, 250)
+    return () => { if (debounce.current) clearTimeout(debounce.current) }
+  }, [clientId, servicioId, recursoSel, fecha, paso])
 
   function elegirHora(s: SlotCita) {
     setHora(s.hora); setHoraRecurso(s.recurso_id); setError(''); setPaso('datos')
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  // Paso intermedio: del formulario de datos al resumen de revisión (sin enviar aún).
+  function handleRevisar(e: React.FormEvent) {
     e.preventDefault()
+    if (!hora || !horaRecurso) { setError('Selecciona una hora.'); return }
+    setError(''); setPaso('revisar')
+  }
+
+  // Envío real: ya con el resumen revisado por el cliente.
+  function handleConfirmar() {
     if (!hora || !horaRecurso) { setError('Selecciona una hora.'); return }
     const fd = new FormData()
     fd.set('client_id', clientId)
@@ -106,6 +125,7 @@ export default function CitasPublicaForm({
     fd.set('hora', hora)
     fd.set('nombre', nombre)
     fd.set('telefono', telefono)
+    fd.set('email', email)
     fd.set('notas', notas)
     fd.set('hp', hp)
     startTransition(async () => {
@@ -125,6 +145,9 @@ export default function CitasPublicaForm({
   const nombreRecursoSel = recursoSel === 'any'
     ? `Cualquier ${et.recurso.toLowerCase()}`
     : recursos.find(r => r.recurso_id === recursoSel)?.nombre ?? ''
+
+  const esHoy    = fecha === hoyISO()
+  const esManana = fecha === sumarDiasISO(1)
 
   return (
     <div className="rp-card">
@@ -148,11 +171,10 @@ export default function CitasPublicaForm({
           <p className="rp-hint">Este negocio aún no tiene servicios disponibles para reservar.</p>
         ) : (
           <>
-            <p className="rp-subtitle">Pide tu cita en línea</p>
-
             {/* Paso 1 — Servicio */}
             {paso === 'servicio' && (
               <>
+                <p className="rp-subtitle">Pide tu cita en línea</p>
                 <p className="rp-step-label">Elige un {et.servicio.toLowerCase()}</p>
                 <div className="rp-opt-list">
                   {servicios.map(s => (
@@ -188,42 +210,49 @@ export default function CitasPublicaForm({
               </>
             )}
 
-            {/* Paso 3 — Día y hora */}
+            {/* Paso 3 — Día y hora (auto-carga, sin botón intermedio) */}
             {paso === 'horario' && (
               <>
                 <button className="rp-back" onClick={() => setPaso(recursosParaServicio.length === 1 ? 'servicio' : 'recurso')}>
                   ← {servicio?.nombre} · {nombreRecursoSel}
                 </button>
-                <div className="rp-field">
-                  <label className="rp-label">Día</label>
-                  <input type="date" className="rp-input" value={fecha} min={hoyISO()} max={fechaMax}
-                    onChange={e => { setFecha(e.target.value); setConsultado(false); setSlots([]) }} />
-                </div>
-                <button type="button" className="rp-btn-primary" onClick={cargarHorarios} disabled={loadingSlots}>
-                  {loadingSlots ? <Loader2 size={16} className="rp-spin" /> : <Calendar size={16} />}
-                  Ver horarios
-                </button>
 
-                {consultado && !loadingSlots && (
-                  <div className="rp-turnos-section">
-                    {horasUnicas.length === 0 ? (
-                      <p className="rp-hint">No hay horarios libres ese día. Prueba con otra fecha.</p>
-                    ) : (
-                      <>
-                        <div className="rp-turnos-day">{formatFecha(fecha)}</div>
-                        <div className="rp-turnos-sub">Elige una hora</div>
-                        <div className="rp-turnos-list">
-                          {horasUnicas.map(s => (
-                            <button key={s.hora} type="button" className="rp-turno" onClick={() => elegirHora(s)}>
-                              <span className="rp-turno-hora-main">{s.hora}</span>
-                              <span className="rp-turno-estado">Libre</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                <div className="rp-controls">
+                  <div className="rp-field">
+                    <span className="rp-label">Día</span>
+                    <div className="rp-day-chips">
+                      <button type="button" className={`rp-chip ${esHoy ? 'rp-chip-active' : ''}`}
+                        onClick={() => setFecha(hoyISO())}>Hoy</button>
+                      <button type="button" className={`rp-chip ${esManana ? 'rp-chip-active' : ''}`}
+                        onClick={() => setFecha(sumarDiasISO(1))}>Mañana</button>
+                      <input type="date" className="rp-input rp-day-date" value={fecha} aria-label="Otro día"
+                        min={hoyISO()} max={fechaMax} onChange={e => setFecha(e.target.value)} />
+                    </div>
                   </div>
-                )}
+                </div>
+
+                <div className="rp-turnos-section">
+                  <div className="rp-turnos-day">{formatFechaCorta(fecha)}</div>
+                  <div className="rp-turnos-sub">Elige una hora</div>
+
+                  {loadingSlots ? (
+                    <div className="rp-slots-loading"><Loader2 size={22} className="rp-spin" /></div>
+                  ) : horasUnicas.length === 0 ? (
+                    <div className="rp-empty">
+                      <p className="rp-hint">No hay horarios libres ese día. Prueba con otra fecha.</p>
+                    </div>
+                  ) : (
+                    <div className="rp-turnos-list">
+                      {horasUnicas.map(s => (
+                        <button key={s.hora} type="button" className="rp-turno"
+                          aria-label={`${s.hora}, libre`} onClick={() => elegirHora(s)}>
+                          <span className="rp-turno-hora-main">{s.hora}</span>
+                          <span className="rp-turno-estado">Libre</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
@@ -235,31 +264,77 @@ export default function CitasPublicaForm({
                   <strong>{servicio?.nombre} · {formatFecha(fecha)}</strong>
                   <span className="rp-turno-confirm-hora">{hora} · {nombreRecursoSel}</span>
                 </div>
-                <form onSubmit={handleSubmit} className="rp-form">
+                <form onSubmit={handleRevisar} className="rp-form">
                   <div className="rp-field">
-                    <label className="rp-label">Nombre <span className="rp-required">*</span></label>
-                    <input className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Tu nombre completo" required autoFocus />
+                    <label className="rp-label" htmlFor="rp-c-nombre">Nombre <span className="rp-required">*</span></label>
+                    <input id="rp-c-nombre" className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Tu nombre completo" required autoFocus />
                   </div>
                   <div className="rp-field">
-                    <label className="rp-label">Teléfono</label>
-                    <input className="rp-input" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="+53 5…" type="tel" />
+                    <label className="rp-label" htmlFor="rp-c-tel">Teléfono</label>
+                    <input id="rp-c-tel" className="rp-input" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="+53 5…" type="tel" />
                   </div>
                   <div className="rp-field">
-                    <label className="rp-label">Notas</label>
-                    <input className="rp-input" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Algo que debamos saber…" />
+                    <label className="rp-label" htmlFor="rp-c-email">Correo <span className="rp-required">*</span></label>
+                    <input id="rp-c-email" className="rp-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" type="email" required />
+                    <span className="rp-hint">Para confirmarte la cita.</span>
+                  </div>
+                  <div className="rp-field">
+                    <label className="rp-label" htmlFor="rp-c-notas">Notas</label>
+                    <input id="rp-c-notas" className="rp-input" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Algo que debamos saber…" />
                   </div>
                   <input type="text" className="rp-hp" name="hp" tabIndex={-1} autoComplete="off"
                     aria-hidden="true" value={hp} onChange={e => setHp(e.target.value)} />
                   {error && <div className="rp-error">{error}</div>}
-                  <button type="submit" className="rp-btn-primary" disabled={isPending}>
-                    {isPending ? <Loader2 size={16} className="rp-spin" /> : <Check size={16} />}
-                    Confirmar cita
+                  <button type="submit" className="rp-btn-primary">
+                    Continuar
+                    <ChevronRight size={16} />
                   </button>
                 </form>
               </div>
             )}
 
-            {error && paso !== 'datos' && <div className="rp-error">{error}</div>}
+            {/* Paso 5 — Revisar (resumen antes de confirmar) */}
+            {paso === 'revisar' && (
+              <div className="rp-turno-form-section">
+                <p className="rp-step-label">Revisa tu cita</p>
+
+                <div className="rp-review-group">
+                  <div className="rp-review-head">
+                    <span className="rp-review-title">Tu cita</span>
+                    <button type="button" className="rp-edit-link"
+                      onClick={() => { setPaso('horario'); setError('') }}>Cambiar</button>
+                  </div>
+                  <dl className="rp-review">
+                    <div className="rp-review-row"><dt>{et.servicio}</dt><dd>{servicio?.nombre}</dd></div>
+                    <div className="rp-review-row"><dt>{et.recurso}</dt><dd>{nombreRecursoSel}</dd></div>
+                    <div className="rp-review-row"><dt>Fecha</dt><dd>{formatFecha(fecha)}</dd></div>
+                    <div className="rp-review-row"><dt>Hora</dt><dd>{hora}</dd></div>
+                  </dl>
+                </div>
+
+                <div className="rp-review-group">
+                  <div className="rp-review-head">
+                    <span className="rp-review-title">Tus datos</span>
+                    <button type="button" className="rp-edit-link"
+                      onClick={() => { setPaso('datos'); setError('') }}>Cambiar</button>
+                  </div>
+                  <dl className="rp-review">
+                    <div className="rp-review-row"><dt>Nombre</dt><dd>{nombre}</dd></div>
+                    {telefono && <div className="rp-review-row"><dt>Teléfono</dt><dd>{telefono}</dd></div>}
+                    <div className="rp-review-row"><dt>Correo</dt><dd>{email}</dd></div>
+                    {notas && <div className="rp-review-row"><dt>Notas</dt><dd>{notas}</dd></div>}
+                  </dl>
+                </div>
+
+                {error && <div className="rp-error">{error}</div>}
+                <button type="button" className="rp-btn-primary" disabled={isPending} onClick={handleConfirmar}>
+                  {isPending ? <Loader2 size={16} className="rp-spin" /> : <Check size={16} />}
+                  Confirmar cita
+                </button>
+              </div>
+            )}
+
+            {error && paso !== 'datos' && paso !== 'revisar' && <div className="rp-error">{error}</div>}
           </>
         )}
       </div>

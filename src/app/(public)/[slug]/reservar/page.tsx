@@ -15,15 +15,16 @@ export default async function ReservaPublicaPage({ params }: Props) {
 
   if (!data.negocio || !data.client_id) notFound()
 
+  // El propio formulario ya renderiza su contenedor `.rp-page` (centrado + ancho
+  // fijo). No envolver aquí: el doble `.rp-page` dejaba la tarjeta en un padre
+  // shrink-to-fit y su ancho variaba según el contenido de cada paso.
   return (
-    <div className="rp-page">
-      <ReservaPublicaForm
-        franjas={data.franjas}
-        clientId={data.client_id}
-        negocio={data.negocio}
-        slug={slug}
-        reglas={data.reglas}
-      />
-    </div>
+    <ReservaPublicaForm
+      franjas={data.franjas}
+      clientId={data.client_id}
+      negocio={data.negocio}
+      slug={slug}
+      reglas={data.reglas}
+    />
   )
 }

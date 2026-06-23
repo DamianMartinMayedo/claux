@@ -48,12 +48,14 @@
 }
 
 .rp-card-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 24px 0; }
-.rp-card-body   { padding: 24px; }
+/* min-height: mantiene el contenedor estable entre los pasos de la reserva
+   (datos ↔ revisar) para que no "salte" de tamaño al avanzar. */
+.rp-card-body   { padding: 24px; min-height: 420px; }
 
 .rp-title   { font-size: 22px; font-weight: 700; margin: 0; }
 .rp-subtitle { font-size: 15px; color: var(--rp-text-muted); margin: 4px 0 20px; }
 .rp-hint    { font-size: 13px; color: var(--rp-text-muted); margin-top: 12px; }
-.rp-back    { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--rp-text-muted); background: none; border: none; cursor: pointer; padding: 2px 0; font-family: var(--rp-font); }
+.rp-back    { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 16px; font-size: 14px; color: var(--rp-text-muted); background: none; border: none; cursor: pointer; padding: 2px 0; font-family: var(--rp-font); }
 
 /* Fecha + Personas lado a lado */
 .rp-inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
@@ -163,6 +165,32 @@
 }
 .rp-turno-confirm strong { font-size: 16px; }
 .rp-turno-confirm-hora { color: var(--rp-text-muted); }
+
+/* Resumen de revisión (antes de confirmar): grupos editables por separado */
+.rp-review-group { margin-bottom: 16px; }
+.rp-review-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin-bottom: 8px;
+}
+.rp-review-title {
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--rp-text-muted);
+}
+.rp-edit-link {
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font-family: var(--rp-font); font-size: 13px; font-weight: 600; color: var(--rp-primary);
+}
+@media (hover: hover) and (pointer: fine) {
+  .rp-edit-link:hover { text-decoration: underline; }
+}
+.rp-review {
+  display: flex; flex-direction: column; gap: 12px;
+  margin: 0; padding: 16px;
+  background: var(--rp-bg); border-radius: 10px;
+}
+.rp-review-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; font-size: 14px; }
+.rp-review-row dt { color: var(--rp-text-muted); flex-shrink: 0; }
+.rp-review-row dd { margin: 0; font-weight: 600; text-align: right; word-break: break-word; }
 
 /* Error */
 .rp-error {

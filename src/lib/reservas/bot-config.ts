@@ -124,6 +124,23 @@ export async function guardarBotConfigCol(
   return { ok: true }
 }
 
+// ── Confirmación automática (independiente del bot) ────────────────────────────
+// La confirmación automática aplica aunque NO haya bot (decide si una reserva/cita
+// web nace CONFIRMADA o PENDIENTE), por eso se guarda por sí sola y sin exigir token.
+// Fusiona solo ese campo en el jsonb, preservando token/nombre/webhook/etc.
+export async function guardarConfirmacionCol(
+  db: SupabaseClient, client_id: string, columna: BotColumna, confirmacionAutomatica: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: cliente } = await db.from('clients').select(columna).eq('client_id', client_id).single()
+  const actual = parseBotConfig((cliente as Record<string, unknown> | null)?.[columna])
+  if (actual.confirmacion_automatica === confirmacionAutomatica) return { ok: true }
+  const { error } = await db.from('clients')
+    .update({ [columna]: { ...actual, confirmacion_automatica: confirmacionAutomatica } })
+    .eq('client_id', client_id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 // ── Activar / desactivar ───────────────────────────────────────────────────────
 
 export async function toggleActivoBotCol(

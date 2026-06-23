@@ -7,7 +7,7 @@ import {
   guardarServicio, eliminarServicio,
   guardarRecurso, eliminarRecurso, importarPersonalRRHH,
   crearCitaManual, cambiarEstadoCita,
-  guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas,
+  guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas, guardarConfirmacionCitas,
   obtenerSlotsCita,
   type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita,
 } from '@/app/actions/portal/citas'
@@ -566,6 +566,17 @@ export default function CitasView({ data }: { data: CitasPageData }) {
     navigator.clipboard.writeText(`claux.app/${data.slug}/citas`)
     toastSuccess('Enlace copiado.')
   }
+  // La confirmación automática se guarda sola al cambiar el switch (no depende del
+  // bot): aplica también a las citas web. Optimista, con reversión si falla.
+  function handleConfirmAuto(v: boolean) {
+    setConfirmAuto(v)
+    startTransition(async () => {
+      const res = await guardarConfirmacionCitas(v)
+      if (!res.ok) { toastError(res.error ?? 'No se pudo guardar.'); setConfirmAuto(!v); return }
+      toastSuccess(v ? 'Las citas se confirmarán automáticamente.' : 'Confirmarás cada cita manualmente.')
+      router.refresh()
+    })
+  }
   function handleBotSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!botForm.token.trim() && !botForm.nombre.trim()) {
@@ -814,7 +825,8 @@ export default function CitasView({ data }: { data: CitasPageData }) {
             <label>¿Confirmar las citas automáticamente?</label>
             <div className="res-switch-wrap">
               <label className="switch">
-                <input type="checkbox" checked={confirmAuto} onChange={e => setConfirmAuto(e.target.checked)} />
+                <input type="checkbox" checked={confirmAuto} disabled={isPending}
+                  onChange={e => handleConfirmAuto(e.target.checked)} />
                 <span className="switch-track" aria-hidden="true" />
               </label>
               <span className="res-switch-text">{confirmAuto ? 'Automática' : 'Manual'}</span>
@@ -823,7 +835,6 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               {confirmAuto
                 ? 'Las citas se confirman solas al crearse. El cliente ve la confirmación al instante.'
                 : 'Tú confirmas cada cita manualmente. El cliente queda pendiente hasta que la revises.'}
-              {' '}Se guarda al guardar el bot, abajo.
             </span>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
-import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol } from '@/lib/reservas/bot-config'
+import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol } from '@/lib/reservas/bot-config'
 import { enviarMensaje } from '@/lib/telegram/enviar'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { getPortalSession }  from './auth'
@@ -93,6 +93,12 @@ function corto(): string {
 function generarFranjaId():  string { return `FRA-${corto()}` }
 function generarReservaId(): string { return `RES-${corto()}` }
 function generarCierreId():  string { return `CIE-${corto()}` }
+
+// Validación básica de correo (suficiente para el formulario público; el navegador
+// ya aplica type="email"). Evita guardar basura sin pretender RFC completa.
+function emailValido(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
 
 // Cierres/festivos vigentes (hoy en adelante) del negocio
 async function cargarCierres(db: ReturnType<typeof createAdminClient>, client_id: string): Promise<Cierre[]> {
@@ -417,6 +423,19 @@ export async function guardarBotConfig(
   return { ok: true }
 }
 
+// ── Confirmación automática (se guarda sola, sin depender del bot) ─────────────
+
+export async function guardarConfirmacionReservas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const r = await guardarConfirmacionCol(createAdminClient(), session.client_id, 'bot_config', activa)
+  if (!r.ok) return r
+  revalidatePath('/portal/reservas')
+  return { ok: true }
+}
+
 // ── Activar / desactivar bot ───────────────────────────────────────────────────
 
 export async function toggleActivoBot(
@@ -565,6 +584,7 @@ export async function crearReservaPublica(
   const personasRaw = parseInt(formData.get('personas') as string, 10)
   const nombre_cliente = (formData.get('nombre')  as string)?.trim()
   const telefono  = (formData.get('telefono')   as string)?.trim() || null
+  const email     = (formData.get('email')      as string)?.trim() || ''
   const notas     = (formData.get('notas')      as string)?.trim() || null
 
   if (!client_id)       return { ok: false, error: 'Negocio no identificado.' }
@@ -572,6 +592,8 @@ export async function crearReservaPublica(
   if (!fecha)           return { ok: false, error: 'Fecha obligatoria.' }
   if (fecha < hoy())    return { ok: false, error: 'No se puede reservar en una fecha pasada.' }
   if (!nombre_cliente)  return { ok: false, error: 'Nombre obligatorio.' }
+  if (!email)           return { ok: false, error: 'Correo obligatorio.' }
+  if (!emailValido(email)) return { ok: false, error: 'Correo no válido.' }
 
   const personas = isNaN(personasRaw) || personasRaw < 1 ? 1 : personasRaw
   const horaVal  = hora || '12:00:00'
@@ -607,6 +629,9 @@ export async function crearReservaPublica(
   if (error) return { ok: false, error: error.message }
   const result = data as { ok: boolean; error?: string }
   if (!result.ok) return { ok: false, error: result.error ?? 'Error al crear la reserva.' }
+
+  // Correo del cliente: se guarda tras la inserción atómica (no es columna de la RPC).
+  await db.from('reservas').update({ email }).eq('reserva_id', reservaId)
 
   // Avisar al dueño por Telegram (no-op si no hay bot activo / sin chat vinculado)
   await notificarReservaNueva(

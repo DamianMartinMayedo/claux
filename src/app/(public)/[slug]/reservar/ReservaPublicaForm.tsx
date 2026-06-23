@@ -9,7 +9,7 @@ import {
   type SlotAforo,
   type ReglasReserva,
 } from '@/app/actions/portal/reservas'
-import { Check, Loader2, Search } from 'lucide-react'
+import { Check, Loader2, Search, ChevronRight } from 'lucide-react'
 
 // Fechas en calendario LOCAL (sin toISOString/UTC) para que "Hoy"/"Mañana" y las
 // comparaciones sean correctas en cualquier zona horaria.
@@ -51,8 +51,10 @@ export default function ReservaPublicaForm({
   const [buscando, setBuscando] = useState(false)
 
   const [sel, setSel]           = useState<SlotAforo | null>(null)
+  const [revisando, setRevisando] = useState(false)
   const [nombre, setNombre]     = useState('')
   const [telefono, setTelefono] = useState('')
+  const [email, setEmail]       = useState('')
   const [notas, setNotas]       = useState('')
   const [hp, setHp]             = useState('')
 
@@ -87,8 +89,16 @@ export default function ReservaPublicaForm({
       .catch(() => setBuscando(false))
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  // Paso intermedio: del formulario de datos al resumen de revisión (sin enviar aún).
+  function handleRevisar(e: React.FormEvent) {
     e.preventDefault()
+    if (!sel) { setError('Selecciona una hora.'); return }
+    setError('')
+    setRevisando(true)
+  }
+
+  // Envío real: ya con el resumen revisado por el cliente.
+  function handleConfirmar() {
     if (!sel) { setError('Selecciona una hora.'); return }
     const fd = new FormData()
     fd.set('client_id', clientId)
@@ -98,6 +108,7 @@ export default function ReservaPublicaForm({
     fd.set('personas', String(personas))
     fd.set('nombre', nombre)
     fd.set('telefono', telefono)
+    fd.set('email', email)
     fd.set('notas', notas)
     fd.set('hp', hp)
     startTransition(async () => {
@@ -143,15 +154,55 @@ export default function ReservaPublicaForm({
               <p className="rp-hint">Este negocio aún no tiene horarios de reserva disponibles.</p>
             </>
 
+          /* ── Paso revisar (resumen antes de confirmar) ──────────── */
+          ) : revisando ? (
+            <div className="rp-turno-form-section">
+              <p className="rp-subtitle">Revisa tu reserva</p>
+
+              <div className="rp-review-group">
+                <div className="rp-review-head">
+                  <span className="rp-review-title">Tu reserva</span>
+                  <button type="button" className="rp-edit-link"
+                    onClick={() => { setRevisando(false); setSel(null); setError('') }}>Cambiar</button>
+                </div>
+                <dl className="rp-review">
+                  <div className="rp-review-row"><dt>Fecha</dt><dd>{formatFecha(fecha)}</dd></div>
+                  <div className="rp-review-row"><dt>Hora</dt><dd>{sel?.hora}</dd></div>
+                  <div className="rp-review-row"><dt>Personas</dt><dd>{personas}</dd></div>
+                </dl>
+              </div>
+
+              <div className="rp-review-group">
+                <div className="rp-review-head">
+                  <span className="rp-review-title">Tus datos</span>
+                  <button type="button" className="rp-edit-link"
+                    onClick={() => { setRevisando(false); setError('') }}>Cambiar</button>
+                </div>
+                <dl className="rp-review">
+                  <div className="rp-review-row"><dt>Nombre</dt><dd>{nombre}</dd></div>
+                  <div className="rp-review-row"><dt>Teléfono</dt><dd>{telefono}</dd></div>
+                  <div className="rp-review-row"><dt>Correo</dt><dd>{email}</dd></div>
+                  {notas && <div className="rp-review-row"><dt>Notas</dt><dd>{notas}</dd></div>}
+                </dl>
+              </div>
+
+              {error && <div className="rp-error">{error}</div>}
+
+              <button type="button" className="rp-btn-primary" disabled={isPending} onClick={handleConfirmar}>
+                {isPending ? <Loader2 size={16} className="rp-spin" /> : <Check size={16} />}
+                Confirmar reserva
+              </button>
+            </div>
+
           /* ── Paso datos ─────────────────────────────────────────── */
           ) : sel ? (
             <div className="rp-turno-form-section">
-              <button className="rp-back" onClick={() => { setSel(null); setError('') }}>← Elegir otra hora</button>
+              <button className="rp-back" onClick={() => { setSel(null); setRevisando(false); setError('') }}>← Elegir otra hora</button>
               <div className="rp-turno-confirm">
                 <strong>{formatFecha(fecha)} · {sel.hora}</strong>
                 <span className="rp-turno-confirm-hora">{personas} persona{personas !== 1 ? 's' : ''}</span>
               </div>
-              <form onSubmit={handleSubmit} className="rp-form">
+              <form onSubmit={handleRevisar} className="rp-form">
                 <div className="rp-field">
                   <label className="rp-label" htmlFor="rp-nombre">Nombre <span className="rp-required">*</span></label>
                   <input id="rp-nombre" className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)}
@@ -161,6 +212,11 @@ export default function ReservaPublicaForm({
                   <label className="rp-label" htmlFor="rp-tel">Teléfono <span className="rp-required">*</span></label>
                   <input id="rp-tel" className="rp-input" value={telefono} onChange={e => setTelefono(e.target.value)}
                     placeholder="+53 5…" type="tel" required />
+                </div>
+                <div className="rp-field">
+                  <label className="rp-label" htmlFor="rp-email">Correo <span className="rp-required">*</span></label>
+                  <input id="rp-email" className="rp-input" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="tucorreo@ejemplo.com" type="email" required />
                   <span className="rp-hint">Para confirmarte la reserva.</span>
                 </div>
                 <div className="rp-field">
@@ -174,9 +230,9 @@ export default function ReservaPublicaForm({
 
                 {error && <div className="rp-error">{error}</div>}
 
-                <button type="submit" className="rp-btn-primary" disabled={isPending}>
-                  {isPending ? <Loader2 size={16} className="rp-spin" /> : <Check size={16} />}
-                  Confirmar reserva
+                <button type="submit" className="rp-btn-primary">
+                  Continuar
+                  <ChevronRight size={16} />
                 </button>
               </form>
             </div>

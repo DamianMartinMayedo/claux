@@ -12,6 +12,7 @@ import {
   guardarBotConfig,
   eliminarBotConfig,
   toggleActivoBot,
+  guardarConfirmacionReservas,
   guardarSlug,
   obtenerDisponibilidadPublica,
   type ReservaFranja,
@@ -623,6 +624,17 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
     })
   }
 
+  // La confirmación automática se guarda sola al cambiar el switch (no depende del
+  // bot): aplica también a las reservas web. Optimista, con reversión si falla.
+  function handleConfirmAuto(v: boolean) {
+    setConfirmAuto(v)
+    startTransition(async () => {
+      const res = await guardarConfirmacionReservas(v)
+      if (!res.ok) { toastError(res.error ?? 'No se pudo guardar.'); setConfirmAuto(!v); return }
+      toastSuccess(v ? 'Las reservas se confirmarán automáticamente.' : 'Confirmarás cada reserva manualmente.')
+      router.refresh()
+    })
+  }
   function handleBotSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!botForm.token.trim() && !botForm.nombre.trim()) {
@@ -858,8 +870,8 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
             <label>¿Confirmar las reservas automáticamente?</label>
             <div className="res-switch-wrap">
               <label className="switch">
-                <input type="checkbox" checked={confirmAuto}
-                  onChange={e => setConfirmAuto(e.target.checked)} />
+                <input type="checkbox" checked={confirmAuto} disabled={isPending}
+                  onChange={e => handleConfirmAuto(e.target.checked)} />
                 <span className="switch-track" aria-hidden="true" />
               </label>
               <span className="res-switch-text">
