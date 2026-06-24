@@ -701,7 +701,6 @@ textarea:focus-visible {
 .mod-cat-actions { display: flex; gap: var(--space-2); align-items: center; }
 .mod-col-drag { width: 36px; }
 .mod-col-act  { width: 80px; }
-.mod-input-dim { opacity: 0.5; }
 
 /* Drag rows */
 .mod-row-dragging { opacity: 0.35; }

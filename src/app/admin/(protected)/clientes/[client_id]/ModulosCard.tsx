@@ -26,10 +26,9 @@ type Props = {
 }
 
 const GRUPOS: { label: string; tipo: string }[] = [
-  { label: 'Contabilidad',       tipo: 'base' },
-  { label: 'Módulos adicionales', tipo: 'modulo' },
-  { label: 'Funcionalidades',     tipo: 'funcionalidad' },
-  { label: 'Addons',              tipo: 'addon' },
+  { label: 'Módulos',         tipo: 'modulo' },
+  { label: 'Funcionalidades', tipo: 'funcionalidad' },
+  { label: 'Addons',          tipo: 'addon' },
 ]
 
 export default function ModulosCard({
@@ -40,9 +39,9 @@ export default function ModulosCard({
   descuentoAnualPct,
   catalogo,
 }: Props) {
-  const [seleccionados, setSeleccionados] = useState<string[]>(
-    modulosActivos.includes('base') ? modulosActivos : ['base', ...modulosActivos]
-  )
+  // La contabilidad ('base') es un módulo opcional como cualquier otro: no se
+  // fuerza, el admin la activa/desactiva por cliente.
+  const [seleccionados, setSeleccionados] = useState<string[]>(modulosActivos)
   const [tarifa, setTarifa] = useState(tarifaInicial || 'estandar')
   const [ciclo, setCiclo]   = useState(cicloInicial || 'mensual')
   const [isPending, startTransition] = useTransition()
@@ -58,8 +57,7 @@ export default function ModulosCard({
 
   function clear() {}
 
-  function toggle(clave: string, esBase: boolean) {
-    if (esBase) return // base: siempre activa
+  function toggle(clave: string) {
     setSeleccionados(prev =>
       prev.includes(clave) ? prev.filter(c => c !== clave) : [...prev, clave]
     )
@@ -122,14 +120,13 @@ export default function ModulosCard({
                       {m.descripcion && <span className="mod-row-desc">{m.descripcion}</span>}
                     </span>
                     <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
-                      {m.es_base ? 'Incluida' : precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}
+                      {precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}
                     </span>
                     <span className="switch">
                       <input
                         type="checkbox"
                         checked={activo}
-                        disabled={m.es_base}
-                        onChange={() => toggle(m.clave, m.es_base)}
+                        onChange={() => toggle(m.clave)}
                         aria-label={`Activar ${m.nombre}`}
                       />
                       <span className="switch-track" aria-hidden="true" />

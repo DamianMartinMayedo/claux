@@ -20,7 +20,7 @@ export async function obtenerCatalogoPublico(): Promise<CatalogoPublico> {
   const [modRes, secRes, necRes] = await Promise.all([
     db
       .from('modulos_catalogo')
-      .select('clave, nombre, descripcion, tipo, es_base, mostrar_en_landing')
+      .select('clave, nombre, descripcion, tipo, mostrar_en_landing')
       .eq('activo', true)
       .order('orden', { ascending: true }),
     db
@@ -40,7 +40,6 @@ export async function obtenerCatalogoPublico(): Promise<CatalogoPublico> {
     nombre: m.nombre,
     descripcion: m.descripcion ?? '',
     tipo: m.tipo,
-    esBase: Boolean(m.es_base),
     mostrarEnLanding: m.mostrar_en_landing !== false,
   }))
 

@@ -51,7 +51,7 @@ Lee solo lo que tu tarea necesita. De `docs/CLAUX-LEGACY.md` usa sus encabezados
 |---|---|---|
 | [CONTEXTO.md](docs/CONTEXTO.md) | Visión del producto, estado actual del código, principios de arquitectura, modelo de datos, prioridades de Fase 0 | Siempre antes de empezar cualquier tarea |
 | [CLAUX-LEGACY.md](docs/CLAUX-LEGACY.md) | Design system completo (tokens, clases CSS, layout), esquema de BD, flujos financieros, convenciones de código | Al trabajar con UI/estilos, base de datos o lógica de negocio |
-| [MODELO-MODULOS.md](docs/MODELO-MODULOS.md) | Diseño del modelo comercial v2 (base contable + módulos à la carte): tablas, migración pendiente, gating, nomenclatura genérica, IA como módulo, discrepancias y checklist de implementación | Al implementar planes/módulos/precios, gating del portal o el admin de clientes |
+| [MODELO-MODULOS.md](docs/MODELO-MODULOS.md) | Diseño del modelo comercial v2 (módulos à la carte; la contabilidad es un módulo más, no una base obligatoria): tablas, gating, nomenclatura genérica, IA como módulo, discrepancias y checklist de implementación | Al implementar planes/módulos/precios, gating del portal o el admin de clientes |
 
 ## Política de eficiencia (ahorro de tokens)
 

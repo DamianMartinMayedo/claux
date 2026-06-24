@@ -30,12 +30,11 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   if (!cliente) redirect('/portal/login')
 
-  // Módulos activos leídos del cliente (modelo à la carte).
-  // 'base' siempre está activo — lo garantizamos aquí para que el sidebar
-  // no dependa de que el campo esté bien rellenado en cada fila.
-  const modulosActivos: string[] = Array.isArray(cliente.modulos_activos) && cliente.modulos_activos.length > 0
-    ? (cliente.modulos_activos.includes('base') ? cliente.modulos_activos : ['base', ...cliente.modulos_activos])
-    : ['base']
+  // Módulos activos leídos del cliente (modelo à la carte). La contabilidad
+  // 'base' es un módulo más: si el cliente no la contrató, no aparece activa.
+  const modulosActivos: string[] = Array.isArray(cliente.modulos_activos)
+    ? (cliente.modulos_activos as string[])
+    : []
 
   // Etiqueta de suscripción para el header (importe real según el ciclo)
   const precioMes   = Number(cliente.precio_mensual_usd ?? 0)

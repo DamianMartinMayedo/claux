@@ -8,14 +8,14 @@ export default async function DiagnosticoAdminPage() {
     supabase.from('diagnostico_necesidades').select('*').order('orden'),
     supabase
       .from('modulos_catalogo')
-      .select('clave, nombre, es_base')
+      .select('clave, nombre')
       .eq('activo', true)
       .order('orden'),
   ])
 
-  // Solo módulos no-base: la contabilidad (base) va siempre incluida.
+  // Todos los módulos, incluida la contabilidad ('base'): ahora es opcional, así
+  // que una necesidad (p.ej. "Contabilidad") puede mapear a 'base' como a cualquier otro.
   const modulos: ModuloLite[] = (modRes.data ?? [])
-    .filter((m) => !m.es_base)
     .map((m) => ({ clave: m.clave, nombre: m.nombre }))
 
   return (

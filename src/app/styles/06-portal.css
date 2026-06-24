@@ -83,12 +83,6 @@
   top: var(--header-h);
   height: calc(100vh - var(--header-h));
 }
-.nav-item-locked {
-  opacity: 0.4;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
 /* ── Contenido principal ── */
 .portal-main {
   grid-row: 2;

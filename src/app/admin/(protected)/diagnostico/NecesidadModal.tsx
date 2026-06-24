@@ -153,7 +153,7 @@ export default function NecesidadModal({
                 ))}
               </div>
               <span className="input-hint">
-                Lo que ofrecemos cuando el cliente marca esta opción. La contabilidad va siempre incluida.
+                Lo que ofrecemos cuando el cliente marca esta opción (la contabilidad es un módulo más).
               </span>
             </div>
 

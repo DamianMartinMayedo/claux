@@ -34,7 +34,6 @@ type Modulo = {
   descripcion: string | null
   precio_fundador_usd: number
   precio_estandar_usd: number
-  es_base: boolean
   tipo: string
   activo: boolean
   orden: number
@@ -146,7 +145,7 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
             <div className="grid-cols-2">
               <div className="input-group">
                 <label>Nombre <span className="required">*</span></label>
-                <input name="nombre" className="input" required defaultValue={modulo.nombre} disabled={modulo.es_base} />
+                <input name="nombre" className="input" required defaultValue={modulo.nombre} />
               </div>
               <div className="input-group">
                 <label>Tipo</label>
@@ -154,20 +153,19 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
                   className="input"
                   value={editTipo}
                   onChange={e => setEditTipo(e.target.value)}
-                  disabled={modulo.es_base || modulo.tipo === 'addon'}
+                  disabled={modulo.tipo === 'addon'}
                 >
                   <option value="modulo">Módulo</option>
                   <option value="funcionalidad">Funcionalidad</option>
                   {modulo.tipo === 'addon' && <option value="addon">Addon</option>}
                 </select>
-                {modulo.es_base && <span className="input-hint">La base no puede cambiar de tipo.</span>}
                 {modulo.tipo === 'addon' && <span className="input-hint">Los addons no pueden cambiar de tipo.</span>}
               </div>
             </div>
             <div className="grid-cols-2">
-              <div className={`input-group${modulo.es_base ? ' mod-input-dim' : ''}`}>
+              <div className="input-group">
                 <label>Orden</label>
-                <input name="orden" className="input" type="number" min="1" defaultValue={modulo.orden} disabled={modulo.es_base} />
+                <input name="orden" className="input" type="number" min="1" defaultValue={modulo.orden} />
               </div>
               <div className="input-group">
                 <label>Descripción</label>
@@ -184,13 +182,10 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
                 <input name="precio_estandar_usd" className="input" type="number" min="0" step="0.01" required defaultValue={modulo.precio_estandar_usd} />
               </div>
             </div>
-            {!modulo.es_base && (
-              <label className="module-check">
-                <input type="checkbox" name="activo" value="true" defaultChecked={modulo.activo} />
-                Activo (visible en los toggles de cliente)
-              </label>
-            )}
-            {modulo.es_base && <input type="hidden" name="activo" value="true" />}
+            <label className="module-check">
+              <input type="checkbox" name="activo" value="true" defaultChecked={modulo.activo} />
+              Activo (visible en los toggles de cliente)
+            </label>
 
             {/* ── Páginas internas (solo para módulos) ── */}
             {editTipo === 'modulo' && (

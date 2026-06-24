@@ -1,4 +1,5 @@
 import { notFound }        from 'next/navigation'
+import { requireModulo }    from '@/app/actions/portal/auth'
 import { obtenerReportes } from '@/app/actions/portal/reportes'
 import ReportesView        from './ReportesView'
 
@@ -20,6 +21,7 @@ interface PageProps {
 }
 
 export default async function ReportesPage({ searchParams }: PageProps) {
+  await requireModulo('base')
   const sp  = await searchParams
   const def = periodoMesActual()
   const desde   = sp.desde   || def.desde

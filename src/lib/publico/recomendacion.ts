@@ -5,10 +5,12 @@
 import type { NecesidadPublica, SectorPublico } from './tipos'
 
 /**
- * Devuelve las claves de módulo recomendadas (incluye siempre 'base'):
- *   base
- *   + módulos sugeridos por el sector (plantillas_sector)
+ * Devuelve las claves de módulo recomendadas:
+ *   módulos sugeridos por el sector (plantillas_sector)
  *   + módulos que cubren las necesidades elegidas (diagnostico_necesidades).
+ *
+ * La contabilidad ('base') es un módulo más: solo se recomienda si el cliente
+ * marca la necesidad "Contabilidad" (que mapea a 'base'). No se fuerza.
  *
  * `necesidadesSel` son CLAVES DE NECESIDAD (no de módulo); se expanden a sus
  * módulos vía el catálogo `necesidades`.
@@ -19,7 +21,7 @@ export function generarRecomendacion(
   sectores: SectorPublico[],
   necesidades: NecesidadPublica[],
 ): string[] {
-  const claves = new Set<string>(['base'])
+  const claves = new Set<string>()
 
   const plantilla = sectores.find((s) => s.sector === sectorId)
   if (plantilla) for (const clave of plantilla.modulos) claves.add(clave)

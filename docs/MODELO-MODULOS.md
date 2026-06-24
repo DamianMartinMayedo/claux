@@ -60,11 +60,12 @@ Decisión del propietario (frente a "reutilizar la tabla plans"): es la única q
 **La idea, simple:**
 1. Un **catálogo** de módulos disponibles, con su precio (tabla `modulos_catalogo`). Es una lista de
    "productos" que CLAUX vende. Los precios viven aquí, en datos — **nunca** en el código. Cada
-   entrada lleva un `tipo` (`base` | `modulo` | `funcionalidad`) que decide cómo se agrupa y presenta
-   en el admin y el portal; `es_base` marca la fila obligatoria que siempre está activa.
+   entrada lleva un `tipo` (`modulo` | `funcionalidad` | `addon`) que decide cómo se agrupa y presenta
+   en el admin y el portal. La contabilidad es un `modulo` más (clave `base`); el antiguo `tipo='base'`/flag
+   `es_base` quedó **retirado** (068): es opcional como cualquier módulo.
 2. Cada **cliente** guarda **qué módulos tiene encendidos** y a qué **tarifa** (fundador o estándar). Su
-   **precio mensual** = base + suma de los módulos encendidos, según su tarifa. Se recalcula cada vez que
-   se togglea un módulo.
+   **precio mensual** = suma de los módulos encendidos (incluida la contabilidad si la contrató), según su
+   tarifa. Se recalcula cada vez que se togglea un módulo.
 3. El **gating** del portal pasa a leer los módulos **del cliente** (no del plan). El resto del gating no
    cambia: `PortalSidebar` ya consume una lista de strings.
 
@@ -95,15 +96,15 @@ páginas internas tiene. Fuente canónica de esta clasificación.
 
 | Tipo | Sidebar | Páginas internas | Ejemplo | ¿Se muestra si no contratado? |
 |---|---|---|---|---|
-| **`base`** | Grupo colapsable «Contabilidad», siempre expandido | Sí (`paginas` JSONB) | Contabilidad | Siempre visible, todas las páginas activas |
-| **`modulo`** | Grupo colapsable con nombre del módulo | Sí (`paginas` JSONB) | Inventario, RRHH, Asistente IA | Visible pero bloqueado (candado, href=`#`) |
-| **`funcionalidad`** | Items standalone (sin grupo) | No (ruta única) | Catálogo QR, Reservas y citas, Docs imprenta | **Oculto** por completo si no está activo |
+| **`modulo`** | Grupo colapsable con nombre del módulo | Sí (`paginas` JSONB) | **Contabilidad** (clave `base`), Inventario, RRHH, Asistente IA | **Oculto** si no está contratado |
+| **`funcionalidad`** | Items standalone (sin grupo) | No (ruta única) | Catálogo QR, Reservas y citas, Docs imprenta | **Oculto** si no está contratado |
 | **`addon`** | **No genera items** en el sidebar | No | Multiempresa, Usuarios extra, Estadísticas premium | El gating se hace en la página afectada |
+
+> **Contabilidad** es un `modulo` con clave `base` (su grupo del sidebar contiene Ventas, Gastos, CxC, CxP, Tesorería, Reportes, Terceros, Monedas). El tipo `base`/flag `es_base` está **retirado** (068): ya no hay categoría especial ni "siempre activa".
 
 **Detalle de cada tipo:**
 
-- **`base`**: La base contable obligatoria. Siempre activa (`es_base = true`). Sus páginas internas son las de Contabilidad (Ventas, Gastos, Tesorería, etc.). No se puede cambiar de tipo ni desactivar.
-- **`modulo`**: Capacidad ERP contratable. Agrupa varias páginas internas bajo un grupo colapsable. Si no está contratado, el grupo se muestra con candado (upsell visual).
+- **`modulo`**: Capacidad ERP contratable (incluida la **Contabilidad**, clave `base`). Agrupa varias páginas internas bajo un grupo colapsable. Si no está contratado, el grupo **no aparece** en el sidebar (regla general: todo módulo no contratado, sea del tipo que sea, se oculta — sin candados de upsell). Las rutas se protegen con `requireModulo()`.
 - **`funcionalidad`**: Feature de sector (restaurante, peluquería, etc.). Item standalone en el sidebar, fuera de grupos. Si no está contratado, **no aparece** en el menú. Las rutas están protegidas por `requireModulo()`.
 - **`addon`**: Desbloquea capacidad extra en una página existente o añade una feature transversal (más empresas, más usuarios, dashboards avanzados). **No genera navegación propia**. El gating se aplica en la página afectada (ej: `empresas/page.tsx` verifica `multiempresa`). En el catálogo del admin aparece como un toggle más con su precio. Siempre se muestra en el panel de activación del cliente.
 
@@ -122,8 +123,9 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
 - **Ocultar en el sidebar NO es control de acceso.** Cada ruta gateada se protege en servidor con
   `requireModulo('<clave>')` al inicio de su `page.tsx` (redirige a `/portal/dashboard` si el cliente no lo tiene).
   Lo tienen: catálogo QR, reservas, docs imprenta, IA, productos/almacenes/compras/movimientos (`inventario`),
-  RRHH. La base no necesita guard (siempre activa); `empresas` es accesible (editas tu empresa) y el alta de la
-  2.ª empresa la limita el addon `multiempresa` dentro de la página.
+  RRHH, **y las páginas de Contabilidad** (Ventas, Gastos, CxC, CxP, Tesorería, Reportes, Terceros, Monedas →
+  `requireModulo('base')`, ya que la contabilidad es opcional). `empresas` es accesible (editas tu empresa) y el
+  alta de la 2.ª empresa la limita el addon `multiempresa` dentro de la página.
 
 > Nota de diseño: la columna `paginas` añade una capa (BD → sidebar) cuyo único beneficio real es renombrar/reordenar
 > sin desplegar; ruta + icono + página viven en código igualmente. Si en el futuro estorba, revertir a un nav
@@ -150,7 +152,7 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
 ## 5. Cambios de código al implementar (resumen)
 
 - **Gating** — `src/app/portal/(app)/layout.tsx`: cambiar la query que hoy lee `plans.modulos` por
-  `clients.modulos_activos` (incluir siempre `'base'`). Sigue pasando una lista de strings al sidebar.
+  `clients.modulos_activos` (la base es un módulo opcional; no se fuerza). Sigue pasando una lista de strings al sidebar.
 - **Sidebar** — `src/components/portal/PortalSidebar.tsx`: reestructurar `buildNav` a la frontera nueva.
   Grupo **Contabilidad** (base, siempre visible): Ventas, Gastos/Cobros, Cuentas por cobrar, Cuentas por
   pagar, Tesorería, Reportes, Terceros, Monedas. Grupo **Inventario** (`modulo: inventario`): Productos,
@@ -165,8 +167,8 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
   el fetch del formulario (`_FacturaFormModal`/`_OfertaFormModal`): sin Inventario → `productos = []`
   (manual puro); con Inventario → se cargan. No cambia la lógica de cálculo.
 - **Admin** — en el detalle de cliente (`src/app/admin/(protected)/clientes/[client_id]/`): UI de **toggle
-  por módulo/funcionalidad** (agrupada por `tipo`; base bloqueada en ON) que actualiza `modulos_activos` y
-  **recalcula** `precio_mensual_usd` = precio de `base` + Σ precios de lo activo según `clients.tarifa`.
+  por módulo/funcionalidad** (agrupada por `tipo`; contabilidad incluida como un módulo toggleable más) que
+  actualiza `modulos_activos` y **recalcula** `precio_mensual_usd` = Σ precios de lo activo según `clients.tarifa`.
   Server action nueva en `src/app/actions/clientes.ts`.
 - **Catálogo** — pantalla admin para CRUD de `modulos_catalogo` (precios fundador/estándar, `tipo`, `activo`).
 - **Constante `MODULOS`** — `src/lib/planes-constants.ts` (y los 3 modales de `/admin/planes`) se unifican a
@@ -221,7 +223,7 @@ por caso de uso. Cómo funciona:
 - [x] **Gating** del portal lee `clients.modulos_activos` (`layout.tsx`).
 - [x] **Sidebar** reestructurado a la frontera nueva (Contabilidad/base, Inventario, RRHH, Multiempresa, IA, Funcionalidades); item Contabilidad (`modulo_contable`) retirado.
 - [x] **Gating de Empresas** por módulo `multiempresa` (OFF → máx. 1 empresa); `empresa_id` intacto.
-- [x] **Admin toggle** en detalle de cliente (`ModulosCard`, agrupado por `tipo`, base bloqueada) + `setModulosCliente` (recalcula `precio_mensual_usd`).
+- [x] **Admin toggle** en detalle de cliente (`ModulosCard`, agrupado por `tipo`; contabilidad toggleable como un módulo más) + `setModulosCliente` (recalcula `precio_mensual_usd`).
 - [x] **Admin catálogo** `/admin/modulos` (CRUD de precios/`activo`).
 - [x] **Backfill** de clientes sin módulos → `['base']` (en 018).
 - [x] **Planes eliminados (018)**: tabla `plans` borrada, `plan_id` vaciado, `/admin/planes` + `planes-constants.ts` + `cambiarPlan` retirados.

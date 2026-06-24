@@ -9,8 +9,7 @@ export interface ModuloPublico {
   clave: string
   nombre: string
   descripcion: string
-  tipo: string // base | modulo | addon | funcionalidad
-  esBase: boolean
+  tipo: string // modulo | addon | funcionalidad (la contabilidad es un modulo, clave 'base')
   mostrarEnLanding: boolean // se muestra en la grilla "Módulos" de la landing
 }
 

@@ -143,20 +143,18 @@ function ValueItem({ icon, title, text }: { icon: React.ReactNode; title: string
 /* ════════════════════════════════════════════════ Módulos ════ */
 
 function ModulesSection({ modulos }: { modulos: ModuloPublico[] }) {
-  const base = modulos.find((m) => m.esBase)
-  const visibles = modulos.filter((m) => !m.esBase && m.mostrarEnLanding)
-  const cards = base ? [base, ...visibles] : visibles
+  const cards = modulos.filter((m) => m.mostrarEnLanding)
 
   return (
     <section className="ld-section ld-section-alt">
       <Reveal className="ld-section-head">
         <div className="ld-section-label">Módulos disponibles</div>
         <h2 className="ld-section-title">
-          Una base sólida, los módulos que tú eliges
+          Los módulos que tú eliges
         </h2>
         <p className="ld-section-text">
-          Todos los clientes llevan la Contabilidad incluida. El resto de módulos
-          los activas solo si los necesitas. Pagas por lo que usas.
+          Activas solo los módulos que tu negocio necesita —contabilidad,
+          inventario, reservas, citas…— y pagas únicamente por lo que usas.
         </p>
       </Reveal>
 
@@ -170,7 +168,6 @@ function ModulesSection({ modulos }: { modulos: ModuloPublico[] }) {
               </div>
               <h3>{m.nombre}</h3>
               <p>{m.descripcion}</p>
-              {m.esBase && <span className="ld-module-tag">Incluida</span>}
             </div>
           )
         })}

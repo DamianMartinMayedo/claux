@@ -9,7 +9,7 @@ import {
   LayoutDashboard, ShoppingCart, TrendingDown, ArrowUpRight, ArrowDownLeft,
   Wallet, FileText, Users, DollarSign, Package, Warehouse, ShoppingBag,
   Boxes, UserCircle, Building2, User, UsersRound, CreditCard, HelpCircle,
-  QrCode, Calendar, Printer, Sparkles, Lock, Circle, ChevronDown, LogOut,
+  QrCode, Calendar, Printer, Sparkles, Circle, ChevronDown, LogOut,
   CalendarClock, Banknote, BarChart3, CalendarDays,
 } from 'lucide-react'
 
@@ -96,7 +96,7 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
   // Auto-expandir el grupo que contiene la ruta activa (sync navegación → UI; intencional).
   useEffect(() => {
     for (const m of catalogo) {
-      const pages = (m.tipo === 'modulo' || m.tipo === 'base') ? (m.paginas ?? []) : []
+      const pages = m.tipo === 'modulo' ? (m.paginas ?? []) : []
       const activeInGroup = pages.some(p => pathname === p.ruta || pathname.startsWith(p.ruta + '/'))
       if (activeInGroup && collapsed[m.clave]) {
         setCollapsed(prev => { const next = { ...prev, [m.clave]: false }; saveCollapsed(next); return next })
@@ -117,33 +117,27 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
 
   const isDashboardActive = pathname === '/portal/dashboard' || pathname.startsWith('/portal/dashboard/')
 
-  // Separar catálogo por tipo
+  // Separar catálogo por tipo. La contabilidad es un módulo más (tipo='modulo',
+  // clave 'base'), así que entra por el camino normal de módulos.
   const catalogItems = catalogo
-  const baseGroup     = catalogItems.find(c => c.tipo === 'base')
   const modulos       = catalogItems.filter(c => c.tipo === 'modulo')
   const funcionalidades = catalogItems.filter(c => c.tipo === 'funcionalidad')
   // addons no generan items de navegación
   const cfgPages      = buildConfiguracion(rol)
 
-  // Helper para renderizar una página (como Link en el sidebar)
-  function renderPage(ruta: string, label: string, icon: React.ReactNode, bloqueado: boolean) {
+  // Helper para renderizar una página (como Link en el sidebar). Solo se pintan
+  // las páginas de módulos contratados, así que no hay estado "bloqueado".
+  function renderPage(ruta: string, label: string, icon: React.ReactNode) {
     const active = pathname === ruta || pathname.startsWith(ruta + '/')
     return (
-      <Link
-        key={ruta}
-        href={bloqueado ? '#' : ruta}
-        className={`nav-item${active ? ' active' : ''}${bloqueado ? ' nav-item-locked' : ''}`}
-        title={bloqueado ? 'Módulo no incluido en tu plan' : undefined}
-        aria-disabled={bloqueado}
-      >
+      <Link key={ruta} href={ruta} className={`nav-item${active ? ' active' : ''}`}>
         {icon}
         <span className="flex-1">{label}</span>
-        {bloqueado && <Lock size={12} strokeWidth={2} style={{ flexShrink: 0, opacity: 0.5 }} />}
       </Link>
     )
   }
 
-  function renderCollapsibleGroup(clave: string, nombre: string, pages: PaginaInfo[], active: boolean) {
+  function renderCollapsibleGroup(clave: string, nombre: string, pages: PaginaInfo[]) {
     const isCollapsed = collapsed[clave] ?? true
     return (
       <div key={clave}>
@@ -156,14 +150,11 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
           <ChevronDown size={14} strokeWidth={2.5} className={`nav-chevron${!isCollapsed ? ' nav-chevron-open' : ''}`} aria-hidden="true" />
         </button>
         <div ref={el => { contentRefs.current[clave] = el }} className={`nav-collapse-wrapper${!isCollapsed ? ' nav-collapse-open' : ''}`} style={!hasHydrated ? { maxHeight: isCollapsed ? '0px' : 'none' } : undefined}>
-          {pages.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta), active ? false : !modulosActivos.includes(clave)))}
+          {pages.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta)))}
         </div>
       </div>
     )
   }
-
-  // Agrupación: base → Contabilidad (always expanded by default), modulos → collapsible, funcionalidades → standalone
-  const basePages    = ensurePages(baseGroup?.paginas).sort((a, b) => a.orden - b.orden)
 
   return (
     <>
@@ -176,28 +167,26 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
           <span className="flex-1">Dashboard</span>
         </Link>
 
-        {/* Funcionalidades — standalone, solo visibles si activas */}
+        {/* Funcionalidades — standalone, solo visibles si contratadas */}
         {funcionalidades
           .filter(f => modulosActivos.includes(f.clave))
           .map(f => {
             const pages = ensurePages(f.paginas).sort((a, b) => a.orden - b.orden)
-            return pages.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta), false))
+            return pages.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta)))
           })}
 
-        {/* Base (Contabilidad) — grupo colapsable, siempre visible, siempre activo */}
-        {baseGroup && renderCollapsibleGroup('base', baseGroup.nombre, basePages, true)}
-
-        {/* Módulos — grupos colapsables, páginas bloqueadas si no activo */}
-        {modulos.map(m => {
-          const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
-          const isActive = modulosActivos.includes(m.clave)
-          return renderCollapsibleGroup(m.clave, m.nombre, pages, isActive)
-        })}
+        {/* Módulos (incluida Contabilidad) — grupos colapsables; solo los
+            contratados, sin candados. */}
+        {modulos
+          .filter(m => modulosActivos.includes(m.clave))
+          .map(m => {
+            const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
+            return renderCollapsibleGroup(m.clave, m.nombre, pages)
+          })}
 
         {/* Configuración — grupo colapsable fijo, siempre visible */}
         {renderCollapsibleGroup('configuracion', 'Configuración',
-          cfgPages.map((p, i) => ({ ruta: p.ruta, label: p.label, orden: i })),
-          true
+          cfgPages.map((p, i) => ({ ruta: p.ruta, label: p.label, orden: i }))
         )}
       </nav>
 

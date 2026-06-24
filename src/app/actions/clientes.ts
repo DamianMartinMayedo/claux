@@ -75,9 +75,9 @@ export async function crearCliente(formData: FormData) {
     .maybeSingle()
   if (emailExiste) return { ok: false, error: 'Ya existe un cliente con ese email.' }
 
-  // Módulos seleccionados (base siempre incluida) y precio mensual resultante
-  const modulosRaw = formData.getAll('modulos') as string[]
-  const modulos_activos = modulosRaw.includes('base') ? modulosRaw : ['base', ...modulosRaw]
+  // Módulos seleccionados (la contabilidad 'base' es opcional, como cualquier
+  // módulo) y precio mensual resultante.
+  const modulos_activos = formData.getAll('modulos') as string[]
   const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
 
   // Estado y vigencia: trial → TRIAL por días configurables; sin trial → DESACTIVADO hasta que
@@ -291,12 +291,11 @@ export async function setModulosCliente(formData: FormData) {
   if (!['fundador', 'estandar'].includes(tarifa)) return { ok: false, error: 'Tarifa inválida.' }
   if (!['mensual', 'anual'].includes(ciclo))      return { ok: false, error: 'Ciclo de facturación inválido.' }
 
-  // Los módulos activos vienen como checkboxes: múltiples values con name="modulos"
-  const modulosRaw = formData.getAll('modulos') as string[]
-  // 'base' siempre activo — garantizarlo aquí
-  const modulos_activos = modulosRaw.includes('base') ? modulosRaw : ['base', ...modulosRaw]
+  // Los módulos activos vienen como checkboxes: múltiples values con name="modulos".
+  // La contabilidad 'base' es opcional, como cualquier módulo (no se fuerza).
+  const modulos_activos = formData.getAll('modulos') as string[]
 
-  // precio = base + Σ módulos activos según tarifa (siempre desde el catálogo)
+  // precio = Σ módulos activos según tarifa (siempre desde el catálogo)
   const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
 
   const { error } = await supabase

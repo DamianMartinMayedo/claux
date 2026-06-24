@@ -34,10 +34,9 @@ type Props = {
 }
 
 const GRUPOS: { label: string; tipo: string }[] = [
-  { label: 'Contabilidad',       tipo: 'base' },
-  { label: 'Módulos adicionales', tipo: 'modulo' },
-  { label: 'Funcionalidades',     tipo: 'funcionalidad' },
-  { label: 'Addons',              tipo: 'addon' },
+  { label: 'Módulos',         tipo: 'modulo' },
+  { label: 'Funcionalidades', tipo: 'funcionalidad' },
+  { label: 'Addons',          tipo: 'addon' },
 ]
 
 export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, descuentoAnualPct }: Props) {
@@ -48,7 +47,9 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  const baseClave = catalogo.find(m => m.es_base)?.clave ?? 'base'
+  // Contabilidad (clave 'base') es un módulo más; lo dejamos preseleccionado por
+  // defecto en el alta (lo común), pero es desmarcable.
+  const baseClave = 'base'
   const [seleccionados, setSeleccionados] = useState<string[]>([baseClave])
   const [sector, setSector] = useState('')
   const [tarifa, setTarifa] = useState('estandar')
@@ -69,8 +70,7 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
   const precioAnual = importeCiclo(precioMensual, 'anual', descuentoAnualPct)
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
 
-  function toggle(clave: string, esBase: boolean) {
-    if (esBase) return
+  function toggle(clave: string) {
     setSeleccionados(prev =>
       prev.includes(clave) ? prev.filter(c => c !== clave) : [...prev, clave]
     )
@@ -197,7 +197,7 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
                               {m.descripcion && <span className="mod-row-desc">{m.descripcion}</span>}
                             </span>
                             <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
-                              {m.es_base ? 'Incluida' : precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}
+                              {precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}
                             </span>
                             <span className="switch">
                               <input
@@ -205,8 +205,7 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
                                 name="modulos"
                                 value={m.clave}
                                 checked={activo}
-                                disabled={m.es_base}
-                                onChange={() => toggle(m.clave, m.es_base)}
+                                onChange={() => toggle(m.clave)}
                                 aria-label={`Activar ${m.nombre}`}
                               />
                               <span className="switch-track" aria-hidden="true" />

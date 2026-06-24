@@ -1,11 +1,12 @@
 import { redirect }            from 'next/navigation'
-import { getPortalSession }    from '@/app/actions/portal/auth'
+import { getPortalSession, requireModulo } from '@/app/actions/portal/auth'
 import { obtenerMonedas, obtenerPares } from '@/app/actions/portal/monedas'
 import MonedasView             from './MonedasView'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MonedasPage() {
+  await requireModulo('base')
   const session = await getPortalSession()
   if (!session) redirect('/portal/login')
 
