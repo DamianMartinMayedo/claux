@@ -614,10 +614,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">{et.reservas}</h1>
+          <h1 className="page-title">Citas</h1>
           <p className="page-subtitle">
             {activeTab === 'agenda' && totalHoy > 0
-              ? `Hoy: ${pendientesHoy} pendientes · ${confirmadasHoy} confirmadas · Total ${totalHoy}`
+              ? `Hoy: ${pendientesHoy} pendientes · ${confirmadasHoy} confirmadas · Total ${totalHoy} citas`
               : `Gestiona las citas de tu negocio.`}
           </p>
         </div>

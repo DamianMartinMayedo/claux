@@ -132,8 +132,11 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
     db.from('reserva_franjas').select('*')
       .eq('client_id', session.client_id)
       .order('hora_inicio', { ascending: true, nullsFirst: true }),
+    // Solo reservas (franja); las citas viven en la misma tabla con recurso_id
+    // — se excluyen aquí para que no aparezcan en la lista de Reservas.
     db.from('reservas').select('*')
       .eq('client_id', session.client_id)
+      .is('recurso_id', null)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false }),
     db.from('clients').select('bot_config, slug, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
