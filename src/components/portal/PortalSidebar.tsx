@@ -13,8 +13,6 @@ import {
   CalendarClock, Banknote, BarChart3, CalendarDays,
 } from 'lucide-react'
 
-type Rol = 'admin_empresa' | 'usuario'
-
 interface PaginaInfo {
   ruta: string
   label: string
@@ -50,24 +48,12 @@ function saveCollapsed(state: Record<string, boolean>) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch {}
 }
 
-// ── Configuración: páginas fijas del sistema ──
-function buildConfiguracion(rol: Rol) {
-  return [
-    { ruta: '/portal/perfil',      label: 'Mi perfil',   icon: <User size={18} strokeWidth={2} /> },
-    ...(rol === 'admin_empresa' ? [{ ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={18} strokeWidth={2} /> }] : []),
-    { ruta: '/portal/empresas',    label: 'Mis Empresas',    icon: <Building2 size={18} strokeWidth={2} /> },
-    { ruta: '/portal/facturacion', label: 'Suscripción', icon: <CreditCard size={18} strokeWidth={2} /> },
-    { ruta: '/portal/soporte',     label: 'Soporte',     icon: <HelpCircle size={18} strokeWidth={2} /> },
-  ]
-}
-
 interface Props {
-  rol:            Rol
   modulosActivos: string[]
   catalogo:       CatalogoItem[]
 }
 
-export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) {
+export default function PortalSidebar({ modulosActivos, catalogo }: Props) {
   const pathname     = usePathname()
   const [pending, startTransition] = useTransition()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
@@ -102,12 +88,7 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
         setCollapsed(prev => { const next = { ...prev, [m.clave]: false }; saveCollapsed(next); return next })
       }
     }
-    // Also check configuración group
-    const cfgActive = buildConfiguracion(rol).some(p => pathname === p.ruta || pathname.startsWith(p.ruta + '/'))
-    if (cfgActive && collapsed['configuracion']) {
-      setCollapsed(prev => { const next = { ...prev, configuracion: false }; saveCollapsed(next); return next })
-    }
-    // Intencional: solo reacciona a la navegación. Incluir collapsed/catalogo/rol
+    // Intencional: solo reacciona a la navegación. Incluir collapsed/catalogo
     // dispararía el efecto en cada toggle y rompería el colapso manual.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
@@ -123,7 +104,6 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
   const modulos       = catalogItems.filter(c => c.tipo === 'modulo')
   const funcionalidades = catalogItems.filter(c => c.tipo === 'funcionalidad')
   // addons no generan items de navegación
-  const cfgPages      = buildConfiguracion(rol)
 
   // Helper para renderizar una página (como Link en el sidebar). Solo se pintan
   // las páginas de módulos contratados, así que no hay estado "bloqueado".
@@ -183,11 +163,6 @@ export default function PortalSidebar({ rol, modulosActivos, catalogo }: Props) 
             const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
             return renderCollapsibleGroup(m.clave, m.nombre, pages)
           })}
-
-        {/* Configuración — grupo colapsable fijo, siempre visible */}
-        {renderCollapsibleGroup('configuracion', 'Configuración',
-          cfgPages.map((p, i) => ({ ruta: p.ruta, label: p.label, orden: i }))
-        )}
       </nav>
 
       <div className="sidebar-footer-nav">

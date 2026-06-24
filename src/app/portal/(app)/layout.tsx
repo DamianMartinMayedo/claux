@@ -1,8 +1,6 @@
 import { redirect }       from 'next/navigation'
 import { getPortalSession } from '@/app/actions/portal/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getSetting }        from '@/app/actions/settings'
-import { suscripcionLabel }  from '@/lib/billing'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
@@ -36,11 +34,6 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     ? (cliente.modulos_activos as string[])
     : []
 
-  // Etiqueta de suscripción para el header (importe real según el ciclo)
-  const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
-  const descuento   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
-  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento)
-
   // Bloqueo basado en estado Y en fecha, sin depender de expiración automática:
   // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
   // · VENCIDO    → siempre bloqueado (estado legado; ya no se genera automáticamente)
@@ -64,11 +57,8 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       <PortalHeader
         session={session}
         nombreEmpresa={cliente.nombre_empresa}
-        estado={cliente.estado}
-        suscripcion={suscripcion}
       />
       <PortalSidebar
-        rol={session.rol}
         modulosActivos={modulosActivos}
         catalogo={(catalogo ?? []) as CatalogoItem[]}
       />
