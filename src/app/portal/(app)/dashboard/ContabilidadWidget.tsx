@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Wallet } from 'lucide-react'
 import type { ContabilidadResumen } from '@/app/actions/portal/dashboard'
 import { formatUSD, formatFecha } from './format'
 import VentasGastosChart from './charts/VentasGastosChart'
@@ -17,7 +18,10 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
   return (
     <section className="card dash-col-full">
       <div className="card-header">
-        <h2 className="card-title">Contabilidad</h2>
+        <div className="dash-card-head">
+          <span className="dash-card-icon metric-icon-teal"><Wallet size={18} /></span>
+          <h2 className="card-title">Contabilidad</h2>
+        </div>
         <Link href="/portal/ventas" className="btn btn-secondary btn-sm">Ver ventas</Link>
       </div>
 
@@ -42,11 +46,17 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
 
       <div className="dash-split">
         <div className="dash-split-main">
-          <h3 className="dash-subtitle">Ventas y gastos · últimos 6 meses</h3>
+          <h3 className="dash-subtitle">
+            <span>Ventas y gastos · 6 meses</span>
+            <Link href="/portal/reportes" className="btn-ghost-xs">Ver reportes</Link>
+          </h3>
           <VentasGastosChart serie={data.serie} />
         </div>
         <div className="dash-split-side">
-          <h3 className="dash-subtitle">Últimas facturas</h3>
+          <h3 className="dash-subtitle">
+            <span>Últimas facturas</span>
+            <Link href="/portal/ventas" className="btn-ghost-xs">Ver facturas</Link>
+          </h3>
           {data.ultimasFacturas.length === 0 ? (
             <p className="dash-muted">Aún no hay facturas emitidas.</p>
           ) : (

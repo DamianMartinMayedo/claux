@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import type { AgendaResumen } from '@/app/actions/portal/dashboard'
 import { formatFecha } from './format'
 import CargaSemanalChart from './charts/CargaSemanalChart'
@@ -9,16 +10,21 @@ interface Props {
   ruta: string            // /portal/reservas | /portal/citas
   unidad: string          // 'reserva' | 'cita' (para textos)
   mostrarPersonas: boolean
+  icon: ReactNode
+  tone: string            // clase metric-icon-* para el color del icono
 }
 
-export default function AgendaWidget({ data, titulo, ruta, unidad, mostrarPersonas }: Props) {
+export default function AgendaWidget({ data, titulo, ruta, unidad, mostrarPersonas, icon, tone }: Props) {
   const prox = data.proxima
   const proxValor = prox ? (prox.hora ?? formatFecha(prox.fecha)) : '—'
 
   return (
-    <section className="card">
+    <section className="card dash-card-md">
       <div className="card-header">
-        <h2 className="card-title">{titulo}</h2>
+        <div className="dash-card-head">
+          <span className={`dash-card-icon ${tone}`}>{icon}</span>
+          <h2 className="card-title">{titulo}</h2>
+        </div>
         <Link href={ruta} className="btn btn-secondary btn-sm">Ver {titulo.toLowerCase()}</Link>
       </div>
 
@@ -42,6 +48,10 @@ export default function AgendaWidget({ data, titulo, ruta, unidad, mostrarPerson
       <h3 className="dash-subtitle">Carga · próximos 7 días</h3>
       <CargaSemanalChart serie={data.serie7} unidad={unidad} />
 
+      <h3 className="dash-subtitle">
+        <span>Hoy</span>
+        <Link href={ruta} className="btn-ghost-xs">Ver todas</Link>
+      </h3>
       {data.hoyLista.length === 0 ? (
         <p className="dash-muted">Sin {unidad}s para hoy.</p>
       ) : (

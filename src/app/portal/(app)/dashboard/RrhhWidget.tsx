@@ -1,11 +1,15 @@
 import Link from 'next/link'
+import { UserCircle } from 'lucide-react'
 import type { RrhhResumen } from '@/app/actions/portal/dashboard'
 
 export default function RrhhWidget({ data }: { data: RrhhResumen }) {
   return (
-    <section className="card">
+    <section className="card dash-card-sm">
       <div className="card-header">
-        <h2 className="card-title">Equipo</h2>
+        <div className="dash-card-head">
+          <span className="dash-card-icon metric-icon-success"><UserCircle size={18} /></span>
+          <h2 className="card-title">Equipo</h2>
+        </div>
         <Link href="/portal/rrhh" className="btn btn-secondary btn-sm">Ver personal</Link>
       </div>
 

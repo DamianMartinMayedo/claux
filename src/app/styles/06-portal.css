@@ -1402,19 +1402,41 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-5);
-  align-items: start;
+  align-items: stretch;
+  /* Alturas por tamaño de card (según el contenido del módulo) */
+  --dash-h-sm: 13rem;
+  --dash-h-md: 25rem;
 }
 @media (min-width: 900px) {
   .dash-grid { grid-template-columns: 1fr 1fr; }
   .dash-col-full { grid-column: 1 / -1; }
 }
+/* Las cards reparten su contenido en columna y se igualan en alto por tamaño */
+.dash-grid > .card { display: flex; flex-direction: column; }
+.dash-card-sm { min-height: var(--dash-h-sm); }
+.dash-card-md { min-height: var(--dash-h-md); }
 
-/* KPIs compactos dentro de cada widget */
+/* Cabecera de card: icono de color + título */
+.dash-card-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.dash-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+/* KPIs compactos dentro de cada widget — en panel tenue para dar relieve */
 .dash-kpis {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-6);
   margin-bottom: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-lg);
 }
 .dash-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dash-kpi-label { font-size: var(--text-xs); color: var(--color-text-muted); }
@@ -1436,11 +1458,16 @@
   .dash-split { grid-template-columns: 3fr 2fr; }
 }
 .dash-subtitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-muted);
   margin-bottom: var(--space-3);
 }
+.dash-subtitle .btn-ghost-xs { font-weight: 700; }
 
 /* Gráficos */
 .dash-chart { width: 100%; height: 220px; }

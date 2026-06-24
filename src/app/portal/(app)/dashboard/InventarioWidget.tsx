@@ -1,11 +1,15 @@
 import Link from 'next/link'
+import { Boxes } from 'lucide-react'
 import type { InventarioResumen } from '@/app/actions/portal/dashboard'
 
 export default function InventarioWidget({ data }: { data: InventarioResumen }) {
   return (
-    <section className="card">
+    <section className="card dash-card-sm">
       <div className="card-header">
-        <h2 className="card-title">Inventario</h2>
+        <div className="dash-card-head">
+          <span className="dash-card-icon metric-icon-amber"><Boxes size={18} /></span>
+          <h2 className="card-title">Inventario</h2>
+        </div>
         <Link href="/portal/inventario" className="btn btn-secondary btn-sm">Ver inventario</Link>
       </div>
 

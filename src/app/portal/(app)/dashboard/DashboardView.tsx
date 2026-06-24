@@ -1,3 +1,4 @@
+import { Calendar, CalendarDays } from 'lucide-react'
 import type { DashboardData } from '@/app/actions/portal/dashboard'
 import { fechaLarga } from './format'
 import ContabilidadWidget from './ContabilidadWidget'
@@ -33,10 +34,18 @@ export default function DashboardView({ data }: { data: DashboardData }) {
       <div className="dash-grid">
         {contabilidad && <ContabilidadWidget data={contabilidad} />}
         {reservas && (
-          <AgendaWidget data={reservas} titulo={etiquetas.reservas} ruta="/portal/reservas" unidad="reserva" mostrarPersonas />
+          <AgendaWidget
+            data={reservas} titulo={etiquetas.reservas} ruta="/portal/reservas"
+            unidad="reserva" mostrarPersonas
+            icon={<Calendar size={18} />} tone="metric-icon-primary"
+          />
         )}
         {citas && (
-          <AgendaWidget data={citas} titulo="Citas" ruta="/portal/citas" unidad="cita" mostrarPersonas={false} />
+          <AgendaWidget
+            data={citas} titulo="Citas" ruta="/portal/citas"
+            unidad="cita" mostrarPersonas={false}
+            icon={<CalendarDays size={18} />} tone="metric-icon-teal"
+          />
         )}
         {inventario && <InventarioWidget data={inventario} />}
         {rrhh && <RrhhWidget data={rrhh} />}
