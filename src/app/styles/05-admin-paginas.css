@@ -105,11 +105,12 @@
   display: flex;
   gap: var(--space-4);
   align-items: flex-start;
+  max-width: var(--content-max);
+  margin: var(--space-8) auto 0 auto;
   background: var(--color-info-bg);
   border: 1px solid rgba(0,175,170,0.2);
   border-radius: var(--radius-xl);
   padding: var(--space-5);
-  margin-bottom: var(--space-6);
 }
 .info-banner svg { flex-shrink: 0; color: var(--color-primary); width: 20px; height: 20px; margin-top: 2px; }
 .info-banner p { font-size: var(--text-sm); color: var(--color-text); }

@@ -1,4 +1,3 @@
-import { Info } from 'lucide-react'
 import { getPortalSession } from '@/app/actions/portal/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { tieneModulo } from '@/lib/modulos'
@@ -22,7 +21,6 @@ export default async function ContabilidadHint({ genera }: { genera: string }) {
 
   return (
     <div className="info-banner">
-      <Info aria-hidden />
       <p>
         <strong>Saca más partido con Contabilidad</strong>
         Con el módulo de Contabilidad verías los gastos y pagos que generan {genera}{' '}
