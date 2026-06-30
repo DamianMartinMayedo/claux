@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { Download, ChevronDown, BarChart3, Search } from 'lucide-react'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
+import EmpresaPills                from '@/components/portal/EmpresaPills'
+import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,11 @@ export default function ReportesView({ data }: { data: ReportesData }) {
   const [hasta,   setHasta]   = useState(data.hasta)
   const [empresa, setEmpresa] = useState(data.empresa_id)
   const [query,   setQuery]   = useState('')
+
+  const { colorOf } = useEmpresas()
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
 
   const q = query.trim().toLowerCase()
   const filtrarCategorias = (cats: { categoria: string; monto: number }[]) =>
@@ -274,12 +281,12 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         <input className="input ter-filter-select" type="date" value={desde} onChange={e => setDesde(e.target.value)} />
         <span className="rep-rango-sep">–</span>
         <input className="input ter-filter-select" type="date" value={hasta} onChange={e => setHasta(e.target.value)} />
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={empresa} onChange={e => setEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={empresa}
+          onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
+          todasLabel="Todas las empresas"
+        />
         <button className="btn btn-primary btn-sm" onClick={aplicar} disabled={isPending}>
           {isPending ? <><span className="spinner spinner-sm" /> …</> : 'Aplicar'}
         </button>

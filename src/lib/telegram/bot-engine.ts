@@ -4,6 +4,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
+import { tieneModulo } from '@/lib/modulos'
+import { interpretarMensajeBot } from '@/lib/ia/telegram'
 
 export interface BotContext {
   client_id: string
@@ -128,10 +130,38 @@ export async function manejarMensaje(
   if (t === 'ubicacion'|| t === 'ubicación' || t === 'donde' || t === 'dónde') return mostrarUbicacion(ctx)
   if (t === 'ayuda'   || t === 'help') return mostrarAyuda(ctx)
 
+  // Capa de IA opcional (add-on): si el negocio tiene 'asistente_ia', dejamos que
+  // la IA interprete el lenguaje libre antes de caer al teclado genérico.
+  const ia = await intentarIaReservas(ctx, chat_id, texto.trim())
+  if (ia) return ia
+
   return {
     texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`,
     markup: tecladoPrincipal(),
   }
+}
+
+// Interpreta lenguaje natural con IA y enruta al flujo de reserva determinista.
+// Devuelve null si el addon no está activo o la IA no detecta nada accionable.
+async function intentarIaReservas(ctx: BotContext, chatId: string, texto: string): Promise<BotResponse | null> {
+  const db = createAdminClient()
+  const { data: cliente } = await db.from('clients').select('modulos_activos').eq('client_id', ctx.client_id).single()
+  if (!tieneModulo(cliente?.modulos_activos, 'asistente_ia')) return null
+
+  const intent = await interpretarMensajeBot(ctx.client_id, 'reserva', texto)
+  if (!intent) return null
+
+  if (intent.intent === 'horarios') return mostrarHorarios(ctx)
+  if (intent.intent === 'reservar') {
+    if (intent.fecha) {
+      // Pre-rellena la fecha entendida y muestra las horas libres de ese día.
+      const datos: DatosReserva = { fecha: intent.fecha }
+      if (intent.personas) datos.personas = intent.personas
+      return mostrarSlots(ctx, chatId, datos)
+    }
+    return iniciarReserva(ctx, chatId)
+  }
+  return null
 }
 
 // ── Bienvenida ────────────────────────────────────────────────────────────────

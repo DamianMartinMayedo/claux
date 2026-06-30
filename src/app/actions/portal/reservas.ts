@@ -780,6 +780,26 @@ export async function obtenerProximoDiaAforo(
   return { fecha: (data as string | null) ?? null }
 }
 
+export interface DiaDisponibleAforo {
+  fecha:        string  // YYYY-MM-DD
+  primera_hora: string  // HH:MM — primer hueco libre del día
+  libres:       number  // nº de horas libres ese día
+}
+
+// Próximos días con hueco libre (para la rejilla de fechas de la mini-web).
+export async function obtenerDiasDisponiblesAforo(
+  client_id: string, personas: number, desde?: string,
+): Promise<DiaDisponibleAforo[]> {
+  if (!await rateLimitOk('dias_aforo', 60, 60)) return []
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('res_dias_disponibles_aforo', {
+    p_client_id: client_id, p_personas: personas < 1 ? 1 : personas,
+    p_desde: desde ?? hoyEnTz(), p_max_dias: 30,
+  })
+  if (error || !Array.isArray(data)) return []
+  return data as DiaDisponibleAforo[]
+}
+
 // ── Gestión pública por token (cancelar reserva/cita sin cuenta) ───────────────
 
 export interface ReservaPublicaToken {

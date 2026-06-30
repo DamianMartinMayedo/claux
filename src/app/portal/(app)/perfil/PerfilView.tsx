@@ -4,7 +4,9 @@ import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
-import { Lock, Globe } from 'lucide-react'
+import { type IaPanel } from '@/app/actions/portal/ia'
+import IaConfigSection from '@/components/portal/ia/IaConfigSection'
+import { Lock } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,7 +41,7 @@ function fmt(dateStr: string | null) {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function PerfilView({ perfil }: { perfil: PerfilData }) {
+export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; panelIa: IaPanel | null }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [showPwd,   setShowPwd]      = useState(false)
@@ -110,6 +112,9 @@ export default function PerfilView({ perfil }: { perfil: PerfilData }) {
           </div>
         </div>
       </div>
+
+      {/* ── Asistente IA (solo con el addon contratado) ── */}
+      {panelIa && <IaConfigSection panel={panelIa} />}
 
       {/* ── Mi usuario ── */}
       <div className="card">

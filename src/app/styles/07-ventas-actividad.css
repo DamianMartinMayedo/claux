@@ -232,6 +232,8 @@
 .ven-info-card:first-child {
   border-top: 3px solid var(--color-primary);
 }
+/* Tarjeta de la empresa emisora: el acento superior adopta su color. */
+.ven-info-card.ven-info-card-empresa { border-top-color: var(--empresa-color, var(--color-primary)); }
 .ven-info-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .08em; color: var(--color-text-muted);
@@ -249,7 +251,8 @@
 .ven-letra-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 7px;
-  color: #fff; font-weight: 800; font-size: 13px;
+  color: #fff; background: var(--empresa-color, var(--color-text-muted));
+  font-weight: 800; font-size: 13px;
   letter-spacing: .02em; flex-shrink: 0;
 }
 
@@ -373,7 +376,8 @@
   width: 60px; height: 60px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   border-radius: 6px;
-  color: #fff; font-weight: 800; font-size: 28px;
+  color: #fff; background: var(--empresa-color, var(--color-text-muted));
+  font-weight: 800; font-size: 28px;
 }
 .pdf-empresa-nombre {
   font-size: 15px; font-weight: 700; color: #1f2937;

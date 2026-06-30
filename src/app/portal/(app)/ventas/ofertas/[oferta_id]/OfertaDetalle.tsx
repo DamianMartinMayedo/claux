@@ -10,6 +10,7 @@ import {
   type VentasResumenData,
 } from '@/app/actions/portal/ventas'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
+import { empresaColorVar }            from '@/components/portal/EmpresaTag'
 import { Copy, Pencil, Printer } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
@@ -157,11 +158,11 @@ export default function OfertaDetalle({ data }: Props) {
 
       {/* ── Información: empresa y cliente ── */}
       <div className="ven-info-grid">
-        <div className="ven-info-card">
+        <div className="ven-info-card ven-info-card-empresa" style={empresaColorVar(empresa.color)}>
           <div className="ven-info-label">Empresa emisora</div>
           <div className="ven-info-nombre">
             {empresa.letra_facturacion && (
-              <span className="ven-letra-badge" style={{ background: empresa.color }}>
+              <span className="ven-letra-badge" style={empresaColorVar(empresa.color)}>
                 {empresa.letra_facturacion}
               </span>
             )}

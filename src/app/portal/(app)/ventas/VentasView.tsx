@@ -18,6 +18,9 @@ import type {
   Oferta,
   Factura,
 } from '@/app/actions/portal/ventas'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
 interface Props { data: VentasResumenData }
 
@@ -36,6 +39,11 @@ export default function VentasView({ data }: Props) {
 
   const conteoOfertas  = data.ofertas.length
   const conteoFacturas = data.facturas.length
+
+  const { colorOf } = useEmpresas()
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
 
   const empresasConLetra = data.empresas.filter(e => !!e.letra_facturacion)
   const sinSetupEmpresas = data.empresas.length === 0
@@ -112,14 +120,12 @@ export default function VentasView({ data }: Props) {
 
       {/* ── Toolbar de filtros ── */}
       <div className="ter-toolbar">
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => (
-              <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>
-            ))}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
         <select className="input ter-filter-select" value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}>
           <option value="">Todos los clientes</option>
           {data.clientes.map(c => (
@@ -198,6 +204,7 @@ function TablaOfertas({
   mostrarEmpresa: boolean
 }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
   return (
     <div className="table-wrapper">
       <table className="table">
@@ -213,7 +220,12 @@ function TablaOfertas({
         </thead>
         <tbody>
           {ofertas.map(o => (
-            <tr key={o.oferta_id} className="table-row-clickable" onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}>
+            <tr
+              key={o.oferta_id}
+              className={`table-row-clickable${mostrarEmpresa ? ' row-empresa-accent' : ''}`}
+              style={mostrarEmpresa ? empresaColorVar(colorOf(o.empresa_id)) : undefined}
+              onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}
+            >
               <td>
                 <Link href={`/portal/ventas/ofertas/${o.oferta_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {o.numero}
@@ -223,8 +235,8 @@ function TablaOfertas({
                 {fmtFecha(o.fecha_emision)}
               </td>
               {mostrarEmpresa && (
-                <td className="text-sm-muted">
-                  {empresaNombres[o.empresa_id] ?? o.empresa_id}
+                <td>
+                  <EmpresaTag color={colorOf(o.empresa_id)} nombre={empresaNombres[o.empresa_id] ?? o.empresa_id} />
                 </td>
               )}
               <td>{clienteNombres[o.cliente_id] ?? o.cliente_id}</td>
@@ -251,6 +263,7 @@ function TablaFacturas({
   mostrarEmpresa: boolean
 }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
   return (
     <div className="table-wrapper">
       <table className="table">
@@ -267,7 +280,12 @@ function TablaFacturas({
         </thead>
         <tbody>
           {facturas.map(f => (
-            <tr key={f.factura_id} className="table-row-clickable" onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}>
+            <tr
+              key={f.factura_id}
+              className={`table-row-clickable${mostrarEmpresa ? ' row-empresa-accent' : ''}`}
+              style={mostrarEmpresa ? empresaColorVar(colorOf(f.empresa_id)) : undefined}
+              onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}
+            >
               <td>
                 <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {f.numero}
@@ -277,8 +295,8 @@ function TablaFacturas({
                 {fmtFecha(f.fecha_emision)}
               </td>
               {mostrarEmpresa && (
-                <td className="text-sm-muted">
-                  {empresaNombres[f.empresa_id] ?? f.empresa_id}
+                <td>
+                  <EmpresaTag color={colorOf(f.empresa_id)} nombre={empresaNombres[f.empresa_id] ?? f.empresa_id} />
                 </td>
               )}
               <td>{clienteNombres[f.cliente_id] ?? f.cliente_id}</td>

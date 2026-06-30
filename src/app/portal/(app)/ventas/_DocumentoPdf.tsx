@@ -6,6 +6,7 @@ import {
   CONDICION_PAGO_LABEL,
   formatearMoneda,
 } from './_ventas-helpers'
+import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import type {
   DocumentoLinea,
   DocumentoAjuste,
@@ -130,7 +131,7 @@ export function DocumentoPdf({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={empresa.logo_url} alt={empresa.nombre} className="pdf-logo" />
           ) : (
-            <div className="pdf-logo-fallback" style={{ background: empresa.color }}>
+            <div className="pdf-logo-fallback" style={empresaColorVar(empresa.color)}>
               {empresa.letra_facturacion ?? empresa.nombre.charAt(0).toUpperCase()}
             </div>
           )}

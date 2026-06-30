@@ -458,3 +458,127 @@ export async function actualizarTasasAuto(): Promise<{
   revalidatePath('/portal/monedas')
   return { ok: true, actualizadas, errores }
 }
+
+// ── Uso / eliminación de monedas ──────────────────────────────────────────────
+//
+// Los códigos de moneda se guardan como texto plano (sin FK) en muchas tablas,
+// así que la integridad es por convención: borrar la fila de `monedas` no rompe
+// la BD pero deja referencias huérfanas. Por eso aquí controlamos el uso real
+// antes de eliminar, y escopamos SIEMPRE por client_id (el mismo código —p.ej.
+// "USD"— existe en varios clientes).
+
+// (entidad legible, tabla, columna) de cada sitio que referencia un código.
+const REF_MONEDA: { entidad: string; tabla: string; col: string }[] = [
+  { entidad: 'Facturas',            tabla: 'facturas',              col: 'moneda' },
+  { entidad: 'Ofertas',             tabla: 'ofertas',               col: 'moneda' },
+  { entidad: 'Compras',             tabla: 'compras',               col: 'moneda' },
+  { entidad: 'Gastos y cobros',     tabla: 'gastos_cobros',         col: 'moneda' },
+  { entidad: 'Movimientos de caja', tabla: 'movimientos_tesoreria', col: 'moneda' },
+  { entidad: 'Nóminas',             tabla: 'nominas',               col: 'moneda' },
+  { entidad: 'Contratos',           tabla: 'contratos',             col: 'moneda' },
+  { entidad: 'Empleados',           tabla: 'empleados',             col: 'moneda' },
+  { entidad: 'Cuentas',             tabla: 'cuentas',               col: 'moneda' },
+  { entidad: 'Terceros',            tabla: 'third_parties',         col: 'moneda_defecto' },
+  { entidad: 'Empresas',            tabla: 'empresas',              col: 'moneda_funcional' },
+]
+
+export interface UsoMoneda {
+  total:   number
+  detalle: { entidad: string; n: number }[]
+}
+
+// Cuenta cuántos registros del cliente usan un código de moneda, por entidad.
+export async function contarUsoMoneda(codigo: string): Promise<UsoMoneda> {
+  const session = await getPortalSession()
+  if (!session) return { total: 0, detalle: [] }
+  const db = createAdminClient()
+
+  const counts = await Promise.all(
+    REF_MONEDA.map(async ref => {
+      const { count } = await db
+        .from(ref.tabla)
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', session.client_id)
+        .eq(ref.col, codigo)
+      return { entidad: ref.entidad, n: count ?? 0 }
+    }),
+  )
+
+  const detalle = counts.filter(c => c.n > 0)
+  return { total: detalle.reduce((s, c) => s + c.n, 0), detalle }
+}
+
+// Elimina una moneda de forma segura.
+//  · No permite borrar la moneda de consolidación.
+//  · Si no la usa ningún registro → borrado limpio (moneda + pares + tasas).
+//  · Si la usan registros y NO se pide fusión → se bloquea (desactivar o fusionar).
+//  · Si se pide `fusionarEn` → reasigna esos registros a esa moneda y borra la
+//    vieja. NO convierte importes: la fusión es para duplicados/typos del mismo
+//    valor (p.ej. una moneda creada por error). Para monedas realmente distintas
+//    lo correcto es desactivar, no fusionar.
+export async function eliminarMoneda(
+  codigo:      string,
+  fusionarEn?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session || session.rol !== 'admin_empresa') return { ok: false, error: 'Sin permisos.' }
+
+  const db = createAdminClient()
+
+  const { data: mon } = await db
+    .from('monedas')
+    .select('es_consolidacion')
+    .eq('client_id', session.client_id)
+    .eq('codigo', codigo)
+    .maybeSingle()
+
+  if (!mon) return { ok: false, error: 'Moneda no encontrada.' }
+  if (mon.es_consolidacion) {
+    return { ok: false, error: 'Es la moneda de consolidación. Cambia la consolidación antes de eliminarla.' }
+  }
+
+  const uso = await contarUsoMoneda(codigo)
+
+  if (uso.total > 0) {
+    if (!fusionarEn) {
+      return { ok: false, error: `La usan ${uso.total} registro(s). Desactívala o fusiónala con otra moneda.` }
+    }
+    if (fusionarEn === codigo) return { ok: false, error: 'Elige una moneda destino distinta.' }
+
+    const { data: destino } = await db
+      .from('monedas')
+      .select('moneda_id')
+      .eq('client_id', session.client_id)
+      .eq('codigo', fusionarEn)
+      .eq('activa', true)
+      .maybeSingle()
+    if (!destino) return { ok: false, error: `La moneda destino "${fusionarEn}" no existe o está inactiva.` }
+
+    // Reasignar el código en cada tabla (sin tocar importes).
+    for (const ref of REF_MONEDA) {
+      const { error } = await db
+        .from(ref.tabla)
+        .update({ [ref.col]: fusionarEn })
+        .eq('client_id', session.client_id)
+        .eq(ref.col, codigo)
+      if (error) return { ok: false, error: `Error al fusionar en ${ref.entidad}.` }
+    }
+  }
+
+  // Purgar la configuración de cambio del código y la propia moneda.
+  await db.from('tasas_cambio').delete()
+    .eq('client_id', session.client_id)
+    .or(`moneda_origen.eq.${codigo},moneda_destino.eq.${codigo}`)
+  await db.from('pares_tasa').delete()
+    .eq('client_id', session.client_id)
+    .or(`origen.eq.${codigo},destino.eq.${codigo}`)
+
+  const { error } = await db.from('monedas').delete()
+    .eq('client_id', session.client_id)
+    .eq('codigo', codigo)
+  if (error) return { ok: false, error: 'Error al eliminar la moneda.' }
+
+  revalidatePath('/portal/monedas')
+  revalidatePath('/portal/empresas')
+  return { ok: true }
+}

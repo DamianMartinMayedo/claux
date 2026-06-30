@@ -112,15 +112,24 @@ function AplicarATodas({
 }
 
 export function NominaDetalleModal({
-  nomina, onClose, onChanged, onConfirmar, onPagar,
+  nomina, onClose, onChanged, onConfirmar, onPagar, empleadoId,
 }: {
   nomina:      NominaConLineas
   onClose:     () => void
   onChanged:   () => void
   onConfirmar: () => void
   onPagar:     () => void
+  empleadoId?: string
 }) {
   const esBorrador = nomina.estado === 'BORRADOR'
+
+  const lineasVisibles = empleadoId
+    ? nomina.lineas.filter(l => l.empleado_id === empleadoId)
+    : nomina.lineas
+  const totalVisible = empleadoId
+    ? lineasVisibles.reduce((s, l) => s + l.neto, 0)
+    : nomina.total
+  const esVistaIndividual = !!empleadoId
 
   return (
     <div className="modal-backdrop open">
@@ -140,15 +149,15 @@ export function NominaDetalleModal({
                 ? 'Ajusta devengado y deducciones; guarda cada línea. Al confirmar se registra el gasto de salarios.'
                 : nomina.saldo_pendiente <= 0.005
                   ? 'Confirmada y pagada por completo.'
-                  : `Gasto registrado · Pagado ${formatMonto(nomina.pagado)} · Pendiente ${formatMonto(nomina.saldo_pendiente)} ${nomina.moneda} (págalo desde Tesorería).`}
+                  : `Gasto registrado · Pagado ${formatMonto(nomina.pagado)} · Pendiente ${formatMonto(nomina.saldo_pendiente)} ${nomina.moneda}. Usa el botón Pagar para liquidar.`}
             </span>
           </div>
 
-          {esBorrador && nomina.lineas.length > 0 && (
+          {esBorrador && !esVistaIndividual && lineasVisibles.length > 0 && (
             <AplicarATodas nominaId={nomina.nomina_id} moneda={nomina.moneda} onChanged={onChanged} />
           )}
 
-          {nomina.lineas.length === 0 ? (
+          {lineasVisibles.length === 0 ? (
             <div className="mon-empty"><Wallet size={32} strokeWidth={1} opacity={0.2} /><p>Esta nómina no tiene líneas.</p></div>
           ) : (
             <div className="table-wrapper">
@@ -164,10 +173,10 @@ export function NominaDetalleModal({
                 </thead>
                 <tbody>
                   {esBorrador
-                    ? nomina.lineas.map(l => (
+                    ? lineasVisibles.map(l => (
                         <LineaEditableRow key={l.linea_id} linea={l} moneda={nomina.moneda} onChanged={onChanged} />
                       ))
-                    : nomina.lineas.map(l => (
+                    : lineasVisibles.map(l => (
                         <tr key={l.linea_id}>
                           <td><strong>{l.empleado_nombre}</strong>{l.cargo && <div className="text-sm-muted">{l.cargo}</div>}</td>
                           <td className="tes-monto-cell">{formatMonto(l.devengado)}</td>
@@ -181,8 +190,8 @@ export function NominaDetalleModal({
           )}
 
           <div className="nom-total">
-            <span>Total nómina</span>
-            <strong>{formatMonto(nomina.total)} {nomina.moneda}</strong>
+            <span>{esVistaIndividual ? 'Neto del trabajador' : 'Total nómina'}</span>
+            <strong>{formatMonto(totalVisible)} {nomina.moneda}</strong>
           </div>
         </div>
         <div className="modal-footer">
@@ -220,7 +229,7 @@ export function ConfirmarNominaModal({
         <div className="modal-body">
           <p className="modal-body-text">
             Se registrará un gasto <strong>«Salarios»</strong> de <strong>{formatMonto(nomina.total)} {nomina.moneda}</strong> en
-            Gastos y cobros (nómina de {formatPeriodo(nomina.periodo)}), que podrás pagar desde Tesorería y aparecerá en
+            Gastos y cobros (nómina de {formatPeriodo(nomina.periodo)}), que podrás pagar con el botón Pagar y aparecerá en
             Cuentas por pagar y Reportes. La nómina dejará de ser editable.
           </p>
         </div>

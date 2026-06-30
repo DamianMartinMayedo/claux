@@ -4,9 +4,11 @@ import { useState, useTransition, useMemo, useEffect, useRef } from 'react'
 import {
   crearCitaPublica,
   obtenerSlotsCita,
+  obtenerDiasDisponiblesCita,
   type ServicioPublico,
   type RecursoPublico,
   type SlotCita,
+  type DiaDisponible,
 } from '@/app/actions/portal/citas'
 import type { EtiquetasSector } from '@/lib/sector'
 import type { ReglasReserva } from '@/app/actions/portal/reservas'
@@ -24,6 +26,22 @@ function sumarDiasISO(dias: number): string {
 function formatFechaCorta(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+function etiquetaDia(f: string): string {
+  if (f === hoyISO()) return 'Hoy'
+  if (f === sumarDiasISO(1)) return 'Mañana'
+  return formatFechaCorta(f)
+}
+// Etiquetas para las celdas de la rejilla de días.
+function dowDia(f: string): string {
+  if (f === hoyISO()) return 'Hoy'
+  if (f === sumarDiasISO(1)) return 'Mañana'
+  const [y, m, d] = f.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')
+}
+function numDia(f: string): string {
+  const [, , d] = f.split('-').map(Number)
+  return String(d)
 }
 
 type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'revisar' | 'ok'
@@ -47,6 +65,13 @@ export default function CitasPublicaForm({
   const [servicioId, setServicioId] = useState('')
   const [recursoSel, setRecursoSel] = useState<string | 'any'>('any')  // elección del cliente
   const [fecha, setFecha] = useState(hoyISO())
+  const [dias, setDias] = useState<DiaDisponible[]>([])   // próximos días con hueco
+  const [loadingDias, setLoadingDias] = useState(false)
+  const [verOtras, setVerOtras] = useState(false)         // abre el selector de fecha nativo
+
+  // Ventana fija de 7 días para la rejilla; cada uno disponible si está en `dias`.
+  const ventana = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDiasISO(i)), [])
+  const diasMap = useMemo(() => new Map(dias.map(d => [d.fecha, d])), [dias])
   const [slots, setSlots] = useState<SlotCita[]>([])
   const [hora, setHora] = useState('')
   const [horaRecurso, setHoraRecurso] = useState('')  // recurso concreto del hueco elegido
@@ -76,17 +101,41 @@ export default function CitasPublicaForm({
   }, [slots])
 
   function elegirServicio(id: string) {
-    setServicioId(id)
-    setRecursoSel('any')
+    setVerOtras(false)
     const cands = recursos.filter(r => r.servicio_ids.length === 0 || r.servicio_ids.includes(id))
-    if (cands.length === 1) { setRecursoSel(cands[0].recurso_id); setPaso('horario') }
-    else                    { setPaso('recurso') }
+    const nextRecurso = cands.length === 1 ? cands[0].recurso_id : 'any'
+    // Solo recargar (spinner) si servicio/profesional cambian de verdad; volver
+    // atrás y reelegir lo mismo reutiliza los días ya cargados.
+    if (id !== servicioId || nextRecurso !== recursoSel) setLoadingDias(true)
+    setServicioId(id)
+    setRecursoSel(nextRecurso)
+    setPaso(cands.length === 1 ? 'horario' : 'recurso')
   }
 
   function elegirRecurso(sel: string | 'any') {
+    setVerOtras(false)
+    if (sel !== recursoSel) setLoadingDias(true)
     setRecursoSel(sel)
     setPaso('horario')
   }
+
+  // Al elegir servicio/profesional, buscar los próximos días con hueco y saltar al
+  // primero. Solo depende del servicio/recurso (no del paso ni de la fecha), así no
+  // pisa la fecha que el cliente elija luego ni al volver atrás desde "Datos".
+  useEffect(() => {
+    if (!servicioId) return
+    let cancel = false
+    const recursoParam = recursoSel === 'any' ? null : recursoSel
+    obtenerDiasDisponiblesCita(clientId, servicioId, recursoParam)
+      .then(ds => {
+        if (cancel) return
+        setDias(ds)
+        if (ds.length > 0) setFecha(ds[0].fecha)   // salto a la fecha más cercana
+        setLoadingDias(false)
+      })
+      .catch(() => { if (!cancel) setLoadingDias(false) })
+    return () => { cancel = true }
+  }, [clientId, servicioId, recursoSel])
 
   // Auto-carga de horarios al entrar al paso y al cambiar día/profesional/servicio
   // (debounced), igual que la mini-web de Reservas: sin botón "Ver horarios".
@@ -146,9 +195,6 @@ export default function CitasPublicaForm({
     ? `Cualquier ${et.recurso.toLowerCase()}`
     : recursos.find(r => r.recurso_id === recursoSel)?.nombre ?? ''
 
-  const esHoy    = fecha === hoyISO()
-  const esManana = fecha === sumarDiasISO(1)
-
   return (
     <div className="rp-card">
       <div className="rp-card-body">
@@ -168,7 +214,7 @@ export default function CitasPublicaForm({
             )}
           </div>
         ) : servicios.length === 0 ? (
-          <p className="rp-hint">Este negocio aún no tiene servicios disponibles para reservar.</p>
+          <p className="rp-hint">Este negocio aún no tiene horarios de cita disponibles. Vuelve pronto.</p>
         ) : (
           <>
             {/* Paso 1 — Servicio */}
@@ -219,18 +265,44 @@ export default function CitasPublicaForm({
 
                 <div className="rp-controls">
                   <div className="rp-field">
-                    <span className="rp-label">Día</span>
-                    <div className="rp-day-chips">
-                      <button type="button" className={`rp-chip ${esHoy ? 'rp-chip-active' : ''}`}
-                        onClick={() => setFecha(hoyISO())}>Hoy</button>
-                      <button type="button" className={`rp-chip ${esManana ? 'rp-chip-active' : ''}`}
-                        onClick={() => setFecha(sumarDiasISO(1))}>Mañana</button>
-                      <input type="date" className="rp-input rp-day-date" value={fecha} aria-label="Otro día"
-                        min={hoyISO()} max={fechaMax} onChange={e => setFecha(e.target.value)} />
-                    </div>
+                    <span className="rp-label">Elige el día</span>
+                    {loadingDias ? (
+                      <div className="rp-slots-loading"><Loader2 size={18} className="rp-spin" /></div>
+                    ) : dias.length === 0 ? (
+                      <p className="rp-hint">No hay horas libres próximamente. Escríbenos y te ayudamos a encontrar hueco.</p>
+                    ) : (
+                      <>
+                        <div className="rp-day-grid">
+                          {ventana.map(f => {
+                            const off = !diasMap.has(f)
+                            return (
+                              <button key={f} type="button" disabled={off}
+                                className={`rp-day-cell${f === fecha ? ' rp-day-cell-active' : ''}${off ? ' rp-day-cell-off' : ''}`}
+                                onClick={() => setFecha(f)}
+                                aria-label={`${formatFecha(f)}${off ? ', sin huecos' : ', con disponibilidad'}`}>
+                                <span className="rp-day-dow">{dowDia(f)}</span>
+                                <span className="rp-day-num">{numDia(f)}</span>
+                              </button>
+                            )
+                          })}
+                          <button type="button" className="rp-day-cell rp-day-cell-more"
+                            onClick={() => setVerOtras(v => !v)} aria-label="Ver otras fechas">
+                            <span className="rp-day-num">Otras fechas</span>
+                          </button>
+                        </div>
+                        {verOtras && (
+                          <div className="rp-day-otras">
+                            <input type="date" className="rp-input" value={fecha} aria-label="Elegir otra fecha"
+                              min={hoyISO()} max={fechaMax}
+                              onChange={e => { setFecha(e.target.value); setVerOtras(false) }} />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 
+                {dias.length > 0 && (
                 <div className="rp-turnos-section">
                   <div className="rp-turnos-day">{formatFechaCorta(fecha)}</div>
                   <div className="rp-turnos-sub">Elige una hora</div>
@@ -239,7 +311,10 @@ export default function CitasPublicaForm({
                     <div className="rp-slots-loading"><Loader2 size={22} className="rp-spin" /></div>
                   ) : horasUnicas.length === 0 ? (
                     <div className="rp-empty">
-                      <p className="rp-hint">No hay horarios libres ese día. Prueba con otra fecha.</p>
+                      <p className="rp-hint">No hay horas libres ese día.</p>
+                      <button type="button" className="rp-edit-link" onClick={() => setFecha(dias[0].fecha)}>
+                        Ver próxima disponibilidad ({etiquetaDia(dias[0].fecha)})
+                      </button>
                     </div>
                   ) : (
                     <div className="rp-turnos-list">
@@ -253,6 +328,7 @@ export default function CitasPublicaForm({
                     </div>
                   )}
                 </div>
+                )}
               </>
             )}
 

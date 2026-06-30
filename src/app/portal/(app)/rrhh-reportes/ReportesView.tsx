@@ -3,6 +3,9 @@
 import { useMemo, useState } from 'react'
 import { type RrhhPageData } from '@/app/actions/portal/rrhh'
 import { BarChart3, Download, ChevronDown } from 'lucide-react'
+import { EmpresaTag }   from '@/components/portal/EmpresaTag'
+import EmpresaPills     from '@/components/portal/EmpresaPills'
+import { useEmpresas }  from '@/components/portal/EmpresaColorContext'
 
 // Interfaz mínima de jsPDF (su .d.ts empaquetado no es un módulo ES y TS lo rechaza).
 interface JsPdfDoc {
@@ -40,6 +43,11 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
   const anioActual = String(new Date().getFullYear())
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [anio, setAnio] = useState(anioActual)
+
+  const { colorOf } = useEmpresas()
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
 
   // Años disponibles (de nóminas) + el actual
   const anios = useMemo(() => {
@@ -114,6 +122,24 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
       coste:        porMoneda(coste.get(d) ?? []),
     }))
   }, [empleados, nominas, deptoDe])
+
+  // Desglose por empresa (solo en vista consolidada "Todas"): plantilla y coste
+  // de cada empresa con su color. Usa los datos ya cargados en cliente.
+  const porEmpresa = useMemo(() => {
+    if (filtroEmpresa) return []
+    return data.empresas
+      .map(emp => ({
+        empresa_id: emp.empresa_id,
+        nombre:     emp.nombre,
+        activos:    data.empleados.filter(e => e.empresa_id === emp.empresa_id && e.estado === 'ACTIVO').length,
+        coste:      porMoneda(
+          data.nominas
+            .filter(n => n.empresa_id === emp.empresa_id && n.estado === 'CONFIRMADA' && n.periodo.startsWith(anio))
+            .map(n => ({ moneda: n.moneda, monto: n.total })),
+        ),
+      }))
+      .filter(e => e.activos > 0 || e.coste.length > 0)
+  }, [data.empresas, data.empleados, data.nominas, filtroEmpresa, anio])
 
   const sinDatos = data.empleados.length === 0
 
@@ -242,12 +268,12 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
       </div>
 
       <div className="ter-toolbar">
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
         <select className="input ter-filter-select" value={anio} onChange={e => setAnio(e.target.value)}>
           {anios.map(a => <option key={a} value={a}>Año {a}</option>)}
         </select>
@@ -289,6 +315,29 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
           <div className="info-box">
             <span className="text-xs-muted">El coste de personal son las nóminas <strong>confirmadas</strong> del período; coincide con los gastos de categoría <strong>«Salarios»</strong> de Reportes financieros (Tesorería refleja lo realmente pagado).</span>
           </div>
+
+          {/* Desglose por empresa (vista consolidada) */}
+          {porEmpresa.length > 0 && (
+            <div className="card card-table rrhh-card-gap">
+              <div className="ter-card-head"><span className="ter-form-section-title">Plantilla y coste por empresa · {anio}</span></div>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead><tr><th>Empresa</th><th>Activos</th><th className="tes-col-monto">Coste {anio}</th></tr></thead>
+                  <tbody>
+                    {porEmpresa.map(e => (
+                      <tr key={e.empresa_id}>
+                        <td><EmpresaTag color={colorOf(e.empresa_id)} nombre={e.nombre} /></td>
+                        <td className="text-sm-muted">{e.activos}</td>
+                        <td className="tes-col-monto tes-monto-cell">
+                          {e.coste.length === 0 ? '—' : e.coste.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Coste por mes */}
           <div className="card card-table rrhh-card-gap">

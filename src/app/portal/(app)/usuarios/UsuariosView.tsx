@@ -10,6 +10,7 @@ import {
   type UsuarioPortal,
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
+import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import { Check, Info, Key, Minus, Pencil, Plus, User, X } from 'lucide-react'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -159,7 +160,7 @@ function UsuarioModal({
                           checked={empresasSel.includes(emp.empresa_id)}
                           onChange={() => toggleEmpresa(emp.empresa_id)}
                         />
-                        <span className="usr-empresa-dot" style={{ background: emp.color }} />
+                        <span className="usr-empresa-dot" style={empresaColorVar(emp.color)} />
                         <span>{emp.nombre}</span>
                       </label>
                     ))}
@@ -335,7 +336,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                         ) : (
                           <div className="usr-empresas-list">
                             {u.empresas.slice(0, 2).map(id => (
-                              <span key={id} className="usr-empresa-tag" style={{ borderColor: empresaMap.get(id)?.color }}>
+                              <span key={id} className="usr-empresa-tag" style={empresaColorVar(empresaMap.get(id)?.color)}>
                                 {empresaMap.get(id)?.nombre ?? id}
                               </span>
                             ))}

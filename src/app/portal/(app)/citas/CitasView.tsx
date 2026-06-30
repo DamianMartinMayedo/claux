@@ -8,8 +8,8 @@ import {
   guardarRecurso, eliminarRecurso, importarPersonalRRHH,
   crearCitaManual, cambiarEstadoCita,
   guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas, guardarConfirmacionCitas,
-  obtenerSlotsCita,
-  type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita,
+  obtenerSlotsCita, obtenerDiasDisponiblesCita,
+  type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita, type DiaDisponible,
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
 import CierresSection from '@/components/portal/CierresSection'
@@ -38,6 +38,13 @@ const MEDIAS_HORAS = Array.from({ length: 48 }, (_, i) => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function mananaISO(): string { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
+function fechaChip(f: string): string {
+  if (f === hoyISO())    return 'Hoy'
+  if (f === mananaISO()) return 'Mañana'
+  const [y, m, d] = f.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+}
 function formatFecha(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
@@ -166,7 +173,7 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
               <div className="input-group ter-col-full">
                 <label>{etiquetaSrv}s que atiende</label>
                 {servicios.length === 0 ? (
-                  <span className="input-hint">Aún no hay servicios. Créalos en la pestaña «Servicios».</span>
+                  <span className="input-hint">Aún no hay servicios. Créalos en la pestaña «Servicios» (si solo das un tipo de cita, basta con uno).</span>
                 ) : (
                   <div className="cita-chk-list">
                     {servicios.map(s => (
@@ -236,6 +243,8 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
   const [hora,       setHora]       = useState('')
   const [slots,      setSlots]      = useState<SlotCita[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [dias,       setDias]       = useState<DiaDisponible[]>([])  // próximos días con hueco
+  const [loadingDias, setLoadingDias] = useState(false)
 
   const recursosActivos = data.recursos.filter(r => r.activo)
   // Recursos que prestan el servicio elegido (sin asignaciones = presta todos)
@@ -243,6 +252,22 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
     !servicioId ? recursosActivos
       : recursosActivos.filter(r => r.servicio_ids.length === 0 || r.servicio_ids.includes(servicioId)),
     [recursosActivos, servicioId])
+
+  // Al elegir servicio + recurso, buscar los próximos días con hueco y saltar al
+  // primero (no depende de la fecha → no pisa la que el usuario elija después).
+  useEffect(() => {
+    if (!servicioId || !recursoId) { setDias([]); return }
+    let cancel = false
+    setLoadingDias(true)
+    obtenerDiasDisponiblesCita(data.client_id, servicioId, recursoId).then(ds => {
+      if (cancel) return
+      setDias(ds)
+      if (ds.length > 0) setFecha(ds[0].fecha)
+      setLoadingDias(false)
+    }).catch(() => { if (!cancel) setLoadingDias(false) })
+    return () => { cancel = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicioId, recursoId])
 
   // Cargar huecos libres cuando hay servicio + recurso + fecha
   useEffect(() => {
@@ -284,7 +309,7 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
           <div className="modal-body">
             {sinDatos ? (
               <div className="alert alert-warning">
-                Necesitas al menos un servicio activo y un {data.etiquetas.recurso.toLowerCase()} activo. Créalos en sus pestañas.
+                Necesitas al menos un servicio activo y un {data.etiquetas.recurso.toLowerCase()} activo. Créalos en sus pestañas. Si solo das un tipo de cita, basta con un único servicio (p.ej. «Consulta», 30 min).
               </div>
             ) : (
               <div className="ter-form-grid">
@@ -306,6 +331,28 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
                     {recursosParaServicio.map(r => <option key={r.recurso_id} value={r.recurso_id}>{r.nombre}</option>)}
                   </select>
                 </div>
+                {recursoId && (
+                  <div className="input-group ter-col-full">
+                    <label>Próxima disponibilidad</label>
+                    {loadingDias ? (
+                      <span className="input-hint">Buscando huecos…</span>
+                    ) : dias.length === 0 ? (
+                      <span className="input-hint input-hint-danger">
+                        Sin huecos próximamente. Revisa el horario del {data.etiquetas.recurso.toLowerCase()}.
+                      </span>
+                    ) : (
+                      <div className="cita-dia-chips">
+                        {dias.map(d => (
+                          <button key={d.fecha} type="button"
+                            className={`cita-dia-chip${d.fecha === fecha ? ' cita-dia-chip-active' : ''}`}
+                            onClick={() => setFecha(d.fecha)}>
+                            {fechaChip(d.fecha)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="input-group ter-col-span-3">
                   <label>Fecha <span className="required">*</span></label>
                   <input className="input" name="fecha" type="date" required min={hoyISO()} value={fecha}
@@ -319,7 +366,9 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
                     {horasLibres.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                   {!loadingSlots && recursoId && horasLibres.length === 0 && (
-                    <span className="input-hint input-hint-danger">Sin huecos libres ese día. Revisa el horario del {data.etiquetas.recurso.toLowerCase()}.</span>
+                    <span className="input-hint input-hint-danger">
+                      Sin huecos ese día.{dias.length > 0 ? ` Prueba el ${fechaChip(dias[0].fecha)}.` : ` Revisa el horario del ${data.etiquetas.recurso.toLowerCase()}.`}
+                    </span>
                   )}
                 </div>
                 <div className="input-group ter-col-span-3">
@@ -783,7 +832,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         {data.servicios.length === 0 ? (
           <div className="mon-empty">
             <CalendarDays size={36} strokeWidth={1} opacity={0.2} />
-            <p>Aún no hay {servicioPlural.toLowerCase()}. Crea los que ofreces (con su duración) para poder agendar.</p>
+            <p>Aún no hay {servicioPlural.toLowerCase()}. Crea los que ofreces (con su duración) para poder agendar. Si solo das un tipo de cita, créalo igualmente como un único servicio (p.ej. «Consulta», 30 min).</p>
           </div>
         ) : (
           <div className="table-wrapper">

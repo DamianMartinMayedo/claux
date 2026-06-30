@@ -16,6 +16,7 @@ import {
   type CobrosFacturaData,
 } from '@/app/actions/portal/cobranza'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
+import { empresaColorVar }            from '@/components/portal/EmpresaTag'
 import { Copy, Pencil, Printer, Trash2, X } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
@@ -172,11 +173,11 @@ export default function FacturaDetalle({ data, cobros }: Props) {
 
       {/* ── Información ── */}
       <div className="ven-info-grid">
-        <div className="ven-info-card">
+        <div className="ven-info-card ven-info-card-empresa" style={empresaColorVar(empresa.color)}>
           <div className="ven-info-label">Empresa emisora</div>
           <div className="ven-info-nombre">
             {empresa.letra_facturacion && (
-              <span className="ven-letra-badge" style={{ background: empresa.color }}>
+              <span className="ven-letra-badge" style={empresaColorVar(empresa.color)}>
                 {empresa.letra_facturacion}
               </span>
             )}

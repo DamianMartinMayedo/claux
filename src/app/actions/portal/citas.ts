@@ -478,6 +478,11 @@ export interface SlotCita {
   recurso_nombre: string
   hora: string  // HH:MM
 }
+export interface DiaDisponible {
+  fecha:        string  // YYYY-MM-DD
+  primera_hora: string  // HH:MM — primer hueco del día
+  huecos:       number  // nº de horas libres ese día
+}
 
 export async function obtenerCitasPublicas(slug: string): Promise<{
   negocio: { nombre: string } | null
@@ -533,6 +538,22 @@ export async function obtenerSlotsCita(
   })
   if (error || !Array.isArray(data)) return []
   return data as SlotCita[]
+}
+
+// Próximos días con hueco para un servicio (+recurso opcional). Una sola llamada
+// devuelve hasta ~10 días disponibles, para saltar al primero y pintar la tira
+// de fechas — el cliente no adivina cuándo hay sitio.
+export async function obtenerDiasDisponiblesCita(
+  client_id: string, servicio_id: string, recurso_id: string | null, desde?: string,
+): Promise<DiaDisponible[]> {
+  if (!await rateLimitOk('dias_cita', 60, 60)) return []
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('res_dias_disponibles_cita', {
+    p_client_id: client_id, p_servicio_id: servicio_id, p_recurso_id: recurso_id,
+    p_desde: desde ?? hoy(), p_max_dias: 30,
+  })
+  if (error || !Array.isArray(data)) return []
+  return data as DiaDisponible[]
 }
 
 export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string; estado?: EstadoReserva }> {

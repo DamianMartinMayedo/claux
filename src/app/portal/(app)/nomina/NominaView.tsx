@@ -19,6 +19,9 @@ import {
   hoyISO,
   formatPeriodo,
 } from '../_shared/NominaDetalleModal'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
 
 function mesActual(): string {
   return new Date().toISOString().slice(0, 7)
@@ -195,6 +198,11 @@ function ConfirmEliminarNomina({
 
 export default function NominaView({ data, focusNominaId }: { data: RrhhPageData; focusNominaId?: string }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
+  const multiempresa = data.empresas.length > 1
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
   const [isPending, startTransition] = useTransition()
 
   const [modalNuevaNomina, setModalNuevaNomina] = useState(false)
@@ -202,6 +210,23 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
   const [confirmarNom,     setConfirmarNom]     = useState<NominaConLineas | null>(null)
   const [delNomina,        setDelNomina]        = useState<NominaConLineas | null>(null)
   const [pagar,            setPagar]            = useState<NominaConLineas | null>(null)
+
+  const [filtroEmpresa, setFiltroEmpresa] = useState('')
+  const [filtroAnio,    setFiltroAnio]    = useState('')
+
+  const aniosDisponibles = useMemo(() => {
+    const set = new Set<string>()
+    for (const n of data.nominas) if (n.periodo) set.add(n.periodo.slice(0, 4))
+    return Array.from(set).sort().reverse()
+  }, [data.nominas])
+
+  const nominasFiltradas = useMemo(() => {
+    return data.nominas.filter(n => {
+      if (filtroEmpresa && n.empresa_id !== filtroEmpresa) return false
+      if (filtroAnio && !n.periodo.startsWith(filtroAnio))  return false
+      return true
+    })
+  }, [data.nominas, filtroEmpresa, filtroAnio])
 
   useEffect(() => {
     if (focusNominaId && data.nominas.some(n => n.nomina_id === focusNominaId)) {
@@ -249,11 +274,28 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
         </div>
       </div>
 
+      <div className="ter-toolbar">
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
+        {aniosDisponibles.length > 1 && (
+          <select className="input ter-filter-select" value={filtroAnio} onChange={e => setFiltroAnio(e.target.value)}>
+            <option value="">Todos los años</option>
+            {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+      </div>
+
       <div className="card card-table">
-        {data.nominas.length === 0 ? (
+        {nominasFiltradas.length === 0 ? (
           <div className="mon-empty">
             <Wallet size={40} strokeWidth={1} opacity={0.2} />
-            <p>Aún no hay nóminas. Crea la primera para pagar a tu personal activo; al confirmarla se registra como gasto de salarios en tu contabilidad.</p>
+            <p>{data.nominas.length === 0
+              ? 'Aún no hay nóminas. Crea la primera para pagar a tus personal activo; al confirmarla se registra como gasto de salarios en tu contabilidad.'
+              : 'No hay nóminas para los filtros seleccionados.'}</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -261,7 +303,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
               <thead>
                 <tr>
                   <th>Período</th>
-                  {data.empresas.length > 1 && <th>Empresa</th>}
+                  {multiempresa && <th>Empresa</th>}
                   <th>Empleados</th>
                   <th className="tes-col-monto">Total</th>
                   <th>Estado</th>
@@ -269,10 +311,19 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                 </tr>
               </thead>
               <tbody>
-                {data.nominas.map(n => (
-                  <tr key={n.nomina_id} className="table-row-clickable" onClick={() => setDetalleNominaId(n.nomina_id)}>
+                {nominasFiltradas.map(n => (
+                  <tr
+                    key={n.nomina_id}
+                    className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
+                    style={multiempresa ? empresaColorVar(colorOf(n.empresa_id)) : undefined}
+                    onClick={() => setDetalleNominaId(n.nomina_id)}
+                  >
                     <td><strong>{formatPeriodo(n.periodo)}</strong></td>
-                    {data.empresas.length > 1 && <td className="text-sm-muted">{data.empresa_nombres[n.empresa_id] ?? '—'}</td>}
+                    {multiempresa && (
+                      <td>
+                        <EmpresaTag color={colorOf(n.empresa_id)} nombre={data.empresa_nombres[n.empresa_id] ?? '—'} />
+                      </td>
+                    )}
                     <td className="text-sm-muted">{n.lineas.length}</td>
                     <td className="tes-col-monto tes-monto-cell">{formatMonto(n.total)} {n.moneda}</td>
                     <td>

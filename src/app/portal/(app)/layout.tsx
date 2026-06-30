@@ -1,11 +1,15 @@
 import { redirect }       from 'next/navigation'
 import { getPortalSession } from '@/app/actions/portal/auth'
+import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
 import { createAdminClient } from '@/lib/supabase/admin'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
 import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
 import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
+import { EmpresaColorProvider } from '@/components/portal/EmpresaColorContext'
+import IaChatWidget          from '@/components/portal/ia/IaChatWidget'
+import { leerIaConfig }      from '@/lib/ia/contexto'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -13,10 +17,10 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const [{ data: cliente }, { data: catalogo }] = await Promise.all([
+  const [{ data: cliente }, { data: catalogo }, empresas] = await Promise.all([
     db
       .from('clients')
-      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
+      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, ia_config')
       .eq('client_id', session.client_id)
       .single(),
     db
@@ -24,6 +28,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       .select('clave, nombre, tipo, paginas, orden')
       .eq('activo', true)
       .order('orden'),
+    obtenerEmpresasSelector(),
   ])
 
   if (!cliente) redirect('/portal/login')
@@ -33,6 +38,10 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const modulosActivos: string[] = Array.isArray(cliente.modulos_activos)
     ? (cliente.modulos_activos as string[])
     : []
+
+  // Addon de IA: el chat flotante del dueño solo aparece si está contratado.
+  const tieneIa = modulosActivos.includes('asistente_ia')
+  const nombreAgente = leerIaConfig(cliente.ia_config).nombreAgente
 
   // Bloqueo basado en estado Y en fecha, sin depender de expiración automática:
   // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
@@ -57,6 +66,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       <PortalHeader
         session={session}
         nombreEmpresa={cliente.nombre_empresa}
+        empresas={empresas}
       />
       <PortalSidebar
         modulosActivos={modulosActivos}
@@ -66,8 +76,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         <PortalToastWrapper>
         {bloqueado
           ? <BloqueadoScreen estado={cliente.estado} />
-          : children}
+          : <EmpresaColorProvider empresas={empresas}>{children}</EmpresaColorProvider>}
         </PortalToastWrapper>
+        {!bloqueado && tieneIa && <IaChatWidget nombreAgente={nombreAgente} />}
       </main>
     </div>
   )

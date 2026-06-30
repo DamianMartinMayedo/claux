@@ -473,7 +473,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
         </div>
       )}
       {detalleVivo && (
-        <NominaDetalleModal nomina={detalleVivo}
+        <NominaDetalleModal nomina={detalleVivo} empleadoId={empleado.empleado_id}
           onClose={() => setDetalleNominaId(null)}
           onChanged={() => router.refresh()}
           onConfirmar={() => setConfirmarNom(detalleVivo)}

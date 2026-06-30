@@ -15,6 +15,9 @@ import {
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
 import { Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -284,6 +287,11 @@ export function ConfirmEliminar({
 
 export default function PersonalView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
+  const multiempresa = data.empresas.length > 1
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
   const [isPending, startTransition] = useTransition()
 
   const [modalEmpleado, setModalEmpleado] = useState(false)
@@ -356,12 +364,12 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
           <option value="ACTIVO">Solo activos</option>
           <option value="BAJA">Solo bajas</option>
         </select>
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
       </div>
 
       <div className="card card-table">
@@ -378,6 +386,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
               <thead>
                 <tr>
                   <th>Empleado</th>
+                  {multiempresa && <th>Empresa</th>}
                   <th>Cargo</th>
                   <th>Contrato</th>
                   <th className="tes-col-monto">Salario base</th>
@@ -387,7 +396,9 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
               </thead>
               <tbody>
                 {empleados.map(e => (
-                  <tr key={e.empleado_id} className="table-row-clickable"
+                  <tr key={e.empleado_id}
+                    className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
+                    style={multiempresa ? empresaColorVar(colorOf(e.empresa_id)) : undefined}
                     onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}>
                     <td>
                       <strong>{nombreCompleto(e)}</strong>
@@ -395,6 +406,11 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                         {e.documento && <span className="tes-mov-cat">{e.documento}</span>}
                       </div>
                     </td>
+                    {multiempresa && (
+                      <td>
+                        <EmpresaTag color={colorOf(e.empresa_id)} nombre={data.empresa_nombres[e.empresa_id] ?? '—'} />
+                      </td>
+                    )}
                     <td>
                       {e.cargo ?? '—'}
                       {e.departamento && <div className="text-sm-muted">{e.departamento}</div>}

@@ -12,6 +12,9 @@ import {
   type TipoAlmacen,
   type AlmacenesPageData,
 } from '@/app/actions/portal/almacenes'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -189,6 +192,11 @@ function ConfirmArchivar({
 
 export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
+  const multiempresa = data.empresas.length > 1
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
   const [isPending, startTransition] = useTransition()
 
   const [modalOpen,   setModalOpen]   = useState(false)
@@ -271,15 +279,12 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
 
       {/* ── Toolbar ── */}
       <div className="ter-toolbar">
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresa}
-            onChange={e => setFiltroEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => (
-              <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>
-            ))}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
         <select className="input ter-filter-select" value={filtroTipo}
           onChange={e => setFiltroTipo(e.target.value)}>
           <option value="">Todos los tipos</option>
@@ -320,7 +325,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
               <thead>
                 <tr>
                   <th>Nombre</th>
-                  {data.empresas.length > 1 && <th>Empresa</th>}
+                  {multiempresa && <th>Empresa</th>}
                   <th>Tipo</th>
                   <th>Descripción</th>
                   <th>Estado</th>
@@ -329,16 +334,20 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
               </thead>
               <tbody>
                 {almacenesFiltrados.map(a => (
-                  <tr key={a.almacen_id} className={!a.activo ? 'ter-row-archivada' : ''}>
+                  <tr
+                    key={a.almacen_id}
+                    className={`${!a.activo ? 'ter-row-archivada' : ''}${multiempresa ? ' row-empresa-accent' : ''}`}
+                    style={multiempresa ? empresaColorVar(colorOf(a.empresa_id)) : undefined}
+                  >
 
                     <td>
                       <strong>{a.nombre}</strong>
                       <div className="alm-id-text">{a.almacen_id}</div>
                     </td>
 
-                    {data.empresas.length > 1 && (
-                      <td className="text-sm-muted">
-                        {data.empresa_nombres[a.empresa_id] ?? a.empresa_id}
+                    {multiempresa && (
+                      <td>
+                        <EmpresaTag color={colorOf(a.empresa_id)} nombre={data.empresa_nombres[a.empresa_id] ?? a.empresa_id} />
                       </td>
                     )}
 

@@ -34,7 +34,7 @@ había en el código. Mapa de pertenencia de cada pieza ya construida o declarad
 |---|---|---|---|
 | Ventas (facturas + ofertas) | Hecho | **BASE** | Mantener; el selector de productos pasa a depender de Inventario |
 | Terceros (clientes/proveedores) | Hecho | **BASE** | Mantener |
-| Monedas y tasas (multimoneda) | Hecho | **BASE** | Mantener |
+| Monedas y tasas (multimoneda) | Hecho | **Cuenta (transversal)** | Fuera de base (071): vive en el menú de cuenta, sin gating |
 | Tesorería | Placeholder | **BASE** | Construir |
 | Gastos / Cobros | No existe | **BASE** | Construir |
 | Cuentas por cobrar / por pagar | No existe | **BASE** | Construir |
@@ -100,7 +100,7 @@ páginas internas tiene. Fuente canónica de esta clasificación.
 | **`funcionalidad`** | Items standalone (sin grupo) | No (ruta única) | Catálogo QR, Reservas y citas, Docs imprenta | **Oculto** si no está contratado |
 | **`addon`** | **No genera items** en el sidebar | No | Multiempresa, Usuarios extra, Estadísticas premium | El gating se hace en la página afectada |
 
-> **Contabilidad** es un `modulo` con clave `base` (su grupo del sidebar contiene Ventas, Gastos, CxC, CxP, Tesorería, Reportes, Terceros, Monedas). El tipo `base`/flag `es_base` está **retirado** (068): ya no hay categoría especial ni "siempre activa".
+> **Contabilidad** es un `modulo` con clave `base` (su grupo del sidebar contiene Ventas, Gastos, CxC, CxP, Tesorería, Reportes, Terceros). El tipo `base`/flag `es_base` está **retirado** (068): ya no hay categoría especial ni "siempre activa". `Monedas y tasas` se sacó de este grupo (071): es config transversal en el menú de cuenta, sin gating.
 
 **Detalle de cada tipo:**
 
@@ -123,8 +123,9 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
 - **Ocultar en el sidebar NO es control de acceso.** Cada ruta gateada se protege en servidor con
   `requireModulo('<clave>')` al inicio de su `page.tsx` (redirige a `/portal/dashboard` si el cliente no lo tiene).
   Lo tienen: catálogo QR, reservas, docs imprenta, IA, productos/almacenes/compras/movimientos (`inventario`),
-  RRHH, **y las páginas de Contabilidad** (Ventas, Gastos, CxC, CxP, Tesorería, Reportes, Terceros, Monedas →
-  `requireModulo('base')`, ya que la contabilidad es opcional). `empresas` es accesible (editas tu empresa) y el
+  RRHH, **y las páginas de Contabilidad** (Ventas, Gastos, CxC, CxP, Tesorería, Reportes, Terceros →
+  `requireModulo('base')`, ya que la contabilidad es opcional). `Monedas y tasas` NO está gateada (config
+  transversal en el menú de cuenta). `empresas` es accesible (editas tu empresa) y el
   alta de la 2.ª empresa la limita el addon `multiempresa` dentro de la página.
 
 > Nota de diseño: la columna `paginas` añade una capa (BD → sidebar) cuyo único beneficio real es renombrar/reordenar
@@ -155,7 +156,7 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
   `clients.modulos_activos` (la base es un módulo opcional; no se fuerza). Sigue pasando una lista de strings al sidebar.
 - **Sidebar** — `src/components/portal/PortalSidebar.tsx`: reestructurar `buildNav` a la frontera nueva.
   Grupo **Contabilidad** (base, siempre visible): Ventas, Gastos/Cobros, Cuentas por cobrar, Cuentas por
-  pagar, Tesorería, Reportes, Terceros, Monedas. Grupo **Inventario** (`modulo: inventario`): Productos,
+  pagar, Tesorería, Reportes, Terceros. (`Monedas y tasas` vive en el menú de cuenta, transversal.) Grupo **Inventario** (`modulo: inventario`): Productos,
   Almacenes, Compras, Movimientos. Grupos **RRHH**, **Multiempresa** (Mis Empresas), **IA**
   (`asistente_ia`). Grupo **Funcionalidades**: Catálogo QR, Reservas, Documentos imprenta. Implica mover
   Productos/Almacenes fuera del grupo "Catálogo" y Mis Empresas a su módulo, Compras de Gestión a
@@ -202,19 +203,23 @@ Regla: **el código usa la clave; la etiqueta se resuelve por sector**. Mecanism
 (`etiquetasDe`) y la server action `obtenerEtiquetasNegocio()`. Nunca poner "menu"/"mesa" en una clave, ruta
 de BD o flag. Las 14 claves ERP actuales no se renombran (es arriesgado y no aportan al cambio).
 
-## 7. La IA es UN módulo, no features sueltos
+## 7. La IA es UN addon transversal, no features sueltos
 
-`asistente_ia` es **una sola fila** del catálogo con **precio fijo** (+$15/+$25). No se trocea en módulos
-por caso de uso. Cómo funciona:
+`asistente_ia` es **una sola fila** del catálogo con **precio fijo** (+$15/+$25). No se trocea por caso de
+uso. **Es un `addon`** (reclasificado de módulo en la mig. 071): no genera navegación propia en el sidebar;
+aparece como **puntos de entrada (icono + tooltip)** repartidos por la plataforma y un **chat flotante** del
+dueño. Cómo funciona (implementado v1 — detalle en CONTEXTO §2 «Asistente IA construido»):
 
-- Se le **pasa el contexto del negocio** (datos del tenant: catálogo, horarios, reservas, números…).
-- **Actúa distinto según desde dónde se le llame**: reservar, analizar números, hablar del catálogo, hacer
-  el resumen semanal. El destino y el comportamiento los decide el punto de invocación, no módulos
-  separados.
-- Coherente con los principios de CONTEXTO: §6 motor híbrido (la IA solo entra en conversación libre; lo
-  predecible lo resuelve código), §7 límites/medición por tenant, §4 proveedor DeepSeek como adaptador
-  intercambiable, salida siempre desde el servidor.
-- Su disponibilidad se gatea como cualquier módulo: `asistente_ia` dentro de `clients.modulos_activos`.
+- Se le **pasa un contexto ACOTADO del negocio** (resumen ya agregado del tenant vía `obtenerDashboard()`,
+  scoped por `client_id` y por módulos contratados): aislamiento entre tenants y coste bajo (no se vuelca la BD).
+- **Actúa distinto según desde dónde se le llame**: analizar números (Dashboard), chat libre del dueño,
+  reservar/pedir cita en lenguaje natural (Telegram). El comportamiento lo decide el punto de invocación.
+- Coherente con los principios de CONTEXTO: §6 motor híbrido (la IA solo interpreta lenguaje libre; la
+  ACCIÓN la ejecuta el código determinista con las RPC existentes), §7 límites/medición por tenant
+  (`ia_uso`), §4 proveedor como adaptador intercambiable (**OpenCode Zen**, `ia_model`/`ia_api_base` en
+  `settings`; salida siempre desde el servidor).
+- **Gating por touchpoint** con `tieneModulo('asistente_ia')` (un addon no se protege con `requireModulo`
+  porque no tiene ruta propia); el nombre del agente y el uso del mes se editan/ven en `/portal/perfil`.
 
 ## 8. Estado de implementación
 
@@ -233,9 +238,10 @@ por caso de uso. Cómo funciona:
 - [x] **Sidebar dirigido por datos** (024): columna `paginas` (JSONB); el sidebar renderiza grupos colapsables desde el catálogo. Caveats y guards en §3.2.
 - [x] **Guards de ruta** `requireModulo()` en todas las rutas gateadas: catálogo QR, reservas, docs imprenta, IA, `inventario` (productos/almacenes/compras/movimientos) y RRHH. (Ocultar en el sidebar no protege; el guard sí.)
 - [x] **Base contable completa (Fase 4)**: Tesorería, Gastos/Cobros, CxC/CxP y Reportes financieros construidos; selector de productos del editor de líneas gateado por `inventario`.
+- [x] **Asistente IA v1 (mig. 071)**: `asistente_ia` reclasificado de módulo a **addon**; núcleo `src/lib/ia/` (provider OpenCode Zen + contexto acotado + agente + medición + intérprete de bot), touchpoints en Dashboard, chat flotante del dueño, sección de Perfil (nombre + uso) y admin de modelo/consumo. Capa de Telegram en lenguaje natural sobre el motor híbrido. Detalle en CONTEXTO §2.
 
 **Pendiente:**
-- [ ] **Build-out de módulos**: Inventario (compras/movimientos reales), RRHH, Asistente IA; funcionalidades por sector (catálogo QR, reservas, documentos imprenta).
+- [ ] **Build-out de módulos**: funcionalidades por sector (catálogo QR, documentos imprenta). Touchpoints de IA en páginas de Ventas/Gastos y chat embebido en la mini-web pública (cuando exista la capa pública).
 
 ## 9. Discrepancias detectadas (registro, con recomendación)
 

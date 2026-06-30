@@ -8,6 +8,8 @@ import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
+import { tieneModulo } from '@/lib/modulos'
+import { interpretarMensajeBot } from '@/lib/ia/telegram'
 import { type BotContext, type BotResponse, parseFecha, formatFechaStr, formatHora } from './bot-engine'
 
 // ── Sesión (clave por modulo='citas') ──────────────────────────────────────────
@@ -83,7 +85,24 @@ export async function manejarMensajeCitas(ctx: BotContext, texto: string, chat_i
   }
   if (t === 'ayuda' || t === 'help') return mostrarAyuda(ctx)
 
+  // Capa de IA opcional (add-on): interpreta lenguaje libre antes del teclado.
+  const ia = await intentarIaCitas(ctx, chat_id, texto.trim())
+  if (ia) return ia
+
   return { texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿Quieres pedir una cita?`, markup: tecladoPrincipal() }
+}
+
+// Si el negocio tiene el addon de IA, deja que interprete el lenguaje natural y
+// arranque el flujo de cita. Devuelve null si no hay addon o nada accionable.
+async function intentarIaCitas(ctx: BotContext, chatId: string, texto: string): Promise<BotResponse | null> {
+  const db = createAdminClient()
+  const { data: cliente } = await db.from('clients').select('modulos_activos').eq('client_id', ctx.client_id).single()
+  if (!tieneModulo(cliente?.modulos_activos, 'asistente_ia')) return null
+
+  const intent = await interpretarMensajeBot(ctx.client_id, 'cita', texto)
+  if (!intent || intent.intent !== 'reservar') return null
+  // La cita necesita elegir servicio primero: arrancamos el flujo conversacional.
+  return iniciarCita(ctx, chatId)
 }
 
 // ── Bienvenida / teclado ────────────────────────────────────────────────────────

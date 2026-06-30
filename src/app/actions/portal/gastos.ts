@@ -326,6 +326,10 @@ export async function registrarLiquidacion(
 
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/tesoreria')
+  revalidatePath('/portal/rrhh')
+  revalidatePath('/portal/nomina')
+  revalidatePath('/portal/cxp')
+  revalidatePath('/portal/reportes')
   return { ok: true }
 }
 
@@ -356,5 +360,9 @@ export async function anularLiquidacion(movimiento_id: string): Promise<{ ok: bo
 
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/tesoreria')
+  revalidatePath('/portal/rrhh')
+  revalidatePath('/portal/nomina')
+  revalidatePath('/portal/cxp')
+  revalidatePath('/portal/reportes')
   return { ok: true }
 }

@@ -12,6 +12,9 @@ import {
   type DocumentoPendiente,
   type Tramo,
 } from '@/app/actions/portal/cobranza'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -156,7 +159,12 @@ function PagoModal({
 
 export default function CuentasView({ data }: { data: CuentasPageData }) {
   const router = useRouter()
+  const { colorOf, nombreOf } = useEmpresas()
   const esCobro = data.modo === 'COBRAR'
+  const multiempresa = data.empresas.length > 1
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
 
   const [pagoDoc,      setPagoDoc]      = useState<DocumentoPendiente | null>(null)
   const [filtroTramo,  setFiltroTramo]  = useState<Tramo | ''>('')
@@ -232,12 +240,12 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
               </button>
             )
           ))}
-          {data.empresas.length > 1 && (
-            <select className="input ter-filter-select cxx-empresa" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
-              <option value="">Todas las empresas</option>
-              {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-            </select>
-          )}
+          <EmpresaPills
+            empresas={empresasFiltro}
+            value={filtroEmpresa}
+            onChange={setFiltroEmpresa}
+            todasLabel="Todas las empresas"
+          />
         </div>
       )}
 
@@ -265,12 +273,19 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
               </thead>
               <tbody>
                 {documentos.map(d => (
-                  <tr key={d.doc_id}>
+                  <tr
+                    key={d.doc_id}
+                    className={multiempresa ? 'row-empresa-accent' : undefined}
+                    style={multiempresa ? empresaColorVar(colorOf(d.empresa_id)) : undefined}
+                  >
                     <td>
                       <strong>{d.numero}</strong>
                       <div className="tes-mov-sub">
                         <span className="badge badge-neutral tes-origen-badge">{d.doc_tipo === 'FACTURA' ? 'Factura' : 'Directo'}</span>
                         <span className="tes-mov-cat">{formatFecha(d.fecha)}</span>
+                        {multiempresa && (
+                          <EmpresaTag color={colorOf(d.empresa_id)} nombre={nombreOf(d.empresa_id) ?? d.empresa_id} />
+                        )}
                       </div>
                     </td>
                     <td className="text-sm-muted">{d.tercero_nombre ?? '—'}</td>

@@ -12,6 +12,9 @@ import {
   type TercerosPageData,
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal, VIA_BADGE } from './_TerceroFormModal'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { Archive, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -85,6 +88,7 @@ function ConfirmArchivar({
 
 export default function TercerosView({ data }: { data: TercerosPageData }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
   const [isPending, startTransition] = useTransition()
 
   const [modalOpen,      setModalOpen]      = useState(false)
@@ -100,9 +104,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
     const seen = new Set<string>()
     return Object.entries(data.empresa_nombres)
       .filter(([id]) => { if (seen.has(id)) return false; seen.add(id); return true })
-      .map(([empresa_id, nombre]) => ({ empresa_id, nombre }))
+      .map(([empresa_id, nombre]) => ({ empresa_id, nombre, color: colorOf(empresa_id) }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
-  }, [data.empresa_nombres])
+  }, [data.empresa_nombres, colorOf])
+
+  const multiempresa = empresasLista.length > 1
 
   const tercerosFiltrados = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -174,15 +180,12 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <option value="PROVEEDOR">Proveedores</option>
           <option value="AMBOS">Ambos</option>
         </select>
-        {empresasLista.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresa}
-            onChange={e => setFiltroEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {empresasLista.map(e => (
-              <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>
-            ))}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasLista}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
         <label className="ter-archivados-toggle">
           <input type="checkbox" checked={verArchivados}
             onChange={e => setVerArchivados(e.target.checked)} />
@@ -217,7 +220,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                 <tr>
                   <th>Nombre / ID fiscal</th>
                   <th>Tipo</th>
-                  {empresasLista.length > 1 && <th>Empresa</th>}
+                  {multiempresa && <th>Empresa</th>}
                   <th>Representante</th>
                   <th>Vías de pago</th>
                   <th>Cond. pago</th>
@@ -228,7 +231,8 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                 {tercerosFiltrados.map(t => (
                   <tr
                     key={t.tercero_id}
-                    className={`table-row-clickable${!t.activo ? ' ter-row-archivada' : ''}`}
+                    className={`table-row-clickable${!t.activo ? ' ter-row-archivada' : ''}${multiempresa ? ' row-empresa-accent' : ''}`}
+                    style={multiempresa ? empresaColorVar(colorOf(t.empresa_id)) : undefined}
                     onClick={() => router.push(`/portal/terceros/${t.tercero_id}`)}
                   >
 
@@ -252,9 +256,12 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     </td>
 
                     {/* Empresa */}
-                    {empresasLista.length > 1 && (
-                      <td className="text-sm-muted">
-                        {data.empresa_nombres[t.empresa_id] ?? t.empresa_id}
+                    {multiempresa && (
+                      <td>
+                        <EmpresaTag
+                          color={colorOf(t.empresa_id)}
+                          nombre={data.empresa_nombres[t.empresa_id] ?? t.empresa_id}
+                        />
                       </td>
                     )}
 

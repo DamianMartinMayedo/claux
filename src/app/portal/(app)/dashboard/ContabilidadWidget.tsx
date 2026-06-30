@@ -1,18 +1,19 @@
 import Link from 'next/link'
 import { Wallet } from 'lucide-react'
 import type { ContabilidadResumen } from '@/app/actions/portal/dashboard'
-import { formatUSD, formatFecha } from './format'
-import VentasGastosChart from './charts/VentasGastosChart'
+import { formatMoneda, formatFecha } from './format'
+import ContabResumen from './ContabResumen'
 
 const ESTADO_FACT: Record<string, { cls: string; label: string }> = {
-  BORRADOR:   { cls: 'badge-neutral', label: 'Borrador' },
-  CONFIRMADO: { cls: 'badge-success', label: 'Confirmada' },
-  ANULADA:    { cls: 'badge-error',   label: 'Anulada' },
+  BORRADOR: { cls: 'badge-neutral', label: 'Borrador' },
+  EMITIDA:  { cls: 'badge-info',    label: 'Emitida' },
+  COBRADA:  { cls: 'badge-success', label: 'Cobrada' },
+  ANULADA:  { cls: 'badge-error',   label: 'Anulada' },
 }
 
 export default function ContabilidadWidget({ data }: { data: ContabilidadResumen }) {
   const caja = data.caja.length
-    ? data.caja.map(c => `${c.saldo.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${c.moneda}`).join(' · ')
+    ? data.caja.map(c => `${c.saldo.toLocaleString('es-ES', { maximumFractionDigits: 0 })} ${c.moneda}`).join(' · ')
     : '—'
 
   return (
@@ -27,18 +28,6 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
 
       <div className="dash-kpis">
         <div className="dash-kpi">
-          <span className="dash-kpi-label">Ventas del mes</span>
-          <span className="dash-kpi-value">{formatUSD(data.ventasMes)}</span>
-        </div>
-        <div className="dash-kpi">
-          <span className="dash-kpi-label">Gastos del mes</span>
-          <span className="dash-kpi-value">{formatUSD(data.gastosMes)}</span>
-        </div>
-        <div className="dash-kpi">
-          <span className="dash-kpi-label">Neto del mes</span>
-          <span className={`dash-kpi-value ${data.netoMes >= 0 ? 'is-pos' : 'is-neg'}`}>{formatUSD(data.netoMes)}</span>
-        </div>
-        <div className="dash-kpi">
           <span className="dash-kpi-label">Caja</span>
           <span className="dash-kpi-value dash-kpi-value-sm">{caja}</span>
         </div>
@@ -50,7 +39,7 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
             <span>Ventas y gastos · 6 meses</span>
             <Link href="/portal/reportes" className="btn-ghost-xs">Ver reportes</Link>
           </h3>
-          <VentasGastosChart serie={data.serie} />
+          <ContabResumen consolidado={data.consolidado} porMoneda={data.porMoneda} />
         </div>
         <div className="dash-split-side">
           <h3 className="dash-subtitle">
@@ -68,7 +57,7 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
                     <span className="dash-list-meta">{f.cliente_nombre} · {formatFecha(f.fecha)}</span>
                   </Link>
                   <span className="dash-list-aside">
-                    <span className="dash-list-amount">{formatUSD(f.total)}</span>
+                    <span className="dash-list-amount">{formatMoneda(f.total, f.moneda)}</span>
                     <span className={`badge ${ESTADO_FACT[f.estado]?.cls ?? 'badge-neutral'}`}>
                       {ESTADO_FACT[f.estado]?.label ?? f.estado}
                     </span>

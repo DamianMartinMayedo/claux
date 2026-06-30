@@ -3,15 +3,18 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Plus, Pencil, RefreshCw, Star, ArrowRight, Info } from 'lucide-react'
+import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info } from 'lucide-react'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
 import {
   guardarMoneda,
   guardarPar,
   cambiarMonedaConsolidacion,
   actualizarTasasAuto,
+  contarUsoMoneda,
+  eliminarMoneda,
   type Moneda,
   type Par,
+  type UsoMoneda,
 } from '@/app/actions/portal/monedas'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,10 +42,12 @@ function MonedaModal({
   moneda,
   onClose,
   onSaved,
+  onPedirEliminar,
 }: {
   moneda:  Moneda | null
   onClose: () => void
   onSaved: () => void
+  onPedirEliminar: () => void
 }) {
   const catalogoArr = [...CATALOGO_MONEDAS]
   const [isPending, startTransition] = useTransition()
@@ -79,7 +84,7 @@ function MonedaModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-440" role="dialog" aria-modal>
+      <div className="modal modal-520" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">{esEdicion ? 'Editar moneda' : 'Añadir moneda'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
@@ -164,13 +169,20 @@ function MonedaModal({
 
           </div>
 
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending}>
-              {isPending
-                ? <><span className="spinner spinner-sm" />{esEdicion ? 'Guardando…' : 'Añadir'}</>
-                : esEdicion ? 'Guardar cambios' : 'Añadir moneda'}
-            </button>
+          <div className="modal-footer modal-footer-split">
+            {esEdicion && !moneda.es_consolidacion && (
+              <button type="button" className="btn btn-danger-text" onClick={onPedirEliminar} disabled={isPending}>
+                <Trash2 size={14} strokeWidth={2} /> Eliminar
+              </button>
+            )}
+            <div className="modal-footer-actions">
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={isPending}>
+                {isPending
+                  ? <><span className="spinner spinner-sm" />{esEdicion ? 'Guardando…' : 'Añadir'}</>
+                  : esEdicion ? 'Guardar cambios' : 'Añadir moneda'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -348,9 +360,176 @@ function ConsolidacionModal({
   )
 }
 
+// ── Modal Eliminar moneda ─────────────────────────────────────────────────────
+
+function EliminarMonedaModal({
+  moneda,
+  monedas,
+  onClose,
+  onDone,
+}: {
+  moneda:  Moneda
+  monedas: Moneda[]
+  onClose: () => void
+  onDone:  () => void
+}) {
+  const [uso,      setUso]      = useState<UsoMoneda | null>(null)
+  const [accion,   setAccion]   = useState<'desactivar' | 'fusionar'>('desactivar')
+  const [isPending, startTransition] = useTransition()
+
+  const otras = monedas.filter(m => m.codigo !== moneda.codigo && m.activa)
+  const [destino, setDestino] = useState(otras[0]?.codigo ?? '')
+
+  useEffect(() => {
+    let vivo = true
+    contarUsoMoneda(moneda.codigo).then(u => { if (vivo) setUso(u) })
+    return () => { vivo = false }
+  }, [moneda.codigo])
+
+  function eliminarLimpio() {
+    startTransition(async () => {
+      const r = await eliminarMoneda(moneda.codigo)
+      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      onDone()
+    })
+  }
+
+  function aplicarConDatos() {
+    startTransition(async () => {
+      if (accion === 'desactivar') {
+        const fd = new FormData()
+        fd.set('codigo_original', moneda.codigo)
+        fd.set('nombre',  moneda.nombre)
+        fd.set('simbolo', moneda.simbolo)
+        fd.set('activa',  'false')
+        const r = await guardarMoneda(fd)
+        if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+        onDone()
+      } else {
+        if (!destino) { toastError('Elige una moneda destino.'); return }
+        const r = await eliminarMoneda(moneda.codigo, destino)
+        if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+        onDone()
+      }
+    })
+  }
+
+  const cargando = uso === null
+  const sinDatos = uso !== null && uso.total === 0
+
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-xl" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Eliminar {moneda.codigo}</h2>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
+        </div>
+
+        <div className="modal-body modal-body-wide">
+          {cargando ? (
+            <div className="mon-uso-loading"><span className="spinner spinner-sm" /> Comprobando uso…</div>
+          ) : (
+            <div className="mon-elim-grid">
+
+              {/* Izquierda: qué afecta */}
+              <div className="mon-elim-side">
+                <h3 className="mon-elim-h">Qué afecta</h3>
+                {sinDatos ? (
+                  <p className="text-sm-muted">
+                    <strong>{moneda.codigo}</strong> no se usa en ningún documento. Solo se eliminarán su definición y sus pares de cambio.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm-muted mb-3">
+                      <strong>{uso!.total}</strong> registro{uso!.total !== 1 ? 's' : ''} usan <strong>{moneda.codigo}</strong>:
+                    </p>
+                    <ul className="mon-uso-list">
+                      {uso!.detalle.map(d => (
+                        <li key={d.entidad}><span>{d.entidad}</span><strong>{d.n}</strong></li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+
+              {/* Derecha: qué hacer */}
+              <div className="mon-elim-side">
+                <h3 className="mon-elim-h">Qué hacer</h3>
+                {sinDatos ? (
+                  <p className="text-sm-muted">
+                    Al no haber datos asociados, se elimina por completo. Esta acción no se puede deshacer.
+                  </p>
+                ) : (
+                  <>
+                    <div className="mon-radio-list">
+                      <label className={`mon-radio-item${accion === 'desactivar' ? ' selected' : ''}`}>
+                        <input type="radio" name="accion-elim" checked={accion === 'desactivar'} onChange={() => setAccion('desactivar')} />
+                        <div className="mon-radio-info">
+                          <strong>Desactivar (recomendado)</strong>
+                          <span>Deja de aparecer al crear documentos nuevos. Los {uso!.total} ya existentes se conservan intactos.</span>
+                        </div>
+                      </label>
+
+                      <label className={`mon-radio-item${accion === 'fusionar' ? ' selected' : ''}${otras.length === 0 ? ' is-disabled' : ''}`}>
+                        <input
+                          type="radio"
+                          name="accion-elim"
+                          checked={accion === 'fusionar'}
+                          disabled={otras.length === 0}
+                          onChange={() => setAccion('fusionar')}
+                        />
+                        <div className="mon-radio-info">
+                          <strong>Fusionar con otra moneda</strong>
+                          <span>Reasigna esos registros a la moneda elegida y elimina {moneda.codigo}. No convierte importes: úsalo solo si {moneda.codigo} es un duplicado.</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {accion === 'fusionar' && otras.length > 0 && (
+                      <div className="input-group mt-3">
+                        <label>Reasignar a</label>
+                        <select className="input" value={destino} onChange={e => setDestino(e.target.value)}>
+                          {otras.map(m => (
+                            <option key={m.codigo} value={m.codigo}>{m.codigo} — {m.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
+          {sinDatos ? (
+            <button type="button" className="btn btn-danger" onClick={eliminarLimpio} disabled={isPending}>
+              {isPending ? <><span className="spinner spinner-sm" />Eliminando…</> : 'Eliminar moneda'}
+            </button>
+          ) : !cargando && (
+            <button
+              type="button"
+              className={accion === 'fusionar' ? 'btn btn-danger' : 'btn btn-primary'}
+              onClick={aplicarConDatos}
+              disabled={isPending || (accion === 'fusionar' && !destino)}
+            >
+              {isPending
+                ? <><span className="spinner spinner-sm" />Aplicando…</>
+                : accion === 'desactivar' ? 'Desactivar' : 'Fusionar y eliminar'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-type ModalKind = 'none' | 'moneda' | 'par' | 'consolidacion'
+type ModalKind = 'none' | 'moneda' | 'par' | 'consolidacion' | 'eliminar'
 
 interface Props {
   monedas: Moneda[]
@@ -361,9 +540,10 @@ interface Props {
 export default function MonedasView({ monedas: initMonedas, pares: initPares, esAdmin }: Props) {
   const router = useRouter()
 
-  const [modalKind,  setModalKind]  = useState<ModalKind>('none')
-  const [monedaEdit, setMonedaEdit] = useState<Moneda | null>(null)
-  const [parEdit,    setParEdit]    = useState<Par | null>(null)
+  const [modalKind,     setModalKind]     = useState<ModalKind>('none')
+  const [monedaEdit,    setMonedaEdit]    = useState<Moneda | null>(null)
+  const [monedaEliminar, setMonedaEliminar] = useState<Moneda | null>(null)
+  const [parEdit,       setParEdit]       = useState<Par | null>(null)
 
   // Tasas locales — se actualizan optimistamente tras guardar un par
   const [localPares, setLocalPares] = useState<Par[]>(initPares)
@@ -374,8 +554,9 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
 
   const monedaConsolidacion = initMonedas.find(m => m.es_consolidacion)
 
-  function cerrar() { setModalKind('none'); setMonedaEdit(null); setParEdit(null) }
+  function cerrar() { setModalKind('none'); setMonedaEdit(null); setParEdit(null); setMonedaEliminar(null) }
   function onSavedMoneda() { cerrar(); router.refresh() }
+  function onEliminada() { cerrar(); router.refresh() }
   function onSavedConsolidacion() { cerrar(); router.refresh() }
 
   function onSavedPar(tasa?: number, fecha?: string) {
@@ -464,6 +645,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                       className="btn btn-secondary btn-xs"
                       onClick={() => { setMonedaEdit(m); setModalKind('moneda') }}
                       title="Editar"
+                      aria-label={`Editar ${m.codigo}`}
                     >
                       <Pencil size={13} strokeWidth={2} />
                     </button>
@@ -545,7 +727,12 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
 
       {/* Modales */}
       {modalKind === 'moneda' && (
-        <MonedaModal moneda={monedaEdit} onClose={cerrar} onSaved={onSavedMoneda} />
+        <MonedaModal
+          moneda={monedaEdit}
+          onClose={cerrar}
+          onSaved={onSavedMoneda}
+          onPedirEliminar={() => { if (monedaEdit) { setMonedaEliminar(monedaEdit); setModalKind('eliminar') } }}
+        />
       )}
       {modalKind === 'par' && parEdit && (
         <ParModal par={parEdit} onClose={cerrar} onSaved={onSavedPar} />
@@ -556,6 +743,14 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
           actual={monedaConsolidacion?.codigo ?? ''}
           onClose={cerrar}
           onSaved={onSavedConsolidacion}
+        />
+      )}
+      {modalKind === 'eliminar' && monedaEliminar && (
+        <EliminarMonedaModal
+          moneda={monedaEliminar}
+          monedas={initMonedas}
+          onClose={cerrar}
+          onDone={onEliminada}
         />
       )}
     </div>

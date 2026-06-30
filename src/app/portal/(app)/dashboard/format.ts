@@ -8,6 +8,16 @@ export function formatCompacto(n: number): string {
   return '$' + Math.round(n).toLocaleString('en-US')
 }
 
+// Importe con su código de moneda (no se asume USD). Convención CLAUX: número + código.
+export function formatMoneda(n: number, moneda: string): string {
+  return `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${moneda}`
+}
+
+// Número compacto sin símbolo (para ejes/tooltips de gráficas, ya etiquetadas por moneda).
+export function formatNumCompacto(n: number): string {
+  return Math.round(n).toLocaleString('es-ES')
+}
+
 export function formatFecha(fecha: string): string {
   if (!fecha) return '—'
   const [y, m, d] = fecha.split('T')[0].split('-').map(Number)

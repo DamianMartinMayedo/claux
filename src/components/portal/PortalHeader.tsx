@@ -3,12 +3,20 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, UsersRound, Building2, CreditCard, HelpCircle } from 'lucide-react'
+import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle } from 'lucide-react'
 import type { PortalSession } from '@/lib/portal-auth'
+import { empresaColorVar } from './EmpresaTag'
+
+interface EmpresaLite {
+  empresa_id: string
+  nombre:     string
+  color?:     string | null
+}
 
 interface Props {
   session:       PortalSession
   nombreEmpresa: string
+  empresas:      EmpresaLite[]
 }
 
 // Iniciales del negocio: primera letra de la primera y la última palabra.
@@ -19,10 +27,14 @@ function inicialesNegocio(nombre: string): string {
   return (palabras[0][0] + palabras[palabras.length - 1][0]).toUpperCase()
 }
 
-export default function PortalHeader({ session, nombreEmpresa }: Props) {
+export default function PortalHeader({ session, nombreEmpresa, empresas }: Props) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Una sola empresa → su color es la identidad de la cuenta: tiñe el avatar.
+  // Varias → el grupo no tiene un color único; avatar neutro + leyenda en el menú.
+  const empresaUnica = empresas.length === 1 ? empresas[0] : null
 
   // Cerrar al hacer clic fuera o con Escape.
   useEffect(() => {
@@ -45,6 +57,7 @@ export default function PortalHeader({ session, nombreEmpresa }: Props) {
       ? [{ ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> }]
       : []),
     { ruta: '/portal/empresas',    label: 'Mis Empresas', icon: <Building2 size={16} strokeWidth={2} /> },
+    { ruta: '/portal/monedas',     label: 'Monedas y tasas', icon: <DollarSign size={16} strokeWidth={2} /> },
     { ruta: '/portal/facturacion', label: 'Suscripción',  icon: <CreditCard size={16} strokeWidth={2} /> },
     { ruta: '/portal/soporte',     label: 'Soporte',      icon: <HelpCircle size={16} strokeWidth={2} /> },
   ]
@@ -58,7 +71,8 @@ export default function PortalHeader({ session, nombreEmpresa }: Props) {
         <div className="portal-header-account" ref={ref}>
           <button
             type="button"
-            className="portal-header-avatar"
+            className={`portal-header-avatar${empresaUnica ? ' empresa-tinted' : ''}`}
+            style={empresaUnica ? empresaColorVar(empresaUnica.color) : undefined}
             onClick={() => setOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={open}
@@ -73,6 +87,17 @@ export default function PortalHeader({ session, nombreEmpresa }: Props) {
                 <span className="portal-account-menu-empresa">{nombreEmpresa}</span>
                 <span className="portal-account-menu-email">{session.email}</span>
               </div>
+              {empresas.length > 1 && (
+                <div className="portal-account-empresas">
+                  <span className="portal-account-empresas-label">Tus empresas</span>
+                  {empresas.map(e => (
+                    <div key={e.empresa_id} className="portal-account-empresa">
+                      <span className="empresa-dot" style={empresaColorVar(e.color)} />
+                      <span className="portal-account-empresa-nombre">{e.nombre}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="portal-account-menu-list">
                 {opciones.map(o => {
                   const active = pathname === o.ruta || pathname.startsWith(o.ruta + '/')

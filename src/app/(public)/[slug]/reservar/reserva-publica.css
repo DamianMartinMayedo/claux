@@ -131,12 +131,12 @@
 .rp-turnos-grupo-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--rp-text-muted); margin-bottom: 6px; }
 .rp-turnos-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
 @media (max-width: 380px) {
-  .rp-turnos-list { grid-template-columns: repeat(2, 1fr); }
+  .rp-turnos-list { grid-template-columns: repeat(3, 1fr); }
 }
 
 .rp-turno {
@@ -260,6 +260,28 @@
 .rp-chip-active { background: var(--rp-primary); color: #fff; border-color: var(--rp-primary); }
 .rp-chip:active { transform: scale(0.96); }
 .rp-day-date { flex: 1; min-width: 130px; }
+
+/* Rejilla de días: celdas como las horas (no pastillas), 4 columnas. La última
+   abre el selector nativo para fechas más lejanas. */
+.rp-day-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.rp-day-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 56px; padding: 8px 4px; text-align: center;
+  background: var(--rp-bg); border: 2px solid var(--rp-border);
+  border-radius: 12px; cursor: pointer; font-family: var(--rp-font);
+  transition: border-color .15s, background .15s, color .15s, transform 140ms cubic-bezier(0.23,1,0.32,1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .rp-day-cell:not(:disabled):hover { border-color: var(--rp-primary); }
+}
+.rp-day-cell:not(:disabled):active { transform: scale(0.96); }
+.rp-day-cell-active { background: var(--rp-primary); border-color: var(--rp-primary); color: #fff; }
+.rp-day-cell-off { opacity: .4; cursor: default; }
+.rp-day-dow { font-size: 11px; font-weight: 600; text-transform: capitalize; color: var(--rp-text-muted); }
+.rp-day-cell-active .rp-day-dow { color: #fff; }
+.rp-day-num { font-size: 17px; font-weight: 700; line-height: 1.1; }
+.rp-day-cell-more .rp-day-num { font-size: 12px; font-weight: 600; color: var(--rp-text-muted); }
+.rp-day-otras { margin-top: 8px; }
 
 /* Carga / vacío de huecos */
 .rp-slots-loading { display: flex; justify-content: center; padding: 28px 0; color: var(--rp-text-muted); }

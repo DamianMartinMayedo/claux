@@ -16,6 +16,9 @@ import {
 } from '@/app/actions/portal/gastos'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
 import { DollarSign, Pencil, Plus, Receipt, Trash2, X } from 'lucide-react'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import EmpresaPills                    from '@/components/portal/EmpresaPills'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -347,6 +350,11 @@ function ConfirmEliminar({
 
 export default function GastosView({ data }: { data: GastosCobrosPageData }) {
   const router = useRouter()
+  const { colorOf } = useEmpresas()
+  const multiempresa = data.empresas.length > 1
+  const empresasFiltro = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
+  }))
   const [isPending, startTransition] = useTransition()
 
   const [modalRegistro, setModalRegistro] = useState(false)
@@ -456,12 +464,12 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
           <option value="PARCIAL">Parciales</option>
           <option value="LIQUIDADO">Liquidados</option>
         </select>
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-          </select>
-        )}
+        <EmpresaPills
+          empresas={empresasFiltro}
+          value={filtroEmpresa}
+          onChange={setFiltroEmpresa}
+          todasLabel="Todas las empresas"
+        />
       </div>
 
       {/* Tabla */}
@@ -480,6 +488,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                 <tr>
                   <th>Fecha</th>
                   <th>Descripción</th>
+                  {multiempresa && <th>Empresa</th>}
                   <th>Tipo</th>
                   <th className="tes-col-monto">Monto</th>
                   <th className="tes-col-monto">Pendiente</th>
@@ -489,7 +498,9 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
               </thead>
               <tbody>
                 {registros.map(r => (
-                  <tr key={r.registro_id}>
+                  <tr key={r.registro_id}
+                    className={multiempresa ? 'row-empresa-accent' : undefined}
+                    style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
                     <td className="text-sm-muted tes-nowrap">{formatFecha(r.fecha)}</td>
                     <td>
                       <strong>{r.descripcion}</strong>
@@ -498,6 +509,11 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                         {r.categoria && <span className="badge badge-neutral tes-origen-badge">{r.categoria}</span>}
                       </div>
                     </td>
+                    {multiempresa && (
+                      <td>
+                        <EmpresaTag color={colorOf(r.empresa_id)} nombre={data.empresa_nombres[r.empresa_id] ?? '—'} />
+                      </td>
+                    )}
                     <td><span className={`badge ${TIPO_BADGE[r.tipo]}`}>{TIPO_LABEL[r.tipo]}</span></td>
                     <td className="tes-col-monto tes-monto-cell">{formatMonto(r.monto)} {r.moneda}</td>
                     <td className="tes-col-monto tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>

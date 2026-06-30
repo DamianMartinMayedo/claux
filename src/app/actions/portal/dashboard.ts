@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
+import { obtenerEmpresasSelector } from './empresas'
 import { getSetting }        from '@/app/actions/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
@@ -24,12 +25,20 @@ const ESTADOS_AGENDA_ACTIVOS = ['PENDIENTE', 'CONFIRMADA']
 export interface SerieMes { mes: string; etiqueta: string; ventas: number; gastos: number }
 export interface FacturaResumen {
   factura_id: string; numero: string; cliente_nombre: string
-  fecha: string; total: number; estado: string
+  fecha: string; total: number; moneda: string; estado: string
+}
+// Ventas/gastos/neto del mes y serie de 6 meses, SEPARADOS por moneda: distintas
+// monedas no se pueden sumar en un único número (cada empresa opera en la suya).
+export interface ContabMonedaResumen {
+  moneda: string
+  ventasMes: number; gastosMes: number; netoMes: number
+  serie: SerieMes[]
 }
 export interface ContabilidadResumen {
-  ventasMes: number; gastosMes: number; netoMes: number
+  porMoneda: ContabMonedaResumen[]
+  consolidado: ContabMonedaResumen | null   // ventas/gastos convertidos a la moneda de consolidación
+  monedaConsolidacion: string               // código de la moneda de consolidación (es_consolidacion)
   caja: { moneda: string; saldo: number }[]
-  serie: SerieMes[]
   ultimasFacturas: FacturaResumen[]
 }
 export interface InventarioResumen {
@@ -48,11 +57,15 @@ export interface AgendaResumen {
 }
 export interface AccesoRapido { clave: string; label: string; ruta: string }
 
+export interface EmpresaLite { empresa_id: string; nombre: string; color?: string | null }
+
 export interface DashboardData {
   nombreEmpresa: string
+  empresas: EmpresaLite[]
   fecha: string
   etiquetas: EtiquetasSector
   suscripcion: { estado: string; diasRestantes: number | null; label: string }
+  tieneIa: boolean
   contabilidad?: ContabilidadResumen
   inventario?: InventarioResumen
   rrhh?: RrhhResumen
@@ -104,30 +117,79 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string): Promise<Co
   const desde6 = `${meses[0].mes}-01`
   const mesActual = hoy.slice(0, 7)
 
-  const [facturas6, gastos6, movimientos, ultimas] = await Promise.all([
+  const [facturas6, gastos6, movimientos, ultimas, consolRow, tasas] = await Promise.all([
     db.from('facturas').select('fecha_emision, total, moneda')
-      .eq('client_id', cid).eq('estado', 'CONFIRMADO').gte('fecha_emision', desde6),
-    db.from('gastos_cobros').select('fecha, monto')
+      .eq('client_id', cid).in('estado', ['EMITIDA', 'COBRADA']).gte('fecha_emision', desde6),
+    db.from('gastos_cobros').select('fecha, monto, moneda')
       .eq('client_id', cid).eq('tipo', 'GASTO').gte('fecha', desde6),
     db.from('movimientos_tesoreria').select('monto, tipo, moneda').eq('client_id', cid),
-    db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, estado')
+    db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, moneda, estado')
       .eq('client_id', cid).order('fecha_emision', { ascending: false }).limit(5),
+    db.from('monedas').select('codigo').eq('client_id', cid).eq('es_consolidacion', true).limit(1).maybeSingle(),
+    db.from('tasas_cambio').select('moneda_origen, moneda_destino, tasa, fecha')
+      .eq('client_id', cid).order('fecha', { ascending: false }),
   ])
 
-  // Serie mensual ventas/gastos
-  const serieMap = new Map(meses.map(m => [m.mes, { ...m, ventas: 0, gastos: 0 }]))
-  for (const f of (facturas6.data ?? [])) {
-    const k = String(f.fecha_emision).slice(0, 7)
-    const b = serieMap.get(k); if (b) b.ventas += Number(f.total) || 0
+  // Serie mensual y totales del mes SEPARADOS POR MONEDA (no se suman entre sí).
+  const monedasSet = new Set<string>()
+  for (const f of (facturas6.data ?? [])) monedasSet.add(f.moneda)
+  for (const g of (gastos6.data ?? [])) monedasSet.add(g.moneda)
+
+  const porMoneda: ContabMonedaResumen[] = [...monedasSet].sort().map(moneda => {
+    const serieMap = new Map(meses.map(m => [m.mes, { ...m, ventas: 0, gastos: 0 }]))
+    for (const f of (facturas6.data ?? [])) {
+      if (f.moneda !== moneda) continue
+      const b = serieMap.get(String(f.fecha_emision).slice(0, 7)); if (b) b.ventas += Number(f.total) || 0
+    }
+    for (const g of (gastos6.data ?? [])) {
+      if (g.moneda !== moneda) continue
+      const b = serieMap.get(String(g.fecha).slice(0, 7)); if (b) b.gastos += Number(g.monto) || 0
+    }
+    const bucket = serieMap.get(mesActual)
+    const ventasMes = bucket?.ventas ?? 0
+    const gastosMes = bucket?.gastos ?? 0
+    return { moneda, ventasMes, gastosMes, netoMes: ventasMes - gastosMes, serie: [...serieMap.values()] }
+  })
+
+  // Consolidado: convierte cada moneda a la de consolidación (es_consolidacion).
+  // Se ancla en los pares "consol→moneda" (p. ej. 1 USD = 670 CUP), que son los
+  // consistentes; el factor es su inverso. Si falta tasa, esa moneda se excluye.
+  const consolCode: string | null = consolRow.data?.codigo ?? null
+  const rateMap = new Map<string, number>()
+  for (const t of (tasas.data ?? [])) {
+    const k = `${t.moneda_origen}__${t.moneda_destino}`
+    if (!rateMap.has(k)) rateMap.set(k, Number(t.tasa)) // primera = más reciente (orden desc por fecha)
   }
-  for (const g of (gastos6.data ?? [])) {
-    const k = String(g.fecha).slice(0, 7)
-    const b = serieMap.get(k); if (b) b.gastos += Number(g.monto) || 0
+  const factorAConsol = (moneda: string): number | null => {
+    if (!consolCode) return null
+    if (moneda === consolCode) return 1
+    const saliente = rateMap.get(`${consolCode}__${moneda}`) // 1 consol = X moneda
+    if (saliente && saliente > 0) return 1 / saliente
+    const entrante = rateMap.get(`${moneda}__${consolCode}`) // 1 moneda = X consol
+    if (entrante && entrante > 0) return entrante
+    return null
   }
-  const serie = [...serieMap.values()]
-  const mesBucket = serieMap.get(mesActual)
-  const ventasMes = mesBucket?.ventas ?? 0
-  const gastosMes = mesBucket?.gastos ?? 0
+  const r2 = (n: number) => Math.round(n * 100) / 100
+
+  let consolidado: ContabMonedaResumen | null = null
+  if (consolCode && porMoneda.length > 1) {
+    const convertibles = porMoneda
+      .map(pm => ({ pm, f: factorAConsol(pm.moneda) }))
+      .filter((x): x is { pm: ContabMonedaResumen; f: number } => x.f != null)
+    if (convertibles.length) {
+      const serie = meses.map((mm, i) => {
+        let ventas = 0, gastos = 0
+        for (const { pm, f } of convertibles) {
+          ventas += (pm.serie[i]?.ventas ?? 0) * f
+          gastos += (pm.serie[i]?.gastos ?? 0) * f
+        }
+        return { mes: mm.mes, etiqueta: mm.etiqueta, ventas: r2(ventas), gastos: r2(gastos) }
+      })
+      let ventasMes = 0, gastosMes = 0
+      for (const { pm, f } of convertibles) { ventasMes += pm.ventasMes * f; gastosMes += pm.gastosMes * f }
+      consolidado = { moneda: consolCode, ventasMes: r2(ventasMes), gastosMes: r2(gastosMes), netoMes: r2(ventasMes - gastosMes), serie }
+    }
+  }
 
   // Caja por moneda
   const cajaMap = new Map<string, number>()
@@ -145,13 +207,14 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string): Promise<Co
   const nombres = Object.fromEntries((terceros ?? []).map((t: { tercero_id: string; nombre: string }) => [t.tercero_id, t.nombre]))
 
   return {
-    ventasMes, gastosMes, netoMes: ventasMes - gastosMes, caja, serie,
+    porMoneda, consolidado, monedaConsolidacion: consolCode ?? '', caja,
     ultimasFacturas: (ultimas.data ?? []).map((f: Record<string, unknown>) => ({
       factura_id: f.factura_id as string,
       numero: f.numero as string,
       cliente_nombre: nombres[f.cliente_id as string] ?? '—',
       fecha: f.fecha_emision as string,
       total: Number(f.total),
+      moneda: f.moneda as string,
       estado: f.estado as string,
     })),
   }
@@ -235,7 +298,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const activos: string[] = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []
   const tiene = (m: string) => activos.includes(m)
 
-  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw, empresas] = await Promise.all([
     tiene('base')           ? resumenContabilidad(db, cid, hoy)            : Promise.resolve(undefined),
     tiene('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
     tiene('rrhh')           ? resumenRrhh(db, cid, hoy)                    : Promise.resolve(undefined),
@@ -243,6 +306,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     tiene('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     getSetting('descuento_anual_pct', '10'),
+    obtenerEmpresasSelector(),
   ])
 
   const descuento = parseInt(descuentoRaw, 10) || 0
@@ -257,6 +321,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
 
   return {
     nombreEmpresa: cliente.nombre_empresa,
+    empresas: empresas.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
     fecha: hoy,
     etiquetas,
     suscripcion: {
@@ -264,6 +329,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       diasRestantes,
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
+    tieneIa: tiene('asistente_ia'),
     contabilidad, inventario, rrhh, reservas, citas, accesos,
   }
 }

@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition, useEffect, useRef, useMemo } from 'react'
 import {
   crearReservaPublica,
   obtenerSlotsAforo,
   obtenerProximoDiaAforo,
+  obtenerDiasDisponiblesAforo,
   type FranjaPublica,
   type SlotAforo,
+  type DiaDisponibleAforo,
   type ReglasReserva,
 } from '@/app/actions/portal/reservas'
 import { Check, Loader2, Search, ChevronRight } from 'lucide-react'
@@ -29,6 +31,17 @@ function formatFechaCorta(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
 }
+// Etiquetas para las celdas de la rejilla de días.
+function dowDia(f: string): string {
+  if (f === hoyISO()) return 'Hoy'
+  if (f === sumarDiasISO(hoyISO(), 1)) return 'Mañana'
+  const [y, m, d] = f.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')
+}
+function numDia(f: string): string {
+  const [, , d] = f.split('-').map(Number)
+  return String(d)
+}
 
 export default function ReservaPublicaForm({
   franjas, clientId, negocio, slug, reglas,
@@ -49,6 +62,14 @@ export default function ReservaPublicaForm({
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState('')
   const [buscando, setBuscando] = useState(false)
+  const [dias, setDias]         = useState<DiaDisponibleAforo[]>([])  // próximos días con hueco
+  const [loadingDias, setLoadingDias] = useState(true)
+  const [verOtras, setVerOtras] = useState(false)
+  const jumped = useRef(false)
+
+  // Ventana fija de 7 días para la rejilla; cada uno disponible si está en `dias`.
+  const ventana = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDiasISO(hoyISO(), i)), [])
+  const diasMap = useMemo(() => new Map(dias.map(d => [d.fecha, d])), [dias])
 
   const [sel, setSel]           = useState<SlotAforo | null>(null)
   const [revisando, setRevisando] = useState(false)
@@ -77,6 +98,21 @@ export default function ReservaPublicaForm({
   }, [clientId, fecha, personas])
 
   const hayLibres = slots.some(s => s.libre)
+
+  // Próximos días con hueco (para la rejilla). Depende solo de personas. En el
+  // primer cálculo salta a la fecha más cercana disponible para no caer en vacío.
+  useEffect(() => {
+    let cancel = false
+    obtenerDiasDisponiblesAforo(clientId, personas)
+      .then(ds => {
+        if (cancel) return
+        setDias(ds)
+        setLoadingDias(false)
+        if (!jumped.current && ds.length > 0) { setFecha(ds[0].fecha); jumped.current = true }
+      })
+      .catch(() => { if (!cancel) setLoadingDias(false) })
+    return () => { cancel = true }
+  }, [clientId, personas])
 
   function buscarProximo() {
     setBuscando(true)
@@ -119,9 +155,6 @@ export default function ReservaPublicaForm({
       setListo(true)
     })
   }
-
-  const esHoy    = fecha === hoyISO()
-  const esManana = fecha === sumarDiasISO(hoyISO(), 1)
 
   return (
     <div className="rp-page">
@@ -244,26 +277,49 @@ export default function ReservaPublicaForm({
 
               <div className="rp-controls">
                 <div className="rp-field">
-                  <span className="rp-label">Día</span>
-                  <div className="rp-day-chips">
-                    <button type="button" className={`rp-chip ${esHoy ? 'rp-chip-active' : ''}`}
-                      onClick={() => setFecha(hoyISO())}>Hoy</button>
-                    <button type="button" className={`rp-chip ${esManana ? 'rp-chip-active' : ''}`}
-                      onClick={() => setFecha(sumarDiasISO(hoyISO(), 1))}>Mañana</button>
-                    <input type="date" className="rp-input rp-day-date" value={fecha} aria-label="Otro día"
-                      min={hoyISO()} max={fechaMax} onChange={e => setFecha(e.target.value)} />
+                  <span className="rp-label">Personas</span>
+                  <div className="rp-stepper">
+                    <button type="button" className="rp-btn-stepper" aria-label="Quitar persona"
+                      onClick={() => { if (personas > 1) { setLoadingDias(true); setPersonas(personas - 1) } }}>−</button>
+                    <span className="rp-stepper-val" aria-live="polite">{personas}</span>
+                    <button type="button" className="rp-btn-stepper" aria-label="Añadir persona"
+                      onClick={() => { if (personas < maxPersonas) { setLoadingDias(true); setPersonas(personas + 1) } }}>+</button>
                   </div>
                 </div>
 
                 <div className="rp-field">
-                  <span className="rp-label">Personas</span>
-                  <div className="rp-stepper">
-                    <button type="button" className="rp-btn-stepper" aria-label="Quitar persona"
-                      onClick={() => setPersonas(p => Math.max(1, p - 1))}>−</button>
-                    <span className="rp-stepper-val" aria-live="polite">{personas}</span>
-                    <button type="button" className="rp-btn-stepper" aria-label="Añadir persona"
-                      onClick={() => setPersonas(p => Math.min(maxPersonas, p + 1))}>+</button>
-                  </div>
+                  <span className="rp-label">Elige el día</span>
+                  {loadingDias ? (
+                    <div className="rp-slots-loading"><Loader2 size={18} className="rp-spin" /></div>
+                  ) : (
+                    <>
+                      <div className="rp-day-grid">
+                        {ventana.map(f => {
+                          const off = !diasMap.has(f)
+                          return (
+                            <button key={f} type="button" disabled={off}
+                              className={`rp-day-cell${f === fecha ? ' rp-day-cell-active' : ''}${off ? ' rp-day-cell-off' : ''}`}
+                              onClick={() => setFecha(f)}
+                              aria-label={`${formatFecha(f)}${off ? ', sin disponibilidad' : ', con disponibilidad'}`}>
+                              <span className="rp-day-dow">{dowDia(f)}</span>
+                              <span className="rp-day-num">{numDia(f)}</span>
+                            </button>
+                          )
+                        })}
+                        <button type="button" className="rp-day-cell rp-day-cell-more"
+                          onClick={() => setVerOtras(v => !v)} aria-label="Ver otras fechas">
+                          <span className="rp-day-num">Otras fechas</span>
+                        </button>
+                      </div>
+                      {verOtras && (
+                        <div className="rp-day-otras">
+                          <input type="date" className="rp-input" value={fecha} aria-label="Elegir otra fecha"
+                            min={hoyISO()} max={fechaMax}
+                            onChange={e => { setFecha(e.target.value); setVerOtras(false) }} />
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
 

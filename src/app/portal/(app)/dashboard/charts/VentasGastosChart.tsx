@@ -7,11 +7,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import type { SerieMes } from '@/app/actions/portal/dashboard'
-import { formatCompacto } from '../format'
+import { formatNumCompacto } from '../format'
 import { useHydrated } from './useHydrated'
 
 interface TipPayload { dataKey: string; name: string; value: number }
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: TipPayload[]; label?: string }) {
+function ChartTooltip({ active, payload, label, moneda }: { active?: boolean; payload?: TipPayload[]; label?: string; moneda: string }) {
   if (!active || !payload?.length) return null
   return (
     <div className="dash-tip">
@@ -19,14 +19,14 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
       {payload.map(p => (
         <div key={p.dataKey} className="dash-tip-row">
           <span className="dash-tip-dot" data-serie={p.dataKey} />
-          {p.name}: <strong>{formatCompacto(p.value)}</strong>
+          {p.name}: <strong>{formatNumCompacto(p.value)} {moneda}</strong>
         </div>
       ))}
     </div>
   )
 }
 
-export default function VentasGastosChart({ serie }: { serie: SerieMes[] }) {
+export default function VentasGastosChart({ serie, moneda }: { serie: SerieMes[]; moneda: string }) {
   if (!useHydrated()) return <div className="dash-chart dash-chart-skeleton" aria-hidden />
 
   return (
@@ -36,8 +36,8 @@ export default function VentasGastosChart({ serie }: { serie: SerieMes[] }) {
           <BarChart data={serie} margin={{ top: 8, right: 4, bottom: 0, left: -18 }} barGap={2}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
             <XAxis dataKey="etiqueta" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} />
-            <YAxis tickLine={false} axisLine={false} width={52} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} tickFormatter={formatCompacto} />
-            <Tooltip cursor={{ fill: 'var(--color-surface-2)', opacity: 0.5 }} content={<ChartTooltip />} />
+            <YAxis tickLine={false} axisLine={false} width={52} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} tickFormatter={formatNumCompacto} />
+            <Tooltip cursor={{ fill: 'var(--color-surface-2)', opacity: 0.5 }} content={<ChartTooltip moneda={moneda} />} />
             <Bar dataKey="ventas" name="Ventas" fill="var(--color-primary)" radius={[4, 4, 0, 0]} maxBarSize={26} />
             <Bar dataKey="gastos" name="Gastos" fill="var(--color-amber)" radius={[4, 4, 0, 0]} maxBarSize={26} />
           </BarChart>

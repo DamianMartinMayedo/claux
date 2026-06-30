@@ -5,6 +5,7 @@ import { useState, useTransition, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
+import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
 const COLORES = [
   '#00AFAA', '#C97A0C', '#2E7D32', '#1565C0',
@@ -37,31 +38,33 @@ function EmpresaCard({
   const inicial  = empresa.nombre.charAt(0).toUpperCase()
   const esActiva = empresa.estado === 'ACTIVO'
   const color    = empresa.color ?? COLORES[0]
+  const colorVar = empresaColorVar(color)
 
   return (
     <div className="emp-card">
-      <div className="emp-card-band" style={{ background: color }} />
+      <div className="emp-card-band" style={colorVar} />
       <div className="emp-card-body">
         <div className="emp-card-top">
           {empresa.logo_url
             ? (
-              <div className="emp-avatar-lg emp-avatar-with-logo">
+              <div className="emp-avatar-lg emp-avatar-with-logo" style={colorVar}>
                 <Image src={empresa.logo_url} alt={empresa.nombre} width={48} height={48} onError={e => {
                   const el = e.currentTarget
                   el.style.display = 'none'
-                  el.parentElement!.style.background = color
+                  // El logo no cargó: revelar el avatar de color quitando el modificador.
+                  el.parentElement!.classList.remove('emp-avatar-with-logo')
                   el.parentElement!.textContent = inicial
                 }} />
               </div>
             )
-            : <div className="emp-avatar-lg" style={{ background: color }}>{inicial}</div>
+            : <div className="emp-avatar-lg" style={colorVar}>{inicial}</div>
           }
           <div className="emp-card-top-right">
             {empresa.letra_facturacion && (
               <span
                 className="emp-letra-badge"
                 title={`Letra de facturación: ${empresa.letra_facturacion}`}
-                style={{ background: color }}
+                style={colorVar}
               >
                 {empresa.letra_facturacion}
               </span>
@@ -293,7 +296,7 @@ function EmpresaModal({
                       key={c}
                       type="button"
                       className={`color-swatch${color === c ? ' selected' : ''}`}
-                      style={{ background: c }}
+                      style={empresaColorVar(c)}
                       onClick={() => setColor(c)}
                       aria-label={c}
                       title={c}
