@@ -1829,12 +1829,23 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); overflow: hidden;
 }
 .ia-chat-head  { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); background: var(--color-surface-2); }
+.ia-chat-head-actions { display: inline-flex; align-items: center; gap: var(--space-1); }
 .ia-chat-title { font-size: var(--text-base); font-weight: 700; color: var(--color-text); display: inline-flex; align-items: center; gap: var(--space-2); }
 .ia-chat-body  { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 .ia-msg        { max-width: 85%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; }
 .ia-msg-user   { align-self: flex-end; background: var(--color-primary); color: var(--color-text-inv); border-bottom-right-radius: var(--radius-sm); }
 .ia-msg-bot    { align-self: flex-start; background: var(--color-surface-2); color: var(--color-text); border-bottom-left-radius: var(--radius-sm); }
 .ia-chat-empty { margin: auto; text-align: center; color: var(--color-text-faint); font-size: var(--text-sm); padding: var(--space-4); }
+.ia-chat-welcome      { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) var(--space-1); }
+.ia-chat-welcome-text { color: var(--color-text); font-size: var(--text-sm); line-height: 1.5; }
+.ia-chat-sugs         { display: flex; flex-direction: column; gap: var(--space-2); }
+.ia-chat-sug {
+  text-align: left; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text);
+  font-size: var(--text-sm); cursor: pointer; transition: var(--transition);
+}
+.ia-chat-sug:hover { border-color: var(--color-primary); background: var(--color-primary-subtle); }
 .ia-chat-foot  { display: flex; gap: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--color-border); }
 
 /* Toggle "que la IA gestione el bot" (config de Reservas/Citas) */

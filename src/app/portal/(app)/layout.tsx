@@ -45,6 +45,15 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const tieneIa = modulosActivos.includes('asistente_ia')
   const nombreAgente = tieneIa ? (await configAgente()).nombreAgente : 'Claux'
 
+  // Sugerencias iniciales del chat, relevantes a los módulos contratados (máx. 4).
+  const sugerenciasIa: string[] = []
+  if (tieneIa) {
+    sugerenciasIa.push('¿Cómo va mi negocio?')
+    if (modulosActivos.includes('base')) sugerenciasIa.push('¿Cómo van mis ventas?', '¿En qué estoy gastando más?')
+    if (modulosActivos.includes('inventario')) sugerenciasIa.push('¿Qué me conviene reponer?')
+    if (modulosActivos.includes('reservas_citas') || modulosActivos.includes('agenda')) sugerenciasIa.push('¿Cuántas reservas tengo hoy?')
+  }
+
   // Bloqueo basado en estado Y en fecha, sin depender de expiración automática:
   // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
   // · VENCIDO    → siempre bloqueado (estado legado; ya no se genera automáticamente)
@@ -82,7 +91,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
               <IaProvider value={{ tieneIa, nombreAgente }}>{children}</IaProvider>
             </EmpresaColorProvider>}
         </PortalToastWrapper>
-        {!bloqueado && tieneIa && <IaChatWidget nombreAgente={nombreAgente} />}
+        {!bloqueado && tieneIa && <IaChatWidget nombreAgente={nombreAgente} sugerencias={sugerenciasIa.slice(0, 4)} />}
       </main>
     </div>
   )
