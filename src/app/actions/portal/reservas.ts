@@ -4,7 +4,8 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
-import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol } from '@/lib/reservas/bot-config'
+import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
+import { tieneModulo } from '@/lib/modulos'
 import { enviarMensaje } from '@/lib/telegram/enviar'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { getPortalSession }  from './auth'
@@ -72,6 +73,7 @@ export interface ReservaPageData {
   empresas:   { empresa_id: string; nombre: string }[]
   cierres:    Cierre[]
   reglas:     ReglasReserva
+  tieneIa:    boolean   // addon asistente_ia contratado → se ofrece el toggle de IA del bot
 }
 
 const REGLAS_DEFAULT: ReglasReserva = { antelacion_min_horas: 0, ventana_max_dias: 0, max_personas: 0 }
@@ -139,7 +141,7 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
       .is('recurso_id', null)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false }),
-    db.from('clients').select('bot_config, slug, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
+    db.from('clients').select('bot_config, slug, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
       .eq('client_id', session.client_id)
       .single(),
   ])
@@ -164,8 +166,9 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
   const slug       = (cliRes.data?.slug as string) ?? null
   const cierres    = await cargarCierres(db, session.client_id)
   const reglas     = parseReglas(cliRes.data as Record<string, unknown> | null)
+  const tieneIa    = tieneModulo(cliRes.data?.modulos_activos, 'asistente_ia')
 
-  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })), cierres, reglas }
+  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })), cierres, reglas, tieneIa }
 }
 
 // ── Crear reserva (manual, desde el panel) ────────────────────────────────────
@@ -449,6 +452,23 @@ export async function toggleActivoBot(
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
   const r = await toggleActivoBotCol(createAdminClient(), session.client_id, 'bot_config', activo)
+  if (!r.ok) return r
+  revalidatePath('/portal/reservas')
+  return { ok: true }
+}
+
+// ── IA del bot (requiere addon asistente_ia) ───────────────────────────────────
+
+export async function toggleIaBotReservas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+  const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
+  if (!tieneModulo(cli?.modulos_activos, 'asistente_ia')) return { ok: false, error: 'El asistente IA no está contratado.' }
+
+  const r = await guardarIaActivaCol(db, session.client_id, 'bot_config', activa)
   if (!r.ok) return r
   revalidatePath('/portal/reservas')
   return { ok: true }

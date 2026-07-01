@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Plus, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
-import {
-  guardarConfigIaGlobal, toggleModeloIa, crearModeloIa, eliminarModeloIa,
-} from '@/app/actions/ia-admin'
+import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
+import NuevoModeloIaModal from './NuevoModeloIaModal'
+import DocumentoIaModal from './DocumentoIaModal'
 
 export interface ModeloIa {
   id: string; nombre: string; gratis: boolean; activo: boolean
@@ -16,6 +16,9 @@ export interface ConsumoCliente {
   client_id: string; nombre: string; conversaciones: number; tokens: number
   cupo: number; cupoPropio: boolean; modeloActual: string
 }
+export interface DocumentoUi {
+  key: string; label: string; descripcion: string; valor: string; esPersonalidad: boolean
+}
 
 interface Props {
   modelos: ModeloIa[]
@@ -24,11 +27,12 @@ interface Props {
   cupoGlobal: number
   nombreAgente: string
   tono: string
+  documentos: DocumentoUi[]
   periodo: string
   consumo: ConsumoCliente[]
 }
 
-export default function IaAdminClient({ modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, periodo, consumo }: Props) {
+export default function IaAdminClient({ modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, documentos, periodo, consumo }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -38,12 +42,6 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [prin, setPrin]   = useState(principal)
   const [fb, setFb]       = useState(fallbackGratis)
   const [cupo, setCupo]   = useState(String(cupoGlobal))
-
-  // Alta de modelo
-  const [nuevoId, setNuevoId]   = useState('')
-  const [nuevoNom, setNuevoNom] = useState('')
-  const [nuevoGratis, setNuevoGratis] = useState(false)
-  const [nuevoBase, setNuevoBase] = useState('')
 
   const activos = modelos.filter(m => m.activo)
   const activosGratis = activos.filter(m => m.gratis)
@@ -77,18 +75,6 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
     })
   }
 
-  function agregar(e: React.FormEvent) {
-    e.preventDefault()
-    if (!nuevoId.trim()) { toastError('Indica el id del modelo.'); return }
-    startTransition(async () => {
-      const r = await crearModeloIa({ id: nuevoId, nombre: nuevoNom, gratis: nuevoGratis, api_base: nuevoBase })
-      if (!r.ok) { toastError(r.error); return }
-      toastSuccess('Modelo añadido')
-      setNuevoId(''); setNuevoNom(''); setNuevoGratis(false); setNuevoBase('')
-      router.refresh()
-    })
-  }
-
   return (
     <div className="view-container">
       <div className="page-header">
@@ -101,7 +87,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
       {/* ── Configuración global ── */}
       <div className="card mb-5">
         <div className="card-header">
-          <h2 className="card-title"><Sparkles size={16} strokeWidth={2} /> Configuración global</h2>
+          <h2 className="card-title">Configuración global</h2>
         </div>
         <form onSubmit={guardarGlobal} className="config-form">
           <div className="grid-cols-2">
@@ -146,11 +132,35 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         </form>
       </div>
 
+      {/* ── Documentos de Claux (personalidad + prompts por sección) ── */}
+      <div className="card mb-5">
+        <div className="card-header">
+          <h2 className="card-title">Documentos de {nombre || 'Claux'}</h2>
+          <span className="badge badge-neutral">{documentos.length}</span>
+        </div>
+        <p className="config-field-hint mb-4">Textos que gobiernan cómo responde el asistente: su personalidad general y qué analiza en cada sección. Se editan en su propia ventana.</p>
+        <div className="ia-doc-list">
+          {documentos.map(d => (
+            <div key={d.key} className="ia-doc-row">
+              <div className="ia-doc-info">
+                <span className="ia-doc-label">{d.label}</span>
+                <span className="ia-doc-desc">{d.descripcion}</span>
+              </div>
+              <DocumentoIaModal docKey={d.key} label={d.label} descripcion={d.descripcion}
+                                valor={d.valor} esPersonalidad={d.esPersonalidad} />
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ── Catálogo de modelos ── */}
       <div className="card mb-5">
         <div className="card-header">
           <h2 className="card-title">Modelos disponibles</h2>
-          <span className="badge badge-neutral">{activos.length} activos</span>
+          <div className="ia-cell-badges">
+            <span className="badge badge-neutral">{activos.length} activos</span>
+            <NuevoModeloIaModal />
+          </div>
         </div>
 
         <div className="table-wrapper table-wrapper-flush">
@@ -184,32 +194,6 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
             </tbody>
           </table>
         </div>
-
-        {/* Añadir modelo (de pago, con su API) */}
-        <form onSubmit={agregar} className="ia-add-modelo">
-          <p className="config-field-label">Añadir modelo</p>
-          <div className="grid-cols-2">
-            <div className="input-group">
-              <label htmlFor="nm-id">ID del modelo</label>
-              <input id="nm-id" className="input" value={nuevoId} onChange={e => setNuevoId(e.target.value)} placeholder="p. ej. claude-haiku-4-5" />
-            </div>
-            <div className="input-group">
-              <label htmlFor="nm-nom">Nombre visible</label>
-              <input id="nm-nom" className="input" value={nuevoNom} onChange={e => setNuevoNom(e.target.value)} placeholder="Claude Haiku 4.5" />
-            </div>
-          </div>
-          <div className="input-group">
-            <label htmlFor="nm-base">Endpoint (opcional, si usa otra API)</label>
-            <input id="nm-base" className="input" value={nuevoBase} onChange={e => setNuevoBase(e.target.value)} placeholder="vacío = mismo proveedor (OpenCode Zen)" />
-          </div>
-          <label className="ia-check">
-            <input type="checkbox" checked={nuevoGratis} onChange={e => setNuevoGratis(e.target.checked)} />
-            <span>Es un modelo gratis</span>
-          </label>
-          <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
-            <Plus size={14} strokeWidth={2} /> Añadir modelo
-          </button>
-        </form>
       </div>
 
       {/* ── Consumo del mes ── */}

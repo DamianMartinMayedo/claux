@@ -4,7 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
-import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol } from '@/lib/reservas/bot-config'
+import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo } from '@/lib/modulos'
@@ -78,6 +78,7 @@ export interface CitasPageData {
   empleados:   EmpleadoRRHH[]   // del módulo RRHH (vacío si no está activo)
   cierres:     Cierre[]         // festivos/cierres del negocio (compartidos con Reservas)
   reglas:      ReglasReserva    // antelación/ventana (compartidas con Reservas)
+  tieneIa:     boolean          // addon asistente_ia contratado → toggle de IA del bot
 }
 
 function reglasDe(c: Record<string, unknown> | null | undefined): ReglasReserva {
@@ -205,6 +206,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     empleados,
     cierres:     (cierresData ?? []) as Cierre[],
     reglas:      reglasDe(cliRes.data as Record<string, unknown> | null),
+    tieneIa:     tieneModulo(cliRes.data?.modulos_activos, 'asistente_ia'),
   }
 }
 
@@ -658,6 +660,21 @@ export async function toggleActivoBotCitas(activo: boolean): Promise<{ ok: boole
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
   const r = await toggleActivoBotCol(createAdminClient(), session.client_id, 'bot_config_citas', activo)
+  if (!r.ok) return r
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
+export async function toggleIaBotCitas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+  const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
+  if (!tieneModulo(cli?.modulos_activos, 'asistente_ia')) return { ok: false, error: 'El asistente IA no está contratado.' }
+
+  const r = await guardarIaActivaCol(db, session.client_id, 'bot_config_citas', activa)
   if (!r.ok) return r
   revalidatePath('/portal/citas')
   return { ok: true }

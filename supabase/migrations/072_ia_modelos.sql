@@ -21,15 +21,18 @@ create table if not exists ia_modelos (
   created_at  timestamptz not null default now()
 );
 
--- Seed: SOLO modelos gratis de Zen (los de pago los añade el admin luego).
+-- Seed: modelos gratis de Zen. Solo se dejan ACTIVOS los que responden bien y
+-- rápido (probados): deepseek (razonamiento, calidad), mimo y north (rápidos).
+-- Los demás se siembran inactivos: minimax/qwen dan "not supported", nemotron es
+-- lento (~13s) y big-pickle (stealth) devuelve vacío.
 insert into ia_modelos (id, nombre, gratis, activo, orden) values
-  ('deepseek-v4-flash-free', 'DeepSeek V4 Flash (free)', true, true, 10),
-  ('minimax-m3-free',        'MiniMax M3 (free)',        true, true, 20),
-  ('mimo-v2.5-free',         'MiMo V2.5 (free)',         true, true, 30),
-  ('qwen3.6-plus-free',      'Qwen 3.6 Plus (free)',     true, true, 40),
-  ('nemotron-3-ultra-free',  'Nemotron 3 Ultra (free)',  true, true, 50),
-  ('north-mini-code-free',   'North Mini Code (free)',   true, true, 60),
-  ('big-pickle',             'Big Pickle (free)',        true, true, 70)
+  ('deepseek-v4-flash-free', 'DeepSeek V4 Flash (free)', true, true,  10),
+  ('mimo-v2.5-free',         'MiMo V2.5 (free)',         true, true,  15),
+  ('north-mini-code-free',   'North Mini Code (free)',   true, true,  18),
+  ('minimax-m3-free',        'MiniMax M3 (free)',        true, false, 20),
+  ('qwen3.6-plus-free',      'Qwen 3.6 Plus (free)',     true, false, 40),
+  ('nemotron-3-ultra-free',  'Nemotron 3 Ultra (free)',  true, false, 50),
+  ('big-pickle',             'Big Pickle (free)',        true, false, 70)
 on conflict (id) do nothing;
 
 -- Ajustes globales (clave-valor en settings). El modelo principal sigue siendo

@@ -1837,6 +1837,15 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ia-chat-empty { margin: auto; text-align: center; color: var(--color-text-faint); font-size: var(--text-sm); padding: var(--space-4); }
 .ia-chat-foot  { display: flex; gap: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--color-border); }
 
+/* Toggle "que la IA gestione el bot" (config de Reservas/Citas) */
+.ia-bot-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  margin-top: var(--space-4); padding: var(--space-4);
+  background: var(--color-primary-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+.ia-bot-toggle-text { display: flex; flex-direction: column; gap: var(--space-1); }
+
 /* Perfil: consumo de IA compacto e informativo (solo lectura) */
 .ia-uso-compact {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4);

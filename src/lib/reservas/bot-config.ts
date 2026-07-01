@@ -19,6 +19,7 @@ export interface BotConfig {
   confirmacion_automatica:  boolean
   webhook_secret:           string | null
   codigo_vinculo:           string | null
+  ia_activa:                boolean   // que la IA interprete lenguaje libre (requiere addon asistente_ia)
 }
 
 export const BOT_CONFIG_DEFAULTS: BotConfig = {
@@ -30,6 +31,7 @@ export const BOT_CONFIG_DEFAULTS: BotConfig = {
   confirmacion_automatica: false,
   webhook_secret:          null,
   codigo_vinculo:          null,
+  ia_activa:               false,
 }
 
 export function parseBotConfig(raw: unknown): BotConfig {
@@ -45,6 +47,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
       confirmacion_automatica: typeof c.confirmacion_automatica  === 'boolean' ? c.confirmacion_automatica  : false,
       webhook_secret:          typeof c.webhook_secret           === 'string'  ? c.webhook_secret           : null,
       codigo_vinculo:          typeof c.codigo_vinculo           === 'string'  ? c.codigo_vinculo           : null,
+      ia_activa:               typeof c.ia_activa                === 'boolean' ? c.ia_activa                : false,
     }
   } catch {
     return { ...BOT_CONFIG_DEFAULTS }
@@ -136,6 +139,22 @@ export async function guardarConfirmacionCol(
   if (actual.confirmacion_automatica === confirmacionAutomatica) return { ok: true }
   const { error } = await db.from('clients')
     .update({ [columna]: { ...actual, confirmacion_automatica: confirmacionAutomatica } })
+    .eq('client_id', client_id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ── IA del bot (activar/desactivar) ────────────────────────────────────────────
+// Solo tiene efecto si el cliente tiene el addon `asistente_ia`; el gate real está
+// en el motor del bot. Se fusiona solo ese campo, preservando el resto.
+export async function guardarIaActivaCol(
+  db: SupabaseClient, client_id: string, columna: BotColumna, iaActiva: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: cliente } = await db.from('clients').select(columna).eq('client_id', client_id).single()
+  const actual = parseBotConfig((cliente as Record<string, unknown> | null)?.[columna])
+  if (actual.ia_activa === iaActiva) return { ok: true }
+  const { error } = await db.from('clients')
+    .update({ [columna]: { ...actual, ia_activa: iaActiva } })
     .eq('client_id', client_id)
   if (error) return { ok: false, error: error.message }
   return { ok: true }

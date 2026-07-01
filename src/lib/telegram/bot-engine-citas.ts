@@ -96,8 +96,9 @@ export async function manejarMensajeCitas(ctx: BotContext, texto: string, chat_i
 // arranque el flujo de cita. Devuelve null si no hay addon o nada accionable.
 async function intentarIaCitas(ctx: BotContext, chatId: string, texto: string): Promise<BotResponse | null> {
   const db = createAdminClient()
-  const { data: cliente } = await db.from('clients').select('modulos_activos').eq('client_id', ctx.client_id).single()
+  const { data: cliente } = await db.from('clients').select('modulos_activos, bot_config_citas').eq('client_id', ctx.client_id).single()
   if (!tieneModulo(cliente?.modulos_activos, 'asistente_ia')) return null
+  if (!parseBotConfig(cliente?.bot_config_citas).ia_activa) return null
 
   const intent = await interpretarMensajeBot(ctx.client_id, 'cita', texto)
   if (!intent || intent.intent !== 'reservar') return null

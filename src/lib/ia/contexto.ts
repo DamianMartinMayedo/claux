@@ -8,6 +8,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { obtenerDashboard, type DashboardData } from '@/app/actions/portal/dashboard'
 import { normalizarModulos } from '@/lib/modulos'
+import { INSTRUCCIONES_DEFAULT } from './documentos'
 
 export interface ContextoNegocio {
   clientId: string
@@ -15,6 +16,7 @@ export interface ContextoNegocio {
   nombreUsuario: string | null
   nombreAgente: string
   tono: string
+  instrucciones: string
   modulos: string[]
   data: DashboardData | null
 }
@@ -22,15 +24,16 @@ export interface ContextoNegocio {
 export const NOMBRE_AGENTE_DEFAULT = 'Claux'
 const TONO_DEFAULT = 'cercano y directo, como un asesor de confianza'
 
-// El nombre y el tono del agente son GLOBALES (decididos por el equipo CLAUX en
-// el admin), no por cliente. Se leen de settings (ia_nombre_agente / ia_tono).
-export async function configAgente(): Promise<{ nombreAgente: string; tono: string }> {
+// Nombre, tono e instrucciones del agente son GLOBALES (los fija el equipo CLAUX
+// en el admin), no por cliente. Se leen de settings.
+export async function configAgente(): Promise<{ nombreAgente: string; tono: string; instrucciones: string }> {
   const db = createAdminClient()
-  const { data } = await db.from('settings').select('key, value').in('key', ['ia_nombre_agente', 'ia_tono'])
+  const { data } = await db.from('settings').select('key, value').in('key', ['ia_nombre_agente', 'ia_tono', 'ia_instrucciones'])
   const S = Object.fromEntries((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
   return {
-    nombreAgente: (S.ia_nombre_agente || '').trim() || NOMBRE_AGENTE_DEFAULT,
-    tono:         (S.ia_tono || '').trim() || TONO_DEFAULT,
+    nombreAgente:  (S.ia_nombre_agente || '').trim() || NOMBRE_AGENTE_DEFAULT,
+    tono:          (S.ia_tono || '').trim() || TONO_DEFAULT,
+    instrucciones: (S.ia_instrucciones || '').trim() || INSTRUCCIONES_DEFAULT,
   }
 }
 
@@ -41,13 +44,14 @@ export async function construirContexto(clientId: string, nombreUsuario?: string
     obtenerDashboard(),
     configAgente(),
   ])
-  const { nombreAgente, tono } = agente
+  const { nombreAgente, tono, instrucciones } = agente
   return {
     clientId,
     nombreEmpresa: cliente?.nombre_empresa ?? data?.nombreEmpresa ?? 'el negocio',
     nombreUsuario: nombreUsuario?.trim() || null,
     nombreAgente,
     tono,
+    instrucciones,
     modulos: normalizarModulos(cliente?.modulos_activos),
     data,
   }

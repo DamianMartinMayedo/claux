@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react'
 import type { IaPanel } from '@/app/actions/portal/ia'
 
 // Bloque informativo y compacto en el perfil: el cliente solo VE su consumo de IA
@@ -7,9 +6,7 @@ export default function IaUsoCard({ panel }: { panel: IaPanel }) {
   const { uso, nombreAgente } = panel
   return (
     <div className="ia-uso-compact">
-      <span className="ia-uso-compact-head">
-        <Sparkles size={15} strokeWidth={2} /> Asistente {nombreAgente}
-      </span>
+      <span className="ia-uso-compact-head">Asistente {nombreAgente}</span>
       <span className="ia-uso-compact-stat">
         {uso.conversaciones.toLocaleString('es-ES')} / {uso.cupo.toLocaleString('es-ES')} consultas este mes
       </span>

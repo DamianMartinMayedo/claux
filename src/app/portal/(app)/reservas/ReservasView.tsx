@@ -12,6 +12,7 @@ import {
   guardarBotConfig,
   eliminarBotConfig,
   toggleActivoBot,
+  toggleIaBotReservas,
   guardarConfirmacionReservas,
   guardarSlug,
   obtenerDisponibilidadPublica,
@@ -674,6 +675,15 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
     })
   }
 
+  function toggleIaBot(activa: boolean) {
+    startTransition(async () => {
+      const res = await toggleIaBotReservas(activa)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(activa ? 'La IA gestionará el bot.' : 'La IA ya no gestiona el bot.')
+      router.refresh()
+    })
+  }
+
   return (
     <div className="view-container">
 
@@ -1007,6 +1017,20 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <div className="info-box">
                 <span className="text-xs-muted">✓ Chat del dueño vinculado · recibes los avisos de reservas nuevas.</span>
               </div>
+            )}
+
+            {data.tieneIa && (
+              <label className="ia-bot-toggle">
+                <span className="ia-bot-toggle-text">
+                  <strong>Que el asistente de IA gestione el bot</strong>
+                  <span className="text-xs-muted">El cliente podrá reservar escribiendo en lenguaje natural (ej: «mesa para 4 mañana»). Si lo desactivas, el bot sigue funcionando por botones.</span>
+                </span>
+                <span className="switch">
+                  <input type="checkbox" checked={data.bot_config.ia_activa} disabled={isPending}
+                    onChange={e => toggleIaBot(e.target.checked)} aria-label="Que la IA gestione el bot" />
+                  <span className="switch-track" aria-hidden="true" />
+                </span>
+              </label>
             )}
           </>
         ) : (

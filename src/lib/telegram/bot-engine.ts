@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
 import { tieneModulo } from '@/lib/modulos'
+import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { interpretarMensajeBot } from '@/lib/ia/telegram'
 
 export interface BotContext {
@@ -145,8 +146,10 @@ export async function manejarMensaje(
 // Devuelve null si el addon no está activo o la IA no detecta nada accionable.
 async function intentarIaReservas(ctx: BotContext, chatId: string, texto: string): Promise<BotResponse | null> {
   const db = createAdminClient()
-  const { data: cliente } = await db.from('clients').select('modulos_activos').eq('client_id', ctx.client_id).single()
+  const { data: cliente } = await db.from('clients').select('modulos_activos, bot_config').eq('client_id', ctx.client_id).single()
+  // La IA en el bot requiere el addon contratado Y que el dueño la haya activado.
   if (!tieneModulo(cliente?.modulos_activos, 'asistente_ia')) return null
+  if (!parseBotConfig(cliente?.bot_config).ia_activa) return null
 
   const intent = await interpretarMensajeBot(ctx.client_id, 'reserva', texto)
   if (!intent) return null

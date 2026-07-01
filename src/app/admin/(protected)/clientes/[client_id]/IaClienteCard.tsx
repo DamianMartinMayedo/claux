@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { setCupoClienteIa } from '@/app/actions/ia-admin'
 
@@ -39,7 +38,7 @@ export default function IaClienteCard({ clientId, cupoGlobal, cupoOverride, conv
   return (
     <div className="card">
       <div className="card-header">
-        <h2 className="card-title"><Sparkles size={16} strokeWidth={2} /> Asistente IA</h2>
+        <h2 className="card-title">Asistente IA</h2>
         <span className={`badge ${pct >= 100 ? 'badge-error' : pct >= 90 ? 'badge-warning' : 'badge-neutral'}`}>{pct}% del cupo</span>
       </div>
 

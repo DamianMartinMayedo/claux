@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import IaAdminClient, { type ModeloIa, type ConsumoCliente } from './IaAdminClient'
+import { DOCUMENTOS_IA } from '@/lib/ia/documentos'
+import IaAdminClient, { type ModeloIa, type ConsumoCliente, type DocumentoUi } from './IaAdminClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,10 +13,11 @@ export default async function AdminIaPage() {
   const supabase = await createClient()
   const periodo = periodoActual()
 
-  const [{ data: modelosRaw }, { data: settingsRaw }, { data: clientesRaw }] = await Promise.all([
+  const [{ data: modelosRaw }, { data: settingsRaw }, { data: docsRaw }, { data: clientesRaw }] = await Promise.all([
     supabase.from('ia_modelos').select('*').order('orden'),
     supabase.from('settings').select('key, value')
       .in('key', ['ia_model', 'ia_modelo_fallback_gratis', 'ia_cupo_conversaciones', 'ia_nombre_agente', 'ia_tono']),
+    supabase.from('settings').select('key, value').in('key', DOCUMENTOS_IA.map(d => d.key)),
     supabase.from('clients').select('client_id, nombre_empresa, ia_config')
       .contains('modulos_activos', ['asistente_ia']),
   ])
@@ -28,6 +30,16 @@ export default async function AdminIaPage() {
   const nombreAgente   = S.ia_nombre_agente || 'Claux'
   const tono           = S.ia_tono || 'cercano y directo, como un asesor de confianza'
   const principalGratis = modelos.find(m => m.id === principal)?.gratis ?? false
+
+  // Documentos de IA (personalidad + prompts por sección), con su valor efectivo.
+  const DV = Object.fromEntries((docsRaw ?? []).map(r => [r.key, r.value]))
+  const documentos: DocumentoUi[] = DOCUMENTOS_IA.map(d => ({
+    key: d.key,
+    label: d.label,
+    descripcion: d.descripcion,
+    valor: (DV[d.key] || '').trim() || d.valorDefault,
+    esPersonalidad: d.grupo === 'personalidad',
+  }))
 
   // Consumo del mes por cliente con IA contratada.
   const clientes = clientesRaw ?? []
@@ -63,6 +75,7 @@ export default async function AdminIaPage() {
       cupoGlobal={cupoGlobal}
       nombreAgente={nombreAgente}
       tono={tono}
+      documentos={documentos}
       periodo={periodo}
       consumo={consumo}
     />

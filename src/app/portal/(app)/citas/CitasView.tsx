@@ -7,7 +7,7 @@ import {
   guardarServicio, eliminarServicio,
   guardarRecurso, eliminarRecurso, importarPersonalRRHH,
   crearCitaManual, cambiarEstadoCita,
-  guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas, guardarConfirmacionCitas,
+  guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas, toggleIaBotCitas, guardarConfirmacionCitas,
   obtenerSlotsCita, obtenerDiasDisponiblesCita,
   type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita, type DiaDisponible,
 } from '@/app/actions/portal/citas'
@@ -655,6 +655,14 @@ export default function CitasView({ data }: { data: CitasPageData }) {
     })
   }
 
+  function toggleIaBot(activa: boolean) {
+    startTransition(async () => {
+      const res = await toggleIaBotCitas(activa)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(activa ? 'La IA gestionará el bot.' : 'La IA ya no gestiona el bot.'); router.refresh()
+    })
+  }
+
   const servicioNombre = et.servicio
   const servicioPlural = `${et.servicio}s`
 
@@ -983,6 +991,20 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <div className="info-box">
                 <span className="text-xs-muted">✓ Chat del dueño vinculado · recibes los avisos de citas nuevas.</span>
               </div>
+            )}
+
+            {data.tieneIa && (
+              <label className="ia-bot-toggle">
+                <span className="ia-bot-toggle-text">
+                  <strong>Que el asistente de IA gestione el bot</strong>
+                  <span className="text-xs-muted">El cliente podrá pedir cita escribiendo en lenguaje natural. Si lo desactivas, el bot sigue funcionando por botones.</span>
+                </span>
+                <span className="switch">
+                  <input type="checkbox" checked={data.bot_config.ia_activa} disabled={isPending}
+                    onChange={e => toggleIaBot(e.target.checked)} aria-label="Que la IA gestione el bot" />
+                  <span className="switch-track" aria-hidden="true" />
+                </span>
+              </label>
             )}
           </>
         ) : (

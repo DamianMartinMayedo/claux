@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { esDocumentoIa, defaultDocumentoIa } from '@/lib/ia/documentos'
 
 // Acciones del panel de control de IA del admin (catálogo de modelos, límites
 // globales y override de cupo por cliente). Server-only; el acceso ya está
@@ -32,6 +33,28 @@ export async function guardarConfigIaGlobal(args: {
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admin/ia')
   return { ok: true }
+}
+
+// ── Documentos de IA editables (personalidad + prompts por sección) ──
+// La clave se valida contra el registro DOCUMENTOS_IA (no se permite escribir
+// cualquier setting arbitrario).
+export async function guardarDocumentoIa(key: string, texto: string): Promise<Resp> {
+  if (!esDocumentoIa(key)) return { ok: false, error: 'Documento no válido.' }
+  const valor = (texto ?? '').trim()
+  if (!valor) return { ok: false, error: 'El documento no puede estar vacío.' }
+  if (valor.length > 6000) return { ok: false, error: 'El documento es demasiado largo (máx. 6000 caracteres).' }
+  const db = createAdminClient()
+  const { error } = await db.from('settings')
+    .upsert({ key, value: valor, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/ia')
+  return { ok: true }
+}
+
+export async function restaurarDocumentoIa(key: string): Promise<Resp> {
+  const def = defaultDocumentoIa(key)
+  if (def == null) return { ok: false, error: 'Documento no válido.' }
+  return guardarDocumentoIa(key, def)
 }
 
 // ── Catálogo de modelos ──
