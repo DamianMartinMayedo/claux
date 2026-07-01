@@ -1764,48 +1764,51 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 /* ── Asistente IA (addon transversal) ─────────────────────────────────────── */
 
-/* Touchpoint: botón de icono + tooltip y popover con el insight */
-.ia-tp        { position: relative; display: inline-flex; }
-.ia-tp-btn {
-  display: inline-flex; align-items: center; gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border); border-radius: var(--radius-full);
-  background: var(--color-primary-subtle); color: var(--color-primary-text);
-  font-size: var(--text-xs); font-weight: 600; cursor: pointer;
-  transition: var(--transition);
+/* Icono de IA junto al nombre de un apartado */
+.page-title-ia { display: flex; align-items: center; gap: var(--space-2); }
+.ia-tp         { position: relative; display: inline-flex; }
+.ia-tp-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 1.9rem; height: 1.9rem; border-radius: var(--radius-full);
+  border: 1px solid var(--color-border); background: var(--color-primary-subtle);
+  color: var(--color-primary-text); cursor: pointer; transition: var(--transition);
 }
-.ia-tp-btn:hover    { border-color: var(--color-primary); background: var(--color-primary-highlight); }
-.ia-tp-btn:disabled { opacity: 0.6; cursor: default; }
+.ia-tp-icon:hover { border-color: var(--color-primary); background: var(--color-primary-highlight); }
 
-.ia-tp-tip {
-  position: absolute; bottom: calc(100% + var(--space-2)); right: 0; z-index: 30;
-  width: max-content; max-width: 220px;
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-text); color: var(--color-text-inv);
-  border-radius: var(--radius-md); font-size: var(--text-xs); line-height: 1.4;
-  box-shadow: var(--shadow-md);
-  opacity: 0; visibility: hidden; transform: translateY(4px);
-  transition: var(--transition); pointer-events: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  .ia-tp:hover .ia-tp-tip { opacity: 1; visibility: visible; transform: translateY(0); }
-}
-.ia-tp-btn:focus-visible + .ia-tp-tip { opacity: 1; visibility: visible; transform: translateY(0); }
+.ia-icon-btn       { background: none; border: none; color: var(--color-text-muted); cursor: pointer; display: inline-flex; padding: var(--space-1); border-radius: var(--radius-sm); transition: var(--transition); }
+.ia-icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
 
-.ia-tp-panel {
+/* Aviso automático: solo informa (la acción la hace el icono) + cerrar */
+.ia-tp-callout {
   position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 35;
-  width: min(340px, 80vw); padding: var(--space-4);
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  width: min(300px, 82vw); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm); line-height: 1.45; color: var(--color-text);
+}
+.ia-tp-callout-text { flex: 1; font-weight: 500; }
+
+/* Panel de resultado del análisis */
+.ia-tp-panel {
+  position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 35; display: block;
+  width: min(360px, 82vw); padding: var(--space-4);
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
 }
 .ia-tp-panel-head  { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
 .ia-tp-panel-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); display: inline-flex; align-items: center; gap: var(--space-2); }
-.ia-icon-btn       { background: none; border: none; color: var(--color-text-muted); cursor: pointer; display: inline-flex; padding: var(--space-1); border-radius: var(--radius-sm); transition: var(--transition); }
-.ia-icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
-.ia-tp-body        { font-size: var(--text-sm); color: var(--color-text); line-height: 1.55; white-space: pre-wrap; }
-.ia-tp-loading     { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }
-.ia-tp-error       { color: var(--color-error); font-size: var(--text-sm); }
-.ia-tp-disclaimer  { margin-top: var(--space-3); font-size: var(--text-xs); color: var(--color-text-faint); }
+.ia-tp-body        { display: block; font-size: var(--text-sm); color: var(--color-text); line-height: 1.55; white-space: pre-wrap; }
+.ia-tp-error       { display: block; color: var(--color-error); font-size: var(--text-sm); }
+.ia-tp-disclaimer  { display: block; margin-top: var(--space-3); font-size: var(--text-xs); color: var(--color-text-faint); }
+
+/* Indicador "escribiendo" (puntos) — chat e insights */
+.ia-typing      { display: inline-flex; align-items: center; gap: 4px; padding: var(--space-1) 0; }
+.ia-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-faint); display: inline-block; animation: ia-typing-bounce 1.2s infinite ease-in-out; }
+.ia-typing span:nth-child(2) { animation-delay: 0.15s; }
+.ia-typing span:nth-child(3) { animation-delay: 0.30s; }
+@keyframes ia-typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ia-typing span { animation: none; } }
 
 /* Botón flotante (FAB) + panel de chat del dueño */
 .ia-fab {
@@ -1819,14 +1822,14 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 .ia-chat {
   position: fixed; right: var(--space-5); bottom: calc(var(--space-5) + 4rem); z-index: 45;
-  width: min(380px, calc(100vw - var(--space-6)));
-  height: min(560px, calc(100vh - 8rem));
+  width: min(440px, calc(100vw - var(--space-6)));
+  height: min(680px, calc(100vh - 6rem));
   display: flex; flex-direction: column;
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); overflow: hidden;
 }
 .ia-chat-head  { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); background: var(--color-surface-2); }
-.ia-chat-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); display: inline-flex; align-items: center; gap: var(--space-2); }
+.ia-chat-title { font-size: var(--text-base); font-weight: 700; color: var(--color-text); display: inline-flex; align-items: center; gap: var(--space-2); }
 .ia-chat-body  { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 .ia-msg        { max-width: 85%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; }
 .ia-msg-user   { align-self: flex-end; background: var(--color-primary); color: var(--color-text-inv); border-bottom-right-radius: var(--radius-sm); }
@@ -1834,10 +1837,18 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ia-chat-empty { margin: auto; text-align: center; color: var(--color-text-faint); font-size: var(--text-sm); padding: var(--space-4); }
 .ia-chat-foot  { display: flex; gap: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--color-border); }
 
-/* Sección IA del perfil (reusa .card y .prf-*) */
+/* Perfil: consumo de IA compacto e informativo (solo lectura) */
+.ia-uso-compact {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+}
+.ia-uso-compact-head { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--color-text); font-size: var(--text-sm); }
+.ia-uso-compact-stat { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* Tarjetas de uso (admin: ficha de cliente) */
 .ia-uso-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
 .ia-uso-item { background: var(--color-surface-2); border-radius: var(--radius-md); padding: var(--space-3); }
 .ia-uso-num  { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); }
 .ia-uso-num.ia-uso-warn { color: var(--color-warning); }
 .ia-uso-lbl  { font-size: var(--text-xs); color: var(--color-text-muted); }
-.dash-ia-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-5); }

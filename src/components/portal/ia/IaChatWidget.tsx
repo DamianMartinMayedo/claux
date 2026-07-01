@@ -50,7 +50,11 @@ export default function IaChatWidget({ nombreAgente }: { nombreAgente: string })
             {mensajes.map((m, i) => (
               <div key={i} className={m.rol === 'user' ? 'ia-msg ia-msg-user' : 'ia-msg ia-msg-bot'}>{m.texto}</div>
             ))}
-            {pending && <div className="ia-msg ia-msg-bot"><span className="spinner spinner-sm" /></div>}
+            {pending && (
+              <div className="ia-msg ia-msg-bot">
+                <span className="ia-typing" aria-label={`${nombreAgente} está escribiendo`}><span></span><span></span><span></span></span>
+              </div>
+            )}
           </div>
 
           <form className="ia-chat-foot" onSubmit={enviar}>

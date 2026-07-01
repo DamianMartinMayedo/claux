@@ -4,10 +4,16 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AccionesHeader from './AccionesHeader'
 import ModulosCard from './ModulosCard'
+import IaClienteCard from './IaClienteCard'
 import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { getSetting } from '@/app/actions/settings'
 import { suscripcionLabel } from '@/lib/billing'
+
+function periodoIa(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Havana', year: 'numeric', month: '2-digit' })
+    .format(new Date()).slice(0, 7)
+}
 
 const METODO_LABEL: Record<string, string> = {
   tropipay:      'TropiPay',
@@ -64,6 +70,24 @@ export default async function ClienteDetallePage({
     .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
   const ultimoPago  = confirmados[0] ?? null
   const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
+
+  // Datos de IA (solo si el cliente tiene el addon contratado).
+  const tieneIa = Array.isArray(cliente.modulos_activos) && cliente.modulos_activos.includes('asistente_ia')
+  let iaData: { cupoGlobal: number; cupoOverride: number | null; conversaciones: number; tokens: number } | null = null
+  if (tieneIa) {
+    const cupoGlobal = parseInt(await getSetting('ia_cupo_conversaciones', '500'), 10) || 500
+    const { data: uso } = await supabase
+      .from('ia_uso').select('conversaciones, tokens_in, tokens_out')
+      .eq('client_id', client_id).eq('periodo', periodoIa()).maybeSingle()
+    const cfg = (cliente.ia_config && typeof cliente.ia_config === 'object') ? cliente.ia_config as Record<string, unknown> : {}
+    const ov = Number(cfg.cupo)
+    iaData = {
+      cupoGlobal,
+      cupoOverride: Number.isFinite(ov) && ov > 0 ? Math.floor(ov) : null,
+      conversaciones: Number(uso?.conversaciones) || 0,
+      tokens: (Number(uso?.tokens_in) || 0) + (Number(uso?.tokens_out) || 0),
+    }
+  }
 
   return (
     <div className="view-container detail-page">
@@ -180,6 +204,18 @@ export default async function ClienteDetallePage({
           precioMensual={Number(cliente.precio_mensual_usd ?? 0)}
           descuentoAnualPct={descuentoAnual}
           catalogo={catalogo}
+        />
+      )}
+
+      {/* ── Asistente IA (solo con el addon contratado) ── */}
+      {iaData && (
+        <IaClienteCard
+          clientId={client_id}
+          cupoGlobal={iaData.cupoGlobal}
+          cupoOverride={iaData.cupoOverride}
+          conversaciones={iaData.conversaciones}
+          tokens={iaData.tokens}
+          periodo={periodoIa()}
         />
       )}
 

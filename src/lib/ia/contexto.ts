@@ -12,33 +12,40 @@ import { normalizarModulos } from '@/lib/modulos'
 export interface ContextoNegocio {
   clientId: string
   nombreEmpresa: string
+  nombreUsuario: string | null
   nombreAgente: string
   tono: string
   modulos: string[]
   data: DashboardData | null
 }
 
-const NOMBRE_AGENTE_DEFAULT = 'Asistente'
+export const NOMBRE_AGENTE_DEFAULT = 'Claux'
+const TONO_DEFAULT = 'cercano y directo, como un asesor de confianza'
 
-interface IaConfigRaw { nombre_agente?: unknown; tono?: unknown }
-
-export function leerIaConfig(raw: unknown): { nombreAgente: string; tono: string } {
-  const c = (raw && typeof raw === 'object' ? raw : {}) as IaConfigRaw
-  const nombre = typeof c.nombre_agente === 'string' && c.nombre_agente.trim() ? c.nombre_agente.trim() : NOMBRE_AGENTE_DEFAULT
-  const tono   = typeof c.tono === 'string' && c.tono.trim() ? c.tono.trim() : 'cercano y profesional'
-  return { nombreAgente: nombre, tono }
+// El nombre y el tono del agente son GLOBALES (decididos por el equipo CLAUX en
+// el admin), no por cliente. Se leen de settings (ia_nombre_agente / ia_tono).
+export async function configAgente(): Promise<{ nombreAgente: string; tono: string }> {
+  const db = createAdminClient()
+  const { data } = await db.from('settings').select('key, value').in('key', ['ia_nombre_agente', 'ia_tono'])
+  const S = Object.fromEntries((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
+  return {
+    nombreAgente: (S.ia_nombre_agente || '').trim() || NOMBRE_AGENTE_DEFAULT,
+    tono:         (S.ia_tono || '').trim() || TONO_DEFAULT,
+  }
 }
 
-export async function construirContexto(clientId: string): Promise<ContextoNegocio> {
+export async function construirContexto(clientId: string, nombreUsuario?: string | null): Promise<ContextoNegocio> {
   const db = createAdminClient()
-  const [{ data: cliente }, data] = await Promise.all([
-    db.from('clients').select('nombre_empresa, modulos_activos, ia_config').eq('client_id', clientId).single(),
+  const [{ data: cliente }, data, agente] = await Promise.all([
+    db.from('clients').select('nombre_empresa, modulos_activos').eq('client_id', clientId).single(),
     obtenerDashboard(),
+    configAgente(),
   ])
-  const { nombreAgente, tono } = leerIaConfig(cliente?.ia_config)
+  const { nombreAgente, tono } = agente
   return {
     clientId,
     nombreEmpresa: cliente?.nombre_empresa ?? data?.nombreEmpresa ?? 'el negocio',
+    nombreUsuario: nombreUsuario?.trim() || null,
     nombreAgente,
     tono,
     modulos: normalizarModulos(cliente?.modulos_activos),

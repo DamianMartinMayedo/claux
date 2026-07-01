@@ -21,6 +21,7 @@ import type {
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
 interface Props { data: VentasResumenData }
 
@@ -55,7 +56,10 @@ export default function VentasView({ data }: Props) {
       {/* ── Cabecera ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Ventas</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Ventas</h1>
+            <IaTouchpoint tipo="ventas" descripcion="un análisis de tus ventas" />
+          </div>
           <p className="page-subtitle">
             Gestiona ofertas comerciales y facturas. Las ofertas aprobadas generan factura automáticamente.
           </p>

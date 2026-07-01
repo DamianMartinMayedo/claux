@@ -41,7 +41,7 @@ export async function interpretarMensajeBot(
   try {
     const { texto: out, usage } = await chat({
       mensajes: [{ role: 'system', content: sys }, { role: 'user', content: texto }],
-      json: true, temperature: 0, maxTokens: 800,
+      json: true, temperature: 0, maxTokens: 800, clientId,
     })
     await registrarUso(clientId, usage, true)
 

@@ -9,7 +9,8 @@ import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
 import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
 import { EmpresaColorProvider } from '@/components/portal/EmpresaColorContext'
 import IaChatWidget          from '@/components/portal/ia/IaChatWidget'
-import { leerIaConfig }      from '@/lib/ia/contexto'
+import { IaProvider }        from '@/components/portal/ia/IaContext'
+import { configAgente }      from '@/lib/ia/contexto'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -20,7 +21,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const [{ data: cliente }, { data: catalogo }, empresas] = await Promise.all([
     db
       .from('clients')
-      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, ia_config')
+      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
       .eq('client_id', session.client_id)
       .single(),
     db
@@ -40,8 +41,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     : []
 
   // Addon de IA: el chat flotante del dueño solo aparece si está contratado.
+  // El nombre del agente es global (lo fija el admin); por defecto "Claux".
   const tieneIa = modulosActivos.includes('asistente_ia')
-  const nombreAgente = leerIaConfig(cliente.ia_config).nombreAgente
+  const nombreAgente = tieneIa ? (await configAgente()).nombreAgente : 'Claux'
 
   // Bloqueo basado en estado Y en fecha, sin depender de expiración automática:
   // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
@@ -76,7 +78,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         <PortalToastWrapper>
         {bloqueado
           ? <BloqueadoScreen estado={cliente.estado} />
-          : <EmpresaColorProvider empresas={empresas}>{children}</EmpresaColorProvider>}
+          : <EmpresaColorProvider empresas={empresas}>
+              <IaProvider value={{ tieneIa, nombreAgente }}>{children}</IaProvider>
+            </EmpresaColorProvider>}
         </PortalToastWrapper>
         {!bloqueado && tieneIa && <IaChatWidget nombreAgente={nombreAgente} />}
       </main>

@@ -4,9 +4,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { IaUsage } from './provider'
+import { cupoEfectivo } from './modelo'
 
-// Tope orientativo de conversaciones/mes del addon (CONTEXTO §7: ~500).
-export const CUPO_CONVERSACIONES = 500
 const AVISO_PCT = 0.9
 
 export interface UsoMes {
@@ -40,10 +39,11 @@ export async function registrarUso(clientId: string, usage: IaUsage, nuevaConver
 export async function obtenerUsoMes(clientId: string): Promise<UsoMes> {
   const db = createAdminClient()
   const periodo = periodoActual()
-  const { data } = await db
-    .from('ia_uso')
-    .select('conversaciones, tokens_in, tokens_out')
-    .eq('client_id', clientId).eq('periodo', periodo).maybeSingle()
+  const [{ data }, cupo] = await Promise.all([
+    db.from('ia_uso').select('conversaciones, tokens_in, tokens_out')
+      .eq('client_id', clientId).eq('periodo', periodo).maybeSingle(),
+    cupoEfectivo(clientId),
+  ])
 
   const conversaciones = Number(data?.conversaciones) || 0
   return {
@@ -51,7 +51,7 @@ export async function obtenerUsoMes(clientId: string): Promise<UsoMes> {
     conversaciones,
     tokensIn:  Number(data?.tokens_in)  || 0,
     tokensOut: Number(data?.tokens_out) || 0,
-    cupo: CUPO_CONVERSACIONES,
-    cercaDelTope: conversaciones >= CUPO_CONVERSACIONES * AVISO_PCT,
+    cupo,
+    cercaDelTope: conversaciones >= cupo * AVISO_PCT,
   }
 }

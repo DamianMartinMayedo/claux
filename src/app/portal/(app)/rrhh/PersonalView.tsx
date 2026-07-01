@@ -18,6 +18,7 @@ import { Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lu
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -345,7 +346,10 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">Personal</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Personal</h1>
+            <IaTouchpoint tipo="rrhh" descripcion="un análisis de tu personal" />
+          </div>
           <p className="page-subtitle">Empleados, contratos y bajas. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
         </div>
         <div className="tes-header-actions">

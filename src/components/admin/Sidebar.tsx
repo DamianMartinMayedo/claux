@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, Boxes, Clock, CreditCard, LayoutGrid, LogOut, Settings, Stethoscope, Users } from 'lucide-react'
+import { Bell, Boxes, Clock, CreditCard, LayoutGrid, LogOut, Settings, Sparkles, Stethoscope, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -22,6 +22,9 @@ const NAV = [
       )},
       { href: '/admin/modulos', label: 'Módulos', icon: (
         <Boxes size={18} className="flex-shrink-0" />
+      )},
+      { href: '/admin/ia', label: 'Asistente IA', icon: (
+        <Sparkles size={18} className="flex-shrink-0" />
       )},
       { href: '/admin/diagnostico', label: 'Diagnóstico', icon: (
         <Stethoscope size={18} className="flex-shrink-0" />

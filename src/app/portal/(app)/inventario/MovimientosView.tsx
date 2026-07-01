@@ -1,6 +1,7 @@
 'use client'
 
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -239,7 +240,10 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Movimientos</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Movimientos</h1>
+            <IaTouchpoint tipo="inventario" descripcion="un análisis de tu inventario" />
+          </div>
           <p className="page-subtitle">Entradas, salidas, ajustes y transferencias de stock entre almacenes.</p>
         </div>
         <div className="det-actions">

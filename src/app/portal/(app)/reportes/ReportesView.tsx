@@ -6,6 +6,7 @@ import { Download, ChevronDown, BarChart3, Search } from 'lucide-react'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
+import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -237,7 +238,10 @@ export default function ReportesView({ data }: { data: ReportesData }) {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">Reportes financieros</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Reportes financieros</h1>
+            <IaTouchpoint tipo="proyeccion" descripcion="una proyección de tus ingresos" />
+          </div>
           <p className="page-subtitle">Estado de resultados (devengado) y flujo de caja (efectivo) del período seleccionado.</p>
         </div>
         {!sinDatos && (

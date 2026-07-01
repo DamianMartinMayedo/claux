@@ -7,34 +7,11 @@
 // MVP: modelo gratis `opencode/deepseek-v4-flash-free`. Pasar a pago = cambiar
 // `settings.ia_model` (cero código).
 
-import { createAdminClient } from '@/lib/supabase/admin'
-
-const DEFAULT_BASE  = 'https://opencode.ai/zen/v1'
-// OJO: los ids de OpenCode Zen van SIN prefijo `opencode/`. deepseek-v4-flash-free
-// es un modelo de razonamiento (gasta tokens "pensando" antes de responder), por
-// eso los max_tokens de las llamadas son holgados.
-const DEFAULT_MODEL = 'deepseek-v4-flash-free'
+import { resolverModelo } from './modelo'
 
 export interface IaMensaje { role: 'system' | 'user' | 'assistant'; content: string }
 export interface IaUsage  { tokensIn: number; tokensOut: number }
 export interface IaResultado { texto: string; usage: IaUsage }
-
-export interface IaConfig { base: string; model: string; apiKey: string | null }
-
-// Lee la config efectiva del proveedor desde `settings` (con defaults) + env.
-export async function leerConfigIa(): Promise<IaConfig> {
-  const db = createAdminClient()
-  const { data } = await db
-    .from('settings')
-    .select('key, value')
-    .in('key', ['ia_api_base', 'ia_model'])
-  const map = Object.fromEntries((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
-  return {
-    base:   (map.ia_api_base || DEFAULT_BASE).replace(/\/$/, ''),
-    model:  map.ia_model || DEFAULT_MODEL,
-    apiKey: process.env.OPENCODE_ZEN_API_KEY || process.env.IA_API_KEY || null,
-  }
-}
 
 export class IaNoConfigurada extends Error {
   constructor() { super('El asistente IA no está configurado (falta la API key del proveedor).') }
@@ -42,16 +19,19 @@ export class IaNoConfigurada extends Error {
 
 interface ChatOpts {
   mensajes: IaMensaje[]
+  /** Cliente para resolver su modelo (aplica auto-fallback a gratis por cupo). */
+  clientId?: string
   /** Pide salida JSON estricta (response_format json_object). */
   json?: boolean
   temperature?: number
   maxTokens?: number
 }
 
-// Una sola llamada de chat. Lanza IaNoConfigurada si no hay key; el llamador la
-// traduce a un mensaje amable. Cualquier error de red/HTTP se propaga como Error.
+// Una sola llamada de chat. Resuelve el modelo del cliente (ia_modelos + cupo) en
+// runtime. Lanza IaNoConfigurada si no hay key; el llamador la traduce a un mensaje
+// amable. Cualquier error de red/HTTP se propaga como Error.
 export async function chat(opts: ChatOpts): Promise<IaResultado> {
-  const cfg = await leerConfigIa()
+  const cfg = await resolverModelo(opts.clientId)
   if (!cfg.apiKey) throw new IaNoConfigurada()
 
   const body: Record<string, unknown> = {
@@ -64,25 +44,37 @@ export async function chat(opts: ChatOpts): Promise<IaResultado> {
   }
   if (opts.json) body.response_format = { type: 'json_object' }
 
-  const res = await fetch(`${cfg.base}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.apiKey}`,
-    },
-    body: JSON.stringify(body),
-  })
+  // El tier gratis del proveedor devuelve 5xx transitorios de vez en cuando.
+  // Reintentamos una vez ante 5xx o error de red; los 4xx se propagan al instante.
+  const url = `${cfg.base}/chat/completions`
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` }
+  let ultimoError = ''
 
-  if (!res.ok) {
+  for (let intento = 0; intento < 2; intento++) {
+    let res: Response
+    try {
+      res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+    } catch (e) {
+      ultimoError = `red: ${(e as Error).message}`
+      continue // reintenta una vez ante fallo de red
+    }
+
+    if (res.ok) {
+      const data = await res.json()
+      const texto: string = data?.choices?.[0]?.message?.content ?? ''
+      return {
+        texto: texto.trim(),
+        usage: {
+          tokensIn:  Number(data?.usage?.prompt_tokens) || 0,
+          tokensOut: Number(data?.usage?.completion_tokens) || 0,
+        },
+      }
+    }
+
     const detalle = await res.text().catch(() => '')
-    throw new Error(`IA HTTP ${res.status}: ${detalle.slice(0, 300)}`)
+    ultimoError = `HTTP ${res.status}: ${detalle.slice(0, 300)}`
+    if (res.status < 500) break // 4xx no se reintenta
   }
 
-  const data = await res.json()
-  const texto: string = data?.choices?.[0]?.message?.content ?? ''
-  const usage: IaUsage = {
-    tokensIn:  Number(data?.usage?.prompt_tokens) || 0,
-    tokensOut: Number(data?.usage?.completion_tokens) || 0,
-  }
-  return { texto: texto.trim(), usage }
+  throw new Error(`IA ${ultimoError}`)
 }

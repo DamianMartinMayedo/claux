@@ -19,6 +19,7 @@ import { DollarSign, Pencil, Plus, Receipt, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -420,7 +421,10 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
       {/* Cabecera */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Gastos y cobros</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Gastos y cobros</h1>
+            <IaTouchpoint tipo="gastos" descripcion="un análisis de tus gastos" />
+          </div>
           <p className="page-subtitle">Ingresos y egresos directos (no facturados). Los pagos se reflejan en Tesorería.</p>
         </div>
         <div className="tes-header-actions">

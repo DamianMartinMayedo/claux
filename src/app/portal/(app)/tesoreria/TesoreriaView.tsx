@@ -1,6 +1,7 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
 import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, Info, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
@@ -471,7 +472,10 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
       {/* Cabecera */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Tesorería</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Tesorería</h1>
+            <IaTouchpoint tipo="tesoreria" descripcion="un análisis de tu liquidez" />
+          </div>
           <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
         </div>
         <div className="tes-header-actions">

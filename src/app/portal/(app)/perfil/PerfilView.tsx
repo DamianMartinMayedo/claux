@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
 import { type IaPanel } from '@/app/actions/portal/ia'
-import IaConfigSection from '@/components/portal/ia/IaConfigSection'
+import IaUsoCard from '@/components/portal/ia/IaUsoCard'
 import { Lock } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,8 +113,8 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
         </div>
       </div>
 
-      {/* ── Asistente IA (solo con el addon contratado) ── */}
-      {panelIa && <IaConfigSection panel={panelIa} />}
+      {/* ── Asistente IA: consumo informativo (solo con el addon contratado) ── */}
+      {panelIa && <IaUsoCard panel={panelIa} />}
 
       {/* ── Mi usuario ── */}
       <div className="card">
