@@ -12,7 +12,7 @@ function fmt(f: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function CierresSection({ cierres }: { cierres: Cierre[] }) {
+export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[]; iaActiva?: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mostrarForm, setMostrarForm] = useState(false)
@@ -42,6 +42,12 @@ export default function CierresSection({ cierres }: { cierres: Cierre[] }) {
           <Plus size={14} strokeWidth={2.5} /> Añadir
         </button>
       </div>
+
+      {iaActiva && (
+        <div className="info-box">
+          <span className="text-xs-muted">La IA no ofrecerá reservas en estas fechas.</span>
+        </div>
+      )}
 
       {mostrarForm && (
         <form onSubmit={handleSubmit}>

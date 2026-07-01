@@ -6,10 +6,11 @@ import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarReglas, type ReglasReserva } from '@/app/actions/portal/reservas'
 
 export default function ReglasReservaSection({
-  reglas, mostrarMaxPersonas,
+  reglas, mostrarMaxPersonas, iaActiva,
 }: {
   reglas: ReglasReserva
   mostrarMaxPersonas?: boolean
+  iaActiva?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -27,6 +28,11 @@ export default function ReglasReservaSection({
   return (
     <div className="card res-section">
       <div className="card-header"><h2 className="card-title">Reglas de reserva</h2></div>
+      {iaActiva && (
+        <div className="info-box">
+          <span className="text-xs-muted">La IA respetará estas reglas al gestionar reservas.</span>
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
         <div className="ter-form-grid res-conf-pad-top">
           <div className="input-group ter-col-span-2">

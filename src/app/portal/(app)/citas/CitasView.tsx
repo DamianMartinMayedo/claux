@@ -874,10 +874,30 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       {activeTab === 'configuracion' && (
       <>
 
-      {/* Confirmación automática */}
+      {/* Gestión de citas (IA + confirmación) */}
       <div className="card">
-        <div className="card-header"><h2 className="card-title">Confirmación de citas</h2></div>
+        <div className="card-header"><h2 className="card-title">Gestión de citas</h2></div>
         <div className="ter-form-grid res-conf-pad">
+          {data.tieneIa && (
+            <div className="input-group ter-col-full">
+              <label>¿Que el asistente de IA gestione las citas?</label>
+              <div className="res-switch-wrap">
+                <label className="switch">
+                  <input type="checkbox" checked={data.bot_config.ia_activa} disabled={isPending}
+                    onChange={e => toggleIaBot(e.target.checked)} aria-label="Que la IA gestione las citas" />
+                  <span className="switch-track" aria-hidden="true" />
+                </label>
+                <span className="res-switch-text">
+                  {data.bot_config.ia_activa ? 'IA activa' : 'Manual'}
+                </span>
+              </div>
+              <span className="input-hint">
+                {data.bot_config.ia_activa
+                  ? 'La IA gestionará las citas por Telegram en lenguaje natural. Las reglas de abajo se respetan como límites.'
+                  : 'Las citas se gestionan por botones o manualmente desde el panel.'}
+              </span>
+            </div>
+          )}
           <div className="input-group ter-col-full">
             <label>¿Confirmar las citas automáticamente?</label>
             <div className="res-switch-wrap">
@@ -889,9 +909,13 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <span className="res-switch-text">{confirmAuto ? 'Automática' : 'Manual'}</span>
             </div>
             <span className="input-hint">
-              {confirmAuto
-                ? 'Las citas se confirman solas al crearse. El cliente ve la confirmación al instante.'
-                : 'Tú confirmas cada cita manualmente. El cliente queda pendiente hasta que la revises.'}
+              {data.tieneIa && data.bot_config.ia_activa
+                ? (confirmAuto
+                    ? 'La IA confirmará automáticamente las citas que cumplan las reglas.'
+                    : 'La IA creará las citas pendientes para que tú las confirmes.')
+                : (confirmAuto
+                    ? 'Las citas se confirman solas al crearse. El cliente ve la confirmación al instante.'
+                    : 'Tú confirmas cada cita manualmente. El cliente queda pendiente hasta que la revises.')}
             </span>
           </div>
         </div>
@@ -992,20 +1016,6 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                 <span className="text-xs-muted">✓ Chat del dueño vinculado · recibes los avisos de citas nuevas.</span>
               </div>
             )}
-
-            {data.tieneIa && (
-              <label className="ia-bot-toggle">
-                <span className="ia-bot-toggle-text">
-                  <strong>Que el asistente de IA gestione el bot</strong>
-                  <span className="text-xs-muted">El cliente podrá pedir cita escribiendo en lenguaje natural. Si lo desactivas, el bot sigue funcionando por botones.</span>
-                </span>
-                <span className="switch">
-                  <input type="checkbox" checked={data.bot_config.ia_activa} disabled={isPending}
-                    onChange={e => toggleIaBot(e.target.checked)} aria-label="Que la IA gestione el bot" />
-                  <span className="switch-track" aria-hidden="true" />
-                </span>
-              </label>
-            )}
           </>
         ) : (
           <>
@@ -1041,10 +1051,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       </div>
 
       {/* Reglas de reserva (antelación/ventana; compartidas con Reservas) */}
-      <ReglasReservaSection reglas={data.reglas} />
+      <ReglasReservaSection reglas={data.reglas} iaActiva={data.tieneIa && data.bot_config.ia_activa} />
 
       {/* Cierres y festivos */}
-      <CierresSection cierres={data.cierres} />
+      <CierresSection cierres={data.cierres} iaActiva={data.tieneIa && data.bot_config.ia_activa} />
 
       </>
       )}

@@ -2,9 +2,9 @@
 
 import { toastError } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
-import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, Info, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
+import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
 import {
   guardarCuenta,
   archivarCuenta,
@@ -12,6 +12,7 @@ import {
   registrarMovimiento,
   registrarTransferencia,
   eliminarMovimiento,
+  obtenerTasaTransferencia,
   type Cuenta,
   type CuentaConSaldo,
   type Movimiento,
@@ -46,8 +47,11 @@ function hoyISO(): string {
   return new Date().toISOString().split('T')[0]
 }
 function formatFecha(f: string): string {
-  const [y, m, d] = f.split('T')[0].split('-').map(Number)
+  const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+function truncar4(n: number): string {
+  return String(Math.trunc(n * 10000) / 10000)
 }
 
 // ── Modal: Cuenta ───────────────────────────────────────────────────────────────
@@ -287,14 +291,114 @@ function TransferenciaModal({
   const [isPending, startTransition] = useTransition()
   const [origen, setOrigen]   = useState(cuentas[0]?.cuenta_id ?? '')
   const [destino, setDestino] = useState(cuentas[1]?.cuenta_id ?? '')
+  const [monto, setMonto]     = useState('')
+  const [montoRecibido, setMontoRecibido] = useState('')
+  const [tasaInput, setTasaInput] = useState('')
+  const [tasaCompleta, setTasaCompleta] = useState<number>(0)
+  const [feeEnvio, setFeeEnvio]   = useState('')
+  const [feeRecibo, setFeeRecibo] = useState('')
+  const [tasaDisplay, setTasaDisplay] = useState<number | null>(null)
+  const [tasaEsInversa, setTasaEsInversa] = useState(false)
+  const [cargandoTasa, setCargandoTasa] = useState(false)
+  const [editandoMontoRecibido, setEditandoMontoRecibido] = useState(false)
 
-  const cuentaOrigen = cuentas.find(c => c.cuenta_id === origen)
+  const cuentaOrigen  = cuentas.find(c => c.cuenta_id === origen)
+  const cuentaDestino = cuentas.find(c => c.cuenta_id === destino)
+  const monedasDiferentes = !!(cuentaOrigen && cuentaDestino && cuentaOrigen.moneda !== cuentaDestino.moneda)
+
+  useEffect(() => {
+    if (!monedasDiferentes || !cuentaOrigen || !cuentaDestino) {
+      setTasaCompleta(0)
+      setTasaDisplay(null)
+      setTasaEsInversa(false)
+      setTasaInput('')
+      setMontoRecibido('')
+      return
+    }
+    setCargandoTasa(true)
+    obtenerTasaTransferencia(cuentaOrigen.moneda, cuentaDestino.moneda)
+      .then(r => {
+        if (r.ok && r.tasa) {
+          setTasaCompleta(r.tasa)
+          setTasaInput(truncar4(r.tasa))
+          setTasaDisplay(r.tasaDisplay ?? r.tasa)
+          setTasaEsInversa(r.esInversa ?? false)
+          setMontoRecibido('')
+          setEditandoMontoRecibido(false)
+        } else {
+          setTasaCompleta(0)
+          setTasaDisplay(null)
+          setTasaEsInversa(false)
+          setTasaInput('')
+          setMontoRecibido('')
+        }
+      })
+      .catch(() => {
+        setTasaCompleta(0)
+        setTasaDisplay(null)
+        setTasaEsInversa(false)
+        setTasaInput('')
+        setMontoRecibido('')
+      })
+      .finally(() => setCargandoTasa(false))
+  }, [origen, destino, monedasDiferentes])
+
+  const montoNum     = parseFloat(monto) || 0
+  const feeEnvioNum  = parseFloat(feeEnvio) || 0
+  const feeReciboNum = parseFloat(feeRecibo) || 0
+  const montoRecibidoNum = parseFloat(montoRecibido) || 0
+  const montoDestino = monedasDiferentes
+    ? (editandoMontoRecibido ? montoRecibidoNum : montoNum * tasaCompleta)
+    : montoNum
+  const totalOrigen  = montoNum + feeEnvioNum
+  const netoDestino  = montoDestino - feeReciboNum
+
+  useEffect(() => {
+    if (monedasDiferentes && !editandoMontoRecibido && montoNum > 0 && tasaCompleta > 0) {
+      setMontoRecibido(String(montoNum * tasaCompleta))
+    }
+  }, [monto, tasaCompleta, monedasDiferentes, editandoMontoRecibido, montoNum])
+
+  function handleMontoRecibidoChange(value: string) {
+    setMontoRecibido(value)
+    setEditandoMontoRecibido(true)
+    const mr = parseFloat(value) || 0
+    if (mr > 0 && montoNum > 0) {
+      const nuevaTasa = mr / montoNum
+      setTasaCompleta(nuevaTasa)
+      setTasaInput(truncar4(nuevaTasa))
+    }
+  }
+
+  function handleTasaChange(value: string) {
+    setTasaInput(value)
+    const num = parseFloat(value) || 0
+    setTasaCompleta(num)
+    setEditandoMontoRecibido(false)
+    setMontoRecibido('')
+  }
+
+  function handleMontoChange(value: string) {
+    setMonto(value)
+    if (editandoMontoRecibido) {
+      const mr = parseFloat(montoRecibido) || 0
+      const m = parseFloat(value) || 0
+      if (mr > 0 && m > 0) {
+        const nuevaTasa = mr / m
+        setTasaCompleta(nuevaTasa)
+        setTasaInput(truncar4(nuevaTasa))
+      }
+    } else {
+      setMontoRecibido('')
+    }
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('cuenta_origen', origen)
     fd.set('cuenta_destino', destino)
+    fd.set('tasa_cambio', String(tasaCompleta))
     startTransition(async () => {
       const res = await registrarTransferencia(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -304,7 +408,7 @@ function TransferenciaModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-md" role="dialog" aria-modal>
+      <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Transferencia entre cuentas</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
@@ -331,12 +435,51 @@ function TransferenciaModal({
               <div className="input-group ter-col-span-3">
                 <label>Monto {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''} <span className="required">*</span></label>
                 <input className="input" name="monto" type="number" min="0" step="0.01" required
-                  autoFocus placeholder="0.00" />
+                  autoFocus placeholder="0.00" value={monto} onChange={e => handleMontoChange(e.target.value)} />
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Fecha <span className="required">*</span></label>
                 <input className="input" name="fecha" type="date" defaultValue={hoyISO()} required />
               </div>
+
+              {monedasDiferentes && (
+                <>
+                  <div className="input-group ter-col-span-3">
+                    <label>Tasa {cuentaOrigen?.moneda} → {cuentaDestino?.moneda} <span className="required">*</span></label>
+                    <input className="input" name="tasa_cambio" type="number" min="0" step="0.0001" required
+                      placeholder="0.0000" value={tasaInput} onChange={e => handleTasaChange(e.target.value)} />
+                    <span className="input-hint">
+                      {cargandoTasa ? 'Buscando tasa…'
+                        : tasaDisplay
+                          ? (tasaEsInversa
+                              ? `Tasa inversa: ${tasaDisplay}`
+                              : `Tasa vigente: ${tasaDisplay}`)
+                          : 'Sin tasa registrada. Introduce manualmente.'}
+                    </span>
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label>Monto recibido ({cuentaDestino?.moneda})</label>
+                    <input className="input" type="number" min="0" step="0.01"
+                      placeholder="0.00"
+                      value={montoRecibido} onChange={e => handleMontoRecibidoChange(e.target.value)} />
+                    <span className="input-hint">Editable si la tasa real difiere</span>
+                  </div>
+                </>
+              )}
+
+              <div className="input-group ter-col-span-3">
+                <label>Fee de envío {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''}</label>
+                <input className="input" name="fee_envio" type="number" min="0" step="0.01"
+                  placeholder="0.00" value={feeEnvio} onChange={e => setFeeEnvio(e.target.value)} />
+                <span className="input-hint">Comisión por enviar (opcional)</span>
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label>Fee de recepción {cuentaDestino ? `(${cuentaDestino.moneda})` : ''}</label>
+                <input className="input" name="fee_recibo" type="number" min="0" step="0.01"
+                  placeholder="0.00" value={feeRecibo} onChange={e => setFeeRecibo(e.target.value)} />
+                <span className="input-hint">Comisión por recibir (opcional)</span>
+              </div>
+
               <div className="input-group ter-col-full">
                 <label>Concepto</label>
                 <input className="input" name="concepto" placeholder="Transferencia entre cuentas" />
@@ -347,10 +490,27 @@ function TransferenciaModal({
                   placeholder="Referencia, observaciones…" />
               </div>
             </div>
-            <div className="info-banner mt-3">
-              <Info aria-hidden />
-              <p>Por ahora solo entre cuentas de la <strong>misma moneda</strong>. El cambio de divisa (con tasa) llegará más adelante.</p>
-            </div>
+
+            {montoNum > 0 && (
+              <div className="tes-transfer-preview">
+                <strong>Resumen de la transferencia:</strong>
+                <ul>
+                  <li className="tes-preview-egreso">
+                    −{formatMonto(totalOrigen)} {cuentaOrigen?.moneda} de {cuentaOrigen?.nombre}
+                    {feeEnvioNum > 0 && ` (incluye ${formatMonto(feeEnvioNum)} de comisión)`}
+                  </li>
+                  <li className="tes-preview-ingreso">
+                    +{formatMonto(netoDestino)} {cuentaDestino?.moneda} en {cuentaDestino?.nombre}
+                    {feeReciboNum > 0 && ` (después de ${formatMonto(feeReciboNum)} de comisión)`}
+                  </li>
+                  {(feeEnvioNum > 0 || feeReciboNum > 0) && (
+                    <li className="tes-preview-gasto">
+                      Se registrará{feeEnvioNum > 0 && feeReciboNum > 0 ? 'n' : ''} como gasto{feeEnvioNum > 0 && feeReciboNum > 0 ? 's' : ''}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
