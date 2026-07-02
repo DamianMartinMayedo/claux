@@ -4,15 +4,13 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { type CategoriaGasto } from './gastos'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type TipoCuenta      = 'CAJA' | 'BANCO' | 'PASARELA' | 'OTRO'
 export type TipoMovimiento  = 'INGRESO' | 'EGRESO'
 export type OrigenMovimiento = 'MANUAL' | 'COBRO' | 'PAGO' | 'TRANSFERENCIA'
-
-// Categoría para fees de transferencias (pendiente de sistema de categorías)
-const CATEGORIA_FEE_TRANSFERENCIA = 'Comisiones bancarias'
 
 export interface Cuenta {
   cuenta_id:     string
@@ -38,7 +36,8 @@ export interface Movimiento {
   monto:          number
   moneda:         string
   concepto:       string
-  categoria:      string | null
+  categoria:      string | null  // Nombre de categoría (para display)
+  categoria_id:   string | null  // FK a categorias_gastos
   origen:         OrigenMovimiento
   referencia_id:  string | null
   transfer_grupo: string | null
@@ -55,12 +54,13 @@ export interface CuentaConSaldo extends Cuenta {
 }
 
 export interface TesoreriaPageData {
-  cuentas:          CuentaConSaldo[]
-  movimientos:      Movimiento[]
+  cuentas:           CuentaConSaldo[]
+  movimientos:       Movimiento[]
   saldos_por_moneda: { moneda: string; saldo: number }[]
-  empresa_nombres:  Record<string, string>
-  empresas:         { empresa_id: string; nombre: string }[]
-  monedas:          string[]   // códigos de monedas activas
+  empresa_nombres:   Record<string, string>
+  empresas:          { empresa_id: string; nombre: string }[]
+  monedas:           string[]   // códigos de monedas activas
+  categorias_gastos: CategoriaGasto[]  // Para selects de categoría
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
   const empresas    = await obtenerEmpresas()
   const empresa_ids = empresas.map(e => e.empresa_id)
 
-  const [cuRes, movRes, monRes] = await Promise.all([
+  const [cuRes, movRes, monRes, catRes] = await Promise.all([
     db.from('cuentas').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', empresa_ids.length ? empresa_ids : ['__none__'])
@@ -103,6 +103,10 @@ export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
       .eq('client_id', session.client_id)
       .eq('activa', true)
       .order('codigo'),
+    db.from('categorias_gastos').select('*')
+      .eq('client_id', session.client_id)
+      .eq('estado', 'ACTIVO')
+      .order('nombre'),
   ])
 
   const cuentas     = (cuRes.data  ?? []) as Cuenta[]
@@ -150,6 +154,7 @@ export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
     empresa_nombres,
     empresas:          empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     monedas:           ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
+    categorias_gastos: (catRes.data ?? []) as CategoriaGasto[],
   }
 }
 
@@ -256,13 +261,13 @@ export async function registrarMovimiento(
 
   const db = createAdminClient()
 
-  const cuenta_id = (formData.get('cuenta_id') as string)?.trim()
-  const tipo      = (formData.get('tipo')      as string)?.trim() as TipoMovimiento
-  const montoRaw  = parseFloat(formData.get('monto') as string)
-  const fecha     = (formData.get('fecha')     as string)?.trim()
-  const concepto  = (formData.get('concepto')  as string)?.trim()
-  const categoria = (formData.get('categoria') as string)?.trim() || null
-  const notas     = (formData.get('notas')     as string)?.trim() || null
+  const cuenta_id    = (formData.get('cuenta_id') as string)?.trim()
+  const tipo         = (formData.get('tipo')      as string)?.trim() as TipoMovimiento
+  const montoRaw     = parseFloat(formData.get('monto') as string)
+  const fecha        = (formData.get('fecha')     as string)?.trim()
+  const concepto     = (formData.get('concepto')  as string)?.trim()
+  const categoria_id = (formData.get('categoria_id') as string)?.trim() || null
+  const notas        = (formData.get('notas')     as string)?.trim() || null
 
   if (!cuenta_id)                          return { ok: false, error: 'Debes seleccionar una cuenta.' }
   if (!TIPOS_MOVIMIENTO.includes(tipo))    return { ok: false, error: 'Tipo de movimiento no válido.' }
@@ -278,6 +283,19 @@ export async function registrarMovimiento(
   if (!cuenta)        return { ok: false, error: 'Cuenta no encontrada.' }
   if (!cuenta.activa) return { ok: false, error: 'La cuenta está archivada.' }
 
+  // Obtener nombre de categoría si se proporciona categoria_id
+  let categoriaNombre: string | null = null
+  if (categoria_id) {
+    const { data: cat } = await db.from('categorias_gastos')
+      .select('nombre')
+      .eq('categoria_id', categoria_id)
+      .eq('client_id', session.client_id)
+      .eq('estado', 'ACTIVO')
+      .maybeSingle()
+    if (!cat) return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
+    categoriaNombre = cat.nombre
+  }
+
   const { error } = await db.from('movimientos_tesoreria').insert({
     movimiento_id: generarMovimientoId(),
     client_id:     session.client_id,
@@ -288,7 +306,8 @@ export async function registrarMovimiento(
     monto:         montoRaw,
     moneda:        cuenta.moneda,
     concepto,
-    categoria,
+    categoria:     categoriaNombre,
+    categoria_id,
     origen:        'MANUAL',
     notas,
   })
@@ -406,6 +425,17 @@ export async function registrarTransferencia(
     montoDestino = montoRaw * tasa
   }
 
+  // Buscar categoria_id de "Comisiones bancarias" (categoría del sistema)
+  const { data: catComisiones } = await db.from('categorias_gastos')
+    .select('categoria_id, nombre')
+    .eq('client_id', session.client_id)
+    .eq('nombre', 'Comisiones bancarias')
+    .eq('estado', 'ACTIVO')
+    .maybeSingle()
+  
+  const comisionesCategoriaId = catComisiones?.categoria_id ?? null
+  const comisionesNombre = catComisiones?.nombre ?? 'Comisiones bancarias'
+
   const grupo      = `TRF-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
   const fechaFinal = fecha || new Date().toISOString().split('T')[0]
 
@@ -450,16 +480,17 @@ export async function registrarTransferencia(
     const gasto_id = generarRegistroId('GASTO')
     gastosCreados.push(gasto_id)
     const { error } = await db.from('gastos_cobros').insert({
-      registro_id: gasto_id,
-      client_id:   session.client_id,
-      empresa_id:  origen.empresa_id,
-      tipo:        'GASTO',
-      fecha:       fechaFinal,
-      descripcion: `Comisión transferencia ${origen.nombre} → ${destino.nombre}`,
-      categoria:   CATEGORIA_FEE_TRANSFERENCIA,
-      moneda:      origen.moneda,
-      monto:       feeEnvio,
-      updated_at:  new Date().toISOString(),
+      registro_id:  gasto_id,
+      client_id:    session.client_id,
+      empresa_id:   origen.empresa_id,
+      tipo:         'GASTO',
+      fecha:        fechaFinal,
+      descripcion:  `Comisión transferencia ${origen.nombre} → ${destino.nombre}`,
+      categoria:    comisionesNombre,
+      categoria_id: comisionesCategoriaId,
+      moneda:       origen.moneda,
+      monto:        feeEnvio,
+      updated_at:   new Date().toISOString(),
     })
     if (error) return { ok: false, error: `Error al crear gasto de fee envío: ${error.message}` }
 
@@ -473,7 +504,8 @@ export async function registrarTransferencia(
       monto:         feeEnvio,
       moneda:        origen.moneda,
       concepto:      `Comisión transferencia → ${destino.nombre}`,
-      categoria:     CATEGORIA_FEE_TRANSFERENCIA,
+      categoria:     comisionesNombre,
+      categoria_id:  comisionesCategoriaId,
       origen:        'PAGO',
       referencia_id: gasto_id,
       transfer_grupo: grupo,
@@ -485,16 +517,17 @@ export async function registrarTransferencia(
     const gasto_id = generarRegistroId('GASTO')
     gastosCreados.push(gasto_id)
     const { error } = await db.from('gastos_cobros').insert({
-      registro_id: gasto_id,
-      client_id:   session.client_id,
-      empresa_id:  destino.empresa_id,
-      tipo:        'GASTO',
-      fecha:       fechaFinal,
-      descripcion: `Comisión transferencia ${origen.nombre} → ${destino.nombre}`,
-      categoria:   CATEGORIA_FEE_TRANSFERENCIA,
-      moneda:      destino.moneda,
-      monto:       feeRecibo,
-      updated_at:  new Date().toISOString(),
+      registro_id:  gasto_id,
+      client_id:    session.client_id,
+      empresa_id:   destino.empresa_id,
+      tipo:         'GASTO',
+      fecha:        fechaFinal,
+      descripcion:  `Comisión transferencia ${origen.nombre} → ${destino.nombre}`,
+      categoria:    comisionesNombre,
+      categoria_id: comisionesCategoriaId,
+      moneda:       destino.moneda,
+      monto:        feeRecibo,
+      updated_at:   new Date().toISOString(),
     })
     if (error) return { ok: false, error: `Error al crear gasto de fee recepción: ${error.message}` }
 
@@ -508,7 +541,8 @@ export async function registrarTransferencia(
       monto:         feeRecibo,
       moneda:        destino.moneda,
       concepto:      `Comisión transferencia ← ${origen.nombre}`,
-      categoria:     CATEGORIA_FEE_TRANSFERENCIA,
+      categoria:     comisionesNombre,
+      categoria_id:  comisionesCategoriaId,
       origen:        'PAGO',
       referencia_id: gasto_id,
       transfer_grupo: grupo,

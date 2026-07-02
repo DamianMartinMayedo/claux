@@ -901,6 +901,14 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   const total = (lineas ?? []).reduce((s, l) => s + Number(l.neto), 0)
   if (total <= EPS) return { ok: false, error: 'La nómina no tiene importe a pagar.' }
 
+  // Categoría del sistema "Salarios" (sembrada por migración) para el gasto de nómina.
+  const { data: catSalarios } = await db.from('categorias_gastos')
+    .select('categoria_id, nombre')
+    .eq('client_id', session.client_id)
+    .eq('nombre', 'Salarios')
+    .eq('estado', 'ACTIVO')
+    .maybeSingle()
+
   const gasto_id = generarGastoId()
   const { error: gErr } = await db.from('gastos_cobros').insert({
     registro_id: gasto_id,
@@ -908,7 +916,8 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     empresa_id:  nomina.empresa_id,
     tipo:        'GASTO',
     fecha:       nomina.fecha,
-    categoria:   'Salarios',
+    categoria:    catSalarios?.nombre ?? 'Salarios',
+    categoria_id: catSalarios?.categoria_id ?? null,
     descripcion: `Nómina ${nomina.periodo}`,
     moneda:      nomina.moneda,
     monto:       total,

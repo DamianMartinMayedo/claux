@@ -1351,14 +1351,25 @@
    ════════════════════════════════════════════════════════════════════════ */
 
 /* Tarjetas de pendientes (por pagar / por cobrar) */
-.gc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
-.gc-stat-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-4); border-left: 3px solid var(--color-border); }
+/* Badge "Sistema" junto al nombre de una categoría de gasto */
+.gc-cat-sistema { margin-left: var(--space-2); }
+
+.gc-stats { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
+.gc-stat-card {
+  flex: 1 1 240px;
+  display: flex; align-items: center; gap: var(--space-3);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border); border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
 .gc-stat-pagar  { border-left-color: var(--color-error); }
 .gc-stat-cobrar { border-left-color: var(--color-success); }
-.gc-stat-label { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-2); }
-.gc-stat-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--text-base); font-variant-numeric: tabular-nums; padding: 2px 0; }
-.gc-stat-line span { color: var(--color-text-muted); font-size: var(--text-sm); }
-.gc-stat-empty { font-size: var(--text-sm); color: var(--color-text-muted); }
+.gc-stat-label { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); white-space: nowrap; }
+.gc-stat-amounts { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: var(--space-1) var(--space-3); margin-left: auto; }
+.gc-stat-amount { font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gc-stat-amount strong { font-weight: 700; }
+.gc-stat-amount em { font-style: normal; color: var(--color-text-muted); font-size: var(--text-xs); margin-left: 3px; }
+.gc-stat-empty { font-size: var(--text-sm); color: var(--color-text-muted); margin-left: auto; }
 
 /* Liquidación: formulario e historial dentro del modal */
 .gc-liq-form { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-divider); }

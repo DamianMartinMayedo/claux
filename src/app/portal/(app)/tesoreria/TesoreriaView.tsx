@@ -182,9 +182,10 @@ function CuentaModal({
 // ── Modal: Movimiento (ingreso / egreso) ────────────────────────────────────────
 
 function MovimientoModal({
-  cuentas, cuentaInicial, onClose, onSaved,
+  cuentas, categorias, cuentaInicial, onClose, onSaved,
 }: {
   cuentas:       CuentaConSaldo[]
+  categorias:    TesoreriaPageData['categorias_gastos']
   cuentaInicial: string | null
   onClose:       () => void
   onSaved:       () => void
@@ -256,8 +257,10 @@ function MovimientoModal({
               </div>
               <div className="input-group ter-col-full">
                 <label>Categoría</label>
-                <input className="input" name="categoria"
-                  placeholder="Opcional: alquiler, salarios, ventas, servicios…" />
+                <select className="input" name="categoria_id" defaultValue="">
+                  <option value="">— Sin categoría —</option>
+                  {categorias.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                </select>
               </div>
               <div className="input-group ter-col-full">
                 <label>Notas</label>
@@ -802,7 +805,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
           onClose={() => { setCuentaModal(false); setEditCuenta(null) }} onSaved={onSaved} />
       )}
       {movModal && (
-        <MovimientoModal cuentas={cuentasActivas} cuentaInicial={movCuentaIni}
+        <MovimientoModal cuentas={cuentasActivas} categorias={data.categorias_gastos} cuentaInicial={movCuentaIni}
           onClose={() => { setMovModal(false); setMovCuentaIni(null) }} onSaved={onSaved} />
       )}
       {transferModal && (

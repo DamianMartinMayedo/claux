@@ -9,6 +9,19 @@ import { obtenerEmpresas }   from './empresas'
 
 export type TipoRegistro   = 'GASTO' | 'COBRO'
 export type EstadoRegistro = 'PENDIENTE' | 'PARCIAL' | 'LIQUIDADO'
+export type EstadoCategoria = 'ACTIVO' | 'INACTIVO'
+
+export interface CategoriaGasto {
+  categoria_id:  string
+  client_id:     string
+  nombre:        string
+  descripcion:   string | null
+  estado:        EstadoCategoria
+  es_sistema:    boolean
+  uso_count?:    number  // Calculado: cuántos gastos usan esta categoría
+  created_at:    string
+  updated_at:    string
+}
 
 export interface GastoCobro {
   registro_id:  string
@@ -18,7 +31,8 @@ export interface GastoCobro {
   fecha:        string
   vencimiento:  string | null
   tercero_id:   string | null
-  categoria:    string | null
+  categoria:    string | null  // nombre desnormalizado (display / reportes)
+  categoria_id: string | null  // FK a categorias_gastos
   descripcion:  string
   moneda:       string
   monto:        number
@@ -44,13 +58,13 @@ export interface GastoCobroConSaldo extends GastoCobro {
 }
 
 export interface GastosCobrosPageData {
-  registros:       GastoCobroConSaldo[]
-  terceros:        { tercero_id: string; nombre: string; tipo: string; empresa_id: string; moneda_defecto: string | null }[]
-  cuentas:         { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }[]
-  monedas:         string[]
-  categorias:      string[]
-  empresa_nombres: Record<string, string>
-  empresas:        { empresa_id: string; nombre: string }[]
+  registros:         GastoCobroConSaldo[]
+  terceros:          { tercero_id: string; nombre: string; tipo: string; empresa_id: string; moneda_defecto: string | null }[]
+  cuentas:           { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }[]
+  monedas:           string[]
+  categorias_gastos: CategoriaGasto[]  // Lista de categorías de gastos
+  empresa_nombres:   Record<string, string>
+  empresas:          { empresa_id: string; nombre: string }[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,6 +74,9 @@ const EPS = 0.005
 function generarRegistroId(tipo: TipoRegistro): string {
   const pre = tipo === 'GASTO' ? 'GAS' : 'COB'
   return `${pre}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
+}
+function generarCategoriaGastoId(): string {
+  return `CATGAS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 function generarMovimientoId(): string {
   return `MOV-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
@@ -84,7 +101,7 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [regRes, movRes, cuRes, terRes, monRes] = await Promise.all([
+  const [regRes, movRes, cuRes, terRes, monRes, catRes] = await Promise.all([
     db.from('gastos_cobros').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -108,6 +125,10 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
       .eq('client_id', session.client_id)
       .eq('activa', true)
       .order('codigo'),
+    db.from('categorias_gastos').select('*')
+      .eq('client_id', session.client_id)
+      .order('estado', { ascending: true })  // ACTIVO primero
+      .order('nombre'),
   ])
 
   const registros = (regRes.data ?? []) as GastoCobro[]
@@ -145,22 +166,36 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
     }
   })
 
-  // Categorías existentes (para datalist)
-  const categorias = Array.from(
-    new Set(registros.map(r => r.categoria).filter((c): c is string => !!c)),
-  ).sort()
+  // Categorías de gastos con conteo de uso
+  const categoriasRaw = (catRes.data ?? []) as CategoriaGasto[]
+  
+  // Contar uso de cada categoría en gastos_cobros
+  const usoPorCategoria = new Map<string, number>()
+  for (const r of registros) {
+    if (r.categoria_id) {
+      usoPorCategoria.set(r.categoria_id, (usoPorCategoria.get(r.categoria_id) ?? 0) + 1)
+    }
+  }
+  
+  // Agregar uso_count y ordenar: ACTIVO primero, luego por uso descendente
+  const categorias_gastos = categoriasRaw
+    .map(c => ({ ...c, uso_count: usoPorCategoria.get(c.categoria_id) ?? 0 }))
+    .sort((a, b) => {
+      if (a.estado !== b.estado) return a.estado === 'ACTIVO' ? -1 : 1
+      return b.uso_count - a.uso_count  // Más usadas primero
+    })
 
   const empresa_nombres: Record<string, string> = {}
   for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
 
   return {
-    registros:  registrosConSaldo,
-    terceros:   (terRes.data ?? []) as GastosCobrosPageData['terceros'],
-    cuentas:    cuentas.filter(c => c.activa).map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda })),
-    monedas:    ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
-    categorias,
+    registros:         registrosConSaldo,
+    terceros:          (terRes.data ?? []) as GastosCobrosPageData['terceros'],
+    cuentas:           cuentas.filter(c => c.activa).map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda })),
+    monedas:           ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
+    categorias_gastos,
     empresa_nombres,
-    empresas:   empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
+    empresas:          empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
   }
 }
 
@@ -181,7 +216,7 @@ export async function guardarGastoCobro(
   const fecha       = (formData.get('fecha')       as string)?.trim() || hoy()
   const vencimiento = (formData.get('vencimiento') as string)?.trim() || null
   const tercero_id  = (formData.get('tercero_id')  as string)?.trim() || null
-  const categoria   = (formData.get('categoria')   as string)?.trim() || null
+  const categoria_id = (formData.get('categoria_id') as string)?.trim() || null
   const descripcion = (formData.get('descripcion') as string)?.trim()
   const moneda      = (formData.get('moneda')      as string)?.trim()
   const montoRaw    = parseFloat(formData.get('monto') as string)
@@ -197,6 +232,21 @@ export async function guardarGastoCobro(
     return { ok: false, error: 'Empresa no válida.' }
   }
 
+  // Validar categoria_id y capturar su nombre (desnormalizado para reportes/listados)
+  let categoriaNombre: string | null = null
+  if (categoria_id) {
+    const { data: cat } = await db.from('categorias_gastos')
+      .select('nombre')
+      .eq('categoria_id', categoria_id)
+      .eq('client_id', session.client_id)
+      .eq('estado', 'ACTIVO')
+      .maybeSingle()
+    if (!cat) {
+      return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
+    }
+    categoriaNombre = cat.nombre
+  }
+
   if (!registro_id) {
     if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
     const { error } = await db.from('gastos_cobros').insert({
@@ -207,7 +257,8 @@ export async function guardarGastoCobro(
       fecha,
       vencimiento,
       tercero_id,
-      categoria,
+      categoria:   categoriaNombre,
+      categoria_id,
       descripcion,
       moneda,
       monto:       montoRaw,
@@ -218,7 +269,7 @@ export async function guardarGastoCobro(
   } else {
     // Editar — la moneda no se cambia (las liquidaciones quedarían inconsistentes)
     const { error } = await db.from('gastos_cobros')
-      .update({ fecha, vencimiento, tercero_id, categoria, descripcion, monto: montoRaw, notas, updated_at: new Date().toISOString() })
+      .update({ fecha, vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, monto: montoRaw, notas, updated_at: new Date().toISOString() })
       .eq('registro_id', registro_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
@@ -278,11 +329,22 @@ export async function registrarLiquidacion(
   if (isNaN(montoRaw) || montoRaw <= 0)  return { ok: false, error: 'El monto debe ser un número positivo.' }
 
   const { data: registro } = await db.from('gastos_cobros')
-    .select('tipo, descripcion, categoria, moneda, monto')
+    .select('tipo, descripcion, categoria_id, moneda, monto')
     .eq('registro_id', registro_id)
     .eq('client_id', session.client_id)
     .single()
   if (!registro) return { ok: false, error: 'Registro no encontrado.' }
+
+  // Obtener nombre de categoría si existe
+  let categoriaNombre: string | null = null
+  if (registro.categoria_id) {
+    const { data: cat } = await db.from('categorias_gastos')
+      .select('nombre')
+      .eq('categoria_id', registro.categoria_id)
+      .eq('client_id', session.client_id)
+      .maybeSingle()
+    categoriaNombre = cat?.nombre ?? null
+  }
 
   const { data: cuenta } = await db.from('cuentas')
     .select('empresa_id, moneda, activa')
@@ -317,7 +379,8 @@ export async function registrarLiquidacion(
     monto:         montoRaw,
     moneda:        registro.moneda,
     concepto:      `${esGasto ? 'Pago' : 'Cobro'} · ${registro.descripcion}`,
-    categoria:     registro.categoria,
+    categoria:     categoriaNombre,  // Nombre de la categoría para display
+    categoria_id:  registro.categoria_id,  // FK para referencia
     origen:        esGasto ? 'PAGO' : 'COBRO',
     referencia_id: registro_id,
     notas,
@@ -364,5 +427,126 @@ export async function anularLiquidacion(movimiento_id: string): Promise<{ ok: bo
   revalidatePath('/portal/nomina')
   revalidatePath('/portal/cxp')
   revalidatePath('/portal/reportes')
+  return { ok: true }
+}
+
+// ── CRUD de categorías de gastos ──────────────────────────────────────────────
+
+export async function guardarCategoriaGasto(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; categoria_id?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+
+  const categoria_id_form = (formData.get('categoria_id') as string)?.trim()
+  const nombre            = (formData.get('nombre') as string)?.trim()
+  const descripcion       = (formData.get('descripcion') as string)?.trim() || null
+
+  if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
+
+  if (!categoria_id_form) {
+    // Crear nueva categoría
+    const categoria_id = generarCategoriaGastoId()
+    const { error } = await db.from('categorias_gastos').insert({
+      categoria_id,
+      client_id:   session.client_id,
+      nombre,
+      descripcion,
+      estado:      'ACTIVO',
+      es_sistema:  false,
+      updated_at:  new Date().toISOString(),
+    })
+    if (error) {
+      if (error.code === '23505') {  // Unique violation
+        return { ok: false, error: 'Ya existe una categoría con ese nombre.' }
+      }
+      return { ok: false, error: error.message }
+    }
+    revalidatePath('/portal/gastos')
+    return { ok: true, categoria_id }
+  } else {
+    // Editar categoría existente
+    const { data: cat } = await db.from('categorias_gastos')
+      .select('es_sistema')
+      .eq('categoria_id', categoria_id_form)
+      .eq('client_id', session.client_id)
+      .maybeSingle()
+    
+    if (!cat) return { ok: false, error: 'Categoría no encontrada.' }
+
+    const { error } = await db.from('categorias_gastos')
+      .update({ nombre, descripcion, updated_at: new Date().toISOString() })
+      .eq('categoria_id', categoria_id_form)
+      .eq('client_id', session.client_id)
+    
+    if (error) {
+      if (error.code === '23505') {
+        return { ok: false, error: 'Ya existe una categoría con ese nombre.' }
+      }
+      return { ok: false, error: error.message }
+    }
+    // Propagar el nuevo nombre a las filas desnormalizadas (reportes/listados).
+    await db.from('gastos_cobros').update({ categoria: nombre })
+      .eq('client_id', session.client_id).eq('categoria_id', categoria_id_form)
+    await db.from('movimientos_tesoreria').update({ categoria: nombre })
+      .eq('client_id', session.client_id).eq('categoria_id', categoria_id_form)
+    revalidatePath('/portal/gastos')
+    revalidatePath('/portal/tesoreria')
+    revalidatePath('/portal/reportes')
+    return { ok: true, categoria_id: categoria_id_form }
+  }
+}
+
+export async function archivarCategoriaGasto(
+  categoria_id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+
+  // Verificar que no sea categoría del sistema
+  const { data: cat } = await db.from('categorias_gastos')
+    .select('es_sistema')
+    .eq('categoria_id', categoria_id)
+    .eq('client_id', session.client_id)
+    .maybeSingle()
+
+  if (!cat) return { ok: false, error: 'Categoría no encontrada.' }
+  if (cat.es_sistema) {
+    return { ok: false, error: 'Las categorías del sistema no se pueden archivar.' }
+  }
+
+  const { error } = await db.from('categorias_gastos')
+    .update({ estado: 'INACTIVO', updated_at: new Date().toISOString() })
+    .eq('categoria_id', categoria_id)
+    .eq('client_id', session.client_id)
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/gastos')
+  return { ok: true }
+}
+
+export async function restaurarCategoriaGasto(
+  categoria_id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const { error } = await createAdminClient()
+    .from('categorias_gastos')
+    .update({ estado: 'ACTIVO', updated_at: new Date().toISOString() })
+    .eq('categoria_id', categoria_id)
+    .eq('client_id', session.client_id)
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/gastos')
   return { ok: true }
 }

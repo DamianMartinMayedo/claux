@@ -8,14 +8,18 @@ import {
   eliminarGastoCobro,
   registrarLiquidacion,
   anularLiquidacion,
+  guardarCategoriaGasto,
+  archivarCategoriaGasto,
+  restaurarCategoriaGasto,
   type GastoCobro,
   type GastoCobroConSaldo,
+  type CategoriaGasto,
   type TipoRegistro,
   type EstadoRegistro,
   type GastosCobrosPageData,
 } from '@/app/actions/portal/gastos'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { DollarSign, Pencil, Plus, Receipt, Trash2, X } from 'lucide-react'
+import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
@@ -69,6 +73,17 @@ function RegistroModal({
     [data.terceros, tipo],
   )
 
+  // Categorías activas para el select; incluye la del registro aunque esté
+  // archivada, para no perderla al editar.
+  const categoriasOpts = useMemo(() => {
+    const activas = data.categorias_gastos.filter(c => c.estado === 'ACTIVO')
+    if (registro?.categoria_id && !activas.some(c => c.categoria_id === registro.categoria_id)) {
+      const actual = data.categorias_gastos.find(c => c.categoria_id === registro.categoria_id)
+      if (actual) return [actual, ...activas]
+    }
+    return activas
+  }, [data.categorias_gastos, registro])
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -121,12 +136,10 @@ function RegistroModal({
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Categoría</label>
-                <input className="input" name="categoria" list="gc-categorias"
-                  defaultValue={registro?.categoria ?? ''}
-                  placeholder={tipo === 'GASTO' ? 'Alquiler, salarios, insumos…' : 'Ventas, servicios…'} />
-                <datalist id="gc-categorias">
-                  {data.categorias.map(c => <option key={c} value={c} />)}
-                </datalist>
+                <select className="input" name="categoria_id" defaultValue={registro?.categoria_id ?? ''}>
+                  <option value="">— Sin categoría —</option>
+                  {categoriasOpts.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                </select>
               </div>
 
               <div className="input-group ter-col-span-2">
@@ -347,6 +360,107 @@ function ConfirmEliminar({
   )
 }
 
+// ── Tab ─────────────────────────────────────────────────────────────────────────
+
+function Tab({ active, onClick, icon, label, count }: {
+  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count: number
+}) {
+  return (
+    <button onClick={onClick} className={`prd-tab${active ? ' active' : ''}`}>
+      {icon}
+      {label}
+      <span className="prd-tab-count">{count}</span>
+    </button>
+  )
+}
+
+// ── Modal: crear / editar categoría de gasto ─────────────────────────────────────
+
+function CategoriaModal({ categoria, onClose, onSaved }: {
+  categoria: CategoriaGasto | null; onClose: () => void; onSaved: () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const isEdit = !!categoria
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    startTransition(async () => {
+      const res = await guardarCategoriaGasto(fd)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      onSaved()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-sm" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">{isEdit ? 'Editar categoría' : 'Nueva categoría'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {categoria && <input type="hidden" name="categoria_id" value={categoria.categoria_id} />}
+          <div className="modal-body">
+            {categoria?.es_sistema && (
+              <div className="alert alert-info mb-3">
+                Categoría del sistema: CLAUX la asigna sola (comisiones de transferencia, nóminas…). Puedes renombrarla, pero no archivarla.
+              </div>
+            )}
+            <div className="input-group">
+              <label>Nombre <span className="required">*</span></label>
+              <input className="input" name="nombre" required autoFocus
+                defaultValue={categoria?.nombre ?? ''} placeholder="Ej: Alquiler, Insumos, Servicios…" />
+            </div>
+            <div className="input-group">
+              <label>Descripción</label>
+              <textarea className="input input-textarea" name="descripcion" rows={2}
+                defaultValue={categoria?.descripcion ?? ''} placeholder="Descripción opcional…" />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={isPending}>
+              {isPending
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
+                : isEdit ? 'Guardar cambios' : 'Crear categoría'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Confirmación archivar categoría ──────────────────────────────────────────────
+
+function ConfirmArchivarCat({ nombre, onConfirm, onClose, isPending }: {
+  nombre: string; onConfirm: () => void; onClose: () => void; isPending: boolean
+}) {
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-sm" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Archivar categoría</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="modal-body-text">
+            ¿Archivar <strong>{nombre}</strong>? Dejará de aparecer al clasificar gastos nuevos,
+            pero los registros que ya la usan la conservan y podrás restaurarla cuando quieras.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Archivando…</> : 'Archivar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
 export default function GastosView({ data }: { data: GastosCobrosPageData }) {
@@ -363,6 +477,11 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
   const [tipoNuevo,     setTipoNuevo]      = useState<TipoRegistro>('GASTO')
   const [liquidar,      setLiquidar]       = useState<GastoCobroConSaldo | null>(null)
   const [confirmDel,    setConfirmDel]     = useState<GastoCobroConSaldo | null>(null)
+
+  const [tab,        setTab]        = useState<'gastos' | 'categorias'>('gastos')
+  const [catModal,   setCatModal]   = useState(false)
+  const [editCat,    setEditCat]    = useState<CategoriaGasto | null>(null)
+  const [confirmCat, setConfirmCat] = useState<CategoriaGasto | null>(null)
 
   const [filtroTipo,    setFiltroTipo]    = useState('')
   const [filtroEstado,  setFiltroEstado]  = useState('')
@@ -410,6 +529,22 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
     })
   }
 
+  const categoriasActivas = data.categorias_gastos.filter(c => c.estado === 'ACTIVO')
+  function openCreateCat()               { setEditCat(null); setCatModal(true) }
+  function openEditCat(c: CategoriaGasto) { setEditCat(c);   setCatModal(true) }
+  function onCatSaved()                  { setCatModal(false); setEditCat(null); router.refresh() }
+  function handleRestaurarCat(c: CategoriaGasto) {
+    startTransition(async () => { await restaurarCategoriaGasto(c.categoria_id); router.refresh() })
+  }
+  function confirmarArchivarCat() {
+    if (!confirmCat) return
+    startTransition(async () => {
+      const res = await archivarCategoriaGasto(confirmCat.categoria_id)
+      if (!res.ok) toastError(res.error ?? 'Error inesperado.')
+      setConfirmCat(null); router.refresh()
+    })
+  }
+
   // Re-sincroniza el registro abierto en Liquidar tras un refresh
   const liquidarVivo = liquidar
     ? data.registros.find(r => r.registro_id === liquidar.registro_id) ?? null
@@ -427,30 +562,50 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
           </div>
           <p className="page-subtitle">Ingresos y egresos directos (no facturados). Los pagos se reflejan en Tesorería.</p>
         </div>
-        <div className="tes-header-actions">
-          <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
-          <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
-        </div>
+        {tab === 'gastos' ? (
+          <div className="tes-header-actions">
+            <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
+            <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
+          </div>
+        ) : (
+          <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
+        )}
       </div>
+
+      {/* Tabs */}
+      <div className="prd-tabs">
+        <Tab active={tab === 'gastos'}     onClick={() => setTab('gastos')}     icon={<Receipt size={15} strokeWidth={2} />} label="Gastos y cobros" count={data.registros.length} />
+        <Tab active={tab === 'categorias'} onClick={() => setTab('categorias')} icon={<Tag size={15} strokeWidth={2} />}     label="Categorías"     count={categoriasActivas.length} />
+      </div>
+
+      {tab === 'gastos' && (<>
 
       {/* Pendientes */}
       {(pendientes.porPagar.length > 0 || pendientes.porCobrar.length > 0) && (
         <div className="gc-stats">
           <div className="gc-stat-card gc-stat-pagar">
-            <div className="gc-stat-label">Por pagar</div>
+            <span className="gc-stat-label">Por pagar</span>
             {pendientes.porPagar.length === 0
-              ? <div className="gc-stat-empty">Sin gastos pendientes</div>
-              : pendientes.porPagar.map(p => (
-                  <div key={p.moneda} className="gc-stat-line"><span>{p.moneda}</span><strong>{formatMonto(p.monto)}</strong></div>
-                ))}
+              ? <span className="gc-stat-empty">Sin pendientes</span>
+              : (
+                <span className="gc-stat-amounts">
+                  {pendientes.porPagar.map(p => (
+                    <span key={p.moneda} className="gc-stat-amount"><strong>{formatMonto(p.monto)}</strong><em>{p.moneda}</em></span>
+                  ))}
+                </span>
+              )}
           </div>
           <div className="gc-stat-card gc-stat-cobrar">
-            <div className="gc-stat-label">Por cobrar</div>
+            <span className="gc-stat-label">Por cobrar</span>
             {pendientes.porCobrar.length === 0
-              ? <div className="gc-stat-empty">Sin cobros pendientes</div>
-              : pendientes.porCobrar.map(p => (
-                  <div key={p.moneda} className="gc-stat-line"><span>{p.moneda}</span><strong>{formatMonto(p.monto)}</strong></div>
-                ))}
+              ? <span className="gc-stat-empty">Sin pendientes</span>
+              : (
+                <span className="gc-stat-amounts">
+                  {pendientes.porCobrar.map(p => (
+                    <span key={p.moneda} className="gc-stat-amount"><strong>{formatMonto(p.monto)}</strong><em>{p.moneda}</em></span>
+                  ))}
+                </span>
+              )}
           </div>
         </div>
       )}
@@ -539,6 +694,71 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
         )}
       </div>
 
+      </>)}
+
+      {/* ══ TAB CATEGORÍAS ══ */}
+      {tab === 'categorias' && (
+        <div className="card card-table">
+          <div className="mon-card-header">
+            <h2 className="mon-section-title">Categorías de gastos</h2>
+            <span className="card-count">{data.categorias_gastos.length} total</span>
+          </div>
+          {data.categorias_gastos.length === 0 ? (
+            <div className="mon-empty">
+              <Tag size={36} strokeWidth={1} opacity={0.25} />
+              <p>Aún no hay categorías. Crea la primera para clasificar tus gastos.</p>
+            </div>
+          ) : (
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th className="text-center">Usos</th>
+                    <th>Estado</th>
+                    <th className="alm-col-act"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.categorias_gastos.map(c => (
+                    <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : undefined}>
+                      <td>
+                        <strong className="text-sm-bold">{c.nombre}</strong>
+                        {c.es_sistema && <span className="badge badge-neutral gc-cat-sistema">Sistema</span>}
+                      </td>
+                      <td className="text-sm-muted">{c.descripcion ?? '—'}</td>
+                      <td className="text-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
+                      <td>
+                        <span className={`badge ${c.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
+                          {c.estado === 'ACTIVO' ? 'Activa' : 'Archivada'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="ter-actions">
+                          {c.estado === 'ACTIVO' ? (
+                            <>
+                              <button className="ter-action-btn" title="Editar" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /></button>
+                              {!c.es_sistema && (
+                                <button className="ter-action-btn ter-action-danger" title="Archivar"
+                                  onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /></button>
+                              )}
+                            </>
+                          ) : (
+                            <button className="ter-action-btn ter-action-restore" title="Restaurar"
+                              onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /></button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Modales */}
       {modalRegistro && (
         <RegistroModal registro={editRegistro} tipoInicial={tipoNuevo} data={data}
@@ -551,6 +771,14 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
       {confirmDel && (
         <ConfirmEliminar registro={confirmDel} onConfirm={confirmarEliminar}
           onClose={() => setConfirmDel(null)} isPending={isPending} />
+      )}
+      {catModal && (
+        <CategoriaModal categoria={editCat}
+          onClose={() => { setCatModal(false); setEditCat(null) }} onSaved={onCatSaved} />
+      )}
+      {confirmCat && (
+        <ConfirmArchivarCat nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}
+          onClose={() => setConfirmCat(null)} isPending={isPending} />
       )}
     </div>
   )
