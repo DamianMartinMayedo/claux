@@ -312,13 +312,13 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                     <th>Rol</th>
                     <th>Empresas</th>
                     <th>Estado</th>
-                    {!soloLectura && <th className="usr-col-act" />}
+                    {!soloLectura && <th className="col-actions" />}
                   </tr>
                 </thead>
                 <tbody>
                   {usuarios.map(u => (
                     <tr key={u.user_id} className={u.estado === 'INACTIVO' ? 'row-inactive' : ''}>
-                      <td>
+                      <td data-label="Usuario">
                         <div className="usr-cell-email">
                           <div className="usr-avatar">{(u.nombre || u.email).charAt(0).toUpperCase()}</div>
                           <div>
@@ -327,8 +327,8 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                           </div>
                         </div>
                       </td>
-                      <td><RolBadge rol={u.rol} soloLectura={u.solo_lectura} /></td>
-                      <td>
+                      <td data-label="Rol"><RolBadge rol={u.rol} soloLectura={u.solo_lectura} /></td>
+                      <td data-label="Empresas">
                         {u.rol === 'admin_empresa' ? (
                           <span className="text-xs-muted">Todas</span>
                         ) : u.empresas.length === 0 ? (
@@ -346,13 +346,13 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Estado">
                         <span className={`usr-estado ${u.estado === 'ACTIVO' ? 'usr-estado-activo' : 'usr-estado-inactivo'}`}>
                           {u.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
                       {!soloLectura && (
-                        <td>
+                        <td className="col-actions">
                           <div className="ter-actions">
                             <button
                               className="btn btn-secondary btn-xs"
@@ -396,16 +396,16 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                 <thead>
                   <tr>
                     <th>Acción</th>
-                    <th className="text-center">Administrador</th>
-                    <th className="text-center">Operador</th>
+                    <th className="col-center">Administrador</th>
+                    <th className="col-center">Operador</th>
                   </tr>
                 </thead>
                 <tbody>
                   {PERMISOS.map(p => (
                     <tr key={p.accion}>
-                      <td>{p.accion}</td>
-                      <td className="text-center">{p.admin    ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
-                      <td className="text-center">{p.operador ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
+                      <td data-label="Acción">{p.accion}</td>
+                      <td data-label="Administrador" className="col-center">{p.admin    ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
+                      <td data-label="Operador" className="col-center">{p.operador ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
                     </tr>
                   ))}
                 </tbody>

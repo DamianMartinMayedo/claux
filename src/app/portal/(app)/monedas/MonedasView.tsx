@@ -675,34 +675,34 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                 <thead>
                   <tr>
                     <th>Par</th>
-                    <th className="text-right">Tasa</th>
+                    <th className="col-num">Tasa</th>
                     <th>Fuente</th>
                     <th>Actualizada</th>
-                    {esAdmin && <th className="mon-col-act" />}
+                    {esAdmin && <th className="col-actions" />}
                   </tr>
                 </thead>
                 <tbody>
                   {localPares.map(p => (
                     <tr key={p.par_id}>
-                      <td>
+                      <td data-label="Par">
                         <span className="mon-par">
                           <strong>{p.origen}</strong>
                           <ArrowRight size={12} strokeWidth={2} className="text-muted flex-shrink-0" />
                           <strong>{p.destino}</strong>
                         </span>
                       </td>
-                      <td className="text-right mon-tasa-val">
+                      <td data-label="Tasa" className="col-num mon-tasa-val">
                         {fmtTasa(p.tasa)}
                       </td>
-                      <td>
+                      <td data-label="Fuente">
                         <span className="mon-fuente-dot" style={{ '--dot-color': FUENTE_COLOR[p.fuente] } as React.CSSProperties} />
                         <span className="text-xs">{FUENTE_LABEL[p.fuente]}</span>
                       </td>
-                      <td className="text-xs-muted">
+                      <td data-label="Actualizada" className="text-xs-muted">
                         {p.fecha ?? '—'}
                       </td>
                       {esAdmin && (
-                        <td>
+                        <td className="col-actions">
                           <button
                             className="btn btn-secondary btn-xs"
                             title="Configurar par"

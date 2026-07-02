@@ -125,20 +125,20 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                   <th>Fecha</th>
                   <th>Período</th>
                   <th>Concepto</th>
-                  <th className="text-right">Monto</th>
+                  <th className="col-num">Monto</th>
                   <th>Método</th>
                 </tr>
               </thead>
               <tbody>
                 {data.pagos.map(p => (
                   <tr key={p.pago_id}>
-                    <td>
+                    <td data-label="ID">
                       <span className="fac-pago-id">{p.pago_id}</span>
                     </td>
-                    <td className="text-sm-nowrap">
+                    <td data-label="Fecha" className="text-sm-nowrap">
                       {fmt(p.fecha)}
                     </td>
-                    <td>
+                    <td data-label="Período">
                       {p.fecha_inicio_periodo && p.fecha_fin_periodo ? (
                         <span className="fac-periodo">
                           {fmt(p.fecha_inicio_periodo)}
@@ -149,13 +149,13 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                         <span className="text-sm-muted">—</span>
                       )}
                     </td>
-                    <td className="text-sm-muted">
+                    <td data-label="Concepto" className="text-sm-muted">
                       {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
                     </td>
-                    <td className="text-right">
+                    <td data-label="Monto" className="col-num">
                       <span className="fac-monto">{fmtUsd(p.monto_usd)}</span>
                     </td>
-                    <td>
+                    <td data-label="Método">
                       <span className="fac-metodo">{METODO_LABEL[p.metodo] ?? p.metodo}</span>
                     </td>
                   </tr>

@@ -1,6 +1,7 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
+import { RowActions } from '@/components/portal/RowActions'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
@@ -383,7 +384,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                       <th>Categoría</th>
                       <th>Precios de venta</th>
                       <th>Stock</th>
-                      <th className="prd-col-act"></th>
+                      <th className="col-actions"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -396,7 +397,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           onClick={() => router.push(`/portal/productos/${p.producto_id}`)}
                         >
                           {/* Nombre */}
-                          <td>
+                          <td data-label="Nombre">
                             <Link
                               href={`/portal/productos/${p.producto_id}`}
                               className="table-name-link"
@@ -410,7 +411,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           </td>
 
                           {/* Código */}
-                          <td>
+                          <td data-label="Código">
                             <span className="code-value">{p.codigo}</span>
                             {p.codigo_proveedor && (
                               <div className="table-cell-secondary">{p.codigo_proveedor}</div>
@@ -418,19 +419,19 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           </td>
 
                           {/* Tipo */}
-                          <td>
+                          <td data-label="Tipo">
                             <span className={`badge ${p.tipo === 'PRODUCTO' ? 'badge-info' : 'badge-purple'}`}>
                               {p.tipo === 'PRODUCTO' ? 'Producto' : 'Servicio'}
                             </span>
                           </td>
 
                           {/* Categoría */}
-                          <td className="text-sm-muted">
+                          <td data-label="Categoría" className="text-sm-muted">
                             {p.categoria_id ? (categoriaMap[p.categoria_id] ?? '—') : '—'}
                           </td>
 
                           {/* Precios */}
-                          <td>
+                          <td data-label="Precios de venta">
                             <div className="prd-precios-cell">
                               {Object.entries(p.precios).length === 0
                                 ? <span className="text-muted">—</span>
@@ -444,7 +445,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           </td>
 
                           {/* Stock */}
-                          <td>
+                          <td data-label="Stock">
                             {p.tipo === 'PRODUCTO' ? (
                               <div className="prd-stock-cell">
                                 <span className={`prd-stock-value${stockBajo ? ' prd-stock-low' : ''}`}>
@@ -462,30 +463,30 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           </td>
 
                           {/* Acciones */}
-                          <td>
-                            <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
+                          <td className="col-actions">
+                            <RowActions>
                               {p.estado === 'ACTIVO' ? (
                                 <>
                                   {p.tipo === 'PRODUCTO' && (
-                                    <button className="ter-action-btn" title="Ajustar stock" onClick={() => setStockProducto(p)}>
-                                      <Layers size={15} strokeWidth={2} />
+                                    <button className="row-actions-item" onClick={() => setStockProducto(p)}>
+                                      <Layers size={15} strokeWidth={2} /> Ajustar stock
                                     </button>
                                   )}
-                                  <button className="ter-action-btn" title="Editar" onClick={() => openEdit(p)}>
-                                    <Pencil size={15} strokeWidth={2} />
+                                  <button className="row-actions-item" onClick={() => openEdit(p)}>
+                                    <Pencil size={15} strokeWidth={2} /> Editar
                                   </button>
-                                  <button className="ter-action-btn ter-action-danger" title="Archivar"
+                                  <button className="row-actions-item row-actions-item-danger"
                                     onClick={() => setConfirmProd(p)} disabled={isPending}>
-                                    <Archive size={15} strokeWidth={2} />
+                                    <Archive size={15} strokeWidth={2} /> Archivar
                                   </button>
                                 </>
                               ) : (
-                                <button className="ter-action-btn ter-action-restore" title="Restaurar"
+                                <button className="row-actions-item"
                                   onClick={() => handleRestaurar(p)} disabled={isPending}>
-                                  <RotateCcw size={15} strokeWidth={2} />
+                                  <RotateCcw size={15} strokeWidth={2} /> Restaurar
                                 </button>
                               )}
-                            </div>
+                            </RowActions>
                           </td>
                         </tr>
                       )
@@ -518,9 +519,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                   <tr>
                     <th>Nombre</th>
                     <th>Descripción</th>
-                    <th className="prd-cat-col-count text-center">Productos</th>
+                    <th className="prd-cat-col-count col-center">Productos</th>
                     <th>Estado</th>
-                    <th className="prd-col-act-sm"></th>
+                    <th className="col-actions"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -528,9 +529,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                     const count = productosPorCategoria[c.categoria_id] ?? 0
                     return (
                       <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : ''}>
-                        <td><strong className="text-sm-bold">{c.nombre}</strong></td>
-                        <td className="text-sm-muted">{c.descripcion ?? '—'}</td>
-                        <td className="text-center">
+                        <td data-label="Nombre"><strong className="text-sm-bold">{c.nombre}</strong></td>
+                        <td data-label="Descripción" className="text-sm-muted cell-truncate">{c.descripcion ?? '—'}</td>
+                        <td data-label="Productos" className="col-center">
                           {count > 0 ? (
                             <button
                               className="prd-cat-count-btn"
@@ -543,24 +544,24 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                             <span className="text-sm-muted">—</span>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Estado">
                           <span className={`badge ${c.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
                             {c.estado === 'ACTIVO' ? 'Activa' : 'Archivada'}
                           </span>
                         </td>
-                        <td>
-                          <div className="ter-actions">
+                        <td className="col-actions">
+                          <RowActions>
                             {c.estado === 'ACTIVO' ? (
                               <>
-                                <button className="ter-action-btn" title="Editar" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /></button>
-                                <button className="ter-action-btn ter-action-danger" title="Archivar"
-                                  onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /></button>
+                                <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                                <button className="row-actions-item row-actions-item-danger"
+                                  onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
                               </>
                             ) : (
-                              <button className="ter-action-btn ter-action-restore" title="Restaurar"
-                                onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /></button>
+                              <button className="row-actions-item"
+                                onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
                             )}
-                          </div>
+                          </RowActions>
                         </td>
                       </tr>
                     )
@@ -569,11 +570,11 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                   {/* Fila Sin categoría */}
                   {sinCategoriaCount > 0 && (
                     <tr className="prd-cat-row-special">
-                      <td>
+                      <td data-label="Nombre">
                         <span className="text-sm-muted text-italic">Sin categoría</span>
                       </td>
-                      <td className="text-sm-muted">Productos sin categoría asignada</td>
-                      <td className="text-center">
+                      <td data-label="Descripción" className="text-sm-muted">Productos sin categoría asignada</td>
+                      <td data-label="Productos" className="col-center">
                         <button
                           className="prd-cat-count-btn prd-cat-count-warn"
                           onClick={() => { setTab('productos'); setFiltroCat('__sin_categoria__') }}
@@ -582,8 +583,8 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           {sinCategoriaCount}
                         </button>
                       </td>
-                      <td><span className="prd-cat-badge-revisar">Revisar</span></td>
-                      <td />
+                      <td data-label="Estado"><span className="prd-cat-badge-revisar">Revisar</span></td>
+                      <td className="col-actions" />
                     </tr>
                   )}
                 </tbody>

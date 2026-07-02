@@ -97,10 +97,10 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
               <th>Nombre</th>
               <th>Tipo</th>
               <th>Páginas</th>
-              <th className="text-right">Fundador</th>
-              <th className="text-right">Estándar</th>
+              <th className="col-num">Fundador</th>
+              <th className="col-num">Estándar</th>
               <th>Activo</th>
-              <th className="mod-col-act"></th>
+              <th className="col-actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -116,23 +116,23 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
                 <td className="mod-drag-cell">
                   <span className="mod-drag-handle" title="Arrastrar para reordenar">⠿</span>
                 </td>
-                <td>
+                <td data-label="Nombre">
                   <span className="table-empresa">{m.nombre}</span>
                 </td>
-                <td>
+                <td data-label="Tipo">
                   <span className={`mod-tipo-badge mod-tipo-${m.tipo === 'funcionalidad' ? 'func' : m.tipo === 'addon' ? 'addon' : m.tipo}`}>
                     {TIPO_LABEL[m.tipo] ?? m.tipo}
                   </span>
                 </td>
-                <td>{countPaginas(m.paginas) || '—'}</td>
-                <td className="table-price text-right">${Number(m.precio_fundador_usd).toFixed(2)}</td>
-                <td className="table-price text-right">${Number(m.precio_estandar_usd).toFixed(2)}</td>
-                <td>
+                <td data-label="Páginas">{countPaginas(m.paginas) || '—'}</td>
+                <td data-label="Fundador" className="col-num table-price">${Number(m.precio_fundador_usd).toFixed(2)}</td>
+                <td data-label="Estándar" className="col-num table-price">${Number(m.precio_estandar_usd).toFixed(2)}</td>
+                <td data-label="Activo">
                   <span className={`badge ${m.activo ? 'badge-success' : 'badge-neutral'}`}>
                     {m.activo ? 'Sí' : 'No'}
                   </span>
                 </td>
-                <td>
+                <td className="col-actions">
                   <EditarModuloModal modulo={m} />
                 </td>
               </tr>

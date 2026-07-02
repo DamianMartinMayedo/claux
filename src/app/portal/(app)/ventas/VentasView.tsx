@@ -219,7 +219,7 @@ function TablaOfertas({
             {mostrarEmpresa && <th>Empresa</th>}
             <th>Cliente</th>
             <th>Estado</th>
-            <th className="text-right">Total</th>
+            <th className="col-num">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -230,22 +230,22 @@ function TablaOfertas({
               style={mostrarEmpresa ? empresaColorVar(colorOf(o.empresa_id)) : undefined}
               onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}
             >
-              <td>
+              <td data-label="Número">
                 <Link href={`/portal/ventas/ofertas/${o.oferta_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {o.numero}
                 </Link>
               </td>
-              <td className="text-sm-muted">
+              <td data-label="Fecha" className="text-sm-muted">
                 {fmtFecha(o.fecha_emision)}
               </td>
               {mostrarEmpresa && (
-                <td>
+                <td data-label="Empresa">
                   <EmpresaTag color={colorOf(o.empresa_id)} nombre={empresaNombres[o.empresa_id] ?? o.empresa_id} />
                 </td>
               )}
-              <td>{clienteNombres[o.cliente_id] ?? o.cliente_id}</td>
-              <td><BadgeOferta estado={o.estado} /></td>
-              <td className="ven-td-amt">
+              <td data-label="Cliente">{clienteNombres[o.cliente_id] ?? o.cliente_id}</td>
+              <td data-label="Estado"><BadgeOferta estado={o.estado} /></td>
+              <td data-label="Total" className="col-num">
                 {formatearMoneda(Number(o.total), o.moneda)}
               </td>
             </tr>
@@ -279,7 +279,7 @@ function TablaFacturas({
             <th>Cliente</th>
             <th>Vencimiento</th>
             <th>Estado</th>
-            <th className="text-right">Total</th>
+            <th className="col-num">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -290,25 +290,25 @@ function TablaFacturas({
               style={mostrarEmpresa ? empresaColorVar(colorOf(f.empresa_id)) : undefined}
               onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}
             >
-              <td>
+              <td data-label="Número">
                 <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {f.numero}
                 </Link>
               </td>
-              <td className="text-sm-muted">
+              <td data-label="Fecha" className="text-sm-muted">
                 {fmtFecha(f.fecha_emision)}
               </td>
               {mostrarEmpresa && (
-                <td>
+                <td data-label="Empresa">
                   <EmpresaTag color={colorOf(f.empresa_id)} nombre={empresaNombres[f.empresa_id] ?? f.empresa_id} />
                 </td>
               )}
-              <td>{clienteNombres[f.cliente_id] ?? f.cliente_id}</td>
-              <td className="text-sm-muted">
+              <td data-label="Cliente">{clienteNombres[f.cliente_id] ?? f.cliente_id}</td>
+              <td data-label="Vencimiento" className="text-sm-muted">
                 {f.fecha_vencimiento ? fmtFecha(f.fecha_vencimiento) : '—'}
               </td>
-              <td><BadgeFactura estado={f.estado} /></td>
-              <td className="ven-td-amt">
+              <td data-label="Estado"><BadgeFactura estado={f.estado} /></td>
+              <td data-label="Total" className="col-num">
                 {formatearMoneda(Number(f.total), f.moneda)}
               </td>
             </tr>

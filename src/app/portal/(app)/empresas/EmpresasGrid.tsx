@@ -3,13 +3,13 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef } from 'react'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
+// Debe coincidir con COLORES_EMPRESA en actions/portal/empresas.ts (fuente de verdad).
 const COLORES = [
-  '#00AFAA', '#C97A0C', '#2E7D32', '#1565C0',
-  '#6A1B9A', '#AD1457', '#00838F', '#4E342E',
+  '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
+  '#E11D48', '#EA580C', '#16A34A', '#64748B',
 ]
 
 interface Moneda { codigo: string; nombre: string; simbolo: string }
@@ -383,7 +383,6 @@ function EmpresaModal({
 // ── Grid principal ────────────────────────────────────────────────────────────
 
 export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin }: Props) {
-  const router = useRouter()
   const [modal, setModal] = useState<ModalState>({ open: false, empresa: null })
   const limiteAlcanzado   = maxEmpresas !== null && init.length >= maxEmpresas
 
@@ -401,8 +400,10 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
   }
 
   function onSaved() {
+    // La lista se refresca sola: guardarEmpresa/subirLogoEmpresa ya hacen
+    // revalidatePath('/portal/empresas'). No hace falta un router.refresh() extra
+    // (duplicaba el re-render del portal en cada guardado).
     cerrar()
-    router.refresh()
   }
 
   return (

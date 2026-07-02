@@ -92,7 +92,7 @@ export default function NecesidadesPageClient({
                 <th>Necesidad</th>
                 <th>Recomienda</th>
                 <th>Estado</th>
-                <th className="mod-col-act"></th>
+                <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
@@ -109,7 +109,7 @@ export default function NecesidadesPageClient({
                     <td className="mod-drag-cell">
                       <span className="mod-drag-handle" title="Arrastrar para reordenar">⠿</span>
                     </td>
-                    <td>
+                    <td data-label="Necesidad">
                       <div className="dgn-need-cell">
                         <div>
                           <span className="table-empresa">{n.etiqueta}</span>
@@ -117,19 +117,19 @@ export default function NecesidadesPageClient({
                         </div>
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Recomienda">
                       <div className="dgn-chips">
                         {n.modulos.map((c) => (
                           <span key={c} className="dgn-chip">{nombreModulo.get(c) ?? c}</span>
                         ))}
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Estado">
                       <span className={`badge ${n.activa ? 'badge-success' : 'badge-neutral'}`}>
                         {n.activa ? 'Activa' : 'Oculta'}
                       </span>
                     </td>
-                    <td>
+                    <td className="col-actions">
                       <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
                         <NecesidadModal modulos={modulos} necesidad={n} />
                         <button className="btn btn-ghost btn-sm" onClick={() => handleEliminar(n)}>

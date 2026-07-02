@@ -23,15 +23,22 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 > - **Tailwind solo es reset**: prohibido usar clases utilitarias de Tailwind en el markup.
 > - Especificación visual completa (valores de tokens): `docs/CLAUX-LEGACY.md` §8.
 
-> ## ⚠️ REGLA DE TABLAS — FILAS SIEMPRE CLICKEABLES
+> ## ⚠️ REGLA DE TABLAS — SISTEMA ÚNICO (todas iguales, presentes y futuras)
 >
-> Toda tabla con página de detalle debe tener las filas clickables (navegar al detalle al pulsar cualquier celda).
+> Toda tabla usa el sistema base `.table` + `.table-wrapper` de `src/app/styles/03-components.css`. **No crees clases propias de alineación, ancho de columna de acciones ni de importes** — ya existen y se reutilizan. Referencias: `TercerosView.tsx` (con botones) o `VentasView.tsx` (sin botones).
 >
-> - Clase CSS canónica: **`table-row-clickable`** (en `src/app/styles/03-components.css`, con cursor:pointer + hover).
-> - Cada `<tr>` lleva `className="table-row-clickable"` + `onClick={() => router.push(...)}`.
-> - Las celdas con botones/acciones deben llevar **stopPropagation** en el contenedor: `<div className="ter-actions" onClick={(e) => e.stopPropagation()}>`.
-> - El `<Link>` del nombre también lleva `onClick={(e) => e.stopPropagation()}` para evitar doble navegación.
-> - Referencia de implementación: `TercerosView.tsx` (con botones) o `VentasView.tsx` (sin botones).
+> **Alineación de columnas** — la MISMA clase modificadora va en el `<th>` y en el `<td>` (así cabecera y dato quedan alineados):
+> - Cifras/importes/cantidades → **`col-num`** (derecha + `tabular-nums`). No uses `text-right` ni clases `*-col-monto`.
+> - Centrado → **`col-center`**. Columna de acciones → **`col-actions`** (se ciñe al contenido, derecha).
+> - Texto libre largo (descripciones, direcciones) → **`cell-truncate`** en el `<td>` (elipsis, sin scroll).
+>
+> **Responsive (obligatorio)** — cada `<td>` lleva **`data-label="<Cabecera>"`** con el texto de su columna. Bajo 640px la tabla se convierte automáticamente en tarjetas apiladas (`etiqueta: valor`); sin ese atributo la tarjeta sale sin etiquetas. Las celdas de acciones (`col-actions`) no necesitan `data-label`.
+>
+> **Acciones de fila**: si una fila tiene **2+ acciones**, usa un único menú `⋯` con el componente `RowActions` (`src/components/portal/RowActions.tsx`) — no pongas una fila de botones-icono (se amontonan y recortan). Sus items son `<button className="row-actions-item">` (+ `-danger` / `-success`) con icono **y** texto. El menú se posiciona en `fixed` para escapar del `overflow` de `.card-table`, y ya hace `stopPropagation`. Con **1 sola acción**, deja el icono directo (`.ter-action-btn`). Referencia: `GastosView.tsx`, `TercerosView.tsx`.
+>
+> **Filas clickables** (tabla con página de detalle): `<tr className="table-row-clickable" onClick={() => router.push(...)}>`. El `<Link>` del nombre lleva `onClick={(e) => e.stopPropagation()}` para evitar doble navegación.
+>
+> **Color de empresa**: en tablas multi-empresa, `<tr>` lleva `className="… row-empresa-accent"` + `style={empresaColorVar(colorOf(id))}` (única excepción al no-inline: custom property de runtime). Se pinta como acento lateral izquierdo; en modo tarjeta pasa al `border-left`. No añadas más presencia de color que ese acento.
 
 ## Qué leer según la tarea (no sobre-leas)
 

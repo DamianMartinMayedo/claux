@@ -87,17 +87,6 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
                 <span className="portal-account-menu-empresa">{nombreEmpresa}</span>
                 <span className="portal-account-menu-email">{session.email}</span>
               </div>
-              {empresas.length > 1 && (
-                <div className="portal-account-empresas">
-                  <span className="portal-account-empresas-label">Tus empresas</span>
-                  {empresas.map(e => (
-                    <div key={e.empresa_id} className="portal-account-empresa">
-                      <span className="empresa-dot" style={empresaColorVar(e.color)} />
-                      <span className="portal-account-empresa-nombre">{e.nombre}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
               <div className="portal-account-menu-list">
                 {opciones.map(o => {
                   const active = pathname === o.ruta || pathname.startsWith(o.ruta + '/')

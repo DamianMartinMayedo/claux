@@ -78,7 +78,7 @@ export const TRANSICIONES_OFERTA: Record<EstadoOferta, EstadoOferta[]> = {
 
 export const TRANSICIONES_FACTURA: Record<EstadoFactura, EstadoFactura[]> = {
   BORRADOR: ['EMITIDA', 'ANULADA'],
-  EMITIDA:  ['COBRADA', 'ANULADA'],
+  EMITIDA:  ['ANULADA'],              // COBRADA solo vía "Registrar cobro" (crea movimiento en tesorería)
   COBRADA:  ['ANULADA'],
   ANULADA:  [],
 }

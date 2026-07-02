@@ -691,6 +691,11 @@ export async function cambiarEstadoFactura(
   if (!factura) return { ok: false, error: 'Factura no encontrada.' }
   if (factura.estado === nuevoEstado) return { ok: true }
 
+  // Bloquear transición EMITIDA → COBRADA: solo se cobra vía registrarPagoDoc
+  if (factura.estado === 'EMITIDA' && nuevoEstado === 'COBRADA') {
+    return { ok: false, error: 'Usa "Registrar cobro" en lugar de cambiar el estado directamente. Así queda el ingreso en tesorería.' }
+  }
+
   const { error } = await db.from('facturas')
     .update({ estado: nuevoEstado, updated_at: new Date().toISOString() })
     .eq('factura_id', factura_id)

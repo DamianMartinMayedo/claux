@@ -4,10 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
 
-// Paleta idéntica al GAS — orden preservado
+// Paleta moderna de identidad de empresa. Saturada y a media-oscuridad (no
+// pastel) para que la inicial blanca del avatar/badge siempre contraste, y bien
+// repartida en la rueda para distinguir empresas de un vistazo. Si cambia, hay
+// que sincronizar COLORES en EmpresasGrid.tsx y mapear los tonos viejos en una
+// migración (ver 075_paleta_colores_empresas.sql).
 const COLORES_EMPRESA = [
-  '#00AFAA', '#C97A0C', '#2E7D32', '#1565C0',
-  '#6A1B9A', '#AD1457', '#00838F', '#4E342E',
+  '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
+  '#E11D48', '#EA580C', '#16A34A', '#64748B',
 ]
 
 export interface Empresa {
@@ -33,8 +37,11 @@ export interface Empresa {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function validarColor(color: string): string {
-  return COLORES_EMPRESA.includes(color) ? color : COLORES_EMPRESA[0]
+function validarColor(color: string): { ok: boolean; color?: string; error?: string } {
+  if (!color || !COLORES_EMPRESA.includes(color)) {
+    return { ok: false, error: 'Color no válido. Selecciona un color de la paleta.' }
+  }
+  return { ok: true, color }
 }
 
 function generarEmpresaId(): string {
@@ -104,7 +111,9 @@ export async function guardarEmpresa(
   if (!nombre) return { ok: false, error: 'El nombre de la empresa es obligatorio.' }
 
   const empresa_id_form = ((formData.get('empresa_id') as string) ?? '').trim()
-  const color           = validarColor((formData.get('color') as string) ?? '')
+  const colorResult     = validarColor((formData.get('color') as string) ?? '')
+  if (!colorResult.ok) return { ok: false, error: colorResult.error }
+  const color           = colorResult.color
   const db              = createAdminClient()
 
   // Letra de facturación: 1 carácter A-Z, opcional pero único por client_id

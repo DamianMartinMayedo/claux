@@ -22,7 +22,9 @@ import {
 } from '@/app/actions/portal/reservas'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import CierresSection from '@/components/portal/CierresSection'
+import { RowActions } from '@/components/portal/RowActions'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
+import IaBotBanner from '@/components/portal/IaBotBanner'
 import { Calendar, Check, Copy, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -759,48 +761,50 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                   <th>Hora</th>
                   <th>Turno</th>
                   <th>Cliente</th>
-                  <th className="tes-col-monto">Pers.</th>
+                  <th className="col-num">Pers.</th>
                   <th>Estado</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {reservas.map(r => (
                   <tr key={r.reserva_id} className="table-row-clickable"
                     onClick={() => setDetalleReserva(r)}>
-                    <td><strong>{formatFecha(r.fecha)}</strong></td>
-                    <td className="tes-col-monto tes-monto-cell">
+                    <td data-label="Fecha"><strong>{formatFecha(r.fecha)}</strong></td>
+                    <td data-label="Hora" className="tes-nowrap">
                       {r.hora ? `${r.hora.substring(0, 5)}${r.hora_fin ? ` – ${r.hora_fin.substring(0, 5)}` : ''}` : '—'}
                     </td>
-                    <td>
+                    <td data-label="Turno">
                       {r.franja_nombre}
                       {r.franja_hora_inicio && <div className="text-sm-muted">{formatHora(r.franja_hora_inicio)} – {formatHora(r.franja_hora_fin)}</div>}
                     </td>
-                    <td>
+                    <td data-label="Cliente">
                       <strong>{r.nombre_cliente}</strong>
                       {r.telefono && <div className="text-sm-muted">{r.telefono}</div>}
                       {r.notas && <div className="text-sm-muted">{r.notas}</div>}
                     </td>
-                    <td className="tes-col-monto tes-monto-cell">{r.personas}</td>
-                    <td>
+                    <td data-label="Pers." className="col-num tes-monto-cell">{r.personas}</td>
+                    <td data-label="Estado">
                       <span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span>
                       <div className="text-xs-muted">{CANAL_LABEL[r.canal] ?? r.canal}</div>
                     </td>
-                    <td>
-                      <div className="ter-actions" onClick={e => e.stopPropagation()}>
-                        {r.estado === 'PENDIENTE' && (
-                          <>
-                            <button className="ter-action-btn ter-action-restore" title="Confirmar"
-                              onClick={() => setCambioEstado({ reserva: r, a: 'CONFIRMADA' })}><Check size={15} strokeWidth={2} /></button>
-                            <button className="ter-action-btn ter-action-danger" title="Rechazar"
-                              onClick={() => setCambioEstado({ reserva: r, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /></button>
-                          </>
-                        )}
-                        {r.estado === 'CONFIRMADA' && (
-                          <button className="ter-action-btn ter-action-danger" title="Cancelar reserva"
-                            onClick={() => setCambioEstado({ reserva: r, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                        )}
-                      </div>
+                    <td className="col-actions">
+                      {(r.estado === 'PENDIENTE' || r.estado === 'CONFIRMADA') && (
+                        <RowActions>
+                          {r.estado === 'PENDIENTE' && (
+                            <>
+                              <button className="row-actions-item"
+                                onClick={() => setCambioEstado({ reserva: r, a: 'CONFIRMADA' })}><Check size={15} strokeWidth={2} /> Confirmar</button>
+                              <button className="row-actions-item row-actions-item-danger"
+                                onClick={() => setCambioEstado({ reserva: r, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /> Rechazar</button>
+                            </>
+                          )}
+                          {r.estado === 'CONFIRMADA' && (
+                            <button className="row-actions-item row-actions-item-danger"
+                              onClick={() => setCambioEstado({ reserva: r, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar reserva</button>
+                          )}
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -831,31 +835,31 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                 <tr>
                   <th>Nombre</th>
                   <th>Horario</th>
-                  <th className="tes-col-monto">Capacidad</th>
+                  <th className="col-num">Capacidad</th>
                   <th>Estado</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {data.franjas.map(f => (
                   <tr key={f.franja_id}>
-                    <td><strong>{f.nombre}</strong></td>
-                    <td className="text-sm-muted">
+                    <td data-label="Nombre"><strong>{f.nombre}</strong></td>
+                    <td data-label="Horario" className="text-sm-muted">
                       {f.hora_inicio ? `${formatHora(f.hora_inicio)} – ${formatHora(f.hora_fin)}` : 'Sin hora'}
                       {f.dias_semana && f.dias_semana.length > 0 && f.dias_semana.length < 7 && (
                         <div className="text-xs-muted">{f.dias_semana.map(d => DIA_LABEL[d]).join(', ')}</div>
                       )}
                     </td>
-                    <td className="tes-col-monto tes-monto-cell">{f.capacidad}</td>
-                    <td>
+                    <td data-label="Capacidad" className="col-num tes-monto-cell">{f.capacidad}</td>
+                    <td data-label="Estado">
                       <span className={`badge ${f.activa ? 'badge-success' : 'badge-neutral'}`}>{f.activa ? 'Activo' : 'Inactivo'}</span>
                     </td>
-                    <td>
-                      <div className="ter-actions">
-                        <button className="ter-action-btn" title="Editar" onClick={() => openEditFranja(f)}><Pencil size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setDelFranja(f)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => openEditFranja(f)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={() => setDelFranja(f)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
@@ -870,55 +874,30 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
       {activeTab === 'configuracion' && (
       <>
 
-      {/* Gestión de reservas (IA + confirmación) */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Gestión de reservas</h2>
+      {/* Automatización: banner IA (si contratado) + confirmación */}
+      {data.tieneIa && (
+        <IaBotBanner entidad="reservas" activa={data.bot_config.ia_activa}
+          isPending={isPending} onToggle={toggleIaBot} />
+      )}
+
+      <div className="res-conf-item">
+        <div className="res-conf-item-text">
+          <span className="res-conf-item-title">Confirmación automática</span>
+          <span className="input-hint">
+            {data.tieneIa && data.bot_config.ia_activa
+              ? (confirmAuto
+                  ? 'La IA confirmará automáticamente las reservas que cumplan las reglas.'
+                  : 'La IA creará las reservas pendientes para que tú las confirmes.')
+              : (confirmAuto
+                  ? 'Las reservas se confirman solas al crearse; el cliente lo ve al instante.'
+                  : 'Tú confirmas cada reserva; el cliente queda pendiente hasta que la revises.')}
+          </span>
         </div>
-        <div className="ter-form-grid res-conf-pad">
-          {data.tieneIa && (
-            <div className="input-group ter-col-full">
-              <label>¿Que el asistente de IA gestione las reservas?</label>
-              <div className="res-switch-wrap">
-                <label className="switch">
-                  <input type="checkbox" checked={data.bot_config.ia_activa} disabled={isPending}
-                    onChange={e => toggleIaBot(e.target.checked)} aria-label="Que la IA gestione las reservas" />
-                  <span className="switch-track" aria-hidden="true" />
-                </label>
-                <span className="res-switch-text">
-                  {data.bot_config.ia_activa ? 'IA activa' : 'Manual'}
-                </span>
-              </div>
-              <span className="input-hint">
-                {data.bot_config.ia_activa
-                  ? 'La IA gestionará las reservas por Telegram en lenguaje natural. Las reglas de abajo se respetan como límites.'
-                  : 'Las reservas se gestionan por botones o manualmente desde el panel.'}
-              </span>
-            </div>
-          )}
-          <div className="input-group ter-col-full">
-            <label>¿Confirmar las reservas automáticamente?</label>
-            <div className="res-switch-wrap">
-              <label className="switch">
-                <input type="checkbox" checked={confirmAuto} disabled={isPending}
-                  onChange={e => handleConfirmAuto(e.target.checked)} />
-                <span className="switch-track" aria-hidden="true" />
-              </label>
-              <span className="res-switch-text">
-                {confirmAuto ? 'Automática' : 'Manual'}
-              </span>
-            </div>
-            <span className="input-hint">
-              {data.tieneIa && data.bot_config.ia_activa
-                ? (confirmAuto
-                    ? 'La IA confirmará automáticamente las reservas que cumplan las reglas.'
-                    : 'La IA creará las reservas pendientes para que tú las confirmes.')
-                : (confirmAuto
-                    ? 'Las reservas se confirman solas al crearse. El cliente ve la confirmación al instante.'
-                    : 'Tú confirmas cada reserva manualmente. El cliente queda pendiente hasta que la revises.')}
-            </span>
-          </div>
-        </div>
+        <label className="switch">
+          <input type="checkbox" checked={confirmAuto} disabled={isPending}
+            onChange={e => handleConfirmAuto(e.target.checked)} aria-label="Confirmar reservas automáticamente" />
+          <span className="switch-track" aria-hidden="true" />
+        </label>
       </div>
 
       {/* Enlace público */}
@@ -933,26 +912,26 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <thead>
                 <tr>
                   <th>Enlace</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>
+                  <td data-label="Enlace">
                     <strong>claux.app/{data.slug}/reservar</strong>
                     <div className="text-xs-muted">Comparte este enlace con tus clientes.</div>
                   </td>
-                  <td>
-                    <div className="ter-actions">
-                      <button className="ter-action-btn" title="Copiar enlace"
+                  <td className="col-actions">
+                    <RowActions>
+                      <button className="row-actions-item"
                         onClick={() => { copiarEnlace(); toastSuccess('Enlace copiado.') }} disabled={isPending}>
-                        <Copy size={15} strokeWidth={2} />
+                        <Copy size={15} strokeWidth={2} /> Copiar enlace
                       </button>
-                      <button className="ter-action-btn" title="Editar enlace"
+                      <button className="row-actions-item"
                         onClick={() => setEditandoSlug(true)} disabled={isPending}>
-                        <Pencil size={15} strokeWidth={2} />
+                        <Pencil size={15} strokeWidth={2} /> Editar enlace
                       </button>
-                    </div>
+                    </RowActions>
                   </td>
                 </tr>
               </tbody>
@@ -999,14 +978,14 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                     <th>Nombre</th>
                     <th>Token</th>
                     <th>Estado</th>
-                    <th className="alm-col-act"></th>
+                    <th className="col-actions"></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td><strong>{data.bot_config.nombre ?? '—'}</strong></td>
-                    <td className="text-sm-muted">{data.bot_config.token ? `${data.bot_config.token.substring(0, 10)}…` : '—'}</td>
-                    <td>
+                    <td data-label="Nombre"><strong>{data.bot_config.nombre ?? '—'}</strong></td>
+                    <td data-label="Token" className="text-sm-muted">{data.bot_config.token ? `${data.bot_config.token.substring(0, 10)}…` : '—'}</td>
+                    <td data-label="Estado">
                       <span className={`badge ${data.bot_config.activo ? 'badge-success' : 'badge-neutral'}`}>
                         {data.bot_config.activo ? 'Activo' : 'Inactivo'}
                       </span>
@@ -1014,15 +993,15 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                         <div className="text-xs-muted">Webhook registrado</div>
                       )}
                     </td>
-                    <td>
-                      <div className="ter-actions">
-                        <button className="ter-action-btn" title={data.bot_config.activo ? 'Desactivar bot' : 'Activar bot'}
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item"
                           onClick={() => setConfirmToggleBot(!data.bot_config.activo)} disabled={isPending}>
-                          {data.bot_config.activo ? <PowerOff size={15} strokeWidth={2} /> : <Power size={15} strokeWidth={2} />}
+                          {data.bot_config.activo ? <PowerOff size={15} strokeWidth={2} /> : <Power size={15} strokeWidth={2} />} {data.bot_config.activo ? 'Desactivar bot' : 'Activar bot'}
                         </button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar bot"
-                          onClick={eliminarBot} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={eliminarBot} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar bot</button>
+                      </RowActions>
                     </td>
                   </tr>
                 </tbody>

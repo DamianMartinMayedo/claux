@@ -153,7 +153,7 @@ export default function ClientesTabla({
                 <th>Suscripción</th>
                 <th>Estado</th>
                 <th>Expiración</th>
-                <th className="text-center">Días</th>
+                <th className="col-center">Días</th>
               </tr>
             </thead>
             <tbody>
@@ -161,7 +161,7 @@ export default function ClientesTabla({
                 const dias = calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia)
                 return (
                   <tr key={c.client_id} className="table-row-clickable" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}>
-                    <td>
+                    <td data-label="Empresa">
                       <Link
                         href={`/admin/clientes/${c.client_id}`}
                         className="table-empresa-link"
@@ -171,17 +171,17 @@ export default function ClientesTabla({
                       </Link>
                       <div className="table-empresa-contact">{c.client_id}</div>
                     </td>
-                    <td className="table-muted">{c.email_admin}</td>
-                    <td className="table-muted">
+                    <td data-label="Email" className="table-muted">{c.email_admin}</td>
+                    <td data-label="Suscripción" className="table-muted">
                       {suscripcionLabel(Number(c.precio_mensual_usd ?? 0), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct)}
                     </td>
-                    <td>
+                    <td data-label="Estado">
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>
                         {c.estado}
                       </span>
                     </td>
-                    <td className="table-muted">{formatFecha(c.fecha_expiracion)}</td>
-                    <td className="text-center">
+                    <td data-label="Expiración" className="table-muted">{formatFecha(c.fecha_expiracion)}</td>
+                    <td data-label="Días" className="col-center">
                       <span className="dias-value" style={{ color: DIAS_COLOR[dias.variant] }}>
                         {dias.label}
                       </span>

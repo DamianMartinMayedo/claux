@@ -182,28 +182,28 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
             <thead>
               <tr>
                 <th>Producto / descripción</th>
-                <th className="text-align-right">Cantidad</th>
-                <th className="text-align-right">Costo unit.</th>
-                <th className="text-align-right">Total</th>
+                <th className="col-num">Cantidad</th>
+                <th className="col-num">Costo unit.</th>
+                <th className="col-num">Total</th>
               </tr>
             </thead>
             <tbody>
               {lineas.map(l => (
                 <tr key={l.linea_id}>
-                  <td>
+                  <td data-label="Producto / descripción">
                     <strong>{l.descripcion}</strong>
                     {!l.producto_id && <span className="text-xs-muted"> (texto libre — no afecta stock)</span>}
                   </td>
-                  <td className="text-align-right">{l.cantidad.toLocaleString('es-VE')}</td>
-                  <td className="text-align-right">{fmt(l.costo_unitario, compra.moneda)}</td>
-                  <td className="text-align-right ven-td-amt">{fmt(l.total, compra.moneda)}</td>
+                  <td data-label="Cantidad" className="col-num">{l.cantidad.toLocaleString('es-VE')}</td>
+                  <td data-label="Costo unit." className="col-num">{fmt(l.costo_unitario, compra.moneda)}</td>
+                  <td data-label="Total" className="col-num">{fmt(l.total, compra.moneda)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={3} className="text-align-right"><strong>Total</strong></td>
-                <td className="text-align-right ven-td-amt"><strong>{fmt(compra.total, compra.moneda)}</strong></td>
+                <td colSpan={3} className="col-num"><strong>Total</strong></td>
+                <td className="col-num"><strong>{fmt(compra.total, compra.moneda)}</strong></td>
               </tr>
             </tfoot>
           </table>

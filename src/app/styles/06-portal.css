@@ -546,7 +546,6 @@
   background: var(--color-surface-2); border-radius: var(--radius-full);
   font-size: var(--text-xs); color: var(--color-text-muted);
 }
-.mon-col-act  { width: 40px; }
 .text-right { text-align: right; }
 
 /* Formulario tasa manual */
@@ -796,7 +795,6 @@
   font-size: var(--text-sm); color: var(--color-text-muted);
 }
 .usr-roles-wrap { display: flex; flex-direction: column; gap: var(--space-5); }
-.usr-col-act    { width: 100px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MÓDULO PERFIL
@@ -915,7 +913,6 @@
 .alm-stat-badge { margin-bottom: var(--space-1); }
 .alm-stat-count { font-size: 24px; font-weight: 800; color: var(--color-text); }
 .alm-stat-label { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
-.alm-col-act    { width: 80px; }
 .alm-id-text    { font-size: 11px; color: var(--color-text-muted); font-family: monospace; margin-top: 1px; }
 .alm-desc-td    { font-size: var(--text-sm); color: var(--color-text-muted); max-width: 280px; }
 .alm-nota-info  {
@@ -1062,7 +1059,6 @@
 }
 .ter-contrato-link:hover { text-decoration: underline; }
 .ter-via-stack  { display: flex; flex-direction: column; gap: 4px; }
-.ter-col-act    { width: 96px; }
 .ter-condicion  { font-size: var(--text-sm); white-space: nowrap; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -1249,8 +1245,6 @@
 
 /* ── Lista de productos (tabla) ───────────────────────────────────────────── */
 .code-value         { font-size: var(--text-sm); font-weight: 600; font-family: monospace; color: var(--color-text); }
-.prd-col-act        { width: 104px; }
-.prd-col-act-sm     { width: 96px; }
 .prd-cat-col-count  { width: 110px; }
 .prd-cat-count-btn  { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; padding: 2px 10px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 700; background: var(--color-info-bg); color: var(--color-primary-text); border: none; cursor: pointer; }
 .prd-cat-count-warn { background: var(--color-warning-bg); color: var(--color-warning); }
@@ -1329,7 +1323,6 @@
 .tes-tipo-egreso.active { border-color: var(--color-error); background: var(--color-error-bg); color: var(--color-error); }
 
 /* Tabla de movimientos */
-.tes-col-monto { text-align: right; }
 .tes-monto-cell { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tes-monto-in { color: var(--color-success); }
 .tes-monto-out { color: var(--color-error); }
@@ -1831,6 +1824,31 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ia-typing span:nth-child(3) { animation-delay: 0.30s; }
 @keyframes ia-typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ia-typing span { animation: none; } }
+
+/* Banner del asistente IA en la configuración de reservas/citas */
+.ia-banner {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--gradient-brand);
+  color: var(--color-text-inv);
+}
+.ia-banner-icon   { display: inline-flex; flex-shrink: 0; }
+.ia-banner-body   { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ia-banner-title  { font-size: var(--text-base); font-weight: 700; }
+.ia-banner-desc   { font-size: var(--text-xs); opacity: 0.92; line-height: 1.4; }
+.ia-banner-switch { flex-shrink: 0; }
+
+/* Fila compacta de ajuste (confirmación automática) */
+.res-conf-item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); margin-bottom: var(--space-4);
+}
+.res-conf-item-text  { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.res-conf-item-title { font-size: var(--text-sm); font-weight: 600; }
 
 /* Botón flotante (FAB) + panel de chat del dueño */
 .ia-fab {

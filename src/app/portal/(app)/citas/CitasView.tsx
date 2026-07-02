@@ -13,7 +13,9 @@ import {
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
 import CierresSection from '@/components/portal/CierresSection'
+import { RowActions } from '@/components/portal/RowActions'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
+import IaBotBanner from '@/components/portal/IaBotBanner'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import { CalendarDays, Check, Copy, Download, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
@@ -748,41 +750,43 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <thead>
                 <tr>
                   <th>Fecha</th><th>Hora</th><th>{servicioNombre}</th><th>{et.recurso}</th>
-                  <th>Cliente</th><th>Estado</th><th className="alm-col-act"></th>
+                  <th>Cliente</th><th>Estado</th><th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {citas.map(c => (
                   <tr key={c.reserva_id} className="table-row-clickable" onClick={() => setDetalleCita(c)}>
-                    <td><strong>{formatFecha(c.fecha)}</strong></td>
-                    <td className="tes-col-monto tes-monto-cell">
+                    <td data-label="Fecha"><strong>{formatFecha(c.fecha)}</strong></td>
+                    <td data-label="Hora" className="tes-nowrap">
                       {c.hora ? `${formatHora(c.hora)}${c.hora_fin ? ` – ${formatHora(c.hora_fin)}` : ''}` : '—'}
                     </td>
-                    <td>{c.servicio_nombre}</td>
-                    <td>{c.recurso_nombre}</td>
-                    <td>
+                    <td data-label={servicioNombre}>{c.servicio_nombre}</td>
+                    <td data-label={et.recurso}>{c.recurso_nombre}</td>
+                    <td data-label="Cliente">
                       <strong>{c.nombre_cliente}</strong>
                       {c.telefono && <div className="text-sm-muted">{c.telefono}</div>}
                     </td>
-                    <td>
+                    <td data-label="Estado">
                       <span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span>
                       <div className="text-xs-muted">{CANAL_LABEL[c.canal] ?? c.canal}</div>
                     </td>
-                    <td>
-                      <div className="ter-actions" onClick={e => e.stopPropagation()}>
-                        {c.estado === 'PENDIENTE' && (
-                          <>
-                            <button className="ter-action-btn ter-action-restore" title="Confirmar"
-                              onClick={() => setCambioEstado({ cita: c, a: 'CONFIRMADA' })} disabled={isPending}><Check size={15} strokeWidth={2} /></button>
-                            <button className="ter-action-btn ter-action-danger" title="Rechazar"
-                              onClick={() => setCambioEstado({ cita: c, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /></button>
-                          </>
-                        )}
-                        {c.estado === 'CONFIRMADA' && (
-                          <button className="ter-action-btn ter-action-danger" title="Cancelar cita"
-                            onClick={() => setCambioEstado({ cita: c, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                        )}
-                      </div>
+                    <td className="col-actions">
+                      {(c.estado === 'PENDIENTE' || c.estado === 'CONFIRMADA') && (
+                        <RowActions>
+                          {c.estado === 'PENDIENTE' && (
+                            <>
+                              <button className="row-actions-item"
+                                onClick={() => setCambioEstado({ cita: c, a: 'CONFIRMADA' })} disabled={isPending}><Check size={15} strokeWidth={2} /> Confirmar</button>
+                              <button className="row-actions-item row-actions-item-danger"
+                                onClick={() => setCambioEstado({ cita: c, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /> Rechazar</button>
+                            </>
+                          )}
+                          {c.estado === 'CONFIRMADA' && (
+                            <button className="row-actions-item row-actions-item-danger"
+                              onClick={() => setCambioEstado({ cita: c, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar cita</button>
+                          )}
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -806,24 +810,24 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           <div className="table-wrapper">
             <table className="table">
               <thead>
-                <tr><th>Nombre</th><th>Tipo</th><th>{servicioPlural}</th><th>Horario</th><th>Estado</th><th className="alm-col-act"></th></tr>
+                <tr><th>Nombre</th><th>Tipo</th><th>{servicioPlural}</th><th>Horario</th><th>Estado</th><th className="col-actions"></th></tr>
               </thead>
               <tbody>
                 {data.recursos.map(r => (
                   <tr key={r.recurso_id} className="table-row-clickable" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}>
-                    <td><strong>{r.nombre}</strong></td>
-                    <td className="text-sm-muted">{r.tipo ?? '—'}</td>
-                    <td className="text-sm-muted">{r.servicio_ids.length === 0 ? 'Todos' : `${r.servicio_ids.length}`}</td>
-                    <td className="text-sm-muted">
+                    <td data-label="Nombre"><strong>{r.nombre}</strong></td>
+                    <td data-label="Tipo" className="text-sm-muted">{r.tipo ?? '—'}</td>
+                    <td data-label={servicioPlural} className="text-sm-muted">{r.servicio_ids.length === 0 ? 'Todos' : `${r.servicio_ids.length}`}</td>
+                    <td data-label="Horario" className="text-sm-muted">
                       {r.horarios.length === 0 ? <span className="text-xs-muted">Sin horario</span>
                         : r.horarios.map(h => DIA_LABEL[h.dia_semana]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
                     </td>
-                    <td><span className={`badge ${r.activo ? 'badge-success' : 'badge-neutral'}`}>{r.activo ? 'Activo' : 'Inactivo'}</span></td>
-                    <td>
-                      <div className="ter-actions" onClick={e => e.stopPropagation()}>
-                        <button className="ter-action-btn" title="Editar" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}><Pencil size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar" onClick={() => setDelRecurso(r)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                    <td data-label="Estado"><span className={`badge ${r.activo ? 'badge-success' : 'badge-neutral'}`}>{r.activo ? 'Activo' : 'Inactivo'}</span></td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setDelRecurso(r)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
@@ -846,20 +850,20 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           <div className="table-wrapper">
             <table className="table">
               <thead>
-                <tr><th>Nombre</th><th className="tes-col-monto">Duración</th><th className="tes-col-monto">Precio</th><th>Estado</th><th className="alm-col-act"></th></tr>
+                <tr><th>Nombre</th><th className="col-num">Duración</th><th className="col-num">Precio</th><th>Estado</th><th className="col-actions"></th></tr>
               </thead>
               <tbody>
                 {data.servicios.map(s => (
                   <tr key={s.servicio_id} className="table-row-clickable" onClick={() => { setEditServicio(s); setShowServicio(true) }}>
-                    <td><strong>{s.nombre}</strong></td>
-                    <td className="tes-col-monto tes-monto-cell">{s.duracion_minutos} min</td>
-                    <td className="tes-col-monto tes-monto-cell cita-precio">{formatPrecio(s.precio)}</td>
-                    <td><span className={`badge ${s.activo ? 'badge-success' : 'badge-neutral'}`}>{s.activo ? 'Activo' : 'Inactivo'}</span></td>
-                    <td>
-                      <div className="ter-actions" onClick={e => e.stopPropagation()}>
-                        <button className="ter-action-btn" title="Editar" onClick={() => { setEditServicio(s); setShowServicio(true) }}><Pencil size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar" onClick={() => setDelServicio(s)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                    <td data-label="Nombre"><strong>{s.nombre}</strong></td>
+                    <td data-label="Duración" className="col-num tes-monto-cell">{s.duracion_minutos} min</td>
+                    <td data-label="Precio" className="col-num tes-monto-cell cita-precio">{formatPrecio(s.precio)}</td>
+                    <td data-label="Estado"><span className={`badge ${s.activo ? 'badge-success' : 'badge-neutral'}`}>{s.activo ? 'Activo' : 'Inactivo'}</span></td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => { setEditServicio(s); setShowServicio(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setDelServicio(s)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
@@ -874,51 +878,30 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       {activeTab === 'configuracion' && (
       <>
 
-      {/* Gestión de citas (IA + confirmación) */}
-      <div className="card">
-        <div className="card-header"><h2 className="card-title">Gestión de citas</h2></div>
-        <div className="ter-form-grid res-conf-pad">
-          {data.tieneIa && (
-            <div className="input-group ter-col-full">
-              <label>¿Que el asistente de IA gestione las citas?</label>
-              <div className="res-switch-wrap">
-                <label className="switch">
-                  <input type="checkbox" checked={data.bot_config.ia_activa} disabled={isPending}
-                    onChange={e => toggleIaBot(e.target.checked)} aria-label="Que la IA gestione las citas" />
-                  <span className="switch-track" aria-hidden="true" />
-                </label>
-                <span className="res-switch-text">
-                  {data.bot_config.ia_activa ? 'IA activa' : 'Manual'}
-                </span>
-              </div>
-              <span className="input-hint">
-                {data.bot_config.ia_activa
-                  ? 'La IA gestionará las citas por Telegram en lenguaje natural. Las reglas de abajo se respetan como límites.'
-                  : 'Las citas se gestionan por botones o manualmente desde el panel.'}
-              </span>
-            </div>
-          )}
-          <div className="input-group ter-col-full">
-            <label>¿Confirmar las citas automáticamente?</label>
-            <div className="res-switch-wrap">
-              <label className="switch">
-                <input type="checkbox" checked={confirmAuto} disabled={isPending}
-                  onChange={e => handleConfirmAuto(e.target.checked)} />
-                <span className="switch-track" aria-hidden="true" />
-              </label>
-              <span className="res-switch-text">{confirmAuto ? 'Automática' : 'Manual'}</span>
-            </div>
-            <span className="input-hint">
-              {data.tieneIa && data.bot_config.ia_activa
-                ? (confirmAuto
-                    ? 'La IA confirmará automáticamente las citas que cumplan las reglas.'
-                    : 'La IA creará las citas pendientes para que tú las confirmes.')
-                : (confirmAuto
-                    ? 'Las citas se confirman solas al crearse. El cliente ve la confirmación al instante.'
-                    : 'Tú confirmas cada cita manualmente. El cliente queda pendiente hasta que la revises.')}
-            </span>
-          </div>
+      {/* Automatización: banner IA (si contratado) + confirmación */}
+      {data.tieneIa && (
+        <IaBotBanner entidad="citas" activa={data.bot_config.ia_activa}
+          isPending={isPending} onToggle={toggleIaBot} />
+      )}
+
+      <div className="res-conf-item">
+        <div className="res-conf-item-text">
+          <span className="res-conf-item-title">Confirmación automática</span>
+          <span className="input-hint">
+            {data.tieneIa && data.bot_config.ia_activa
+              ? (confirmAuto
+                  ? 'La IA confirmará automáticamente las citas que cumplan las reglas.'
+                  : 'La IA creará las citas pendientes para que tú las confirmes.')
+              : (confirmAuto
+                  ? 'Las citas se confirman solas al crearse; el cliente lo ve al instante.'
+                  : 'Tú confirmas cada cita; el cliente queda pendiente hasta que la revises.')}
+          </span>
         </div>
+        <label className="switch">
+          <input type="checkbox" checked={confirmAuto} disabled={isPending}
+            onChange={e => handleConfirmAuto(e.target.checked)} aria-label="Confirmar citas automáticamente" />
+          <span className="switch-track" aria-hidden="true" />
+        </label>
       </div>
 
       {/* Enlace público */}
@@ -927,18 +910,18 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         {data.slug && !editandoSlug ? (
           <div className="table-wrapper">
             <table className="table">
-              <thead><tr><th>Enlace</th><th className="alm-col-act"></th></tr></thead>
+              <thead><tr><th>Enlace</th><th className="col-actions"></th></tr></thead>
               <tbody>
                 <tr>
-                  <td>
+                  <td data-label="Enlace">
                     <strong>claux.app/{data.slug}/citas</strong>
                     <div className="text-xs-muted">Compártelo para que tus clientes pidan cita en línea.</div>
                   </td>
-                  <td>
-                    <div className="ter-actions">
-                      <button className="ter-action-btn" title="Copiar enlace" onClick={copiarEnlace} disabled={isPending}><Copy size={15} strokeWidth={2} /></button>
-                      <button className="ter-action-btn" title="Editar enlace" onClick={() => setEditandoSlug(true)} disabled={isPending}><Pencil size={15} strokeWidth={2} /></button>
-                    </div>
+                  <td className="col-actions">
+                    <RowActions>
+                      <button className="row-actions-item" onClick={copiarEnlace} disabled={isPending}><Copy size={15} strokeWidth={2} /> Copiar enlace</button>
+                      <button className="row-actions-item" onClick={() => setEditandoSlug(true)} disabled={isPending}><Pencil size={15} strokeWidth={2} /> Editar enlace</button>
+                    </RowActions>
                   </td>
                 </tr>
               </tbody>
@@ -976,27 +959,27 @@ export default function CitasView({ data }: { data: CitasPageData }) {
             <div className="table-wrapper">
               <table className="table">
                 <thead>
-                  <tr><th>Nombre</th><th>Token</th><th>Estado</th><th className="alm-col-act"></th></tr>
+                  <tr><th>Nombre</th><th>Token</th><th>Estado</th><th className="col-actions"></th></tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td><strong>{data.bot_config.nombre ?? '—'}</strong></td>
-                    <td className="text-sm-muted">{data.bot_config.token ? `${data.bot_config.token.substring(0, 10)}…` : '—'}</td>
-                    <td>
+                    <td data-label="Nombre"><strong>{data.bot_config.nombre ?? '—'}</strong></td>
+                    <td data-label="Token" className="text-sm-muted">{data.bot_config.token ? `${data.bot_config.token.substring(0, 10)}…` : '—'}</td>
+                    <td data-label="Estado">
                       <span className={`badge ${data.bot_config.activo ? 'badge-success' : 'badge-neutral'}`}>
                         {data.bot_config.activo ? 'Activo' : 'Inactivo'}
                       </span>
                       {data.bot_config.webhook_registrado && <div className="text-xs-muted">Webhook registrado</div>}
                     </td>
-                    <td>
-                      <div className="ter-actions">
-                        <button className="ter-action-btn" title={data.bot_config.activo ? 'Desactivar bot' : 'Activar bot'}
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item"
                           onClick={() => setConfirmToggleBot(!data.bot_config.activo)} disabled={isPending}>
-                          {data.bot_config.activo ? <PowerOff size={15} strokeWidth={2} /> : <Power size={15} strokeWidth={2} />}
+                          {data.bot_config.activo ? <PowerOff size={15} strokeWidth={2} /> : <Power size={15} strokeWidth={2} />} {data.bot_config.activo ? 'Desactivar bot' : 'Activar bot'}
                         </button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar bot"
-                          onClick={eliminarBot} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={eliminarBot} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar bot</button>
+                      </RowActions>
                     </td>
                   </tr>
                 </tbody>

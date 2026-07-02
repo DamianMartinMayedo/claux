@@ -46,7 +46,7 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
         <tr>
           <th>Cliente</th>
           <th>Estado</th>
-          <th className="text-right">Días</th>
+          <th className="col-num">Días</th>
         </tr>
       </thead>
       <tbody>
@@ -54,17 +54,17 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
           const { label, color } = calcDias(c)
           return (
             <tr key={c.client_id}>
-              <td>
+              <td data-label="Cliente">
                 <Link href={`/admin/clientes/${c.client_id}`} className="table-empresa-link">
                   {c.nombre_empresa}
                 </Link>
               </td>
-              <td>
+              <td data-label="Estado">
                 <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>
                   {c.estado}
                 </span>
               </td>
-              <td className="text-right">
+              <td data-label="Días" className="col-num">
                 <span className="dias-value" style={{ color }}>
                   {label}
                 </span>

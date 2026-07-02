@@ -242,28 +242,28 @@ export default async function ClienteDetallePage({
                 <thead>
                   <tr>
                     <th>Fecha</th>
-                    <th>Monto</th>
+                    <th className="col-num">Monto</th>
                     <th>Estado</th>
                     <th>Método</th>
-                    <th />
+                    <th className="col-actions" />
                   </tr>
                 </thead>
                 <tbody>
                   {pagos.map(p => (
                     <tr key={p.pago_id}>
-                      <td className="table-muted">{formatFecha(p.fecha)}</td>
-                      <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
-                      <td>
+                      <td data-label="Fecha" className="table-muted">{formatFecha(p.fecha)}</td>
+                      <td data-label="Monto" className="col-num table-price">${p.monto_usd?.toFixed(2)}</td>
+                      <td data-label="Estado">
                         <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
                           {p.estado === 'por_confirmar' ? 'Por confirmar' : 'Confirmado'}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Método">
                         <span className="badge badge-neutral">
                           {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
                         </span>
                       </td>
-                      <td className="table-actions-right">
+                      <td className="col-actions">
                         {p.estado === 'por_confirmar' && (
                           <ConfirmarPagoBtn
                             pagoId={p.pago_id}

@@ -193,14 +193,18 @@ function MovimientoModal({
   const [isPending, startTransition] = useTransition()
   const [tipo,  setTipo]  = useState<TipoMovimiento>('INGRESO')
   const [cuentaId, setCuentaId] = useState(cuentaInicial ?? cuentas[0]?.cuenta_id ?? '')
+  const [registrarGasto, setRegistrarGasto] = useState(true)
 
   const cuentaSel = cuentas.find(c => c.cuenta_id === cuentaId)
+  const esEgreso  = tipo === 'EGRESO'
+  const labelRegistro = esEgreso ? 'gasto' : 'cobro'
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
     fd.set('cuenta_id', cuentaId)
+    fd.set('registrar_gasto', String(registrarGasto))
     startTransition(async () => {
       const res = await registrarMovimiento(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -210,7 +214,7 @@ function MovimientoModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-md" role="dialog" aria-modal>
+      <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Registrar movimiento</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
@@ -255,13 +259,32 @@ function MovimientoModal({
                 <input className="input" name="concepto" required
                   placeholder="Ej: Venta del día, pago de proveedor, retiro…" />
               </div>
+
+              {/* Toggle registrar como gasto/cobro */}
               <div className="input-group ter-col-full">
-                <label>Categoría</label>
-                <select className="input" name="categoria_id" defaultValue="">
-                  <option value="">— Sin categoría —</option>
-                  {categorias.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
-                </select>
+                <label className="cita-chk-item">
+                  <input type="checkbox" name="registrar_gasto" checked={registrarGasto}
+                    onChange={e => setRegistrarGasto(e.target.checked)} />
+                  Registrar como {labelRegistro}
+                </label>
+                <span className="input-hint">
+                  El egreso se registrará también como gasto y el ingreso como cobro,
+                  vinculados automáticamente.
+                </span>
               </div>
+
+              {registrarGasto && (
+                <div className="input-group ter-col-full">
+                  <label>Categoría</label>
+                  <select className="input" name="categoria_id" defaultValue="">
+                    <option value="">— Sin categoría —</option>
+                    {categorias.filter(c => c.estado === 'ACTIVO').map(c => (
+                      <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="input-group ter-col-full">
                 <label>Notas</label>
                 <textarea className="input input-textarea" name="notas" rows={2}
@@ -766,26 +789,26 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
                   <th>Fecha</th>
                   <th>Concepto</th>
                   <th>Cuenta</th>
-                  <th className="tes-col-monto">Monto</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-num">Monto</th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {movimientosFiltrados.map(m => (
                   <tr key={m.movimiento_id}>
-                    <td className="text-sm-muted tes-nowrap">{formatFecha(m.fecha)}</td>
-                    <td>
+                    <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(m.fecha)}</td>
+                    <td data-label="Concepto">
                       <strong>{m.concepto}</strong>
                       <div className="tes-mov-sub">
                         {m.categoria && <span className="tes-mov-cat">{m.categoria}</span>}
                         {m.origen !== 'MANUAL' && <span className="badge badge-neutral tes-origen-badge">{m.origen}</span>}
                       </div>
                     </td>
-                    <td className="text-sm-muted">{cuentaNombre[m.cuenta_id] ?? m.cuenta_id}</td>
-                    <td className={`tes-col-monto tes-monto-cell ${m.tipo === 'INGRESO' ? 'tes-monto-in' : 'tes-monto-out'}`}>
+                    <td data-label="Cuenta" className="text-sm-muted">{cuentaNombre[m.cuenta_id] ?? m.cuenta_id}</td>
+                    <td data-label="Monto" className={`col-num tes-monto-cell ${m.tipo === 'INGRESO' ? 'tes-monto-in' : 'tes-monto-out'}`}>
                       {m.tipo === 'INGRESO' ? '+' : '−'}{formatMonto(Number(m.monto))} {m.moneda}
                     </td>
-                    <td>
+                    <td className="col-actions">
                       <div className="ter-actions">
                         <button className="ter-action-btn ter-action-danger" title="Eliminar"
                           onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>

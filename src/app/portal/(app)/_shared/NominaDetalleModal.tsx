@@ -53,16 +53,16 @@ function LineaEditableRow({
 
   return (
     <tr>
-      <td>
+      <td data-label="Empleado">
         <strong>{linea.empleado_nombre}</strong>
         {linea.cargo && <div className="text-sm-muted">{linea.cargo}</div>}
       </td>
-      <td><input className="input nom-input" type="number" min="0" step="0.01" value={dev}
+      <td data-label="Devengado" className="col-num"><input className="input nom-input" type="number" min="0" step="0.01" value={dev}
         onChange={e => setDev(e.target.value)} aria-label={`Devengado de ${linea.empleado_nombre}`} /></td>
-      <td><input className="input nom-input" type="number" min="0" step="0.01" value={ded}
+      <td data-label="Deducciones" className="col-num"><input className="input nom-input" type="number" min="0" step="0.01" value={ded}
         onChange={e => setDed(e.target.value)} aria-label={`Deducciones de ${linea.empleado_nombre}`} /></td>
-      <td className="tes-col-monto tes-monto-cell">{formatMonto(netoLive)} {moneda}</td>
-      <td>
+      <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(netoLive)} {moneda}</td>
+      <td className="col-actions">
         <button type="button" className="ter-action-btn ter-action-restore" title="Guardar línea"
           onClick={save} disabled={isPending || !dirty}><Check size={15} strokeWidth={2} /></button>
       </td>
@@ -165,10 +165,10 @@ export function NominaDetalleModal({
                 <thead>
                   <tr>
                     <th>Empleado</th>
-                    <th>Devengado</th>
-                    <th>Deducciones</th>
-                    <th className="tes-col-monto">Neto</th>
-                    {esBorrador && <th className="alm-col-act"></th>}
+                    <th className="col-num">Devengado</th>
+                    <th className="col-num">Deducciones</th>
+                    <th className="col-num">Neto</th>
+                    {esBorrador && <th className="col-actions"></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -178,10 +178,10 @@ export function NominaDetalleModal({
                       ))
                     : lineasVisibles.map(l => (
                         <tr key={l.linea_id}>
-                          <td><strong>{l.empleado_nombre}</strong>{l.cargo && <div className="text-sm-muted">{l.cargo}</div>}</td>
-                          <td className="tes-monto-cell">{formatMonto(l.devengado)}</td>
-                          <td className="tes-monto-cell">{formatMonto(l.deducciones)}</td>
-                          <td className="tes-col-monto tes-monto-cell">{formatMonto(l.neto)} {nomina.moneda}</td>
+                          <td data-label="Empleado"><strong>{l.empleado_nombre}</strong>{l.cargo && <div className="text-sm-muted">{l.cargo}</div>}</td>
+                          <td data-label="Devengado" className="col-num tes-monto-cell">{formatMonto(l.devengado)}</td>
+                          <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(l.deducciones)}</td>
+                          <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(l.neto)} {nomina.moneda}</td>
                         </tr>
                       ))}
                 </tbody>

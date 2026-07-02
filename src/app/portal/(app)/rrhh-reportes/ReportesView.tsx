@@ -322,13 +322,13 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
               <div className="ter-card-head"><span className="ter-form-section-title">Plantilla y coste por empresa · {anio}</span></div>
               <div className="table-wrapper">
                 <table className="table">
-                  <thead><tr><th>Empresa</th><th>Activos</th><th className="tes-col-monto">Coste {anio}</th></tr></thead>
+                  <thead><tr><th>Empresa</th><th>Activos</th><th className="col-num">Coste {anio}</th></tr></thead>
                   <tbody>
                     {porEmpresa.map(e => (
                       <tr key={e.empresa_id}>
-                        <td><EmpresaTag color={colorOf(e.empresa_id)} nombre={e.nombre} /></td>
-                        <td className="text-sm-muted">{e.activos}</td>
-                        <td className="tes-col-monto tes-monto-cell">
+                        <td data-label="Empresa"><EmpresaTag color={colorOf(e.empresa_id)} nombre={e.nombre} /></td>
+                        <td data-label="Activos" className="text-sm-muted">{e.activos}</td>
+                        <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">
                           {e.coste.length === 0 ? '—' : e.coste.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
                         </td>
                       </tr>
@@ -347,12 +347,12 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
             ) : (
               <div className="table-wrapper">
                 <table className="table">
-                  <thead><tr><th>Mes</th><th className="tes-col-monto">Coste</th></tr></thead>
+                  <thead><tr><th>Mes</th><th className="col-num">Coste</th></tr></thead>
                   <tbody>
                     {costePorMes.map(r => (
                       <tr key={r.periodo}>
-                        <td><strong>{formatMes(r.periodo)}</strong></td>
-                        <td className="tes-col-monto tes-monto-cell">
+                        <td data-label="Mes"><strong>{formatMes(r.periodo)}</strong></td>
+                        <td data-label="Coste" className="col-num tes-monto-cell">
                           {r.monedas.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
                         </td>
                       </tr>
@@ -368,13 +368,13 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
             <div className="ter-card-head"><span className="ter-form-section-title">Plantilla por departamento</span></div>
             <div className="table-wrapper">
               <table className="table">
-                <thead><tr><th>Departamento</th><th>Activos</th><th className="tes-col-monto">Coste {anio}</th></tr></thead>
+                <thead><tr><th>Departamento</th><th>Activos</th><th className="col-num">Coste {anio}</th></tr></thead>
                 <tbody>
                   {porDepto.map(d => (
                     <tr key={d.departamento}>
-                      <td><strong>{d.departamento}</strong></td>
-                      <td className="text-sm-muted">{d.activos}</td>
-                      <td className="tes-col-monto tes-monto-cell">
+                      <td data-label="Departamento"><strong>{d.departamento}</strong></td>
+                      <td data-label="Activos" className="text-sm-muted">{d.activos}</td>
+                      <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">
                         {d.coste.length === 0 ? '—' : d.coste.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
                       </td>
                     </tr>

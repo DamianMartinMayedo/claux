@@ -20,6 +20,7 @@ import {
   formatPeriodo,
 } from '../_shared/NominaDetalleModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { RowActions }                  from '@/components/portal/RowActions'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 
@@ -305,9 +306,9 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                   <th>Período</th>
                   {multiempresa && <th>Empresa</th>}
                   <th>Empleados</th>
-                  <th className="tes-col-monto">Total</th>
+                  <th className="col-num">Total</th>
                   <th>Estado</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -318,25 +319,25 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                     style={multiempresa ? empresaColorVar(colorOf(n.empresa_id)) : undefined}
                     onClick={() => setDetalleNominaId(n.nomina_id)}
                   >
-                    <td><strong>{formatPeriodo(n.periodo)}</strong></td>
+                    <td data-label="Período"><strong>{formatPeriodo(n.periodo)}</strong></td>
                     {multiempresa && (
-                      <td>
+                      <td data-label="Empresa">
                         <EmpresaTag color={colorOf(n.empresa_id)} nombre={data.empresa_nombres[n.empresa_id] ?? '—'} />
                       </td>
                     )}
-                    <td className="text-sm-muted">{n.lineas.length}</td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(n.total)} {n.moneda}</td>
-                    <td>
+                    <td data-label="Empleados" className="text-sm-muted">{n.lineas.length}</td>
+                    <td data-label="Total" className="col-num tes-monto-cell">{formatMonto(n.total)} {n.moneda}</td>
+                    <td data-label="Estado">
                       <span className={`badge ${n.estado === 'BORRADOR' ? 'badge-warning' : (n.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
                         {n.estado === 'BORRADOR' ? 'Borrador' : (n.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
                     </td>
-                    <td>
-                      <div className="ter-actions" onClick={e => e.stopPropagation()}>
-                        <button className="ter-action-btn" title="Ver detalle" onClick={() => setDetalleNominaId(n.nomina_id)}><Pencil size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setDelNomina(n)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setDetalleNominaId(n.nomina_id)}><Pencil size={15} strokeWidth={2} /> Ver detalle</button>
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={() => setDelNomina(n)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

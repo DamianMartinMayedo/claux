@@ -82,13 +82,13 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
       ) : (
         <div className="table-wrapper">
           <table className="table">
-            <thead><tr><th>Fechas</th><th>Motivo</th><th className="alm-col-act"></th></tr></thead>
+            <thead><tr><th>Fechas</th><th>Motivo</th><th className="col-actions"></th></tr></thead>
             <tbody>
               {cierres.map(c => (
                 <tr key={c.cierre_id}>
-                  <td><strong>{c.fecha_desde === c.fecha_hasta ? fmt(c.fecha_desde) : `${fmt(c.fecha_desde)} – ${fmt(c.fecha_hasta)}`}</strong></td>
-                  <td className="text-sm-muted">{c.motivo ?? '—'}</td>
-                  <td>
+                  <td data-label="Fechas"><strong>{c.fecha_desde === c.fecha_hasta ? fmt(c.fecha_desde) : `${fmt(c.fecha_desde)} – ${fmt(c.fecha_hasta)}`}</strong></td>
+                  <td data-label="Motivo" className="text-sm-muted cell-truncate">{c.motivo ?? '—'}</td>
+                  <td className="col-actions">
                     <div className="ter-actions">
                       <button className="ter-action-btn ter-action-danger" title="Eliminar"
                         onClick={() => doEliminar(c.cierre_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>

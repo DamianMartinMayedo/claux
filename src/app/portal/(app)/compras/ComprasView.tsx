@@ -90,19 +90,19 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                   <th>Proveedor</th>
                   <th>Almacén</th>
                   <th>Estado</th>
-                  <th className="text-align-right">Total</th>
+                  <th className="col-num">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {filtradas.map(c => (
                   <tr key={c.compra_id} className="table-row-clickable"
                     onClick={() => router.push(`/portal/compras/${c.compra_id}`)}>
-                    <td><code className="text-mono">{c.numero}</code></td>
-                    <td className="text-sm-muted">{fmtDate(c.fecha)}</td>
-                    <td>{c.proveedor_id ? (data.proveedor_nombres[c.proveedor_id] ?? c.proveedor_id) : <span className="text-faint">—</span>}</td>
-                    <td className="text-sm-muted">{data.almacen_nombres[c.almacen_id] ?? c.almacen_id}</td>
-                    <td><span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span></td>
-                    <td className="text-align-right ven-td-amt">{fmt(c.total, c.moneda)}</td>
+                    <td data-label="Número"><code className="text-mono">{c.numero}</code></td>
+                    <td data-label="Fecha" className="text-sm-muted">{fmtDate(c.fecha)}</td>
+                    <td data-label="Proveedor">{c.proveedor_id ? (data.proveedor_nombres[c.proveedor_id] ?? c.proveedor_id) : <span className="text-faint">—</span>}</td>
+                    <td data-label="Almacén" className="text-sm-muted">{data.almacen_nombres[c.almacen_id] ?? c.almacen_id}</td>
+                    <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span></td>
+                    <td data-label="Total" className="col-num">{fmt(c.total, c.moneda)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition }   from 'react'
+import { useState, useTransition, useEffect, useRef }   from 'react'
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
 import {
@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/portal/ventas'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
-import { Copy, Pencil, Printer } from 'lucide-react'
+import { Copy, MoreHorizontal, Pencil, Printer } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
   CONDICION_PAGO_LABEL,
@@ -37,6 +37,17 @@ export default function OfertaDetalle({ data }: Props) {
     onConfirm: () => void
   } | null>(null)
   const [alertMsg, setAlertMsg] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [menuOpen])
 
   const { oferta, empresa, cliente, lineas, ajustes, factura } = data
 
@@ -111,40 +122,47 @@ export default function OfertaDetalle({ data }: Props) {
             )}
           </p>
         </div>
-        <div className="ven-btn-group">
-          <Link href={`/portal/pdf/oferta/${oferta.oferta_id}`} target="_blank" className="btn btn-secondary">
-            <Printer size={14} strokeWidth={2} /> Ver / Descargar PDF
-          </Link>
+        <div className="ven-btn-group ven-btn-group-relative">
           {puedeEditar && (
             <Link href={`/portal/ventas/ofertas/${oferta.oferta_id}/editar`} className="btn btn-secondary">
               <Pencil size={14} strokeWidth={2} /> Editar
             </Link>
           )}
-          <button className="btn btn-secondary" onClick={handleDuplicar} disabled={duplicating}>
-            <Copy size={14} strokeWidth={2} /> {duplicating ? 'Duplicando…' : 'Duplicar'}
-          </button>
+          <div className="ven-dropdown-wrap" ref={menuRef}>
+            <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)}>
+              <MoreHorizontal size={16} />
+            </button>
+            {menuOpen && (
+              <div className="ven-dropdown-menu" onClick={() => setMenuOpen(false)}>
+                <button className="ven-dropdown-item" onClick={() => window.open(`/portal/pdf/oferta/${oferta.oferta_id}`, '_blank')}>
+                  <Printer size={14} strokeWidth={2} /> Ver / Descargar PDF
+                </button>
+                <button className="ven-dropdown-item" onClick={handleDuplicar} disabled={duplicating}>
+                  <Copy size={14} strokeWidth={2} /> {duplicating ? 'Duplicando…' : 'Duplicar'}
+                </button>
+                {transiciones.length > 0 && (
+                  <>
+                    <div className="ven-dropdown-sep" />
+                    {transiciones.map(t => (
+                      <button
+                        key={t}
+                        className="ven-dropdown-item"
+                        onClick={() => cambiarEstado(t)}
+                        disabled={isPending}
+                      >
+                        Cambiar a {ESTADO_OFERTA_LABEL[t]}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {statusMsg && (
         <div className="alert alert-success mb-4">{statusMsg}</div>
-      )}
-
-      {/* ── Transiciones de estado ── */}
-      {transiciones.length > 0 && (
-        <div className="ven-acciones-estado">
-          <span className="ven-acciones-label">Cambiar estado a:</span>
-          {transiciones.map(t => (
-            <button
-              key={t}
-              className="btn btn-secondary btn-sm"
-              onClick={() => cambiarEstado(t)}
-              disabled={isPending}
-            >
-              {ESTADO_OFERTA_LABEL[t]}
-            </button>
-          ))}
-        </div>
       )}
 
       {factura && (
@@ -201,26 +219,26 @@ export default function OfertaDetalle({ data }: Props) {
             <thead>
               <tr>
                 <th>Descripción</th>
-                <th className="text-right">Cantidad</th>
-                <th className="text-right">Precio unit.</th>
+                <th className="col-num">Cantidad</th>
+                <th className="col-num">Precio unit.</th>
                 {lineas.some(l => Number(l.descuento_pct) > 0) && (
-                  <th className="text-right">Dto. %</th>
+                  <th className="col-num">Dto. %</th>
                 )}
-                <th className="text-right">Total</th>
+                <th className="col-num">Total</th>
               </tr>
             </thead>
             <tbody>
               {lineas.map(l => (
                 <tr key={l.linea_id}>
-                  <td>{l.descripcion}</td>
-                  <td className="text-right">{Number(l.cantidad)}</td>
-                  <td className="text-right">{formatearMoneda(Number(l.precio_unitario), oferta.moneda)}</td>
+                  <td data-label="Descripción">{l.descripcion}</td>
+                  <td data-label="Cantidad" className="col-num">{Number(l.cantidad)}</td>
+                  <td data-label="Precio unit." className="col-num">{formatearMoneda(Number(l.precio_unitario), oferta.moneda)}</td>
                   {lineas.some(x => Number(x.descuento_pct) > 0) && (
-                    <td className="text-right text-muted">
+                    <td data-label="Dto. %" className="col-num text-muted">
                       {Number(l.descuento_pct) > 0 ? `${Number(l.descuento_pct)}%` : '—'}
                     </td>
                   )}
-                  <td className="ven-td-amt">{formatearMoneda(Number(l.total), oferta.moneda)}</td>
+                  <td data-label="Total" className="col-num">{formatearMoneda(Number(l.total), oferta.moneda)}</td>
                 </tr>
               ))}
             </tbody>

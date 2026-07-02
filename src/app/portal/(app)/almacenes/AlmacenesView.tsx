@@ -13,6 +13,7 @@ import {
   type AlmacenesPageData,
 } from '@/app/actions/portal/almacenes'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { RowActions }                  from '@/components/portal/RowActions'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
@@ -329,7 +330,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                   <th>Tipo</th>
                   <th>Descripción</th>
                   <th>Estado</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -340,53 +341,52 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                     style={multiempresa ? empresaColorVar(colorOf(a.empresa_id)) : undefined}
                   >
 
-                    <td>
+                    <td data-label="Nombre">
                       <strong>{a.nombre}</strong>
                       <div className="alm-id-text">{a.almacen_id}</div>
                     </td>
 
                     {multiempresa && (
-                      <td>
+                      <td data-label="Empresa">
                         <EmpresaTag color={colorOf(a.empresa_id)} nombre={data.empresa_nombres[a.empresa_id] ?? a.empresa_id} />
                       </td>
                     )}
 
-                    <td>
+                    <td data-label="Tipo">
                       <span className={`badge ${TIPO_BADGE[a.tipo]}`}>
                         {TIPO_ALMACEN_LABEL[a.tipo]}
                       </span>
                     </td>
 
-                    <td className="alm-desc-td">
+                    <td data-label="Descripción" className="alm-desc-td cell-truncate">
                       {a.descripcion ?? '—'}
                     </td>
 
-                    <td>
+                    <td data-label="Estado">
                       <span className={`badge ${a.activo ? 'badge-success' : 'badge-neutral'}`}>
                         {a.activo ? 'Activo' : 'Archivado'}
                       </span>
                     </td>
 
-                    <td>
-                      <div className="ter-actions">
+                    <td className="col-actions">
+                      <RowActions>
                         {a.activo ? (
                           <>
-                            <button className="ter-action-btn" title="Editar"
-                              onClick={() => openEdit(a)}>
-                              <Pencil size={15} strokeWidth={2} />
+                            <button className="row-actions-item" onClick={() => openEdit(a)}>
+                              <Pencil size={15} strokeWidth={2} /> Editar
                             </button>
-                            <button className="ter-action-btn ter-action-danger" title="Archivar"
+                            <button className="row-actions-item row-actions-item-danger"
                               onClick={() => setConfirmAlm(a)} disabled={isPending}>
-                              <Archive size={15} strokeWidth={2} />
+                              <Archive size={15} strokeWidth={2} /> Archivar
                             </button>
                           </>
                         ) : (
-                          <button className="ter-action-btn ter-action-restore" title="Restaurar"
+                          <button className="row-actions-item"
                             onClick={() => handleRestaurar(a)} disabled={isPending}>
-                            <RotateCcw size={15} strokeWidth={2} />
+                            <RotateCcw size={15} strokeWidth={2} /> Restaurar
                           </button>
                         )}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

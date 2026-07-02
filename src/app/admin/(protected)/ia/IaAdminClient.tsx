@@ -166,22 +166,22 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         <div className="table-wrapper table-wrapper-flush">
           <table className="table">
             <thead>
-              <tr><th>Modelo</th><th>ID</th><th>Tipo</th><th className="text-right">Activo</th><th /></tr>
+              <tr><th>Modelo</th><th>ID</th><th>Tipo</th><th className="col-center">Activo</th><th className="col-actions" /></tr>
             </thead>
             <tbody>
               {modelos.map(m => (
                 <tr key={m.id}>
-                  <td><span className="ia-cell-badges">{m.nombre}{m.id === principal && <span className="badge badge-info">principal</span>}</span></td>
-                  <td className="table-muted">{m.id}</td>
-                  <td><span className={`badge ${m.gratis ? 'badge-success' : 'badge-warning'}`}>{m.gratis ? 'Gratis' : 'Pago'}</span></td>
-                  <td className="text-right">
+                  <td data-label="Modelo"><span className="ia-cell-badges">{m.nombre}{m.id === principal && <span className="badge badge-info">principal</span>}</span></td>
+                  <td data-label="ID" className="table-muted">{m.id}</td>
+                  <td data-label="Tipo"><span className={`badge ${m.gratis ? 'badge-success' : 'badge-warning'}`}>{m.gratis ? 'Gratis' : 'Pago'}</span></td>
+                  <td data-label="Activo" className="col-center">
                     <span className="switch">
                       <input type="checkbox" checked={m.activo} onChange={() => toggle(m.id, !m.activo)}
                              aria-label={`Activar ${m.nombre}`} disabled={isPending} />
                       <span className="switch-track" aria-hidden="true" />
                     </span>
                   </td>
-                  <td className="table-actions-right">
+                  <td className="col-actions">
                     {m.id !== principal && m.id !== fallbackGratis && (
                       <button type="button" className="ia-icon-btn" onClick={() => eliminar(m.id)}
                               aria-label={`Eliminar ${m.nombre}`} disabled={isPending}>
@@ -211,8 +211,8 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
               <thead>
                 <tr>
                   <th>Cliente</th>
-                  <th className="text-right">Conversaciones</th>
-                  <th className="text-right">Tokens</th>
+                  <th className="col-num">Conversaciones</th>
+                  <th className="col-num">Tokens</th>
                   <th>Modelo en uso</th>
                 </tr>
               </thead>
@@ -221,16 +221,16 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                   const pct = c.cupo > 0 ? Math.round((c.conversaciones / c.cupo) * 100) : 0
                   return (
                     <tr key={c.client_id}>
-                      <td>{c.nombre}</td>
-                      <td className="text-right">
+                      <td data-label="Cliente">{c.nombre}</td>
+                      <td data-label="Conversaciones" className="col-num">
                         <span className="ia-cell-badges">
                           <span>{c.conversaciones.toLocaleString('es-ES')} / {c.cupo.toLocaleString('es-ES')}</span>
                           <span className={`badge ${pct >= 100 ? 'badge-error' : pct >= 90 ? 'badge-warning' : 'badge-neutral'}`}>{pct}%</span>
                           {c.cupoPropio && <span className="badge badge-info">cupo propio</span>}
                         </span>
                       </td>
-                      <td className="text-right">{c.tokens.toLocaleString('es-ES')}</td>
-                      <td className="table-muted">{c.modeloActual}</td>
+                      <td data-label="Tokens" className="col-num">{c.tokens.toLocaleString('es-ES')}</td>
+                      <td data-label="Modelo en uso" className="table-muted">{c.modeloActual}</td>
                     </tr>
                   )
                 })}
@@ -238,8 +238,8 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
               <tfoot>
                 <tr>
                   <td>Total</td>
-                  <td className="text-right">{totalConv.toLocaleString('es-ES')}</td>
-                  <td className="text-right">{totalTok.toLocaleString('es-ES')}</td>
+                  <td className="col-num">{totalConv.toLocaleString('es-ES')}</td>
+                  <td className="col-num">{totalTok.toLocaleString('es-ES')}</td>
                   <td />
                 </tr>
               </tfoot>

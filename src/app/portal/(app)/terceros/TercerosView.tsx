@@ -13,6 +13,7 @@ import {
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal, VIA_BADGE } from './_TerceroFormModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { RowActions }                  from '@/components/portal/RowActions'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { Archive, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
@@ -224,7 +225,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                   <th>Representante</th>
                   <th>Vías de pago</th>
                   <th>Cond. pago</th>
-                  <th className="ter-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -237,7 +238,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                   >
 
                     {/* Nombre / ID */}
-                    <td>
+                    <td data-label="Nombre">
                       <Link
                         href={`/portal/terceros/${t.tercero_id}`}
                         className="ter-nombre link-inherit"
@@ -249,7 +250,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     </td>
 
                     {/* Tipo */}
-                    <td>
+                    <td data-label="Tipo">
                       <span className={`ter-badge ${TIPO_CLS[t.tipo]}`}>
                         {TIPO_LABEL[t.tipo]}
                       </span>
@@ -257,7 +258,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
 
                     {/* Empresa */}
                     {multiempresa && (
-                      <td>
+                      <td data-label="Empresa">
                         <EmpresaTag
                           color={colorOf(t.empresa_id)}
                           nombre={data.empresa_nombres[t.empresa_id] ?? t.empresa_id}
@@ -266,7 +267,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     )}
 
                     {/* Representante */}
-                    <td>
+                    <td data-label="Representante">
                       <div className="ter-contacto">
                         {t.representante
                           ? <span className="ter-rep-nombre">{t.representante}
@@ -286,7 +287,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     </td>
 
                     {/* Vías de pago */}
-                    <td>
+                    <td data-label="Vías de pago">
                       <div className="ter-via-stack">
                         <ViaBadge via={t.via_primaria} />
                         {t.via_secundaria?.tipo && <ViaBadge via={t.via_secundaria} />}
@@ -294,43 +295,40 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     </td>
 
                     {/* Condición pago */}
-                    <td className="ter-condicion">
+                    <td data-label="Cond. pago" className="ter-condicion">
                       {CONDICION_LABEL[t.condicion_pago] ?? t.condicion_pago}
                     </td>
 
                     {/* Acciones */}
-                    <td>
-                      <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
-                        {/* Contrato */}
+                    <td className="col-actions">
+                      <RowActions>
                         {t.contrato_url && (
                           <a
                             href={t.contrato_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="ter-action-btn"
-                            title="Ver contrato"
+                            className="row-actions-item"
                           >
-                            <FileText size={15} strokeWidth={2} />
+                            <FileText size={15} strokeWidth={2} /> Ver contrato
                           </a>
                         )}
                         {t.activo ? (
                           <>
-                            <button className="ter-action-btn" title="Editar"
-                              onClick={() => openEdit(t)}>
-                              <Pencil size={15} strokeWidth={2} />
+                            <button className="row-actions-item" onClick={() => openEdit(t)}>
+                              <Pencil size={15} strokeWidth={2} /> Editar
                             </button>
-                            <button className="ter-action-btn ter-action-danger" title="Archivar"
+                            <button className="row-actions-item row-actions-item-danger"
                               onClick={() => setConfirmTercero(t)} disabled={isPending}>
-                              <Archive size={15} strokeWidth={2} />
+                              <Archive size={15} strokeWidth={2} /> Archivar
                             </button>
                           </>
                         ) : (
-                          <button className="ter-action-btn ter-action-restore" title="Restaurar"
+                          <button className="row-actions-item"
                             onClick={() => handleRestaurar(t)} disabled={isPending}>
-                            <RotateCcw size={15} strokeWidth={2} />
+                            <RotateCcw size={15} strokeWidth={2} /> Restaurar
                           </button>
                         )}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

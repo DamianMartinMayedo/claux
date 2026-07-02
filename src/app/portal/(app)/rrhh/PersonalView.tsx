@@ -16,6 +16,7 @@ import {
 } from '@/app/actions/portal/rrhh'
 import { Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { RowActions }                  from '@/components/portal/RowActions'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -393,9 +394,9 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                   {multiempresa && <th>Empresa</th>}
                   <th>Cargo</th>
                   <th>Contrato</th>
-                  <th className="tes-col-monto">Salario base</th>
+                  <th className="col-num">Salario base</th>
                   <th>Estado</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -404,29 +405,29 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                     className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(e.empresa_id)) : undefined}
                     onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}>
-                    <td>
+                    <td data-label="Empleado">
                       <strong>{nombreCompleto(e)}</strong>
                       <div className="tes-mov-sub">
                         {e.documento && <span className="tes-mov-cat">{e.documento}</span>}
                       </div>
                     </td>
                     {multiempresa && (
-                      <td>
+                      <td data-label="Empresa">
                         <EmpresaTag color={colorOf(e.empresa_id)} nombre={data.empresa_nombres[e.empresa_id] ?? '—'} />
                       </td>
                     )}
-                    <td>
+                    <td data-label="Cargo">
                       {e.cargo ?? '—'}
                       {e.departamento && <div className="text-sm-muted">{e.departamento}</div>}
                     </td>
-                    <td>
+                    <td data-label="Contrato">
                       {TIPO_CONTRATO_LABEL[e.tipo_contrato]}
                       <div className="text-sm-muted">{PERIODICIDAD_LABEL[e.periodicidad]} · alta {formatFecha(e.fecha_alta)}</div>
                     </td>
-                    <td className="tes-col-monto tes-monto-cell">
+                    <td data-label="Salario base" className="col-num tes-monto-cell">
                       {e.salario_base > 0 ? `${formatMonto(e.salario_base)} ${e.moneda}` : '—'}
                     </td>
-                    <td>
+                    <td data-label="Estado">
                       <span className={`badge ${e.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
                         {e.estado === 'ACTIVO' ? 'Activo' : 'Baja'}
                       </span>
@@ -434,18 +435,18 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                         <div className="text-sm-muted">{formatFecha(e.fecha_baja)}</div>
                       )}
                     </td>
-                    <td>
-                      <div className="ter-actions" onClick={ev => ev.stopPropagation()}>
-                        <button className="ter-action-btn" title="Editar" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /></button>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /> Editar</button>
                         {e.estado === 'ACTIVO' ? (
-                          <button className="ter-action-btn" title="Dar de baja" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /></button>
+                          <button className="row-actions-item" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
                         ) : (
-                          <button className="ter-action-btn ter-action-restore" title="Reactivar"
-                            onClick={() => reactivar(e.empleado_id)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /></button>
+                          <button className="row-actions-item"
+                            onClick={() => reactivar(e.empleado_id)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Reactivar</button>
                         )}
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setConfirmDel(e)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={() => setConfirmDel(e)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

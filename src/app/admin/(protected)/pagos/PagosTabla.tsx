@@ -145,43 +145,43 @@ export default function PagosTabla({
                 <th>Concepto</th>
                 <th>Estado</th>
                 <th>Método</th>
-                <th>Monto USD</th>
+                <th className="col-num">Monto USD</th>
                 <th>Fecha</th>
                 <th>Período</th>
-                <th />
+                <th className="col-actions" />
               </tr>
             </thead>
             <tbody>
               {paginados.map(p => (
                 <tr key={p.pago_id}>
-                  <td><span className="table-code-muted">{p.pago_id}</span></td>
-                  <td>
+                  <td data-label="ID"><span className="table-code-muted">{p.pago_id}</span></td>
+                  <td data-label="Cliente">
                     <div className="table-empresa">{clienteNombre[p.client_id] ?? p.client_id}</div>
                     <div className="table-empresa-contact">{p.client_id}</div>
                   </td>
-                  <td>
+                  <td data-label="Concepto">
                     <span className={`badge ${p.concepto === 'configuracion' ? 'badge-info' : 'badge-neutral'}`}>
                       {conceptoLabel(p.concepto)}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Estado">
                     <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
                       {estadoLabel(p.estado)}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Método">
                     <span className="badge badge-neutral">
                       {METODO_LABEL[p.metodo] ?? p.metodo}
                     </span>
                   </td>
-                  <td className="table-price">${p.monto_usd?.toFixed(2)}</td>
-                  <td className="table-muted">{formatFecha(p.fecha)}</td>
-                  <td className="table-muted text-xs">
+                  <td data-label="Monto USD" className="col-num table-price">${p.monto_usd?.toFixed(2)}</td>
+                  <td data-label="Fecha" className="table-muted">{formatFecha(p.fecha)}</td>
+                  <td data-label="Período" className="table-muted text-xs">
                     {p.fecha_inicio_periodo && p.fecha_fin_periodo
                       ? `${formatFecha(p.fecha_inicio_periodo)} → ${formatFecha(p.fecha_fin_periodo)}`
                       : '—'}
                   </td>
-                  <td className="table-actions-right">
+                  <td className="col-actions">
                     <div className="table-actions-group">
                       {p.estado === 'por_confirmar' && (
                         <ConfirmarPagoBtn

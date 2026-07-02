@@ -119,28 +119,28 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
               </tr>
             ) : filtrados.map(r => (
               <tr key={r.id}>
-                <td className="act-date-cell">
+                <td data-label="Fecha" className="act-date-cell">
                   {formatFecha(r.created_at)}
                 </td>
 
-                <td>
+                <td data-label="Entidad">
                   <span className={`act-entity-badge act-badge-${r.entity}`}>
                     {ENTITY_LABEL[r.entity] ?? r.entity}
                   </span>
                 </td>
 
-                <td className="act-action-cell">
+                <td data-label="Acción" className="act-action-cell">
                   {ACTION_LABEL[r.action] ?? r.action}
                 </td>
 
-                <td className="act-desc-cell">
+                <td data-label="Descripción" className="act-desc-cell">
                   {r.description}
                   {r.entity_id && (
                     <span className="act-entity-id">[{r.entity_id}]</span>
                   )}
                 </td>
 
-                <td className="act-user-cell">
+                <td data-label="Usuario" className="act-user-cell">
                   {r.user_email}
                 </td>
               </tr>

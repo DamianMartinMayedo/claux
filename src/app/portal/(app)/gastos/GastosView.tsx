@@ -21,6 +21,7 @@ import {
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
 import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { RowActions }                  from '@/components/portal/RowActions'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -655,10 +656,10 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                   <th>Descripción</th>
                   {multiempresa && <th>Empresa</th>}
                   <th>Tipo</th>
-                  <th className="tes-col-monto">Monto</th>
-                  <th className="tes-col-monto">Pendiente</th>
+                  <th className="col-num">Monto</th>
+                  <th className="col-num">Pendiente</th>
                   <th>Estado</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -666,8 +667,8 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                   <tr key={r.registro_id}
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
-                    <td className="text-sm-muted tes-nowrap">{formatFecha(r.fecha)}</td>
-                    <td>
+                    <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(r.fecha)}</td>
+                    <td data-label="Descripción">
                       <strong>{r.descripcion}</strong>
                       <div className="tes-mov-sub">
                         {r.tercero_id && <span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span>}
@@ -675,22 +676,26 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                       </div>
                     </td>
                     {multiempresa && (
-                      <td>
+                      <td data-label="Empresa">
                         <EmpresaTag color={colorOf(r.empresa_id)} nombre={data.empresa_nombres[r.empresa_id] ?? '—'} />
                       </td>
                     )}
-                    <td><span className={`badge ${TIPO_BADGE[r.tipo]}`}>{TIPO_LABEL[r.tipo]}</span></td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(r.monto)} {r.moneda}</td>
-                    <td className="tes-col-monto tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
-                    <td><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
-                    <td>
-                      <div className="ter-actions">
-                        <button className="ter-action-btn ter-action-money" title={r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
-                          onClick={() => setLiquidar(r)}><DollarSign size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn" title="Editar" onClick={() => openEdit(r)}><Pencil size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setConfirmDel(r)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                    <td data-label="Tipo"><span className={`badge ${TIPO_BADGE[r.tipo]}`}>{TIPO_LABEL[r.tipo]}</span></td>
+                    <td data-label="Monto" className="col-num tes-monto-cell">{formatMonto(r.monto)} {r.moneda}</td>
+                    <td data-label="Pendiente" className="col-num tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
+                    <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setLiquidar(r)}>
+                          <DollarSign size={15} strokeWidth={2} /> {r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
+                        </button>
+                        <button className="row-actions-item" onClick={() => openEdit(r)}>
+                          <Pencil size={15} strokeWidth={2} /> Editar
+                        </button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmDel(r)} disabled={isPending}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
@@ -721,40 +726,38 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                   <tr>
                     <th>Nombre</th>
                     <th>Descripción</th>
-                    <th className="text-center">Usos</th>
+                    <th className="col-center">Usos</th>
                     <th>Estado</th>
-                    <th className="alm-col-act"></th>
+                    <th className="col-actions"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.categorias_gastos.map(c => (
                     <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : undefined}>
-                      <td>
+                      <td data-label="Nombre">
                         <strong className="text-sm-bold">{c.nombre}</strong>
                         {c.es_sistema && <span className="badge badge-neutral gc-cat-sistema">Sistema</span>}
                       </td>
-                      <td className="text-sm-muted">{c.descripcion ?? '—'}</td>
-                      <td className="text-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
-                      <td>
+                      <td data-label="Descripción" className="text-sm-muted cell-truncate">{c.descripcion ?? '—'}</td>
+                      <td data-label="Usos" className="col-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
+                      <td data-label="Estado">
                         <span className={`badge ${c.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
                           {c.estado === 'ACTIVO' ? 'Activa' : 'Archivada'}
                         </span>
                       </td>
-                      <td>
-                        <div className="ter-actions">
+                      <td className="col-actions">
+                        <RowActions>
                           {c.estado === 'ACTIVO' ? (
                             <>
-                              <button className="ter-action-btn" title="Editar" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /></button>
+                              <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
                               {!c.es_sistema && (
-                                <button className="ter-action-btn ter-action-danger" title="Archivar"
-                                  onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /></button>
+                                <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
                               )}
                             </>
                           ) : (
-                            <button className="ter-action-btn ter-action-restore" title="Restaurar"
-                              onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /></button>
+                            <button className="row-actions-item" onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
                           )}
-                        </div>
+                        </RowActions>
                       </td>
                     </tr>
                   ))}

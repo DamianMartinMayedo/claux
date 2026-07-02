@@ -13,6 +13,7 @@ import {
   type Tramo,
 } from '@/app/actions/portal/cobranza'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { RowActions }                  from '@/components/portal/RowActions'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
@@ -266,9 +267,9 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
                   <th>Documento</th>
                   <th>{esCobro ? 'Cliente' : 'Proveedor'}</th>
                   <th>Vencimiento</th>
-                  <th className="tes-col-monto">Total</th>
-                  <th className="tes-col-monto">Pendiente</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-num">Total</th>
+                  <th className="col-num">Pendiente</th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -278,7 +279,7 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(d.empresa_id)) : undefined}
                   >
-                    <td>
+                    <td data-label="Documento">
                       <strong>{d.numero}</strong>
                       <div className="tes-mov-sub">
                         <span className="badge badge-neutral tes-origen-badge">{d.doc_tipo === 'FACTURA' ? 'Factura' : 'Directo'}</span>
@@ -288,23 +289,23 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
                         )}
                       </div>
                     </td>
-                    <td className="text-sm-muted">{d.tercero_nombre ?? '—'}</td>
-                    <td className="tes-nowrap">
+                    <td data-label={esCobro ? 'Cliente' : 'Proveedor'} className="text-sm-muted">{d.tercero_nombre ?? '—'}</td>
+                    <td data-label="Vencimiento" className="tes-nowrap">
                       {formatFecha(d.vencimiento)}
                       {d.dias_vencido != null && (
                         <span className={`badge ${TRAMO_BADGE[d.tramo]} cxx-dias`}>{d.dias_vencido} d</span>
                       )}
                     </td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(d.monto)} {d.moneda}</td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
-                    <td>
-                      <div className="ter-actions">
-                        <button className="ter-action-btn ter-action-money" title={esCobro ? 'Cobrar' : 'Pagar'}
-                          onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /></button>
+                    <td data-label="Total" className="col-num tes-monto-cell">{formatMonto(d.monto)} {d.moneda}</td>
+                    <td data-label="Pendiente" className="col-num tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item"
+                          onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /> {esCobro ? 'Cobrar' : 'Pagar'}</button>
                         {d.ref_url && d.doc_tipo === 'FACTURA' && (
-                          <Link className="ter-action-btn" title="Ver factura" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /></Link>
+                          <Link className="row-actions-item" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /> Ver factura</Link>
                         )}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

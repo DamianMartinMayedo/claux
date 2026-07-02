@@ -305,6 +305,28 @@
 .ven-breadcrumb      { margin-bottom: var(--space-3); }
 .ven-breadcrumb-link { font-size: var(--text-sm); color: var(--color-text-muted); text-decoration: none; }
 .ven-btn-group       { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ven-btn-group-relative { position: relative; }
+
+/* ── Dropdown de opciones ── */
+.ven-dropdown-wrap { position: relative; }
+.ven-dropdown-menu {
+  position: absolute; top: 100%; right: 0; margin-top: var(--space-1);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  min-width: 200px; z-index: 50; padding: var(--space-1) 0;
+}
+.ven-dropdown-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm); color: var(--color-text); background: none; border: none;
+  cursor: pointer; text-decoration: none; text-align: left;
+}
+.ven-dropdown-item:hover   { background: var(--color-surface-2); }
+.ven-dropdown-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.ven-dropdown-item-danger { color: var(--color-error); }
+.ven-dropdown-sep {
+  height: 1px; background: var(--color-border); margin: var(--space-1) 0;
+}
 .ven-td-amt          { text-align: right; font-weight: 600; }
 
 /* ════════════════════════════════════════════════════════════════════════════

@@ -305,7 +305,7 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
                   <th>Tipo</th>
                   <th>Producto</th>
                   <th>Almacén</th>
-                  <th className="text-align-right">Cantidad</th>
+                  <th className="col-num">Cantidad</th>
                   <th>Motivo</th>
                   <th>Origen</th>
                 </tr>
@@ -315,21 +315,21 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
                   const s = signo(m)
                   return (
                     <tr key={m.movimiento_id}>
-                      <td className="text-sm-muted">{fmtDate(m.fecha)}</td>
-                      <td>
+                      <td data-label="Fecha" className="text-sm-muted">{fmtDate(m.fecha)}</td>
+                      <td data-label="Tipo">
                         <span className={`badge ${TIPO_BADGE[m.tipo]}`}>
                           <TipoIcon tipo={m.tipo} size={12} /> {TIPO_LABEL[m.tipo]}
                         </span>
                       </td>
-                      <td><strong>{data.producto_nombres[m.producto_id] ?? m.producto_id}</strong></td>
-                      <td className="text-sm-muted">
+                      <td data-label="Producto"><strong>{data.producto_nombres[m.producto_id] ?? m.producto_id}</strong></td>
+                      <td data-label="Almacén" className="text-sm-muted">
                         {m.tipo === 'TRANSFERENCIA' && m.almacen_destino_id
                           ? <>{data.almacen_nombres[m.almacen_id] ?? m.almacen_id} <ArrowRightLeft size={11} strokeWidth={2} /> {data.almacen_nombres[m.almacen_destino_id] ?? m.almacen_destino_id}</>
                           : (data.almacen_nombres[m.almacen_id] ?? m.almacen_id)}
                       </td>
-                      <td className={`text-align-right ${s.cls}`}>{s.txt}</td>
-                      <td className="text-sm-muted">{m.motivo ?? '—'}</td>
-                      <td>
+                      <td data-label="Cantidad" className={`col-num ${s.cls}`}>{s.txt}</td>
+                      <td data-label="Motivo" className="text-sm-muted">{m.motivo ?? '—'}</td>
+                      <td data-label="Origen">
                         {m.origen === 'MANUAL'
                           ? <span className="text-xs-muted">Manual</span>
                           : <span className="badge badge-neutral">{m.origen === 'COMPRA' ? 'Compra' : 'Venta'}</span>}

@@ -1,6 +1,7 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
+import { RowActions } from '@/components/portal/RowActions'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -107,10 +108,11 @@ function TurnoModal({
 // ── Celda de asignación (un empleado × un día) ───────────────────────────────────
 
 function CeldaTurno({
-  empleadoId, dia, turnoIdActual, turnos, onChanged,
+  empleadoId, dia, diaLabel, turnoIdActual, turnos, onChanged,
 }: {
   empleadoId:    string
   dia:           number
+  diaLabel:      string
   turnoIdActual: string
   turnos:        Turno[]
   onChanged:     () => void
@@ -132,7 +134,7 @@ function CeldaTurno({
   const color = turnos.find(t => t.turno_id === turnoIdActual)?.color ?? null
 
   return (
-    <td className="turno-cell">
+    <td className="turno-cell" data-label={diaLabel}>
       <div className="turno-cell-wrap" style={color ? ({ '--turno-color': color } as React.CSSProperties) : undefined}>
         {color && <span className="turno-dot" />}
         <select className="input turno-grid-select" value={turnoIdActual}
@@ -213,24 +215,24 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
           <div className="table-wrapper">
             <table className="table">
               <thead>
-                <tr><th>Turno</th><th>Horario</th><th className="alm-col-act"></th></tr>
+                <tr><th>Turno</th><th>Horario</th><th className="col-actions"></th></tr>
               </thead>
               <tbody>
                 {turnos.map(t => (
                   <tr key={t.turno_id}>
-                    <td>
+                    <td data-label="Turno">
                       <div className="turno-name">
                         {t.color && <span className="turno-dot" style={{ '--turno-color': t.color } as React.CSSProperties} />}
                         <strong>{t.nombre}</strong>
                       </div>
                     </td>
-                    <td className="text-sm-muted">{horario(t)}</td>
-                    <td>
-                      <div className="ter-actions">
-                        <button className="ter-action-btn" title="Editar" onClick={() => setModalTurno(t)}><Pencil size={15} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setDelTurno(t)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                    <td data-label="Horario" className="text-sm-muted">{horario(t)}</td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setModalTurno(t)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={() => setDelTurno(t)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
@@ -265,12 +267,12 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
               <tbody>
                 {empleados.map(e => (
                   <tr key={e.empleado_id}>
-                    <td className="turno-grid-emp">
+                    <td className="turno-grid-emp" data-label="Empleado">
                       <strong>{[e.nombre, e.apellidos].filter(Boolean).join(' ')}</strong>
                       {e.cargo && <div className="text-sm-muted">{e.cargo}</div>}
                     </td>
                     {DIAS.map(d => (
-                      <CeldaTurno key={d.n} empleadoId={e.empleado_id} dia={d.n}
+                      <CeldaTurno key={d.n} empleadoId={e.empleado_id} dia={d.n} diaLabel={d.label}
                         turnoIdActual={asignMap.get(`${e.empleado_id}-${d.n}`) ?? ''}
                         turnos={turnos} onChanged={onChanged} />
                     ))}

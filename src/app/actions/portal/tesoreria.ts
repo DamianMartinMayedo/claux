@@ -251,6 +251,9 @@ export async function restaurarCuenta(cuenta_id: string): Promise<{ ok: boolean;
 }
 
 // ── Registrar movimiento manual (INGRESO / EGRESO) ─────────────────────────────
+// Si registrar_gasto está activo, crea también un gasto_cobro vinculado
+// (GASTO si es EGRESO, COBRO si es INGRESO) y el movimiento queda con
+// origen PAGO/COBRO y referencia_id al registro creado.
 
 export async function registrarMovimiento(
   formData: FormData,
@@ -261,13 +264,15 @@ export async function registrarMovimiento(
 
   const db = createAdminClient()
 
-  const cuenta_id    = (formData.get('cuenta_id') as string)?.trim()
-  const tipo         = (formData.get('tipo')      as string)?.trim() as TipoMovimiento
-  const montoRaw     = parseFloat(formData.get('monto') as string)
-  const fecha        = (formData.get('fecha')     as string)?.trim()
-  const concepto     = (formData.get('concepto')  as string)?.trim()
-  const categoria_id = (formData.get('categoria_id') as string)?.trim() || null
-  const notas        = (formData.get('notas')     as string)?.trim() || null
+  const cuenta_id      = (formData.get('cuenta_id') as string)?.trim()
+  const tipo           = (formData.get('tipo')      as string)?.trim() as TipoMovimiento
+  const montoRaw       = parseFloat(formData.get('monto') as string)
+  const fecha          = (formData.get('fecha')     as string)?.trim()
+  const concepto       = (formData.get('concepto')  as string)?.trim()
+  const categoria_id   = (formData.get('categoria_id') as string)?.trim() || null
+  const notas          = (formData.get('notas')     as string)?.trim() || null
+  const registrarGasto = formData.get('registrar_gasto') === 'true'
+  const tercero_id     = (formData.get('tercero_id') as string)?.trim() || null
 
   if (!cuenta_id)                          return { ok: false, error: 'Debes seleccionar una cuenta.' }
   if (!TIPOS_MOVIMIENTO.includes(tipo))    return { ok: false, error: 'Tipo de movimiento no válido.' }
@@ -296,24 +301,60 @@ export async function registrarMovimiento(
     categoriaNombre = cat.nombre
   }
 
+  let gastoId: string | null = null
+  const fechaFinal = fecha || new Date().toISOString().split('T')[0]
+
+  if (registrarGasto) {
+    const esGasto = tipo === 'EGRESO'
+    gastoId = generarRegistroId(esGasto ? 'GASTO' : 'COBRO')
+    const { error: gcErr } = await db.from('gastos_cobros').insert({
+      registro_id:  gastoId,
+      client_id:    session.client_id,
+      empresa_id:   cuenta.empresa_id,
+      tipo:         esGasto ? 'GASTO' : 'COBRO',
+      fecha:        fechaFinal,
+      descripcion:  concepto,
+      categoria:    categoriaNombre,
+      categoria_id,
+      moneda:       cuenta.moneda,
+      monto:        montoRaw,
+      tercero_id:   tercero_id,
+      notas,
+      updated_at:   new Date().toISOString(),
+    })
+    if (gcErr) return { ok: false, error: `Error al crear el registro: ${gcErr.message}` }
+  }
+
   const { error } = await db.from('movimientos_tesoreria').insert({
     movimiento_id: generarMovimientoId(),
     client_id:     session.client_id,
     empresa_id:    cuenta.empresa_id,
     cuenta_id,
-    fecha:         fecha || new Date().toISOString().split('T')[0],
+    fecha:         fechaFinal,
     tipo,
     monto:         montoRaw,
     moneda:        cuenta.moneda,
     concepto,
     categoria:     categoriaNombre,
     categoria_id,
-    origen:        'MANUAL',
+    origen:        registrarGasto ? (tipo === 'EGRESO' ? 'PAGO' : 'COBRO') : 'MANUAL',
+    referencia_id: gastoId,
     notas,
   })
-  if (error) return { ok: false, error: error.message }
+  if (error) {
+    if (gastoId) {
+      await db.from('gastos_cobros').delete().eq('registro_id', gastoId).eq('client_id', session.client_id)
+    }
+    return { ok: false, error: error.message }
+  }
 
   revalidatePath('/portal/tesoreria')
+  if (registrarGasto) {
+    revalidatePath('/portal/gastos')
+    revalidatePath('/portal/cxp')
+    revalidatePath('/portal/cxc')
+    revalidatePath('/portal/reportes')
+  }
   return { ok: true }
 }
 

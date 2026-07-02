@@ -193,15 +193,15 @@ function ConceptosSection({
         <div className="table-wrapper mt-3">
           <table className="table">
             <thead>
-              <tr><th>Concepto</th><th>Tipo</th><th className="tes-col-monto">Valor</th><th className="alm-col-act"></th></tr>
+              <tr><th>Concepto</th><th>Tipo</th><th className="col-num">Valor</th><th className="col-actions"></th></tr>
             </thead>
             <tbody>
               {conceptos.map(c => (
                 <tr key={c.concepto_id}>
-                  <td><strong>{c.nombre}</strong></td>
-                  <td><span className={`badge ${c.tipo === 'BONO' ? 'badge-success' : 'badge-warning'}`}>{c.tipo === 'BONO' ? 'Bono' : 'Deducción'}</span></td>
-                  <td className="tes-col-monto tes-monto-cell">{c.modo === 'PORCENTAJE' ? `${c.valor}%` : `${c.valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${moneda}`}</td>
-                  <td>
+                  <td data-label="Concepto"><strong>{c.nombre}</strong></td>
+                  <td data-label="Tipo"><span className={`badge ${c.tipo === 'BONO' ? 'badge-success' : 'badge-warning'}`}>{c.tipo === 'BONO' ? 'Bono' : 'Deducción'}</span></td>
+                  <td data-label="Valor" className="col-num tes-monto-cell">{c.modo === 'PORCENTAJE' ? `${c.valor}%` : `${c.valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${moneda}`}</td>
+                  <td className="col-actions">
                     <div className="ter-actions">
                       {delId === c.concepto_id ? (
                         <>
@@ -362,23 +362,23 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                   <th>Tipo</th>
                   <th>Vigencia</th>
                   <th>Documento</th>
-                  <th className="alm-col-act"></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {contratos.map(c => (
                   <tr key={c.contrato_id}>
-                    <td>
+                    <td data-label="Tipo">
                       {TIPO_CONTRATO_LABEL[c.tipo_contrato]}
                       <div className="text-sm-muted">{PERIODICIDAD_LABEL[c.periodicidad]}{c.notas ? ` · ${c.notas}` : ''}</div>
                     </td>
-                    <td className="text-sm-muted tes-nowrap">{formatFecha(c.fecha_inicio)} – {c.fecha_fin ? formatFecha(c.fecha_fin) : 'sin fin'}</td>
-                    <td>
+                    <td data-label="Vigencia" className="text-sm-muted tes-nowrap">{formatFecha(c.fecha_inicio)} – {c.fecha_fin ? formatFecha(c.fecha_fin) : 'sin fin'}</td>
+                    <td data-label="Documento">
                       {c.pdf_url
                         ? <a href={c.pdf_url} target="_blank" rel="noopener noreferrer" className="link-primary det-meta-inline"><FileText size={14} strokeWidth={2} /> Ver PDF</a>
                         : <span className="text-faint">Sin PDF</span>}
                     </td>
-                    <td>
+                    <td className="col-actions">
                       <div className="ter-actions">
                         <button className="ter-action-btn ter-action-danger" title="Eliminar contrato"
                           onClick={() => setDelContrato(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
@@ -410,9 +410,9 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
               <thead>
                 <tr>
                   <th>Período</th>
-                  <th className="tes-col-monto">Devengado</th>
-                  <th className="tes-col-monto">Deducciones</th>
-                  <th className="tes-col-monto">Neto</th>
+                  <th className="col-num">Devengado</th>
+                  <th className="col-num">Deducciones</th>
+                  <th className="col-num">Neto</th>
                   <th>Estado</th>
                 </tr>
               </thead>
@@ -420,11 +420,11 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                 {miNomina.map(({ nomina, linea }) => (
                   <tr key={nomina.nomina_id} className="table-row-clickable"
                     onClick={() => setDetalleNominaId(nomina.nomina_id)}>
-                    <td><strong>{formatPeriodo(nomina.periodo)}</strong></td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.devengado)} {nomina.moneda}</td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.deducciones)}</td>
-                    <td className="tes-col-monto tes-monto-cell">{formatMonto(linea.neto)} {nomina.moneda}</td>
-                    <td>
+                    <td data-label="Período"><strong>{formatPeriodo(nomina.periodo)}</strong></td>
+                    <td data-label="Devengado" className="col-num tes-monto-cell">{formatMonto(linea.devengado)} {nomina.moneda}</td>
+                    <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(linea.deducciones)}</td>
+                    <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(linea.neto)} {nomina.moneda}</td>
+                    <td data-label="Estado">
                       <span className={`badge ${nomina.estado === 'BORRADOR' ? 'badge-warning' : (nomina.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
                         {nomina.estado === 'BORRADOR' ? 'Borrador' : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
