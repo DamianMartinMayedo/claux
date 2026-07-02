@@ -19,7 +19,7 @@ import {
   type GastosCobrosPageData,
 } from '@/app/actions/portal/gastos'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, Trash2, X } from 'lucide-react'
+import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
@@ -117,7 +117,7 @@ function RegistroModal({
                   placeholder={tipo === 'GASTO' ? 'Ej: Compra de verduras, alquiler de local…' : 'Ej: Venta directa, anticipo de cliente…'} />
               </div>
 
-              <div className="input-group ter-col-span-3">
+              <div className={`input-group ${tipo === 'GASTO' ? 'ter-col-span-3' : 'ter-col-full'}`}>
                 <label>{tipo === 'GASTO' ? 'Proveedor' : 'Cliente'}</label>
                 <select className="input" name="tercero_id" defaultValue={registro?.tercero_id ?? ''}>
                   <option value="">— Sin {tipo === 'GASTO' ? 'proveedor' : 'cliente'} —</option>
@@ -134,13 +134,17 @@ function RegistroModal({
                   </div>
                 )}
               </div>
-              <div className="input-group ter-col-span-3">
-                <label>Categoría</label>
-                <select className="input" name="categoria_id" defaultValue={registro?.categoria_id ?? ''}>
-                  <option value="">— Sin categoría —</option>
-                  {categoriasOpts.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
-                </select>
-              </div>
+              {/* Categorías son solo de gastos (así se llaman y así se usan en
+                  reportes). En cobros no se pide categoría. */}
+              {tipo === 'GASTO' && (
+                <div className="input-group ter-col-span-3">
+                  <label>Categoría</label>
+                  <select className="input" name="categoria_id" defaultValue={registro?.categoria_id ?? ''}>
+                    <option value="">— Sin categoría —</option>
+                    {categoriasOpts.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                  </select>
+                </div>
+              )}
 
               <div className="input-group ter-col-span-2">
                 <label>Fecha <span className="required">*</span></label>
@@ -584,6 +588,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
       {(pendientes.porPagar.length > 0 || pendientes.porCobrar.length > 0) && (
         <div className="gc-stats">
           <div className="gc-stat-card gc-stat-pagar">
+            <span className="gc-stat-ico"><TrendingDown size={16} strokeWidth={2.2} /></span>
             <span className="gc-stat-label">Por pagar</span>
             {pendientes.porPagar.length === 0
               ? <span className="gc-stat-empty">Sin pendientes</span>
@@ -596,6 +601,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
               )}
           </div>
           <div className="gc-stat-card gc-stat-cobrar">
+            <span className="gc-stat-ico"><TrendingUp size={16} strokeWidth={2.2} /></span>
             <span className="gc-stat-label">Por cobrar</span>
             {pendientes.porCobrar.length === 0
               ? <span className="gc-stat-empty">Sin pendientes</span>

@@ -155,9 +155,8 @@
 .ven-ajuste-tag-descuento { background: var(--color-warning-bg); color: var(--color-warning); }
 .ven-ajuste-tag-cargo     { background: var(--color-indigo-bg);  color: var(--color-indigo); }
 .ven-ajuste-tag-impuesto  { background: var(--color-rose-bg);    color: var(--color-rose); }
-.ven-ajuste-row-descuento { border-left-color: var(--color-warning-bg); }
-.ven-ajuste-row-cargo     { border-left-color: var(--color-indigo-bg); }
-.ven-ajuste-row-impuesto  { border-left-color: var(--color-rose-bg); }
+/* Descuento/cargo/impuesto se distinguen por su tag de color; el borde de color
+   se reserva para la identidad de empresa (--empresa-color). */
 
 /* ── Bottom row: totales + notas side by side ─────────────────────────────── */
 .ven-bottom-row {
@@ -262,7 +261,6 @@
   padding: var(--space-4);
   background: var(--color-surface-2);
   border-radius: var(--radius-md);
-  border-left: 3px solid var(--color-primary);
 }
 .ven-notas p {
   margin: 6px 0 0 0;
@@ -277,7 +275,6 @@
   padding: 10px 16px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-primary);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
 }
