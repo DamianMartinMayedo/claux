@@ -2,6 +2,7 @@
 
 import type { FacturacionData } from '@/app/actions/portal/facturacion'
 import { Receipt } from 'lucide-react'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ function diasRestantes(fechaStr: string | null): number | null {
 // ── Vista principal ───────────────────────────────────────────────────────────
 
 export default function FacturacionView({ data }: { data: FacturacionData }) {
+  const { pageItems, ...pag } = usePagination(data.pagos)
   const dias = diasRestantes(data.fecha_expiracion)
 
   const diasCls =
@@ -130,7 +132,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                 </tr>
               </thead>
               <tbody>
-                {data.pagos.map(p => (
+                {pageItems.map(p => (
                   <tr key={p.pago_id}>
                     <td data-label="ID">
                       <span className="fac-pago-id">{p.pago_id}</span>
@@ -164,6 +166,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="pago" />
       </div>
 
     </div>

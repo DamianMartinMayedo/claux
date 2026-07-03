@@ -170,6 +170,10 @@ textarea.input { resize: vertical; min-height: 80px; }
   text-align: left; text-decoration: none; cursor: pointer; white-space: nowrap;
   transition: background var(--transition);
 }
+/* Los <Link> de Next.js heredan el color del texto, no usan el azul por defecto */
+a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-actions-item:hover {
+  color: var(--color-text) !important;
+}
 .row-actions-item:hover { background: var(--color-surface-2); }
 .row-actions-item:disabled { opacity: 0.45; cursor: not-allowed; }
 .row-actions-item svg { flex-shrink: 0; color: var(--color-text-muted); }
@@ -408,6 +412,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 .text-xs-error   { font-size: var(--text-xs); color: var(--color-error); }
 .body-text       { font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.6; }
 .input-hint-danger { color: var(--color-error); font-weight: 600; }
+.input-hint-warning { color: var(--color-warning); font-weight: 600; }
 .text-italic     { font-style: italic; }
 .text-truncate   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hidden          { display: none; }
@@ -616,6 +621,11 @@ input[type="checkbox"]:checked::after {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+/* Selector de tamaño de página (reutiliza .filter-select, más compacto) */
+.pagination-size {
+  padding-top: var(--space-1); padding-bottom: var(--space-1);
+  font-size: var(--text-xs);
 }
 
 /* ── Section label dentro de modales ── */

@@ -14,6 +14,7 @@ import {
 import { guardarSlug } from '@/app/actions/portal/reservas'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { type EstadoReserva } from '@/lib/reservas/estado'
@@ -566,6 +567,8 @@ export default function CitasView({ data }: { data: CitasPageData }) {
     })
   }, [data.citas, search, filtroDesde, filtroHasta, filtroRecurso, filtroEstado])
 
+  const { pageItems: citaItems, ...citaPag } = usePagination(citas)
+
   const pendientesHoy  = data.citas.filter(c => c.fecha === hoy && c.estado === 'PENDIENTE').length
   const confirmadasHoy = data.citas.filter(c => c.fecha === hoy && c.estado === 'CONFIRMADA').length
   const totalHoy       = data.citas.filter(c => c.fecha === hoy).length
@@ -754,7 +757,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {citas.map(c => (
+                {citaItems.map(c => (
                   <tr key={c.reserva_id} className="table-row-clickable" onClick={() => setDetalleCita(c)}>
                     <td data-label="Fecha"><strong>{formatFecha(c.fecha)}</strong></td>
                     <td data-label="Hora" className="tes-nowrap">
@@ -794,6 +797,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...citaPag} label="cita" />
       </div>
       </>
       )}

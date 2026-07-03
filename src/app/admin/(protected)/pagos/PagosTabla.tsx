@@ -2,6 +2,7 @@
 
 import { CreditCard, Download, Search } from 'lucide-react'
 import { useState, useMemo } from 'react'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import EditarPagoModal  from './EditarPagoModal'
 import EliminarPagoBtn  from './EliminarPagoBtn'
 import ConfirmarPagoBtn from './ConfirmarPagoBtn'
@@ -16,8 +17,6 @@ type Pago = {
   fecha_inicio_periodo: string | null; fecha_fin_periodo: string | null
   notas: string | null
 }
-
-const POR_PAGINA = 10
 
 function conceptoLabel(concepto: string | null) {
   return concepto === 'configuracion' ? 'Configuración' : 'Suscripción'
@@ -65,7 +64,6 @@ export default function PagosTabla({
   const [filtroConcepto, setFiltroConcepto] = useState('')
   const [filtroEstado, setFiltroEstado]   = useState('')
   const [filtroMetodo, setFiltroMetodo]   = useState('')
-  const [pagina, setPagina]               = useState(1)
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase()
@@ -81,10 +79,7 @@ export default function PagosTabla({
     })
   }, [pagos, busqueda, filtroConcepto, filtroEstado, filtroMetodo, clienteNombre])
 
-  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
-  const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
-
-  function resetPagina(fn: () => void) { fn(); setPagina(1) }
+  const { pageItems, ...pag } = usePagination(filtrados)
 
   return (
     <>
@@ -96,26 +91,26 @@ export default function PagosTabla({
             type="search" className="search-input"
             placeholder="Buscar por empresa o ID cliente…"
             value={busqueda}
-            onChange={e => resetPagina(() => setBusqueda(e.target.value))}
+            onChange={e => setBusqueda(e.target.value)}
           />
         </div>
 
         <select className="filter-select" value={filtroConcepto}
-          onChange={e => resetPagina(() => setFiltroConcepto(e.target.value))}>
+          onChange={e => setFiltroConcepto(e.target.value)}>
           <option value="">Todos los conceptos</option>
           <option value="suscripcion">Suscripción</option>
           <option value="configuracion">Configuración</option>
         </select>
 
         <select className="filter-select" value={filtroEstado}
-          onChange={e => resetPagina(() => setFiltroEstado(e.target.value))}>
+          onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="por_confirmar">Por confirmar</option>
           <option value="confirmado">Confirmado</option>
         </select>
 
         <select className="filter-select" value={filtroMetodo}
-          onChange={e => resetPagina(() => setFiltroMetodo(e.target.value))}>
+          onChange={e => setFiltroMetodo(e.target.value)}>
           <option value="">Todos los métodos</option>
           <option value="tropipay">TropiPay</option>
           <option value="transferencia">Transferencia</option>
@@ -136,6 +131,7 @@ export default function PagosTabla({
           </div>
         </div>
       ) : (
+        <>
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -152,7 +148,7 @@ export default function PagosTabla({
               </tr>
             </thead>
             <tbody>
-              {paginados.map(p => (
+              {pageItems.map(p => (
                 <tr key={p.pago_id}>
                   <td data-label="ID"><span className="table-code-muted">{p.pago_id}</span></td>
                   <td data-label="Cliente">
@@ -205,17 +201,9 @@ export default function PagosTabla({
               ))}
             </tbody>
           </table>
-
-          {totalPaginas > 1 && (
-            <div className="pagination">
-              <span>{filtrados.length} pago{filtrados.length !== 1 ? 's' : ''} · Página {pagina} de {totalPaginas}</span>
-              <div className="pagination-controls">
-                <button className="btn btn-secondary btn-sm" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)}>‹ Ant.</button>
-                <button className="btn btn-secondary btn-sm" disabled={pagina >= totalPaginas} onClick={() => setPagina(p => p + 1)}>Sig. ›</button>
-              </div>
-            </div>
-          )}
         </div>
+        <TablePagination {...pag} label="pago" />
+        </>
       )}
     </>
   )

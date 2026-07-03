@@ -23,6 +23,7 @@ import {
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { Calendar, Check, Copy, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
@@ -585,6 +586,8 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
     })
   }, [data.reservas, search, filtroDesde, filtroHasta, filtroFranja, filtroEstado])
 
+  const { pageItems: reservaItems, ...reservaPag } = usePagination(reservas)
+
   const pendientesHoy = data.reservas.filter(r => r.fecha === hoy && r.estado === 'PENDIENTE').length
   const confirmadasHoy = data.reservas.filter(r => r.fecha === hoy && r.estado === 'CONFIRMADA').length
   const totalHoy = data.reservas.filter(r => r.fecha === hoy).length
@@ -767,7 +770,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {reservas.map(r => (
+                {reservaItems.map(r => (
                   <tr key={r.reserva_id} className="table-row-clickable"
                     onClick={() => setDetalleReserva(r)}>
                     <td data-label="Fecha"><strong>{formatFecha(r.fecha)}</strong></td>
@@ -812,6 +815,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...reservaPag} label="reserva" />
       </div>
       </>
       )}

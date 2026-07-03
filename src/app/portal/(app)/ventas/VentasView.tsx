@@ -20,6 +20,7 @@ import type {
 } from '@/app/actions/portal/ventas'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
@@ -209,7 +210,9 @@ function TablaOfertas({
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
+  const { pageItems, ...pag } = usePagination(ofertas)
   return (
+    <>
     <div className="table-wrapper">
       <table className="table">
         <thead>
@@ -223,7 +226,7 @@ function TablaOfertas({
           </tr>
         </thead>
         <tbody>
-          {ofertas.map(o => (
+          {pageItems.map(o => (
             <tr
               key={o.oferta_id}
               className={`table-row-clickable${mostrarEmpresa ? ' row-empresa-accent' : ''}`}
@@ -253,6 +256,8 @@ function TablaOfertas({
         </tbody>
       </table>
     </div>
+    <TablePagination {...pag} label="oferta" />
+    </>
   )
 }
 
@@ -268,7 +273,9 @@ function TablaFacturas({
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
+  const { pageItems, ...pag } = usePagination(facturas)
   return (
+    <>
     <div className="table-wrapper">
       <table className="table">
         <thead>
@@ -283,7 +290,7 @@ function TablaFacturas({
           </tr>
         </thead>
         <tbody>
-          {facturas.map(f => (
+          {pageItems.map(f => (
             <tr
               key={f.factura_id}
               className={`table-row-clickable${mostrarEmpresa ? ' row-empresa-accent' : ''}`}
@@ -316,6 +323,8 @@ function TablaFacturas({
         </tbody>
       </table>
     </div>
+    <TablePagination {...pag} label="factura" />
+    </>
   )
 }
 

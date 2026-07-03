@@ -108,7 +108,7 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false }),
     db.from('movimientos_tesoreria')
-      .select('movimiento_id, fecha, monto, cuenta_id, referencia_id, origen')
+      .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id, origen')
       .eq('client_id', session.client_id)
       .in('origen', ['PAGO', 'COBRO'])
       .not('referencia_id', 'is', null),
@@ -132,7 +132,7 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
   ])
 
   const registros = (regRes.data ?? []) as GastoCobro[]
-  const movs      = (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; cuenta_id: string; referencia_id: string }[]
+  const movs      = (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string; referencia_id: string }[]
   const cuentas   = (cuRes.data  ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean }[]
 
   const cuentaNombre: Record<string, string> = {}
@@ -145,7 +145,8 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
     arr.push({
       movimiento_id: m.movimiento_id,
       fecha:         m.fecha,
-      monto:         Number(m.monto),
+      // Importe aplicado al registro en su moneda (monto_ref); reconcilia el saldo
+      monto:         Number(m.monto_ref ?? m.monto),
       cuenta_id:     m.cuenta_id,
       cuenta_nombre: cuentaNombre[m.cuenta_id] ?? m.cuenta_id,
     })
@@ -320,7 +321,8 @@ export async function registrarLiquidacion(
 
   const registro_id = (formData.get('registro_id') as string)?.trim()
   const cuenta_id   = (formData.get('cuenta_id')   as string)?.trim()
-  const montoRaw    = parseFloat(formData.get('monto') as string)
+  const montoRaw    = parseFloat(formData.get('monto') as string)   // en la moneda del registro
+  const tasaRaw     = parseFloat(formData.get('tasa_cambio') as string)
   const fecha       = (formData.get('fecha')       as string)?.trim() || hoy()
   const notas       = (formData.get('notas')       as string)?.trim() || null
 
@@ -353,22 +355,30 @@ export async function registrarLiquidacion(
     .single()
   if (!cuenta)        return { ok: false, error: 'Cuenta no encontrada.' }
   if (!cuenta.activa) return { ok: false, error: 'La cuenta está archivada.' }
-  if (cuenta.moneda !== registro.moneda) {
-    return { ok: false, error: `La cuenta es en ${cuenta.moneda} y el registro en ${registro.moneda}. Usa una cuenta de la misma moneda.` }
-  }
 
-  // Saldo pendiente actual
+  // Moneda distinta a la del registro → se aplica tasa (misma lógica que las transferencias).
+  // `montoRaw` es el importe en la moneda del registro (reduce su saldo); en la caja
+  // entra/sale `montoCaja` = montoRaw × tasa, en la moneda de la caja.
+  const cambiaMoneda = cuenta.moneda !== registro.moneda
+  const tasa = cambiaMoneda ? tasaRaw : 1
+  if (cambiaMoneda && (isNaN(tasa) || tasa <= 0)) {
+    return { ok: false, error: `Indica la tasa de cambio para saldar en ${registro.moneda} desde una caja en ${cuenta.moneda}.` }
+  }
+  const montoCaja = Math.round(montoRaw * tasa * 100) / 100
+
+  // Saldo pendiente actual (en la moneda del registro → se suma monto_ref)
   const { data: liqs } = await db.from('movimientos_tesoreria')
-    .select('monto')
+    .select('monto_ref, monto')
     .eq('client_id', session.client_id)
     .eq('referencia_id', registro_id)
-  const yaLiquidado = (liqs ?? []).reduce((s, m) => s + Number(m.monto), 0)
+  const yaLiquidado = (liqs ?? []).reduce((s, m) => s + Number(m.monto_ref ?? m.monto), 0)
   const pendiente   = Number(registro.monto) - yaLiquidado
   if (montoRaw > pendiente + EPS) {
     return { ok: false, error: `El monto supera el saldo pendiente (${pendiente.toFixed(2)} ${registro.moneda}).` }
   }
 
   const esGasto = registro.tipo === 'GASTO'
+  const conceptoBase = `${esGasto ? 'Pago' : 'Cobro'} · ${registro.descripcion}`
   const { error } = await db.from('movimientos_tesoreria').insert({
     movimiento_id: generarMovimientoId(),
     client_id:     session.client_id,
@@ -376,9 +386,10 @@ export async function registrarLiquidacion(
     cuenta_id,
     fecha,
     tipo:          esGasto ? 'EGRESO' : 'INGRESO',
-    monto:         montoRaw,
-    moneda:        registro.moneda,
-    concepto:      `${esGasto ? 'Pago' : 'Cobro'} · ${registro.descripcion}`,
+    monto:         montoCaja,             // en la moneda de la caja
+    moneda:        cuenta.moneda,
+    monto_ref:     montoRaw,              // en la moneda del registro (reduce su saldo)
+    concepto:      cambiaMoneda ? `${conceptoBase} (${montoRaw.toFixed(2)} ${registro.moneda} a ${tasa} ${cuenta.moneda}/${registro.moneda})` : conceptoBase,
     categoria:     categoriaNombre,  // Nombre de la categoría para display
     categoria_id:  registro.categoria_id,  // FK para referencia
     origen:        esGasto ? 'PAGO' : 'COBRO',

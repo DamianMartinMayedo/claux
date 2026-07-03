@@ -21,6 +21,7 @@ import {
 } from '../_shared/NominaDetalleModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 
@@ -229,6 +230,8 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
     })
   }, [data.nominas, filtroEmpresa, filtroAnio])
 
+  const { pageItems, ...pag } = usePagination(nominasFiltradas)
+
   useEffect(() => {
     if (focusNominaId && data.nominas.some(n => n.nomina_id === focusNominaId)) {
       setDetalleNominaId(focusNominaId)
@@ -312,7 +315,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                 </tr>
               </thead>
               <tbody>
-                {nominasFiltradas.map(n => (
+                {pageItems.map(n => (
                   <tr
                     key={n.nomina_id}
                     className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
@@ -345,6 +348,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="nómina" />
       </div>
 
       {modalNuevaNomina && (

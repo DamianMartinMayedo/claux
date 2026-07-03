@@ -12,6 +12,7 @@ import {
   type MovimientoProducto,
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from '../_ProductoFormModal'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 
 // ── Config de movimientos ───────────────────────────────────────────────────────
@@ -239,6 +240,7 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
 
 function TabMovimientos({ data }: { data: ProductoDetalleData }) {
   const { movimientos, almacen_nombres, producto } = data
+  const { pageItems, ...pag } = usePagination(movimientos)
 
   if (movimientos.length === 0) {
     return (
@@ -267,7 +269,7 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
               </tr>
             </thead>
             <tbody>
-              {movimientos.map(m => {
+              {pageItems.map(m => {
                 const s = signoMov(m)
                 return (
                   <tr key={m.movimiento_id}>
@@ -291,6 +293,7 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
             </tbody>
           </table>
         </div>
+        <TablePagination {...pag} label="movimiento" />
       </div>
     </div>
   )

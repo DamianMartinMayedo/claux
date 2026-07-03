@@ -8,6 +8,7 @@ import {
   type EstadoCompra,
 } from '@/app/actions/portal/compras'
 import { CompraFormModal }              from './_CompraFormModal'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 
 function fmt(n: number, moneda: string) {
   return new Intl.NumberFormat('es-VE', {
@@ -34,6 +35,8 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
     () => data.compras.filter(c => !filtroEstado || c.estado === filtroEstado),
     [data.compras, filtroEstado],
   )
+
+  const { pageItems, ...pag } = usePagination(filtradas)
 
   const sinAlmacenes = data.almacenes.length === 0
 
@@ -94,7 +97,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {filtradas.map(c => (
+                {pageItems.map(c => (
                   <tr key={c.compra_id} className="table-row-clickable"
                     onClick={() => router.push(`/portal/compras/${c.compra_id}`)}>
                     <td data-label="Número"><code className="text-mono">{c.numero}</code></td>
@@ -109,6 +112,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="compra" />
       </div>
 
       {modalOpen && (

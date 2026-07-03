@@ -15,6 +15,7 @@ import {
   anularPagoDoc,
   type CobrosFacturaData,
 } from '@/app/actions/portal/cobranza'
+import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
 import { Copy, MoreHorizontal, Pencil, Printer, Trash2, X } from 'lucide-react'
@@ -336,16 +337,18 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
 
-  const cuentasCompat = cobros.cuentas.filter(c => c.moneda === cobros.moneda)
-  const [cuentaId, setCuentaId]   = useState(cuentasCompat[0]?.cuenta_id ?? '')
+  const [liq, setLiq] = useState<LiquidarState | null>(null)
   const puedeCobrar = cobros.estado === 'EMITIDA' && cobros.saldo > 0.005
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!liq || !liq.valido) return
     const fd = new FormData(e.currentTarget)
     fd.set('doc_tipo', 'FACTURA')
     fd.set('doc_id', cobros.factura_id)
-    fd.set('cuenta_id', cuentaId)
+    fd.set('cuenta_id', liq.cuentaId)
+    fd.set('monto', liq.monto)
+    fd.set('tasa_cambio', String(liq.tasa))
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -398,35 +401,30 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
         <div className="modal-backdrop open">
           <div className="modal modal-md" role="dialog" aria-modal>
             <div className="modal-header">
-              <h2 className="modal-title">Registrar cobro · {numero}</h2>
+              <div>
+                <h2 className="modal-title">Registrar cobro · {numero}</h2>
+                <p className="text-xs-muted mt-1">
+                  Total {formatearMoneda(cobros.total, cobros.moneda)} · Pendiente <strong>{formatearMoneda(cobros.saldo, cobros.moneda)}</strong>
+                </p>
+              </div>
               <button type="button" className="modal-close" onClick={() => setModalOpen(false)}>
                 <X size={16} />
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body">
-                <div className="info-box">
-                  <span className="text-xs-muted">
-                    Total {formatearMoneda(cobros.total, cobros.moneda)} ·
-                    <strong> Pendiente {formatearMoneda(cobros.saldo, cobros.moneda)}</strong>
-                  </span>
+            <div className="modal-body">
+              {cobros.cuentas.length === 0 ? (
+                <div className="alert alert-warning">
+                  No tienes cajas disponibles. Crea una en Tesorería para registrar el cobro.
                 </div>
-                {cuentasCompat.length === 0 ? (
-                  <div className="alert alert-warning mt-3">
-                    No tienes cuentas en {cobros.moneda}. Crea una en Tesorería para registrar el cobro.
-                  </div>
-                ) : (
-                  <div className="ter-form-grid mt-3">
-                    <div className="input-group ter-col-full">
-                      <label>Cuenta <span className="required">*</span></label>
-                      <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
-                        {cuentasCompat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
-                      </select>
-                    </div>
-                    <div className="input-group ter-col-span-3">
-                      <label>Monto ({cobros.moneda}) <span className="required">*</span></label>
-                      <input className="input" name="monto" type="number" min="0" step="0.01" required defaultValue={cobros.saldo.toFixed(2)} />
-                    </div>
+              ) : (
+                <form id="cobro-form" onSubmit={handleSubmit} className="gc-liq-form">
+                  <div className="ter-form-grid">
+                    <LiquidarCuentaFields
+                      cuentas={cobros.cuentas}
+                      docMoneda={cobros.moneda}
+                      saldo={cobros.saldo}
+                      onChange={setLiq}
+                    />
                     <div className="input-group ter-col-span-3">
                       <label>Fecha <span className="required">*</span></label>
                       <input className="input" name="fecha" type="date" required defaultValue={new Date().toISOString().split('T')[0]} />
@@ -436,15 +434,17 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
                       <input className="input" name="notas" placeholder="Referencia del cobro…" />
                     </div>
                   </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={isPending || cuentasCompat.length === 0}>
+                </form>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+              {cobros.cuentas.length > 0 && (
+                <button type="submit" form="cobro-form" className="btn btn-primary" disabled={isPending || !liq?.valido}>
                   {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar cobro'}
                 </button>
-              </div>
-            </form>
+              )}
+            </div>
           </div>
         </div>
       )}

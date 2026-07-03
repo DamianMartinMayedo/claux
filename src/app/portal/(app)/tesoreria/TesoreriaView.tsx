@@ -2,6 +2,7 @@
 
 import { toastError } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
@@ -20,6 +21,13 @@ import {
   type TipoMovimiento,
   type TesoreriaPageData,
 } from '@/app/actions/portal/tesoreria'
+import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
+
+// Pendientes por saldar (CxC / CxP) que se pueden liquidar desde un movimiento
+interface Pendientes {
+  cobrar: DocumentoPendiente[]
+  pagar:  DocumentoPendiente[]
+}
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -182,10 +190,11 @@ function CuentaModal({
 // ── Modal: Movimiento (ingreso / egreso) ────────────────────────────────────────
 
 function MovimientoModal({
-  cuentas, categorias, cuentaInicial, onClose, onSaved,
+  cuentas, categorias, pendientes, cuentaInicial, onClose, onSaved,
 }: {
   cuentas:       CuentaConSaldo[]
   categorias:    TesoreriaPageData['categorias_gastos']
+  pendientes:    Pendientes
   cuentaInicial: string | null
   onClose:       () => void
   onSaved:       () => void
@@ -194,18 +203,110 @@ function MovimientoModal({
   const [tipo,  setTipo]  = useState<TipoMovimiento>('INGRESO')
   const [cuentaId, setCuentaId] = useState(cuentaInicial ?? cuentas[0]?.cuenta_id ?? '')
   const [registrarGasto, setRegistrarGasto] = useState(true)
+  const [pendienteId, setPendienteId] = useState('')
+  const [impDoc, setImpDoc]             = useState('')   // importe en la moneda del documento
+  const [impCaja, setImpCaja]           = useState('')   // lo que se mueve en la caja
+  const [editandoCaja, setEditandoCaja] = useState(false)
+  const [tasaInput, setTasaInput]       = useState('')
+  const [tasaCompleta, setTasaCompleta] = useState(1)
+  const [cargandoTasa, setCargandoTasa] = useState(false)
 
   const cuentaSel = cuentas.find(c => c.cuenta_id === cuentaId)
   const esEgreso  = tipo === 'EGRESO'
   const labelRegistro = esEgreso ? 'gasto' : 'cobro'
 
+  // Pendientes que puede saldar este movimiento: mismo sentido.
+  // Se muestran TODOS los pendientes (sin filtro por empresa).
+  // Los de la misma moneda aparecen primero; los de otra moneda aplican tasa.
+  const listaPendientes = useMemo(() => {
+    if (!cuentaSel) return []
+    const base = esEgreso ? pendientes.pagar : pendientes.cobrar
+    return base
+      .sort((a, b) => (a.moneda === cuentaSel.moneda ? 0 : 1) - (b.moneda === cuentaSel.moneda ? 0 : 1))
+  }, [esEgreso, pendientes, cuentaSel])
+
+  const pendienteSel = listaPendientes.find(d => d.doc_id === pendienteId) ?? null
+
+  // Si cambian tipo/cuenta y el pendiente elegido ya no está en la lista, se limpia
+  useEffect(() => {
+    if (pendienteId && !listaPendientes.some(d => d.doc_id === pendienteId)) setPendienteId('')
+  }, [pendienteId, listaPendientes])
+
+  // ¿El pendiente está en otra moneda que la caja? → se aplica tasa (como en transferencias)
+  const cambiaMoneda = !!(pendienteSel && cuentaSel && pendienteSel.moneda !== cuentaSel.moneda)
+
+  // Al elegir/soltar un pendiente, el importe parte del saldo (en la moneda del documento)
+  useEffect(() => {
+    setImpDoc(pendienteSel ? pendienteSel.saldo.toFixed(2) : '')
+    setImpCaja('')
+    setEditandoCaja(false)
+  }, [pendienteId])
+
+  // Cargar la tasa vigente cuando la moneda de la caja difiere de la del documento
+  useEffect(() => {
+    if (!cambiaMoneda || !pendienteSel || !cuentaSel) { setTasaCompleta(1); setTasaInput(''); setCargandoTasa(false); return }
+    let vivo = true
+    setCargandoTasa(true)
+    obtenerTasaTransferencia(pendienteSel.moneda, cuentaSel.moneda)
+      .then(r => {
+        if (!vivo) return
+        if (r.ok && r.tasa) { setTasaCompleta(r.tasa); setTasaInput(truncar4(r.tasa)); setEditandoCaja(false) }
+        else                { setTasaCompleta(0); setTasaInput('') }
+      })
+      .catch(() => { if (vivo) { setTasaCompleta(0); setTasaInput('') } })
+      .finally(() => { if (vivo) setCargandoTasa(false) })
+    return () => { vivo = false }
+  }, [cambiaMoneda, pendienteSel, cuentaSel])
+
+  const impDocNum  = parseFloat(impDoc)  || 0
+  const impCajaNum = editandoCaja ? (parseFloat(impCaja) || 0) : Math.round(impDocNum * tasaCompleta * 100) / 100
+
+  // Derivar el importe en la caja desde el importe del documento × tasa (salvo edición manual)
+  useEffect(() => {
+    if (cambiaMoneda && !editandoCaja && impDocNum > 0 && tasaCompleta > 0) {
+      setImpCaja(String(Math.round(impDocNum * tasaCompleta * 100) / 100))
+    }
+  }, [impDoc, tasaCompleta, cambiaMoneda, editandoCaja, impDocNum])
+
+  function handleTasaChange(v: string) {
+    setTasaInput(v)
+    setTasaCompleta(parseFloat(v) || 0)
+    setEditandoCaja(false)
+    setImpCaja('')
+  }
+  function handleImpCajaChange(v: string) {
+    setImpCaja(v)
+    setEditandoCaja(true)
+    const caja = parseFloat(v) || 0
+    if (caja > 0 && impDocNum > 0) {
+      const nueva = caja / impDocNum
+      setTasaCompleta(nueva)
+      setTasaInput(truncar4(nueva))
+    }
+  }
+
+  const pagoInvalido = !!pendienteSel && (impDocNum <= 0 || impDocNum > pendienteSel.saldo + 0.005 || (cambiaMoneda && tasaCompleta <= 0))
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    fd.set('tipo', tipo)
     fd.set('cuenta_id', cuentaId)
-    fd.set('registrar_gasto', String(registrarGasto))
     startTransition(async () => {
+      // Liquidar un pendiente existente → no se crea un registro nuevo (evita duplicados)
+      if (pendienteSel) {
+        if (pagoInvalido) return
+        fd.set('doc_tipo', pendienteSel.doc_tipo)
+        fd.set('doc_id', pendienteSel.doc_id)
+        fd.set('monto', impDoc)                              // importe en la moneda del documento
+        fd.set('tasa_cambio', String(cambiaMoneda ? tasaCompleta : 1))
+        const res = await registrarPagoDoc(fd)
+        if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+        onSaved()
+        return
+      }
+      // Movimiento libre (crea gasto/cobro nuevo si el toggle está activo)
+      fd.set('tipo', tipo)
+      fd.set('registrar_gasto', String(registrarGasto))
       const res = await registrarMovimiento(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
@@ -245,44 +346,113 @@ function MovimientoModal({
                   ))}
                 </select>
               </div>
-              <div className="input-group ter-col-span-3">
-                <label>Monto {cuentaSel ? `(${cuentaSel.moneda})` : ''} <span className="required">*</span></label>
-                <input className="input" name="monto" type="number" min="0" step="0.01" required
-                  autoFocus placeholder="0.00" />
-              </div>
+
+              {/* Saldar un pendiente ya existente (evita duplicar el gasto/cobro) */}
+              {listaPendientes.length > 0 && (
+                <div className="input-group ter-col-full">
+                  <label>{esEgreso ? 'Pagar un pendiente' : 'Cobrar un pendiente'}</label>
+                  <select className="input" value={pendienteId} onChange={e => setPendienteId(e.target.value)}>
+                    <option value="">— Ninguno (registrar {labelRegistro} nuevo) —</option>
+                    {listaPendientes.map(d => (
+                      <option key={d.doc_id} value={d.doc_id}>
+                        {d.numero} · {formatMonto(d.saldo)} {d.moneda}
+                        {cuentaSel && d.moneda !== cuentaSel.moneda ? ' (otra moneda)' : ''}
+                        {d.tercero_nombre ? ` · ${d.tercero_nombre}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="input-hint">
+                    Los de la misma moneda aparecen primero. Elige uno para evitar duplicados.
+                  </span>
+                  {cambiaMoneda && pendienteSel && cuentaSel && (
+                    <span className="input-hint-warning">
+                      Monedas distintas: el documento está en {pendienteSel.moneda} y la caja en {cuentaSel.moneda}. Se aplicará la tasa de cambio.
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Importe: en la moneda del documento si liquidas un pendiente; si no, en la de la caja */}
+              {pendienteSel ? (
+                <div className="input-group ter-col-span-3">
+                  <label>Importe ({pendienteSel.moneda}) <span className="required">*</span></label>
+                  <input className="input" type="number" min="0" step="0.01" required autoFocus
+                    value={impDoc} onChange={e => setImpDoc(e.target.value)} placeholder="0.00" />
+                  <span className="input-hint">Saldo pendiente {formatMonto(pendienteSel.saldo)} {pendienteSel.moneda}. Puedes cobrar/pagar menos.</span>
+                  {impDocNum > pendienteSel.saldo + 0.005 && (
+                    <span className="input-hint-warning">El monto supera el saldo pendiente</span>
+                  )}
+                </div>
+              ) : (
+                <div className="input-group ter-col-span-3">
+                  <label>Monto {cuentaSel ? `(${cuentaSel.moneda})` : ''} <span className="required">*</span></label>
+                  <input className="input" name="monto" type="number" min="0" step="0.01" required
+                    autoFocus placeholder="0.00" />
+                </div>
+              )}
               <div className="input-group ter-col-span-3">
                 <label>Fecha <span className="required">*</span></label>
                 <input className="input" name="fecha" type="date" defaultValue={hoyISO()} required />
               </div>
-              <div className="input-group ter-col-full">
-                <label>Concepto <span className="required">*</span></label>
-                <input className="input" name="concepto" required
-                  placeholder="Ej: Venta del día, pago de proveedor, retiro…" />
-              </div>
 
-              {/* Toggle registrar como gasto/cobro */}
-              <div className="input-group ter-col-full">
-                <label className="cita-chk-item">
-                  <input type="checkbox" name="registrar_gasto" checked={registrarGasto}
-                    onChange={e => setRegistrarGasto(e.target.checked)} />
-                  Registrar como {labelRegistro}
-                </label>
-                <span className="input-hint">
-                  El egreso se registrará también como gasto y el ingreso como cobro,
-                  vinculados automáticamente.
-                </span>
-              </div>
+              {/* Cambio de moneda: tasa + importe en la caja, editables en ambos sentidos (como en transferencias) */}
+              {cambiaMoneda && pendienteSel && cuentaSel && (
+                <>
+                  <div className="input-group ter-col-span-3">
+                    <label>Tasa ({cuentaSel.moneda}/{pendienteSel.moneda}) <span className="required">*</span></label>
+                    <input className="input" type="number" min="0" step="0.0001"
+                      value={tasaInput} onChange={e => handleTasaChange(e.target.value)}
+                      placeholder={cargandoTasa ? 'Cargando…' : '0.0000'} />
+                    {tasaCompleta <= 0 && !cargandoTasa && (
+                      <span className="input-hint-warning">No hay tasa para {pendienteSel.moneda} → {cuentaSel.moneda}. Escríbela.</span>
+                    )}
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label>Se moverá en la caja ({cuentaSel.moneda})</label>
+                    <input className="input" type="number" min="0" step="0.01"
+                      value={impCaja} onChange={e => handleImpCajaChange(e.target.value)} placeholder="0.00" />
+                    <span className="input-hint">
+                      {impDocNum > 0 && tasaCompleta > 0
+                        ? `Saldas ${formatMonto(impDocNum)} ${pendienteSel.moneda}; en la caja ${esEgreso ? 'salen' : 'entran'} ${formatMonto(impCajaNum)} ${cuentaSel.moneda}.`
+                        : 'Ajusta el importe o la tasa.'}
+                    </span>
+                  </div>
+                </>
+              )}
+              {/* Concepto, gasto/cobro y categoría solo aplican al registrar uno nuevo */}
+              {!pendienteSel && (
+                <>
+                  <div className="input-group ter-col-full">
+                    <label>Concepto <span className="required">*</span></label>
+                    <input className="input" name="concepto" required
+                      placeholder="Ej: Venta del día, pago de proveedor, retiro…" />
+                  </div>
 
-              {registrarGasto && (
-                <div className="input-group ter-col-full">
-                  <label>Categoría</label>
-                  <select className="input" name="categoria_id" defaultValue="">
-                    <option value="">— Sin categoría —</option>
-                    {categorias.filter(c => c.estado === 'ACTIVO').map(c => (
-                      <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
-                    ))}
-                  </select>
-                </div>
+                  {/* Toggle registrar como gasto/cobro */}
+                  <div className="input-group ter-col-full">
+                    <label className="cita-chk-item">
+                      <input type="checkbox" name="registrar_gasto" checked={registrarGasto}
+                        onChange={e => setRegistrarGasto(e.target.checked)} />
+                      Registrar como {labelRegistro}
+                    </label>
+                    <span className="input-hint">
+                      El egreso se registrará también como gasto y el ingreso como cobro,
+                      vinculados automáticamente.
+                    </span>
+                  </div>
+
+                  {registrarGasto && (
+                    <div className="input-group ter-col-full">
+                      <label>Categoría</label>
+                      <select className="input" name="categoria_id" defaultValue="">
+                        <option value="">— Sin categoría —</option>
+                        {categorias.filter(c => c.estado === 'ACTIVO').map(c => (
+                          <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="input-group ter-col-full">
@@ -295,7 +465,7 @@ function MovimientoModal({
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending}>
+            <button type="submit" className="btn btn-primary" disabled={isPending || pagoInvalido}>
               {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar'}
             </button>
           </div>
@@ -587,7 +757,7 @@ function ConfirmEliminar({
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
+export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPageData; pendientes: Pendientes }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -602,6 +772,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
   const [verArchivadas,  setVerArchivadas]  = useState(false)
   const [filtroCuenta,   setFiltroCuenta]   = useState('')
   const [filtroTipo,     setFiltroTipo]     = useState('')
+  const [tab,            setTab]            = useState<'cuentas' | 'movimientos'>('cuentas')
 
   const cuentasActivas = useMemo(() => data.cuentas.filter(c => c.activa), [data.cuentas])
   const cuentasVista   = useMemo(
@@ -623,6 +794,8 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
       return true
     })
   }, [data.movimientos, filtroCuenta, filtroTipo])
+
+  const { pageItems, ...pag } = usePagination(movimientosFiltrados)
 
   function onSaved() {
     setCuentaModal(false); setEditCuenta(null)
@@ -696,6 +869,17 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
         </div>
       )}
 
+      {/* Pestañas: Cuentas | Movimientos (evita el scroll infinito de la tabla) */}
+      <div className="ven-tabs">
+        <button type="button" className={`ven-tab${tab === 'cuentas' ? ' active' : ''}`} onClick={() => setTab('cuentas')}>
+          Cuentas <span className="ven-tab-count">{cuentasActivas.length}</span>
+        </button>
+        <button type="button" className={`ven-tab${tab === 'movimientos' ? ' active' : ''}`} onClick={() => setTab('movimientos')}>
+          Movimientos <span className="ven-tab-count">{data.movimientos.length}</span>
+        </button>
+      </div>
+
+      {tab === 'cuentas' && (<>
       {/* Cuentas */}
       <div className="tes-section-header">
         <h2 className="tes-section-title">{verArchivadas ? 'Cuentas archivadas' : 'Cuentas'}</h2>
@@ -760,9 +944,10 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
           ))}
         </div>
       )}
+      </>)}
 
+      {tab === 'movimientos' && (<>
       {/* Movimientos */}
-      <h2 className="tes-section-title tes-section-header-mt tes-mov-titulo">Movimientos</h2>
       <div className="ter-toolbar">
         <select className="input ter-filter-select" value={filtroCuenta} onChange={e => setFiltroCuenta(e.target.value)}>
           <option value="">Todas las cuentas</option>
@@ -794,7 +979,7 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {movimientosFiltrados.map(m => (
+                {pageItems.map(m => (
                   <tr key={m.movimiento_id}>
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(m.fecha)}</td>
                     <td data-label="Concepto">
@@ -820,7 +1005,9 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="movimiento" />
       </div>
+      </>)}
 
       {/* Modales */}
       {cuentaModal && (
@@ -828,7 +1015,8 @@ export default function TesoreriaView({ data }: { data: TesoreriaPageData }) {
           onClose={() => { setCuentaModal(false); setEditCuenta(null) }} onSaved={onSaved} />
       )}
       {movModal && (
-        <MovimientoModal cuentas={cuentasActivas} categorias={data.categorias_gastos} cuentaInicial={movCuentaIni}
+        <MovimientoModal cuentas={cuentasActivas} categorias={data.categorias_gastos} pendientes={pendientes}
+          cuentaInicial={movCuentaIni}
           onClose={() => { setMovModal(false); setMovCuentaIni(null) }} onSaved={onSaved} />
       )}
       {transferModal && (

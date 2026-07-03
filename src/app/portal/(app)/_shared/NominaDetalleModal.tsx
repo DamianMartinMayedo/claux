@@ -10,6 +10,7 @@ import {
   type NominaLinea,
 } from '@/app/actions/portal/rrhh'
 import { registrarLiquidacion } from '@/app/actions/portal/gastos'
+import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { Check, CircleCheck, DollarSign, Wallet, X } from 'lucide-react'
 
 type CuentaInfo = { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }
@@ -253,14 +254,17 @@ export function PagarNominaModal({
   onPaid:  () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const compat = cuentas.filter(c => c.moneda === nomina.moneda)
-  const [cuentaId, setCuentaId] = useState(compat[0]?.cuenta_id ?? '')
+  const cuentasEmpresa = cuentas.filter(c => c.empresa_id === nomina.empresa_id)
+  const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!liq || !liq.valido) return
     const fd = new FormData(e.currentTarget)
     fd.set('registro_id', nomina.gasto_id ?? '')
-    fd.set('cuenta_id', cuentaId)
+    fd.set('cuenta_id', liq.cuentaId)
+    fd.set('monto', liq.monto)
+    fd.set('tasa_cambio', String(liq.tasa))
     startTransition(async () => {
       const res = await registrarLiquidacion(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -283,27 +287,23 @@ export function PagarNominaModal({
               <strong> Pendiente {formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong>
             </span>
           </div>
-          {compat.length === 0 ? (
-            <div className="alert alert-warning mt-3">No tienes cuentas en {nomina.moneda}. Crea una en Tesorería para registrar el pago.</div>
+          {cuentasEmpresa.length === 0 ? (
+            <div className="alert alert-warning mt-3">No tienes cajas en esta empresa. Crea una en Tesorería para registrar el pago.</div>
           ) : (
             <form onSubmit={handleSubmit} className="gc-liq-form">
               <div className="ter-form-grid">
-                <div className="input-group ter-col-full">
-                  <label>Cuenta <span className="required">*</span></label>
-                  <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
-                    {compat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
-                  </select>
-                </div>
-                <div className="input-group ter-col-span-3">
-                  <label>Monto ({nomina.moneda}) <span className="required">*</span></label>
-                  <input className="input" name="monto" type="number" min="0" step="0.01" required defaultValue={nomina.saldo_pendiente.toFixed(2)} />
-                </div>
+                <LiquidarCuentaFields
+                  cuentas={cuentasEmpresa}
+                  docMoneda={nomina.moneda}
+                  saldo={nomina.saldo_pendiente}
+                  onChange={setLiq}
+                />
                 <div className="input-group ter-col-span-3">
                   <label>Fecha <span className="required">*</span></label>
                   <input className="input" name="fecha" type="date" required defaultValue={hoyISO()} />
                 </div>
               </div>
-              <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending}>
+              <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending || !liq?.valido}>
                 {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar pago'}
               </button>
             </form>

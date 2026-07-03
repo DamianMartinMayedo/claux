@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import DocumentoIaModal from './DocumentoIaModal'
 
 export interface ModeloIa {
@@ -47,6 +48,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const activosGratis = activos.filter(m => m.gratis)
   const totalConv = consumo.reduce((s, c) => s + c.conversaciones, 0)
   const totalTok  = consumo.reduce((s, c) => s + c.tokens, 0)
+  const { pageItems: consumoItems, ...consumoPag } = usePagination(consumo)
 
   function guardarGlobal(e: React.FormEvent) {
     e.preventDefault()
@@ -217,7 +219,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                 </tr>
               </thead>
               <tbody>
-                {consumo.map(c => {
+                {consumoItems.map(c => {
                   const pct = c.cupo > 0 ? Math.round((c.conversaciones / c.cupo) * 100) : 0
                   return (
                     <tr key={c.client_id}>
@@ -246,6 +248,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
             </table>
           </div>
         )}
+        <TablePagination {...consumoPag} label="cliente" />
       </div>
     </div>
   )

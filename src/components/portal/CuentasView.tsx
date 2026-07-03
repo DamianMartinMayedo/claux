@@ -12,8 +12,10 @@ import {
   type DocumentoPendiente,
   type Tramo,
 } from '@/app/actions/portal/cobranza'
+import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
@@ -52,16 +54,22 @@ function PagoModal({
 }) {
   const [isPending, startTransition] = useTransition()
 
-  const esCobro       = modo === 'COBRAR'
-  const cuentasCompat = cuentas.filter(c => c.moneda === doc.moneda)
-  const [cuentaId, setCuentaId] = useState(cuentasCompat[0]?.cuenta_id ?? '')
+  const esCobro        = modo === 'COBRAR'
+  // Mostrar TODAS las cuentas (sin filtro por empresa).
+  // Las de la misma moneda aparecen primero; las de otra moneda aplican tasa.
+  const cuentasOrdenadas = [...cuentas].sort((a, b) =>
+    (a.moneda === doc.moneda ? 0 : 1) - (b.moneda === doc.moneda ? 0 : 1))
+  const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!liq || !liq.valido) return
     const fd = new FormData(e.currentTarget)
     fd.set('doc_tipo', doc.doc_tipo)
     fd.set('doc_id', doc.doc_id)
-    fd.set('cuenta_id', cuentaId)
+    fd.set('cuenta_id', liq.cuentaId)
+    fd.set('monto', liq.monto)
+    fd.set('tasa_cambio', String(liq.tasa))
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -81,39 +89,30 @@ function PagoModal({
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{esCobro ? 'Registrar cobro' : 'Registrar pago'}</h2>
+          <div>
+            <h2 className="modal-title">{esCobro ? 'Registrar cobro' : 'Registrar pago'}</h2>
+            <p className="text-xs-muted mt-1">
+              {doc.numero} · {doc.tercero_nombre ? `${doc.tercero_nombre} · ` : ''}
+              Total {formatMonto(doc.monto)} {doc.moneda} · Pendiente <strong>{formatMonto(doc.saldo)} {doc.moneda}</strong>
+            </p>
+          </div>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
-
-          <div className="info-box">
-            <strong className="info-box-title">{doc.numero}</strong>
-            <span className="text-xs-muted">
-              {doc.tercero_nombre ? `${doc.tercero_nombre} · ` : ''}
-              Total {formatMonto(doc.monto)} {doc.moneda} ·
-              <strong> Pendiente {formatMonto(doc.saldo)} {doc.moneda}</strong>
-            </span>
-          </div>
-
           {doc.saldo > 0.005 ? (
-            cuentasCompat.length === 0 ? (
-              <div className="alert alert-warning mt-3">
-                No tienes cuentas en {doc.moneda}. Crea una en Tesorería para registrar el {esCobro ? 'cobro' : 'pago'}.
+            cuentasOrdenadas.length === 0 ? (
+              <div className="alert alert-warning">
+                No tienes cajas disponibles. Crea una en Tesorería para registrar el {esCobro ? 'cobro' : 'pago'}.
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="gc-liq-form">
+               <form id="cobro-form" onSubmit={handleSubmit} className="gc-liq-form">
                 <div className="ter-form-grid">
-                  <div className="input-group ter-col-full">
-                    <label>Cuenta <span className="required">*</span></label>
-                    <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
-                      {cuentasCompat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
-                    </select>
-                  </div>
-                  <div className="input-group ter-col-span-3">
-                    <label>Monto ({doc.moneda}) <span className="required">*</span></label>
-                    <input className="input" name="monto" type="number" min="0" step="0.01" required
-                      defaultValue={doc.saldo.toFixed(2)} />
-                  </div>
+                  <LiquidarCuentaFields
+                    cuentas={cuentasOrdenadas}
+                    docMoneda={doc.moneda}
+                    saldo={doc.saldo}
+                    onChange={setLiq}
+                  />
                   <div className="input-group ter-col-span-3">
                     <label>Fecha <span className="required">*</span></label>
                     <input className="input" name="fecha" type="date" defaultValue={hoyISO()} required />
@@ -123,15 +122,11 @@ function PagoModal({
                     <input className="input" name="notas" placeholder="Referencia…" />
                   </div>
                 </div>
-                <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending}>
-                  {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : esCobro ? 'Registrar cobro' : 'Registrar pago'}
-                </button>
               </form>
             )
           ) : (
-            <div className="alert alert-success mt-3">{esCobro ? 'Cobrado' : 'Pagado'} por completo.</div>
+            <div className="alert alert-success">{esCobro ? 'Cobrado' : 'Pagado'} por completo.</div>
           )}
-
           {doc.liquidaciones.length > 0 && (
             <div className="gc-liq-historial">
               <span className="ter-form-section-title">{esCobro ? 'Cobros' : 'Pagos'} registrados</span>
@@ -146,10 +141,14 @@ function PagoModal({
               ))}
             </div>
           )}
-
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+          {doc.saldo > 0.005 && cuentasOrdenadas.length > 0 && (
+            <button type="submit" form="cobro-form" className="btn btn-primary" disabled={isPending || !liq?.valido}>
+              {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : esCobro ? 'Registrar cobro' : 'Registrar pago'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -178,6 +177,8 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
       return true
     })
   }, [data.documentos, filtroTramo, filtroEmpresa])
+
+  const { pageItems, ...pag } = usePagination(documentos)
 
   // Total pendiente por moneda
   const porMoneda = useMemo(() => {
@@ -273,7 +274,7 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {documentos.map(d => (
+                {pageItems.map(d => (
                   <tr
                     key={d.doc_id}
                     className={multiempresa ? 'row-empresa-accent' : undefined}
@@ -313,6 +314,7 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="documento" />
       </div>
 
       {pagoVivo && (

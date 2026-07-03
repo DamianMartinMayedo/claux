@@ -19,6 +19,7 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -319,6 +320,8 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
     })
   }, [data.empleados, search, filtroEstado, filtroEmpresa])
 
+  const { pageItems, ...pag } = usePagination(empleados)
+
   const activos = data.empleados.filter(e => e.estado === 'ACTIVO').length
 
   function openNuevo() { setEditEmpleado(null); setModalEmpleado(true) }
@@ -400,7 +403,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {empleados.map(e => (
+                {pageItems.map(e => (
                   <tr key={e.empleado_id}
                     className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(e.empresa_id)) : undefined}
@@ -454,6 +457,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="empleado" />
       </div>
 
       {modalEmpleado && (

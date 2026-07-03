@@ -244,11 +244,12 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const pagadoPorGasto = new Map<string, number>()
   if (gastoIds.length) {
     const { data: movs } = await db.from('movimientos_tesoreria')
-      .select('monto, referencia_id')
+      .select('monto, monto_ref, referencia_id')
       .eq('client_id', session.client_id)
       .in('referencia_id', gastoIds)
-    for (const m of (movs ?? []) as { monto: number; referencia_id: string }[]) {
-      pagadoPorGasto.set(m.referencia_id, (pagadoPorGasto.get(m.referencia_id) ?? 0) + Number(m.monto))
+    // Saldo de la nómina en su moneda → se suma monto_ref (importe aplicado)
+    for (const m of (movs ?? []) as { monto: number; monto_ref: number | null; referencia_id: string }[]) {
+      pagadoPorGasto.set(m.referencia_id, (pagadoPorGasto.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
     }
   }
 

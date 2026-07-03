@@ -5,6 +5,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { suscripcionLabel } from '@/lib/billing'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info', GRACIA: 'badge-warning',
@@ -19,8 +20,6 @@ type Cliente = {
   fecha_fin_gracia: string | null
   created_at: string | null; notas: string | null
 }
-
-const POR_PAGINA = 10
 
 function cicloLabel(ciclo: string | null) {
   return ciclo === 'anual' ? 'Anual' : 'Mensual'
@@ -87,7 +86,6 @@ export default function ClientesTabla({
   const router = useRouter()
   const [busqueda, setBusqueda]         = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
-  const [pagina, setPagina]             = useState(1)
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase()
@@ -101,10 +99,7 @@ export default function ClientesTabla({
     })
   }, [clientes, busqueda, filtroEstado])
 
-  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
-  const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
-
-  function resetPagina(fn: () => void) { fn(); setPagina(1) }
+  const { pageItems, ...pag } = usePagination(filtrados)
 
   return (
     <>
@@ -116,12 +111,12 @@ export default function ClientesTabla({
             type="search" className="search-input"
             placeholder="Buscar por empresa, email o ID…"
             value={busqueda}
-            onChange={e => resetPagina(() => setBusqueda(e.target.value))}
+            onChange={e => setBusqueda(e.target.value)}
           />
         </div>
 
         <select className="filter-select" value={filtroEstado}
-          onChange={e => resetPagina(() => setFiltroEstado(e.target.value))}>
+          onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="ACTIVO">Activo</option>
           <option value="TRIAL">Trial</option>
@@ -144,6 +139,7 @@ export default function ClientesTabla({
           </div>
         </div>
       ) : (
+        <>
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -157,7 +153,7 @@ export default function ClientesTabla({
               </tr>
             </thead>
             <tbody>
-              {paginados.map(c => {
+              {pageItems.map(c => {
                 const dias = calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia)
                 return (
                   <tr key={c.client_id} className="table-row-clickable" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}>
@@ -191,17 +187,9 @@ export default function ClientesTabla({
               })}
             </tbody>
           </table>
-
-          {totalPaginas > 1 && (
-            <div className="pagination">
-              <span>{filtrados.length} cliente{filtrados.length !== 1 ? 's' : ''} · Página {pagina} de {totalPaginas}</span>
-              <div className="pagination-controls">
-                <button className="btn btn-secondary btn-sm" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)}>‹ Ant.</button>
-                <button className="btn btn-secondary btn-sm" disabled={pagina >= totalPaginas} onClick={() => setPagina(p => p + 1)}>Sig. ›</button>
-              </div>
-            </div>
-          )}
         </div>
+        <TablePagination {...pag} label="cliente" />
+        </>
       )}
     </>
   )

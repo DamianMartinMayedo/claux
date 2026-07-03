@@ -2,6 +2,7 @@
 
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -226,6 +227,8 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
     })
   }, [data.movimientos, filtroTipo, filtroAlm])
 
+  const { pageItems, ...pag } = usePagination(filtrados)
+
   function onSaved() { setModalOpen(false); startTransition(() => router.refresh()) }
 
   function signo(m: Movimiento): { txt: string; cls: string } {
@@ -311,7 +314,7 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(m => {
+                {pageItems.map(m => {
                   const s = signo(m)
                   return (
                     <tr key={m.movimiento_id}>
@@ -341,6 +344,7 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="movimiento" />
       </div>
 
       {modalOpen && (

@@ -2,6 +2,7 @@
 
 import { toastError } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
@@ -254,6 +255,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     })
   }, [data.productos, search, filtroTipo, filtroCat, filtroProv, verArchivados, categoriaMap])
 
+  const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
+  const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
+
   const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
   const archivados        = data.productos.filter(p => p.estado === 'INACTIVO').length
   const categoriasActivas = data.categorias.filter(c => c.estado === 'ACTIVO')
@@ -388,7 +392,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {productosFiltrados.map(p => {
+                    {prodItems.map(p => {
                       const stockBajo = p.tipo === 'PRODUCTO' && p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo
                       return (
                         <tr
@@ -495,6 +499,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 </table>
               </div>
             )}
+            <TablePagination {...prodPag} label="producto" />
           </div>
         </>
       )}
@@ -525,7 +530,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.categorias.map(c => {
+                  {catItems.map(c => {
                     const count = productosPorCategoria[c.categoria_id] ?? 0
                     return (
                       <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : ''}>
@@ -591,6 +596,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
               </table>
             </div>
           )}
+          <TablePagination {...catPag} label="categoría" />
         </div>
       )}
 

@@ -18,10 +18,12 @@ import {
   type EstadoRegistro,
   type GastosCobrosPageData,
 } from '@/app/actions/portal/gastos'
+import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
 import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -228,15 +230,18 @@ function LiquidarModal({
 }) {
   const [isPending, startTransition] = useTransition()
 
-  const esGasto         = registro.tipo === 'GASTO'
-  const cuentasCompat   = cuentas.filter(c => c.moneda === registro.moneda)
-  const [cuentaId, setCuentaId] = useState(cuentasCompat[0]?.cuenta_id ?? '')
+  const esGasto        = registro.tipo === 'GASTO'
+  const cuentasEmpresa = cuentas.filter(c => c.empresa_id === registro.empresa_id)
+  const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!liq || !liq.valido) return
     const fd = new FormData(e.currentTarget)
     fd.set('registro_id', registro.registro_id)
-    fd.set('cuenta_id', cuentaId)
+    fd.set('cuenta_id', liq.cuentaId)
+    fd.set('monto', liq.monto)
+    fd.set('tasa_cambio', String(liq.tasa))
     startTransition(async () => {
       const res = await registrarLiquidacion(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -273,24 +278,19 @@ function LiquidarModal({
 
           {/* Formulario de liquidación */}
           {registro.saldo_pendiente > 0.005 ? (
-            cuentasCompat.length === 0 ? (
+            cuentasEmpresa.length === 0 ? (
               <div className="alert alert-warning mt-3">
-                No tienes cuentas en {registro.moneda}. Crea una en Tesorería para registrar el {esGasto ? 'pago' : 'cobro'}.
+                No tienes cajas en esta empresa. Crea una en Tesorería para registrar el {esGasto ? 'pago' : 'cobro'}.
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="gc-liq-form">
                 <div className="ter-form-grid">
-                  <div className="input-group ter-col-full">
-                    <label>Cuenta <span className="required">*</span></label>
-                    <select className="input" value={cuentaId} onChange={e => setCuentaId(e.target.value)} required>
-                      {cuentasCompat.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>)}
-                    </select>
-                  </div>
-                  <div className="input-group ter-col-span-3">
-                    <label>Monto ({registro.moneda}) <span className="required">*</span></label>
-                    <input className="input" name="monto" type="number" min="0" step="0.01" required
-                      defaultValue={registro.saldo_pendiente.toFixed(2)} />
-                  </div>
+                  <LiquidarCuentaFields
+                    cuentas={cuentasEmpresa}
+                    docMoneda={registro.moneda}
+                    saldo={registro.saldo_pendiente}
+                    onChange={setLiq}
+                  />
                   <div className="input-group ter-col-span-3">
                     <label>Fecha <span className="required">*</span></label>
                     <input className="input" name="fecha" type="date" defaultValue={hoyISO()} required />
@@ -300,7 +300,7 @@ function LiquidarModal({
                     <input className="input" name="notas" placeholder="Referencia del pago…" />
                   </div>
                 </div>
-                <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending}>
+                <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending || !liq?.valido}>
                   {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : esGasto ? 'Registrar pago' : 'Registrar cobro'}
                 </button>
               </form>
@@ -520,6 +520,9 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
     return m
   }, [data.terceros])
 
+  const { pageItems: regItems, ...regPag } = usePagination(registros)
+  const { pageItems: catItems, ...catPag } = usePagination(data.categorias_gastos)
+
   function openNuevo(tipo: TipoRegistro) { setTipoNuevo(tipo); setEditRegistro(null); setModalRegistro(true) }
   function openEdit(r: GastoCobro)       { setEditRegistro(r); setModalRegistro(true) }
   function onSaved()  { setModalRegistro(false); setEditRegistro(null); router.refresh() }
@@ -663,7 +666,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {registros.map(r => (
+                {regItems.map(r => (
                   <tr key={r.registro_id}
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
@@ -703,6 +706,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...regPag} label="registro" />
       </div>
 
       </>)}
@@ -732,7 +736,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.categorias_gastos.map(c => (
+                  {catItems.map(c => (
                     <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : undefined}>
                       <td data-label="Nombre">
                         <strong className="text-sm-bold">{c.nombre}</strong>
@@ -765,6 +769,7 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
               </table>
             </div>
           )}
+          <TablePagination {...catPag} label="categoría" />
         </div>
       )}
 

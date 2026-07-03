@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 
 type Registro = {
   id: number
@@ -66,6 +67,8 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
     })
   }, [registros, filtroEntity, busqueda])
 
+  const { pageItems, ...pag } = usePagination(filtrados)
+
   return (
     <div className="card card-table">
 
@@ -117,7 +120,7 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
                   Sin registros
                 </td>
               </tr>
-            ) : filtrados.map(r => (
+            ) : pageItems.map(r => (
               <tr key={r.id}>
                 <td data-label="Fecha" className="act-date-cell">
                   {formatFecha(r.created_at)}
@@ -149,11 +152,7 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
         </table>
       </div>
 
-      {/* ── Footer contador ── */}
-      <div className="act-footer">
-        {filtrados.length} registro{filtrados.length !== 1 ? 's' : ''}
-        {filtrados.length !== registros.length && ` de ${registros.length}`}
-      </div>
+      <TablePagination {...pag} label="registro" />
     </div>
   )
 }

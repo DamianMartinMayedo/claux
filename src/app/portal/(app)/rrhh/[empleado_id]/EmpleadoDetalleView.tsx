@@ -21,6 +21,7 @@ import {
 } from '@/app/actions/portal/rrhh'
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { FileText, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
   NominaDetalleModal,
   ConfirmarNominaModal,
@@ -249,6 +250,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
     const l = n.lineas.find(x => x.empleado_id === empleado.empleado_id)
     return l ? [{ nomina: n, linea: l }] : []
   })
+  const { pageItems: nominaItems, ...nominaPag } = usePagination(miNomina)
 
   const detalleVivo = useMemo(() =>
     detalleNominaId ? data.nominas.find(n => n.nomina_id === detalleNominaId) ?? null : null,
@@ -417,7 +419,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                 </tr>
               </thead>
               <tbody>
-                {miNomina.map(({ nomina, linea }) => (
+                {nominaItems.map(({ nomina, linea }) => (
                   <tr key={nomina.nomina_id} className="table-row-clickable"
                     onClick={() => setDetalleNominaId(nomina.nomina_id)}>
                     <td data-label="Período"><strong>{formatPeriodo(nomina.periodo)}</strong></td>
@@ -435,6 +437,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
             </table>
           </div>
         )}
+        <TablePagination {...nominaPag} label="nómina" />
       </div>
 
       {/* Modales */}

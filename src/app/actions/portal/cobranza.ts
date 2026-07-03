@@ -82,7 +82,7 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
   // Movimientos de liquidación (para saldos e historial) + terceros + cuentas
   const [movRes, terRes, cuRes] = await Promise.all([
     db.from('movimientos_tesoreria')
-      .select('movimiento_id, fecha, monto, cuenta_id, referencia_id')
+      .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id')
       .eq('client_id', session.client_id)
       .in('origen', ['PAGO', 'COBRO'])
       .not('referencia_id', 'is', null),
@@ -99,10 +99,12 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
 
   const liquidadoPorDoc = new Map<string, number>()
   const liqsPorDoc      = new Map<string, LiquidacionDoc[]>()
-  for (const m of (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; cuenta_id: string; referencia_id: string }[]) {
-    liquidadoPorDoc.set(m.referencia_id, (liquidadoPorDoc.get(m.referencia_id) ?? 0) + Number(m.monto))
+  for (const m of (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string; referencia_id: string }[]) {
+    // El saldo del documento se mide en su propia moneda → monto_ref (importe aplicado)
+    const aplicado = Number(m.monto_ref ?? m.monto)
+    liquidadoPorDoc.set(m.referencia_id, (liquidadoPorDoc.get(m.referencia_id) ?? 0) + aplicado)
     const arr = liqsPorDoc.get(m.referencia_id) ?? []
-    arr.push({ movimiento_id: m.movimiento_id, fecha: m.fecha, monto: Number(m.monto), cuenta_nombre: cuentaNombre[m.cuenta_id] ?? m.cuenta_id })
+    arr.push({ movimiento_id: m.movimiento_id, fecha: m.fecha, monto: aplicado, cuenta_nombre: cuentaNombre[m.cuenta_id] ?? m.cuenta_id })
     liqsPorDoc.set(m.referencia_id, arr)
   }
   const terceroNombre: Record<string, string> = {}
@@ -208,13 +210,12 @@ export async function obtenerCobrosFactura(factura_id: string): Promise<CobrosFa
 
   const [movRes, cuRes] = await Promise.all([
     db.from('movimientos_tesoreria')
-      .select('movimiento_id, fecha, monto, cuenta_id')
+      .select('movimiento_id, fecha, monto, monto_ref, cuenta_id')
       .eq('client_id', session.client_id)
       .eq('referencia_id', factura_id)
       .in('origen', ['COBRO', 'PAGO']),
     db.from('cuentas').select('cuenta_id, nombre, moneda')
       .eq('client_id', session.client_id)
-      .eq('empresa_id', factura.empresa_id)
       .eq('activa', true)
       .order('nombre'),
   ])
@@ -222,8 +223,9 @@ export async function obtenerCobrosFactura(factura_id: string): Promise<CobrosFa
   const cuentaNombre: Record<string, string> = {}
   for (const c of (cuRes.data ?? []) as { cuenta_id: string; nombre: string }[]) cuentaNombre[c.cuenta_id] = c.nombre
 
-  const liquidaciones: LiquidacionDoc[] = ((movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; cuenta_id: string }[])
-    .map(m => ({ movimiento_id: m.movimiento_id, fecha: m.fecha, monto: Number(m.monto), cuenta_nombre: cuentaNombre[m.cuenta_id] ?? m.cuenta_id }))
+  // monto_ref = importe aplicado a la factura en su moneda (reconcilia el saldo)
+  const liquidaciones: LiquidacionDoc[] = ((movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string }[])
+    .map(m => ({ movimiento_id: m.movimiento_id, fecha: m.fecha, monto: Number(m.monto_ref ?? m.monto), cuenta_nombre: cuentaNombre[m.cuenta_id] ?? m.cuenta_id }))
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
 
   const total     = Number(factura.total)
@@ -257,7 +259,8 @@ export async function registrarPagoDoc(
   const doc_tipo  = (formData.get('doc_tipo')  as string)?.trim() as DocTipo
   const doc_id    = (formData.get('doc_id')    as string)?.trim()
   const cuenta_id = (formData.get('cuenta_id') as string)?.trim()
-  const montoRaw  = parseFloat(formData.get('monto') as string)
+  const montoRaw  = parseFloat(formData.get('monto') as string)   // en la moneda del documento
+  const tasaRaw   = parseFloat(formData.get('tasa_cambio') as string)
   const fecha     = (formData.get('fecha')     as string)?.trim() || hoyISO()
   const notas     = (formData.get('notas')     as string)?.trim() || null
 
@@ -291,14 +294,21 @@ export async function registrarPagoDoc(
     .eq('cuenta_id', cuenta_id).eq('client_id', session.client_id).single()
   if (!cuenta)        return { ok: false, error: 'Cuenta no encontrada.' }
   if (!cuenta.activa) return { ok: false, error: 'La cuenta está archivada.' }
-  if (cuenta.moneda !== moneda) {
-    return { ok: false, error: `La cuenta es en ${cuenta.moneda} y el documento en ${moneda}. Usa una cuenta de la misma moneda.` }
-  }
 
-  // Saldo pendiente
+  // Moneda distinta a la del documento → se aplica tasa (misma lógica que las transferencias).
+  // `montoRaw` es siempre el importe en la moneda del documento (lo que reduce su saldo);
+  // en la caja entra/sale `montoCaja` = montoRaw × tasa, en la moneda de la caja.
+  const cambiaMoneda = cuenta.moneda !== moneda
+  const tasa = cambiaMoneda ? tasaRaw : 1
+  if (cambiaMoneda && (isNaN(tasa) || tasa <= 0)) {
+    return { ok: false, error: `Indica la tasa de cambio para saldar en ${moneda} desde una caja en ${cuenta.moneda}.` }
+  }
+  const montoCaja = Math.round(montoRaw * tasa * 100) / 100
+
+  // Saldo pendiente (en la moneda del documento → se suma monto_ref)
   const { data: liqs } = await db.from('movimientos_tesoreria')
-    .select('monto').eq('client_id', session.client_id).eq('referencia_id', doc_id)
-  const yaLiquidado = (liqs ?? []).reduce((s, m) => s + Number(m.monto), 0)
+    .select('monto_ref, monto').eq('client_id', session.client_id).eq('referencia_id', doc_id)
+  const yaLiquidado = (liqs ?? []).reduce((s, m) => s + Number(m.monto_ref ?? m.monto), 0)
   const pendiente   = monto - yaLiquidado
   if (montoRaw > pendiente + EPS) {
     return { ok: false, error: `El monto supera el saldo pendiente (${pendiente.toFixed(2)} ${moneda}).` }
@@ -311,9 +321,10 @@ export async function registrarPagoDoc(
     cuenta_id,
     fecha,
     tipo:          esIngreso ? 'INGRESO' : 'EGRESO',
-    monto:         montoRaw,
-    moneda,
-    concepto,
+    monto:         montoCaja,       // en la moneda de la caja
+    moneda:        cuenta.moneda,
+    monto_ref:     montoRaw,        // en la moneda del documento (reduce su saldo)
+    concepto:      cambiaMoneda ? `${concepto} (${montoRaw.toFixed(2)} ${moneda} a ${tasa} ${cuenta.moneda}/${moneda})` : concepto,
     origen:        esIngreso ? 'COBRO' : 'PAGO',
     referencia_id: doc_id,
     notas,

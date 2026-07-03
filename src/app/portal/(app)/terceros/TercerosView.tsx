@@ -14,6 +14,7 @@ import {
 import { TerceroFormModal, VIA_BADGE } from './_TerceroFormModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { Archive, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
@@ -128,6 +129,8 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
     })
   }, [data.terceros, search, filtroTipo, filtroEmpresa, verArchivados])
 
+  const { pageItems, ...pag } = usePagination(tercerosFiltrados)
+
   function openCreate() { setEditTercero(null); setModalOpen(true) }
   function openEdit(t: Tercero) { setEditTercero(t); setModalOpen(true) }
   function closeModal() { setModalOpen(false); setEditTercero(null) }
@@ -229,7 +232,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                 </tr>
               </thead>
               <tbody>
-                {tercerosFiltrados.map(t => (
+                {pageItems.map(t => (
                   <tr
                     key={t.tercero_id}
                     className={`table-row-clickable${!t.activo ? ' ter-row-archivada' : ''}${multiempresa ? ' row-empresa-accent' : ''}`}
@@ -336,6 +339,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             </table>
           </div>
         )}
+        <TablePagination {...pag} label="registro" />
       </div>
 
       {/* ── Modales ── */}

@@ -123,6 +123,9 @@
   .table td[data-label=""]::before { content: none; }
   .table td.col-actions { justify-content: flex-end; width: auto; }
   .table td.col-actions::before { content: none; }
+
+  /* Pie de paginación: que no se apriete en móvil */
+  .pagination { flex-wrap: wrap; gap: var(--space-3); }
 }
 
 @media (max-width: 480px) {

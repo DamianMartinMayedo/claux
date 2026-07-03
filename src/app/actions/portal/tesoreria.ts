@@ -334,6 +334,7 @@ export async function registrarMovimiento(
     tipo,
     monto:         montoRaw,
     moneda:        cuenta.moneda,
+    monto_ref:     montoRaw,   // gasto/cobro creado en la misma moneda de la caja
     concepto,
     categoria:     categoriaNombre,
     categoria_id,
@@ -544,6 +545,7 @@ export async function registrarTransferencia(
       tipo:          'EGRESO',
       monto:         feeEnvio,
       moneda:        origen.moneda,
+      monto_ref:     feeEnvio,
       concepto:      `Comisión transferencia → ${destino.nombre}`,
       categoria:     comisionesNombre,
       categoria_id:  comisionesCategoriaId,
@@ -581,6 +583,7 @@ export async function registrarTransferencia(
       tipo:          'EGRESO',
       monto:         feeRecibo,
       moneda:        destino.moneda,
+      monto_ref:     feeRecibo,
       concepto:      `Comisión transferencia ← ${origen.nombre}`,
       categoria:     comisionesNombre,
       categoria_id:  comisionesCategoriaId,
