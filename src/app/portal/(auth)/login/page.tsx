@@ -20,7 +20,7 @@ export default function PortalLoginPage() {
       if (result?.error) {
         setError(result.error)
       } else {
-        router.push('/portal/empresas')
+        router.push('/portal/dashboard')
       }
     })
   }
