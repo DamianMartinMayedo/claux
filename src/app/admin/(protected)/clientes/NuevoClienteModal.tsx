@@ -24,6 +24,7 @@ type PlantillaSector = {
   sector:  string
   nombre:  string
   modulos: string[]
+  etiquetas: { catalogo?: string } | null
 }
 
 type Props = {
@@ -69,6 +70,15 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
     .reduce((sum, m) => sum + Number(m[precioField] ?? 0), 0)
   const precioAnual = importeCiclo(precioMensual, 'anual', descuentoAnualPct)
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
+
+  // Vista previa del sector: el módulo de catálogo se muestra con la etiqueta que
+  // verá el cliente ("Menú digital…"/"Servicios digital…"). El resto, sin cambios.
+  const etiquetaCatalogo = plantillas.find(p => p.sector === sector)?.etiquetas?.catalogo
+  function nombreModulo(m: ModuloCatalogo): string {
+    return m.clave === 'catalogo_qr' && etiquetaCatalogo
+      ? m.nombre.replace(/^Catálogo\b/, etiquetaCatalogo)
+      : m.nombre
+  }
 
   function toggle(clave: string) {
     setSeleccionados(prev =>
@@ -193,7 +203,7 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
                         return (
                           <label key={m.clave} className="mod-row">
                             <span className="mod-row-main">
-                              <span className="mod-row-name">{m.nombre}</span>
+                              <span className="mod-row-name">{nombreModulo(m)}</span>
                               {m.descripcion && <span className="mod-row-desc">{m.descripcion}</span>}
                             </span>
                             <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
@@ -206,7 +216,7 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
                                 value={m.clave}
                                 checked={activo}
                                 onChange={() => toggle(m.clave)}
-                                aria-label={`Activar ${m.nombre}`}
+                                aria-label={`Activar ${nombreModulo(m)}`}
                               />
                               <span className="switch-track" aria-hidden="true" />
                             </span>

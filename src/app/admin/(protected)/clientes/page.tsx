@@ -16,7 +16,7 @@ export default async function ClientesPage() {
       .order('orden'),
     supabase
       .from('plantillas_sector')
-      .select('sector, nombre, modulos')
+      .select('sector, nombre, modulos, etiquetas')
       .eq('activa', true)
       .order('orden'),
   ])
