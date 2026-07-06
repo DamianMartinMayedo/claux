@@ -817,3 +817,27 @@ input[type="checkbox"]:checked::after {
   margin: 0;
 }
 
+/* ── ImageUpload (subida de foto con previsualización) ── */
+.img-upload { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.img-upload-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.img-upload-drop {
+  width: 160px; height: 160px; border-radius: var(--radius-lg);
+  border: 1.5px dashed var(--color-border); background: var(--color-surface-offset);
+  cursor: pointer; overflow: hidden; padding: 0;
+  transition: border-color var(--transition), background var(--transition);
+}
+.img-upload-drop:hover:not(:disabled) { border-color: var(--color-primary); }
+.img-upload-drop:disabled { cursor: not-allowed; opacity: 0.7; }
+.img-upload-placeholder {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); width: 100%; height: 100%;
+  color: var(--color-text-muted); font-size: var(--text-xs); text-align: center; padding: var(--space-3);
+}
+.img-upload-spin { animation: img-upload-spin 0.8s linear infinite; }
+@keyframes img-upload-spin { to { transform: rotate(360deg); } }
+.img-upload-preview {
+  display: block; width: 100%; height: 100%;
+  background-image: var(--preview); background-size: cover; background-position: center;
+}
+.img-upload-remove { align-self: flex-start; }
+

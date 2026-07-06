@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle } from 'lucide-react'
+import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon } from 'lucide-react'
 import type { PortalSession } from '@/lib/portal-auth'
 import { empresaColorVar } from './EmpresaTag'
 
@@ -31,6 +31,18 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const [tema, setTema] = useState<'light' | 'dark'>('light')
+
+  useEffect(() => {
+    setTema(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
+  }, [])
+
+  function toggleTema() {
+    const next = tema === 'dark' ? 'light' : 'dark'
+    document.documentElement.setAttribute('data-theme', next)
+    localStorage.setItem('claux-theme', next)
+    setTema(next)
+  }
 
   // Una sola empresa → su color es la identidad de la cuenta: tiñe el avatar.
   // Varias → el grupo no tiene un color único; avatar neutro + leyenda en el menú.
@@ -68,6 +80,15 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
         <span className="portal-logo">CLAUX</span>
       </div>
       <div className="portal-header-right">
+        <button
+          type="button"
+          className="theme-toggle-btn"
+          onClick={toggleTema}
+          aria-label={tema === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={tema === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+        >
+          {tema === 'dark' ? <Sun size={18} strokeWidth={2} /> : <Moon size={18} strokeWidth={2} />}
+        </button>
         <div className="portal-header-account" ref={ref}>
           <button
             type="button"

@@ -196,28 +196,23 @@
 
 /* ═══════════════════════════════════════════════════
    DARK MODE IMPROVEMENTS
+   Siguen al tema elegido (data-theme), no al del navegador.
    ═══════════════════════════════════════════════════ */
-@media (prefers-color-scheme: dark) {
-  .search-input:focus {
-    box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
-  }
-
-  .code-block {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-  }
-
-  .spinner {
-    border-color: rgba(63, 212, 207, 0.2);
-    border-top-color: var(--color-primary);
-  }
-
-  .form-input {
-    background: var(--color-surface-2);
-  }
-
-  .form-input:focus {
-    box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
-  }
+[data-theme="dark"] .search-input:focus {
+  box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
+}
+[data-theme="dark"] .code-block {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+[data-theme="dark"] .spinner {
+  border-color: rgba(63, 212, 207, 0.2);
+  border-top-color: var(--color-primary);
+}
+[data-theme="dark"] .form-input {
+  background: var(--color-surface-2);
+}
+[data-theme="dark"] .form-input:focus {
+  box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
 }
 

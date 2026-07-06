@@ -1,0 +1,177 @@
+/* ── Catálogo público — página ligera (menú/carta/servicios) ──
+   Hoja propia y autocontenida (mismo criterio y paleta que reserva-publica.css:
+   tarjeta blanca sobre fondo crema, teal de marca, fuentes del sistema, sin
+   librerías). Presupuesto de carga < 100 KB (skill de UI, sección públicas). */
+
+.cp-page {
+  --cp-bg: #faf7f2;
+  --cp-card-bg: #fff;
+  --cp-text: #1a1a1a;
+  --cp-text-muted: #595959;
+  --cp-border: #e5e0d8;
+  --cp-primary: #0d9488;
+  --cp-primary-hover: #0f766e;
+  --cp-error: #dc2626;
+  --cp-radius: 12px;
+  --cp-font: system-ui, -apple-system, sans-serif;
+  font-family: var(--cp-font);
+  background: var(--cp-bg);
+  color: var(--cp-text);
+  min-height: 100dvh;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cp-page {
+    --cp-bg: #1a1a1a;
+    --cp-card-bg: #262626;
+    --cp-text: #e5e5e5;
+    --cp-text-muted: #a3a3a3;
+    --cp-border: #404040;
+  }
+}
+
+.cp-shell { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+
+/* Cabecera: negocio a la izquierda, CTA (reservar/cita) arriba a la derecha,
+   alineado verticalmente con el nombre. */
+.cp-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+.cp-header-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cp-header-titles { min-width: 0; }
+/* Dimensiones fijas en CSS (no depender solo de los atributos width/height del
+   <img>, que la hoja global alteraba). `contain` = muestra el logo completo sin
+   recortarlo ni deformarlo. */
+.cp-logo { width: 44px; height: 44px; border-radius: 10px; object-fit: contain; flex-shrink: 0; }
+.cp-title { font-size: 22px; font-weight: 700; margin: 0; }
+.cp-subtitle { font-size: 14px; color: var(--cp-text-muted); margin: 2px 0 0; }
+
+/* CTA = botón primario compacto: teal sólido, texto blanco, no rompe la línea. */
+.cp-cta {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 10px 16px; white-space: nowrap;
+  background: var(--cp-primary); color: #fff; font-weight: 600; font-size: 14px;
+  border-radius: 10px; text-decoration: none;
+  transition: background .15s, transform 140ms cubic-bezier(0.23,1,0.32,1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .cp-cta:hover { background: var(--cp-primary-hover); }
+}
+.cp-cta:active { transform: scale(0.97); }
+
+.cp-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 48px 16px; text-align: center; color: var(--cp-text-muted);
+}
+.cp-empty svg { opacity: .3; }
+
+.cp-categoria { margin-bottom: 28px; }
+.cp-categoria-title {
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--cp-text-muted); margin: 0 0 12px;
+}
+
+/* Rejilla de tarjetas: foto arriba + nombre/descripción/precio. La foto tiene
+   relación fija; sin imagen se muestra un placeholder discreto (no un hueco). */
+.cp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (min-width: 560px) { .cp-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.cp-card {
+  display: flex; flex-direction: column; text-align: left; width: 100%; padding: 0;
+  background: var(--cp-card-bg); border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius); overflow: hidden; cursor: pointer;
+  font-family: var(--cp-font); color: var(--cp-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .04);
+  transition: transform 140ms cubic-bezier(0.23,1,0.32,1), box-shadow .15s, border-color .15s;
+}
+.cp-card:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .cp-card:hover { border-color: var(--cp-primary); box-shadow: 0 4px 14px rgb(0 0 0 / .08); }
+}
+/* "Agotado": solo se atenúan foto y textos, no los badges. */
+.cp-card-agotado .cp-card-photo,
+.cp-card-agotado .cp-card-body { opacity: .5; }
+
+.cp-card-photo {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; background: var(--cp-bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.cp-card-photo-empty { color: var(--cp-text-muted); opacity: .35; }
+.cp-item-photo-img { object-fit: cover; }
+
+/* flex:1 → el cuerpo llena la altura de la tarjeta (las tarjetas de una fila ya se
+   estiran a la más alta), lo que permite anclar el precio abajo con margin-top:auto. */
+.cp-card-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px; flex: 1; }
+/* color explícito: la tarjeta es un <a>, y la regla global a:not(.btn)… (mayor
+   especificidad) pintaría el nombre de teal si no fijamos la tinta aquí. */
+.cp-card-nombre { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--cp-text); }
+.cp-card-desc {
+  font-size: 13px; color: var(--cp-text-muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* Precio en tinta (no en color); el color se reserva para el CTA y acentos.
+   margin-top:auto → el precio queda SIEMPRE pegado abajo, alineado entre tarjetas. */
+.cp-card-precio { font-size: 15px; font-weight: 700; color: var(--cp-text); font-variant-numeric: tabular-nums; margin-top: auto; padding-top: 6px; }
+
+/* Precio anterior (tachado) cuando hay descuento: en su PROPIA línea ARRIBA del
+   precio actual, más pequeño y sin repetir la moneda (esa va solo en el final). */
+.cp-precio-antes { display: block; font-size: 0.8em; line-height: 1.15; color: var(--cp-text-muted); font-weight: 500; text-decoration: line-through; }
+
+.cp-badge {
+  position: absolute; top: 8px; right: 8px;
+  padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--cp-text); color: var(--cp-card-bg);
+}
+.cp-badge-inline { position: static; align-self: flex-start; margin: 4px 0 0; }
+/* Badge de descuento (teal), esquina superior izquierda de la foto. */
+.cp-badge-desc { position: absolute; top: 8px; left: 8px; right: auto;
+  padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--cp-primary); color: #fff; }
+
+/* Barra de herramientas: toggle de vista tarjetas/lista (alineado a la derecha). */
+.cp-toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.cp-viewtoggle { display: inline-flex; gap: 2px; padding: 2px; background: var(--cp-card-bg); border: 1px solid var(--cp-border); border-radius: 10px; }
+.cp-viewtoggle-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 30px; border: none; background: transparent; border-radius: 8px;
+  color: var(--cp-text-muted); cursor: pointer;
+}
+.cp-viewtoggle-btn.active { background: var(--cp-primary); color: #fff; }
+
+/* Vista lista: filas compactas sin foto (nombre + descripción + precio). */
+.cp-list { display: flex; flex-direction: column; }
+.cp-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  padding: 12px 4px; border-bottom: 1px solid var(--cp-border);
+  text-decoration: none; color: var(--cp-text); cursor: pointer;
+}
+.cp-row:last-child { border-bottom: none; }
+.cp-row:active { opacity: .6; }
+.cp-card-agotado.cp-row { opacity: .55; }
+.cp-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-row-nombre { font-size: 15px; font-weight: 600; color: var(--cp-text); display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cp-row-desc {
+  font-size: 13px; color: var(--cp-text-muted);
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cp-row-precio { font-size: 15px; font-weight: 700; color: var(--cp-text); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.cp-badge-desc-inline {
+  display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--cp-primary); color: #fff;
+}
+
+/* Página de detalle del ítem */
+.cp-back {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px;
+  color: var(--cp-text-muted); text-decoration: none; font-size: 14px; font-weight: 600;
+}
+.cp-detalle { display: flex; flex-direction: column; gap: 20px; }
+.cp-detalle-photo {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden;
+  border-radius: var(--cp-radius); background: var(--cp-bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.cp-detalle-body { display: flex; flex-direction: column; }
+.cp-detalle-cat { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--cp-text-muted); margin: 0 0 4px; }
+.cp-detalle-title { font-size: 22px; font-weight: 700; margin: 0; }
+.cp-detalle-precio { font-size: 20px; font-weight: 700; color: var(--cp-text); margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+.cp-detalle-desc { font-size: 15px; line-height: 1.6; margin: 16px 0; }
+.cp-sheet-meta { font-size: 13px; color: var(--cp-text-muted); margin: 0 0 6px; }

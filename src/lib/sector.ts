@@ -3,12 +3,16 @@
 // la etiqueta VISIBLE la decide el sector del negocio (plantillas_sector.etiquetas).
 // CONTEXTO §1 / MODELO-MODULOS §6: nunca hornear "menú"/"mesa" en el código.
 
+export type CatalogoIcono = 'comida' | 'producto'
+
 export interface EtiquetasSector {
   reservas:   string  // "Reservas" | "Citas" | "Clases" | "Turnos"
   recurso:    string  // "Mesa" | "Profesional" | "Cancha" | "Cabina"
   recurso_pl: string
   servicio:   string  // "Servicio" | "Tratamiento" | "Clase"
   catalogo:   string  // "Menú" | "Carta" | "Catálogo" | "Servicios"
+  // Icono de la card de catálogo sin foto: comida → cubiertos, producto → caja.
+  catalogoIcono: CatalogoIcono
 }
 
 // Valores por defecto (negocio sin sector asignado). Se eligen palabras que un
@@ -20,6 +24,7 @@ export const ETIQUETAS_DEFAULT: EtiquetasSector = {
   recurso_pl: 'Personal',
   servicio:   'Servicio',
   catalogo:   'Catálogo',
+  catalogoIcono: 'producto',  // sin sector → icono genérico de producto (no comida)
 }
 
 /** Normaliza el jsonb `etiquetas` de plantillas_sector contra los valores por defecto. */
@@ -34,5 +39,6 @@ export function etiquetasDe(raw: unknown): EtiquetasSector {
     recurso_pl: pick('recurso_pl'),
     servicio:   pick('servicio'),
     catalogo:   pick('catalogo'),
+    catalogoIcono: r.catalogoIcono === 'comida' ? 'comida' : 'producto',
   }
 }

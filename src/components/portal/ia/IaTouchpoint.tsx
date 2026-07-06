@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useRef, useEffect } from 'react'
+import { useState, useTransition, useRef, useEffect, useId } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import { generarInsightIa } from '@/app/actions/portal/ia'
 import { useIa } from './IaContext'
@@ -23,6 +23,8 @@ export default function IaTouchpoint({
   const [pending, startTransition] = useTransition()
   const ref = useRef<HTMLSpanElement>(null)
   const dismissKey = `ia-tip-${tipo}`
+  // Id único para el degradado del icono (evita ids duplicados si hay varios).
+  const gradId = `iaspark-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
 
   // Auto-aviso al entrar, salvo que el usuario ya lo cerrara antes (recordado).
   useEffect(() => {
@@ -59,12 +61,21 @@ export default function IaTouchpoint({
 
   return (
     <span className="ia-tp" ref={ref}>
+      {/* Degradado de marca para el trazo del icono (estrellitas). */}
+      <svg className="ia-grad-defs" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" className="ia-grad-0" />
+            <stop offset="100%" className="ia-grad-1" />
+          </linearGradient>
+        </defs>
+      </svg>
       <button
         type="button" className="ia-tp-icon"
         onClick={() => (panel ? setPanel(false) : analizar())}
         aria-label={`Deja que ${nombreAgente} haga ${descripcion}`}
       >
-        <Sparkles size={16} strokeWidth={2} />
+        <Sparkles size={18} strokeWidth={2} color={`url(#${gradId})`} />
       </button>
 
       {/* Aviso automático (solo informa; la acción la hace el icono) */}

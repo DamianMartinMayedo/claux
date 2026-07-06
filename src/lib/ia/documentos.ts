@@ -4,7 +4,7 @@
 // como el admin (listado/edición en modal). Añadir un documento nuevo = una fila
 // más en DOCUMENTOS_IA. Sin dependencias de otros módulos de IA (evita ciclos).
 
-export type TipoInsight = 'ventas' | 'gastos' | 'proyeccion' | 'general' | 'inventario' | 'rrhh' | 'tesoreria'
+export type TipoInsight = 'ventas' | 'gastos' | 'proyeccion' | 'general' | 'inventario' | 'rrhh' | 'tesoreria' | 'catalogo'
 
 // Prompt de TAREA por sección (lo que se le pide analizar). El contexto del
 // negocio (datos reales) se añade aparte, por código.
@@ -16,6 +16,7 @@ export const PROMPTS_INSIGHT_DEFAULT: Record<TipoInsight, string> = {
   inventario: 'Analiza mi INVENTARIO: productos bajo mínimo, riesgo de quedarme sin stock y qué conviene reponer primero. Máximo 5 frases.',
   rrhh:       'Analiza mi PERSONAL: tamaño de la plantilla, altas recientes y lo más relevante del coste de personal. Máximo 5 frases.',
   tesoreria:  'Analiza mi LIQUIDEZ: saldos de caja por moneda y cómo se ven frente a mis ventas y gastos recientes. Máximo 5 frases.',
+  catalogo:   'Revisa mi CATÁLOGO público: ítems sin foto, sin descripción o sin precio que conviene completar para vender mejor, y 1-2 mejoras concretas. Máximo 5 frases.',
 }
 
 // Documento de personalidad (system prompt base). Placeholders que el código
@@ -56,6 +57,7 @@ export const DOCUMENTOS_IA: DocumentoIa[] = [
   { key: 'ia_prompt_inventario', label: 'Análisis de inventario',        descripcion: 'Icono de IA en Inventario.',                valorDefault: PROMPTS_INSIGHT_DEFAULT.inventario, grupo: 'analisis' },
   { key: 'ia_prompt_rrhh',       label: 'Análisis de personal',          descripcion: 'Icono de IA en Personal (RRHH).',           valorDefault: PROMPTS_INSIGHT_DEFAULT.rrhh,       grupo: 'analisis' },
   { key: 'ia_prompt_tesoreria',  label: 'Análisis de liquidez',          descripcion: 'Icono de IA en Tesorería.',                 valorDefault: PROMPTS_INSIGHT_DEFAULT.tesoreria,  grupo: 'analisis' },
+  { key: 'ia_prompt_catalogo',   label: 'Análisis del catálogo',         descripcion: 'Icono de IA en Catálogo QR.',               valorDefault: PROMPTS_INSIGHT_DEFAULT.catalogo,   grupo: 'analisis' },
 ]
 
 const PORDEFECTO = new Map(DOCUMENTOS_IA.map(d => [d.key, d.valorDefault]))

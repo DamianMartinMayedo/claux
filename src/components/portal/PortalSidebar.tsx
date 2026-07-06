@@ -10,7 +10,7 @@ import {
   Wallet, FileText, Users, DollarSign, Package, Warehouse, ShoppingBag,
   Boxes, UserCircle, Building2, User, UsersRound, CreditCard, HelpCircle,
   QrCode, Calendar, Printer, Sparkles, Circle, ChevronDown, LogOut,
-  CalendarClock, Banknote, BarChart3, CalendarDays,
+  CalendarClock, Banknote, BarChart3, CalendarDays, UtensilsCrossed,
 } from 'lucide-react'
 
 interface PaginaInfo {
@@ -51,9 +51,11 @@ function saveCollapsed(state: Record<string, boolean>) {
 interface Props {
   modulosActivos: string[]
   catalogo:       CatalogoItem[]
+  catalogoEtiqueta?: string                    // etiqueta del catálogo según sector ("Menú"…)
+  catalogoIcono?:    'comida' | 'producto'     // icono del navbar: cubiertos vs QR
 }
 
-export default function PortalSidebar({ modulosActivos, catalogo }: Props) {
+export default function PortalSidebar({ modulosActivos, catalogo, catalogoEtiqueta, catalogoIcono }: Props) {
   const pathname     = usePathname()
   const [pending, startTransition] = useTransition()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
@@ -108,6 +110,14 @@ export default function PortalSidebar({ modulosActivos, catalogo }: Props) {
   // Helper para renderizar una página (como Link en el sidebar). Solo se pintan
   // las páginas de módulos contratados, así que no hay estado "bloqueado".
   function renderPage(ruta: string, label: string, icon: React.ReactNode) {
+    // Catálogo → nombre e icono por sector: restaurante "Menú digital" + cubiertos;
+    // resto "Catálogo/Servicios digital" + QR. El label estático viene del catálogo de módulos.
+    if (ruta === '/portal/catalogo' && catalogoEtiqueta) {
+      label = `${catalogoEtiqueta} digital`
+      icon = catalogoIcono === 'comida'
+        ? <UtensilsCrossed size={18} strokeWidth={2} />
+        : <QrCode size={18} strokeWidth={2} />
+    }
     const active = pathname === ruta || pathname.startsWith(ruta + '/')
     return (
       <Link key={ruta} href={ruta} className={`nav-item${active ? ' active' : ''}`}>

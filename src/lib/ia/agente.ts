@@ -24,9 +24,9 @@ function systemPrompt(ctx: ContextoNegocio): string {
     .replaceAll('{{tono}}',    ctx.tono)
 }
 
-const FOCO: Record<TipoInsight, 'ventas' | 'gastos' | 'general'> = {
+const FOCO: Record<TipoInsight, 'ventas' | 'gastos' | 'general' | 'catalogo'> = {
   ventas: 'ventas', gastos: 'gastos', proyeccion: 'ventas', general: 'general',
-  inventario: 'general', rrhh: 'general', tesoreria: 'general',
+  inventario: 'general', rrhh: 'general', tesoreria: 'general', catalogo: 'catalogo',
 }
 
 // Prompt de tarea de la sección: editable desde el admin (settings), con fallback

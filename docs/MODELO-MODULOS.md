@@ -22,7 +22,7 @@ desde `modulos_catalogo` según `clients.modulos_activos` + tarifa, con ciclo me
 
 ## 2. Contexto histórico (modelo de planes, eliminado)
 
-El sistema arrancó con planes cerrados (tabla `plans`: Básico/Profesional/Empresarial; el gating leía `plans.modulos`). Todo eso se **eliminó** en la migración 018. Esta sección queda solo como nota de por qué se hizo el cambio; no describe nada vigente.
+El sistema arrancó con planes cerrados (tabla `plans`; gating por `plans.modulos`), **eliminados** en la migración 018. Nota histórica; no describe nada vigente.
 
 ## 2.1 Frontera base/módulo (reenfoque junio 2026) — fuente canónica
 
@@ -132,6 +132,20 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
 > sin desplegar; ruta + icono + página viven en código igualmente. Si en el futuro estorba, revertir a un nav
 > definido en código es viable (el render de grupos colapsables se conserva).
 
+### 3.3 Receta: crear un módulo / funcionalidad / addon nuevo
+
+Pasos repetibles (aplican a los tres `tipo`; sus diferencias, en §3.1). Sirve para construir **y** para no olvidar cómo documentarlo — que sea siempre igual es lo que evita que cada módulo se haga distinto.
+
+1. **Datos (catálogo).** Añade una fila a `modulos_catalogo`: `clave` estable y **genérica** (nunca "menu"/"mesa", §6), `tipo`, `nombre`, precios fundador/estándar, `orden`, y `paginas` (JSONB `[{ruta,label,orden}]`) si es `modulo`/`funcionalidad`. Precios SOLO en datos, nunca en código. Migración nueva en `supabase/migrations/` con el **número siguiente** (no reutilizar).
+2. **Código de la(s) página(s).** El `page.tsx`, su ruta y su icono son **código** — crear la fila del catálogo es media operación (§3.2). Crea el `page.tsx` en la ruta declarada y su icono en el `ICON_MAP` de `PortalSidebar`. Una `ruta` sin `page.tsx` da 404.
+3. **Gating (obligatorio, server-side).**
+   - `modulo`/`funcionalidad`: primera línea del `page.tsx` → `requireModulo('<clave>')`. Ocultar en el sidebar NO es control de acceso.
+   - `addon`: no tiene ruta propia; se gatea **dentro de la página afectada** con `tieneModulo('<clave>')` (`src/lib/modulos.ts`).
+4. **Independencia (regla transversal, CONTEXTO §2).** Funciona solo; la base opera sin él. Si aprovecha otro módulo, es **llenado rápido aditivo en una dirección** (cargar algo solo si el otro está activo), nunca dependencia; su modelo de datos es propio y los vínculos a otros módulos son blandos/opcionales.
+5. **UI.** Toda la pantalla sigue `skills/ui/SKILL.md` (fuente única: reglas, tablas, tokens, iconos, gotchas). Etiquetas por sector, sin jerga (§6; helper `src/lib/sector.ts`). Las server actions devuelven objeto tipado y llaman `revalidatePath`.
+6. **Admin.** El toggle por cliente ya existe (`ModulosCard`, agrupado por `tipo`) y recalcula `precio_mensual_usd`. No hay que tocarlo salvo que cambie la mecánica.
+7. **Documentar (una sola vez, en su sitio).** Actualiza el **mapa §2 de CONTEXTO.md** con **un bullet** en el formato estándar: *qué es (clave, tipo) · estado · puntos de entrada (ruta · vista · acciones) · pendiente*. **No** párrafos-ensayo, listas de migraciones ni RPC (viven en las migraciones y el código). Gotchas de UI → `SKILL.md`. Detalles operativos volátiles (claves de proveedor, quirks) → memoria del agente. Skill nueva → regístrala en `AGENTS.md`.
+
 ## 4. Migraciones aplicadas (017 → 025)
 
 > ✅ Aplicada como `supabase/migrations/017_modulos_catalogo.sql` (catálogo + columnas de cliente) y
@@ -239,9 +253,10 @@ dueño. Cómo funciona (implementado v1 — detalle en CONTEXTO §2 «Asistente 
 - [x] **Guards de ruta** `requireModulo()` en todas las rutas gateadas: catálogo QR, reservas, docs imprenta, IA, `inventario` (productos/almacenes/compras/movimientos) y RRHH. (Ocultar en el sidebar no protege; el guard sí.)
 - [x] **Base contable completa (Fase 4)**: Tesorería, Gastos/Cobros, CxC/CxP y Reportes financieros construidos; selector de productos del editor de líneas gateado por `inventario`.
 - [x] **Asistente IA v1 (mig. 071)**: `asistente_ia` reclasificado de módulo a **addon**; núcleo `src/lib/ia/` (provider OpenCode Zen + contexto acotado + agente + medición + intérprete de bot), touchpoints en Dashboard, chat flotante del dueño, sección de Perfil (nombre + uso) y admin de modelo/consumo. Capa de Telegram en lenguaje natural sobre el motor híbrido. Detalle en CONTEXTO §2.
+- [x] **Catálogo QR (mig. 077, julio 2026)**: funcionalidad `catalogo_qr` construida — modelo propio (`catalogo_categorias`/`catalogo_items`) independiente de Inventario, editor `/portal/catalogo`, público `/[slug]/catalogo` (ISR), imágenes optimizadas cliente+servidor, QR, PWA/offline, IA de cara al dueño (autocompletar + insight). Detalle en CONTEXTO §2.
 
 **Pendiente:**
-- [ ] **Build-out de módulos**: funcionalidades por sector (catálogo QR, documentos imprenta). Touchpoints de IA en páginas de Ventas/Gastos y chat embebido en la mini-web pública (cuando exista la capa pública).
+- [ ] **Build-out de módulos**: funcionalidad por sector `documentos_imprenta`. Chat embebido de IA en la mini-web pública para clientes finales (requiere medición/rate-limit propios de tráfico anónimo).
 
 ## 9. Discrepancias detectadas (registro, con recomendación)
 
@@ -249,6 +264,6 @@ dueño. Cómo funciona (implementado v1 — detalle en CONTEXTO §2 «Asistente 
 |---|---|---|
 | D1 | `actualizarPlan` guardaba `plans.modulos` como CSV y rompía el gating al editar | **Resuelto** (CONTEXTO §2, ahora array). Queda moot al pasar el gating a `clients.modulos_activos`. |
 | D2 | `plans.precio_usd` / `nivel` / `modalidad` (precio único por tier) | Superado por el precio compuesto (`clients.precio_mensual_usd`). |
-| D3 | `docs/CLAUX-LEGACY.md` usa nombres Básico/Profesional/Empresarial | Marcado superado en CONTEXTO §2; al editar LEGACY, alinear a base + módulos. |
+| D3 | `docs/CLAUX-LEGACY.md` usaba nombres Básico/Profesional/Empresarial | **Resuelto: LEGACY eliminado** (contenido vivo absorbido en CONTEXTO/SKILL). Ya no hay tercera fuente que contradiga. |
 | D4 | `plans.max_empresas` / `max_usuarios` (límites en el plan) | **Resuelto**: el límite de empresas lo da el módulo `multiempresa` (OFF → 1 empresa); ver `empresas.ts` y `empresas/page.tsx`. `max_usuarios` queda como futuro. |
 | D5 | `BloqueadoScreen` solo cubre SUSPENDIDO/VENCIDO; la degradación gradual (aviso→degradación→corte, CONTEXTO §8) está parcial | Anotado para la fase de corte por impago. |

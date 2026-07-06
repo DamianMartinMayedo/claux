@@ -1,6 +1,7 @@
 import { redirect }       from 'next/navigation'
 import { getPortalSession } from '@/app/actions/portal/auth'
 import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
+import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { createAdminClient } from '@/lib/supabase/admin'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
@@ -18,7 +19,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const [{ data: cliente }, { data: catalogo }, empresas] = await Promise.all([
+  const [{ data: cliente }, { data: catalogo }, empresas, etiquetas] = await Promise.all([
     db
       .from('clients')
       .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
@@ -30,6 +31,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       .eq('activo', true)
       .order('orden'),
     obtenerEmpresasSelector(),
+    obtenerEtiquetasNegocio(),
   ])
 
   if (!cliente) redirect('/portal/login')
@@ -82,6 +84,8 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       <PortalSidebar
         modulosActivos={modulosActivos}
         catalogo={(catalogo ?? []) as CatalogoItem[]}
+        catalogoEtiqueta={etiquetas.catalogo}
+        catalogoIcono={etiquetas.catalogoIcono}
       />
       <main className="portal-main">
         <PortalToastWrapper>

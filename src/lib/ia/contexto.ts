@@ -10,6 +10,19 @@ import { obtenerDashboard, type DashboardData } from '@/app/actions/portal/dashb
 import { normalizarModulos } from '@/lib/modulos'
 import { INSTRUCCIONES_DEFAULT } from './documentos'
 
+// Resumen compacto del catálogo público (solo si el módulo catalogo_qr está
+// activo). Diseñado como base "pública-segura": ni cifras financieras ni datos de
+// clientes, así que sirve tal cual para un futuro chat embebido de clientes finales.
+export interface CatalogoResumen {
+  total: number
+  categorias: number
+  sin_foto: number
+  sin_descripcion: number
+  sin_precio: number
+  no_disponibles: number
+  ejemplos: string[]
+}
+
 export interface ContextoNegocio {
   clientId: string
   nombreEmpresa: string
@@ -19,6 +32,7 @@ export interface ContextoNegocio {
   instrucciones: string
   modulos: string[]
   data: DashboardData | null
+  catalogo: CatalogoResumen | null
 }
 
 export const NOMBRE_AGENTE_DEFAULT = 'Claux'
@@ -45,6 +59,7 @@ export async function construirContexto(clientId: string, nombreUsuario?: string
     configAgente(),
   ])
   const { nombreAgente, tono, instrucciones } = agente
+  const modulos = normalizarModulos(cliente?.modulos_activos)
   return {
     clientId,
     nombreEmpresa: cliente?.nombre_empresa ?? data?.nombreEmpresa ?? 'el negocio',
@@ -52,8 +67,28 @@ export async function construirContexto(clientId: string, nombreUsuario?: string
     nombreAgente,
     tono,
     instrucciones,
-    modulos: normalizarModulos(cliente?.modulos_activos),
+    modulos,
     data,
+    catalogo: modulos.includes('catalogo_qr') ? await resumenCatalogo(db, clientId) : null,
+  }
+}
+
+// Cuenta agregada del catálogo del tenant (sin volcar filas): totales y huecos a
+// completar. Scoped por client_id.
+async function resumenCatalogo(db: ReturnType<typeof createAdminClient>, clientId: string): Promise<CatalogoResumen> {
+  const [{ data: items }, { count: categorias }] = await Promise.all([
+    db.from('catalogo_items').select('nombre, foto_url, descripcion, precio, disponible').eq('client_id', clientId).eq('activo', true),
+    db.from('catalogo_categorias').select('categoria_id', { count: 'exact', head: true }).eq('client_id', clientId).eq('activa', true),
+  ])
+  const rows = (items ?? []) as { nombre: string; foto_url: string | null; descripcion: string | null; precio: number | null; disponible: boolean }[]
+  return {
+    total: rows.length,
+    categorias: categorias ?? 0,
+    sin_foto: rows.filter(r => !r.foto_url).length,
+    sin_descripcion: rows.filter(r => !r.descripcion).length,
+    sin_precio: rows.filter(r => r.precio == null).length,
+    no_disponibles: rows.filter(r => !r.disponible).length,
+    ejemplos: rows.slice(0, 8).map(r => r.nombre),
   }
 }
 
@@ -61,10 +96,14 @@ export async function construirContexto(clientId: string, nombreUsuario?: string
 // (ahorra tokens en insights puntuales); sin foco, incluye todo lo disponible.
 export function contextoComoTexto(
   ctx: ContextoNegocio,
-  foco?: 'ventas' | 'gastos' | 'general',
+  foco?: 'ventas' | 'gastos' | 'general' | 'catalogo',
 ): string {
+  // Foco catálogo: solo el resumen del catálogo (ahorra tokens en su insight).
+  if (foco === 'catalogo') {
+    return JSON.stringify({ fecha: ctx.data?.fecha ?? null, catalogo: ctx.catalogo ?? null })
+  }
   const d = ctx.data
-  if (!d) return '{}'
+  if (!d) return ctx.catalogo ? JSON.stringify({ catalogo: ctx.catalogo }) : '{}'
   const cont = d.contabilidad
   const snap: Record<string, unknown> = { fecha: d.fecha, moneda_consolidacion: cont?.monedaConsolidacion || null }
 
@@ -92,6 +131,7 @@ export function contextoComoTexto(
     if (d.rrhh)       snap.rrhh = d.rrhh
     if (d.reservas)   snap.reservas = { hoy: d.reservas.hoyCount, proxima: d.reservas.proxima, carga_7d: d.reservas.serie7 }
     if (d.citas)      snap.citas = { hoy: d.citas.hoyCount, proxima: d.citas.proxima, carga_7d: d.citas.serie7 }
+    if (ctx.catalogo) snap.catalogo = ctx.catalogo
   }
   return JSON.stringify(snap)
 }

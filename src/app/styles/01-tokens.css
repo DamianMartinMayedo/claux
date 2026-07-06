@@ -75,8 +75,16 @@
   --duration:   180ms;
   --transition: var(--duration) var(--ease);
 
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body:    'IBM Plex Sans', system-ui, sans-serif;
+  /* ── Tipografías anteriores (comentadas para switch rápido) ──
+  --font-display: 'Schibsted Grotesk', system-ui, sans-serif;
+  --font-display: 'Public Sans', system-ui, sans-serif;          
+  --font-display: 'Funnel Display', system-ui, sans-serif;
+  --font-body:    'Funnel Sans', system-ui, sans-serif;
   --font-display: 'Space Grotesk', system-ui, sans-serif;
   --font-body:    'Space Grotesk', system-ui, sans-serif;
+  ── */
 
   --text-xs:   0.8125rem; --text-sm:   0.9375rem; --text-base: 1rem;   /* xs 13px · sm 15px (subida moderada) */
   --text-lg:   1.125rem;  --text-xl:   1.25rem;   --text-2xl:  1.5rem;
@@ -94,8 +102,10 @@
   --content-max: 1200px;
 }
 
+/* Auto-oscuro SOLO si el usuario no ha elegido tema manualmente (data-theme).
+   Con data-theme presente, mandan las reglas [data-theme="…"] de abajo. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --color-primary:           #3FD4CF;
     --color-primary-hover:     #2BBBB6;
     --color-primary-dark:      #00AFAA;
@@ -138,5 +148,48 @@
     --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
     --shadow-xl: 0 16px 40px rgba(0,0,0,0.45);
   }
+}
+
+/* Toggle manual de tema (atributo data-theme en <html>) */
+[data-theme="dark"] {
+  --color-primary:           #3FD4CF;
+  --color-primary-hover:     #2BBBB6;
+  --color-primary-dark:      #00AFAA;
+  --color-primary-highlight: #0D3533;
+  --color-primary-subtle:    #091F1E;
+  --color-primary-text:      #3FD4CF;
+  --color-bg:                #131210;
+  --color-surface:           #181714;
+  --color-surface-2:         #1E1D1A;
+  --color-surface-offset:    #252420;
+  --color-surface-offset-2:  #2A2925;
+  --color-divider:           #3A3833;
+  --color-text:              #F5F4EF;
+  --color-text-muted:        #A8A69C;
+  --color-text-faint:        #8E8C82;
+  --color-text-inv:          #1C1B16;
+  --color-success:           #66BB6A;
+  --color-success-bg:        #0D2B0F;
+  --color-error:             #EF5350;
+  --color-error-bg:          #2D0A0A;
+  --color-warning:           #E8A830;
+  --color-warning-bg:        #2D1E04;
+  --color-info:              #3FD4CF;
+  --color-info-bg:           #0A2625;
+  --color-purple:            #c4b5fd;
+  --color-purple-bg:         #1e1048;
+  --color-indigo:            #a5b4fc;
+  --color-indigo-bg:         #1e1b4b;
+  --color-rose:              #fda4af;
+  --color-rose-bg:           #2d0f1e;
+  --color-border:            #34322D;
+  --color-border-strong:     #504D45;
+  --color-border-focus:      #3FD4CF;
+  --gradient-brand: linear-gradient(100deg, var(--color-primary) 0%, var(--color-warning) 100%);
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-xl: 0 16px 40px rgba(0,0,0,0.45);
 }
 

@@ -1,5 +1,9 @@
 import type { Metadata } from 'next'
-import './globals.css'
+
+// NOTA: globals.css (el design system del portal) ya NO se importa aquí. Se carga
+// en el layout de cada superficie interna (admin/, portal/, landing/, diagnostico/)
+// para que las rutas públicas por-negocio de (public)/ — menú, reservar, citas —
+// queden libres de su peso. Regla de públicas: CONTEXTO §3 / skills/ui/SKILL.md §6.
 
 export const metadata: Metadata = {
   // Base para canonical y OG (relativos). Configurable por entorno; el equipo
@@ -16,7 +20,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'CLAUX — Digitaliza tu negocio',
     description:
-      'SaaS todo en uno para digitalizar tu negocio. Contabilidad, menú digital QR, reservas, inventario y RRHH.',
+      'SaaS todo en uno para digitalizar tu negocio. Contabilidad, menú digital, reservas, inventario, RRHH y más.',
     type: 'website',
     locale: 'es_ES',
   },
@@ -24,15 +28,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap"
-          rel="stylesheet"
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('claux-theme')||(window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()`,
+          }}
         />
+        {/* Las fuentes de marca las cargan las superficies internas vía <BrandFonts>
+            (admin/portal/landing/diagnóstico). Las rutas públicas usan system-ui. */}
       </head>
       <body>{children}</body>
     </html>
