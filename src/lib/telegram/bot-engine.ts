@@ -1,18 +1,22 @@
 // ── Motor de bot de Telegram (agnóstico de canal) ──
-// Lógica de botones, sin IA. La IA es capa opcional (add-on).
+// Por defecto, flujo de botones determinista. Si el negocio tiene el addon de IA
+// y el dueño la activa (bot_config.ia_activa), el bot atiende en lenguaje natural
+// (manejarConversacionReserva): la IA conversa y extrae datos, pero la reserva se
+// crea SIEMPRE por RPC al pulsar el botón de confirmar (la IA nunca la crea).
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
 import { tieneModulo } from '@/lib/modulos'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
-import { interpretarMensajeBot } from '@/lib/ia/telegram'
+import { conversarReserva, type TurnoConv } from '@/lib/ia/telegram'
 
 export interface BotContext {
   client_id: string
   token: string
   nombre_empresa: string
   slug: string | null
+  modulos: string[]   // modulos_activos del cliente (gating de carta, etc.)
 }
 
 interface ReplyMarkup {
@@ -26,7 +30,9 @@ export interface BotResponse {
 
 // ── Tipos de sesión ───────────────────────────────────────────────────────────
 
-export type PasoReserva = 'inicio' | 'fecha' | 'hora' | 'personas' | 'nombre' | 'confirmar'
+// 'ia' = conversación en lenguaje natural en curso (modo asistente IA). El resto
+// son pasos del flujo de botones determinista.
+export type PasoReserva = 'inicio' | 'fecha' | 'hora' | 'personas' | 'nombre' | 'confirmar' | 'ia'
 
 export interface DatosReserva {
   fecha?: string
@@ -35,6 +41,9 @@ export interface DatosReserva {
   hora?: string
   personas?: number
   nombre?: string
+  // Solo en modo IA: historial corto de la conversación, para coherencia entre
+  // turnos. Se descarta al pasar a 'confirmar'; la creación por RPC no lo usa.
+  _hist?: TurnoConv[]
 }
 
 export interface SesionInfo {
@@ -109,8 +118,23 @@ export async function manejarMensaje(
 ): Promise<BotResponse> {
   const t = texto.trim().toLowerCase()
 
-  // Si hay flujo de reserva activo, continuar
   const sesion = await cargarSesion(ctx.client_id, chat_id)
+
+  // Conversación IA en curso: el asistente sigue llevando el hilo en lenguaje natural.
+  if (sesion.paso === 'ia') {
+    if (t === 'reservar') { await guardarSesion(ctx.client_id, chat_id, 'inicio', {}); return promptFecha() }
+    if (t === 'cancelar_flujo' || t === 'cancelar' || t === '/cancelar') {
+      await guardarSesion(ctx.client_id, chat_id, null, {})
+      return bienvenida(ctx)
+    }
+    const conv = await manejarConversacionReserva(ctx, chat_id, sesion.datos, texto.trim())
+    if (conv) return conv
+    // La IA falló: limpiamos el estado y ofrecemos el teclado.
+    await guardarSesion(ctx.client_id, chat_id, null, {})
+    return { texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`, markup: tecladoPrincipal(ctx) }
+  }
+
+  // Flujo de botones activo (no IA): continuar la máquina de pasos.
   if (sesion.paso) {
     if (t === 'cancelar_flujo' || t === 'cancelar' || t === '/cancelar') {
       await guardarSesion(ctx.client_id, chat_id, null, {})
@@ -128,43 +152,19 @@ export async function manejarMensaje(
   if (t === 'cancelar_flujo') return bienvenida(ctx)
   if (t === 'carta'   || t === 'menu' || t === 'menú') return mostrarCarta(ctx)
   if (t === 'horarios'|| t === 'horario') return mostrarHorarios(ctx)
-  if (t === 'ubicacion'|| t === 'ubicación' || t === 'donde' || t === 'dónde') return mostrarUbicacion(ctx)
   if (t === 'ayuda'   || t === 'help') return mostrarAyuda(ctx)
 
-  // Capa de IA opcional (add-on): si el negocio tiene 'asistente_ia', dejamos que
-  // la IA interprete el lenguaje libre antes de caer al teclado genérico.
-  const ia = await intentarIaReservas(ctx, chat_id, texto.trim())
-  if (ia) return ia
+  // Modo IA (add-on activo): el asistente lleva la conversación en lenguaje
+  // natural. Si no está activo o la IA falla, cae al teclado genérico de siempre.
+  if (await iaActivaReservas(ctx.client_id)) {
+    const conv = await manejarConversacionReserva(ctx, chat_id, {}, texto.trim())
+    if (conv) return conv
+  }
 
   return {
     texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`,
-    markup: tecladoPrincipal(),
+    markup: tecladoPrincipal(ctx),
   }
-}
-
-// Interpreta lenguaje natural con IA y enruta al flujo de reserva determinista.
-// Devuelve null si el addon no está activo o la IA no detecta nada accionable.
-async function intentarIaReservas(ctx: BotContext, chatId: string, texto: string): Promise<BotResponse | null> {
-  const db = createAdminClient()
-  const { data: cliente } = await db.from('clients').select('modulos_activos, bot_config').eq('client_id', ctx.client_id).single()
-  // La IA en el bot requiere el addon contratado Y que el dueño la haya activado.
-  if (!tieneModulo(cliente?.modulos_activos, 'asistente_ia')) return null
-  if (!parseBotConfig(cliente?.bot_config).ia_activa) return null
-
-  const intent = await interpretarMensajeBot(ctx.client_id, 'reserva', texto)
-  if (!intent) return null
-
-  if (intent.intent === 'horarios') return mostrarHorarios(ctx)
-  if (intent.intent === 'reservar') {
-    if (intent.fecha) {
-      // Pre-rellena la fecha entendida y muestra las horas libres de ese día.
-      const datos: DatosReserva = { fecha: intent.fecha }
-      if (intent.personas) datos.personas = intent.personas
-      return mostrarSlots(ctx, chatId, datos)
-    }
-    return iniciarReserva(ctx, chatId)
-  }
-  return null
 }
 
 // ── Bienvenida ────────────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ async function intentarIaReservas(ctx: BotContext, chatId: string, texto: string
 function bienvenida(ctx: BotContext): BotResponse {
   return {
     texto: `¡Bienvenido a ${ctx.nombre_empresa}!\n\n¿Qué quieres hacer?`,
-    markup: tecladoPrincipal(),
+    markup: tecladoPrincipal(ctx),
   }
 }
 
@@ -196,24 +196,24 @@ function promptFecha(): BotResponse {
   }
 }
 
-// ── Helper: mostrar slots horarios disponibles ────────────────────────────────
+// ── Helper: calcular slots horarios libres de un día (reutilizado por botones e IA) ──
 
-async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
+export interface SlotReserva { hora: string; franja_id: string; franja_nombre: string }
+
+export async function slotsDisponiblesReserva(clientId: string, fecha: string): Promise<SlotReserva[]> {
   const db = createAdminClient()
   const { data: franjas } = await db.from('reserva_franjas')
     .select('franja_id, nombre, hora_inicio, hora_fin, duracion_minutos, dias_semana')
-    .eq('client_id', ctx.client_id)
+    .eq('client_id', clientId)
     .eq('activa', true)
     .order('hora_inicio')
 
-  if (!franjas || franjas.length === 0) {
-    await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: 'No hay horarios disponibles todavía. Vuelve pronto.', markup: tecladoPrincipal() }
-  }
+  if (!franjas || franjas.length === 0) return []
 
-  const slots: { hora: string; franja_id: string; franja_nombre: string }[] = []
-  const fecha = datos.fecha!
+  const slots: SlotReserva[] = []
   const isodow = isodowDe(fecha)
+  const [hAhora, mAhora] = ahoraEnTz().split(':').map(Number) // ahora en la zona del negocio
+  const minsAhora = hAhora * 60 + mAhora
   for (const f of (franjas as { franja_id: string; nombre: string; hora_inicio: string | null; hora_fin: string | null; duracion_minutos: number; dias_semana: number[] | null }[])) {
     // Respetar los días de la semana del turno (NULL/vacío = todos los días)
     if (f.dias_semana && f.dias_semana.length > 0 && !f.dias_semana.includes(isodow)) continue
@@ -222,8 +222,6 @@ async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva
     const [hFin, mFin] = f.hora_fin.split(':').map(Number)
     const ini = hIni * 60 + mIni
     const fin = hFin * 60 + mFin
-    const [hAhora, mAhora] = ahoraEnTz().split(':').map(Number) // ahora en la zona del negocio
-    const minsAhora = hAhora * 60 + mAhora
     for (let t = ini; t < fin; t += 30) {
       if (fecha === hoyISO() && t <= minsAhora) continue
       const hh = String(Math.floor(t / 60)).padStart(2, '0')
@@ -231,10 +229,18 @@ async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva
       slots.push({ hora: `${hh}:${mm}`, franja_id: f.franja_id, franja_nombre: f.nombre })
     }
   }
+  return slots
+}
+
+// ── Helper: mostrar slots horarios disponibles (flujo de botones) ──────────────
+
+async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
+  const fecha = datos.fecha!
+  const slots = await slotsDisponiblesReserva(ctx.client_id, fecha)
 
   if (slots.length === 0) {
     await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: 'No hay horarios disponibles para ese día.', markup: tecladoPrincipal() }
+    return { texto: 'No hay horarios disponibles para ese día.', markup: tecladoPrincipal(ctx) }
   }
 
   const botones: { text: string; callback_data: string }[][] = []
@@ -253,6 +259,110 @@ async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva
     texto: `📅 ${formatFechaStr(fecha)}\n\nElige una hora:`,
     markup: { inline_keyboard: botones },
   }
+}
+
+// ── Resumen + botón de confirmación (compartido por botones e IA) ──────────────
+// Guarda la sesión en 'confirmar' (descartando el historial de IA) y devuelve el
+// resumen con los botones ✅ Confirmar / ← Cancelar. La reserva NO se crea aquí:
+// se crea en el paso 'confirmar' al pulsar el botón (misma ruta RPC de siempre).
+async function resumenConfirmacion(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
+  const db = createAdminClient()
+  const { data: cliente } = await db.from('clients').select('bot_config').eq('client_id', ctx.client_id).single()
+  const confirmAuto = !!parseBotConfig(cliente?.bot_config).confirmacion_automatica
+
+  const limpio: DatosReserva = {
+    fecha: datos.fecha, franja_id: datos.franja_id, franja_nombre: datos.franja_nombre,
+    hora: datos.hora, personas: datos.personas, nombre: datos.nombre,
+  }
+  await guardarSesion(ctx.client_id, chatId, 'confirmar', limpio)
+
+  const autoText = confirmAuto ? '\n✅ Confirmación automática: tu reserva se confirma al instante.' : '\nTe confirmaremos por este mismo chat.'
+  return {
+    texto: `📋 *Resumen*\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}${autoText}\n\n¿Confirmar reserva?`,
+    markup: {
+      inline_keyboard: [
+        [{ text: '✅ Confirmar', callback_data: 'confirmar_reserva' }],
+        [{ text: '← Cancelar', callback_data: 'cancelar_flujo' }],
+      ],
+    },
+  }
+}
+
+// ── Modo IA: asistente conversacional ──────────────────────────────────────────
+
+// ¿El negocio tiene el addon Y el dueño activó la IA en el bot de reservas?
+async function iaActivaReservas(clientId: string): Promise<boolean> {
+  const db = createAdminClient()
+  const { data: cliente } = await db.from('clients').select('modulos_activos, bot_config').eq('client_id', clientId).single()
+  return tieneModulo(cliente?.modulos_activos, 'asistente_ia') && !!parseBotConfig(cliente?.bot_config).ia_activa
+}
+
+// Resumen de horarios del negocio (texto para el contexto de la IA).
+async function horariosResumen(clientId: string): Promise<string> {
+  const db = createAdminClient()
+  const { data: franjas } = await db.from('reserva_franjas')
+    .select('nombre, hora_inicio, hora_fin').eq('client_id', clientId).eq('activa', true).order('hora_inicio')
+  const lista = (franjas ?? []) as { nombre: string; hora_inicio: string | null; hora_fin: string | null }[]
+  if (lista.length === 0) return ''
+  return lista.map(f => `${f.nombre} ${f.hora_inicio?.substring(0, 5) ?? '—'}–${f.hora_fin?.substring(0, 5) ?? '—'}`).join('; ')
+}
+
+// Turno conversacional: 1 llamada a IA, valida los datos contra disponibilidad
+// real y, cuando están completos, pasa a resumen + botón. Devuelve null si la IA
+// no está configurada o falla (el llamador cae al flujo de botones).
+async function manejarConversacionReserva(
+  ctx: BotContext, chatId: string, datosPrev: DatosReserva, texto: string,
+): Promise<BotResponse | null> {
+  const datos: DatosReserva = { ...datosPrev }
+  const hist: TurnoConv[] = Array.isArray(datos._hist) ? datos._hist : []
+
+  // Disponibilidad real: priorizamos una fecha mencionada en ESTE mensaje (el
+  // cliente puede estar cambiándola) y, si no, la ya conocida de la sesión.
+  const fechaEnTexto = (() => { const f = parseFecha(texto); return f && f >= hoyISO() ? f : undefined })()
+  const preFecha = fechaEnTexto ?? datos.fecha
+  const slotsPre = preFecha ? await slotsDisponiblesReserva(ctx.client_id, preFecha) : []
+  const dispTexto = preFecha
+    ? (slotsPre.length ? `${formatFechaStr(preFecha)}: ${slotsPre.map(s => formatHora(s.hora)).join(', ')}` : `${formatFechaStr(preFecha)}: sin horas libres`)
+    : null
+
+  const r = await conversarReserva({
+    clientId: ctx.client_id,
+    etiqueta: 'reserva',
+    negocio: ctx.nombre_empresa,
+    horariosTexto: await horariosResumen(ctx.client_id),
+    disponibilidadTexto: dispTexto,
+    pideNombre: !!(datos.fecha && datos.hora && datos.personas),
+    datos: { fecha: datos.fecha, hora: datos.hora, personas: datos.personas, nombre: datos.nombre },
+    historial: hist,
+    mensaje: texto,
+  })
+  if (!r) return null
+
+  // Fusionar lo que la IA haya extraído (validado).
+  if (r.fecha && r.fecha >= hoyISO()) {
+    if (r.fecha !== datos.fecha) { datos.hora = undefined; datos.franja_id = undefined } // cambió el día → invalidar la hora
+    datos.fecha = r.fecha
+  }
+  if (r.personas) datos.personas = r.personas
+  if (r.nombre) datos.nombre = r.nombre
+
+  // La hora solo vale si es un hueco REAL del día elegido (no la IA inventando).
+  if (r.hora && datos.fecha) {
+    const slotsFecha = datos.fecha === preFecha ? slotsPre : await slotsDisponiblesReserva(ctx.client_id, datos.fecha)
+    const match = slotsFecha.find(s => formatHora(s.hora) === r.hora)
+    if (match) { datos.hora = formatHora(match.hora); datos.franja_id = match.franja_id; datos.franja_nombre = match.franja_nombre }
+  }
+
+  // ¿Completo? → resumen + botón (reutiliza la creación por RPC del paso confirmar).
+  if (datos.fecha && datos.hora && datos.franja_id && datos.personas && datos.nombre) {
+    return resumenConfirmacion(ctx, chatId, datos)
+  }
+
+  // Seguir conversando: guardamos estado + historial corto y devolvemos texto natural.
+  hist.push({ rol: 'user', texto }, { rol: 'assistant', texto: r.respuesta })
+  datos._hist = hist.slice(-6)
+  await guardarSesion(ctx.client_id, chatId, 'ia', datos)
+  return { texto: r.respuesta }
 }
 
 // ── Máquina de pasos de reserva ───────────────────────────────────────────────
@@ -337,28 +447,7 @@ export async function manejarPasoReserva(
   if (paso === 'nombre') {
     if (texto.length < 2) return { texto: 'El nombre debe tener al menos 2 letras.' }
     datos.nombre = texto
-
-    // Confirmación automática
-    const { data: cliente } = await db.from('clients')
-      .select('bot_config')
-      .eq('client_id', ctx.client_id)
-      .single()
-    const botCfg = (cliente?.bot_config as Record<string, unknown>) ?? {}
-    const confirmAuto = !!botCfg.confirmacion_automatica
-
-    await guardarSesion(ctx.client_id, chatId, 'confirmar', datos)
-
-    const autoText = confirmAuto ? '\n✅ Confirmación automática: tu reserva se confirma al instante.' : '\nTe confirmaremos por este mismo chat.'
-
-    return {
-      texto: `📋 *Resumen*\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}${autoText}\n\n¿Confirmar reserva?`,
-      markup: {
-        inline_keyboard: [
-          [{ text: '✅ Confirmar', callback_data: 'confirmar_reserva' }],
-          [{ text: '← Cancelar', callback_data: 'cancelar_flujo' }],
-        ],
-      },
-    }
+    return resumenConfirmacion(ctx, chatId, datos)
   }
 
   // ── CONFIRMAR ───────────────────────────────────────────────────────────────
@@ -393,12 +482,12 @@ export async function manejarPasoReserva(
     await guardarSesion(ctx.client_id, chatId, null, {})
 
     if (rpcErr) {
-      return { texto: `❌ No se pudo crear la reserva.\n\n${rpcErr.message}`, markup: tecladoPrincipal() }
+      return { texto: `❌ No se pudo crear la reserva.\n\n${rpcErr.message}`, markup: tecladoPrincipal(ctx) }
     }
 
     const result = (rpcData as { ok?: boolean; error?: string; reserva_id?: string }) ?? {}
     if (!result.ok) {
-      return { texto: `❌ ${result.error ?? 'Error al crear la reserva.'}`, markup: tecladoPrincipal() }
+      return { texto: `❌ ${result.error ?? 'Error al crear la reserva.'}`, markup: tecladoPrincipal(ctx) }
     }
 
     // Guardar el chat del cliente para poder avisarle de cambios de estado
@@ -431,17 +520,26 @@ export async function manejarPasoReserva(
     const estado = confirmAuto ? 'confirmada' : 'pendiente de confirmación'
     return {
       texto: `✅ ¡Reserva ${estado}!\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}\n\nTe avisaremos por aquí.`,
-      markup: tecladoPrincipal(),
+      markup: tecladoPrincipal(ctx),
     }
   }
 
-  return { texto: 'Algo salió mal. Usa /start para volver.', markup: tecladoPrincipal() }
+  return { texto: 'Algo salió mal. Usa /start para volver.', markup: tecladoPrincipal(ctx) }
 }
 
-// ── Mostrar carta ─────────────────────────────────────────────────────────────
+// ── Mostrar carta (solo si el negocio tiene el módulo de menú digital) ─────────
 
-function mostrarCarta(_ctx: BotContext): BotResponse {
-  return { texto: '📋 La carta digital estará disponible próximamente.', markup: tecladoPrincipal() }
+function tieneCarta(ctx: BotContext): boolean {
+  return tieneModulo(ctx.modulos, 'catalogo_qr')
+}
+
+function mostrarCarta(ctx: BotContext): BotResponse {
+  if (!tieneCarta(ctx) || !ctx.slug) {
+    return { texto: 'La carta no está disponible ahora mismo.', markup: tecladoPrincipal(ctx) }
+  }
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
+  const url = base ? `${base}/${ctx.slug}/catalogo` : `/${ctx.slug}/catalogo`
+  return { texto: `📋 Nuestra carta:\n${url}`, markup: tecladoPrincipal(ctx) }
 }
 
 // ── Mostrar horarios ──────────────────────────────────────────────────────────
@@ -455,38 +553,39 @@ async function mostrarHorarios(ctx: BotContext): Promise<BotResponse> {
     .order('hora_inicio')
 
   if (!franjas || franjas.length === 0) {
-    return { texto: 'Horario no disponible todavía.', markup: tecladoPrincipal() }
+    return { texto: 'Horario no disponible todavía.', markup: tecladoPrincipal(ctx) }
   }
 
   const lista = (franjas as { nombre: string; hora_inicio: string | null; hora_fin: string | null }[])
     .map(f => `• ${f.nombre}: ${f.hora_inicio?.substring(0, 5) ?? '—'} – ${f.hora_fin?.substring(0, 5) ?? '—'}`)
     .join('\n')
 
-  return { texto: `🕐 Horarios de ${ctx.nombre_empresa}\n\n${lista}`, markup: tecladoPrincipal() }
-}
-
-// ── Mostrar ubicación ─────────────────────────────────────────────────────────
-
-function mostrarUbicacion(ctx: BotContext): BotResponse {
-  return { texto: '📍 La ubicación estará disponible próximamente.', markup: tecladoPrincipal() }
+  return { texto: `🕐 Horarios de ${ctx.nombre_empresa}\n\n${lista}`, markup: tecladoPrincipal(ctx) }
 }
 
 // ── Ayuda ─────────────────────────────────────────────────────────────────────
 
 function mostrarAyuda(ctx: BotContext): BotResponse {
+  const puede = ['• Hacer una reserva']
+  if (tieneCarta(ctx)) puede.push('• Ver la carta')
+  puede.push('• Consultar horarios')
   return {
-    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n• Hacer una reserva\n• Ver la carta\n• Consultar horarios\n• Ver la ubicación`,
-    markup: tecladoPrincipal(),
+    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n${puede.join('\n')}`,
+    markup: tecladoPrincipal(ctx),
   }
 }
 
 // ── Teclados ──────────────────────────────────────────────────────────────────
 
-function tecladoPrincipal(): ReplyMarkup {
+// El botón «Carta» solo aparece si el negocio tiene el módulo de menú digital
+// (catalogo_qr). «Ubicación» se retira hasta que exista dónde configurarla.
+function tecladoPrincipal(ctx: BotContext): ReplyMarkup {
+  const fila1 = [{ text: '📅 Reservar', callback_data: 'reservar' }]
+  if (tieneCarta(ctx)) fila1.push({ text: '📋 Carta', callback_data: 'carta' })
   return {
     inline_keyboard: [
-      [{ text: '📅 Reservar', callback_data: 'reservar' }, { text: '📋 Carta', callback_data: 'carta' }],
-      [{ text: '🕐 Horarios', callback_data: 'horarios' }, { text: '📍 Ubicación', callback_data: 'ubicacion' }],
+      fila1,
+      [{ text: '🕐 Horarios', callback_data: 'horarios' }],
     ],
   }
 }

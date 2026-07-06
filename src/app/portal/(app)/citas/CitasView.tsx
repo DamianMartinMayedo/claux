@@ -544,6 +544,12 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   const [confirmAuto, setConfirmAuto] = useState(data.bot_config.confirmacion_automatica)
   const [confirmToggleBot, setConfirmToggleBot] = useState<boolean | null>(null)
 
+  // Host de la plataforma para el enlace público (dinámico, no hardcodeado).
+  const [host, setHost] = useState(
+    (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, ''),
+  )
+  useEffect(() => { setHost(window.location.host) }, [])
+
   useEffect(() => { setSlugForm(data.slug ?? '') }, [data.slug])
   useEffect(() => {
     setBotForm({ token: data.bot_config.token ?? '', nombre: data.bot_config.nombre ?? '' })
@@ -617,7 +623,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   }
   function copiarEnlace() {
     if (!data.slug) return
-    navigator.clipboard.writeText(`claux.app/${data.slug}/citas`)
+    navigator.clipboard.writeText(`${window.location.origin}/${data.slug}/citas`)
     toastSuccess('Enlace copiado.')
   }
   // La confirmación automática se guarda sola al cambiar el switch (no depende del
@@ -918,7 +924,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <tbody>
                 <tr>
                   <td data-label="Enlace">
-                    <strong>claux.app/{data.slug}/citas</strong>
+                    <strong>{host}/{data.slug}/citas</strong>
                     <div className="text-xs-muted">Compártelo para que tus clientes pidan cita en línea.</div>
                   </td>
                   <td className="col-actions">
@@ -937,11 +943,11 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <div className="input-group ter-col-full">
                 <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
                 <div className="res-slug-wrap">
-                  <span className="res-slug-prefix">claux.app/</span>
+                  <span className="res-slug-prefix">{host}/</span>
                   <input className="input" name="slug" placeholder="tu-negocio" value={slugForm} onChange={e => setSlugForm(e.target.value)} />
                   <span className="res-slug-suffix">/citas</span>
                 </div>
-                <span className="input-hint">Solo letras, números y guiones. El mismo enlace sirve para reservas y citas.</span>
+                <span className="input-hint">Solo letras, números y guiones.</span>
               </div>
             </div>
             <div className="res-form-submit res-actions-row">

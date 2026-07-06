@@ -18,24 +18,24 @@ export async function POST(
 
   // 1. Resolver el negocio por token. Reservas y Citas tienen bots INDEPENDIENTES
   //    (columnas `bot_config` / `bot_config_citas`); probamos ambas por su índice.
-  let cliente: { client_id: string; nombre_empresa: string | null; slug: string | null } | null = null
+  let cliente: { client_id: string; nombre_empresa: string | null; slug: string | null; modulos_activos: string[] | null } | null = null
   let cfg: Record<string, unknown> = {}
   let columna: 'bot_config' | 'bot_config_citas' = 'bot_config'
   let modulo: 'reservas' | 'citas' = 'reservas'
 
   const rRes = await db.from('clients')
-    .select('client_id, nombre_empresa, slug, bot_config')
+    .select('client_id, nombre_empresa, slug, modulos_activos, bot_config')
     .eq('bot_config->>token', token).maybeSingle()
   if (rRes.data) {
-    cliente = { client_id: rRes.data.client_id, nombre_empresa: rRes.data.nombre_empresa, slug: rRes.data.slug }
+    cliente = { client_id: rRes.data.client_id, nombre_empresa: rRes.data.nombre_empresa, slug: rRes.data.slug, modulos_activos: rRes.data.modulos_activos }
     cfg = (rRes.data.bot_config as Record<string, unknown>) ?? {}
     columna = 'bot_config'; modulo = 'reservas'
   } else {
     const rCit = await db.from('clients')
-      .select('client_id, nombre_empresa, slug, bot_config_citas')
+      .select('client_id, nombre_empresa, slug, modulos_activos, bot_config_citas')
       .eq('bot_config_citas->>token', token).maybeSingle()
     if (rCit.data) {
-      cliente = { client_id: rCit.data.client_id, nombre_empresa: rCit.data.nombre_empresa, slug: rCit.data.slug }
+      cliente = { client_id: rCit.data.client_id, nombre_empresa: rCit.data.nombre_empresa, slug: rCit.data.slug, modulos_activos: rCit.data.modulos_activos }
       cfg = (rCit.data.bot_config_citas as Record<string, unknown>) ?? {}
       columna = 'bot_config_citas'; modulo = 'citas'
     }
@@ -92,6 +92,7 @@ export async function POST(
     token,
     nombre_empresa: (cliente.nombre_empresa as string) ?? 'CLAUX',
     slug:           (cliente.slug as string) ?? null,
+    modulos:        Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : [],
   }
 
   // 5. Callback de botón inline

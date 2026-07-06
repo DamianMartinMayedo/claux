@@ -544,6 +544,14 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   const [editarReserva,  setEditarReserva]  = useState<ReservaConFranja | null>(null)
   const [confirmToggleBot, setConfirmToggleBot] = useState<boolean | null>(null)
 
+  // Host de la plataforma para el enlace público (dinámico, no hardcodeado).
+  // Default = NEXT_PUBLIC_SITE_URL (build) para render SSR-consistente; al montar
+  // se ajusta al host real (cubre dominios propios).
+  const [host, setHost] = useState(
+    (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, ''),
+  )
+  useEffect(() => { setHost(window.location.host) }, [])
+
   const [search,         setSearch]         = useState('')
   const [filtroDesde,   setFiltroDesde]   = useState(hoyISO())
   const [filtroHasta,   setFiltroHasta]   = useState('')
@@ -659,7 +667,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
 
   function copiarEnlace() {
     if (!data.slug) return
-    navigator.clipboard.writeText(`claux.app/${data.slug}/reservar`)
+    navigator.clipboard.writeText(`${window.location.origin}/${data.slug}/reservar`)
   }
 
   function eliminarBot() {
@@ -922,7 +930,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <tbody>
                 <tr>
                   <td data-label="Enlace">
-                    <strong>claux.app/{data.slug}/reservar</strong>
+                    <strong>{host}/{data.slug}/reservar</strong>
                     <div className="text-xs-muted">Comparte este enlace con tus clientes.</div>
                   </td>
                   <td className="col-actions">
@@ -947,7 +955,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <div className="input-group ter-col-full">
                 <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
                 <div className="res-slug-wrap">
-                  <span className="res-slug-prefix">claux.app/</span>
+                  <span className="res-slug-prefix">{host}/</span>
                   <input className="input" name="slug" placeholder="tu-negocio"
                     value={slugForm} onChange={e => setSlugForm(e.target.value)} />
                   <span className="res-slug-suffix">/reservar</span>
