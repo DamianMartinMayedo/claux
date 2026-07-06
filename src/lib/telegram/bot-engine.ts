@@ -10,6 +10,7 @@ import { notificarReservaNueva } from '@/lib/reservas/estado'
 import { tieneModulo } from '@/lib/modulos'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { conversarReserva, type TurnoConv } from '@/lib/ia/telegram'
+import { enviarAccion } from './enviar'
 
 export interface BotContext {
   client_id: string
@@ -17,6 +18,7 @@ export interface BotContext {
   nombre_empresa: string
   slug: string | null
   modulos: string[]   // modulos_activos del cliente (gating de carta, etc.)
+  iaActiva: boolean   // addon asistente_ia contratado Y ia_activa en el bot
 }
 
 interface ReplyMarkup {
@@ -117,26 +119,37 @@ export async function manejarMensaje(
   chat_id: string,
 ): Promise<BotResponse> {
   const t = texto.trim().toLowerCase()
+  const esCancelar = t === 'cancelar_flujo' || t === 'cancelar' || t === '/cancelar'
+  const esSaludo   = t === '/start' || SALUDOS.includes(t)
 
   const sesion = await cargarSesion(ctx.client_id, chat_id)
 
-  // Conversación IA en curso: el asistente sigue llevando el hilo en lenguaje natural.
-  if (sesion.paso === 'ia') {
-    if (t === 'reservar') { await guardarSesion(ctx.client_id, chat_id, 'inicio', {}); return promptFecha() }
-    if (t === 'cancelar_flujo' || t === 'cancelar' || t === '/cancelar') {
-      await guardarSesion(ctx.client_id, chat_id, null, {})
-      return bienvenida(ctx)
+  // ══ MODO IA: 100% conversacional, sin teclados salvo el ✅ Confirmar final ══
+  if (ctx.iaActiva) {
+    // Cierre por botón: en 'confirmar' solo valen ✅ Confirmar / ← Cancelar.
+    if (sesion.paso === 'confirmar') {
+      if (esCancelar) { await guardarSesion(ctx.client_id, chat_id, null, {}); return saludoIa(ctx) }
+      return manejarPasoReserva(ctx, chat_id, sesion, texto.trim())
     }
-    const conv = await manejarConversacionReserva(ctx, chat_id, sesion.datos, texto.trim())
+    if (esCancelar) { await guardarSesion(ctx.client_id, chat_id, null, {}); return saludoIa(ctx) }
+    // Saludo puro / iniciar → saludo directo, sin coste de IA ni botones.
+    if (esSaludo) {
+      if (sesion.paso) await guardarSesion(ctx.client_id, chat_id, null, {})
+      return saludoIa(ctx)
+    }
+    // Todo lo demás lo lleva el asistente en lenguaje natural.
+    const datosPrev = sesion.paso === 'ia' ? sesion.datos : {}
+    const conv = await manejarConversacionReserva(ctx, chat_id, datosPrev, texto.trim())
     if (conv) return conv
-    // La IA falló: limpiamos el estado y ofrecemos el teclado.
-    await guardarSesion(ctx.client_id, chat_id, null, {})
-    return { texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`, markup: tecladoPrincipal(ctx) }
+    return { texto: 'Perdona, ahora mismo no puedo responder. Prueba de nuevo en un momento.' }
   }
 
-  // Flujo de botones activo (no IA): continuar la máquina de pasos.
-  if (sesion.paso) {
-    if (t === 'cancelar_flujo' || t === 'cancelar' || t === '/cancelar') {
+  // ══ MODO BOTONES (sin addon de IA) ══
+  // Si quedó un estado 'ia' de cuando la IA estaba activa, lo descartamos.
+  if (sesion.paso === 'ia') await guardarSesion(ctx.client_id, chat_id, null, {})
+
+  if (sesion.paso && sesion.paso !== 'ia') {
+    if (esCancelar) {
       await guardarSesion(ctx.client_id, chat_id, null, {})
       return bienvenida(ctx)
     }
@@ -147,28 +160,24 @@ export async function manejarMensaje(
     return manejarPasoReserva(ctx, chat_id, sesion, texto.trim())
   }
 
-  // Botones/comandos explícitos: deterministas siempre (para que los botones del
-  // teclado sigan funcionando aunque la IA esté activa).
+  if (t === '/start' || SALUDOS.some(s => t.startsWith(s))) return bienvenida(ctx)
   if (t === 'reservar' || t === '/reservar') return iniciarReserva(ctx, chat_id)
   if (t === 'cancelar_flujo') return bienvenida(ctx)
   if (t === 'carta'   || t === 'menu' || t === 'menú') return mostrarCarta(ctx)
   if (t === 'horarios'|| t === 'horario') return mostrarHorarios(ctx)
   if (t === 'ayuda'   || t === 'help') return mostrarAyuda(ctx)
 
-  // Modo IA (add-on activo): el asistente lleva TODO lo demás en lenguaje natural,
-  // incluido el saludo y /start (por eso va ANTES del teclado de bienvenida).
-  if (await iaActivaReservas(ctx.client_id)) {
-    // A /start le pasamos un "hola" para que el asistente salude con naturalidad.
-    const entrada = (t === '/start') ? 'hola' : texto.trim()
-    const conv = await manejarConversacionReserva(ctx, chat_id, {}, entrada)
-    if (conv) return conv
-  }
-
-  // Sin IA (o la IA falló): comportamiento clásico de botones.
-  if (t === '/start' || SALUDOS.some(s => t.startsWith(s))) return bienvenida(ctx)
   return {
     texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`,
     markup: tecladoPrincipal(ctx),
+  }
+}
+
+// Saludo conversacional del modo IA (sin botones, instantáneo, sin coste de IA).
+function saludoIa(ctx: BotContext): BotResponse {
+  const carta = tieneCarta(ctx) && ctx.slug ? ' Si quieres, también te paso la carta.' : ''
+  return {
+    texto: `¡Hola! 👋 Soy el asistente de ${ctx.nombre_empresa}. ¿Quieres reservar? Dime el día, la hora y para cuántas personas y te lo preparo.${carta}`,
   }
 }
 
@@ -295,13 +304,6 @@ async function resumenConfirmacion(ctx: BotContext, chatId: string, datos: Datos
 
 // ── Modo IA: asistente conversacional ──────────────────────────────────────────
 
-// ¿El negocio tiene el addon Y el dueño activó la IA en el bot de reservas?
-async function iaActivaReservas(clientId: string): Promise<boolean> {
-  const db = createAdminClient()
-  const { data: cliente } = await db.from('clients').select('modulos_activos, bot_config').eq('client_id', clientId).single()
-  return tieneModulo(cliente?.modulos_activos, 'asistente_ia') && !!parseBotConfig(cliente?.bot_config).ia_activa
-}
-
 // Resumen de horarios del negocio (texto para el contexto de la IA).
 async function horariosResumen(clientId: string): Promise<string> {
   const db = createAdminClient()
@@ -318,6 +320,9 @@ async function horariosResumen(clientId: string): Promise<string> {
 async function manejarConversacionReserva(
   ctx: BotContext, chatId: string, datosPrev: DatosReserva, texto: string,
 ): Promise<BotResponse | null> {
+  // "Escribiendo…" mientras preparamos el contexto y llamamos a la IA (varios seg).
+  await enviarAccion(ctx.token, chatId)
+
   const datos: DatosReserva = { ...datosPrev }
   const hist: TurnoConv[] = Array.isArray(datos._hist) ? datos._hist : []
 
@@ -330,12 +335,16 @@ async function manejarConversacionReserva(
     ? (slotsPre.length ? `${formatFechaStr(preFecha)}: ${slotsPre.map(s => formatHora(s.hora)).join(', ')}` : `${formatFechaStr(preFecha)}: sin horas libres`)
     : null
 
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
+  const cartaUrl = tieneCarta(ctx) && ctx.slug && base ? `${base}/${ctx.slug}/catalogo` : null
+
   const r = await conversarReserva({
     clientId: ctx.client_id,
     etiqueta: 'reserva',
     negocio: ctx.nombre_empresa,
     horariosTexto: await horariosResumen(ctx.client_id),
     disponibilidadTexto: dispTexto,
+    cartaUrl,
     pideNombre: !!(datos.fecha && datos.hora && datos.personas),
     datos: { fecha: datos.fecha, hora: datos.hora, personas: datos.personas, nombre: datos.nombre },
     historial: hist,
@@ -582,9 +591,12 @@ function mostrarAyuda(ctx: BotContext): BotResponse {
 
 // ── Teclados ──────────────────────────────────────────────────────────────────
 
-// El botón «Carta» solo aparece si el negocio tiene el módulo de menú digital
-// (catalogo_qr). «Ubicación» se retira hasta que exista dónde configurarla.
-function tecladoPrincipal(ctx: BotContext): ReplyMarkup {
+// En modo IA no se muestra ningún teclado (experiencia 100% conversacional; el
+// único botón es el ✅ Confirmar del resumen). Sin IA: teclado clásico, con el
+// botón «Carta» solo si el negocio tiene menú digital (catalogo_qr). «Ubicación»
+// se retira hasta que exista dónde configurarla.
+function tecladoPrincipal(ctx: BotContext): ReplyMarkup | undefined {
+  if (ctx.iaActiva) return undefined
   const fila1 = [{ text: '📅 Reservar', callback_data: 'reservar' }]
   if (tieneCarta(ctx)) fila1.push({ text: '📋 Carta', callback_data: 'carta' })
   return {

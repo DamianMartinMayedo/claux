@@ -32,6 +32,25 @@ export async function enviarMensaje(
   }
 }
 
+// Indicador de actividad ("escribiendo…"). Telegram lo muestra ~5 s o hasta el
+// siguiente mensaje. Se envía antes de una llamada a IA para que el cliente vea
+// que el bot está trabajando. Nunca lanza: si falla, se ignora.
+export async function enviarAccion(
+  token: string,
+  chatId: string,
+  action: 'typing' = 'typing',
+): Promise<void> {
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendChatAction`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ chat_id: chatId, action }),
+    })
+  } catch (e) {
+    console.error('telegram sendChatAction error:', e)
+  }
+}
+
 export async function answerCallback(
   token: string,
   callbackQueryId: string,

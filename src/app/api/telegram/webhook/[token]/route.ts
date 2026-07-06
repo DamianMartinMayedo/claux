@@ -87,12 +87,15 @@ export async function POST(
     await db.from('telegram_sessions').delete().lt('updated_at', corte)
   }
 
+  const modulos = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []
   const ctx: BotContext = {
     client_id:      cliente.client_id as string,
     token,
     nombre_empresa: (cliente.nombre_empresa as string) ?? 'CLAUX',
     slug:           (cliente.slug as string) ?? null,
-    modulos:        Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : [],
+    modulos,
+    // La IA del bot requiere el addon contratado Y que el dueño la haya activado.
+    iaActiva:       modulos.includes('asistente_ia') && cfg.ia_activa === true,
   }
 
   // 5. Callback de botón inline

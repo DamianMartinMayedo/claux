@@ -83,6 +83,7 @@ export interface ParamsConversacion {
   negocio:            string
   horariosTexto:      string           // horarios generales del negocio
   disponibilidadTexto: string | null   // horas libres reales para la fecha en curso
+  cartaUrl:           string | null    // enlace del menú digital, si el negocio lo tiene
   pideNombre:         boolean           // false hasta tener fecha/hora/personas (evita pedir todo de golpe)
   datos:              { fecha?: string; hora?: string; personas?: number; nombre?: string }
   historial:          TurnoConv[]
@@ -104,6 +105,7 @@ export async function conversarReserva(p: ParamsConversacion): Promise<Respuesta
     `Atiendes a un cliente que quiere hacer una ${p.etiqueta}. Habla español cercano, breve y directo, como un buen camarero: una o dos frases, sin markdown, sin listas, sin emojis excesivos.`,
     `Horario del negocio: ${p.horariosTexto || 'no especificado'}.`,
     p.disponibilidadTexto ? `Horas libres REALES para la fecha en curso: ${p.disponibilidadTexto}. Propón SOLO estas horas; si el cliente pide otra, dile que no hay y ofrece de estas.` : `Aún no hay una fecha concreta; pide la fecha antes de hablar de horas.`,
+    p.cartaUrl ? `Si el cliente pregunta por la carta o el menú, comparte este enlace tal cual: ${p.cartaUrl}` : ``,
     `Datos ya recogidos: ${JSON.stringify(p.datos)}.`,
     `Tu objetivo es reunir: fecha, hora, número de personas y nombre. Pregunta SOLO lo que falte, de una en una, en orden natural.`,
     p.pideNombre ? `` : `Todavía NO pidas el nombre: primero cierra fecha, hora y personas.`,
