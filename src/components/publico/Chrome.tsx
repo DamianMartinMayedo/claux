@@ -10,7 +10,7 @@ export function PublicHeader() {
         <span className="ld-header-logo-text">CLAUX</span>
       </Link>
       <nav className="ld-header-nav">
-        <a href="/admin/login" className="btn btn-ghost btn-sm">
+        <a href="/portal/login" className="btn btn-ghost btn-sm">
           Acceso clientes
         </a>
         <Link href="/diagnostico" className="btn btn-primary btn-sm ld-header-cta">
