@@ -14,7 +14,22 @@ import type {
 
 export type { CatalogoPublico, ModuloPublico, NecesidadPublica, SectorPublico }
 
+// Catálogo vacío: fallback cuando la BD/secreto no está disponible. Una página
+// pública de marketing (landing/diagnóstico) NUNCA debe tumbar el build ni
+// devolver 500 por un fallo de lectura: degradamos a vacío y, como las páginas
+// usan ISR, se auto-reparan en la siguiente revalidación cuando la BD vuelve.
+const CATALOGO_VACIO: CatalogoPublico = { modulos: [], sectores: [], necesidades: [] }
+
 export async function obtenerCatalogoPublico(): Promise<CatalogoPublico> {
+  try {
+    return await cargarCatalogoPublico()
+  } catch (err) {
+    console.error('[obtenerCatalogoPublico] fallo al leer el catálogo público:', err)
+    return CATALOGO_VACIO
+  }
+}
+
+async function cargarCatalogoPublico(): Promise<CatalogoPublico> {
   const db = createAdminClient()
 
   const [modRes, secRes, necRes] = await Promise.all([

@@ -5,7 +5,7 @@ import Link from 'next/link'
 export function PublicHeader() {
   return (
     <header className="ld-header">
-      <Link href="/landing" className="ld-header-logo" aria-label="CLAUX — inicio">
+      <Link href="/" className="ld-header-logo" aria-label="CLAUX — inicio">
         <div className="ld-header-logo-icon">C</div>
         <span className="ld-header-logo-text">CLAUX</span>
       </Link>

@@ -13,7 +13,7 @@ const CLAVE_RE = /^[a-z][a-z0-9_]*$/
 function revalidar() {
   revalidatePath('/admin/diagnostico')
   revalidatePath('/diagnostico')
-  revalidatePath('/landing')
+  revalidatePath('/')
 }
 
 function leerCampos(formData: FormData) {

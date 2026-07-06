@@ -19,12 +19,12 @@ export const metadata: Metadata = {
   title: 'Digitaliza tu negocio',
   description:
     'CLAUX es la plataforma todo en uno para digitalizar tu negocio: contabilidad, catálogo con QR, reservas y un asistente con IA. Activas solo los módulos que necesitas y pagas por lo que usas. Empieza con tu diagnóstico gratis.',
-  alternates: { canonical: '/landing' },
+  alternates: { canonical: '/' },
   openGraph: {
     title: 'CLAUX — Digitaliza tu negocio',
     description:
       'Plataforma todo en uno para digitalizar tu negocio: contabilidad, catálogo QR, reservas y asistente con IA. Activas solo los módulos que necesitas.',
-    url: '/landing',
+    url: '/',
   },
 }
 
