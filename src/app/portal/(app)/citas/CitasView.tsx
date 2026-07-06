@@ -544,11 +544,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   const [confirmAuto, setConfirmAuto] = useState(data.bot_config.confirmacion_automatica)
   const [confirmToggleBot, setConfirmToggleBot] = useState<boolean | null>(null)
 
-  // Host de la plataforma para el enlace público (dinámico, no hardcodeado).
-  const [host, setHost] = useState(
-    (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, ''),
-  )
-  useEffect(() => { setHost(window.location.host) }, [])
+  // Host de la plataforma para el enlace público (dinámico, no hardcodeado): se
+  // deriva de NEXT_PUBLIC_SITE_URL. La copia del enlace usa el origin real.
+  const host = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '')
 
   useEffect(() => { setSlugForm(data.slug ?? '') }, [data.slug])
   useEffect(() => {

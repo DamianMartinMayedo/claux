@@ -544,13 +544,9 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   const [editarReserva,  setEditarReserva]  = useState<ReservaConFranja | null>(null)
   const [confirmToggleBot, setConfirmToggleBot] = useState<boolean | null>(null)
 
-  // Host de la plataforma para el enlace público (dinámico, no hardcodeado).
-  // Default = NEXT_PUBLIC_SITE_URL (build) para render SSR-consistente; al montar
-  // se ajusta al host real (cubre dominios propios).
-  const [host, setHost] = useState(
-    (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, ''),
-  )
-  useEffect(() => { setHost(window.location.host) }, [])
+  // Host de la plataforma para el enlace público (dinámico, no hardcodeado): se
+  // deriva de NEXT_PUBLIC_SITE_URL. La copia del enlace usa el origin real.
+  const host = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '')
 
   const [search,         setSearch]         = useState('')
   const [filtroDesde,   setFiltroDesde]   = useState(hoyISO())

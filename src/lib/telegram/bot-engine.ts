@@ -375,7 +375,7 @@ export async function manejarPasoReserva(
 ): Promise<BotResponse> {
   const db = createAdminClient()
   const paso = sesion.paso!
-  let datos = { ...sesion.datos }
+  const datos = { ...sesion.datos }
 
   // ── FECHA ───────────────────────────────────────────────────────────────────
   if (paso === 'inicio') {
