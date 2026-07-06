@@ -147,20 +147,25 @@ export async function manejarMensaje(
     return manejarPasoReserva(ctx, chat_id, sesion, texto.trim())
   }
 
-  if (t === '/start' || SALUDOS.some(s => t.startsWith(s))) return bienvenida(ctx)
+  // Botones/comandos explícitos: deterministas siempre (para que los botones del
+  // teclado sigan funcionando aunque la IA esté activa).
   if (t === 'reservar' || t === '/reservar') return iniciarReserva(ctx, chat_id)
   if (t === 'cancelar_flujo') return bienvenida(ctx)
   if (t === 'carta'   || t === 'menu' || t === 'menú') return mostrarCarta(ctx)
   if (t === 'horarios'|| t === 'horario') return mostrarHorarios(ctx)
   if (t === 'ayuda'   || t === 'help') return mostrarAyuda(ctx)
 
-  // Modo IA (add-on activo): el asistente lleva la conversación en lenguaje
-  // natural. Si no está activo o la IA falla, cae al teclado genérico de siempre.
+  // Modo IA (add-on activo): el asistente lleva TODO lo demás en lenguaje natural,
+  // incluido el saludo y /start (por eso va ANTES del teclado de bienvenida).
   if (await iaActivaReservas(ctx.client_id)) {
-    const conv = await manejarConversacionReserva(ctx, chat_id, {}, texto.trim())
+    // A /start le pasamos un "hola" para que el asistente salude con naturalidad.
+    const entrada = (t === '/start') ? 'hola' : texto.trim()
+    const conv = await manejarConversacionReserva(ctx, chat_id, {}, entrada)
     if (conv) return conv
   }
 
+  // Sin IA (o la IA falló): comportamiento clásico de botones.
+  if (t === '/start' || SALUDOS.some(s => t.startsWith(s))) return bienvenida(ctx)
   return {
     texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`,
     markup: tecladoPrincipal(ctx),
