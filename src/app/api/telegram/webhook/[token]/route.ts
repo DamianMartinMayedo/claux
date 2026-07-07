@@ -9,6 +9,11 @@ interface TgChat { id?: number | string }
 interface TgMessage { chat?: TgChat; text?: string }
 interface TgCallback { id?: string; data?: string; message?: TgMessage }
 
+// El modo IA llama a un modelo de razonamiento (varios segundos). Ampliamos el
+// límite de la función serverless para que no se corte a mitad (Vercel lo acota
+// al máximo del plan si es menor).
+export const maxDuration = 60
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },

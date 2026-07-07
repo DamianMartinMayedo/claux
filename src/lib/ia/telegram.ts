@@ -102,15 +102,17 @@ export async function conversarReserva(p: ParamsConversacion): Promise<Respuesta
   const hoy = hoyEnTz()
   const sys = [
     `Eres el asistente de ${p.negocio} en Telegram. Hoy es ${hoy} (zona America/Havana).`,
-    `Atiendes a un cliente que quiere hacer una ${p.etiqueta}. Habla español cercano, breve y directo, como un buen camarero: una o dos frases, sin markdown, sin listas, sin emojis excesivos.`,
+    `Atiendes a clientes que quieren hacer una ${p.etiqueta}. Habla español de forma cálida, cercana y natural, tratando de tú, con simpatía: frases cortas y claras, y algún emoji con moderación (😊, 👍). Nada de markdown ni listas largas.`,
     `Horario del negocio: ${p.horariosTexto || 'no especificado'}.`,
-    p.disponibilidadTexto ? `Horas libres REALES para la fecha en curso: ${p.disponibilidadTexto}. Propón SOLO estas horas; si el cliente pide otra, dile que no hay y ofrece de estas.` : `Aún no hay una fecha concreta; pide la fecha antes de hablar de horas.`,
-    p.cartaUrl ? `Si el cliente pregunta por la carta o el menú, comparte este enlace tal cual: ${p.cartaUrl}` : ``,
+    p.disponibilidadTexto
+      ? `Horas libres REALES para la fecha en curso: ${p.disponibilidadTexto}. Propón SOLO estas horas; si piden otra, dilo con amabilidad y ofréceles de estas.`
+      : `Aún no hay una fecha concreta. Si preguntan por los horarios o por qué horas hay, diles el horario general del negocio y pregúntales para qué día quieren, para mirarles las horas libres exactas.`,
+    p.cartaUrl ? `Si preguntan por la carta o el menú, comparte este enlace tal cual: ${p.cartaUrl}` : ``,
     `Datos ya recogidos: ${JSON.stringify(p.datos)}.`,
-    `Tu objetivo es reunir: fecha, hora, número de personas y nombre. Pregunta SOLO lo que falte, de una en una, en orden natural.`,
+    `Objetivo: reunir fecha, hora, número de personas y nombre. Pregunta SOLO lo que falte, de una en una, con naturalidad.`,
     p.pideNombre ? `` : `Todavía NO pidas el nombre: primero cierra fecha, hora y personas.`,
-    `No inventes disponibilidad. No confirmes tú la ${p.etiqueta}: cuando tengas los 4 datos, en 'respuesta' di algo tipo "te muestro el resumen para confirmar" (el sistema mostrará el botón).`,
-    `Devuelve SOLO un objeto JSON con estas claves exactas: respuesta (string, lo único que verá el cliente), fecha (YYYY-MM-DD o null), hora (HH:MM o null), personas (entero o null), nombre (string o null). Rellena cada dato que el cliente haya dado (incluye los ya recogidos). Nada de texto fuera del JSON.`,
+    `No inventes disponibilidad. No confirmes tú la ${p.etiqueta}: cuando tengas los 4 datos, en 'respuesta' di algo como "te muestro el resumen para confirmar" (el sistema pondrá el botón).`,
+    `Responde SIEMPRE con un único objeto JSON válido y COMPLETO, sin nada de texto fuera de él, con estas claves exactas: respuesta (string, lo único que verá el cliente), fecha (YYYY-MM-DD o null), hora (HH:MM o null), personas (entero o null), nombre (string o null). Incluye también los datos ya recogidos.`,
   ].filter(Boolean).join(' ')
 
   const mensajes = [
@@ -120,7 +122,10 @@ export async function conversarReserva(p: ParamsConversacion): Promise<Respuesta
   ]
 
   try {
-    const { texto, usage } = await chat({ mensajes, json: true, temperature: 0.4, maxTokens: 1200, clientId: p.clientId })
+    // Margen alto: es un modelo de razonamiento y gasta tokens "pensando" antes
+    // de emitir el JSON; con poco margen el contenido sale vacío/truncado y el
+    // parseo falla ("Unexpected end of JSON input").
+    const { texto, usage } = await chat({ mensajes, json: true, temperature: 0.4, maxTokens: 3000, clientId: p.clientId })
     await registrarUso(p.clientId, usage, p.historial.length === 0)
 
     const o = JSON.parse(limpiarJson(texto)) as Record<string, unknown>
