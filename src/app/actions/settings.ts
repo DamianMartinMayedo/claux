@@ -1,10 +1,13 @@
 'use server'
 
+import { requireAdmin } from '@/lib/admin-guard'
+
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
 
 export async function getSetting(key: string, fallback: string): Promise<string> {
+  await requireAdmin()
   const supabase = await createClient()
   const { data } = await supabase
     .from('settings')
@@ -15,6 +18,7 @@ export async function getSetting(key: string, fallback: string): Promise<string>
 }
 
 export async function guardarSetting(key: string, value: string) {
+  await requireAdmin()
   const supabase = await createClient()
   const { error } = await supabase
     .from('settings')

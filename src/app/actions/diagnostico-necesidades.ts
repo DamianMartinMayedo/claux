@@ -1,5 +1,7 @@
 'use server'
 
+import { requireAdmin } from '@/lib/admin-guard'
+
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
@@ -27,6 +29,7 @@ function leerCampos(formData: FormData) {
 
 // ── Crear ────────────────────────────────────────────────────────────
 export async function crearNecesidad(formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
 
   const clave = ((formData.get('clave') as string) ?? '').trim()
@@ -69,6 +72,7 @@ export async function crearNecesidad(formData: FormData) {
 
 // ── Editar ───────────────────────────────────────────────────────────
 export async function editarNecesidad(formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
 
   const clave = ((formData.get('clave') as string) ?? '').trim()
@@ -100,6 +104,7 @@ export async function editarNecesidad(formData: FormData) {
 
 // ── Eliminar ─────────────────────────────────────────────────────────
 export async function eliminarNecesidad(clave: string) {
+  await requireAdmin()
   const supabase = await createClient()
 
   const { error } = await supabase.from('diagnostico_necesidades').delete().eq('clave', clave)
@@ -120,6 +125,7 @@ export async function eliminarNecesidad(clave: string) {
 
 // ── Reordenar ────────────────────────────────────────────────────────
 export async function reordenarNecesidades(claves: string[]) {
+  await requireAdmin()
   const supabase = await createClient()
 
   for (let i = 0; i < claves.length; i++) {

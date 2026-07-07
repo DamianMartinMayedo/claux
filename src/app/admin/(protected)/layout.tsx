@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { isAuthBypassed, DEV_ADMIN, emailEsAdmin } from '@/lib/dev-auth'
 import Sidebar from '@/components/admin/Sidebar'
@@ -12,7 +13,22 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   // Lista blanca de admins (defensa en profundidad): una cuenta de Supabase Auth
   // que no esté en ADMIN_EMAILS no entra al panel, aunque exista y esté confirmada.
-  if (realUser && !emailEsAdmin(realUser.email)) redirect('/')
+  if (realUser && !emailEsAdmin(realUser.email)) {
+    return (
+      <div className="login-container">
+        <div className="login-box">
+          <div className="card card-lg">
+            <h1 className="login-card-title">Acceso no autorizado</h1>
+            <p className="text-sm-muted mb-4">
+              Esta cuenta no tiene permisos de administrador. Si crees que es un error,
+              contacta con el equipo de CLAUX.
+            </p>
+            <Link href="/" className="btn btn-secondary btn-full">Volver al inicio</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Bypass de login SOLO en desarrollo local (doble candado en isAuthBypassed):
   // si no hay sesión real, usamos un admin ficticio para pintar el shell.

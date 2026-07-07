@@ -1,5 +1,7 @@
+import Link from 'next/link'
+
 // Banner de captación en dashboards con pocos módulos: anima al dueño a activar
-// más funcionalidades. El botón de contacto todavía no está conectado (pendiente).
+// más funcionalidades. "Contáctanos" lleva al formulario de soporte.
 export default function ContratarMasBanner() {
   return (
     <section className="card dash-col-full dash-cta">
@@ -11,8 +13,7 @@ export default function ContratarMasBanner() {
         </p>
       </div>
       <div className="dash-cta-action">
-        <button type="button" className="btn btn-primary" disabled>Contáctanos</button>
-        <span className="dash-cta-hint">Muy pronto</span>
+        <Link href="/portal/soporte" className="btn btn-primary">Contáctanos</Link>
       </div>
     </section>
   )

@@ -1,10 +1,13 @@
 'use server'
 
+import { requireAdmin } from '@/lib/admin-guard'
+
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
 
 export async function editarModulo(formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
 
   const clave                = (formData.get('clave')                as string ?? '').trim()
@@ -64,6 +67,7 @@ export async function editarModulo(formData: FormData) {
 
 // ── Crear módulo ─────────────────────────────────────────────────────
 export async function crearModulo(formData: FormData) {
+  await requireAdmin()
   const supabase = await createClient()
 
   const clave                = (formData.get('clave')                as string ?? '').trim()
@@ -117,6 +121,7 @@ export async function crearModulo(formData: FormData) {
 
 // ── Reordenar módulos ────────────────────────────────────────────────
 export async function reordenarModulos(claves: string[]) {
+  await requireAdmin()
   const supabase = await createClient()
 
   for (let i = 0; i < claves.length; i++) {
