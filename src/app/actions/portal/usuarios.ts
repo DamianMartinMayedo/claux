@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
 import { hashPasswordPortal } from '@/lib/portal-auth'
+import type { ModuloPerm } from '@/lib/permisos'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -16,7 +17,8 @@ export interface UsuarioPortal {
   solo_lectura: boolean
   estado:       'ACTIVO' | 'INACTIVO'
   created_at:   string
-  empresas:     string[]   // empresa_ids asignadas (solo para rol 'usuario')
+  empresas:     string[]        // empresa_ids asignadas (solo para rol 'usuario')
+  modulos:      ModuloPerm[]    // permisos por módulo (solo rol 'usuario'; vacío = todos)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -47,18 +49,18 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
 
   const db = createAdminClient()
 
-  const [{ data: usuarios }, { data: asignaciones }] = await Promise.all([
-    db.from('client_users')
-      .select('user_id, client_id, email, nombre, rol, solo_lectura, estado, created_at')
-      .eq('client_id', session.client_id)
-      .order('created_at'),
-    db.from('empresa_usuario')
-      .select('user_id, empresa_id')
-      .in('user_id',
-        // pre-fetch para evitar subquery — se filtra abajo
-        (await db.from('client_users').select('user_id').eq('client_id', session.client_id))
-          .data?.map(u => u.user_id) ?? []
-      ),
+  const { data: usuarios } = await db
+    .from('client_users')
+    .select('user_id, client_id, email, nombre, rol, solo_lectura, estado, created_at')
+    .eq('client_id', session.client_id)
+    .order('created_at')
+
+  const userIds   = (usuarios ?? []).map(u => u.user_id)
+  const idsFiltro = userIds.length ? userIds : ['__none__']
+
+  const [{ data: asignaciones }, { data: permisos }] = await Promise.all([
+    db.from('empresa_usuario').select('user_id, empresa_id').in('user_id', idsFiltro),
+    db.from('usuario_modulo').select('user_id, modulo_clave, puede_editar').in('user_id', idsFiltro),
   ])
 
   // Agrupar empresas por usuario
@@ -68,11 +70,39 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
     empresasPorUsuario.get(a.user_id)!.push(a.empresa_id)
   }
 
+  // Agrupar permisos de módulo por usuario
+  const modulosPorUsuario = new Map<string, ModuloPerm[]>()
+  for (const p of (permisos ?? [])) {
+    if (!modulosPorUsuario.has(p.user_id)) modulosPorUsuario.set(p.user_id, [])
+    modulosPorUsuario.get(p.user_id)!.push({ clave: p.modulo_clave, puede_editar: !!p.puede_editar })
+  }
+
   return (usuarios ?? []).map(u => ({
     ...u,
     solo_lectura: u.solo_lectura ?? false,
     empresas: empresasPorUsuario.get(u.user_id) ?? [],
+    modulos:  modulosPorUsuario.get(u.user_id) ?? [],
   })) as UsuarioPortal[]
+}
+
+// Lee los permisos por módulo del formulario y los sincroniza para un usuario.
+// Solo aplica a rol 'usuario'; admin_empresa no lleva filas (= todos los módulos).
+async function sincronizarModulos(
+  db: ReturnType<typeof createAdminClient>,
+  user_id: string,
+  rol: UsuarioPortal['rol'],
+  formData: FormData,
+): Promise<void> {
+  await db.from('usuario_modulo').delete().eq('user_id', user_id)
+  if (rol !== 'usuario') return
+
+  const modulos    = formData.getAll('modulos') as string[]
+  const editables  = new Set(formData.getAll('modulos_editar') as string[])
+  if (modulos.length === 0) return
+
+  await db.from('usuario_modulo').insert(
+    modulos.map(clave => ({ user_id, modulo_clave: clave, puede_editar: editables.has(clave) })),
+  )
 }
 
 // ── Crear usuario ─────────────────────────────────────────────────────────────
@@ -123,7 +153,7 @@ export async function crearUsuario(formData: FormData): Promise<{
     password_hash:     hash,
     salt,
     estado:            'ACTIVO',
-    must_change_password: false,  // desactivado por ahora
+    must_change_password: true,  // definirá su propia contraseña en el primer acceso
   })
 
   if (error) return { ok: false, error: 'Error al crear el usuario.' }
@@ -134,6 +164,9 @@ export async function crearUsuario(formData: FormData): Promise<{
       empresas.map(empresa_id => ({ user_id, empresa_id }))
     )
   }
+
+  // Permisos por módulo (solo rol usuario; sin filas = todos los contratados)
+  await sincronizarModulos(db, user_id, rol, formData)
 
   revalidatePath('/portal/usuarios')
   return { ok: true, passwordTemporal: password }
@@ -190,6 +223,9 @@ export async function editarUsuario(formData: FormData): Promise<{
     )
   }
 
+  // Sincronizar permisos por módulo (borrar + reinsertar; admin = sin filas = todos)
+  await sincronizarModulos(db, user_id, rol, formData)
+
   revalidatePath('/portal/usuarios')
   return { ok: true }
 }
@@ -214,7 +250,7 @@ export async function resetearPassword(user_id: string): Promise<{
 
   const { error } = await db
     .from('client_users')
-    .update({ password_hash: hash, salt, must_change_password: false })
+    .update({ password_hash: hash, salt, must_change_password: true })
     .eq('user_id', user_id)
     .eq('client_id', session.client_id)
 

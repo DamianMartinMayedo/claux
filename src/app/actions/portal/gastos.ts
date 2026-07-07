@@ -2,7 +2,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -208,6 +208,7 @@ export async function guardarGastoCobro(
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -287,6 +288,7 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -316,6 +318,7 @@ export async function registrarLiquidacion(
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -413,6 +416,7 @@ export async function anularLiquidacion(movimiento_id: string): Promise<{ ok: bo
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -449,6 +453,7 @@ export async function guardarCategoriaGasto(
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -517,6 +522,7 @@ export async function archivarCategoriaGasto(
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -549,6 +555,7 @@ export async function restaurarCategoriaGasto(
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient()
     .from('categorias_gastos')

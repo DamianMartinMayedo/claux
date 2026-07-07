@@ -198,7 +198,56 @@ export async function crearCliente(formData: FormData) {
   revalidatePath('/admin/clientes')
   revalidatePath('/admin/dashboard')
   revalidatePath('/admin/pagos')
-  return { ok: true, client_id, passwordTemporal }
+  return { ok: true, client_id, passwordTemporal, estado: estadoInicial }
+}
+
+// ── Regenerar contraseña de un usuario del cliente ───────────────────
+// Las contraseñas son hash de una vía (no se recuperan), pero SÍ se regeneran.
+// Resuelve el huevo-y-la-gallina: si el admin principal del tenant pierde su
+// clave, aquí (panel admin) se le genera una temporal. must_change_password:true
+// → el cliente definirá su propia contraseña en el primer acceso.
+// Reutilizable como base de un futuro auto-servicio por email (no construido aún).
+export async function regenerarPasswordCliente(
+  user_id: string,
+  client_id: string,
+): Promise<{ ok: boolean; passwordTemporal?: string; error?: string }> {
+  const supabase = await createClient()
+
+  if (!user_id || !client_id) return { ok: false, error: 'Datos inválidos.' }
+
+  // Verificar que el usuario pertenece a ese cliente antes de tocar nada
+  const { data: usuario } = await supabase
+    .from('client_users')
+    .select('user_id, email')
+    .eq('user_id', user_id)
+    .eq('client_id', client_id)
+    .maybeSingle()
+
+  if (!usuario) return { ok: false, error: 'Usuario no encontrado para este cliente.' }
+
+  const passwordTemporal = generatePassword()
+  const salt             = generateSalt()
+  const password_hash    = await hashPassword(passwordTemporal, salt)
+
+  const { error } = await supabase
+    .from('client_users')
+    .update({ password_hash, salt, must_change_password: true })
+    .eq('user_id', user_id)
+    .eq('client_id', client_id)
+
+  if (error) return { ok: false, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'reset_password',
+    description: `Regeneró la contraseña del usuario ${usuario.email} (${user_id}) del cliente ${client_id}`,
+  })
+
+  revalidatePath(`/admin/clientes/${client_id}`)
+  return { ok: true, passwordTemporal }
 }
 
 // ── Desactivar cliente ───────────────────────────────────────────────

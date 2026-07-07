@@ -11,27 +11,21 @@ import {
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
-import { Check, Info, Key, Minus, Pencil, Plus, User, X } from 'lucide-react'
+import { Info, Key, Pencil, Plus, User, X } from 'lucide-react'
+
+// Módulos/funcionalidades que el tenant tiene contratados (para repartir por usuario).
+export interface ModuloContratado {
+  clave:  string
+  nombre: string
+  tipo:   'base' | 'modulo' | 'funcionalidad' | 'addon'
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ROL_LABEL: Record<string, string> = {
   admin_empresa: 'Administrador',
   usuario:       'Operador',
 }
-
-const PERMISOS: Array<{
-  accion: string
-  admin: boolean
-  operador: boolean
-}> = [
-  { accion: 'Gestionar empresas',         admin: true,  operador: false },
-  { accion: 'Gestionar monedas y tasas',  admin: true,  operador: false },
-  { accion: 'Gestionar usuarios',         admin: true,  operador: false },
-  { accion: 'Registrar operaciones',      admin: true,  operador: true  },
-  { accion: 'Ver reportes',               admin: true,  operador: true  },
-  { accion: 'Acceso a todas las empresas',admin: true,  operador: false },
-  { accion: 'Acceso a empresas asignadas',admin: true,  operador: true  },
-]
 
 function RolBadge({ rol, soloLectura }: { rol: string; soloLectura: boolean }) {
   const label = soloLectura
@@ -47,19 +41,40 @@ function UsuarioModal({
   usuario,
   empresas,
   sessionUserId,
+  modulosContratados,
   onClose,
   onSaved,
 }: {
-  usuario:       UsuarioPortal | null
-  empresas:      Empresa[]
-  sessionUserId: string
-  onClose:       () => void
-  onSaved:       (pwd?: string) => void
+  usuario:            UsuarioPortal | null
+  empresas:           Empresa[]
+  sessionUserId:      string
+  modulosContratados: ModuloContratado[]
+  onClose:            () => void
+  onSaved:            (pwd?: string) => void
 }) {
   const esEdicion = !!usuario
   const [isPending, startTransition] = useTransition()
   const [rol,       setRol]          = useState<UsuarioPortal['rol']>(usuario?.rol ?? 'usuario')
   const [empresasSel, setEmpresasSel] = useState<string[]>(usuario?.empresas ?? [])
+
+  // Permisos por módulo. "Todos" = sin filas (acceso a todo lo contratado); es el
+  // estado de los usuarios existentes sin restricción y el default al crear.
+  const [todosModulos, setTodosModulos] = useState<boolean>(
+    esEdicion ? (usuario!.modulos.length === 0) : true,
+  )
+  const [modPerms, setModPerms] = useState<Record<string, 'ver' | 'editar'>>(() => {
+    const m: Record<string, 'ver' | 'editar'> = {}
+    for (const mm of (usuario?.modulos ?? [])) m[mm.clave] = mm.puede_editar ? 'editar' : 'ver'
+    return m
+  })
+  function setModPerm(clave: string, val: 'no' | 'ver' | 'editar') {
+    setModPerms(prev => {
+      const next = { ...prev }
+      if (val === 'no') delete next[clave]
+      else next[clave] = val
+      return next
+    })
+  }
 
   function toggleEmpresa(id: string) {
     setEmpresasSel(prev =>
@@ -72,6 +87,19 @@ function UsuarioModal({
     const fd = new FormData(e.currentTarget)
     fd.set('rol', rol)
     empresasSel.forEach(id => fd.append('empresas', id))
+
+    // Permisos por módulo (solo operador y solo si NO es "acceso a todos").
+    if (rol === 'usuario' && !todosModulos) {
+      const claves = Object.keys(modPerms)
+      if (claves.length === 0) {
+        toastError('Selecciona al menos un módulo o marca «Acceso a todos los módulos».')
+        return
+      }
+      for (const clave of claves) {
+        fd.append('modulos', clave)
+        if (modPerms[clave] === 'editar') fd.append('modulos_editar', clave)
+      }
+    }
 
     startTransition(async () => {
       const result = esEdicion ? await editarUsuario(fd) : await crearUsuario(fd)
@@ -170,6 +198,49 @@ function UsuarioModal({
               </div>
             )}
 
+            {/* Módulos y permisos — solo para operadores */}
+            {rol === 'usuario' && (
+              <div>
+                <label className="form-label">Módulos y permisos</label>
+                <label className="checkbox-group">
+                  <input
+                    type="checkbox"
+                    checked={todosModulos}
+                    onChange={e => setTodosModulos(e.target.checked)}
+                  />
+                  <span className="checkbox-label">Acceso a todos los módulos contratados</span>
+                </label>
+
+                {!todosModulos && (
+                  modulosContratados.length === 0 ? (
+                    <p className="text-sm-muted">El negocio no tiene módulos contratados.</p>
+                  ) : (
+                    <div className="usr-mod-list">
+                      {modulosContratados.map(m => (
+                        <div key={m.clave} className="usr-mod-row">
+                          <span>{m.nombre}</span>
+                          <select
+                            className="input usr-mod-select"
+                            aria-label={`Permiso para ${m.nombre}`}
+                            value={modPerms[m.clave] ?? 'no'}
+                            onChange={e => setModPerm(m.clave, e.target.value as 'no' | 'ver' | 'editar')}
+                          >
+                            <option value="no">Sin acceso</option>
+                            <option value="ver">Ver</option>
+                            <option value="editar">Ver y editar</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+                <span className="input-hint">
+                  Los módulos ocultos siguen funcionando en segundo plano: sus cargas y relaciones
+                  con otros módulos se mantienen.
+                </span>
+              </div>
+            )}
+
             {!esEdicion && (
               <div className="usr-pwd-info">
                 <Info size={16} strokeWidth={2} />
@@ -239,9 +310,10 @@ interface Props {
   empresas:      Empresa[]
   sessionUserId: string
   soloLectura:   boolean
+  modulosContratados: ModuloContratado[]
 }
 
-export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLectura }: Props) {
+export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLectura, modulosContratados }: Props) {
   const router = useRouter()
   const [tab,        setTab]       = useState<TabKind>('usuarios')
   const [modalOpen,  setModalOpen] = useState(false)
@@ -387,37 +459,37 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
       {/* ── Tab Roles ── */}
       {tab === 'roles' && (
         <div className="usr-roles-wrap">
-          <div className="card card-table">
-            <div className="mon-card-header">
-              <h2 className="mon-section-title">Tabla de permisos</h2>
+          <div className="card modal-body-wide">
+            <h3 className="text-sm-bold mb-3">Roles</h3>
+            <div className="usr-lectura-ejemplos">
+              <div className="usr-lectura-ejemplo">
+                <RolBadge rol="admin_empresa" soloLectura={false} />
+                <span>Acceso total: ve todas las empresas y todos los módulos contratados, y gestiona usuarios, empresas y monedas.</span>
+              </div>
+              <div className="usr-lectura-ejemplo">
+                <RolBadge rol="usuario" soloLectura={false} />
+                <span>Acceso acotado: solo las empresas y los módulos que le asignes (cada módulo, en «Ver» o «Ver y editar»). No gestiona usuarios, empresas ni monedas.</span>
+              </div>
             </div>
-            <div className="table-wrapper">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Acción</th>
-                    <th className="col-center">Administrador</th>
-                    <th className="col-center">Operador</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PERMISOS.map(p => (
-                    <tr key={p.accion}>
-                      <td data-label="Acción">{p.accion}</td>
-                      <td data-label="Administrador" className="col-center">{p.admin    ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
-                      <td data-label="Operador" className="col-center">{p.operador ? <Check size={16} strokeWidth={2.5} /> : <Minus size={16} strokeWidth={2} />}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          </div>
+
+          <div className="card modal-body-wide">
+            <h3 className="text-sm-bold mb-3">Permisos por módulo (operadores)</h3>
+            <p className="body-text">
+              A cada operador se le puede definir qué módulos ve y en cuáles puede editar
+              (Sin acceso / Ver / Ver y editar), o darle acceso a todos los contratados.
+              Ocultar un módulo a un operador es solo una cuestión de vista: el módulo sigue
+              existiendo y sus relaciones con el resto (cargas y actualizaciones automáticas)
+              se mantienen intactas.
+            </p>
           </div>
 
           <div className="card modal-body-wide">
             <h3 className="text-sm-bold mb-3">Flag «Solo lectura»</h3>
             <p className="body-text">
-              Se puede activar en cualquier rol. Un usuario con solo lectura puede navegar por todos los módulos
-              a los que su rol le da acceso, pero no puede crear, editar ni eliminar ningún dato.
+              Interruptor maestro: se puede activar en cualquier rol. Un usuario con solo lectura
+              puede navegar por los módulos a los que tiene acceso, pero no puede crear, editar ni
+              eliminar ningún dato, aunque un módulo esté marcado como «Ver y editar».
               Es ideal para socios, auditores o supervisores que necesitan visibilidad sin poder modificar.
             </p>
             <div className="usr-lectura-ejemplos">
@@ -441,6 +513,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
           usuario={editTarget}
           empresas={empresas}
           sessionUserId={sessionUserId}
+          modulosContratados={modulosContratados}
           onClose={cerrar}
           onSaved={onSaved}
         />

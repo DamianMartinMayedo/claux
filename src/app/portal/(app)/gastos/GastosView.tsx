@@ -468,7 +468,7 @@ function ConfirmArchivarCat({ nombre, onConfirm, onClose, isPending }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function GastosView({ data }: { data: GastosCobrosPageData }) {
+export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -570,14 +570,14 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
           </div>
           <p className="page-subtitle">Ingresos y egresos directos (no facturados). Los pagos se reflejan en Tesorería.</p>
         </div>
-        {tab === 'gastos' ? (
+        {puedeEditar && (tab === 'gastos' ? (
           <div className="tes-header-actions">
             <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
             <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
           </div>
         ) : (
           <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
-        )}
+        ))}
       </div>
 
       {/* Tabs */}
@@ -688,17 +688,19 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => setLiquidar(r)}>
-                          <DollarSign size={15} strokeWidth={2} /> {r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
-                        </button>
-                        <button className="row-actions-item" onClick={() => openEdit(r)}>
-                          <Pencil size={15} strokeWidth={2} /> Editar
-                        </button>
-                        <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmDel(r)} disabled={isPending}>
-                          <Trash2 size={14} strokeWidth={2} /> Eliminar
-                        </button>
-                      </RowActions>
+                      {puedeEditar && (
+                        <RowActions>
+                          <button className="row-actions-item" onClick={() => setLiquidar(r)}>
+                            <DollarSign size={15} strokeWidth={2} /> {r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
+                          </button>
+                          <button className="row-actions-item" onClick={() => openEdit(r)}>
+                            <Pencil size={15} strokeWidth={2} /> Editar
+                          </button>
+                          <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmDel(r)} disabled={isPending}>
+                            <Trash2 size={14} strokeWidth={2} /> Eliminar
+                          </button>
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -750,18 +752,20 @@ export default function GastosView({ data }: { data: GastosCobrosPageData }) {
                         </span>
                       </td>
                       <td className="col-actions">
-                        <RowActions>
-                          {c.estado === 'ACTIVO' ? (
-                            <>
-                              <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                              {!c.es_sistema && (
-                                <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
-                              )}
-                            </>
-                          ) : (
-                            <button className="row-actions-item" onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
-                          )}
-                        </RowActions>
+                        {puedeEditar && (
+                          <RowActions>
+                            {c.estado === 'ACTIVO' ? (
+                              <>
+                                <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                                {!c.es_sistema && (
+                                  <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
+                                )}
+                              </>
+                            ) : (
+                              <button className="row-actions-item" onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
+                            )}
+                          </RowActions>
+                        )}
                       </td>
                     </tr>
                   ))}

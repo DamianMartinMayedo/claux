@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AccionesHeader from './AccionesHeader'
+import AccesoUsuariosCard from './AccesoUsuariosCard'
 import ModulosCard from './ModulosCard'
 import IaClienteCard from './IaClienteCard'
 import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
@@ -44,7 +45,7 @@ export default async function ClienteDetallePage({
   const { client_id } = await params
   const supabase = await createClient()
 
-  const [{ data: cliente }, { data: pagos }, { data: catalogo }] = await Promise.all([
+  const [{ data: cliente }, { data: pagos }, { data: catalogo }, { data: usuarios }] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).single(),
     supabase
       .from('payments')
@@ -56,6 +57,11 @@ export default async function ClienteDetallePage({
       .select('clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo')
       .eq('activo', true)
       .order('orden'),
+    supabase
+      .from('client_users')
+      .select('user_id, email, nombre, rol, estado, created_at')
+      .eq('client_id', client_id)
+      .order('created_at'),
   ])
 
   if (!cliente) notFound()
@@ -193,6 +199,9 @@ export default async function ClienteDetallePage({
           </div>
         )}
       </div>
+
+      {/* ── Acceso y usuarios del cliente (regenerar contraseñas) ── */}
+      <AccesoUsuariosCard clientId={client_id} usuarios={usuarios ?? []} />
 
       {/* ── Módulos contratados ── */}
       {catalogo && catalogo.length > 0 && (

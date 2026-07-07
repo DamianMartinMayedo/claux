@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter }               from 'next/navigation'
-import { loginCliente }            from '@/app/actions/portal/auth'
+import { useRouter } from 'next/navigation'
+import { cambiarPasswordObligatorio } from '@/app/actions/portal/auth'
 import { Eye, EyeOff } from 'lucide-react'
 
-export default function PortalLoginPage() {
+export default function CambiarPasswordForm({ email }: { email: string }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error,    setError]    = useState('')
@@ -15,15 +15,15 @@ export default function PortalLoginPage() {
     e.preventDefault()
     setError('')
     const fd = new FormData(e.currentTarget)
+    const nueva   = (fd.get('password_nueva')   as string) ?? ''
+    const confirm = (fd.get('password_confirm') as string) ?? ''
+    if (nueva.length < 8)  { setError('La contraseña debe tener al menos 8 caracteres.'); return }
+    if (nueva !== confirm) { setError('Las contraseñas no coinciden.'); return }
+
     startTransition(async () => {
-      const result = await loginCliente(fd)
-      if (result?.error) {
-        setError(result.error)
-      } else if (result?.mustChangePassword) {
-        router.push('/portal/cambiar-password')
-      } else {
-        router.push('/portal/dashboard')
-      }
+      const result = await cambiarPasswordObligatorio(fd)
+      if (result?.error) { setError(result.error); return }
+      router.push('/portal/dashboard')
     })
   }
 
@@ -40,31 +40,24 @@ export default function PortalLoginPage() {
         </div>
 
         <div className="card card-lg">
-          <h1 className="login-card-title">Iniciar sesión</h1>
+          <h1 className="login-card-title">Crea tu contraseña</h1>
+          <p className="text-sm-muted mb-3">
+            Por seguridad, define una contraseña propia para <strong>{email}</strong>.
+            La temporal deja de funcionar tras este paso.
+          </p>
 
           <form onSubmit={handleSubmit} className="login-form" noValidate>
 
             <div className="form-group">
-              <label className="form-label">Email <span className="required">*</span></label>
-              <input
-                className="form-input"
-                type="email"
-                name="email"
-                autoComplete="email"
-                placeholder="tu@empresa.com"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Contraseña <span className="required">*</span></label>
+              <label className="form-label">Nueva contraseña <span className="required">*</span></label>
               <div className="input-pwd-wrap">
                 <input
                   className="form-input input-pwd"
                   type={showPass ? 'text' : 'password'}
-                  name="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
+                  name="password_nueva"
+                  autoComplete="new-password"
+                  placeholder="Mínimo 8 caracteres"
+                  minLength={8}
                   required
                 />
                 <button
@@ -78,6 +71,19 @@ export default function PortalLoginPage() {
               </div>
             </div>
 
+            <div className="form-group">
+              <label className="form-label">Repite la contraseña <span className="required">*</span></label>
+              <input
+                className="form-input"
+                type={showPass ? 'text' : 'password'}
+                name="password_confirm"
+                autoComplete="new-password"
+                placeholder="••••••••"
+                minLength={8}
+                required
+              />
+            </div>
+
             {error && <div className="alert alert-error">{error}</div>}
 
             <button
@@ -86,19 +92,14 @@ export default function PortalLoginPage() {
               className="btn btn-primary btn-full btn-lg"
             >
               {isPending
-                ? <><span className="spinner spinner-sm" /> Entrando…</>
-                : 'Iniciar sesión'}
+                ? <><span className="spinner spinner-sm" /> Guardando…</>
+                : 'Guardar y entrar'}
             </button>
 
           </form>
         </div>
 
-        <p className="login-footer">
-          ¿Problemas de acceso?{' '}
-          <a href="mailto:soporte@claux.app">soporte@claux.app</a>
-        </p>
       </div>
     </div>
   )
 }
-

@@ -1,8 +1,9 @@
 import { redirect }       from 'next/navigation'
-import { getPortalSession } from '@/app/actions/portal/auth'
+import { getPortalSession, debeCambiarPassword } from '@/app/actions/portal/auth'
 import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
@@ -19,7 +20,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const [{ data: cliente }, { data: catalogo }, empresas, etiquetas] = await Promise.all([
+  const [{ data: cliente }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar] = await Promise.all([
     db
       .from('clients')
       .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
@@ -32,9 +33,15 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       .order('orden'),
     obtenerEmpresasSelector(),
     obtenerEtiquetasNegocio(),
+    modulosDeUsuario(db, session.user_id),
+    debeCambiarPassword(session),
   ])
 
   if (!cliente) redirect('/portal/login')
+
+  // Primer acceso / tras reset: obligar a definir una contraseña propia antes de
+  // usar el portal. La página vive en (auth), fuera de este shell → sin bucle.
+  if (debeCambiar) redirect('/portal/cambiar-password')
 
   // Módulos activos leídos del cliente (modelo à la carte). La contabilidad
   // 'base' es un módulo más: si el cliente no la contrató, no aparece activa.
@@ -42,9 +49,14 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     ? (cliente.modulos_activos as string[])
     : []
 
-  // Addon de IA: el chat flotante del dueño solo aparece si está contratado.
-  // El nombre del agente es global (lo fija el admin); por defecto "Claux".
-  const tieneIa = modulosActivos.includes('asistente_ia')
+  // Módulos que ESTE usuario puede ver (tenant ∩ permisos por usuario). El sidebar
+  // y los guards de página usan este subconjunto; las cascadas entre módulos NO.
+  const { visibles: modulosVisibles } = calcularAcceso(session, modulosActivos, filasUsuario)
+
+  // Addon de IA: el chat flotante solo aparece si está contratado Y el usuario
+  // tiene permiso para verlo. El nombre del agente es global; por defecto "Claux".
+  const iaVisible = modulosVisibles.includes('asistente_ia')
+  const tieneIa = iaVisible
   const nombreAgente = tieneIa ? (await configAgente()).nombreAgente : 'Claux'
 
   // Sugerencias iniciales del chat, relevantes a los módulos contratados (máx. 4).
@@ -82,7 +94,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         empresas={empresas}
       />
       <PortalSidebar
-        modulosActivos={modulosActivos}
+        modulosVisibles={modulosVisibles}
         catalogo={(catalogo ?? []) as CatalogoItem[]}
         catalogoEtiqueta={etiquetas.catalogo}
         catalogoIcono={etiquetas.catalogoIcono}

@@ -43,7 +43,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
 export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, descuentoAnualPct }: Props) {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string } | null>(null)
+  const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string; estado: string } | null>(null)
   const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
@@ -110,7 +110,7 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
     const res = await crearCliente(new FormData(formRef.current!))
     setLoading(false)
     if (!res.ok) { toastError(res.error ?? 'Error desconocido'); return }
-    setResultado({ client_id: res.client_id!, passwordTemporal: res.passwordTemporal! })
+    setResultado({ client_id: res.client_id!, passwordTemporal: res.passwordTemporal!, estado: res.estado! })
   }
 
   const modal = (
@@ -137,6 +137,18 @@ export default function NuevoClienteModal({ catalogo, plantillas, setupDefault, 
                 <p className="code-block-value code-block-value-text">{resultado.passwordTemporal}</p>
               </div>
             </div>
+            {resultado.estado === 'TRIAL' ? (
+              <div className="alert alert-success">
+                <strong>Prueba activa.</strong> El cliente ya puede iniciar sesión en el portal.
+                En su primer acceso deberá crear su propia contraseña.
+              </div>
+            ) : (
+              <div className="alert alert-warning">
+                <strong>Pendiente de pago.</strong> El cliente puede iniciar sesión, pero verá una
+                pantalla de bloqueo hasta que confirmes su primer pago. En su primer acceso deberá
+                crear su propia contraseña.
+              </div>
+            )}
             <button className="btn btn-primary btn-full" onClick={handleClose}>Listo</button>
           </div>
         ) : (

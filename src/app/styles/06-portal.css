@@ -773,6 +773,20 @@
   flex-shrink: 0;
 }
 
+/* Selector de permisos por módulo en el modal (Ver / Ver y editar) */
+.usr-mod-list {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  max-height: 220px; overflow-y: auto;
+  padding: var(--space-2); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); background: var(--color-surface-2);
+}
+.usr-mod-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+.usr-mod-select { width: auto; min-width: 9rem; }
+
 /* Info password temporal */
 .usr-pwd-info {
   display: flex; align-items: flex-start; gap: var(--space-3);

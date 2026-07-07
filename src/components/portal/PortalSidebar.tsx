@@ -49,13 +49,13 @@ function saveCollapsed(state: Record<string, boolean>) {
 }
 
 interface Props {
-  modulosActivos: string[]
+  modulosVisibles: string[]                    // módulos que ESTE usuario puede ver (tenant ∩ permisos)
   catalogo:       CatalogoItem[]
   catalogoEtiqueta?: string                    // etiqueta del catálogo según sector ("Menú"…)
   catalogoIcono?:    'comida' | 'producto'     // icono del navbar: cubiertos vs QR
 }
 
-export default function PortalSidebar({ modulosActivos, catalogo, catalogoEtiqueta, catalogoIcono }: Props) {
+export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqueta, catalogoIcono }: Props) {
   const pathname     = usePathname()
   const [pending, startTransition] = useTransition()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
@@ -159,7 +159,7 @@ export default function PortalSidebar({ modulosActivos, catalogo, catalogoEtique
 
         {/* Funcionalidades — standalone, solo visibles si contratadas */}
         {funcionalidades
-          .filter(f => modulosActivos.includes(f.clave))
+          .filter(f => modulosVisibles.includes(f.clave))
           .map(f => {
             const pages = ensurePages(f.paginas).sort((a, b) => a.orden - b.orden)
             return pages.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta)))
@@ -168,7 +168,7 @@ export default function PortalSidebar({ modulosActivos, catalogo, catalogoEtique
         {/* Módulos (incluida Contabilidad) — grupos colapsables; solo los
             contratados, sin candados. */}
         {modulos
-          .filter(m => modulosActivos.includes(m.clave))
+          .filter(m => modulosVisibles.includes(m.clave))
           .map(m => {
             const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
             return renderCollapsibleGroup(m.clave, m.nombre, pages)
