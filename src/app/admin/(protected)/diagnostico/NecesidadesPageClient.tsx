@@ -18,6 +18,14 @@ export default function NecesidadesPageClient({
   const router = useRouter()
   const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [necesidades, setNecesidades] = useState<Necesidad[]>(() => initial.map((n) => ({ ...n })))
+  // Sincroniza con las props cuando el servidor manda datos nuevos (router.refresh
+  // tras crear/editar/eliminar): el inicializador de useState solo corre al montar,
+  // así que sin esto la lista mostraba datos viejos aunque el guardado sí persistía.
+  const [prevInitial, setPrevInitial] = useState(initial)
+  if (initial !== prevInitial) {
+    setPrevInitial(initial)
+    setNecesidades(initial.map((n) => ({ ...n })))
+  }
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasDragged, setHasDragged] = useState(false)

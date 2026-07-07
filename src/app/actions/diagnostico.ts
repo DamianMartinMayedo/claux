@@ -1,6 +1,31 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/admin-guard'
+
+export interface DiagnosticoLead {
+  id: number
+  nombre: string
+  telefono: string
+  email: string | null
+  sector: string
+  necesidades: string[]
+  modo_actual: string
+  modulos_rec: string[]
+  created_at: string
+}
+
+// Lista de solicitudes de diagnóstico (leads) para el admin. El guardado lo hace
+// el público por service_role; listarlas solo puede un admin autorizado.
+export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
+  await requireAdmin()
+  const db = createAdminClient()
+  const { data } = await db
+    .from('diagnosticos')
+    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, created_at')
+    .order('created_at', { ascending: false })
+  return (data ?? []) as DiagnosticoLead[]
+}
 
 interface GuardarDiagnosticoInput {
   nombre: string

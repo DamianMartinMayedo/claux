@@ -78,6 +78,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [recClaves, setRecClaves] = useState<string[] | null>(null)
+  const [contactado, setContactado] = useState(false)
 
   const progressPct = ((step + 1) / TOTAL_STEPS) * 100
   const sectorSel = sectores.find((s) => s.sector === sector)
@@ -432,14 +433,32 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
           </div>
 
           <div className="dg-report-cta">
-            <p className="dg-report-cta-text">
-              Demos el siguiente paso juntos. Elige cómo prefieres que te
-              ayudemos a ponerlo en marcha. Sin compromiso.
-            </p>
-            <div className="dg-report-actions">
-              <span className="btn btn-primary btn-lg">Que me llamen gratis</span>
-              <span className="btn btn-secondary btn-lg">Agendar una cita</span>
-            </div>
+            {contactado ? (
+              <p className="dg-report-cta-text">
+                ¡Gracias, {nombre.split(' ')[0]}! Hemos recibido tu solicitud. Te
+                contactaremos muy pronto para ayudarte a ponerlo en marcha.
+              </p>
+            ) : (
+              <>
+                <p className="dg-report-cta-text">
+                  Demos el siguiente paso juntos. Elige cómo prefieres que te
+                  ayudemos a ponerlo en marcha. Sin compromiso.
+                </p>
+                <div className="dg-report-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-lg"
+                    onClick={() => setContactado(true)}
+                  >
+                    Que me llamen gratis
+                  </button>
+                  {/* Pendiente: agendar una cita (Calendly u otro). */}
+                  <button type="button" className="btn btn-secondary btn-lg" disabled>
+                    Agendar una cita
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
