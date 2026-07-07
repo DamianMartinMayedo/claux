@@ -818,6 +818,35 @@
 }
 .usr-roles-wrap { display: flex; flex-direction: column; gap: var(--space-5); }
 
+/* ── Soporte: FAQ (acordeón) + contacto ── */
+.soporte-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.soporte-grid {
+  display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--space-5); align-items: start;
+}
+@media (max-width: 900px) { .soporte-grid { grid-template-columns: 1fr; } }
+
+.faq-group + .faq-group { margin-top: var(--space-4); }
+.faq-group-title {
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em;
+  color: var(--color-text-muted); margin-bottom: var(--space-2);
+}
+.faq-item {
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  margin-bottom: var(--space-2); background: var(--color-surface-2);
+}
+.faq-q {
+  cursor: pointer; padding: var(--space-3) var(--space-4);
+  font-weight: 600; font-size: var(--text-sm); color: var(--color-text);
+  list-style: none; display: flex; justify-content: space-between; gap: var(--space-3);
+}
+.faq-q::-webkit-details-marker { display: none; }
+.faq-q::after { content: '+'; color: var(--color-text-muted); font-weight: 400; }
+.faq-item[open] .faq-q::after { content: '–'; }
+.faq-a {
+  padding: 0 var(--space-4) var(--space-4);
+  font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MÓDULO PERFIL
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1781,6 +1810,13 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dash-list-amount.is-neg { color: var(--color-error); }
 
 .dash-muted { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-2) 0; }
+
+/* ── Dashboard: banner de captación (contratar más módulos) ── */
+.dash-cta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
+.dash-cta-body { flex: 1 1 20rem; }
+.dash-cta-body .dash-muted { padding-top: var(--space-1); max-width: 48ch; }
+.dash-cta-action { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.dash-cta-hint { font-size: var(--text-xs); color: var(--color-text-faint); }
 
 /* Accesos rápidos (fallback) */
 .dash-accesos { display: flex; flex-wrap: wrap; gap: var(--space-3); }

@@ -190,18 +190,20 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
           <h1 className="page-title">Turnos</h1>
           <p className="page-subtitle">Catálogo de turnos por empresa y planificación semanal del personal.</p>
         </div>
+        <div className="tes-header-actions">
+          <button className="btn btn-primary" onClick={() => setModalNuevo(true)} disabled={!empresaId}>
+            <Plus size={14} strokeWidth={2.5} /> Nuevo turno
+          </button>
+        </div>
       </div>
 
-      <div className="ter-toolbar">
-        {data.empresas.length > 1 && (
+      {data.empresas.length > 1 && (
+        <div className="ter-toolbar">
           <select className="input ter-filter-select" value={empresaId} onChange={e => setEmpresaId(e.target.value)}>
             {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
           </select>
-        )}
-        <button className="btn btn-primary btn-sm" onClick={() => setModalNuevo(true)} disabled={!empresaId}>
-          <Plus size={14} strokeWidth={2.5} /> Nuevo turno
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Catálogo de turnos */}
       <div className="card card-table rrhh-card-gap">

@@ -615,7 +615,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
         <div className="card card-table">
           <div className="mon-card-header">
             <h2 className="mon-section-title">Monedas activas</h2>
-            {esAdmin && monedaConsolidacion && (
+            {esAdmin && initMonedas.some(m => m.activa) && (
               <button className="btn btn-secondary btn-sm" onClick={() => setModalKind('consolidacion')}>
                 <Star size={13} strokeWidth={2} /> Consolidación
               </button>

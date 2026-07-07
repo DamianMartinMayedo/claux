@@ -315,9 +315,15 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     ? Math.ceil((new Date(cliente.fecha_expiracion).getTime() - Date.now()) / 86_400_000)
     : null
 
+  // La etiqueta del acceso respeta el vocabulario del sector (Menú/Carta en vez
+  // de "Catálogo", "Citas" en vez de "Reservas"…). El resto mantiene su nombre.
+  const labelAcceso = (c: string): string =>
+    c === 'catalogo_qr'    ? etiquetas.catalogo
+    : c === 'reservas_citas' ? etiquetas.reservas
+    : ACCESOS[c].label
   const accesos: AccesoRapido[] = activos
     .filter(c => ACCESOS[c])
-    .map(c => ({ clave: c, label: ACCESOS[c].label, ruta: ACCESOS[c].ruta }))
+    .map(c => ({ clave: c, label: labelAcceso(c), ruta: ACCESOS[c].ruta }))
 
   return {
     nombreEmpresa: cliente.nombre_empresa,

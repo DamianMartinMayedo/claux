@@ -7,6 +7,7 @@ import InventarioWidget from './InventarioWidget'
 import RrhhWidget from './RrhhWidget'
 import AgendaWidget from './AgendaWidget'
 import AccesosRapidos from './AccesosRapidos'
+import ContratarMasBanner from './ContratarMasBanner'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -68,6 +69,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         {inventario && <InventarioWidget data={inventario} />}
         {rrhh && <RrhhWidget data={rrhh} />}
         {!hayPaneles && <AccesosRapidos accesos={accesos} />}
+        {!hayPaneles && <ContratarMasBanner />}
       </div>
     </div>
   )
