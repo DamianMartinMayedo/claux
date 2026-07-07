@@ -110,9 +110,15 @@ function emailValido(v: string): boolean {
 function hhmm(t: string | null): string { return t ? t.substring(0, 5) : '' }
 
 async function etiquetasDeSector(db: ReturnType<typeof createAdminClient>, sector: string | null): Promise<EtiquetasSector> {
-  if (!sector) return { ...ETIQUETAS_DEFAULT }
-  const { data: pl } = await db.from('plantillas_sector').select('etiquetas').eq('sector', sector).maybeSingle()
-  return etiquetasDe(pl?.etiquetas)
+  let base: EtiquetasSector = { ...ETIQUETAS_DEFAULT }
+  if (sector) {
+    const { data: pl } = await db.from('plantillas_sector').select('etiquetas').eq('sector', sector).maybeSingle()
+    base = etiquetasDe(pl?.etiquetas)
+  }
+  // Citas NO varía con el tipo de negocio (un restaurante usa Reservas, no Citas):
+  // el "recurso" es siempre el personal que atiende los servicios. Forzamos la
+  // etiqueta genérica para no heredar "Mesas"/"Cabinas"/… del sector.
+  return { ...base, recurso: ETIQUETAS_DEFAULT.recurso, recurso_pl: ETIQUETAS_DEFAULT.recurso_pl }
 }
 
 // ── Datos del portal ───────────────────────────────────────────────────────────
