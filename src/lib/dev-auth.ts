@@ -21,6 +21,25 @@ export function isAuthBypassed(): boolean {
   )
 }
 
+/**
+ * Lista blanca de administradores (defensa en profundidad). El panel /admin solo
+ * comprobaba que existiera una sesión de Supabase Auth; con esto, además, el email
+ * debe estar en ADMIN_EMAILS (coma-separada, en env — fuera del repo, que es
+ * público). Así, aunque se cree una cuenta de Supabase Auth, si su email no está
+ * autorizado NO entra al admin.
+ *
+ * Si ADMIN_EMAILS no está configurada, NO filtra (fail-open) para no bloquear
+ * antes de ponerla: el registro público ya está desactivado, así que no pueden
+ * aparecer cuentas nuevas por sorpresa. Configúrala en Vercel para activar el filtro.
+ */
+export function emailEsAdmin(email: string | null | undefined): boolean {
+  const raw = process.env.ADMIN_EMAILS?.trim()
+  if (!raw) return true
+  const permitidos = raw.split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+  if (permitidos.length === 0) return true
+  return !!email && permitidos.includes(email.trim().toLowerCase())
+}
+
 /** Usuario admin ficticio para pintar el shell del admin cuando el bypass está activo. */
 export const DEV_ADMIN = {
   email: 'dev@local',

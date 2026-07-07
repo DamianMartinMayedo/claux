@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { isAuthBypassed, DEV_ADMIN } from '@/lib/dev-auth'
+import { isAuthBypassed, DEV_ADMIN, emailEsAdmin } from '@/lib/dev-auth'
 import Sidebar from '@/components/admin/Sidebar'
 import Header from '@/components/admin/Header'
 import { desactivarClientesVencidos } from '@/app/actions/clientes'
@@ -9,6 +9,10 @@ import AdminToastWrapper from '@/components/admin/AdminToastWrapper'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user: realUser } } = await supabase.auth.getUser()
+
+  // Lista blanca de admins (defensa en profundidad): una cuenta de Supabase Auth
+  // que no esté en ADMIN_EMAILS no entra al panel, aunque exista y esté confirmada.
+  if (realUser && !emailEsAdmin(realUser.email)) redirect('/')
 
   // Bypass de login SOLO en desarrollo local (doble candado en isAuthBypassed):
   // si no hay sesión real, usamos un admin ficticio para pintar el shell.
