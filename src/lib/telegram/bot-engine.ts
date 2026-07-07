@@ -177,7 +177,7 @@ export async function manejarMensaje(
 function saludoIa(ctx: BotContext): BotResponse {
   const carta = tieneCarta(ctx) && ctx.slug ? ' Si quieres, también te paso la carta.' : ''
   return {
-    texto: `¡Hola! 👋 Soy el asistente de ${ctx.nombre_empresa}. ¿Quieres reservar? Dime el día, la hora y para cuántas personas y te lo preparo.${carta}`,
+    texto: `¡Hola! Soy el asistente de ${ctx.nombre_empresa}. ¿Te ayudo con una reserva? Dime el día, la hora y para cuántas personas y te lo preparo.${carta}`,
   }
 }
 
