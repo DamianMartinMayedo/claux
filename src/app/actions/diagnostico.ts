@@ -3,6 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/admin-guard'
 
+export type EstadoLead = 'nuevo' | 'contactado'
+
 export interface DiagnosticoLead {
   id: number
   nombre: string
@@ -12,6 +14,7 @@ export interface DiagnosticoLead {
   necesidades: string[]
   modo_actual: string
   modulos_rec: string[]
+  estado: EstadoLead
   created_at: string
 }
 
@@ -22,9 +25,22 @@ export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('diagnosticos')
-    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, created_at')
+    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, estado, created_at')
     .order('created_at', { ascending: false })
   return (data ?? []) as DiagnosticoLead[]
+}
+
+// Marcar una solicitud como 'nuevo' o 'contactado'.
+export async function actualizarEstadoDiagnostico(
+  id: number,
+  estado: EstadoLead,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin()
+  if (estado !== 'nuevo' && estado !== 'contactado') return { ok: false, error: 'Estado inválido.' }
+  const db = createAdminClient()
+  const { error } = await db.from('diagnosticos').update({ estado }).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
 
 interface GuardarDiagnosticoInput {

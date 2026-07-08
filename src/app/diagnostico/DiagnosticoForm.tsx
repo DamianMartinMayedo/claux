@@ -436,13 +436,13 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
             {contactado ? (
               <p className="dg-report-cta-text">
                 ¡Gracias, {nombre.split(' ')[0]}! Hemos recibido tu solicitud. Te
-                contactaremos muy pronto para ayudarte a ponerlo en marcha.
+                contactaremos lo antes posible para agendar una cita.
               </p>
             ) : (
               <>
                 <p className="dg-report-cta-text">
-                  Demos el siguiente paso juntos. Elige cómo prefieres que te
-                  ayudemos a ponerlo en marcha. Sin compromiso.
+                  Demos el siguiente paso juntos. Te contactamos para ayudarte a
+                  ponerlo en marcha. Sin compromiso.
                 </p>
                 <div className="dg-report-actions">
                   <button
@@ -450,12 +450,14 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
                     className="btn btn-primary btn-lg"
                     onClick={() => setContactado(true)}
                   >
-                    Que me llamen gratis
+                    Quiero que me contacten gratis
                   </button>
-                  {/* Pendiente: agendar una cita (Calendly u otro). */}
+                  {/* Botón de agendar cita (Calendly u otro) — oculto por ahora,
+                      NO borrar; reactivar cuando esté conectado:
                   <button type="button" className="btn btn-secondary btn-lg" disabled>
                     Agendar una cita
                   </button>
+                  */}
                 </div>
               </>
             )}

@@ -417,12 +417,16 @@
   white-space: nowrap;
   border: 0;
 }
-.dg-option-input {
+/* `input.` (no solo `.dg-option-input`) para ganar en especificidad al
+   `input[type="checkbox"]` global del design system, que si no deja el input
+   nativo en el flujo (position: relative, 18px) ocupando espacio junto al box. */
+input.dg-option-input {
   position: absolute;
   opacity: 0;
   width: 1px;
   height: 1px;
   margin: 0;
+  border: 0;
   pointer-events: none;
 }
 

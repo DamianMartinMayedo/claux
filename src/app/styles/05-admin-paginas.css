@@ -836,3 +836,12 @@ textarea:focus-visible {
   padding: var(--space-3) var(--space-4); background: var(--color-surface-2);
   border: 1px solid var(--color-border); border-radius: var(--radius-md); margin: 0;
 }
+
+/* ── Solicitudes de diagnóstico: detalle (modal) ── */
+.sol-detalle { display: flex; flex-direction: column; gap: var(--space-3); }
+.sol-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.sol-label {
+  flex: 0 0 8.5rem; font-size: var(--text-xs); color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.sol-value { flex: 1 1 12rem; min-width: 0; color: var(--color-text); word-break: break-word; }
