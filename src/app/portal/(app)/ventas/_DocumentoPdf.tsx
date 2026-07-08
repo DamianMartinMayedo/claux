@@ -83,19 +83,15 @@ export function DocumentoPdf({
     if (downloading) return
     setDownloading(true)
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-      const el = document.querySelector('.pdf-page') as HTMLElement
-      if (!el) return
-      await html2pdf()
-        .set({
-          margin: [8, 8, 8, 8],
-          filename: downloadFilename ?? `${numero}.pdf`,
-          image:    { type: 'jpeg', quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        })
-        .from(el)
-        .save()
+      const { crearDoc, sellarPie }     = await import('@/lib/pdf/documento')
+      const { construirDocumentoVenta } = await import('@/lib/pdf/venta')
+      const doc = await crearDoc()
+      await construirDocumentoVenta(doc, {
+        titulo, numero, fechaEmision, fechaSecundaria, condicionPago,
+        empresa, cliente, moneda, lineas, ajustes, subtotal, total, notas,
+      })
+      sellarPie(doc)
+      doc.save(downloadFilename ?? `${numero}.pdf`)
     } finally {
       setDownloading(false)
     }
@@ -186,7 +182,7 @@ export function DocumentoPdf({
       <table className="pdf-table">
         <thead>
           <tr>
-            <th style={{ width: tieneDescuentosLinea ? '44%' : '50%' }}>Descripción</th>
+            <th className="pdf-col-desc">Descripción</th>
             <th className="pdf-col-qty">Cantidad</th>
             <th className="pdf-col-price">Precio unit.</th>
             {tieneDescuentosLinea && <th className="pdf-col-dto">Dto.%</th>}
@@ -241,9 +237,9 @@ export function DocumentoPdf({
         </section>
       )}
 
-      {/* ── Pie ── */}
+      {/* ── Pie (sello de marca) ── */}
       <footer className="pdf-footer">
-        Documento generado por CLAUX
+        Documento generado con <strong>CLAUX</strong>
       </footer>
     </div>
   )

@@ -158,6 +158,59 @@
 /* Descuento/cargo/impuesto se distinguen por su tag de color; el borde de color
    se reserva para la identidad de empresa (--empresa-color). */
 
+/* ── Editores de líneas y ajustes en móvil ──
+   Las filas de columnas fijas desbordarían un móvil, así que se apilan:
+   · Líneas: mini-tarjeta con etiqueta por campo (data-label en cada .ven-col-*);
+     la cabecera de columnas se oculta.
+   · Ajustes: nombre a lo ancho, modo/valor en dos, importe debajo, borrar en la esquina.
+   El ven-form-grid pasa a una sola columna. */
+@media (max-width: 640px) {
+  .ven-form-grid { grid-template-columns: 1fr; }
+
+  /* Líneas → mini-tarjeta con etiquetas */
+  .ven-lineas-head { display: none; }
+  .ven-lineas-row {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-3);
+    position: relative;
+  }
+  .ven-lineas-row .ven-col-prod { grid-column: 1 / -1; padding-right: var(--space-8); }
+  .ven-lineas-row .ven-col-num { text-align: left; }
+  .ven-lineas-row .ven-col-num::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+  .ven-lineas-row .ven-input-num { text-align: left; }
+  .ven-lineas-row .ven-total-cell { align-self: end; }
+  .ven-lineas-row .ven-col-del {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    width: auto;
+  }
+
+  /* Ajustes → apilado (hijos son input/select, sin etiqueta ::before posible) */
+  .ven-ajuste-head { display: none; }
+  .ven-ajuste-row {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-4) var(--space-3);
+    position: relative;
+  }
+  .ven-ajuste-row .ven-aj-nombre { grid-column: 1 / -1; padding-right: var(--space-8); }
+  .ven-ajuste-row .ven-aj-monto  { grid-column: 1 / -1; }
+  .ven-ajuste-row > .ter-action-btn {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+  }
+}
+
 /* ── Bottom row: totales + notas side by side ─────────────────────────────── */
 .ven-bottom-row {
   display: grid;
@@ -334,15 +387,15 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 .pdf-page {
-  background: #fff;
+  background: var(--paper-bg);
   max-width: 800px;
   margin: 0 auto;
   padding: 40px 48px 32px;
-  font-family: var(--font-sans, system-ui), sans-serif;
-  color: #1f2937;
+  font-family: var(--font-body);
+  color: var(--paper-ink);
   font-size: 13px;
   line-height: 1.5;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-lg);
 }
 .pdf-layout-body .pdf-page {
   margin-top: 0;
@@ -356,35 +409,24 @@
 }
 
 .pdf-toolbar {
-  display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  padding: 12px 24px;
-  background: #1f2937;
+  display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
   position: sticky; top: 0; z-index: 10;
 }
-.pdf-toolbar .btn-primary {
-  background: var(--color-primary);
-  color: #fff;
-}
-.pdf-toolbar .btn-secondary {
-  background: rgba(255,255,255,0.15);
-  color: #fff;
-  border-color: rgba(255,255,255,0.2);
-}
-.pdf-toolbar .btn-secondary:hover {
-  background: rgba(255,255,255,0.25);
-}
 .pdf-toolbar-brand {
-  font-size: 13px; font-weight: 700;
-  color: rgba(255,255,255,0.7);
+  font-size: var(--text-xs); font-weight: 700;
+  color: var(--color-text-muted);
   letter-spacing: 0.03em;
 }
-.pdf-toolbar-actions { display: flex; gap: 8px; }
+.pdf-toolbar-actions { display: flex; gap: var(--space-2); }
 
 .pdf-header {
   display: flex; justify-content: space-between; align-items: flex-start;
-  gap: 24px;
+  gap: var(--space-6);
   padding-bottom: 16px;
-  border-bottom: 2px solid #1f2937;
+  border-bottom: 2px solid var(--paper-ink);
   margin-bottom: 20px;
 }
 .pdf-empresa { display: flex; gap: 14px; align-items: flex-start; }
@@ -394,64 +436,66 @@
 .pdf-logo-fallback {
   width: 60px; height: 60px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 6px;
-  color: #fff; background: var(--empresa-color, var(--color-text-muted));
+  border-radius: var(--radius-md);
+  color: var(--paper-bg); background: var(--empresa-color, var(--paper-ink-muted));
   font-weight: 800; font-size: 28px;
 }
 .pdf-empresa-nombre {
-  font-size: 15px; font-weight: 700; color: #1f2937;
+  font-size: 15px; font-weight: 700; color: var(--paper-ink);
   margin-bottom: 4px;
 }
 .pdf-empresa-line {
-  font-size: 11px; color: #6b7280; line-height: 1.4;
+  font-size: 11px; color: var(--paper-ink-faint); line-height: 1.4;
 }
 .pdf-doc-block { text-align: right; min-width: 240px; }
 .pdf-doc-titulo {
   font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .1em; color: #6b7280;
+  letter-spacing: .1em; color: var(--paper-ink-faint);
 }
 .pdf-doc-numero {
-  font-family: monospace;
+  font-family: var(--font-display);
   font-size: 22px; font-weight: 800;
-  color: #1f2937; margin: 4px 0 10px;
+  color: var(--paper-ink); margin: 4px 0 10px;
 }
-.pdf-doc-meta { font-size: 11px; color: #6b7280; line-height: 1.6; }
-.pdf-doc-meta span { font-weight: 600; color: #1f2937; }
+.pdf-doc-meta { font-size: 11px; color: var(--paper-ink-muted); line-height: 1.6; }
+.pdf-doc-meta span { font-weight: 600; color: var(--paper-ink); }
 
+/* Cliente: bloque limpio, sin relleno (documento blanco). */
 .pdf-cliente {
-  margin-bottom: 20px;
-  padding: 12px 14px;
-  background: #f9fafb;
-  border-radius: 4px;
+  margin-bottom: 24px;
 }
 .pdf-section-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .08em; color: #6b7280;
-  margin-bottom: 4px;
+  letter-spacing: .08em; color: var(--paper-ink-faint);
+  margin-bottom: 5px;
 }
-.pdf-cliente-nombre { font-size: 14px; font-weight: 700; color: #1f2937; }
-.pdf-line { font-size: 11px; color: #6b7280; line-height: 1.5; }
+.pdf-cliente-nombre { font-size: 14px; font-weight: 700; color: var(--paper-ink); }
+.pdf-line { font-size: 11px; color: var(--paper-ink-muted); line-height: 1.5; }
 
 .pdf-table {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 16px;
 }
+/* Cabecera de tabla: sin banda de color — etiquetas tenues con regla fina. */
 .pdf-table th {
-  background: #1f2937;
-  color: #fff;
-  font-size: 11px;
+  background: transparent;
+  color: var(--paper-ink-faint);
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .05em;
-  padding: 8px 10px;
+  letter-spacing: .06em;
+  padding: 4px 10px 6px;
   text-align: left;
+  border-bottom: 1.5px solid var(--paper-ink);
 }
 .pdf-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--paper-line);
   font-size: 12px;
+  color: var(--paper-ink);
 }
+.pdf-col-desc  { width: 46%; word-break: break-word; }
 .pdf-col-qty   { width: 12%; text-align: right; }
 .pdf-col-price { width: 18%; text-align: right; }
 .pdf-col-dto   { width: 8%;  text-align: right; }
@@ -466,36 +510,38 @@
   display: flex; justify-content: space-between;
   padding: 4px 0;
   font-size: 12px;
+  color: var(--paper-ink-muted);
 }
 .pdf-total-final {
   margin-top: 4px;
   padding-top: 8px;
-  border-top: 2px solid #1f2937;
+  border-top: 1.5px solid var(--paper-ink);
   font-size: 16px;
   font-weight: 800;
+  color: var(--paper-ink);
 }
 
+/* Notas: bloque limpio con regla superior, sin relleno de color. */
 .pdf-notas {
-  margin-top: 18px;
-  padding: 12px 14px;
-  background: #fef3c7;
-  border-left: 3px solid #d97706;
-  border-radius: 4px;
+  margin-top: 22px;
+  padding-top: 12px;
+  border-top: 1px solid var(--paper-line);
 }
 .pdf-notas p {
   margin: 4px 0 0 0;
   font-size: 12px;
-  color: #78350f;
+  color: var(--paper-ink-muted);
   white-space: pre-wrap;
 }
 
 .pdf-footer {
   margin-top: 32px;
   padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
-  font-size: 10px; color: #9ca3af;
+  border-top: 1px solid var(--paper-line);
+  font-size: 10px; color: var(--paper-ink-faint);
   text-align: center;
 }
+.pdf-footer strong { color: var(--paper-teal-ink); font-weight: 700; }
 
 /* ── Print rules: ocultar UI del portal al imprimir ───────────────────────── */
 @media print {
@@ -595,7 +641,7 @@
 .ven-preview-modal-body {
   overflow-y: auto;
   padding: var(--space-5);
-  background: #d1d5db;
+  background: var(--color-bg);
   flex: 1;
 }
 .ven-preview-scale {
@@ -628,7 +674,7 @@
 
 /* ── PDF route wrapper ───────────────────────────────────────────────────── */
 .pdf-layout-body {
-  background: #d1d5db;
+  background: var(--color-bg);
   min-height: 100vh;
   padding: 0 0 48px;
 }
@@ -642,7 +688,7 @@
 }
 
 /* ── PDF standalone page (legacy, keep for compat) ──────────────────────── */
-.pdf-standalone { background: #d1d5db; min-height: 100vh; padding: var(--space-6); }
+.pdf-standalone { background: var(--color-bg); min-height: 100vh; padding: var(--space-6); }
 .pdf-standalone .pdf-page { max-width: 800px; margin: 0 auto; }
 @media print {
   .pdf-standalone { background: #fff !important; padding: 0 !important; }

@@ -68,7 +68,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="admin-sidebar">
+    <aside className="admin-sidebar" id="admin-nav">
       <nav className="flex-1">
         {NAV.map(group => (
           <div key={group.section}>

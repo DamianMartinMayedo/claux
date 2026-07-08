@@ -18,7 +18,7 @@ import {
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
-import { Copy, MoreHorizontal, Pencil, Printer, Trash2, X } from 'lucide-react'
+import { Copy, MoreHorizontal, Pencil, Download, Trash2, X } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
   CONDICION_PAGO_LABEL,
@@ -46,6 +46,7 @@ export default function FacturaDetalle({ data, cobros }: Props) {
   } | null>(null)
   const [alertMsg, setAlertMsg] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [descargandoPdf, setDescargandoPdf] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,6 +62,29 @@ export default function FacturaDetalle({ data, cobros }: Props) {
 
   const puedeEditar  = factura.estado === 'BORRADOR'
   const transiciones = TRANSICIONES_FACTURA[factura.estado] ?? []
+
+  // Descarga directa: se genera en cliente con los datos ya cargados, sin abrir
+  // otra página ni recargar (principio de descargas directas — contexto Cuba).
+  async function handleDescargarPdf() {
+    if (descargandoPdf) return
+    setDescargandoPdf(true)
+    try {
+      const { descargarDocumentoVenta } = await import('@/lib/pdf/venta')
+      await descargarDocumentoVenta({
+        titulo:          'FACTURA',
+        numero:          factura.numero,
+        fechaEmision:    factura.fecha_emision,
+        fechaSecundaria: factura.fecha_vencimiento ? { label: 'Vencimiento', valor: factura.fecha_vencimiento } : undefined,
+        condicionPago:   factura.condicion_pago,
+        empresa, cliente, moneda: factura.moneda, lineas, ajustes,
+        subtotal:        Number(factura.subtotal),
+        total:           Number(factura.total),
+        notas:           factura.notas,
+      })
+    } finally {
+      setDescargandoPdf(false)
+    }
+  }
 
   async function handleDuplicar() {
     setDialog({
@@ -145,15 +169,15 @@ export default function FacturaDetalle({ data, cobros }: Props) {
               <Pencil size={14} strokeWidth={2} /> Editar
             </Link>
           )}
+          <button className="btn btn-secondary" onClick={handleDescargarPdf} disabled={descargandoPdf}>
+            <Download size={14} strokeWidth={2} /> {descargandoPdf ? 'Generando…' : 'Descargar PDF'}
+          </button>
           <div className="ven-dropdown-wrap" ref={menuRef}>
             <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)}>
               <MoreHorizontal size={16} />
             </button>
             {menuOpen && (
               <div className="ven-dropdown-menu" onClick={() => setMenuOpen(false)}>
-                <button className="ven-dropdown-item" onClick={() => window.open(`/portal/pdf/factura/${factura.factura_id}`, '_blank')}>
-                  <Printer size={14} strokeWidth={2} /> Ver / Descargar PDF
-                </button>
                 <button className="ven-dropdown-item" onClick={handleDuplicar} disabled={duplicating}>
                   <Copy size={14} strokeWidth={2} /> {duplicating ? 'Duplicando…' : 'Duplicar'}
                 </button>

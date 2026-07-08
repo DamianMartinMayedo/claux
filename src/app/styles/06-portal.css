@@ -180,6 +180,40 @@
   background-color: var(--color-bg);
 }
 
+/* ── Colapso del shell del portal → sidebar como drawer off-canvas ──
+   El chrome compartido (hamburguesa, backdrop, body.nav-locked) vive en
+   04-responsive-dark.css; aquí solo el override del shell del portal, que debe ir
+   en este archivo (carga después de 04) para ganar la cascada sobre la base. */
+@media (max-width: 1023px) {
+  .portal-shell { grid-template-columns: 1fr; }
+
+  .portal-sidebar {
+    grid-row: 1;
+    grid-column: 1;
+    position: fixed;
+    left: 0;
+    top: var(--header-h);
+    width: min(var(--sidebar-w), 82vw);
+    height: calc(100dvh - var(--header-h));
+    z-index: 90;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform var(--transition);
+  }
+  .portal-shell.nav-open .portal-sidebar { transform: translateX(0); }
+
+  .portal-main { grid-column: 1; }
+
+  /* Header más compacto y respetando el notch (safe-area) en móvil/tablet. */
+  .portal-header {
+    padding-left: max(var(--space-4), env(safe-area-inset-left));
+    padding-right: max(var(--space-4), env(safe-area-inset-right));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-sidebar { transition: none; }
+}
+
 /* ── Pantalla de bloqueo ── */
 .bloqueado-screen {
   display: flex;
@@ -1183,6 +1217,19 @@
 .prd-col-3    { grid-column: span 3; }
 .prd-col-4    { grid-column: span 4; }
 .prd-col-full { grid-column: span 6; }
+
+/* ── Colapso en móvil de los grids de 6 columnas (terceros, productos, vías de
+   pago) y de las tarjetas de estadística ──
+   A una columna; los span-* se resetean a `auto` para que no generen columnas
+   implícitas (que desbordarían). via-pago-fields reutiliza los .ter-col-*. */
+@media (max-width: 640px) {
+  .ter-form-grid,
+  .prd-form-grid,
+  .via-pago-fields { grid-template-columns: 1fr; }
+  .ter-col-span-2, .ter-col-span-3, .ter-col-span-4, .ter-col-full,
+  .prd-col-2, .prd-col-3, .prd-col-4, .prd-col-full { grid-column: auto; }
+  .alm-stats-grid { grid-template-columns: 1fr 1fr; }
+}
 
 /* ── Precios / costos editor ──────────────────────────────────────────────── */
 .prd-precios-container {

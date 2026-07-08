@@ -148,7 +148,7 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
 
   return (
     <>
-    <aside className="portal-sidebar">
+    <aside className="portal-sidebar" id="portal-nav">
       <nav className="flex-1">
 
         {/* Dashboard — standalone */}

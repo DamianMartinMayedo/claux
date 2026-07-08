@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon } from 'lucide-react'
 import type { PortalSession } from '@/lib/portal-auth'
 import { empresaColorVar } from './EmpresaTag'
+import MobileNavToggle from '@/components/MobileNavToggle'
 
 interface EmpresaLite {
   empresa_id: string
@@ -77,6 +78,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
   return (
     <header className="portal-header">
       <div className="portal-header-left">
+        <MobileNavToggle shellSelector=".portal-shell" navId="portal-nav" />
         <span className="portal-logo">CLAUX</span>
       </div>
       <div className="portal-header-right">

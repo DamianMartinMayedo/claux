@@ -728,6 +728,25 @@ input.dg-option-input {
 .dg-report-cta {
   text-align: center;
 }
+/* Confirmación tras "Quiero que me contacten": grande y prominente, sobre la
+   misma banda con degradado (texto blanco heredado de .dg-report). */
+.dg-report-confirm {
+  text-align: center;
+  padding: var(--space-4) 0;
+}
+.dg-report-confirm-title {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.15;
+  margin-bottom: var(--space-3);
+}
+.dg-report-confirm-sub {
+  font-size: var(--text-lg);
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.5;
+}
 .dg-report-actions {
   display: flex;
   flex-wrap: wrap;

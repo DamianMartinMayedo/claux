@@ -1,10 +1,36 @@
 /* ═══════════════════════════════════════════════════
    RESPONSIVE DESIGN
+   Escala de breakpoints del sistema (usar estos, no valores sueltos):
+   · 1024px → colapso del shell: la sidebar pasa a drawer off-canvas
+   · 768px  → tablet-portrait: compactar cabeceras, métricas, tablas
+   · 640px  → móvil: las tablas se vuelven tarjetas apiladas
+   · 480px  → móvil estrecho: máxima compactación
    ═══════════════════════════════════════════════════ */
-@media (max-width: 768px) {
-  .admin-shell {
-    grid-template-columns: 1fr;
-  }
+
+/* ── Chrome de navegación móvil (hamburguesa + backdrop) ──
+   Oculto en escritorio; el media query de 1024px lo activa. El backdrop solo se
+   monta (createPortal) cuando el drawer está abierto, por eso no lleva display:none. */
+.mobile-nav-toggle { display: none; }
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 27, 22, 0.5);
+  z-index: 80;
+  animation: nav-backdrop-in var(--duration) var(--ease);
+}
+@keyframes nav-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .nav-backdrop { animation: none; }
+}
+
+/* ── Colapso del shell: la sidebar se sale del grid y pasa a drawer off-canvas
+   controlado por `.nav-open` en el shell. z-index: header (100) por encima de la
+   sidebar (90) por encima del backdrop (80).
+   El shell del ADMIN vive aquí (su base está en 02, que carga antes → este override
+   gana). El del PORTAL vive en 06-portal.css: su base está en 06, que carga DESPUÉS
+   de este archivo, así que el override tiene que ir allí para ganar la cascada. ── */
+@media (max-width: 1023px) {
+  .admin-shell { grid-template-columns: 1fr; }
 
   .admin-sidebar {
     grid-row: 1;
@@ -12,22 +38,55 @@
     position: fixed;
     left: 0;
     top: var(--header-h);
-    width: var(--sidebar-w);
-    height: calc(100vh - var(--header-h));
-    z-index: 50;
+    width: min(var(--sidebar-w), 82vw);
+    height: calc(100dvh - var(--header-h));
+    z-index: 90;
     border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
     transform: translateX(-100%);
     transition: transform var(--transition);
   }
+  .admin-shell.nav-open .admin-sidebar { transform: translateX(0); }
 
-  .admin-sidebar.open {
-    transform: translateX(0);
+  .admin-main { grid-column: 1; }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text);
+    transition: background var(--transition), border-color var(--transition);
+  }
+  .mobile-nav-toggle:hover {
+    background: var(--color-surface-2);
+    border-color: var(--color-border-strong);
   }
 
-  .admin-main {
-    grid-column: 1;
-  }
+  body.nav-locked { overflow: hidden; }
 
+  /* Header del admin más compacto y respetando el notch (safe-area). */
+  .admin-header {
+    padding-left: max(var(--space-4), env(safe-area-inset-left));
+    padding-right: max(var(--space-4), env(safe-area-inset-right));
+  }
+}
+
+/* Header del admin: en móvil estrecho, el avatar basta; el nombre/rol se ocultan
+   para no competir con la hamburguesa y el logo. */
+@media (max-width: 480px) {
+  .admin-header .header-user-info { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar { transition: none; }
+}
+
+@media (max-width: 768px) {
   .view-container {
     padding: var(--space-6) var(--space-4);
   }
@@ -164,11 +223,8 @@
     gap: var(--space-1);
   }
 
-  .btn {
-    padding: var(--space-2) var(--space-4);
-    font-size: var(--text-xs);
-  }
-
+  /* Los botones NO se encogen en móvil: mantener el área táctil. Solo el btn-lg
+     baja un peldaño de padding horizontal para que quepa a lo ancho. */
   .btn-lg {
     padding: var(--space-3) var(--space-6);
   }
@@ -192,6 +248,68 @@
   .login-header {
     margin-bottom: var(--space-8);
   }
+}
+
+/* ═══════════════════════════════════════════════════
+   MODALES EN MÓVIL — bottom-sheet
+   En móvil el modal se ancla abajo, a todo el ancho y con esquinas superiores
+   redondeadas (más alcanzable con el pulgar); los botones del pie se apilan a
+   ancho completo. Usa dvh para no recortarse tras la barra del navegador y
+   respeta el safe-area inferior (home indicator).
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: none;
+    max-height: 92dvh;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    border-bottom: none;
+    animation: modal-sheet-in var(--duration) var(--ease);
+  }
+  .modal-footer {
+    flex-direction: column-reverse;
+    padding-bottom: max(var(--space-5), env(safe-area-inset-bottom));
+  }
+  .modal-footer > * { width: 100%; }
+}
+@keyframes modal-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .modal { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════
+   TÁCTIL — móvil y tablet (contexto Cuba: casi todo móvil)
+   ═══════════════════════════════════════════════════ */
+
+/* iOS Safari hace ZOOM al enfocar cualquier campo con font-size < 16px. Los
+   inputs del sistema usan 15px → en móvil se suben a 16px para evitar el salto
+   de zoom (y el desplazamiento de layout que provoca). Solo afecta a ≤640px. */
+@media (max-width: 640px) {
+  .input,
+  select.input,
+  textarea.input,
+  .search-input,
+  .form-input,
+  .filter-select {
+    font-size: 16px;
+  }
+}
+
+/* Área táctil mínima (WCAG 2.2 §2.5.8): en dispositivos de puntero grueso los
+   controles interactivos garantizan ~44px de alto. No afecta al ratón (fino). */
+@media (pointer: coarse) {
+  .btn,
+  .input,
+  select.input,
+  .nav-item,
+  .portal-account-menu-item,
+  .row-actions-item {
+    min-height: 44px;
+  }
+  .btn-sm { min-height: 38px; }
+  .theme-toggle-btn,
+  .mobile-nav-toggle,
+  .ter-action-btn { min-width: 44px; min-height: 44px; }
 }
 
 /* ═══════════════════════════════════════════════════

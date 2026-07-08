@@ -7,24 +7,12 @@ import type { ReportesData }       from '@/app/actions/portal/reportes'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
+import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const ORIGEN_LABEL: Record<string, string> = {
   MANUAL: 'Manual', COBRO: 'Cobros', PAGO: 'Pagos', TRANSFERENCIA: 'Transferencias',
-}
-
-// Interfaz mínima de jsPDF (su .d.ts empaquetado no es un módulo ES y TS lo rechaza).
-interface JsPdfDoc {
-  internal: { pageSize: { getWidth(): number; getHeight(): number } }
-  setFont(family: string, style: string): void
-  setFontSize(n: number): void
-  setTextColor(r: number, g: number, b: number): void
-  setDrawColor(r: number, g: number, b: number): void
-  text(text: string, x: number, y: number, opts?: { align?: string }): void
-  line(x1: number, y1: number, x2: number, y2: number): void
-  addPage(): void
-  save(filename: string): void
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -75,20 +63,18 @@ export default function ReportesView({ data }: { data: ReportesData }) {
     if (descargando) return
     setDescargando(true)
     try {
-      // jsPDF empaqueta un .d.ts que TS no reconoce como módulo: casteamos a la interfaz mínima.
-      const mod = await import('jspdf') as unknown as { jsPDF: new (o: object) => JsPdfDoc }
-      const doc: JsPdfDoc = new mod.jsPDF({ unit: 'mm', format: 'a4' })
+      const doc   = await crearDoc()
       const pageW = doc.internal.pageSize.getWidth()
       const pageH = doc.internal.pageSize.getHeight()
-      const M = 16
+      const M     = 16
       const right = pageW - M
       let y = M
 
-      const TEAL: [number, number, number] = [13, 148, 136]
-      const DARK: [number, number, number] = [28, 27, 22]
-      const GRAY: [number, number, number] = [107, 104, 98]
+      const TEAL = MARCA.teal
+      const DARK = MARCA.dark
+      const GRAY = MARCA.muted
 
-      const ensure = (space: number) => { if (y + space > pageH - M) { doc.addPage(); y = M } }
+      const ensure = (space: number) => { if (y + space > pageH - RESERVA_PIE - 2) { doc.addPage(); y = M } }
       const row = (
         label: string, amount: string,
         opts: { bold?: boolean; color?: [number, number, number]; indent?: boolean; gap?: number } = {},
@@ -114,7 +100,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
         doc.text(m, M, y); doc.text('Importe', right, y, { align: 'right' })
         y += 2
-        doc.setDrawColor(216, 213, 204); doc.line(M, y, right, y)
+        doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.line(M, y, right, y)
         y += 5
       }
       const totalRow = (label: string, amount: string) => {
@@ -123,16 +109,11 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         row(label, amount, { bold: true, color: TEAL, gap: 9 })
       }
 
-      // Cabecera
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-      doc.setTextColor(TEAL[0], TEAL[1], TEAL[2]); doc.text('CLAUX', M, y); y += 6
-      doc.setFontSize(18); doc.setTextColor(DARK[0], DARK[1], DARK[2])
-      doc.text('Reportes financieros', M, y); y += 6
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
-      doc.text(empresaNombre, M, y)
-      doc.text(`${formatFechaCorta(data.desde)} - ${formatFechaCorta(data.hasta)}`, right, y, { align: 'right' })
-      y += 3
-      doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.line(M, y, right, y); y += 9
+      y = cabeceraReporte(doc, {
+        titulo:    'Reportes financieros',
+        izquierda: empresaNombre,
+        derecha:   `${formatFechaCorta(data.desde)} — ${formatFechaCorta(data.hasta)}`,
+      })
 
       // Estado de resultados
       heading('Estado de resultados')
@@ -160,6 +141,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         totalRow('Flujo neto', formatMonto(f.neto))
       }
 
+      sellarPie(doc)
       doc.save(`${nombreArchivo}.pdf`)
     } finally {
       setDescargando(false)

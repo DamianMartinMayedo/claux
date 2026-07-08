@@ -6,19 +6,7 @@ import { BarChart3, Download, ChevronDown } from 'lucide-react'
 import { EmpresaTag }   from '@/components/portal/EmpresaTag'
 import EmpresaPills     from '@/components/portal/EmpresaPills'
 import { useEmpresas }  from '@/components/portal/EmpresaColorContext'
-
-// Interfaz mínima de jsPDF (su .d.ts empaquetado no es un módulo ES y TS lo rechaza).
-interface JsPdfDoc {
-  internal: { pageSize: { getWidth(): number; getHeight(): number } }
-  setFont(family: string, style: string): void
-  setFontSize(n: number): void
-  setTextColor(r: number, g: number, b: number): void
-  setDrawColor(r: number, g: number, b: number): void
-  text(text: string, x: number, y: number, opts?: { align?: string }): void
-  line(x1: number, y1: number, x2: number, y2: number): void
-  addPage(): void
-  save(filename: string): void
-}
+import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -159,17 +147,15 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
     if (descargando) return
     setDescargando(true)
     try {
-      const mod = await import('jspdf') as unknown as { jsPDF: new (o: object) => JsPdfDoc }
-      const doc: JsPdfDoc = new mod.jsPDF({ unit: 'mm', format: 'a4' })
-      const pageW = doc.internal.pageSize.getWidth()
+      const doc   = await crearDoc()
       const pageH = doc.internal.pageSize.getHeight()
-      const M = 16, right = pageW - M
+      const M = 16, right = doc.internal.pageSize.getWidth() - M
       let y = M
-      const TEAL: [number, number, number] = [13, 148, 136]
-      const DARK: [number, number, number] = [28, 27, 22]
-      const GRAY: [number, number, number] = [107, 104, 98]
+      const TEAL = MARCA.teal
+      const DARK = MARCA.dark
+      const GRAY = MARCA.muted
 
-      const ensure = (s: number) => { if (y + s > pageH - M) { doc.addPage(); y = M } }
+      const ensure = (s: number) => { if (y + s > pageH - RESERVA_PIE - 2) { doc.addPage(); y = M } }
       const row = (label: string, amount: string, opts: { bold?: boolean; color?: [number, number, number]; indent?: boolean } = {}) => {
         ensure(7)
         doc.setFont('helvetica', opts.bold ? 'bold' : 'normal'); doc.setFontSize(10)
@@ -183,12 +169,11 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
         doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text(text, M, y); y += 7
       }
 
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-      doc.setTextColor(TEAL[0], TEAL[1], TEAL[2]); doc.text('CLAUX', M, y); y += 6
-      doc.setFontSize(18); doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text('Reportes de personal', M, y); y += 6
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
-      doc.text(empresaNombre, M, y); doc.text(`Año ${anio}`, right, y, { align: 'right' }); y += 3
-      doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.line(M, y, right, y); y += 9
+      y = cabeceraReporte(doc, {
+        titulo:    'Reportes de personal',
+        izquierda: empresaNombre,
+        derecha:   `Año ${anio}`,
+      })
 
       heading('Resumen')
       row('Plantilla activa', String(plantilla))
@@ -203,6 +188,7 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
       y += 2; heading('Plantilla por departamento')
       for (const d of porDepto) row(`${d.departamento} (${d.activos})`, lineaMoneda(d.coste))
 
+      sellarPie(doc)
       doc.save(`${nombreArchivo}.pdf`)
     } finally {
       setDescargando(false)

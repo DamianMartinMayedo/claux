@@ -51,6 +51,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   z-index: 100;
   height: var(--header-h);
 }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
 .header-logo {
   display: flex;
   align-items: center;

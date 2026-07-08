@@ -434,10 +434,14 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
 
           <div className="dg-report-cta">
             {contactado ? (
-              <p className="dg-report-cta-text">
-                ¡Gracias, {nombre.split(' ')[0]}! Hemos recibido tu solicitud. Te
-                contactaremos lo antes posible para agendar una cita.
-              </p>
+              <div className="dg-report-confirm">
+                <p className="dg-report-confirm-title">
+                  ¡Gracias, {nombre.split(' ')[0]}!
+                </p>
+                <p className="dg-report-confirm-sub">
+                  Te contactaremos lo antes posible para agendar tu cita.
+                </p>
+              </div>
             ) : (
               <>
                 <p className="dg-report-cta-text">

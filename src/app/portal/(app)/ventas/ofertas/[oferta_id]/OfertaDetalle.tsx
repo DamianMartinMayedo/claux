@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/portal/ventas'
 import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
-import { Copy, MoreHorizontal, Pencil, Printer } from 'lucide-react'
+import { Copy, MoreHorizontal, Pencil, Download } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
   CONDICION_PAGO_LABEL,
@@ -38,6 +38,7 @@ export default function OfertaDetalle({ data }: Props) {
   } | null>(null)
   const [alertMsg, setAlertMsg] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [descargandoPdf, setDescargandoPdf] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -53,6 +54,29 @@ export default function OfertaDetalle({ data }: Props) {
 
   const puedeEditar = oferta.estado === 'BORRADOR' || oferta.estado === 'ENVIADA'
   const transiciones = TRANSICIONES_OFERTA[oferta.estado] ?? []
+
+  // Descarga directa: se genera en cliente con los datos ya cargados, sin abrir
+  // otra página ni recargar (principio de descargas directas — contexto Cuba).
+  async function handleDescargarPdf() {
+    if (descargandoPdf) return
+    setDescargandoPdf(true)
+    try {
+      const { descargarDocumentoVenta } = await import('@/lib/pdf/venta')
+      await descargarDocumentoVenta({
+        titulo:          'OFERTA COMERCIAL',
+        numero:          oferta.numero,
+        fechaEmision:    oferta.fecha_emision,
+        fechaSecundaria: oferta.fecha_validez ? { label: 'Válida hasta', valor: oferta.fecha_validez } : undefined,
+        condicionPago:   oferta.condicion_pago,
+        empresa, cliente, moneda: oferta.moneda, lineas, ajustes,
+        subtotal:        Number(oferta.subtotal),
+        total:           Number(oferta.total),
+        notas:           oferta.notas,
+      })
+    } finally {
+      setDescargandoPdf(false)
+    }
+  }
 
   async function handleDuplicar() {
     setDialog({
@@ -128,15 +152,15 @@ export default function OfertaDetalle({ data }: Props) {
               <Pencil size={14} strokeWidth={2} /> Editar
             </Link>
           )}
+          <button className="btn btn-secondary" onClick={handleDescargarPdf} disabled={descargandoPdf}>
+            <Download size={14} strokeWidth={2} /> {descargandoPdf ? 'Generando…' : 'Descargar PDF'}
+          </button>
           <div className="ven-dropdown-wrap" ref={menuRef}>
             <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)}>
               <MoreHorizontal size={16} />
             </button>
             {menuOpen && (
               <div className="ven-dropdown-menu" onClick={() => setMenuOpen(false)}>
-                <button className="ven-dropdown-item" onClick={() => window.open(`/portal/pdf/oferta/${oferta.oferta_id}`, '_blank')}>
-                  <Printer size={14} strokeWidth={2} /> Ver / Descargar PDF
-                </button>
                 <button className="ven-dropdown-item" onClick={handleDuplicar} disabled={duplicating}>
                   <Copy size={14} strokeWidth={2} /> {duplicating ? 'Duplicando…' : 'Duplicar'}
                 </button>

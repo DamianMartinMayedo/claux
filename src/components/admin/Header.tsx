@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import MobileNavToggle from '@/components/MobileNavToggle'
 
 function getInitials(name: string): string {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
@@ -9,10 +10,13 @@ function getInitials(name: string): string {
 export default function Header({ displayName }: { email: string; displayName: string }) {
   return (
     <header className="admin-header">
-      <a href="/admin/dashboard" className="header-logo">
-        <div className="header-logo-icon"><span>C</span></div>
-        <span className="header-logo-name">CLAUX</span>
-      </a>
+      <div className="header-left">
+        <MobileNavToggle shellSelector=".admin-shell" navId="admin-nav" />
+        <a href="/admin/dashboard" className="header-logo">
+          <div className="header-logo-icon"><span>C</span></div>
+          <span className="header-logo-name">CLAUX</span>
+        </a>
+      </div>
       <div className="header-right">
         <Link href="/admin/configuracion" className="header-user-card">
           <div className="header-user-avatar">{getInitials(displayName)}</div>

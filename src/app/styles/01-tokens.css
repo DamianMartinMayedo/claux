@@ -56,6 +56,22 @@
   --color-border-strong:#B8B5AC;   /* hover de bordes — más oscuro que --color-border */
   --color-border-focus: #00AFAA;
 
+  /* ── Papel — documentos imprimibles (factura/oferta/reporte) ──
+     Tinta sobre papel blanco; NO se invierten con el tema (una hoja impresa es
+     siempre clara). Reflejan la paleta de marca en su versión clara y son la
+     fuente única compartida con el generador vectorial (src/lib/pdf). */
+  --paper-bg:         #FFFFFF;   /* hoja */
+  --paper-ink:        #1C1B16;   /* texto principal   (= --color-text claro) */
+  --paper-ink-muted:  #5C5B52;   /* texto secundario  (= --color-text-muted claro) */
+  --paper-ink-faint:  #76746A;   /* texto terciario   (= --color-text-faint claro) */
+  --paper-line:       #D9D7D0;   /* divisorias finas  (= --color-border claro) */
+  --paper-surface:    #EFEDE8;   /* recuadros suaves  (= --color-surface-2 claro) */
+  --paper-teal:       #00AFAA;   /* banda de tabla / acento (= --color-primary) */
+  --paper-teal-ink:   #00716D;   /* teal de texto     (= --color-primary-text) */
+  --paper-amber:      #C97A0C;   /* nota — acento     (= --color-amber) */
+  --paper-amber-bg:   #FEF3C7;   /* nota — fondo      (= --color-warning-bg claro) */
+  --paper-amber-ink:  #78350F;   /* nota — texto (marrón oscuro legible) */
+
   --space-1:  0.25rem;  --space-2:  0.5rem;   --space-3:  0.75rem;
   --space-4:  1rem;     --space-5:  1.25rem;  --space-6:  1.5rem;
   --space-8:  2rem;     --space-10: 2.5rem;   --space-12: 3rem;

@@ -138,7 +138,7 @@ export function DocumentoLineasEditor({
                   </datalist>
                 </div>
 
-                <div className="ven-col-num">
+                <div className="ven-col-num" data-label="Cant.">
                   <input
                     className="input input-sm ven-input-num"
                     type="number" min="0" step="0.001"
@@ -148,7 +148,7 @@ export function DocumentoLineasEditor({
                   />
                 </div>
 
-                <div className="ven-col-num">
+                <div className="ven-col-num" data-label="Precio">
                   <input
                     className="input input-sm ven-input-num"
                     type="number" min="0" step="0.01"
@@ -158,7 +158,7 @@ export function DocumentoLineasEditor({
                   />
                 </div>
 
-                <div className="ven-col-num">
+                <div className="ven-col-num" data-label="Dto. %">
                   <input
                     className="input input-sm ven-input-num"
                     type="number" min="0" max="100" step="0.5"
@@ -168,7 +168,7 @@ export function DocumentoLineasEditor({
                   />
                 </div>
 
-                <div className="ven-col-num ven-total-cell">
+                <div className="ven-col-num ven-total-cell" data-label="Total">
                   {formatearMoneda(totales.lineas_totales[i] ?? 0, moneda)}
                   {(totales.lineas_descuentos[i] ?? 0) > 0 && (
                     <div className="ven-descuento-hint">
