@@ -27,6 +27,11 @@ function formatFechaCorta(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+// Normaliza un nombre para usarlo en el nombre de archivo (sin acentos ni símbolos).
+function slug(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'reporte'
+}
 
 // ── Vista ─────────────────────────────────────────────────────────────────────
 
@@ -55,7 +60,9 @@ export default function ReportesView({ data }: { data: ReportesData }) {
   const empresaNombre = data.empresa_id
     ? (data.empresas.find(e => e.empresa_id === data.empresa_id)?.nombre ?? '')
     : 'Todas las empresas'
-  const nombreArchivo = `reportes_${data.desde}_${data.hasta}`
+  // Nombre de archivo: reportes_<empresa|todas>_<desde>_<hasta>
+  const empresaSlug = data.empresa_id ? slug(empresaNombre) : 'todas'
+  const nombreArchivo = `reportes_${empresaSlug}_${data.desde}_${data.hasta}`
 
   // PDF construido con texto real (jsPDF), no una captura de la página.
   async function descargarPDF() {
@@ -146,6 +153,54 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         totalRow('Flujo neto', formatMonto(f.neto))
       }
 
+      // ── Consolidado (recuadro gris claro) ──
+      const c = data.consolidado
+      if (c) {
+        const lineas: { label: string; val: string; bold?: boolean; muted?: boolean; gap?: number }[] = []
+        if (c.resultado) {
+          lineas.push({ label: 'Estado de resultados', val: '', bold: true, muted: true })
+          lineas.push({ label: 'Ingresos', val: formatMonto(c.resultado.total_ingresos) })
+          lineas.push({ label: 'Gastos', val: formatMonto(c.resultado.total_gastos) })
+          lineas.push({ label: 'Resultado neto', val: formatMonto(c.resultado.neto), bold: true })
+        }
+        if (c.flujo) {
+          lineas.push({ label: 'Flujo de caja', val: '', bold: true, muted: true, gap: 7 })
+          lineas.push({ label: 'Entradas', val: formatMonto(c.flujo.entradas) })
+          lineas.push({ label: 'Salidas', val: formatMonto(c.flujo.salidas) })
+          lineas.push({ label: 'Flujo neto', val: formatMonto(c.flujo.neto), bold: true })
+        }
+        const bodyH = lineas.reduce((s, l) => s + (l.gap ?? 5.5), 0)
+        const boxH  = 14 + bodyH + (c.monedasExcluidas.length ? 6 : 0) + 4
+        y += 6
+        if (y + boxH > pageH - RESERVA_PIE - 2) { doc.addPage(); y = M }
+        doc.setFillColor(MARCA.surface[0], MARCA.surface[1], MARCA.surface[2])
+        doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.setLineWidth(0.2)
+        doc.roundedRect(M, y, right - M, boxH, 2, 2, 'FD')
+        const padX = M + 5
+        let yy = y + 8
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+        doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text(`Consolidado en ${c.moneda}`, padX, yy)
+        yy += 5
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+        doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
+        doc.text('Convertido a la tasa vigente · truncado a 2 decimales', padX, yy)
+        yy += 6
+        for (const l of lineas) {
+          doc.setFont('helvetica', l.bold ? 'bold' : 'normal'); doc.setFontSize(l.muted ? 8.5 : 9.5)
+          const col = l.muted ? GRAY : DARK
+          doc.setTextColor(col[0], col[1], col[2])
+          doc.text(l.label, l.muted ? padX : padX + 3, yy)
+          if (l.val) doc.text(l.val, right - 5, yy, { align: 'right' })
+          yy += l.gap ?? 5.5
+        }
+        if (c.monedasExcluidas.length) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+          doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
+          doc.text(`Sin tasa hacia ${c.moneda}: ${c.monedasExcluidas.join(', ')}`, padX, yy)
+        }
+        y += boxH
+      }
+
       sellarPie(doc)
       doc.save(`${nombreArchivo}.pdf`)
     } finally {
@@ -181,6 +236,23 @@ export default function ReportesView({ data }: { data: ReportesData }) {
       rows.push(`${f.moneda};Total salidas;;${num(f.salidas)}`)
       rows.push(`${f.moneda};Flujo neto;;${num(f.neto)}`)
     }
+    if (data.consolidado) {
+      const c = data.consolidado
+      rows.push('')
+      rows.push(`CONSOLIDADO EN ${c.moneda} (tasa vigente, truncado 2 decimales)`)
+      rows.push('Sección;Concepto;Importe')
+      if (c.resultado) {
+        rows.push(`Estado de resultados;Ingresos;${num(c.resultado.total_ingresos)}`)
+        rows.push(`Estado de resultados;Gastos;${num(c.resultado.total_gastos)}`)
+        rows.push(`Estado de resultados;Resultado neto;${num(c.resultado.neto)}`)
+      }
+      if (c.flujo) {
+        rows.push(`Flujo de caja;Entradas;${num(c.flujo.entradas)}`)
+        rows.push(`Flujo de caja;Salidas;${num(c.flujo.salidas)}`)
+        rows.push(`Flujo de caja;Flujo neto;${num(c.flujo.neto)}`)
+      }
+      if (c.monedasExcluidas.length) rows.push(`Sin tasa hacia ${c.moneda};${c.monedasExcluidas.join(' ')};`)
+    }
     // BOM para que Excel (ES) respete acentos; separador ; para locale español
     const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
@@ -195,8 +267,6 @@ export default function ReportesView({ data }: { data: ReportesData }) {
     if (e) params.set('empresa', e)
     startTransition(() => router.push(`/portal/reportes?${params.toString()}`))
   }
-
-  function aplicar() { navegar(desde, hasta, empresa) }
 
   function rangoPreset(tipo: 'mes' | 'mes_pasado' | 'anio'): { d: string; h: string } {
     const now = new Date()
@@ -267,21 +337,27 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         <button className={`cxx-chip${presetActivo('anio') ? ' active' : ''}`} onClick={() => preset('anio')} disabled={isPending}>Este año</button>
       </div>
 
-      {/* Fila de rango de fechas + empresa */}
+      {/* Fila de rango de fechas + empresa — se aplica solo al cambiar (sin botón) */}
       <div className="ter-toolbar rep-rango-row">
-        <input className="input ter-filter-select" type="date" value={desde} onChange={e => setDesde(e.target.value)} />
+        <input
+          className="input ter-filter-select" type="date" value={desde}
+          onChange={e => { const v = e.target.value; setDesde(v); if (v && hasta) navegar(v, hasta, empresa) }}
+        />
         <span className="rep-rango-sep">–</span>
-        <input className="input ter-filter-select" type="date" value={hasta} onChange={e => setHasta(e.target.value)} />
+        <input
+          className="input ter-filter-select" type="date" value={hasta}
+          onChange={e => { const v = e.target.value; setHasta(v); if (desde && v) navegar(desde, v, empresa) }}
+        />
         <EmpresaPills
           empresas={empresasFiltro}
           value={empresa}
           onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
           todasLabel="Todas las empresas"
         />
-        <button className="btn btn-primary btn-sm" onClick={aplicar} disabled={isPending}>
-          {isPending ? <><span className="spinner spinner-sm" /> …</> : 'Aplicar'}
-        </button>
-        <span className="rep-periodo-actual">{formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}</span>
+        <span className="rep-periodo-actual">
+          {isPending && <span className="spinner spinner-sm" />}
+          {formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}
+        </span>
       </div>
 
       {sinDatos ? (
@@ -358,6 +434,39 @@ export default function ReportesView({ data }: { data: ReportesData }) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ── Consolidado (conversión a la moneda de consolidación) ── */}
+          {data.consolidado && (
+            <div className="rep-consol">
+              <div className="rep-consol-head">
+                <span className="rep-consol-title">Consolidado en {data.consolidado.moneda}</span>
+                <span className="rep-consol-note">Convertido a la tasa vigente · truncado a 2 decimales</span>
+              </div>
+              <div className="rep-consol-grid">
+                {data.consolidado.resultado && (
+                  <div className="rep-consol-block">
+                    <div className="rep-consol-block-title">Estado de resultados</div>
+                    <div className="rep-line"><span>Ingresos</span><span>{formatMonto(data.consolidado.resultado.total_ingresos)}</span></div>
+                    <div className="rep-line"><span>Gastos</span><span>{formatMonto(data.consolidado.resultado.total_gastos)}</span></div>
+                    <div className="rep-line rep-consol-neto"><span>Resultado neto</span><strong>{formatMonto(data.consolidado.resultado.neto)}</strong></div>
+                  </div>
+                )}
+                {data.consolidado.flujo && (
+                  <div className="rep-consol-block">
+                    <div className="rep-consol-block-title">Flujo de caja</div>
+                    <div className="rep-line"><span>Entradas</span><span>{formatMonto(data.consolidado.flujo.entradas)}</span></div>
+                    <div className="rep-line"><span>Salidas</span><span>{formatMonto(data.consolidado.flujo.salidas)}</span></div>
+                    <div className="rep-line rep-consol-neto"><span>Flujo neto</span><strong>{formatMonto(data.consolidado.flujo.neto)}</strong></div>
+                  </div>
+                )}
+              </div>
+              {data.consolidado.monedasExcluidas.length > 0 && (
+                <p className="rep-consol-excl">
+                  Sin tasa hacia {data.consolidado.moneda}, no incluidas: {data.consolidado.monedasExcluidas.join(', ')}.
+                </p>
+              )}
             </div>
           )}
         </>

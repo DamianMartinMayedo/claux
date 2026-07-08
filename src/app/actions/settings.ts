@@ -5,16 +5,14 @@ import { requireAdmin } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
+import { leerSetting } from '@/lib/settings'
 
+/** Lectura de un ajuste desde el ADMIN (mantiene el guard como defensa en
+ *  profundidad). El portal NO debe usar esta acción — usa `leerSetting` de
+ *  `@/lib/settings`, que no exige sesión de Supabase Auth. */
 export async function getSetting(key: string, fallback: string): Promise<string> {
   await requireAdmin()
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', key)
-    .maybeSingle()
-  return data?.value ?? fallback
+  return leerSetting(key, fallback)
 }
 
 export async function guardarSetting(key: string, value: string) {

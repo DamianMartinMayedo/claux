@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
-import { getSetting }        from '@/app/actions/settings'
+import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
 
   const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
   const ciclo       = cliente.ciclo_facturacion ?? 'mensual'
-  const descuento   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const suscripcion = suscripcionLabel(precioMes, ciclo, descuento)
 
   return {

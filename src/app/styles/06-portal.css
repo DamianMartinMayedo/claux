@@ -1517,6 +1517,38 @@
 .rep-in strong  { color: var(--color-success); }
 .rep-out strong { color: var(--color-error); }
 
+/* ── Consolidado (conversión a la moneda de consolidación) ── */
+.rep-consol {
+  margin-top: var(--space-5);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+}
+.rep-consol-head {
+  display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.rep-consol-title {
+  font-size: var(--text-base); font-weight: 700; color: var(--color-text);
+}
+.rep-consol-note { font-size: var(--text-xs); color: var(--color-text-muted); }
+.rep-consol-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4) var(--space-8);
+}
+.rep-consol-block-title {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+.rep-consol-neto {
+  margin-top: var(--space-1); padding-top: var(--space-2);
+  border-top: 1px solid var(--color-divider);
+  font-weight: 700; color: var(--color-text);
+}
+.rep-consol-excl { margin-top: var(--space-3); font-size: var(--text-xs); color: var(--color-text-muted); }
+
 /* Menú de descarga */
 .rep-dl { position: relative; }
 .rep-dl-overlay { position: fixed; inset: 0; z-index: 40; }

@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
-import { getSetting }        from '@/app/actions/settings'
+import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { hashPasswordPortal } from '@/lib/portal-auth'
 
@@ -49,7 +49,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
   if (!cliente || !usuario) return null
 
   const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
-  const descuento   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento)
 
   return {

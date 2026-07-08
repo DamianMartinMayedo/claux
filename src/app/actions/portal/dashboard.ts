@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresasSelector } from './empresas'
-import { getSetting }        from '@/app/actions/settings'
+import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
@@ -305,7 +305,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     tiene('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
     tiene('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
-    getSetting('descuento_anual_pct', '10'),
+    leerSetting('descuento_anual_pct', '10'),
     obtenerEmpresasSelector(),
   ])
 

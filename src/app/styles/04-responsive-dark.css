@@ -97,7 +97,7 @@
   }
 
   .page-title {
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
   }
 
   .metrics-grid {
@@ -193,7 +193,7 @@
   }
 
   .page-title {
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
   }
 
   .modal-header,
