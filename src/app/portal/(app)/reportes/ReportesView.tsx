@@ -100,12 +100,17 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
         doc.text(m, M, y); doc.text('Importe', right, y, { align: 'right' })
         y += 2
-        doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.line(M, y, right, y)
+        doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.setLineWidth(0.2)
+        doc.line(M, y, right, y)
         y += 5
       }
       const totalRow = (label: string, amount: string) => {
-        ensure(8)
-        doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.line(M, y - 1, right, y - 1)
+        ensure(13)
+        // Regla arriba del total y luego el texto debajo (evita que la línea
+        // atraviese las letras).
+        doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.setLineWidth(0.4)
+        doc.line(M, y, right, y)
+        y += 5
         row(label, amount, { bold: true, color: TEAL, gap: 9 })
       }
 
