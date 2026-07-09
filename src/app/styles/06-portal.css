@@ -1496,7 +1496,6 @@
 
 .rep-rango-row { align-items: center; margin-top: calc(-1 * var(--space-2)); }
 .rep-rango-sep { color: var(--color-text-muted); }
-.rep-periodo-actual { margin-left: auto; font-size: var(--text-sm); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 .rep-titulo { margin-bottom: var(--space-3); }
 .rep-titulo-mt { margin-top: var(--space-6); }
 .rep-nota { font-size: var(--text-sm); color: var(--color-text-muted); margin: calc(-1 * var(--space-2)) 0 var(--space-3); }

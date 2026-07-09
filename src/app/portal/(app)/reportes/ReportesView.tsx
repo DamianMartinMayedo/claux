@@ -354,10 +354,6 @@ export default function ReportesView({ data }: { data: ReportesData }) {
           onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
           todasLabel="Todas las empresas"
         />
-        <span className="rep-periodo-actual">
-          {isPending && <span className="spinner spinner-sm" />}
-          {formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}
-        </span>
       </div>
 
       {sinDatos ? (
@@ -369,6 +365,10 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         <>
           {/* ── Estado de resultados ── */}
           <h2 className="tes-section-title rep-titulo">Estado de resultados</h2>
+          <p className="rep-nota">
+            {isPending && <span className="spinner spinner-sm" />}
+            {formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}
+          </p>
           {data.resultado.length === 0 ? (
             <div className="card mon-empty"><p>Sin ingresos ni gastos devengados en el período.</p></div>
           ) : (
