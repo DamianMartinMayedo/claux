@@ -183,7 +183,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         yy += 5
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
         doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
-        doc.text('Convertido a la tasa vigente · truncado a 2 decimales', padX, yy)
+        doc.text('Convertido a la tasa vigente', padX, yy)
         yy += 6
         for (const l of lineas) {
           doc.setFont('helvetica', l.bold ? 'bold' : 'normal'); doc.setFontSize(l.muted ? 8.5 : 9.5)
@@ -239,7 +239,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
     if (data.consolidado) {
       const c = data.consolidado
       rows.push('')
-      rows.push(`CONSOLIDADO EN ${c.moneda} (tasa vigente, truncado 2 decimales)`)
+      rows.push(`CONSOLIDADO EN ${c.moneda} (tasa vigente)`)
       rows.push('Sección;Concepto;Importe')
       if (c.resultado) {
         rows.push(`Estado de resultados;Ingresos;${num(c.resultado.total_ingresos)}`)
@@ -442,7 +442,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
             <div className="rep-consol">
               <div className="rep-consol-head">
                 <span className="rep-consol-title">Consolidado en {data.consolidado.moneda}</span>
-                <span className="rep-consol-note">Convertido a la tasa vigente · truncado a 2 decimales</span>
+                <span className="rep-consol-note">Convertido a la tasa vigente</span>
               </div>
               <div className="rep-consol-grid">
                 {data.consolidado.resultado && (

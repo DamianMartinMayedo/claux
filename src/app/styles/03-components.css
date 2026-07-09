@@ -39,15 +39,16 @@
   border-radius: var(--radius-full);
 }
 .badge-dot::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: currentColor; }
-.badge-success { background: var(--color-success-bg); color: var(--color-success); }
-.badge-error   { background: var(--color-error-bg);   color: var(--color-error); }
-.badge-warning { background: var(--color-warning-bg); color: var(--color-warning); }
-.badge-info    { background: var(--color-info-bg);    color: var(--color-info); }
-.badge-amber   { background: var(--color-orange-highlight); color: var(--color-orange); }
-.badge-neutral { background: var(--color-surface-2);  color: var(--color-text-muted); }
-.badge-purple  { background: var(--color-purple-bg);  color: var(--color-purple); }
-.badge-indigo  { background: var(--color-indigo-bg);  color: var(--color-indigo); }
-.badge-rose    { background: var(--color-rose-bg);    color: var(--color-rose); }
+/* Sin relleno: solo el nombre en su color oscuro (aligera tablas con mucho contenido). */
+.badge-success { color: var(--color-success); }
+.badge-error   { color: var(--color-error); }
+.badge-warning { color: var(--color-warning); }
+.badge-info    { color: var(--color-info); }
+.badge-amber   { color: var(--color-orange); }
+.badge-neutral { color: var(--color-text-muted); }
+.badge-purple  { color: var(--color-purple); }
+.badge-indigo  { color: var(--color-indigo); }
+.badge-rose    { color: var(--color-rose); }
 
 /* ═══════════════════════════════════════════════════
    FORMULARIOS

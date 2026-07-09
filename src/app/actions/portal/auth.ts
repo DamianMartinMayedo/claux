@@ -10,17 +10,9 @@ import {
   verifyPortalToken,
   hashPasswordPortal,
   PORTAL_COOKIE,
-  SESSION_DURATION,
+  PORTAL_COOKIE_OPTS,
   type PortalSession,
 } from '@/lib/portal-auth'
-
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure:   process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path:     '/portal',
-  maxAge:   SESSION_DURATION,
-}
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
@@ -58,7 +50,7 @@ export async function loginCliente(
   })
 
   const jar = await cookies()
-  jar.set(PORTAL_COOKIE, token, COOKIE_OPTS)
+  jar.set(PORTAL_COOKIE, token, PORTAL_COOKIE_OPTS)
 
   if (usuario.must_change_password) return { mustChangePassword: true }
   return {}

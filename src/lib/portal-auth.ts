@@ -4,7 +4,21 @@
  */
 
 export const PORTAL_COOKIE = 'claux_portal'
-export const SESSION_DURATION = 60 * 60 * 24 // 24 h en segundos
+// Caducidad por INACTIVIDAD: la sesión es deslizante (se renueva con el uso vía
+// middleware), así que solo expira tras 7 días sin actividad real.
+export const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 días en segundos
+// Cada cuánto, como máximo, se re-emite el token al renovar (evita re-firmar en
+// cada petición): una vez al día basta para deslizar la ventana de 7 días.
+export const RENEW_THROTTLE = 60 * 60 * 24 // 1 día en segundos
+
+// Opciones de la cookie de sesión del portal (compartidas por login y renovación).
+export const PORTAL_COOKIE_OPTS = {
+  httpOnly: true,
+  secure:   process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path:     '/portal',
+  maxAge:   SESSION_DURATION,
+}
 
 export interface PortalSession {
   user_id:      string

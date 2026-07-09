@@ -23,9 +23,11 @@ export default function BloqueadoScreen({ estado }: { estado: string }) {
       </div>
       <h2 className="bloqueado-titulo">{msg.titulo}</h2>
       <p className="bloqueado-texto">{msg.texto}</p>
+      {/* TODO: reactivar cuando tengamos correo de soporte (avisar cuando esté listo).
       <a href="mailto:soporte@claux.app" className="btn btn-primary">
         Contactar soporte
       </a>
+      */}
     </div>
   )
 }

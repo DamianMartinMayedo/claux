@@ -93,10 +93,12 @@ export default function PortalLoginPage() {
           </form>
         </div>
 
+        {/* TODO: reactivar cuando tengamos correo de soporte (avisar cuando esté listo).
         <p className="login-footer">
           ¿Problemas de acceso?{' '}
           <a href="mailto:soporte@claux.app">soporte@claux.app</a>
         </p>
+        */}
       </div>
     </div>
   )
