@@ -17,7 +17,7 @@
   --color-amber-active:      #864D06;
   --color-amber-light:       #FEF3C7;   /* alias legacy */
   --color-amber-highlight:   #F2E2C4;
-  --color-orange:            #D97706;
+  --color-orange:            #B45309;   /* naranja accesible como TEXTO sobre claro (badge sin fondo, ≥4.5:1) */
   --color-orange-highlight:  #FFF7ED;
 
   /* ── Superficies ── */
@@ -144,6 +144,7 @@
     --color-error-bg:          #2D0A0A;
     --color-warning:           #E8A830;
     --color-warning-bg:        #2D1E04;
+    --color-orange:            #EFA23C;   /* amber badge — se aclara en oscuro como el resto */
     --color-info:              #3FD4CF;
     --color-info-bg:           #0A2625;
     --color-purple:            #c4b5fd;
@@ -190,6 +191,7 @@
   --color-error-bg:          #2D0A0A;
   --color-warning:           #E8A830;
   --color-warning-bg:        #2D1E04;
+  --color-orange:            #EFA23C;   /* amber badge — se aclara en oscuro como el resto */
   --color-info:              #3FD4CF;
   --color-info-bg:           #0A2625;
   --color-purple:            #c4b5fd;

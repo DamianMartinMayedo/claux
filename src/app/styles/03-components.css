@@ -50,6 +50,19 @@
 .badge-indigo  { color: var(--color-indigo); }
 .badge-rose    { color: var(--color-rose); }
 
+/* Modificador: restaura el fondo claro en casos puntuales donde el badge debe
+   seguir leyéndose como etiqueta rellena, no como texto plano — p. ej. el % de
+   descuento sobre el precio de un ítem del catálogo. Combinar con badge + badge-<variante>. */
+.badge-fill.badge-success { background: var(--color-success-bg); }
+.badge-fill.badge-error   { background: var(--color-error-bg); }
+.badge-fill.badge-warning { background: var(--color-warning-bg); }
+.badge-fill.badge-info    { background: var(--color-info-bg); }
+.badge-fill.badge-amber   { background: var(--color-orange-highlight); }
+.badge-fill.badge-neutral { background: var(--color-surface-2); }
+.badge-fill.badge-purple  { background: var(--color-purple-bg); }
+.badge-fill.badge-indigo  { background: var(--color-indigo-bg); }
+.badge-fill.badge-rose    { background: var(--color-rose-bg); }
+
 /* ═══════════════════════════════════════════════════
    FORMULARIOS
    ═══════════════════════════════════════════════════ */

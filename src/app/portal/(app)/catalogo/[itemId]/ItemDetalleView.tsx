@@ -43,7 +43,7 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
           <div>
             <div className="cat-detalle-badges">
               {!item.disponible && <span className="badge badge-neutral">Agotado</span>}
-              {item.descuentoPct ? <span className="badge badge-success">-{item.descuentoPct}%</span> : null}
+              {item.descuentoPct ? <span className="badge badge-fill badge-success">-{item.descuentoPct}%</span> : null}
             </div>
 
             {item.precioMostrado != null && (

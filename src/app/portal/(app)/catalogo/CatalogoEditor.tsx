@@ -158,7 +158,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                 {!soloSin && (
                   <h3 className="cat-cat-section-title">
                     {g.nombre}
-                    {g.descuento > 0 && <span className="badge badge-success cat-desc-badge">-{g.descuento}%</span>}
+                    {g.descuento > 0 && <span className="badge badge-fill badge-success cat-desc-badge">-{g.descuento}%</span>}
                   </h3>
                 )}
                 <div className="cat-grid">
@@ -190,7 +190,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                           <tr className="cat-cat-header-row">
                             <td colSpan={colSpanLista}>
                               {g.nombre}
-                              {g.descuento > 0 && <span className="badge badge-success cat-desc-badge">-{g.descuento}%</span>}
+                              {g.descuento > 0 && <span className="badge badge-fill badge-success cat-desc-badge">-{g.descuento}%</span>}
                             </td>
                           </tr>
                         )}
@@ -291,7 +291,7 @@ function ItemCard({ item, tieneInventario, onEdit, onDelete, onSaved }: {
           ? <span className="cat-card-photo-img" style={{ '--preview': `url(${item.foto_thumb_url})` } as React.CSSProperties} />
           : <span className="cat-card-photo-empty"><Package size={28} strokeWidth={1.5} /></span>}
         {!item.disponible && <span className="badge badge-neutral cat-card-badge">Agotado</span>}
-        {item.descuentoPct ? <span className="badge badge-success cat-card-badge-desc">-{item.descuentoPct}%</span> : null}
+        {item.descuentoPct ? <span className="badge badge-fill badge-success cat-card-badge-desc">-{item.descuentoPct}%</span> : null}
       </div>
       <div className="cat-card-body">
         <div className="cat-card-top">
