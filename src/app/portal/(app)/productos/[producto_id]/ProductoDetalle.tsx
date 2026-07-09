@@ -1,17 +1,17 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
 import {
   archivarProducto,
   restaurarProducto,
-  ajustarStock,
   type ProductoDetalleData,
   type MovimientoProducto,
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from '../_ProductoFormModal'
+import { StockAjusteModal } from '../_StockAjusteModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 
@@ -182,47 +182,37 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
     <div className="det-tab-body">
       <div className="det-card">
         <div className="det-section-title">Tabla de precios y costos</div>
-        <div className="overflow-x-auto">
-          <table className="prd-prices-table">
+        <div className="table-wrapper">
+          <table className="table">
             <thead>
               <tr>
                 <th>Moneda</th>
-                <th className="text-align-right">Precio de venta</th>
-                <th className="text-align-right">Costo</th>
-                <th className="text-align-right">Margen</th>
+                <th className="col-num">Precio de venta</th>
+                <th className="col-num">Costo</th>
+                <th className="col-num">Margen</th>
               </tr>
             </thead>
             <tbody>
               {allMonedas.map((mon) => {
                 const precio = producto.precios[mon] ?? 0
                 const costo  = producto.costos[mon]  ?? 0
-                const margen = precio > 0 && costo > 0
-                  ? ((precio - costo) / precio * 100).toFixed(1)
-                  : null
+                const margenNum = precio > 0 && costo > 0 ? (precio - costo) / precio * 100 : null
+                const margenCls = margenNum === null ? '' : margenNum > 20 ? 'prd-margen-alto' : margenNum > 0 ? 'prd-margen-bajo' : 'prd-margen-neg'
 
                 return (
                   <tr key={mon}>
-                    <td>
+                    <td data-label="Moneda">
                       <span className="prd-moneda-badge">{mon}</span>
                     </td>
-                    <td className="ven-td-amt">
+                    <td data-label="Precio de venta" className="col-num">
                       {precio > 0 ? fmt(precio, mon) : <span className="text-faint">—</span>}
                     </td>
-                    <td className="text-align-right">
+                    <td data-label="Costo" className="col-num">
                       {costo > 0 ? fmt(costo, mon) : <span className="text-faint">—</span>}
                     </td>
-                    <td className="text-align-right">
-                      {margen !== null ? (
-                        <span
-                          className="prd-margen"
-                          style={{ color: parseFloat(margen) > 20
-                            ? 'var(--color-success)'
-                            : parseFloat(margen) > 0
-                              ? 'var(--color-warning)'
-                              : 'var(--color-error)' }}
-                        >
-                          {margen}%
-                        </span>
+                    <td data-label="Margen" className="col-num">
+                      {margenNum !== null ? (
+                        <span className={`prd-margen ${margenCls}`}>{margenNum.toFixed(1)}%</span>
                       ) : <span className="text-faint">—</span>}
                     </td>
                   </tr>
@@ -299,115 +289,59 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
   )
 }
 
-// ── Tab: Historial de precios (placeholder) ───────────────────────────────────
+// ── Tab: Historial de precios ──────────────────────────────────────────────────
 
-function TabHistorialPrecios() {
-  return (
-    <div className="det-empty">
-      <div className="det-empty-icon"><TrendingUp size={40} strokeWidth={1} opacity={0.2} /></div>
-      <div className="det-empty-title">Historial de precios</div>
-      <div className="det-empty-text">Aquí se mostrará la evolución de precios y costos en el tiempo.</div>
-    </div>
-  )
-}
+const HistorialPreciosChart = dynamic(() => import('./HistorialPreciosChart'), { ssr: false })
 
-// ── Modal de ajuste de stock ──────────────────────────────────────────────────
+function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
+  const { historialPrecios } = data
 
-function StockModal({
-  data,
-  onClose,
-  onSaved,
-}: {
-  data:     ProductoDetalleData
-  onClose:  () => void
-  onSaved:  () => void
-}) {
-  const { producto, almacenes, stock_por_almacen } = data
-  const [almacenId, setAlmacenId] = useState(almacenes[0]?.almacen_id ?? '')
-  const [cantidad,  setCantidad]  = useState('')
-  const [motivo,    setMotivo]    = useState('')
-  const [pending,   startT]       = useTransition()
-
-  const cantNum   = parseFloat(cantidad) || 0
-  const actualAlm = stock_por_almacen.find(s => s.almacen_id === almacenId)?.cantidad ?? 0
-  const preview   = actualAlm + cantNum
-
-  function handleSubmit() {
-    if (!almacenId)     { toastError('Selecciona un almacén.'); return }
-    if (!cantidad)      { toastError('Ingresa una cantidad.'); return }
-    if (!motivo.trim()) { toastError('El motivo es obligatorio.'); return }
-    startT(async () => {
-      const res = await ajustarStock(producto.producto_id, almacenId, cantNum, motivo.trim())
-      if (!res.ok) { toastError(res.error ?? 'Error'); return }
-      onSaved()
-    })
-  }
-
-  if (almacenes.length === 0) {
+  if (historialPrecios.length === 0) {
     return (
-      <div className="modal-backdrop">
-        <div className="prd-stock-modal">
-          <h3>Ajustar stock — {producto.nombre}</h3>
-          <p className="modal-body-text">
-            Necesitas al menos un almacén para ajustar el stock. Crea uno en <strong>Almacenes</strong>.
-          </p>
-          <div className="prd-stock-footer">
-            <button onClick={onClose} className="btn btn-secondary">Cerrar</button>
-          </div>
-        </div>
+      <div className="det-empty">
+        <div className="det-empty-icon"><TrendingUp size={40} strokeWidth={1} opacity={0.2} /></div>
+        <div className="det-empty-title">Historial de precios</div>
+        <div className="det-empty-text">Aún no hay cambios registrados. El historial se genera al modificar precios o costos.</div>
       </div>
     )
   }
 
+  // Agrupar por moneda
+  const porMoneda = new Map<string, typeof historialPrecios>()
+  for (const h of historialPrecios) {
+    const arr = porMoneda.get(h.moneda) ?? []
+    arr.push(h)
+    porMoneda.set(h.moneda, arr)
+  }
+
   return (
-    <div className="modal-backdrop">
-      <div className="prd-stock-modal">
-        <h3>Ajustar stock — {producto.nombre}</h3>
-
-        <div className="prd-stock-group">
-          <label htmlFor="stk-alm">Almacén</label>
-          <select id="stk-alm" className="input" value={almacenId} onChange={e => setAlmacenId(e.target.value)}>
-            {almacenes.map(a => <option key={a.almacen_id} value={a.almacen_id}>{a.nombre}</option>)}
-          </select>
-        </div>
-
-        <div className="prd-stock-current">
-          <div className="prd-stock-current-label">Stock actual en este almacén</div>
-          <div className="prd-stock-current-val">
-            {actualAlm.toLocaleString('es-VE')} {producto.unidad}
+    <div className="det-tab-body">
+      {[...porMoneda].map(([moneda, items]) => (
+        <div key={moneda} className="det-card">
+          <div className="det-section-title">Historial · {moneda}</div>
+          <HistorialPreciosChart historial={items} moneda={moneda} />
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th className="col-num">Precio</th>
+                  <th className="col-num">Costo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(h => (
+                  <tr key={h.historial_id}>
+                    <td className="text-sm-muted tes-nowrap">{fmtDate(h.created_at)}</td>
+                    <td className="col-num tes-monto-cell">{h.precio != null ? fmt(h.precio, moneda) : '—'}</td>
+                    <td className="col-num tes-monto-cell">{h.costo != null ? fmt(h.costo, moneda) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        <div className="prd-stock-group">
-          <label htmlFor="stk-cant">Cantidad (+ entrada / − salida)</label>
-          <input id="stk-cant" className="input" type="number" step="any"
-            value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="ej: 10 o -5" />
-        </div>
-
-        {cantidad && !isNaN(parseFloat(cantidad)) && (
-          <div className={`prd-stock-preview ${preview < 0 ? 'prd-stock-preview-neg' : 'prd-stock-preview-ok'}`}>
-            Stock resultante: {preview.toLocaleString('es-VE')} {producto.unidad}
-            {preview < 0 && (
-              <span className="prd-stock-preview-inline">
-                <AlertTriangle size={13} strokeWidth={2} /> Stock negativo no permitido
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="prd-stock-group mb-5">
-          <label htmlFor="stk-motivo">Motivo del ajuste *</label>
-          <input id="stk-motivo" className="input" type="text"
-            value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="ej: Conteo físico, devolución, etc." />
-        </div>
-
-        <div className="prd-stock-footer">
-          <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
-          <button onClick={handleSubmit} disabled={pending || preview < 0} className="btn btn-primary">
-            {pending ? 'Guardando…' : 'Confirmar ajuste'}
-          </button>
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
@@ -485,7 +419,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
         {/* Acciones */}
         <div className="det-actions">
           {!esServicio && producto.estado === 'ACTIVO' && (
-            <button onClick={() => setShowStock(true)} className="btn btn-info">
+            <button onClick={() => setShowStock(true)} className="btn btn-primary">
               <Layers size={14} strokeWidth={2} /> Ajustar stock
             </button>
           )}
@@ -522,12 +456,15 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
       {tab === 'info'        && <TabInfo     data={data} />}
       {tab === 'precios'     && <TabPrecios  data={data} />}
       {tab === 'movimientos' && <TabMovimientos data={data} />}
-      {tab === 'historial'   && <TabHistorialPrecios />}
+      {tab === 'historial'   && <TabHistorialPrecios data={data} />}
 
       {/* Modal de ajuste de stock */}
       {showStock && (
-        <StockModal
-          data={data}
+        <StockAjusteModal
+          producto_id={producto.producto_id}
+          nombre={producto.nombre}
+          unidad={producto.unidad}
+          almacenes={data.almacenes}
           onClose={() => setShowStock(false)}
           onSaved={handleSaved}
         />

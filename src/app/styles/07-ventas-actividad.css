@@ -380,7 +380,6 @@
 .ven-dropdown-sep {
   height: 1px; background: var(--color-border); margin: var(--space-1) 0;
 }
-.ven-td-amt          { text-align: right; font-weight: 600; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    PDF imprimible

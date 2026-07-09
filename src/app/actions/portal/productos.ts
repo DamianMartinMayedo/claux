@@ -201,6 +201,19 @@ export async function guardarProducto(
     return { ok: true, producto_id }
   }
 
+  // Obtener precios/costos actuales antes de actualizar (para el historial)
+  let oldPrecios: Record<string, number> = {}
+  let oldCostos:  Record<string, number> = {}
+  const { data: current } = await db.from('products')
+    .select('precios, costos')
+    .eq('producto_id', producto_id_form)
+    .eq('client_id', session.client_id)
+    .maybeSingle()
+  if (current) {
+    oldPrecios = (typeof current.precios === 'object' && current.precios !== null) ? current.precios as Record<string, number> : {}
+    oldCostos  = (typeof current.costos  === 'object' && current.costos  !== null) ? current.costos  as Record<string, number> : {}
+  }
+
   const { error } = await db
     .from('products')
     .update(campos)
@@ -210,6 +223,25 @@ export async function guardarProducto(
   if (error) {
     console.error('[productos] update error:', error)
     return { ok: false, error: 'Error al actualizar.' }
+  }
+
+  // Registrar cambios de precio/costo en el historial
+  const monedasChanged = new Set(Object.keys({ ...precios, ...costos, ...oldPrecios, ...oldCostos }))
+  for (const moneda of monedasChanged) {
+    const nuevoPrecio = precios[moneda]
+    const viejoPrecio = oldPrecios[moneda]
+    const nuevoCosto  = costos[moneda]
+    const viejoCosto  = oldCostos[moneda]
+    if (nuevoPrecio !== viejoPrecio || nuevoCosto !== viejoCosto) {
+      await db.from('producto_precios_historial').insert({
+        historial_id: `HIS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`,
+        client_id:    session.client_id,
+        producto_id:  producto_id_form,
+        moneda,
+        precio:       nuevoPrecio ?? null,
+        costo:        nuevoCosto ?? null,
+      })
+    }
   }
   revalidatePath('/portal/productos')
   return { ok: true, producto_id: producto_id_form }
@@ -256,6 +288,24 @@ export async function restaurarProducto(
 }
 
 // ── Ajuste de stock (por almacén, vía movimiento AJUSTE) ────────────────────────
+
+// Lectura ligera del stock por almacén de un producto (sin el resto del detalle),
+// para pre-cargar el modal de ajuste con el stock real de cada almacén.
+export async function obtenerStockPorAlmacen(
+  producto_id: string,
+): Promise<{ almacen_id: string; cantidad: number }[]> {
+  const session = await getPortalSession()
+  if (!session) return []
+
+  const db = createAdminClient()
+  const { data } = await db.from('stock_almacenes')
+    .select('almacen_id, cantidad')
+    .eq('client_id', session.client_id)
+    .eq('producto_id', producto_id)
+
+  return ((data ?? []) as { almacen_id: string; cantidad: number }[])
+    .map(s => ({ almacen_id: s.almacen_id, cantidad: Number(s.cantidad) }))
+}
 
 export async function ajustarStock(
   producto_id: string,
@@ -411,6 +461,14 @@ export interface MovimientoProducto {
   origen:             'MANUAL' | 'COMPRA' | 'VENTA'
 }
 
+export interface HistorialPrecio {
+  historial_id: string
+  moneda:       string
+  precio:       number | null
+  costo:        number | null
+  created_at:   string
+}
+
 export interface ProductoDetalleData {
   producto:          Producto
   categoria:         Categoria | null
@@ -422,6 +480,7 @@ export interface ProductoDetalleData {
   stock_por_almacen: { almacen_id: string; nombre: string; cantidad: number }[]
   movimientos:       MovimientoProducto[]
   almacen_nombres:   Record<string, string>
+  historialPrecios:  HistorialPrecio[]
 }
 
 export async function obtenerProductoDetalle(
@@ -432,7 +491,7 @@ export async function obtenerProductoDetalle(
 
   const db = createAdminClient()
 
-  const [prodRes, catRes, provRes, monRes, almRes, stkRes, movRes] = await Promise.all([
+  const [prodRes, catRes, provRes, monRes, almRes, stkRes, movRes, histRes] = await Promise.all([
     db.from('products')
       .select('*')
       .eq('producto_id', producto_id)
@@ -468,6 +527,11 @@ export async function obtenerProductoDetalle(
       .eq('producto_id', producto_id)
       .order('created_at', { ascending: false })
       .limit(100),
+    db.from('producto_precios_historial')
+      .select('historial_id, moneda, precio, costo, created_at')
+      .eq('client_id', session.client_id)
+      .eq('producto_id', producto_id)
+      .order('created_at', { ascending: false }),
   ])
 
   if (!prodRes.data) return null
@@ -517,6 +581,14 @@ export async function obtenerProductoDetalle(
     origen:             m.origen as MovimientoProducto['origen'],
   })) as MovimientoProducto[]
 
+  const historialPrecios = ((histRes.data ?? []) as Record<string, unknown>[]).map(h => ({
+    historial_id: h.historial_id as string,
+    moneda:       h.moneda as string,
+    precio:       h.precio != null ? Number(h.precio) : null,
+    costo:        h.costo != null ? Number(h.costo) : null,
+    created_at:   h.created_at as string,
+  }))
+
   return {
     producto,
     categoria,
@@ -528,5 +600,6 @@ export async function obtenerProductoDetalle(
     stock_por_almacen,
     movimientos,
     almacen_nombres,
+    historialPrecios,
   }
 }

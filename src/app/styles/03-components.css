@@ -39,29 +39,19 @@
   border-radius: var(--radius-full);
 }
 .badge-dot::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: currentColor; }
-/* Sin relleno: solo el nombre en su color oscuro (aligera tablas con mucho contenido). */
-.badge-success { color: var(--color-success); }
-.badge-error   { color: var(--color-error); }
-.badge-warning { color: var(--color-warning); }
-.badge-info    { color: var(--color-info); }
-.badge-amber   { color: var(--color-orange); }
-.badge-neutral { color: var(--color-text-muted); }
-.badge-purple  { color: var(--color-purple); }
-.badge-indigo  { color: var(--color-indigo); }
-.badge-rose    { color: var(--color-rose); }
+.badge-success { color: var(--color-success); background: var(--color-success-bg); }
+.badge-error   { color: var(--color-error);   background: var(--color-error-bg); }
+.badge-warning { color: var(--color-warning); background: var(--color-warning-bg); }
+.badge-info    { color: var(--color-info);    background: var(--color-info-bg); }
+.badge-amber   { color: var(--color-orange);  background: var(--color-orange-highlight); }
+.badge-neutral { color: var(--color-text-muted); background: var(--color-surface-2); }
+.badge-purple  { color: var(--color-purple);  background: var(--color-purple-bg); }
+.badge-indigo  { color: var(--color-indigo);  background: var(--color-indigo-bg); }
+.badge-rose    { color: var(--color-rose);    background: var(--color-rose-bg); }
 
-/* Modificador: restaura el fondo claro en casos puntuales donde el badge debe
-   seguir leyéndose como etiqueta rellena, no como texto plano — p. ej. el % de
-   descuento sobre el precio de un ítem del catálogo. Combinar con badge + badge-<variante>. */
-.badge-fill.badge-success { background: var(--color-success-bg); }
-.badge-fill.badge-error   { background: var(--color-error-bg); }
-.badge-fill.badge-warning { background: var(--color-warning-bg); }
-.badge-fill.badge-info    { background: var(--color-info-bg); }
-.badge-fill.badge-amber   { background: var(--color-orange-highlight); }
-.badge-fill.badge-neutral { background: var(--color-surface-2); }
-.badge-fill.badge-purple  { background: var(--color-purple-bg); }
-.badge-fill.badge-indigo  { background: var(--color-indigo-bg); }
-.badge-fill.badge-rose    { background: var(--color-rose-bg); }
+/* Dentro de tablas: sin fondo, más ligero visualmente */
+.table-wrapper .badge,
+table .badge { background: transparent; }
 
 /* ═══════════════════════════════════════════════════
    FORMULARIOS
@@ -320,21 +310,6 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .modal-body-form { padding: var(--space-5) var(--space-6); gap: var(--space-4); }
 .modal-body-text { color: var(--color-text-muted); line-height: 1.6; }
 
-/* Stock adjustment modal */
-.prd-stock-modal { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-8); width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
-.prd-stock-modal h3 { margin: 0 0 var(--space-5); font-size: var(--text-lg); font-weight: 700; }
-.prd-stock-current { margin-bottom: var(--space-4); }
-.prd-stock-current-label { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-1); }
-.prd-stock-current-val { font-size: 24px; font-weight: 700; }
-.prd-stock-group { margin-bottom: var(--space-4); }
-.prd-stock-group label { display: block; font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
-.prd-stock-preview { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-4); }
-.prd-stock-preview-ok  { background: var(--color-success-bg); color: var(--color-success); }
-.prd-stock-preview-neg { background: var(--color-error-bg);   color: var(--color-error); }
-.prd-stock-preview-inline { display: inline-flex; align-items: center; gap: var(--space-1); }
-.prd-stock-footer { display: flex; gap: var(--space-2); }
-.prd-stock-footer .btn { flex: 1; }
-
 /* ═══════════════════════════════════════════════════
    ALERT
    ═══════════════════════════════════════════════════ */
@@ -399,11 +374,9 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    ═══════════════════════════════════════════════════ */
 .flex-shrink-0 { flex-shrink: 0; }
 .flex-1 { flex: 1; }
-.overflow-x-auto { overflow-x: auto; }
 .flex-center { display: flex; align-items: center; justify-content: center; }
 .text-center { text-align: center; }
 .text-align-left  { text-align: left; }
-.text-align-right { text-align: right; }
 .text-faint { color: var(--color-text-faint); }
 .mb-3 { margin-bottom: var(--space-3); }
 .mb-4 { margin-bottom: var(--space-4); }

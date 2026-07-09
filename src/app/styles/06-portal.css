@@ -1187,16 +1187,16 @@
   color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 600;
   transition: all var(--transition); flex: 1; text-align: left;
 }
-.prd-tipo-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-info-bg); }
-.prd-tipo-btn.active               { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-info-bg); }
+.prd-tipo-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary-text); background: var(--color-info-bg); }
+.prd-tipo-btn.active               { border-color: var(--color-primary); color: var(--color-primary-text); background: var(--color-info-bg); }
 .prd-tipo-btn:disabled             { opacity: .6; cursor: default; }
 .prd-tipo-btn-text {
   display: flex; flex-direction: column; gap: 2px;
 }
 .prd-tipo-desc {
-  font-size: var(--text-xs); font-weight: 400; color: var(--color-text-muted);
+  font-size: var(--text-xs); font-weight: 400; color: var(--color-text);
 }
-.prd-tipo-btn.active .prd-tipo-desc { color: var(--color-primary); opacity: .75; }
+.prd-tipo-btn.active .prd-tipo-desc { color: var(--color-primary-text); }
 
 /* ── Form sections ────────────────────────────────────────────────────────── */
 .prd-form-section { margin-bottom: var(--space-5); }
@@ -1328,10 +1328,6 @@
 .prd-estado-inactivo { background: var(--color-surface-2); color: var(--color-text-muted); }
 
 /* ── Stock modal ──────────────────────────────────────────────────────────── */
-.prd-stock-nombre {
-  font-weight: 700; font-size: var(--text-sm); margin-bottom: var(--space-3);
-  color: var(--color-text);
-}
 .prd-stock-actual-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);
@@ -1349,13 +1345,12 @@
 .prd-cat-row-special { background: var(--color-surface-2); }
 .prd-cat-badge-revisar { display: inline-block; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: var(--radius-full); background: var(--color-warning-bg); color: var(--color-warning); }
 
-/* ── Prices/costs detail table ────────────────────────────────────────────── */
-.prd-prices-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-.prd-prices-table th { text-align: left; padding: 10px 16px; font-weight: 700; color: var(--color-text-muted); font-size: var(--text-xs); border-bottom: 2px solid var(--color-border); }
-.prd-prices-table td { padding: 12px 16px; }
-.prd-prices-table tbody tr:nth-child(even) { background: var(--color-surface-2); }
+/* ── Prices/costs detail table (usa el sistema .table estándar) ─────────────── */
 .prd-moneda-badge { display: inline-block; padding: 2px 10px; border-radius: 6px; background: var(--color-surface-2); font-weight: 700; font-size: var(--text-xs); font-family: monospace; letter-spacing: 0.04em; }
 .prd-margen { font-weight: 600; }
+.prd-margen-alto { color: var(--color-success); }
+.prd-margen-bajo { color: var(--color-warning); }
+.prd-margen-neg  { color: var(--color-error); }
 
 /* ── Inline precios/costos editor ────────────────────────────────────────── */
 .prd-editor-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; }
@@ -1376,7 +1371,7 @@
 .prd-tipo-btn:disabled { cursor: default; opacity: 0.7; }
 .prd-tipo-labels { display: flex; flex-direction: column; gap: 2px; }
 .prd-tipo-name { font-weight: 700; font-size: var(--text-sm); }
-.prd-tipo-desc { font-weight: 400; font-size: var(--text-xs); opacity: 0.8; }
+.prd-tipo-desc { font-weight: 400; font-size: var(--text-xs); }
 .prd-tipo-hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
 
 /* ════════════════════════════════════════════════════════════════════════
