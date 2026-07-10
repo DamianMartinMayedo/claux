@@ -365,19 +365,8 @@ export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; 
   let full: Buffer, thumb: Buffer
   try {
     const entrada = Buffer.from(await file.arrayBuffer())
-    // TEMP DIAGNÓSTICO — quitar tras localizar la corrupción de imágenes en prod.
-    console.log('[catalogo/foto] recibido', {
-      name: file.name, type: file.type, size: file.size,
-      entradaLen: entrada.length,
-      entradaHex16: entrada.subarray(0, 16).toString('hex'),
-    })
     const opt = await optimizarImagen(entrada)
     full = opt.full; thumb = opt.thumb
-    // TEMP DIAGNÓSTICO — quitar tras localizar la corrupción de imágenes en prod.
-    console.log('[catalogo/foto] optimizado', {
-      fullLen: full.length, fullHex16: full.subarray(0, 16).toString('hex'),
-      thumbLen: thumb.length, thumbHex16: thumb.subarray(0, 16).toString('hex'),
-    })
   } catch (e) {
     return { ok: false, error: `No se pudo procesar la imagen: ${(e as Error).message}` }
   }
@@ -385,9 +374,17 @@ export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; 
   const path      = `${session.client_id}/${item_id}.webp`
   const pathThumb = `${session.client_id}/${item_id}_thumb.webp`
 
-  const up1 = await db.storage.from('catalogo').upload(path, full, { contentType: 'image/webp', upsert: true })
+  // Subir como Blob, no como Buffer: storage-js envía los Blob por multipart
+  // (binario seguro); un Node Buffer lo manda como body crudo de fetch y en el
+  // runtime serverless de Vercel se corrompe (se recodifica a UTF-8, todos los
+  // bytes ≥0x80 → U+FFFD). Confirmado con los bytes reales del bucket.
+  const webpBlob = (b: Buffer) => new Blob([new Uint8Array(b)], { type: 'image/webp' })
+
+  const up1 = await db.storage.from('catalogo')
+    .upload(path, webpBlob(full), { contentType: 'image/webp', upsert: true })
   if (up1.error) return { ok: false, error: up1.error.message }
-  const up2 = await db.storage.from('catalogo').upload(pathThumb, thumb, { contentType: 'image/webp', upsert: true })
+  const up2 = await db.storage.from('catalogo')
+    .upload(pathThumb, webpBlob(thumb), { contentType: 'image/webp', upsert: true })
   if (up2.error) return { ok: false, error: up2.error.message }
 
   const { data: { publicUrl } }      = db.storage.from('catalogo').getPublicUrl(path)

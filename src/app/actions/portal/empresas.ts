@@ -248,10 +248,14 @@ export async function subirLogoEmpresa(
   const ext  = file.type.split('/')[1].replace('jpeg', 'jpg')
   const path = `${session.client_id}/${empresa_id}.${ext}`
 
+  // Subir como Blob, no como Buffer: en el runtime serverless de Vercel el Buffer
+  // se manda como body crudo de fetch y se corrompe (recodificado a UTF-8); el
+  // Blob va por multipart, binario seguro. (Ver nota en catalogo.ts/subirFotoItem.)
   const buffer = Buffer.from(await file.arrayBuffer())
+  const blob = new Blob([new Uint8Array(buffer)], { type: file.type })
   const { error: uploadError } = await db.storage
     .from('logos')
-    .upload(path, buffer, { contentType: file.type, upsert: true })
+    .upload(path, blob, { contentType: file.type, upsert: true })
 
   if (uploadError) return { ok: false, error: uploadError.message }
 
