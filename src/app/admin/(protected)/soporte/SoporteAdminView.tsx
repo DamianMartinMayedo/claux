@@ -10,7 +10,7 @@ import {
   actualizarEstadoMensaje, guardarFaq, eliminarFaq,
   type MensajeSoporte, type FaqAdmin,
 } from '@/app/actions/soporte'
-import { Mail, Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Eye, Mail, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
 
 type Estado = 'NUEVO' | 'LEIDO' | 'RESUELTO'
@@ -253,6 +253,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                       <th>Asunto</th>
                       <th>Estado</th>
                       <th>Fecha</th>
+                      <th className="col-actions"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -265,6 +266,11 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                         <td data-label="Asunto" className="cell-truncate">{m.asunto}</td>
                         <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[m.estado]}`}>{ESTADO_LABEL[m.estado]}</span></td>
                         <td data-label="Fecha" className="table-muted">{fmtFecha(m.created_at)}</td>
+                        <td className="col-actions">
+                          <RowActions>
+                            <button className="row-actions-item" onClick={() => abrirMsg(m)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                          </RowActions>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

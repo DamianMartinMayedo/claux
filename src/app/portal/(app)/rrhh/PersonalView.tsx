@@ -14,7 +14,7 @@ import {
   type Periodicidad,
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
-import { Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
+import { Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -440,6 +440,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                     </td>
                     <td className="col-actions">
                       <RowActions>
+                        <button className="row-actions-item" onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                         <button className="row-actions-item" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /> Editar</button>
                         {e.estado === 'ACTIVO' ? (
                           <button className="row-actions-item" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>

@@ -1,11 +1,12 @@
 'use client'
 
-import { Download, Search, User } from 'lucide-react'
+import { Download, Eye, Search, User } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { suscripcionLabel } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { RowActions } from '@/components/portal/RowActions'
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info', GRACIA: 'badge-warning',
@@ -150,6 +151,7 @@ export default function ClientesTabla({
                 <th>Estado</th>
                 <th>Expiración</th>
                 <th className="col-center">Días</th>
+                  <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
@@ -181,6 +183,11 @@ export default function ClientesTabla({
                       <span className="dias-value" style={{ color: DIAS_COLOR[dias.variant] }}>
                         {dias.label}
                       </span>
+                    </td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                      </RowActions>
                     </td>
                   </tr>
                 )

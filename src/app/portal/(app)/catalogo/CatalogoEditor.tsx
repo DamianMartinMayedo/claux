@@ -297,6 +297,7 @@ function ItemCard({ item, tieneInventario, onEdit, onDelete, onSaved }: {
         <div className="cat-card-top">
           <strong className="cat-card-nombre">{item.nombre}</strong>
           <RowActions>
+            <button className="row-actions-item" onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
             <button className="row-actions-item" onClick={onEdit}><Pencil size={15} strokeWidth={2} /> Editar</button>
             <button className="row-actions-item" onClick={toggleDisponible} disabled={isPending}>
               {item.disponible ? <><EyeOff size={15} strokeWidth={2} /> Marcar agotado</> : <><Eye size={15} strokeWidth={2} /> Marcar disponible</>}
@@ -373,6 +374,7 @@ function ItemRow({ item, tieneInventario, onEdit, onDelete, onSaved }: {
       )}
       <td className="col-actions">
         <RowActions>
+          <button className="row-actions-item" onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
           <button className="row-actions-item" onClick={onEdit}><Pencil size={15} strokeWidth={2} /> Editar</button>
           <button className="row-actions-item" onClick={toggleDisponible} disabled={isPending}>
             {item.disponible ? <><EyeOff size={15} strokeWidth={2} /> Marcar agotado</> : <><Eye size={15} strokeWidth={2} /> Marcar disponible</>}

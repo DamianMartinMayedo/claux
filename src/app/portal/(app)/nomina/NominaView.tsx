@@ -10,7 +10,7 @@ import {
   type NominaConLineas,
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
-import { Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
+import { Eye, Plus, Trash2, Wallet, X } from 'lucide-react'
 import {
   NominaDetalleModal,
   ConfirmarNominaModal,
@@ -337,7 +337,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                     </td>
                     <td className="col-actions">
                       <RowActions>
-                        <button className="row-actions-item" onClick={() => setDetalleNominaId(n.nomina_id)}><Pencil size={15} strokeWidth={2} /> Ver detalle</button>
+                        <button className="row-actions-item" onClick={() => setDetalleNominaId(n.nomina_id)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
                         <button className="row-actions-item row-actions-item-danger"
                           onClick={() => setDelNomina(n)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
                       </RowActions>

@@ -17,7 +17,7 @@ import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import { Archive, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
+import { Archive, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -305,6 +305,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     {/* Acciones */}
                     <td className="col-actions">
                       <RowActions>
+                        <button className="row-actions-item" onClick={() => router.push(`/portal/terceros/${t.tercero_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                         {t.contrato_url && (
                           <a
                             href={t.contrato_url}

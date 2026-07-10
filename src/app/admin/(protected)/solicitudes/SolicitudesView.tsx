@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Copy, X } from 'lucide-react'
+import { Check, Copy, Eye, X } from 'lucide-react'
 import { useToast } from '@/app/contexts/ToastContext'
+import { RowActions } from '@/components/portal/RowActions'
 import {
   actualizarEstadoDiagnostico,
   type DiagnosticoLead,
@@ -97,6 +98,7 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
                   <th>Contacto</th>
                   <th>Sector</th>
                   <th>Fecha</th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -110,6 +112,11 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
                     </td>
                     <td data-label="Sector">{l.sector}</td>
                     <td data-label="Fecha">{fmtFecha(l.created_at)}</td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setDetalle(l)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                      </RowActions>
+                    </td>
                   </tr>
                 ))}
               </tbody>

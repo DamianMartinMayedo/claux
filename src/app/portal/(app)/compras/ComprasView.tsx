@@ -2,13 +2,14 @@
 
 import { useState, useMemo }            from 'react'
 import { useRouter }                    from 'next/navigation'
-import { Plus, ShoppingCart }           from 'lucide-react'
+import { Eye, Plus, ShoppingCart }      from 'lucide-react'
 import {
   type ComprasPageData,
   type EstadoCompra,
 } from '@/app/actions/portal/compras'
 import { CompraFormModal }              from './_CompraFormModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { RowActions }                   from '@/components/portal/RowActions'
 
 function fmt(n: number, moneda: string) {
   return new Intl.NumberFormat('es-VE', {
@@ -94,6 +95,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                   <th>Almacén</th>
                   <th>Estado</th>
                   <th className="col-num">Total</th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -106,6 +108,11 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                     <td data-label="Almacén" className="text-sm-muted">{data.almacen_nombres[c.almacen_id] ?? c.almacen_id}</td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span></td>
                     <td data-label="Total" className="col-num">{fmt(c.total, c.moneda)}</td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => router.push(`/portal/compras/${c.compra_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                      </RowActions>
+                    </td>
                   </tr>
                 ))}
               </tbody>

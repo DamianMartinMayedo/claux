@@ -26,7 +26,7 @@ import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
-import { Calendar, Check, Copy, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -796,22 +796,25 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                       <div className="text-xs-muted">{CANAL_LABEL[r.canal] ?? r.canal}</div>
                     </td>
                     <td className="col-actions">
-                      {(r.estado === 'PENDIENTE' || r.estado === 'CONFIRMADA') && (
-                        <RowActions>
-                          {r.estado === 'PENDIENTE' && (
-                            <>
-                              <button className="row-actions-item"
-                                onClick={() => setCambioEstado({ reserva: r, a: 'CONFIRMADA' })}><Check size={15} strokeWidth={2} /> Confirmar</button>
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setDetalleReserva(r)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                        {(r.estado === 'PENDIENTE' || r.estado === 'CONFIRMADA') && (
+                          <>
+                            {r.estado === 'PENDIENTE' && (
+                              <>
+                                <button className="row-actions-item"
+                                  onClick={() => setCambioEstado({ reserva: r, a: 'CONFIRMADA' })}><Check size={15} strokeWidth={2} /> Confirmar</button>
+                                <button className="row-actions-item row-actions-item-danger"
+                                  onClick={() => setCambioEstado({ reserva: r, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /> Rechazar</button>
+                              </>
+                            )}
+                            {r.estado === 'CONFIRMADA' && (
                               <button className="row-actions-item row-actions-item-danger"
-                                onClick={() => setCambioEstado({ reserva: r, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /> Rechazar</button>
-                            </>
-                          )}
-                          {r.estado === 'CONFIRMADA' && (
-                            <button className="row-actions-item row-actions-item-danger"
-                              onClick={() => setCambioEstado({ reserva: r, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar reserva</button>
-                          )}
-                        </RowActions>
-                      )}
+                                onClick={() => setCambioEstado({ reserva: r, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar reserva</button>
+                            )}
+                          </>
+                        )}
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

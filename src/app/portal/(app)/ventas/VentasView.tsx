@@ -3,7 +3,7 @@
 import { useState, useMemo }   from 'react'
 import { useRouter }            from 'next/navigation'
 import Link                   from 'next/link'
-import { FileText, Plus } from 'lucide-react'
+import { Eye, FileText, Plus } from 'lucide-react'
 import {
   ESTADO_OFERTA_LABEL,
   ESTADO_OFERTA_BADGE,
@@ -22,6 +22,7 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import { RowActions }                  from '@/components/portal/RowActions'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
 interface Props { data: VentasResumenData }
@@ -223,6 +224,7 @@ function TablaOfertas({
             <th>Cliente</th>
             <th>Estado</th>
             <th className="col-num">Total</th>
+            <th className="col-actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -250,6 +252,11 @@ function TablaOfertas({
               <td data-label="Estado"><BadgeOferta estado={o.estado} /></td>
               <td data-label="Total" className="col-num">
                 {formatearMoneda(Number(o.total), o.moneda)}
+              </td>
+              <td className="col-actions">
+                <RowActions>
+                  <button className="row-actions-item" onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                </RowActions>
               </td>
             </tr>
           ))}
@@ -287,6 +294,7 @@ function TablaFacturas({
             <th>Vencimiento</th>
             <th>Estado</th>
             <th className="col-num">Total</th>
+            <th className="col-actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -317,6 +325,11 @@ function TablaFacturas({
               <td data-label="Estado"><BadgeFactura estado={f.estado} /></td>
               <td data-label="Total" className="col-num">
                 {formatearMoneda(Number(f.total), f.moneda)}
+              </td>
+              <td className="col-actions">
+                <RowActions>
+                  <button className="row-actions-item" onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                </RowActions>
               </td>
             </tr>
           ))}

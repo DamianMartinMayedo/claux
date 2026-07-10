@@ -18,7 +18,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { type EstadoReserva } from '@/lib/reservas/estado'
-import { CalendarDays, Check, Copy, Download, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import { CalendarDays, Check, Copy, Download, Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -778,8 +778,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                       <div className="text-xs-muted">{CANAL_LABEL[c.canal] ?? c.canal}</div>
                     </td>
                     <td className="col-actions">
-                      {(c.estado === 'PENDIENTE' || c.estado === 'CONFIRMADA') && (
-                        <RowActions>
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setDetalleCita(c)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                        {(c.estado === 'PENDIENTE' || c.estado === 'CONFIRMADA') && (
+                          <>
                           {c.estado === 'PENDIENTE' && (
                             <>
                               <button className="row-actions-item"
@@ -792,8 +794,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                             <button className="row-actions-item row-actions-item-danger"
                               onClick={() => setCambioEstado({ cita: c, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar cita</button>
                           )}
-                        </RowActions>
-                      )}
+                          </>
+                        )}
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

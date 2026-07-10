@@ -21,7 +21,8 @@ import {
   type NominaConLineas,
 } from '@/app/actions/portal/rrhh'
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
-import { FileText, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { RowActions } from '@/components/portal/RowActions'
+import { FileText, Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
   NominaDetalleModal,
@@ -451,6 +452,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                   <th className="col-num">Deducciones</th>
                   <th className="col-num">Neto</th>
                   <th>Estado</th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -465,6 +467,11 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                       <span className={`badge ${nomina.estado === 'BORRADOR' ? 'badge-warning' : (nomina.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
                         {nomina.estado === 'BORRADOR' ? 'Borrador' : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
+                    </td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setDetalleNominaId(nomina.nomina_id)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}

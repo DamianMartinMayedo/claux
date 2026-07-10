@@ -19,7 +19,7 @@ import {
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
-import { AlertTriangle, Archive, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, X } from 'lucide-react'
 
 // ── CategoriaModal ────────────────────────────────────────────────────────────
 
@@ -390,6 +390,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           {/* Acciones */}
                           <td className="col-actions">
                             <RowActions>
+                              <button className="row-actions-item" onClick={() => router.push(`/portal/productos/${p.producto_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                               {p.estado === 'ACTIVO' ? (
                                 <>
                                   {p.tipo === 'PRODUCTO' && (
