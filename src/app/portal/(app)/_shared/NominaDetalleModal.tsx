@@ -254,7 +254,10 @@ export function PagarNominaModal({
   onPaid:  () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const cuentasEmpresa = cuentas.filter(c => c.empresa_id === nomina.empresa_id)
+  // Todas las cajas (sin filtrar por empresa ni por moneda): la de la misma
+  // moneda aparece primero; si eliges otra, LiquidarCuentaFields aplica la tasa.
+  const cuentasOrdenadas = [...cuentas].sort((a, b) =>
+    (a.moneda === nomina.moneda ? 0 : 1) - (b.moneda === nomina.moneda ? 0 : 1))
   const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -276,24 +279,23 @@ export function PagarNominaModal({
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">Pagar nómina {formatPeriodo(nomina.periodo)}</h2>
+          <div>
+            <h2 className="modal-title">Pagar nómina {formatPeriodo(nomina.periodo)}</h2>
+            <p className="text-xs-muted mt-1">
+              Salarios · Total {formatMonto(nomina.total)} {nomina.moneda} ·
+              Pendiente <strong>{formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong>
+            </p>
+          </div>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
-          <div className="info-box">
-            <strong className="info-box-title">Salarios · {formatPeriodo(nomina.periodo)}</strong>
-            <span className="text-xs-muted">
-              Total {formatMonto(nomina.total)} {nomina.moneda} · Pagado {formatMonto(nomina.pagado)} ·
-              <strong> Pendiente {formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong>
-            </span>
-          </div>
-          {cuentasEmpresa.length === 0 ? (
-            <div className="alert alert-warning mt-3">No tienes cajas en esta empresa. Crea una en Tesorería para registrar el pago.</div>
+          {cuentasOrdenadas.length === 0 ? (
+            <div className="alert alert-warning">No tienes cajas disponibles. Crea una en Tesorería para registrar el pago.</div>
           ) : (
-            <form onSubmit={handleSubmit} className="gc-liq-form">
+            <form id="pagar-nomina-form" onSubmit={handleSubmit} className="gc-liq-form">
               <div className="ter-form-grid">
                 <LiquidarCuentaFields
-                  cuentas={cuentasEmpresa}
+                  cuentas={cuentasOrdenadas}
                   docMoneda={nomina.moneda}
                   saldo={nomina.saldo_pendiente}
                   onChange={setLiq}
@@ -302,15 +304,21 @@ export function PagarNominaModal({
                   <label>Fecha <span className="required">*</span></label>
                   <input className="input" name="fecha" type="date" required defaultValue={hoyISO()} />
                 </div>
+                <div className="input-group ter-col-full">
+                  <label>Notas</label>
+                  <input className="input" name="notas" placeholder="Referencia…" />
+                </div>
               </div>
-              <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending || !liq?.valido}>
-                {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar pago'}
-              </button>
             </form>
           )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+          {cuentasOrdenadas.length > 0 && (
+            <button type="submit" form="pagar-nomina-form" className="btn btn-primary" disabled={isPending || !liq?.valido}>
+              {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar pago'}
+            </button>
+          )}
         </div>
       </div>
     </div>

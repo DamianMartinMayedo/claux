@@ -231,7 +231,10 @@ function LiquidarModal({
   const [isPending, startTransition] = useTransition()
 
   const esGasto        = registro.tipo === 'GASTO'
-  const cuentasEmpresa = cuentas.filter(c => c.empresa_id === registro.empresa_id)
+  // Todas las cajas (sin filtrar por empresa ni moneda): la de la misma moneda
+  // aparece primero; si eliges otra, LiquidarCuentaFields aplica la tasa.
+  const cuentasOrdenadas = [...cuentas].sort((a, b) =>
+    (a.moneda === registro.moneda ? 0 : 1) - (b.moneda === registro.moneda ? 0 : 1))
   const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -261,32 +264,28 @@ function LiquidarModal({
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{esGasto ? 'Pagar gasto' : 'Registrar cobro'}</h2>
+          <div>
+            <h2 className="modal-title">{esGasto ? 'Registrar pago' : 'Registrar cobro'}</h2>
+            <p className="text-xs-muted mt-1">
+              {registro.descripcion} · Total {formatMonto(registro.monto)} {registro.moneda} ·
+              Pendiente <strong>{formatMonto(registro.saldo_pendiente)} {registro.moneda}</strong>
+            </p>
+          </div>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
 
-          {/* Resumen */}
-          <div className="info-box">
-            <strong className="info-box-title">{registro.descripcion}</strong>
-            <span className="text-xs-muted">
-              Total {formatMonto(registro.monto)} {registro.moneda} ·
-              Pagado {formatMonto(registro.monto_liquidado)} ·
-              <strong> Pendiente {formatMonto(registro.saldo_pendiente)} {registro.moneda}</strong>
-            </span>
-          </div>
-
           {/* Formulario de liquidación */}
           {registro.saldo_pendiente > 0.005 ? (
-            cuentasEmpresa.length === 0 ? (
+            cuentasOrdenadas.length === 0 ? (
               <div className="alert alert-warning mt-3">
-                No tienes cajas en esta empresa. Crea una en Tesorería para registrar el {esGasto ? 'pago' : 'cobro'}.
+                No tienes cajas disponibles. Crea una en Tesorería para registrar el {esGasto ? 'pago' : 'cobro'}.
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="gc-liq-form">
+              <form id="liquidar-form" onSubmit={handleSubmit} className="gc-liq-form">
                 <div className="ter-form-grid">
                   <LiquidarCuentaFields
-                    cuentas={cuentasEmpresa}
+                    cuentas={cuentasOrdenadas}
                     docMoneda={registro.moneda}
                     saldo={registro.saldo_pendiente}
                     onChange={setLiq}
@@ -300,9 +299,6 @@ function LiquidarModal({
                     <input className="input" name="notas" placeholder="Referencia del pago…" />
                   </div>
                 </div>
-                <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={isPending || !liq?.valido}>
-                  {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : esGasto ? 'Registrar pago' : 'Registrar cobro'}
-                </button>
               </form>
             )
           ) : (
@@ -328,6 +324,11 @@ function LiquidarModal({
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+          {registro.saldo_pendiente > 0.005 && cuentasOrdenadas.length > 0 && (
+            <button type="submit" form="liquidar-form" className="btn btn-primary" disabled={isPending || !liq?.valido}>
+              {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : esGasto ? 'Registrar pago' : 'Registrar cobro'}
+            </button>
+          )}
         </div>
       </div>
     </div>
