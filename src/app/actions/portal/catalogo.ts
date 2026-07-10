@@ -365,8 +365,19 @@ export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; 
   let full: Buffer, thumb: Buffer
   try {
     const entrada = Buffer.from(await file.arrayBuffer())
+    // TEMP DIAGNÓSTICO — quitar tras localizar la corrupción de imágenes en prod.
+    console.log('[catalogo/foto] recibido', {
+      name: file.name, type: file.type, size: file.size,
+      entradaLen: entrada.length,
+      entradaHex16: entrada.subarray(0, 16).toString('hex'),
+    })
     const opt = await optimizarImagen(entrada)
     full = opt.full; thumb = opt.thumb
+    // TEMP DIAGNÓSTICO — quitar tras localizar la corrupción de imágenes en prod.
+    console.log('[catalogo/foto] optimizado', {
+      fullLen: full.length, fullHex16: full.subarray(0, 16).toString('hex'),
+      thumbLen: thumb.length, thumbHex16: thumb.subarray(0, 16).toString('hex'),
+    })
   } catch (e) {
     return { ok: false, error: `No se pudo procesar la imagen: ${(e as Error).message}` }
   }
