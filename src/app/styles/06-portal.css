@@ -1179,6 +1179,7 @@
 .prd-tipo-selector {
   display: flex; gap: var(--space-3);
 }
+.prd-tipo-grid { display: flex; gap: var(--space-3); }
 .prd-tipo-btn {
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
@@ -1196,6 +1197,9 @@
 .prd-tipo-desc {
   font-size: var(--text-xs); font-weight: 400; color: var(--color-text);
 }
+.prd-tipo-labels { display: flex; flex-direction: column; gap: 2px; }
+.prd-tipo-name { font-weight: 700; font-size: var(--text-sm); }
+.prd-tipo-hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
 .prd-tipo-btn.active .prd-tipo-desc { color: var(--color-primary-text); }
 
 /* ── Form sections ────────────────────────────────────────────────────────── */
@@ -1363,16 +1367,6 @@
 .prd-editor-select { width: 88px; flex-shrink: 0; font-size: var(--text-sm); padding: 4px 6px; }
 .prd-editor-input { flex: 1; font-size: var(--text-sm); padding: 4px 8px; }
 .prd-editor-del-btn { width: 24px; height: 24px; flex-shrink: 0; border: none; background: none; cursor: pointer; color: var(--color-text-muted); font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
-
-/* ── Tipo selector (botones PRODUCTO / SERVICIO) ─────────────────────────── */
-.prd-tipo-grid { display: flex; gap: var(--space-3); }
-.prd-tipo-btn { flex: 1; display: flex; align-items: center; gap: var(--space-3); padding: 12px 16px; border: 2px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; text-align: left; }
-.prd-tipo-btn.active { border-color: var(--color-primary); background: var(--color-info-bg); color: var(--color-primary-text); }
-.prd-tipo-btn:disabled { cursor: default; opacity: 0.7; }
-.prd-tipo-labels { display: flex; flex-direction: column; gap: 2px; }
-.prd-tipo-name { font-weight: 700; font-size: var(--text-sm); }
-.prd-tipo-desc { font-weight: 400; font-size: var(--text-xs); }
-.prd-tipo-hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
 
 /* ════════════════════════════════════════════════════════════════════════
    TESORERÍA (base contable) — cuentas, saldos y movimientos
