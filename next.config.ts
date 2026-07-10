@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverActions: {
+    bodySizeLimit: '12mb',
+  },
   images: {
     // Logos de empresas servidos desde Supabase Storage (bucket público).
     remotePatterns: [
