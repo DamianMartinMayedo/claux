@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath }    from 'next/cache'
+import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -344,6 +345,7 @@ export async function registrarPagoDoc(
   revalidatePath('/portal/cxp')
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/tesoreria')
+  revalidarFinanzas()
   return { ok: true }
 }
 
@@ -386,5 +388,6 @@ export async function anularPagoDoc(movimiento_id: string): Promise<{ ok: boolea
   revalidatePath('/portal/cxp')
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/tesoreria')
+  revalidarFinanzas()
   return { ok: true }
 }

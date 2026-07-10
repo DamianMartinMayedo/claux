@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath }    from 'next/cache'
+import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -356,7 +357,7 @@ export async function registrarMovimiento(
     revalidatePath('/portal/gastos')
     revalidatePath('/portal/cxp')
     revalidatePath('/portal/cxc')
-    revalidatePath('/portal/reportes')
+    revalidarFinanzas()
   }
   return { ok: true }
 }
@@ -607,7 +608,7 @@ export async function registrarTransferencia(
   revalidatePath('/portal/tesoreria')
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/cxp')
-  revalidatePath('/portal/reportes')
+  revalidarFinanzas()
   return { ok: true }
 }
 
@@ -670,6 +671,6 @@ export async function eliminarMovimiento(movimiento_id: string): Promise<{ ok: b
   revalidatePath('/portal/tesoreria')
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/cxp')
-  revalidatePath('/portal/reportes')
+  revalidarFinanzas()
   return { ok: true }
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath }    from 'next/cache'
+import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -1001,7 +1002,7 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/cxp')
   revalidatePath('/portal/tesoreria')
-  revalidatePath('/portal/reportes')
+  revalidarFinanzas()
   return { ok: true }
 }
 

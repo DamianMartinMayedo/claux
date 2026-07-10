@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
@@ -296,6 +296,20 @@ const HistorialPreciosChart = dynamic(() => import('./HistorialPreciosChart'), {
 function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
   const { historialPrecios } = data
 
+  // Agrupar por moneda (el historial ya viene ordenado del más reciente al más antiguo)
+  const porMoneda = useMemo(() => {
+    const m = new Map<string, typeof historialPrecios>()
+    for (const h of historialPrecios) {
+      const arr = m.get(h.moneda) ?? []
+      arr.push(h)
+      m.set(h.moneda, arr)
+    }
+    return m
+  }, [historialPrecios])
+
+  const monedas = [...porMoneda.keys()]
+  const [monedaSel, setMonedaSel] = useState(monedas[0] ?? '')
+
   if (historialPrecios.length === 0) {
     return (
       <div className="det-empty">
@@ -306,42 +320,65 @@ function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
     )
   }
 
-  // Agrupar por moneda
-  const porMoneda = new Map<string, typeof historialPrecios>()
-  for (const h of historialPrecios) {
-    const arr = porMoneda.get(h.moneda) ?? []
-    arr.push(h)
-    porMoneda.set(h.moneda, arr)
-  }
+  const sel   = porMoneda.has(monedaSel) ? monedaSel : monedas[0]
+  const items = porMoneda.get(sel) ?? []
 
   return (
     <div className="det-tab-body">
-      {[...porMoneda].map(([moneda, items]) => (
-        <div key={moneda} className="det-card">
-          <div className="det-section-title">Historial · {moneda}</div>
-          <HistorialPreciosChart historial={items} moneda={moneda} />
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th className="col-num">Precio</th>
-                  <th className="col-num">Costo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(h => (
-                  <tr key={h.historial_id}>
-                    <td className="text-sm-muted tes-nowrap">{fmtDate(h.created_at)}</td>
-                    <td className="col-num tes-monto-cell">{h.precio != null ? fmt(h.precio, moneda) : '—'}</td>
-                    <td className="col-num tes-monto-cell">{h.costo != null ? fmt(h.costo, moneda) : '—'}</td>
+      <div className="det-card">
+        <div className="det-section-head">
+          <div className="det-section-title">Historial de precios</div>
+          {monedas.length > 1 && (
+            <div className="dash-moneda-switch" role="tablist" aria-label="Moneda">
+              {monedas.map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={m === sel}
+                  className={m === sel ? 'active' : ''}
+                  onClick={() => setMonedaSel(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="dash-split">
+          <div className="dash-split-main">
+            {items.length >= 2 ? (
+              <HistorialPreciosChart historial={items} moneda={sel} />
+            ) : (
+              <p className="text-xs-hint">Se necesitan al menos dos registros para dibujar la evolución.</p>
+            )}
+          </div>
+          <div className="dash-split-side">
+            <div className="dash-subtitle"><span>Cambios registrados</span></div>
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th className="col-num">Precio</th>
+                    <th className="col-num">Costo</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map(h => (
+                    <tr key={h.historial_id}>
+                      <td data-label="Fecha" className="text-sm-muted tes-nowrap">{fmtDate(h.created_at)}</td>
+                      <td data-label="Precio" className="col-num tes-monto-cell">{h.precio != null ? fmt(h.precio, sel) : '—'}</td>
+                      <td data-label="Costo" className="col-num tes-monto-cell">{h.costo != null ? fmt(h.costo, sel) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      ))}
+      </div>
     </div>
   )
 }

@@ -34,7 +34,7 @@ function ChartTooltip({ active, payload, label, moneda }: { active?: boolean; pa
       <div className="dash-tip-title">{label}</div>
       {payload.map(p => (
         <div key={p.dataKey} className="dash-tip-row">
-          <span className="dash-tip-dot" style={{ background: p.color }} />
+          <span className="dash-tip-dot" style={{ '--dot': p.color } as React.CSSProperties} />
           {p.name}: <strong>{fmtNum(p.value)} {moneda}</strong>
         </div>
       ))}
@@ -62,7 +62,7 @@ export default function HistorialPreciosChart({ historial, moneda }: { historial
   if (data.length < 2) return null // necesita al menos 2 puntos para un gráfico
 
   return (
-    <div className="dash-chart" style={{ height: 200, marginBottom: 'var(--space-4)' }}>
+    <div className="dash-chart">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />

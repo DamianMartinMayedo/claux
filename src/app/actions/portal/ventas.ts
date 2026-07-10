@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath }    from 'next/cache'
+import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -580,6 +581,7 @@ export async function guardarFactura(
 
   revalidatePath('/portal/ventas')
   revalidatePath(`/portal/ventas/facturas/${factura_id_form}`)
+  revalidarFinanzas()
   return { ok: true, factura_id: factura_id_form }
 }
 
@@ -704,6 +706,7 @@ export async function cambiarEstadoFactura(
 
   revalidatePath('/portal/ventas')
   revalidatePath(`/portal/ventas/facturas/${factura_id}`)
+  revalidarFinanzas()
   return { ok: true }
 }
 
@@ -809,6 +812,7 @@ export async function convertirOfertaEnFactura(
   revalidatePath('/portal/ventas')
   revalidatePath(`/portal/ventas/ofertas/${oferta_id}`)
   revalidatePath(`/portal/ventas/facturas/${factura_id}`)
+  revalidarFinanzas()
   return { ok: true, factura_id }
 }
 
@@ -1008,5 +1012,6 @@ export async function duplicarFactura(
   }
 
   revalidatePath('/portal/ventas')
+  revalidarFinanzas()
   return { ok: true, factura_id: nueva_id }
 }

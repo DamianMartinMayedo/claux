@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath }    from 'next/cache'
+import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -406,7 +407,7 @@ export async function registrarLiquidacion(
   revalidatePath('/portal/rrhh')
   revalidatePath('/portal/nomina')
   revalidatePath('/portal/cxp')
-  revalidatePath('/portal/reportes')
+  revalidarFinanzas()
   return { ok: true }
 }
 
@@ -441,7 +442,7 @@ export async function anularLiquidacion(movimiento_id: string): Promise<{ ok: bo
   revalidatePath('/portal/rrhh')
   revalidatePath('/portal/nomina')
   revalidatePath('/portal/cxp')
-  revalidatePath('/portal/reportes')
+  revalidarFinanzas()
   return { ok: true }
 }
 
@@ -511,7 +512,7 @@ export async function guardarCategoriaGasto(
       .eq('client_id', session.client_id).eq('categoria_id', categoria_id_form)
     revalidatePath('/portal/gastos')
     revalidatePath('/portal/tesoreria')
-    revalidatePath('/portal/reportes')
+    revalidarFinanzas()
     return { ok: true, categoria_id: categoria_id_form }
   }
 }

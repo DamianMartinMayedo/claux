@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath }    from 'next/cache'
+import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -381,6 +382,7 @@ export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean;
   revalidatePath('/portal/cxp')
   revalidatePath('/portal/inventario')
   revalidatePath('/portal/productos')
+  revalidarFinanzas()
   return { ok: true }
 }
 
@@ -403,6 +405,7 @@ export async function anularCompra(compra_id: string): Promise<{ ok: boolean; er
   revalidatePath('/portal/cxp')
   revalidatePath('/portal/inventario')
   revalidatePath('/portal/productos')
+  revalidarFinanzas()
   return { ok: true }
 }
 
