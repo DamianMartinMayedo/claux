@@ -180,7 +180,9 @@ export async function guardarCuenta(
 
   if (!nombre)                          return { ok: false, error: 'El nombre de la cuenta es obligatorio.' }
   if (!empresa_id)                      return { ok: false, error: 'Debes seleccionar una empresa.' }
-  if (!moneda)                          return { ok: false, error: 'Debes seleccionar una moneda.' }
+  // La moneda solo se fija al crear; al editar no se cambia (los movimientos
+  // quedarían inconsistentes) y el campo va deshabilitado, así que no se exige.
+  if (!cuenta_id && !moneda)            return { ok: false, error: 'Debes seleccionar una moneda.' }
   if (!TIPOS_CUENTA.includes(tipo))     return { ok: false, error: 'Tipo de cuenta no válido.' }
 
   const empresas = await obtenerEmpresas()
