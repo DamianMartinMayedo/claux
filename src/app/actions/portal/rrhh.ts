@@ -439,6 +439,24 @@ export async function eliminarEmpleado(empleado_id: string): Promise<{ ok: boole
 
 const PDF_MAX = 10 * 1024 * 1024
 
+// Sube el PDF de un contrato al bucket (como Blob — el Buffer se corrompe en el
+// serverless de Vercel, ver memoria storage-upload-blob-no-buffer) y devuelve
+// { url, nombre } o un error de validación.
+async function subirContratoPdf(
+  db: ReturnType<typeof createAdminClient>,
+  file: File,
+  path: string,
+): Promise<{ url: string; nombre: string } | { error: string }> {
+  if (file.type !== 'application/pdf') return { error: 'El contrato debe ser un archivo PDF.' }
+  if (file.size > PDF_MAX)             return { error: 'El PDF no puede superar los 10 MB.' }
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const blob   = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
+  const { error: upErr } = await db.storage.from('contratos')
+    .upload(path, blob, { contentType: 'application/pdf', upsert: true })
+  if (upErr) return { error: upErr.message }
+  return { url: db.storage.from('contratos').getPublicUrl(path).data.publicUrl, nombre: file.name }
+}
+
 export async function guardarContrato(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -476,15 +494,9 @@ export async function guardarContrato(
   let pdf_url:    string | null = null
   let pdf_nombre: string | null = null
   if (file && file.size > 0) {
-    if (file.type !== 'application/pdf') return { ok: false, error: 'El contrato debe ser un archivo PDF.' }
-    if (file.size > PDF_MAX)             return { ok: false, error: 'El PDF no puede superar los 10 MB.' }
-    const path   = `${session.client_id}/${empleado_id}/${contrato_id}.pdf`
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const { error: upErr } = await db.storage.from('contratos')
-      .upload(path, buffer, { contentType: 'application/pdf', upsert: true })
-    if (upErr) return { ok: false, error: upErr.message }
-    pdf_url    = db.storage.from('contratos').getPublicUrl(path).data.publicUrl
-    pdf_nombre = file.name
+    const sub = await subirContratoPdf(db, file, `${session.client_id}/${empleado_id}/${contrato_id}.pdf`)
+    if ('error' in sub) return { ok: false, error: sub.error }
+    pdf_url = sub.url; pdf_nombre = sub.nombre
   }
 
   const { error } = await db.from('contratos').insert({
@@ -504,6 +516,55 @@ export async function guardarContrato(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath(`/portal/rrhh/${empleado_id}`)
+  return { ok: true }
+}
+
+// ── Actualizar contrato (editar campos y/o adjuntar/reemplazar el PDF) ───────────
+export async function actualizarContrato(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const contrato_id  = (formData.get('contrato_id')  as string)?.trim()
+  const tipo_raw     = (formData.get('tipo_contrato') as string)?.trim() as TipoContrato
+  const fecha_inicio = (formData.get('fecha_inicio') as string)?.trim() || hoy()
+  const fecha_fin    = (formData.get('fecha_fin')    as string)?.trim() || null
+  const periodi_raw  = (formData.get('periodicidad') as string)?.trim() as Periodicidad
+  const notas        = (formData.get('notas')        as string)?.trim() || null
+  const file         = formData.get('pdf') as File | null
+
+  if (!contrato_id) return { ok: false, error: 'Contrato no válido.' }
+
+  const tipo_contrato = TIPOS_CONTRATO.includes(tipo_raw)    ? tipo_raw    : 'INDEFINIDO'
+  const periodicidad  = PERIODICIDADES.includes(periodi_raw) ? periodi_raw : 'MENSUAL'
+
+  const db = createAdminClient()
+
+  const { data: contrato } = await db.from('contratos')
+    .select('empleado_id, pdf_url, pdf_nombre')
+    .eq('contrato_id', contrato_id)
+    .eq('client_id', session.client_id)
+    .single()
+  if (!contrato) return { ok: false, error: 'Contrato no encontrado.' }
+
+  // PDF: si adjunta uno nuevo, reemplaza (mismo path, upsert); si no, conserva el actual.
+  let pdf_url:    string | null = contrato.pdf_url as string | null
+  let pdf_nombre: string | null = contrato.pdf_nombre as string | null
+  if (file && file.size > 0) {
+    const sub = await subirContratoPdf(db, file, `${session.client_id}/${contrato.empleado_id}/${contrato_id}.pdf`)
+    if ('error' in sub) return { ok: false, error: sub.error }
+    pdf_url = sub.url; pdf_nombre = sub.nombre
+  }
+
+  const { error } = await db.from('contratos')
+    .update({ tipo_contrato, fecha_inicio, fecha_fin, periodicidad, notas, pdf_url, pdf_nombre })
+    .eq('contrato_id', contrato_id)
+    .eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/portal/rrhh/${contrato.empleado_id}`)
   return { ok: true }
 }
 

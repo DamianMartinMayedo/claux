@@ -8,6 +8,7 @@ import {
   reactivarEmpleado,
   eliminarEmpleado,
   guardarContrato,
+  actualizarContrato,
   eliminarContrato,
   guardarConceptoEmpleado,
   eliminarConceptoEmpleado,
@@ -49,23 +50,32 @@ function formatFecha(f: string | null): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-// ── Modal: nuevo contrato (documento + PDF opcional) ─────────────────────────────
+// ── Modal: contrato (crear / editar · documento + PDF opcional) ──────────────────
 
-function NuevoContratoModal({
-  empleadoId, onClose, onSaved,
+function ContratoModal({
+  empleadoId, contrato, onClose, onSaved,
 }: {
   empleadoId: string
+  contrato?:  Contrato | null   // presente = edición
   onClose:    () => void
   onSaved:    () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  const [nuevoNombre, setNuevoNombre] = useState<string | null>(null)  // nombre del PDF recién elegido
+  const esEdicion = !!contrato
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    fd.set('empleado_id', empleadoId)
     startTransition(async () => {
-      const res = await guardarContrato(fd)
+      let res
+      if (esEdicion) {
+        fd.set('contrato_id', contrato!.contrato_id)
+        res = await actualizarContrato(fd)
+      } else {
+        fd.set('empleado_id', empleadoId)
+        res = await guardarContrato(fd)
+      }
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -75,47 +85,69 @@ function NuevoContratoModal({
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">Nuevo contrato</h2>
+          <h2 className="modal-title">{esEdicion ? 'Editar contrato' : 'Nuevo contrato'}</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
+            <p className="text-sm-muted mb-3">
+              Registra el contrato del empleado y, si quieres, adjunta su PDF. Es un documento de archivo:
+              no cambia el salario ni la nómina.
+            </p>
             <div className="ter-form-grid">
               <div className="input-group ter-col-span-3">
                 <label>Tipo de contrato</label>
-                <select className="input" name="tipo_contrato" defaultValue="INDEFINIDO">
+                <select className="input" name="tipo_contrato" defaultValue={contrato?.tipo_contrato ?? 'INDEFINIDO'}>
                   {TIPOS_CONTRATO.map(t => <option key={t} value={t}>{TIPO_CONTRATO_LABEL[t]}</option>)}
                 </select>
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Periodicidad</label>
-                <select className="input" name="periodicidad" defaultValue="MENSUAL">
+                <select className="input" name="periodicidad" defaultValue={contrato?.periodicidad ?? 'MENSUAL'}>
                   {PERIODICIDADES.map(p => <option key={p} value={p}>{PERIODICIDAD_LABEL[p]}</option>)}
                 </select>
               </div>
               <div className="input-group ter-col-span-2">
                 <label>Inicio <span className="required">*</span></label>
-                <input className="input" name="fecha_inicio" type="date" required defaultValue={hoyISO()} />
+                <input className="input" name="fecha_inicio" type="date" required
+                  defaultValue={contrato?.fecha_inicio?.split('T')[0] ?? hoyISO()} />
               </div>
               <div className="input-group ter-col-span-2">
-                <label>Fin</label>
-                <input className="input" name="fecha_fin" type="date" />
+                <label>Fin <span className="input-hint-inline">(opcional)</span></label>
+                <input className="input" name="fecha_fin" type="date" defaultValue={contrato?.fecha_fin?.split('T')[0] ?? ''} />
               </div>
+
               <div className="input-group ter-col-full">
-                <label>PDF del contrato</label>
-                <input className="input" name="pdf" type="file" accept="application/pdf" />
-                <span className="input-hint">Opcional · documento externo, máx. 10 MB.</span>
+                <label>Documento PDF <span className="input-hint-inline">(opcional · máx. 10 MB)</span></label>
+                {esEdicion && contrato?.pdf_url && !nuevoNombre && (
+                  <div className="con-pdf-actual">
+                    <a href={contrato.pdf_url} target="_blank" rel="noopener noreferrer" className="link-primary det-meta-inline">
+                      <FileText size={14} strokeWidth={2} /> {contrato.pdf_nombre ?? 'Ver PDF actual'}
+                    </a>
+                    <span className="text-xs-muted">Elige un archivo para reemplazarlo.</span>
+                  </div>
+                )}
+                <input className="input" name="pdf" type="file" accept="application/pdf"
+                  onChange={e => setNuevoNombre(e.target.files?.[0]?.name ?? null)} />
+                <span className="input-hint">
+                  {nuevoNombre
+                    ? `Se subirá: ${nuevoNombre}`
+                    : esEdicion && contrato?.pdf_url
+                      ? 'Deja este campo vacío para conservar el PDF actual.'
+                      : 'Adjunta el PDF del contrato firmado (opcional).'}
+                </span>
               </div>
+
               <div className="input-group ter-col-full">
-                <label>Notas</label>
-                <input className="input" name="notas" placeholder="Referencia, anexos…" />
+                <label>Notas <span className="input-hint-inline">(opcional)</span></label>
+                <input className="input" name="notas" defaultValue={contrato?.notas ?? ''} placeholder="Referencia, anexos…" />
               </div>
             </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
-              {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Guardar contrato'}
+              {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : (esEdicion ? 'Guardar cambios' : 'Guardar contrato')}
             </button>
           </div>
         </form>
@@ -236,6 +268,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const [showBaja,      setShowBaja]      = useState(false)
   const [showDelete,    setShowDelete]    = useState(false)
   const [showNuevo,     setShowNuevo]     = useState(false)
+  const [editContrato,  setEditContrato]  = useState<Contrato | null>(null)
   const [delContrato,   setDelContrato]   = useState<Contrato | null>(null)
   const [detalleNominaId, setDetalleNominaId] = useState<string | null>(null)
   const [confirmarNom,  setConfirmarNom]  = useState<NominaConLineas | null>(null)
@@ -382,6 +415,8 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                     </td>
                     <td className="col-actions">
                       <div className="ter-actions">
+                        <button className="ter-action-btn" title="Editar contrato"
+                          onClick={() => setEditContrato(c)} disabled={isPending}><Pencil size={14} strokeWidth={2} /></button>
                         <button className="ter-action-btn ter-action-danger" title="Eliminar contrato"
                           onClick={() => setDelContrato(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                       </div>
@@ -453,8 +488,12 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
           onClose={() => setShowDelete(false)} isPending={isPending} />
       )}
       {showNuevo && (
-        <NuevoContratoModal empleadoId={empleado.empleado_id}
+        <ContratoModal empleadoId={empleado.empleado_id}
           onClose={() => setShowNuevo(false)} onSaved={() => { setShowNuevo(false); refrescar() }} />
+      )}
+      {editContrato && (
+        <ContratoModal empleadoId={empleado.empleado_id} contrato={editContrato}
+          onClose={() => setEditContrato(null)} onSaved={() => { setEditContrato(null); refrescar() }} />
       )}
       {delContrato && (
         <div className="modal-backdrop open">

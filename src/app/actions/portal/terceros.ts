@@ -168,11 +168,14 @@ export async function guardarTercero(
 
     const ext    = contratoFile.name.split('.').pop()?.toLowerCase() || 'pdf'
     const path   = `${session.client_id}/${tercero_id}.${ext}`
+    // Subir como Blob, no como Buffer: el Buffer se corrompe en el serverless de
+    // Vercel (recodificado a UTF-8). Ver memoria storage-upload-blob-no-buffer.
     const buffer = Buffer.from(await contratoFile.arrayBuffer())
+    const blob   = new Blob([new Uint8Array(buffer)], { type: contratoFile.type })
 
     const { error: upErr } = await db.storage
       .from('contratos')
-      .upload(path, buffer, { contentType: contratoFile.type, upsert: true })
+      .upload(path, blob, { contentType: contratoFile.type, upsert: true })
 
     if (upErr) return { ok: false, error: 'Error al subir el contrato.' }
 
