@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo }   from 'react'
+import { toastError } from '@/app/contexts/ToastContext'
+import { useState, useMemo, useTransition }   from 'react'
 import { useRouter }            from 'next/navigation'
 import Link                   from 'next/link'
-import { Eye, FileText, Plus } from 'lucide-react'
+import { Copy, Eye, FileText, Plus } from 'lucide-react'
 import {
   ESTADO_OFERTA_LABEL,
   ESTADO_OFERTA_BADGE,
@@ -13,10 +14,12 @@ import {
   type EstadoOferta,
   type EstadoFactura,
 } from './_ventas-helpers'
-import type {
-  VentasResumenData,
-  Oferta,
-  Factura,
+import {
+  duplicarOferta,
+  duplicarFactura,
+  type VentasResumenData,
+  type Oferta,
+  type Factura,
 } from '@/app/actions/portal/ventas'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
@@ -212,6 +215,15 @@ function TablaOfertas({
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const { pageItems, ...pag } = usePagination(ofertas)
+  const [isPending, startTransition] = useTransition()
+
+  function handleDuplicar(oferta_id: string) {
+    startTransition(async () => {
+      const res = await duplicarOferta(oferta_id)
+      if (!res.ok) { toastError(res.error ?? 'Error al duplicar.'); return }
+      router.push(`/portal/ventas/ofertas/${res.oferta_id}`)
+    })
+  }
   return (
     <>
     <div className="table-wrapper">
@@ -256,6 +268,7 @@ function TablaOfertas({
               <td className="col-actions">
                 <RowActions>
                   <button className="row-actions-item" onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                  <button className="row-actions-item" onClick={() => handleDuplicar(o.oferta_id)} disabled={isPending}><Copy size={15} strokeWidth={2} /> Duplicar</button>
                 </RowActions>
               </td>
             </tr>
@@ -281,6 +294,15 @@ function TablaFacturas({
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const { pageItems, ...pag } = usePagination(facturas)
+  const [isPending, startTransition] = useTransition()
+
+  function handleDuplicar(factura_id: string) {
+    startTransition(async () => {
+      const res = await duplicarFactura(factura_id)
+      if (!res.ok) { toastError(res.error ?? 'Error al duplicar.'); return }
+      router.push(`/portal/ventas/facturas/${res.factura_id}`)
+    })
+  }
   return (
     <>
     <div className="table-wrapper">
@@ -329,6 +351,7 @@ function TablaFacturas({
               <td className="col-actions">
                 <RowActions>
                   <button className="row-actions-item" onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                  <button className="row-actions-item" onClick={() => handleDuplicar(f.factura_id)} disabled={isPending}><Copy size={15} strokeWidth={2} /> Duplicar</button>
                 </RowActions>
               </td>
             </tr>
