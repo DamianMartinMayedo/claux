@@ -8,6 +8,7 @@ import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
 import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
+import TopLoader             from '@/components/portal/TopLoader'
 import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
 import { EmpresaColorProvider } from '@/components/portal/EmpresaColorContext'
 import IaChatWidget          from '@/components/portal/ia/IaChatWidget'
@@ -87,6 +88,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   return (
     <div className="portal-shell">
+      <TopLoader />
       <PortalRealtimeSync clientId={session.client_id} />
       <PortalHeader
         session={session}

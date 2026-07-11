@@ -87,6 +87,27 @@ export async function resolverModelo(clientId?: string): Promise<ModeloResuelto>
   return { model: row?.id || DEFAULT_MODEL, base, apiKey, esFallback }
 }
 
+// Config del modelo gratis de respaldo (settings.ia_modelo_fallback_gratis).
+// La usa provider.chat() como red de seguridad: si el modelo elegido falla en el
+// proveedor (lo rechaza, 5xx persistente o respuesta vacía), reintenta con este
+// en vez de tumbar todo el asistente. Si el respaldo configurado no sirve, cae al
+// DEFAULT_MODEL con la base global.
+export async function resolverFallbackGratis(): Promise<ModeloResuelto> {
+  const db = createAdminClient()
+  const { data: setRows } = await db.from('settings').select('key, value')
+    .in('key', ['ia_modelo_fallback_gratis', 'ia_api_base'])
+  const S = Object.fromEntries((setRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
+  const baseGlobal = (S.ia_api_base || DEFAULT_BASE).replace(/\/$/, '')
+  const id = S.ia_modelo_fallback_gratis || DEFAULT_MODEL
+
+  const row = await leerModelo(db, id)
+  if (!row || !row.activo) {
+    return { model: DEFAULT_MODEL, base: baseGlobal, apiKey: keyDe(null), esFallback: true }
+  }
+  const base = (row.api_base || baseGlobal).replace(/\/$/, '')
+  return { model: row.id, base, apiKey: keyDe(row.api_key_env), esFallback: true }
+}
+
 async function leerModelo(db: ReturnType<typeof createAdminClient>, id: string): Promise<ModeloRow | null> {
   const { data } = await db.from('ia_modelos').select('id, activo, gratis, api_base, api_key_env').eq('id', id).maybeSingle()
   return (data as ModeloRow | null) ?? null

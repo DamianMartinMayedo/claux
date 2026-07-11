@@ -1726,6 +1726,29 @@
    ═══════════════════════════════════════════════════ */
 /* Identidad de empresa en el encabezado: una empresa tiñe el acento;
    varias muestran una leyenda de colores del grupo. */
+/* ── Barra de progreso de navegación (TopLoader) ─────────────────────────────
+   Presupuesto Cuba: feedback inmediato de "cargando" en cada navegación. El
+   ancho se controla por --tl-progress (0→1) en runtime desde el componente. */
+.top-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  transform: scaleX(var(--tl-progress, 0));
+  transform-origin: 0 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px 0 var(--color-primary);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.2s ease, opacity 0.3s ease;
+}
+.top-loader[data-visible="true"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .top-loader { transition: opacity 0.3s ease; }
+}
+
 .dash-identidad { border-left: 3px solid var(--empresa-color, transparent); padding-left: var(--space-3); }
 .dash-empresas-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); }
 /* Switch de moneda dentro de la gráfica de contabilidad (consolidado + monedas) */
