@@ -254,6 +254,7 @@ dueño. Cómo funciona (implementado v1 — detalle en CONTEXTO §2 «Asistente 
 - [x] **Base contable completa (Fase 4)**: Tesorería, Gastos/Cobros, CxC/CxP y Reportes financieros construidos; selector de productos del editor de líneas gateado por `inventario`.
 - [x] **Asistente IA v1 (mig. 071)**: `asistente_ia` reclasificado de módulo a **addon**; núcleo `src/lib/ia/` (provider OpenCode Zen + contexto acotado + agente + medición + intérprete de bot), touchpoints en Dashboard, chat flotante del dueño, sección de Perfil (nombre + uso) y admin de modelo/consumo. Capa de Telegram en lenguaje natural sobre el motor híbrido. Detalle en CONTEXTO §2.
 - [x] **Catálogo QR (mig. 077, julio 2026)**: funcionalidad `catalogo_qr` construida — modelo propio (`catalogo_categorias`/`catalogo_items`) independiente de Inventario, editor `/portal/catalogo`, público `/[slug]/catalogo` (ISR), imágenes optimizadas cliente+servidor, QR, PWA/offline, IA de cara al dueño (autocompletar + insight). Detalle en CONTEXTO §2.
+- [x] **Caja / POS offline (mig. 089, julio 2026)**: nuevo módulo `caja` — PWA instalable offline (`/caja`) + sync idempotente (`/caja/api/{seed,sync}`); detalle propio (`caja_tickets`/`caja_ticket_lineas`) y resúmenes por cierre a Tesorería (`origen='CAJA'`) e Inventario (`origen='VENTA'`). Portal `/portal/caja`. Detalle en CONTEXTO §2.
 
 **Pendiente:**
 - [ ] **Build-out de módulos**: funcionalidad por sector `documentos_imprenta`. Chat embebido de IA en la mini-web pública para clientes finales (requiere medición/rate-limit propios de tráfico anónimo).

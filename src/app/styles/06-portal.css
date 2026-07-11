@@ -2243,3 +2243,27 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .cat-qr-card { text-align: center; }
 .cat-qr-preview { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
 .cat-qr-preview img { border-radius: var(--radius-md); border: 1px solid var(--color-border); }
+
+/* ── Caja (POS offline) ─────────────────────────────────────────── */
+.caja-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--color-divider); margin-bottom: var(--space-4); }
+.caja-tab {
+  padding: var(--space-2) var(--space-4);
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--color-text-muted); font-family: var(--font-body);
+  font-size: var(--text-sm); font-weight: 500; cursor: pointer; transition: var(--transition);
+}
+.caja-tab:hover { color: var(--color-text); }
+.caja-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+.caja-install { display: flex; flex-direction: column; gap: var(--space-3); }
+.caja-link-row { display: flex; gap: var(--space-2); align-items: center; }
+.caja-link-field { flex: 1; font-size: var(--text-xs); overflow-x: auto; }
+.caja-install-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+.caja-moneda-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.caja-moneda-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.caja-moneda-check { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 500; }
+.caja-moneda-row select { flex: 1; min-width: 0; }
+
+.caja-config-section { margin-bottom: var(--space-6); }
+.caja-actions { display: flex; justify-content: flex-end; margin-top: var(--space-5); }

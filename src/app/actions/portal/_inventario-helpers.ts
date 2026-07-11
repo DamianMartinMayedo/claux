@@ -52,6 +52,7 @@ export interface MovimientoInput {
   motivo?:            string | null
   origen?:            OrigenMovimiento
   referencia_id?:     string | null
+  permitir_negativo?: boolean         // ventas de caja: la venta ya ocurrió, el stock puede quedar negativo
 }
 
 export interface MovimientoResult {
@@ -77,6 +78,7 @@ export async function aplicarMovimiento(db: Db, m: MovimientoInput): Promise<Mov
     p_motivo:             m.motivo ?? null,
     p_origen:             m.origen ?? 'MANUAL',
     p_referencia_id:      m.referencia_id ?? null,
+    p_permitir_negativo:  m.permitir_negativo ?? false,
   })
   if (error) throw new Error(traducirErrorInventario(error.message))
   const r = (data ?? {}) as { movimiento_id: string; stock_global: number; stock_almacen: number }
