@@ -69,5 +69,6 @@ export const LINEAS_FASE2: LineaFase2[] = [
   { key: 'rrhh_nomina',   label: 'RRHH · Configuraciones de nómina',     horas: 1, limite: 2,  modulo: 'rrhh',        campo: 'config_nomina' },
 ]
 
-// Clave del módulo de contabilidad (obligatorio, siempre marcado en el form).
+// Clave del módulo base de contabilidad (no obligatorio; se usa para excluirlo
+// de las horas extra de formación en Fase 3, que ya tiene sus 2h base fijas).
 export const CLAVE_BASE = 'base'

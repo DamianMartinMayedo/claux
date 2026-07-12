@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useToast } from '@/app/contexts/ToastContext'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import {
-  CAMPOS_FASE1, LINEAS_FASE2, FORMATOS, CLAVE_BASE,
+  CAMPOS_FASE1, LINEAS_FASE2, FORMATOS,
   type FormatoDatos, type TarifaTipo,
 } from '@/lib/presupuesto/config'
 import {
@@ -48,7 +48,7 @@ export default function PresupuestoCalculadora({
   const [formato, setFormato]                     = useState<FormatoDatos>('cero')
 
   const [modulosSel, setModulosSel] = useState<string[]>(
-    Array.from(new Set([CLAVE_BASE, ...prefill.modulos])),
+    prefill.modulos,
   )
   const [vol, setVol] = useState<Record<string, string>>({ empresas: '1', monedas: '1', cuentas_tesoreria: '1' })
 
@@ -83,7 +83,6 @@ export default function PresupuestoCalculadora({
   const lineasFase2 = LINEAS_FASE2.filter(l => modulosSel.includes(l.modulo))
 
   function toggleModulo(clave: string) {
-    if (clave === CLAVE_BASE) return
     setModulosSel(prev => prev.includes(clave) ? prev.filter(c => c !== clave) : [...prev, clave])
   }
 
@@ -205,17 +204,16 @@ export default function PresupuestoCalculadora({
                   {items.map(m => {
                     const activo = modulosSel.includes(m.clave)
                     const precio = Number(m[precioField] ?? 0)
-                    const fija = m.clave === CLAVE_BASE
                     return (
                       <label key={m.clave} className="mod-row">
                         <span className="mod-row-main">
-                          <span className="mod-row-name">{m.nombre}{fija && ' (obligatorio)'}</span>
+                          <span className="mod-row-name">{m.nombre}</span>
                         </span>
                         <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
                           {precio > 0 ? `+${usd(precio)}` : 'Gratis'}
                         </span>
                         <span className="switch">
-                          <input type="checkbox" checked={activo} disabled={fija}
+                          <input type="checkbox" checked={activo}
                             onChange={() => toggleModulo(m.clave)} aria-label={`Contratar ${m.nombre}`} />
                           <span className="switch-track" aria-hidden="true" />
                         </span>
@@ -301,7 +299,7 @@ export default function PresupuestoCalculadora({
 
         {/* ── Columna de resultado (en vivo) ── */}
         <div className="pres-resultado">
-          <div className="card pres-sticky">
+          <div className="card">
             <p className="mod-list-label">Resultado estimado</p>
             <div className="pres-desglose">
               {resultado.desglose.map((d, i) => (
