@@ -80,7 +80,8 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
       <div className="portal-header-left">
         <MobileNavToggle shellSelector=".portal-shell" navId="portal-nav" />
         <Link href="/portal/dashboard" className="portal-logo">
-          <img src="/logo_color.svg" alt="CLAUX" height={32} />
+          <img src="/logo_color.svg" alt="CLAUX" className="logo-light" />
+          <img src="/logo_blanco.svg" alt="CLAUX" className="logo-dark" />
         </Link>
       </div>
       <div className="portal-header-right">

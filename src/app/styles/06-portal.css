@@ -34,11 +34,9 @@
 }
 .theme-toggle-btn:hover { background: var(--color-surface-2); color: var(--color-text); border-color: var(--color-border-strong); }
 .portal-logo {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: var(--text-xl);
-  color: var(--color-primary);
-  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 /* Menú de cuenta: único elemento de la derecha. Avatar con las iniciales del
    negocio en un acento distinto del principal (índigo), abre un desplegable. */

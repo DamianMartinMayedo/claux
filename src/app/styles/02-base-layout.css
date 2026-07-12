@@ -62,6 +62,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   gap: var(--space-3);
   text-decoration: none;
 }
+
+/* Logo image sizing & dark/light toggle */
+.header-logo img,
+.portal-logo img,
+.ld-header-logo img { display: block; height: 32px; width: auto; }
+.header-logo img { height: 36px; }
+.ld-footer-logo img { height: 30px; }
+
+.logo-dark { display: none; }
+[data-theme="dark"] .logo-light { display: none; }
+[data-theme="dark"] .logo-dark { display: block; }
 .header-logo-icon {
   width: 32px;
   height: 32px;

@@ -141,7 +141,12 @@ export default function CajaApp() {
     setLibreNom(''); setLibrePre(''); setLibre(false)
   }
   function changeQty(key: string, d: number) {
-    setCart(prev => prev.flatMap(l => l.key !== key ? [l] : (l.cantidad + d <= 0 ? [] : [{ ...l, cantidad: l.cantidad + d }])))
+    setCart(prev => prev.reduce<CartLine[]>((acc, l) => {
+      if (l.key !== key) { acc.push(l); return acc }
+      const nueva = l.cantidad + d
+      if (nueva > 0) acc.push({ ...l, cantidad: nueva })
+      return acc
+    }, []))
   }
   function removeLine(key: string) { setCart(prev => prev.filter(l => l.key !== key)) }
 

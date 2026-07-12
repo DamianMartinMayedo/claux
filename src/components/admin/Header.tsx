@@ -13,7 +13,8 @@ export default function Header({ displayName }: { email: string; displayName: st
       <div className="header-left">
         <MobileNavToggle shellSelector=".admin-shell" navId="admin-nav" />
         <Link href="/admin/dashboard" className="header-logo">
-          <img src="/logo_color.svg" alt="CLAUX" height={36} />
+          <img src="/logo_color.svg" alt="CLAUX" className="logo-light" />
+          <img src="/logo_blanco.svg" alt="CLAUX" className="logo-dark" />
         </Link>
       </div>
       <div className="header-right">

@@ -14,8 +14,8 @@ export function GET() {
     background_color: '#eef1f5',
     theme_color: '#0d9488',
     icons: [
-      { src: '/caja.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-      { src: '/caja.png', sizes: '512x512', type: 'image/png' },
+      { src: '/icon-catalogo-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icon-catalogo-512.png', sizes: '512x512', type: 'image/png' },
     ],
   })
 }
