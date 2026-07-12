@@ -63,16 +63,28 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   text-decoration: none;
 }
 
-/* Logo image sizing & dark/light toggle */
+/* Logo image sizing */
 .header-logo img,
 .portal-logo img,
-.ld-header-logo img { display: block; height: 32px; width: auto; }
-.header-logo img { height: 36px; }
-.ld-footer-logo img { height: 30px; }
+.ld-header-logo img { width: auto; }
 
-.logo-dark { display: none; }
-[data-theme="dark"] .logo-light { display: none; }
-[data-theme="dark"] .logo-dark { display: block; }
+.header-logo img    { height: 28px; }
+.portal-logo img    { height: 26px; }
+.ld-header-logo img { height: 30px; }
+.ld-footer-logo img { height: 26px; }
+
+/* Dark/light toggle — usa selector compuesto (> especificidad que el base) */
+.header-logo .logo-dark,
+.portal-logo .logo-dark,
+.ld-header-logo .logo-dark { display: none; }
+
+[data-theme="dark"] .header-logo .logo-light,
+[data-theme="dark"] .portal-logo .logo-light,
+[data-theme="dark"] .ld-header-logo .logo-light { display: none; }
+
+[data-theme="dark"] .header-logo .logo-dark,
+[data-theme="dark"] .portal-logo .logo-dark,
+[data-theme="dark"] .ld-header-logo .logo-dark { display: block; }
 .header-logo-icon {
   width: 32px;
   height: 32px;
