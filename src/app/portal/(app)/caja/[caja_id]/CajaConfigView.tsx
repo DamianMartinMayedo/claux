@@ -76,8 +76,9 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
       <div className="card caja-config-section">
         <h2 className="mon-section-title">Instalar en un dispositivo</h2>
         <p className="caja-install-hint">
-          Abre este enlace UNA vez con conexión en el móvil o tablet que será la caja e instálala
-          («Añadir a inicio»). Después funciona sin conexión.
+          Cómo dársela al cliente — <strong>1.</strong> abre este enlace (o compártelo por Telegram/WhatsApp) en el móvil o
+          tablet que hará de caja · <strong>2.</strong> pulsa «Instalar la caja» · <strong>3.</strong> abre el turno y a cobrar.
+          Después funciona sin conexión.
         </p>
         <div className="caja-install">
           <div className="caja-link-row">

@@ -99,14 +99,27 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
   function handleLogout() { setShowLogoutDialog(true) }
   function confirmLogout() { startTransition(() => { logoutCliente() }) }
 
-  const isDashboardActive = pathname === '/portal/dashboard' || pathname.startsWith('/portal/dashboard/')
-
   // Separar catálogo por tipo. La contabilidad es un módulo más (tipo='modulo',
   // clave 'base'), así que entra por el camino normal de módulos.
   const catalogItems = catalogo
   const modulos       = catalogItems.filter(c => c.tipo === 'modulo')
   const funcionalidades = catalogItems.filter(c => c.tipo === 'funcionalidad')
   // addons no generan items de navegación
+
+  // Ruta activa = la coincidencia de prefijo MÁS específica (la más larga). Sin esto,
+  // un hub como /portal/caja se quedaría "enganchado" como activo al navegar a una
+  // subpágina hermana (/portal/caja/operaciones), que también empieza por /portal/caja.
+  // Con el match más largo cada subpágina gana a su hub; el drill-down /portal/caja/<id>
+  // (sin item propio) sigue activando el hub. El resto de módulos no anida rutas, así que
+  // su comportamiento no cambia. Solo consideramos rutas de items realmente pintados.
+  const navRutas: string[] = ['/portal/dashboard']
+  for (const f of funcionalidades) if (modulosVisibles.includes(f.clave)) for (const p of ensurePages(f.paginas)) navRutas.push(p.ruta)
+  for (const m of modulos)         if (modulosVisibles.includes(m.clave)) for (const p of ensurePages(m.paginas)) navRutas.push(p.ruta)
+  const activeRuta = navRutas
+    .filter(r => pathname === r || pathname.startsWith(r + '/'))
+    .reduce<string | null>((best, r) => (best === null || r.length > best.length ? r : best), null)
+
+  const isDashboardActive = activeRuta === '/portal/dashboard'
 
   // Helper para renderizar una página (como Link en el sidebar). Solo se pintan
   // las páginas de módulos contratados, así que no hay estado "bloqueado".
@@ -119,7 +132,7 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
         ? <UtensilsCrossed size={18} strokeWidth={2} />
         : <QrCode size={18} strokeWidth={2} />
     }
-    const active = pathname === ruta || pathname.startsWith(ruta + '/')
+    const active = ruta === activeRuta
     return (
       <Link key={ruta} href={ruta} className={`nav-item${active ? ' active' : ''}`}>
         {icon}

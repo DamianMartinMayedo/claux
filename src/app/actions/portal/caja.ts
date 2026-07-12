@@ -79,7 +79,9 @@ function generarCajaId(): string {
   return `CAJ-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 function generarToken(): string {
-  return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '')
+  // 32 hex (128 bits): suficiente para un token revocable + rate-limitado, y
+  // hace el enlace de instalación bastante más corto.
+  return crypto.randomUUID().replace(/-/g, '')
 }
 
 async function empresaIds(): Promise<string[]> {

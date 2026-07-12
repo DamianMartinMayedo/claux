@@ -11,8 +11,8 @@ export function GET() {
     scope: '/caja',
     display: 'standalone',
     orientation: 'portrait',
-    background_color: '#0f172a',
-    theme_color: '#0f172a',
+    background_color: '#eef1f5',
+    theme_color: '#0d9488',
     icons: [
       { src: '/icon-catalogo-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/icon-catalogo-512.png', sizes: '512x512', type: 'image/png' },
