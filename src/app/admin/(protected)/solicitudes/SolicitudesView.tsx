@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation'
 import { Check, Copy, Eye, FileText, X } from 'lucide-react'
 import { useToast } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
+import VentasTabs from '@/components/admin/VentasTabs'
+import type { RolAdmin, SeccionKey } from '@/lib/roles'
 import {
   actualizarEstadoDiagnostico,
   type DiagnosticoLead,
@@ -26,7 +29,15 @@ function EstadoBadge({ estado }: { estado: EstadoLead }) {
     : <span className="badge badge-info">Nuevo</span>
 }
 
-export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] }) {
+export default function SolicitudesView({
+  leads,
+  rol,
+  permisos,
+}: {
+  leads: DiagnosticoLead[]
+  rol: RolAdmin
+  permisos: SeccionKey[]
+}) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
   const [filtro, setFiltro] = useState<Filtro>('todos')
@@ -35,6 +46,7 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
 
   const visibles = leads.filter((l) => filtro === 'todos' || l.estado === filtro)
   const nNuevos = leads.filter((l) => l.estado === 'nuevo').length
+  const { pageItems, ...pag } = usePagination(visibles)
 
   async function copiar(texto: string, etiqueta: string) {
     try {
@@ -70,6 +82,8 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
         </div>
       </div>
 
+      <VentasTabs rol={rol} permisos={permisos} />
+
       <div className="ter-toolbar">
         {FILTROS.map((f) => (
           <button
@@ -103,7 +117,7 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
                 </tr>
               </thead>
               <tbody>
-                {visibles.map((l) => (
+                {pageItems.map((l) => (
                   <tr key={l.id} className="table-row-clickable" onClick={() => setDetalle(l)}>
                     <td data-label="Estado"><EstadoBadge estado={l.estado} /></td>
                     <td data-label="Nombre">{l.nombre}</td>
@@ -116,6 +130,7 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => setDetalle(l)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                        <Link href={`/admin/presupuestos/nuevo?lead=${l.id}`} className="row-actions-item"><FileText size={15} strokeWidth={2} /> Crear presupuesto</Link>
                       </RowActions>
                     </td>
                   </tr>
@@ -123,6 +138,7 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
               </tbody>
             </table>
           </div>
+          <TablePagination {...pag} label="solicitud" />
         </div>
       )}
 

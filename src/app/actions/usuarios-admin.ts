@@ -7,18 +7,27 @@ import { PERMISOS_VENDEDOR_DEFAULT, SECCIONES, type RolAdmin, type SeccionKey } 
 import { revalidatePath } from 'next/cache'
 
 export interface UsuarioAdmin {
-  email:      string
-  nombre:     string
-  rol:        RolAdmin
-  permisos:   SeccionKey[]
-  activo:     boolean
-  created_at: string
+  email:       string
+  nombre:      string
+  rol:         RolAdmin
+  permisos:    SeccionKey[]
+  activo:      boolean
+  created_at:  string
+  esBootstrap: boolean   // super_admin fijado por ADMIN_EMAILS (env), no por la tabla
+  gestionable: boolean   // tiene fila en admin_users editable/eliminable desde el panel
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const CLAVES_VALIDAS = new Set(SECCIONES.map(s => s.key))
 
 type Resp = { ok: true } | { ok: false; error: string }
+
+/** Emails super-admin de bootstrap (ADMIN_EMAILS). Vacío si no está configurada. */
+function superAdminsBootstrap(): string[] {
+  const raw = process.env.ADMIN_EMAILS?.trim()
+  if (!raw) return []
+  return raw.split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+}
 
 function normalizarPermisos(rol: RolAdmin, permisos: string[]): SeccionKey[] {
   if (rol === 'super_admin') return []
@@ -27,15 +36,73 @@ function normalizarPermisos(rol: RolAdmin, permisos: string[]): SeccionKey[] {
   return limpio.length > 0 ? Array.from(new Set(limpio)) : [...PERMISOS_VENDEDOR_DEFAULT]
 }
 
-/** Lista de usuarios internos (equipo). Solo super_admin. */
+/**
+ * Lista de usuarios internos (equipo). Solo super_admin.
+ * Fusiona la tabla `admin_users` con las cuentas de Supabase Auth: así los
+ * super admins de bootstrap (ADMIN_EMAILS) también aparecen, aunque no tengan
+ * fila, marcados como "Cuenta base" (no editables/eliminables desde el panel;
+ * su rol lo fija la env var, pero sí se les puede regenerar la contraseña).
+ */
 export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
   await requireSuperAdmin()
   const db = createAdminClient()
-  const { data } = await db
-    .from('admin_users')
-    .select('email, nombre, rol, permisos, activo, created_at')
-    .order('created_at', { ascending: false })
-  return (data ?? []) as UsuarioAdmin[]
+
+  const [filasRes, authRes] = await Promise.all([
+    db.from('admin_users').select('email, nombre, rol, permisos, activo, created_at'),
+    db.auth.admin.listUsers({ page: 1, perPage: 200 }),
+  ])
+
+  const authByEmail = new Map<string, { nombre?: string; created_at: string }>()
+  for (const u of authRes.data?.users ?? []) {
+    if (u.email) {
+      authByEmail.set(u.email.toLowerCase(), {
+        nombre: u.user_metadata?.full_name as string | undefined,
+        created_at: u.created_at,
+      })
+    }
+  }
+
+  const whitelist = superAdminsBootstrap()
+  const conFila = new Set<string>()
+  const out: UsuarioAdmin[] = []
+
+  // 1. Filas de admin_users (super admins env → rol forzado a super_admin).
+  for (const f of filasRes.data ?? []) {
+    const email = f.email.toLowerCase()
+    conFila.add(email)
+    const boot = whitelist.includes(email)
+    out.push({
+      email,
+      nombre:      f.nombre,
+      rol:         boot ? 'super_admin' : (f.rol as RolAdmin),
+      permisos:    boot ? [] : ((f.permisos ?? []) as SeccionKey[]),
+      activo:      boot ? true : f.activo,
+      created_at:  f.created_at,
+      esBootstrap: boot,
+      gestionable: !boot,
+    })
+  }
+
+  // 2. Super admins de bootstrap sin fila (cuentas base creadas en Supabase).
+  for (const email of whitelist) {
+    if (conFila.has(email)) continue
+    const a = authByEmail.get(email)
+    out.push({
+      email,
+      nombre:      a?.nombre || email.split('@')[0],
+      rol:         'super_admin',
+      permisos:    [],
+      activo:      true,
+      created_at:  a?.created_at || new Date(0).toISOString(),
+      esBootstrap: true,
+      gestionable: false,
+    })
+  }
+
+  // Cuentas base primero, luego por nombre.
+  return out.sort((a, b) =>
+    a.esBootstrap === b.esBootstrap ? a.nombre.localeCompare(b.nombre) : a.esBootstrap ? -1 : 1,
+  )
 }
 
 /** Crea un usuario interno + su cuenta de Supabase Auth (email + contraseña). */
@@ -151,10 +218,18 @@ export async function resetPasswordUsuarioAdmin(email: string, nuevaPassword: st
   if (nuevaPassword.length < 8) return { ok: false, error: 'La contraseña debe tener al menos 8 caracteres.' }
 
   const db = createAdminClient()
+  // La cuenta puede tener fila en admin_users (vendedor / super admin gestionado)
+  // o ser una "cuenta base" de bootstrap sin fila → resolvemos por Supabase Auth.
+  let authUserId: string | null = null
   const { data: fila } = await db.from('admin_users').select('auth_user_id').eq('email', clave).maybeSingle()
-  if (!fila?.auth_user_id) return { ok: false, error: 'Usuario sin cuenta de acceso asociada.' }
+  authUserId = fila?.auth_user_id ?? null
+  if (!authUserId) {
+    const { data: usuarios } = await db.auth.admin.listUsers({ page: 1, perPage: 200 })
+    authUserId = usuarios?.users?.find(u => u.email?.toLowerCase() === clave)?.id ?? null
+  }
+  if (!authUserId) return { ok: false, error: 'Usuario sin cuenta de acceso asociada.' }
 
-  const { error } = await db.auth.admin.updateUserById(fila.auth_user_id, { password: nuevaPassword })
+  const { error } = await db.auth.admin.updateUserById(authUserId, { password: nuevaPassword })
   if (error) return { ok: false, error: error.message }
 
   await logActividad(db, {

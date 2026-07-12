@@ -3,6 +3,9 @@
 import { Search, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { suscripcionLabel } from '@/lib/billing'
+import { usePagination, TablePagination } from '@/components/TablePagination'
+import VentasTabs from '@/components/admin/VentasTabs'
+import type { RolAdmin, SeccionKey } from '@/lib/roles'
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info', GRACIA: 'badge-warning',
@@ -22,9 +25,13 @@ export type ClienteRO = {
 export default function ClientesReadOnly({
   clientes,
   descuentoAnualPct,
+  rol,
+  permisos,
 }: {
   clientes: ClienteRO[]
   descuentoAnualPct: number
+  rol: RolAdmin
+  permisos: SeccionKey[]
 }) {
   const [busqueda, setBusqueda] = useState('')
 
@@ -39,6 +46,8 @@ export default function ClientesReadOnly({
     )
   }, [clientes, busqueda])
 
+  const { pageItems, ...pag } = usePagination(filtrados)
+
   return (
     <div className="view-container">
       <div className="page-header">
@@ -47,6 +56,8 @@ export default function ClientesReadOnly({
           <p className="page-subtitle">{clientes.length} en total · vista de solo lectura.</p>
         </div>
       </div>
+
+      <VentasTabs rol={rol} permisos={permisos} />
 
       <div className="filters-bar">
         <div className="search-wrapper">
@@ -81,7 +92,7 @@ export default function ClientesReadOnly({
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(c => (
+                {pageItems.map(c => (
                   <tr key={c.client_id}>
                     <td data-label="Empresa">
                       <div className="table-empresa">{c.nombre_empresa}</div>
@@ -102,6 +113,7 @@ export default function ClientesReadOnly({
               </tbody>
             </table>
           </div>
+          <TablePagination {...pag} label="cliente" />
         </div>
       )}
     </div>

@@ -5,7 +5,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
+import { usePagination, TablePagination } from '@/components/TablePagination'
+import VentasTabs from '@/components/admin/VentasTabs'
 import { useToast } from '@/app/contexts/ToastContext'
+import type { RolAdmin, SeccionKey } from '@/lib/roles'
 import {
   obtenerPresupuesto,
   actualizarHorasReales,
@@ -23,13 +26,22 @@ function fmtFecha(iso: string): string {
 }
 const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
 
-export default function PresupuestosView({ presupuestos }: { presupuestos: PresupuestoRow[] }) {
+export default function PresupuestosView({
+  presupuestos,
+  rol,
+  permisos,
+}: {
+  presupuestos: PresupuestoRow[]
+  rol: RolAdmin
+  permisos: SeccionKey[]
+}) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [cargando, setCargando] = useState(false)
   const [horasReales, setHorasReales] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const { pageItems, ...pag } = usePagination(presupuestos)
 
   async function abrir(id: number) {
     setCargando(true)
@@ -67,6 +79,8 @@ export default function PresupuestosView({ presupuestos }: { presupuestos: Presu
         </Link>
       </div>
 
+      <VentasTabs rol={rol} permisos={permisos} />
+
       {presupuestos.length === 0 ? (
         <div className="table-wrapper">
           <div className="table-empty">
@@ -92,7 +106,7 @@ export default function PresupuestosView({ presupuestos }: { presupuestos: Presu
                 </tr>
               </thead>
               <tbody>
-                {presupuestos.map(p => (
+                {pageItems.map(p => (
                   <tr key={p.id} className="table-row-clickable" onClick={() => abrir(p.id)}>
                     <td data-label="Fecha" className="table-muted">{fmtFecha(p.created_at)}</td>
                     <td data-label="Negocio">{p.nombre_negocio}</td>
@@ -113,6 +127,7 @@ export default function PresupuestosView({ presupuestos }: { presupuestos: Presu
               </tbody>
             </table>
           </div>
+          <TablePagination {...pag} label="presupuesto" />
         </div>
       )}
 

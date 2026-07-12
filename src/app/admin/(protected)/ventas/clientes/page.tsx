@@ -1,7 +1,6 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { leerSetting } from '@/lib/settings'
-import VentasTabs from '@/components/admin/VentasTabs'
 import ClientesReadOnly from './ClientesReadOnly'
 
 export const dynamic = 'force-dynamic'
@@ -18,9 +17,11 @@ export default async function VentasClientesPage() {
   const descuentoAnual = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
 
   return (
-    <>
-      <VentasTabs rol={ctx.rol} permisos={ctx.permisos} />
-      <ClientesReadOnly clientes={clientes ?? []} descuentoAnualPct={descuentoAnual} />
-    </>
+    <ClientesReadOnly
+      clientes={clientes ?? []}
+      descuentoAnualPct={descuentoAnual}
+      rol={ctx.rol}
+      permisos={ctx.permisos}
+    />
   )
 }

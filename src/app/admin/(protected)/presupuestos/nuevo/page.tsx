@@ -2,7 +2,6 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listarModulosParaPresupuesto, listarComerciales } from '@/app/actions/presupuestos'
 import { LIMITE_FUNDADOR } from '@/lib/presupuesto/config'
-import VentasTabs from '@/components/admin/VentasTabs'
 import PresupuestoCalculadora from './PresupuestoCalculadora'
 
 export const dynamic = 'force-dynamic'
@@ -49,15 +48,12 @@ export default async function NuevoPresupuestoPage({
   const tarifaSugerida: 'fundador' | 'estandar' = (count ?? 0) < LIMITE_FUNDADOR ? 'fundador' : 'estandar'
 
   return (
-    <>
-      <VentasTabs rol={ctx.rol} permisos={ctx.permisos} />
-      <PresupuestoCalculadora
-        modulos={modulos}
-        comerciales={comerciales}
-        comercialEmailDefault={ctx.email}
-        tarifaSugerida={tarifaSugerida}
-        prefill={prefill}
-      />
-    </>
+    <PresupuestoCalculadora
+      modulos={modulos}
+      comerciales={comerciales}
+      comercialEmailDefault={ctx.email}
+      tarifaSugerida={tarifaSugerida}
+      prefill={prefill}
+    />
   )
 }
