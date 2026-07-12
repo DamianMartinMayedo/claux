@@ -47,8 +47,7 @@ export default function LoginPage() {
 
         <div className="login-header">
           <div className="login-logo-group">
-            <div className="login-logo-icon"><span>C</span></div>
-            <h2 className="login-title">CLAUX</h2>
+            <img src="/logo_color.svg" alt="CLAUX" height={48} />
           </div>
           <p className="login-subtitle">Panel de administración</p>
         </div>

@@ -12,10 +12,9 @@ export default function Header({ displayName }: { email: string; displayName: st
     <header className="admin-header">
       <div className="header-left">
         <MobileNavToggle shellSelector=".admin-shell" navId="admin-nav" />
-        <a href="/admin/dashboard" className="header-logo">
-          <div className="header-logo-icon"><span>C</span></div>
-          <span className="header-logo-name">CLAUX</span>
-        </a>
+        <Link href="/admin/dashboard" className="header-logo">
+          <img src="/logo_color.svg" alt="CLAUX" height={36} />
+        </Link>
       </div>
       <div className="header-right">
         <Link href="/admin/configuracion" className="header-user-card">

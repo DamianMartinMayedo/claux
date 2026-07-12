@@ -33,8 +33,7 @@ export default function PortalLoginPage() {
 
         <div className="login-header">
           <div className="login-logo-group">
-            <div className="login-logo-icon"><span>C</span></div>
-            <h2 className="login-title">CLAUX</h2>
+            <img src="/logo_color.svg" alt="CLAUX" height={48} />
           </div>
           <p className="login-subtitle">Portal de gestión empresarial</p>
         </div>
@@ -93,12 +92,10 @@ export default function PortalLoginPage() {
           </form>
         </div>
 
-        {/* TODO: reactivar cuando tengamos correo de soporte (avisar cuando esté listo).
         <p className="login-footer">
           ¿Problemas de acceso?{' '}
-          <a href="mailto:soporte@claux.app">soporte@claux.app</a>
+          <a href="mailto:soporte@claux.es">soporte@claux.es</a>
         </p>
-        */}
       </div>
     </div>
   )

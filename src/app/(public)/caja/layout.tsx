@@ -7,6 +7,7 @@ import CajaPwaRegister from './CajaPwaRegister'
 export const metadata: Metadata = {
   title: 'Caja — CLAUX',
   manifest: '/caja/manifest.webmanifest',
+  icons: { apple: '/caja.png' },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Caja' },
 }
 

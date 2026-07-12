@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 
-// Manifest genérico de la caja (el token va en el fragmento del enlace de
+// Manifest de la caja (el token va en el fragmento del enlace de
 // instalación, no en el manifest). Tras instalar, la app arranca en /caja y lee
-// el token guardado en IndexedDB. Reutiliza los iconos PWA existentes.
+// el token guardado en IndexedDB.
 export function GET() {
   return NextResponse.json({
     name: 'Caja — CLAUX',
@@ -14,8 +14,8 @@ export function GET() {
     background_color: '#eef1f5',
     theme_color: '#0d9488',
     icons: [
-      { src: '/icon-catalogo-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/icon-catalogo-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/caja.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      { src: '/caja.png', sizes: '512x512', type: 'image/png' },
     ],
   })
 }

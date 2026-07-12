@@ -6,8 +6,7 @@ export function PublicHeader() {
   return (
     <header className="ld-header">
       <Link href="/" className="ld-header-logo" aria-label="CLAUX — inicio">
-        <div className="ld-header-logo-icon">C</div>
-        <span className="ld-header-logo-text">CLAUX</span>
+        <img src="/logo_color.svg" alt="CLAUX" height={32} />
       </Link>
       <nav className="ld-header-nav">
         <a href="/portal/login" className="btn btn-ghost btn-sm">
@@ -24,10 +23,9 @@ export function PublicHeader() {
 export function PublicFooter() {
   return (
     <footer className="ld-footer">
-      <div className="ld-header-logo ld-footer-logo">
-        <div className="ld-header-logo-icon">C</div>
-        <span className="ld-header-logo-text">CLAUX</span>
-      </div>
+      <Link href="/" className="ld-header-logo ld-footer-logo" aria-label="CLAUX">
+        <img src="/logo_color.svg" alt="CLAUX" height={30} />
+      </Link>
       <p className="ld-footer-text">
         Hecho para hacer crecer tu negocio. Simple, rápido, sin complicaciones.
       </p>
