@@ -89,6 +89,7 @@ export default function CajaApp() {
       if (m) { tk = decodeURIComponent(m[1]); await metaSet('token', tk); history.replaceState(null, '', window.location.pathname) }
       tk = tk ?? (await metaGet<string>('token')) ?? null
       let cfg = (await metaGet<CajaConfig>('config')) ?? null
+      const teniaCache = !!cfg
       let prods = await getProductos()
       if (tk && !cfg && navigator.onLine) {
         try { const s = await fetchSeed(tk); cfg = s.config; prods = s.productos; await metaSet('config', cfg); await saveProductos(prods) } catch { /* offline */ }
@@ -102,6 +103,17 @@ export default function CajaApp() {
       setDismissed((await metaGet<boolean>('install_dismissed')) === true)
       await reload()
       setReady(true)
+      // Refresco en segundo plano (ya mostramos la caja con lo cacheado): con conexión
+      // re-baja productos/precios/monedas para quedar al día — quita los archivados y
+      // trae cambios del portal sin que el vendedor pulse nada.
+      if (tk && teniaCache && navigator.onLine) {
+        try {
+          const s = await fetchSeed(tk)
+          if (cancelled) return
+          await metaSet('config', s.config); await saveProductos(s.productos)
+          setConfig(s.config); setProds(s.productos)
+        } catch { /* seguimos con lo cacheado */ }
+      }
     })()
     const on = () => setOnline(true), off = () => setOnline(false)
     const bip = (e: Event) => { e.preventDefault(); setInstallEvt(e as InstallPromptEvent) }
