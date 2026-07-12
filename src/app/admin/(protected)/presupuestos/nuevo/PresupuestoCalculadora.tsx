@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, X } from 'lucide-react'
+import { Check, ChevronRight, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -141,6 +141,11 @@ export default function PresupuestoCalculadora({
     <div className="view-container">
       <div className="page-header">
         <div>
+          <nav className="breadcrumb" aria-label="Ruta de navegación">
+            <Link href="/admin/presupuestos">Presupuestos</Link>
+            <ChevronRight className="breadcrumb-sep" />
+            <span className="breadcrumb-current">Nuevo presupuesto</span>
+          </nav>
           <h1 className="page-title">Nuevo presupuesto de instalación</h1>
           <p className="page-subtitle">Calcula horas y coste a partir de los módulos y el volumen.</p>
         </div>

@@ -18,8 +18,8 @@ h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; line-hei
 /* Enlaces de texto. Excluye los <a> que son botones (.btn): esos toman su color
    de las clases .btn-* y no deben heredar el color de enlace (rompía el hover:
    el texto teal coincidía con el fondo teal del botón). */
-a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
-a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):hover { color: var(--color-primary-hover); }
+a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.ven-tab) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
+a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.ven-tab):hover { color: var(--color-primary-hover); }
 a.btn { text-decoration: none; }
 img, svg { display: block; }
 ul, ol { list-style: none; }

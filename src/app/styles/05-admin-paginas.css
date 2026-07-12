@@ -867,10 +867,11 @@ textarea:focus-visible {
 .sol-value { flex: 1 1 12rem; min-width: 0; color: var(--color-text); word-break: break-word; }
 
 /* ── Presupuesto de instalación: calculadora + resultado ── */
-.pres-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); align-items: start; }
-.pres-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.pres-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
+.pres-form { display: flex; flex-direction: column; gap: var(--space-4); align-self: start; }
 .pres-form .card { display: flex; flex-direction: column; gap: var(--space-3); }
-.pres-sticky { position: sticky; top: var(--space-4); }
+.pres-sticky { position: sticky; top: var(--space-6); z-index: 10; }
+.pres-sticky > .btn { margin-top: var(--space-4); }
 .pres-desglose { display: flex; flex-direction: column; gap: var(--space-2); }
 .pres-fase-row {
   display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-3);
