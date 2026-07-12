@@ -13,6 +13,12 @@ const money = (n: number) => Number(n).toLocaleString('es-ES', { minimumFraction
 const qty   = (n: number) => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 3 })
 const fecha = (s: string) => s ? new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 
+function estadoBadge(estado: string) {
+  if (estado === 'ANULADO')       return <span className="mon-badge mon-badge-warn">Anulada</span>
+  if (estado === 'RECTIFICACION') return <span className="mon-badge mon-badge-info">Rectificación</span>
+  return <span className="mon-badge mon-badge-neutral">Original</span>
+}
+
 export default function OperacionesView({ data }: Props) {
   const [tab, setTab]       = useState<'ventas' | 'stock'>('ventas')
   const [search, setSearch] = useState('')
@@ -80,7 +86,7 @@ function VentasTabla({ items, cajaNombre }: { items: Ticket[]; cajaNombre: (id: 
             <thead>
               <tr>
                 <th>Fecha</th><th>Caja</th><th>Medio de pago</th>
-                <th className="col-num">Total</th><th>Moneda</th>
+                <th className="col-num">Total</th><th>Moneda</th><th>Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -91,6 +97,7 @@ function VentasTabla({ items, cajaNombre }: { items: Ticket[]; cajaNombre: (id: 
                   <td data-label="Medio de pago">{t.medio_pago ?? '—'}</td>
                   <td data-label="Total" className="col-num">{money(t.total)}</td>
                   <td data-label="Moneda">{t.moneda}</td>
+                  <td data-label="Estado">{estadoBadge(t.estado)}</td>
                 </tr>
               ))}
             </tbody>

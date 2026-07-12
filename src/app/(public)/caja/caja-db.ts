@@ -17,6 +17,9 @@ export interface LocalLinea {
 export interface LocalTicket {
   ticket_uuid: string; sesion_uuid: string | null; fecha: string; moneda: string; total: number
   medio_pago: string | null; lineas: LocalLinea[]; synced: boolean
+  // Rectificación: el original queda 'ANULADO' y se crea uno 'RECTIFICACION' que
+  // apunta al original en rectifica_a. Tickets antiguos sin campo → 'VIGENTE'.
+  estado?: 'VIGENTE' | 'ANULADO' | 'RECTIFICACION'; rectifica_a?: string | null
 }
 export interface LocalSesion {
   sesion_uuid: string; abierta_at: string; cerrada_at: string | null; estado: 'ABIERTA' | 'CERRADA'

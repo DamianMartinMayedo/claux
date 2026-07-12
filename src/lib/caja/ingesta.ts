@@ -36,13 +36,15 @@ export interface LineaIn {
   subtotal:        number
 }
 export interface TicketIn {
-  ticket_uuid: string
+  ticket_uuid:  string
   sesion_uuid?: string | null
-  fecha:       string
-  moneda:      string
-  total:       number
-  medio_pago?: string | null
-  lineas:      LineaIn[]
+  fecha:        string
+  moneda:       string
+  total:        number
+  medio_pago?:  string | null
+  estado?:      'VIGENTE' | 'ANULADO' | 'RECTIFICACION'
+  rectifica_a?: string | null   // ticket_uuid del original (solo en RECTIFICACION)
+  lineas:       LineaIn[]
 }
 export interface CierreIn {
   sesion_uuid:       string
@@ -146,11 +148,23 @@ export async function ingestarLote(
       moneda:      t.moneda,
       total:       Number(t.total) || 0,
       medio_pago:  t.medio_pago ?? null,
+      estado:      t.estado ?? 'VIGENTE',
+      rectifica_a: t.rectifica_a ?? null,
       origen_sync: origenSync,
     }, { onConflict: 'ticket_uuid', ignoreDuplicates: true }).select('ticket_uuid')
 
     if (error)                      { res.errores.push(`ticket ${t.ticket_uuid}: ${error.message}`); continue }
-    if (!nuevo || nuevo.length === 0) { res.duplicados++; continue }
+    if (!nuevo || nuevo.length === 0) {
+      // Ya existía. Si vuelve como ANULADO (se rectificó un ticket ya sincronizado),
+      // propagamos solo el cambio de estado; las líneas no se re-insertan.
+      res.duplicados++
+      if ((t.estado ?? 'VIGENTE') === 'ANULADO') {
+        await db.from('caja_tickets')
+          .update({ estado: 'ANULADO', rectifica_a: t.rectifica_a ?? null })
+          .eq('ticket_uuid', t.ticket_uuid).eq('client_id', caja.client_id)
+      }
+      continue
+    }
     res.tickets_nuevos++
 
     const lineas = Array.isArray(t.lineas) ? t.lineas : []
@@ -215,12 +229,14 @@ async function postearResumenCierre(
   const fecha = (ses.cerrada_at ?? new Date().toISOString()).split('T')[0]
   let did = false
 
-  // Totales por moneda desde los tickets sincronizados de este cierre.
+  // Totales por moneda desde los tickets sincronizados de este cierre. Los ANULADO
+  // (rectificados) se excluyen → Tesorería e Inventario reciben el NETO corregido.
   const { data: tks } = await db.from('caja_tickets')
-    .select('ticket_uuid, moneda, total').eq('sesion_uuid', sesionUuid)
-  const ticketUuids = (tks ?? []).map((t: { ticket_uuid: string }) => t.ticket_uuid)
+    .select('ticket_uuid, moneda, total, estado').eq('sesion_uuid', sesionUuid)
+  const vigentes = (tks ?? []).filter((t: { estado?: string }) => (t.estado ?? 'VIGENTE') !== 'ANULADO')
+  const ticketUuids = vigentes.map((t: { ticket_uuid: string }) => t.ticket_uuid)
   const porMoneda = new Map<string, number>()
-  for (const t of (tks ?? [])) porMoneda.set(t.moneda, (porMoneda.get(t.moneda) ?? 0) + Number(t.total))
+  for (const t of vigentes) porMoneda.set(t.moneda, (porMoneda.get(t.moneda) ?? 0) + Number(t.total))
 
   // ── Tesorería: un INGRESO resumen por moneda ──
   if (tieneBase && ses.tesoreria_movs == null && porMoneda.size > 0) {

@@ -5,7 +5,7 @@
 // /caja/api/* (seed/sync) NUNCA se cachean: siempre a red (o fallan y la app
 // guarda local para reintentar).
 
-const CACHE = 'claux-caja-v1'
+const CACHE = 'claux-caja-v2'
 
 self.addEventListener('install', () => self.skipWaiting())
 

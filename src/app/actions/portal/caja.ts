@@ -37,6 +37,7 @@ export interface Ticket {
   total:       number
   medio_pago:  string | null
   sesion_uuid: string | null
+  estado:      string   // VIGENTE | ANULADO | RECTIFICACION
 }
 
 export interface MovimientoStock {
@@ -247,7 +248,7 @@ export async function listarOperaciones(): Promise<{ tickets: Ticket[]; stock: M
 
   const [tkRes, cajasRes] = await Promise.all([
     db.from('caja_tickets')
-      .select('ticket_uuid, caja_id, fecha, moneda, total, medio_pago, sesion_uuid')
+      .select('ticket_uuid, caja_id, fecha, moneda, total, medio_pago, sesion_uuid, estado')
       .eq('client_id', session.client_id).in('empresa_id', scope)
       .order('fecha', { ascending: false }).limit(1000),
     db.from('cajas').select('caja_id, nombre').eq('client_id', session.client_id),
@@ -257,7 +258,8 @@ export async function listarOperaciones(): Promise<{ tickets: Ticket[]; stock: M
   const cajaNombres: Record<string, string> = {}
   for (const c of (cajasRes.data ?? []) as { caja_id: string; nombre: string }[]) cajaNombres[c.caja_id] = c.nombre
 
-  // Líneas (movimientos de stock detallados) de esos tickets.
+  // Líneas (movimientos de stock detallados) de esos tickets. Se excluyen las de
+  // tickets ANULADO (rectificados: no movieron stock) y se ordena por fecha desc.
   const uuids = tickets.map(t => t.ticket_uuid)
   let stock: MovimientoStock[] = []
   if (uuids.length) {
@@ -265,10 +267,13 @@ export async function listarOperaciones(): Promise<{ tickets: Ticket[]; stock: M
       .select('ticket_uuid, producto_id, descripcion, cantidad, precio_unitario')
       .in('ticket_uuid', uuids)
     const tkMap = new Map(tickets.map(t => [t.ticket_uuid, t]))
-    stock = ((lineas ?? []) as Omit<MovimientoStock, 'fecha' | 'caja_id'>[]).map(l => {
-      const tk = tkMap.get(l.ticket_uuid)
-      return { ...l, fecha: tk?.fecha ?? '', caja_id: tk?.caja_id ?? '' }
-    })
+    stock = ((lineas ?? []) as Omit<MovimientoStock, 'fecha' | 'caja_id'>[])
+      .filter(l => (tkMap.get(l.ticket_uuid)?.estado ?? 'VIGENTE') !== 'ANULADO')
+      .map(l => {
+        const tk = tkMap.get(l.ticket_uuid)
+        return { ...l, fecha: tk?.fecha ?? '', caja_id: tk?.caja_id ?? '' }
+      })
+      .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
   }
 
   return { tickets, stock, cajaNombres }
