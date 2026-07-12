@@ -14,7 +14,7 @@ type Vista = 'card' | 'lista'
 // (/[slug]/catalogo/[itemId]). Presupuesto de rendimiento: solo lucide-react +
 // hooks de React, nada del ERP.
 export default function CatalogoPublico({ data, slug }: { data: CatalogoPublicoData; slug: string }) {
-  const [vista, setVista] = useState<Vista>('card')
+  const [vista, setVista] = useState<Vista>('lista')
 
   // Si el único grupo es el sintético "Otros" (ítems sin categoría), no tiene
   // sentido rotularlo: se listan sin cabecera de sección.
