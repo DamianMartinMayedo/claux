@@ -68,10 +68,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .portal-logo img,
 .ld-header-logo img { width: auto; }
 
-.header-logo img    { height: 28px; }
-.portal-logo img    { height: 26px; }
-.ld-header-logo img { height: 30px; }
-.ld-footer-logo img { height: 26px; }
+.header-logo img    { height: 20px; }
+.portal-logo img    { height: 20px; }
+.ld-header-logo img { height: 20px; }
+.ld-footer-logo img { height: 20px; }
 
 /* Dark/light toggle — usa selector compuesto (> especificidad que el base) */
 .header-logo .logo-dark,
