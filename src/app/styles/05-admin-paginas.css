@@ -866,28 +866,6 @@ textarea:focus-visible {
 }
 .sol-value { flex: 1 1 12rem; min-width: 0; color: var(--color-text); word-break: break-word; }
 
-/* ── Ventas: barra de sub-pestañas (Solicitudes | Presupuestos | Clientes) ── */
-.ventas-tabs {
-  display: flex; gap: 0;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: var(--space-5);
-}
-.ventas-tab {
-  display: inline-flex; align-items: center;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm); font-weight: 600;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color var(--transition), border-color var(--transition);
-}
-.ventas-tab:hover { color: var(--color-text); }
-.ventas-tab.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
-
 /* ── Presupuesto de instalación: calculadora + resultado ── */
 .pres-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); align-items: start; }
 .pres-form { display: flex; flex-direction: column; gap: var(--space-4); }

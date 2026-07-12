@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { obtenerContextoAdmin } from '@/lib/roles-server'
+import TopLoader from '@/components/portal/TopLoader'
 import Sidebar from '@/components/admin/Sidebar'
 import Header from '@/components/admin/Header'
 import { desactivarClientesVencidos } from '@/app/actions/clientes'
@@ -42,6 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="admin-shell">
+      <TopLoader />
       <Header displayName={ctx.nombre} rol={ctx.rol} />
       <Sidebar rol={ctx.rol} permisos={ctx.permisos} />
       <div className="admin-main">
