@@ -10,9 +10,9 @@ export function PublicHeader() {
         <img src="/logo_blanco.svg" alt="CLAUX" className="logo-dark" />
       </Link>
       <nav className="ld-header-nav">
-        <a href="/portal/login" className="btn btn-ghost btn-sm">
+        <Link href="/portal" className="btn btn-ghost btn-sm">
           Acceso clientes
-        </a>
+        </Link>
         <Link href="/diagnostico" className="btn btn-primary btn-sm ld-header-cta">
           Diagnóstico gratis
         </Link>
