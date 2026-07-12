@@ -1,3 +1,4 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { CreditCard, Lock, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
@@ -5,6 +6,7 @@ import PerfilForm from './PerfilForm'
 import FacturacionForm from './FacturacionForm'
 
 export default async function ConfiguracionPage() {
+  await requireAccesoPagina('configuracion')
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 

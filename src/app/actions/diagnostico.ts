@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/admin-guard'
+import { requirePermiso } from '@/lib/admin-guard'
 
 export type EstadoLead = 'nuevo' | 'contactado'
 
@@ -21,7 +21,7 @@ export interface DiagnosticoLead {
 // Lista de solicitudes de diagnóstico (leads) para el admin. El guardado lo hace
 // el público por service_role; listarlas solo puede un admin autorizado.
 export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
-  await requireAdmin()
+  await requirePermiso('solicitudes')
   const db = createAdminClient()
   const { data } = await db
     .from('diagnosticos')
@@ -35,7 +35,7 @@ export async function actualizarEstadoDiagnostico(
   id: number,
   estado: EstadoLead,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin()
+  await requirePermiso('solicitudes')
   if (estado !== 'nuevo' && estado !== 'contactado') return { ok: false, error: 'Estado inválido.' }
   const db = createAdminClient()
   const { error } = await db.from('diagnosticos').update({ estado }).eq('id', id)

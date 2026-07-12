@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/admin-guard'
+import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
@@ -50,7 +50,7 @@ async function calcularPrecioMensual(
 
 // ── Crear cliente ────────────────────────────────────────────────────
 export async function crearCliente(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
 
   const nombre_empresa  = (formData.get('nombre_empresa')  as string ?? '').trim()
@@ -214,7 +214,7 @@ export async function regenerarPasswordCliente(
   user_id: string,
   client_id: string,
 ): Promise<{ ok: boolean; passwordTemporal?: string; error?: string }> {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
 
   if (!user_id || !client_id) return { ok: false, error: 'Datos inválidos.' }
@@ -256,7 +256,7 @@ export async function regenerarPasswordCliente(
 
 // ── Desactivar cliente ───────────────────────────────────────────────
 export async function cambiarEstadoCliente(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
 
   const client_id    = formData.get('client_id') as string
@@ -290,7 +290,7 @@ export async function cambiarEstadoCliente(formData: FormData) {
 
 // ── Aplicar período especial (GRACIA) ────────────────────────────────
 export async function aplicarGracia(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
 
   const client_id = formData.get('client_id') as string
@@ -336,7 +336,7 @@ export async function aplicarGracia(formData: FormData) {
 
 // ── Módulos à la carte: activar/desactivar y recalcular precio ───────
 export async function setModulosCliente(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
 
   const client_id = (formData.get('client_id') as string ?? '').trim()
@@ -378,7 +378,7 @@ export async function setModulosCliente(formData: FormData) {
 
 // ── Editar datos del cliente ──────────────────────────────────────────
 export async function editarCliente(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
 
   const client_id       = (formData.get('client_id')       as string ?? '').trim()
@@ -425,7 +425,7 @@ export async function editarCliente(formData: FormData) {
 // Busca clientes con período de gracia vencido o fecha de expiración pasada
 // y los suspende automáticamente. Se ejecuta al cargar el admin.
 export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendidos: number }> {
-  await requireAdmin()
+  await requirePermiso('clientes')
   const supabase = await createClient()
   const hoy = toDateStr(new Date())
 

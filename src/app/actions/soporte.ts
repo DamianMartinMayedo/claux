@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/admin-guard'
+import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -30,7 +30,7 @@ export interface MensajeSoporte {
 }
 
 export async function listarMensajesSoporte(): Promise<MensajeSoporte[]> {
-  await requireAdmin()
+  await requirePermiso('soporte')
   if (!(await adminAutenticado())) return []
   const db = createAdminClient()
 
@@ -56,7 +56,7 @@ export async function actualizarEstadoMensaje(
   id: number,
   estado: 'NUEVO' | 'LEIDO' | 'RESUELTO',
 ): Promise<{ ok: boolean }> {
-  await requireAdmin()
+  await requirePermiso('soporte')
   if (!(await adminAutenticado())) return { ok: false }
   if (!['NUEVO', 'LEIDO', 'RESUELTO'].includes(estado)) return { ok: false }
   const { error } = await createAdminClient()
@@ -80,7 +80,7 @@ export interface FaqAdmin {
 }
 
 export async function listarFaqAdmin(): Promise<FaqAdmin[]> {
-  await requireAdmin()
+  await requirePermiso('soporte')
   if (!(await adminAutenticado())) return []
   const { data } = await createAdminClient()
     .from('soporte_faq')
@@ -91,7 +91,7 @@ export async function listarFaqAdmin(): Promise<FaqAdmin[]> {
 }
 
 export async function guardarFaq(formData: FormData): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin()
+  await requirePermiso('soporte')
   if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
 
   const id           = ((formData.get('id')           as string) ?? '').trim()
@@ -120,7 +120,7 @@ export async function guardarFaq(formData: FormData): Promise<{ ok: boolean; err
 }
 
 export async function eliminarFaq(id: number): Promise<{ ok: boolean }> {
-  await requireAdmin()
+  await requirePermiso('soporte')
   if (!(await adminAutenticado())) return { ok: false }
   const { error } = await createAdminClient().from('soporte_faq').delete().eq('id', id)
   if (error) return { ok: false }

@@ -1,3 +1,4 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { DOCUMENTOS_IA } from '@/lib/ia/documentos'
 import IaAdminClient, { type ModeloIa, type ConsumoCliente, type DocumentoUi } from './IaAdminClient'
@@ -10,6 +11,7 @@ function periodoActual(): string {
 }
 
 export default async function AdminIaPage() {
+  await requireAccesoPagina('ia')
   const supabase = await createClient()
   const periodo = periodoActual()
 

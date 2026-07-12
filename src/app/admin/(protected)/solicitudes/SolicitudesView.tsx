@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Check, Copy, Eye, X } from 'lucide-react'
+import { Check, Copy, Eye, FileText, X } from 'lucide-react'
 import { useToast } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import {
@@ -179,6 +180,9 @@ export default function SolicitudesView({ leads }: { leads: DiagnosticoLead[] })
               </div>
             </div>
             <div className="modal-footer">
+              <Link href={`/admin/presupuestos/nuevo?lead=${detalle.id}`} className="btn btn-secondary">
+                <FileText size={15} strokeWidth={2} /> Crear presupuesto
+              </Link>
               {detalle.estado === 'nuevo' ? (
                 <button className="btn btn-primary" disabled={saving} onClick={() => marcar(detalle, 'contactado')}>
                   <Check size={15} strokeWidth={2} /> Marcar como contactada

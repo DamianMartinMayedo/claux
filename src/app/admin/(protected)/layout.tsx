@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { isAuthBypassed, DEV_ADMIN, emailEsAdmin } from '@/lib/dev-auth'
+import { obtenerContextoAdmin } from '@/lib/roles-server'
 import Sidebar from '@/components/admin/Sidebar'
 import Header from '@/components/admin/Header'
 import { desactivarClientesVencidos } from '@/app/actions/clientes'
@@ -10,10 +10,11 @@ import AdminToastWrapper from '@/components/admin/AdminToastWrapper'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user: realUser } } = await supabase.auth.getUser()
+  const ctx = await obtenerContextoAdmin()
 
-  // Lista blanca de admins (defensa en profundidad): una cuenta de Supabase Auth
-  // que no esté en ADMIN_EMAILS no entra al panel, aunque exista y esté confirmada.
-  if (realUser && !emailEsAdmin(realUser.email)) {
+  // Cuenta de Supabase Auth existente pero SIN autorización (ni whitelist ni fila
+  // activa en admin_users) → pantalla de acceso denegado (defensa en profundidad).
+  if (realUser && !ctx) {
     return (
       <div className="login-container">
         <div className="login-box">
@@ -30,22 +31,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     )
   }
 
-  // Bypass de login SOLO en desarrollo local (doble candado en isAuthBypassed):
-  // si no hay sesión real, usamos un admin ficticio para pintar el shell.
-  const user = realUser ?? (isAuthBypassed() ? DEV_ADMIN : null)
-  if (!user) redirect('/admin/login')
+  // Sin sesión (y sin bypass de desarrollo) → login.
+  if (!ctx) redirect('/admin/login')
 
-  // Desactivar automáticamente clientes con período de gracia vencido o fecha de expiración pasada
-  await desactivarClientesVencidos()
-
-  const displayName: string =
-    (user.user_metadata?.full_name as string | undefined) ||
-    (user.email?.split('@')[0] ?? 'Admin')
+  // Desactivar automáticamente clientes vencidos (solo super_admin, evita error
+  // de permisos para un vendedor al abrir el panel).
+  if (ctx.rol === 'super_admin') {
+    await desactivarClientesVencidos()
+  }
 
   return (
     <div className="admin-shell">
-      <Header email={user.email ?? ''} displayName={displayName} />
-      <Sidebar />
+      <Header displayName={ctx.nombre} rol={ctx.rol} />
+      <Sidebar rol={ctx.rol} permisos={ctx.permisos} />
       <div className="admin-main">
         <AdminToastWrapper>{children}</AdminToastWrapper>
       </div>

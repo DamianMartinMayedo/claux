@@ -1,7 +1,9 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { getSetting } from '@/app/actions/settings'
 import NotificacionesForm from './NotificacionesForm'
 
 export default async function NotificacionesPage() {
+  await requireAccesoPagina('notificaciones')
   const diasAviso = parseInt(await getSetting('dias_aviso', '5'), 10)
 
   return (

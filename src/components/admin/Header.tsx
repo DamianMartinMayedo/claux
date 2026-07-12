@@ -2,12 +2,18 @@
 
 import Link from 'next/link'
 import MobileNavToggle from '@/components/MobileNavToggle'
+import type { RolAdmin } from '@/lib/roles'
 
 function getInitials(name: string): string {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
 }
 
-export default function Header({ displayName }: { email: string; displayName: string }) {
+const ROL_LABEL: Record<RolAdmin, string> = {
+  super_admin: 'Super Admin',
+  vendedor:    'Vendedor',
+}
+
+export default function Header({ displayName, rol }: { displayName: string; rol: RolAdmin }) {
   return (
     <header className="admin-header">
       <div className="header-left">
@@ -22,7 +28,7 @@ export default function Header({ displayName }: { email: string; displayName: st
           <div className="header-user-avatar">{getInitials(displayName)}</div>
           <div className="header-user-info">
             <span className="header-user-name">{displayName}</span>
-            <span className="header-user-role">Super Admin</span>
+            <span className="header-user-role">{ROL_LABEL[rol]}</span>
           </div>
         </Link>
       </div>

@@ -1,9 +1,11 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { AlertTriangle, CheckCircle, Clock, CreditCard, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting }   from '@/app/actions/settings'
 import ProximosVencer   from './ProximosVencer'
 
 export default async function DashboardPage() {
+  await requireAccesoPagina('dashboard')
   const supabase = await createClient()
 
   const DIAS_AVISO = parseInt(await getSetting('dias_aviso', '5'), 10)

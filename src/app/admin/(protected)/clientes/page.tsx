@@ -1,3 +1,4 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
@@ -5,6 +6,7 @@ import NuevoClienteModal from './NuevoClienteModal'
 import ClientesTabla     from './ClientesTabla'
 
 export default async function ClientesPage() {
+  await requireAccesoPagina('clientes')
   const supabase = await createClient()
 
   const [{ data: clientes }, { data: catalogo }, { data: plantillas }] = await Promise.all([

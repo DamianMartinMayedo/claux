@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/admin-guard'
+import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
@@ -14,7 +14,7 @@ import { diasCiclo, importeCiclo } from '@/lib/billing'
 // (mensual = precio; anual = precio × 12 con descuento). La duración del período la marca el ciclo.
 // fecha_inicio = día siguiente a la fecha_expiracion actual (o hoy si no hay).
 export async function obtenerDatosPagoDefecto(clientId: string) {
-  await requireAdmin()
+  await requirePermiso('pagos')
   const supabase = await createClient()
 
   const { data: cliente } = await supabase
@@ -82,7 +82,7 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
 // - Detecta gap entre expiración actual y inicio del período (advierte pero no bloquea)
 // - Cambia plan si viene uno nuevo
 export async function registrarPago(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('pagos')
   const supabase = await createClient()
 
   const client_id            = formData.get('client_id')            as string
@@ -212,7 +212,7 @@ export async function registrarPago(formData: FormData) {
 // Solo entonces cuenta como ingreso. No cambia fechas del cliente (la vigencia se fija
 // al crear/cobrar); confirmar es el reconocimiento contable de que el dinero entró.
 export async function confirmarPago(pagoId: string) {
-  await requireAdmin()
+  await requirePermiso('pagos')
   const supabase = await createClient()
 
   const { data: pago } = await supabase
@@ -266,7 +266,7 @@ export async function confirmarPago(pagoId: string) {
 // sincroniza fecha_expiracion del cliente.
 // Configuración (pago único): solo importe/método/notas, sin período ni expiración.
 export async function editarPago(formData: FormData) {
-  await requireAdmin()
+  await requirePermiso('pagos')
   const supabase = await createClient()
 
   const pago_id              = formData.get('pago_id')              as string
@@ -372,7 +372,7 @@ export async function editarPago(formData: FormData) {
 // Suscripción: solo el pago más reciente; revierte fecha_expiracion al anterior.
 // Configuración (pago único): se puede eliminar siempre, sin tocar la expiración.
 export async function eliminarPago(pagoId: string) {
-  await requireAdmin()
+  await requirePermiso('pagos')
   const supabase = await createClient()
 
   const { data: pago } = await supabase

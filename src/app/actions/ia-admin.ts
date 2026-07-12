@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePermiso } from '@/lib/admin-guard'
 import { esDocumentoIa, defaultDocumentoIa } from '@/lib/ia/documentos'
 
 // Acciones del panel de control de IA del admin (catálogo de modelos, límites
@@ -18,6 +19,7 @@ export async function guardarConfigIaGlobal(args: {
   fallbackGratis: string
   cupo: number
 }): Promise<Resp> {
+  await requirePermiso('ia')
   const db = createAdminClient()
   const filas = [
     { key: 'ia_nombre_agente',          value: (args.nombre || '').trim().slice(0, 40) || 'Claux' },
@@ -39,6 +41,7 @@ export async function guardarConfigIaGlobal(args: {
 // La clave se valida contra el registro DOCUMENTOS_IA (no se permite escribir
 // cualquier setting arbitrario).
 export async function guardarDocumentoIa(key: string, texto: string): Promise<Resp> {
+  await requirePermiso('ia')
   if (!esDocumentoIa(key)) return { ok: false, error: 'Documento no válido.' }
   const valor = (texto ?? '').trim()
   if (!valor) return { ok: false, error: 'El documento no puede estar vacío.' }
@@ -52,6 +55,7 @@ export async function guardarDocumentoIa(key: string, texto: string): Promise<Re
 }
 
 export async function restaurarDocumentoIa(key: string): Promise<Resp> {
+  await requirePermiso('ia')
   const def = defaultDocumentoIa(key)
   if (def == null) return { ok: false, error: 'Documento no válido.' }
   return guardarDocumentoIa(key, def)
@@ -59,6 +63,7 @@ export async function restaurarDocumentoIa(key: string): Promise<Resp> {
 
 // ── Catálogo de modelos ──
 export async function toggleModeloIa(id: string, activo: boolean): Promise<Resp> {
+  await requirePermiso('ia')
   const db = createAdminClient()
   const { error } = await db.from('ia_modelos').update({ activo }).eq('id', id)
   if (error) return { ok: false, error: error.message }
@@ -69,6 +74,7 @@ export async function toggleModeloIa(id: string, activo: boolean): Promise<Resp>
 export async function crearModeloIa(args: {
   id: string; nombre: string; gratis: boolean; api_base?: string | null; api_key_env?: string | null
 }): Promise<Resp> {
+  await requirePermiso('ia')
   const id = (args.id || '').trim()
   const nombre = (args.nombre || '').trim()
   if (!id) return { ok: false, error: 'El id del modelo es obligatorio.' }
@@ -85,6 +91,7 @@ export async function crearModeloIa(args: {
 }
 
 export async function eliminarModeloIa(id: string): Promise<Resp> {
+  await requirePermiso('ia')
   const db = createAdminClient()
   const { error } = await db.from('ia_modelos').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
@@ -95,6 +102,7 @@ export async function eliminarModeloIa(id: string): Promise<Resp> {
 // ── Override de cupo por cliente (clients.ia_config.cupo) ──
 // cupo=null/0 → quita el override y vuelve al cupo global.
 export async function setCupoClienteIa(clientId: string, cupo: number | null): Promise<Resp> {
+  await requirePermiso('ia')
   const db = createAdminClient()
   const { data: row } = await db.from('clients').select('ia_config').eq('client_id', clientId).single()
   const actual = (row?.ia_config && typeof row.ia_config === 'object') ? row.ia_config as Record<string, unknown> : {}

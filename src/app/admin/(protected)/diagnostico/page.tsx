@@ -1,7 +1,9 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import NecesidadesPageClient, { type ModuloLite, type Necesidad } from './NecesidadesPageClient'
 
 export default async function DiagnosticoAdminPage() {
+  await requireAccesoPagina('diagnostico')
   const supabase = await createClient()
 
   const [necRes, modRes] = await Promise.all([

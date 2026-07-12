@@ -1,9 +1,11 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import ActividadTabla from './ActividadTabla'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ActividadPage() {
+  await requireAccesoPagina('actividad')
   const supabase = await createClient()
 
   const { data: registros } = await supabase

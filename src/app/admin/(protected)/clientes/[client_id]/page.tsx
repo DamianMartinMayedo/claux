@@ -1,3 +1,4 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { ChevronRight, Clock, CreditCard } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -42,6 +43,7 @@ export default async function ClienteDetallePage({
 }: {
   params: Promise<{ client_id: string }>
 }) {
+  await requireAccesoPagina('clientes')
   const { client_id } = await params
   const supabase = await createClient()
 

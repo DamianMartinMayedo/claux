@@ -1,3 +1,4 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { CreditCard } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
@@ -5,6 +6,7 @@ import RegistrarPagoModal from './RegistrarPagoModal'
 import PagosTabla         from './PagosTabla'
 
 export default async function PagosPage() {
+  await requireAccesoPagina('pagos')
   const supabase = await createClient()
 
   const [{ data: pagos }, { data: clientes }] = await Promise.all([

@@ -1,3 +1,4 @@
+import { requireAccesoPagina } from '@/lib/admin-guard'
 import { listarMensajesSoporte, listarFaqAdmin } from '@/app/actions/soporte'
 import { createAdminClient } from '@/lib/supabase/admin'
 import SoporteAdminView from './SoporteAdminView'
@@ -5,6 +6,7 @@ import SoporteAdminView from './SoporteAdminView'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminSoportePage() {
+  await requireAccesoPagina('soporte')
   const db = createAdminClient()
   const [mensajes, faqs, { data: catalogo }] = await Promise.all([
     listarMensajesSoporte(),

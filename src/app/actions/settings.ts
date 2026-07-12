@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/admin-guard'
+import { requireAdmin, requireSuperAdmin } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
@@ -16,7 +16,7 @@ export async function getSetting(key: string, fallback: string): Promise<string>
 }
 
 export async function guardarSetting(key: string, value: string) {
-  await requireAdmin()
+  await requireSuperAdmin()
   const supabase = await createClient()
   const { error } = await supabase
     .from('settings')

@@ -865,3 +865,55 @@ textarea:focus-visible {
   text-transform: uppercase; letter-spacing: 0.03em;
 }
 .sol-value { flex: 1 1 12rem; min-width: 0; color: var(--color-text); word-break: break-word; }
+
+/* ── Ventas: barra de sub-pestañas (Solicitudes | Presupuestos | Clientes) ── */
+.ventas-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-5);
+}
+.ventas-tab {
+  display: inline-flex; align-items: center;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--transition), border-color var(--transition);
+}
+.ventas-tab:hover { color: var(--color-text); }
+.ventas-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* ── Presupuesto de instalación: calculadora + resultado ── */
+.pres-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); align-items: start; }
+.pres-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.pres-form .card { display: flex; flex-direction: column; gap: var(--space-3); }
+.pres-sticky { position: sticky; top: var(--space-4); }
+.pres-desglose { display: flex; flex-direction: column; gap: var(--space-2); }
+.pres-fase-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-3);
+  align-items: baseline; font-size: var(--text-sm);
+}
+.pres-fase-nombre { color: var(--color-text); }
+.pres-fase-horas  { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.pres-fase-sub    { font-weight: 700; min-width: 5rem; }
+.pres-revisiones {
+  margin: var(--space-2) 0 0; padding-left: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-xs);
+}
+.pres-totales {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  border-top: 1px solid var(--color-divider); padding-top: var(--space-3); margin-top: var(--space-2);
+}
+.pres-totales > div { display: flex; justify-content: space-between; align-items: baseline; }
+.pres-total-label { color: var(--color-text-muted); font-size: var(--text-sm); }
+.pres-total-valor { font-weight: 700; font-family: var(--font-display); }
+.pres-acciones-cierre { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+
+@media (min-width: 900px) {
+  .pres-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+}
