@@ -35,7 +35,7 @@ export default function PortalLoginPage() {
           <div className="login-logo-group">
             <img src="/logo_color.svg" alt="CLAUX" height={48} />
           </div>
-          <p className="login-subtitle">Portal de gestión empresarial</p>
+          <p className="login-subtitle">Digitaliza tu negocio</p>
         </div>
 
         <div className="card card-lg">

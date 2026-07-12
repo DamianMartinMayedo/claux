@@ -66,8 +66,8 @@ function Hero() {
         <span className="ld-text-gradient">digital y al día</span>.
       </h1>
       <p className="ld-hero-subtitle">
-        Contabilidad, catálogo con QR, reservas y un asistente con IA en una
-        sola plataforma. Accede desde cualquier móvil, estés donde estés.
+        Contabilidad, Catálogo / Menú digital, Caja registradora offline, Reservas, Control de stock y mucho más en una
+        sola plataforma. Accede desde cualquier dispositivo, estés donde estés.
       </p>
       <div className="ld-hero-actions">
         <Link href="/diagnostico" className="btn btn-primary btn-lg">
@@ -79,7 +79,7 @@ function Hero() {
         </a>
       </div>
       <p className="ld-hero-trust">
-        Sin permanencia · Empieza con un módulo · Soporte cercano
+        Sin permanencia · Personalizado para ti· Soporte cercano
       </p>
     </section>
   )
@@ -154,7 +154,7 @@ function ModulesSection({ modulos }: { modulos: ModuloPublico[] }) {
         </h2>
         <p className="ld-section-text">
           Activas solo los módulos que tu negocio necesita —contabilidad,
-          inventario, reservas, citas…— y pagas únicamente por lo que usas.
+          inventario, punto de venta, reservas, citas…— y pagas únicamente por lo que usas.
         </p>
       </Reveal>
 
