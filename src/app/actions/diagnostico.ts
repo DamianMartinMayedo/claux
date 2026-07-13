@@ -1,5 +1,6 @@
 'use server'
 
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
 import { renderPlantilla } from '@/lib/email/render'
@@ -87,9 +88,10 @@ export async function guardarDiagnostico(
     return { ok: false, error: error.message }
   }
 
-  // Fire-and-forget: un fallo de Resend no debe romper el guardado del lead.
+  // after(): envío garantizado tras la respuesta (un `void` suelto se pierde en
+  // Vercel). Un fallo de Resend no debe romper el guardado del lead.
   if (email.trim()) {
-    void (async () => {
+    after(async () => {
       if (!(await tipoEmailActivo('diagnostico_cita'))) return
       const { asunto, html } = await renderPlantilla('diagnostico_cita', {
         nombre: nombre.trim(),
@@ -103,14 +105,14 @@ export async function guardarDiagnostico(
         html,
         tipo: 'diagnostico_cita',
       })
-    })()
+    })
   }
 
-  void enviarAvisoInterno({
+  after(() => enviarAvisoInterno({
     tipo: 'aviso_lead',
     asunto: `Nuevo lead: ${nombre.trim()}`,
     cuerpo: `Nuevo diagnóstico recibido.\n\nNombre: ${nombre.trim()}\nTeléfono: ${telefono.trim()}\nEmail: ${email.trim() || '—'}\nSector: ${sector}\nMódulos recomendados: ${modulosRec.join(', ') || '—'}`,
-  })
+  }))
 
   return { ok: true }
 }

@@ -1,5 +1,6 @@
 'use server'
 
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
 import { enviarAvisoInterno } from '@/lib/email/enviar'
@@ -77,12 +78,12 @@ export async function enviarMensajeSoporte(
 
   const { data: cliente } = await db
     .from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle()
-  void enviarAvisoInterno({
+  after(() => enviarAvisoInterno({
     tipo: 'aviso_soporte',
     asunto: `Nuevo mensaje de soporte: ${cliente?.nombre_empresa ?? session.client_id}`,
     cuerpo: `Nuevo mensaje de soporte.\n\nCliente: ${cliente?.nombre_empresa ?? session.client_id} (${session.client_id})\nDe: ${session.email}\nAsunto: ${asunto}\n\n${mensaje}`,
     clientId: session.client_id,
-  })
+  }))
 
   return { ok: true }
 }

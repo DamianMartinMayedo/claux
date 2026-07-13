@@ -4,6 +4,7 @@ import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
 import { addDays, toDateStr } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
@@ -202,8 +203,10 @@ export async function crearCliente(formData: FormData) {
     estado:              'ACTIVO',
   })
 
-  // Fire-and-forget: un fallo de Resend no debe romper la creación del cliente.
-  void (async () => {
+  // after(): el envío corre TRAS la respuesta pero garantizado (a diferencia de un
+  // `void` suelto, que Vercel descarta al congelar la función). Un fallo de Resend
+  // no rompe la creación del cliente.
+  after(async () => {
     if (!(await tipoEmailActivo('bienvenida'))) return
     const { asunto, html } = await renderPlantilla('bienvenida', {
       nombre: nombre_contacto || nombre_empresa,
@@ -219,14 +222,14 @@ export async function crearCliente(formData: FormData) {
       tipo: 'bienvenida',
       clientId: client_id,
     })
-  })()
+  })
 
-  void enviarAvisoInterno({
+  after(() => enviarAvisoInterno({
     tipo: 'aviso_cliente',
     asunto: `Nuevo cliente creado: ${nombre_empresa}`,
     cuerpo: `Se creó el cliente ${nombre_empresa} (${client_id}).\n\nContacto: ${nombre_contacto || '—'}\nEmail: ${email_admin}\nTarifa: ${tarifa}/${ciclo}\nMódulos: ${modulos_activos.join(', ') || '—'}\nEstado inicial: ${estadoInicial}`,
     clientId: client_id,
-  })
+  }))
 
   // Si el alta viene de un presupuesto aprobado, enlazamos el cliente creado al
   // presupuesto (cierra el embudo ventas → cliente y evita duplicar el alta).
@@ -291,8 +294,9 @@ export async function regenerarPasswordCliente(
     description: `Regeneró la contraseña del usuario ${usuario.email} (${user_id}) del cliente ${client_id}`,
   })
 
-  // Fire-and-forget: un fallo de Resend no debe romper la regeneración.
-  void (async () => {
+  // after(): garantiza el envío tras la respuesta (un `void` suelto se pierde en
+  // Vercel). Un fallo de Resend no debe romper la regeneración.
+  after(async () => {
     if (!(await tipoEmailActivo('password_reset'))) return
     const { data: cliente } = await supabase
       .from('clients')
@@ -313,7 +317,7 @@ export async function regenerarPasswordCliente(
       tipo: 'password_reset',
       clientId: client_id,
     })
-  })()
+  })
 
   revalidatePath(`/admin/clientes/${client_id}`)
   return { ok: true, passwordTemporal }

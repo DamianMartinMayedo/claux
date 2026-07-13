@@ -4,6 +4,7 @@ import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
 import { toDateStr } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
@@ -192,9 +193,10 @@ export async function registrarPago(formData: FormData) {
     })
     .eq('client_id', client_id)
 
-  // Fire-and-forget: un fallo de Resend no debe romper el registro del pago.
+  // after(): envío garantizado tras la respuesta (un `void` suelto se pierde en
+  // Vercel). Un fallo de Resend no debe romper el registro del pago.
   if (cliente.email_admin) {
-    void (async () => {
+    after(async () => {
       if (await tipoEmailActivo('confirmacion_pago')) {
         const { asunto, html } = await renderPlantilla('confirmacion_pago', {
           empresa: cliente.nombre_empresa,
@@ -211,7 +213,7 @@ export async function registrarPago(formData: FormData) {
           to: cliente.email_admin, subject: reactivado.asunto, html: reactivado.html, tipo: 'reactivacion', clientId: client_id,
         })
       }
-    })()
+    })
   }
 
   const { data: { user: up1 } } = await supabase.auth.getUser()
@@ -276,8 +278,9 @@ export async function confirmarPago(pagoId: string) {
     }
   }
 
-  // Fire-and-forget: un fallo de Resend no debe romper la confirmación del pago.
-  void (async () => {
+  // after(): envío garantizado tras la respuesta (un `void` suelto se pierde en
+  // Vercel). Un fallo de Resend no debe romper la confirmación del pago.
+  after(async () => {
     const { data: cliente } = await supabase
       .from('clients')
       .select('nombre_empresa, email_admin, fecha_expiracion')
@@ -300,7 +303,7 @@ export async function confirmarPago(pagoId: string) {
         to: cliente.email_admin, subject: reactivado.asunto, html: reactivado.html, tipo: 'reactivacion', clientId: pago.client_id,
       })
     }
-  })()
+  })
 
   const { data: { user } } = await supabase.auth.getUser()
   await logActividad(supabase, {
