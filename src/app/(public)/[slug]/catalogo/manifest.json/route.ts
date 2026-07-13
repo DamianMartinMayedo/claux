@@ -28,8 +28,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     background_color: '#faf7f2',
     theme_color: '#0d9488',
     icons: [
-      { src: '/icon-catalogo-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/icon-catalogo-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/simbolo-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+      { src: '/simbolo-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
     ],
   })
 }
