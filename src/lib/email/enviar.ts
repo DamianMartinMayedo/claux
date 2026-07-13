@@ -15,6 +15,10 @@ interface EnviarEmailInput {
   // al equipo (p. ej. 'aviso_lead', no editable desde el admin).
   tipo:      string
   clientId?: string | null
+  // Metadatos guardados en `emails_log.meta`. Los usa el cron de recordatorios
+  // (Fase 2) como guard de idempotencia: p. ej. { fecha_expiracion: '2026-08-15' }
+  // para no reenviar el mismo aviso al mismo cliente por el mismo vencimiento.
+  meta?:     Record<string, unknown>
 }
 
 const REMITENTE_DEFAULT = 'CLAUX <notificaciones@claux.es>'
@@ -58,6 +62,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
       tipo:         input.tipo,
       estado:       'enviado',
       resend_id:    data?.id ?? null,
+      ...(input.meta ? { meta: input.meta } : {}),
     })
     return { ok: true }
   } catch (err) {

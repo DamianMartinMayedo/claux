@@ -170,7 +170,7 @@ export function CompraFormModal({
                   </div>
                   {lineas.map((l, i) => (
                     <div key={i} className="cmp-lineas-row">
-                      <div>
+                      <div className="cmp-col-prod">
                         <input className="input input-sm" type="text" list={`cmp-prod-${i}`}
                           placeholder="Escribe o selecciona un producto…"
                           value={l.descripcion} onChange={e => onDescripcion(i, e.target.value)} />
@@ -178,19 +178,19 @@ export function CompraFormModal({
                           {form.productos.map(p => <option key={p.producto_id} value={`${p.codigo} — ${p.nombre}`} />)}
                         </datalist>
                       </div>
-                      <div className="ven-col-num">
+                      <div className="ven-col-num" data-label="Cant.">
                         <input className="input input-sm ven-input-num" type="number" min="0" step="0.001"
                           value={l.cantidad}
                           onChange={e => updateLinea(i, { cantidad: parseFloat(e.target.value) || 0 })}
                           onFocus={e => e.target.select()} />
                       </div>
-                      <div className="ven-col-num">
+                      <div className="ven-col-num" data-label="Costo">
                         <input className="input input-sm ven-input-num" type="number" min="0" step="0.01"
                           value={l.costo_unitario}
                           onChange={e => updateLinea(i, { costo_unitario: parseFloat(e.target.value) || 0 })}
                           onFocus={e => e.target.select()} />
                       </div>
-                      <div className="ven-col-num ven-total-cell">{fmt(l.cantidad * l.costo_unitario, moneda)}</div>
+                      <div className="ven-col-num ven-total-cell" data-label="Total">{fmt(l.cantidad * l.costo_unitario, moneda)}</div>
                       <div className="ven-col-del">
                         <button type="button" className="ter-action-btn ter-action-danger"
                           onClick={() => removeLinea(i)} title="Eliminar línea">
