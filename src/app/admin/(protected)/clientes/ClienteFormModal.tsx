@@ -56,8 +56,6 @@ const GRUPOS: { label: string; tipo: string }[] = [
   { label: 'Addons',          tipo: 'addon' },
 ]
 
-const baseClave = 'base'
-
 export default function ClienteFormModal({
   open, onClose, catalogo, plantillas, setupDefault, descuentoAnualPct, initial, presupuestoId,
 }: Props) {
@@ -67,7 +65,7 @@ export default function ClienteFormModal({
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  const [seleccionados, setSeleccionados] = useState<string[]>([baseClave])
+  const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [sector, setSector] = useState('')
   const [tarifa, setTarifa] = useState<'estandar' | 'fundador'>('estandar')
   const [ciclo, setCiclo]   = useState<'mensual' | 'anual'>('mensual')
@@ -77,19 +75,11 @@ export default function ClienteFormModal({
   useEffect(() => {
     if (!open) return
     setResultado(null)
-    setSeleccionados(initial?.modulos?.length ? initial.modulos : [baseClave])
+    setSeleccionados(initial?.modulos ?? [])
     setSector(initial?.sector ?? '')
     setTarifa(initial?.tarifa ?? 'estandar')
     setCiclo(initial?.ciclo ?? 'mensual')
   }, [open, initial])
-
-  // Al elegir un sector manualmente, preselecciona los módulos recomendados (base siempre).
-  function elegirSector(s: string) {
-    setSector(s)
-    const pl = plantillas.find(p => p.sector === s)
-    const sugeridos = pl ? pl.modulos.filter(c => c !== baseClave && catalogo.some(m => m.clave === c)) : []
-    setSeleccionados([baseClave, ...sugeridos])
-  }
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
   const precioMensual = catalogo
@@ -203,11 +193,11 @@ export default function ClienteFormModal({
                 {/* Sector del negocio: preselecciona módulos recomendados y adapta etiquetas */}
                 <div className="input-group">
                   <label>Sector del negocio</label>
-                  <select name="sector" className="input" value={sector} onChange={e => elegirSector(e.target.value)}>
+                  <select name="sector" className="input" value={sector} onChange={e => setSector(e.target.value)}>
                     <option value="">Sin especificar</option>
                     {plantillas.map(p => <option key={p.sector} value={p.sector}>{p.nombre}</option>)}
                   </select>
-                  <span className="input-hint">Activa los módulos recomendados y adapta las etiquetas (Reservas/Citas, Mesa/Profesional…).</span>
+                  <span className="input-hint">Adapta las etiquetas del negocio (Reservas/Citas, Mesa/Profesional…). No cambia los módulos seleccionados.</span>
                 </div>
 
                 {/* Tarifa */}

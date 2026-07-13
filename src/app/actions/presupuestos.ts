@@ -128,7 +128,9 @@ export async function obtenerPresupuesto(id: number) {
   const db = createAdminClient()
   const { data } = await db
     .from('presupuestos_instalacion')
-    .select('*')
+    // Traemos el diagnóstico de origen: el correo (contacto principal) y el sector
+    // solo viven ahí, y son los que precargan el alta de cliente.
+    .select('*, diagnosticos ( email, sector )')
     .eq('id', id)
     .maybeSingle()
   return data

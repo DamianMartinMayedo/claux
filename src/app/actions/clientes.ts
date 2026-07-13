@@ -33,8 +33,8 @@ function generateSalt(): string {
 
 
 // ── Helper: precio mensual a partir de los módulos activos ───────────
-// Suma base + módulos/funcionalidades activos según la tarifa. Precios desde modulos_catalogo
-// (nunca hardcodeados). 'base' debe venir ya incluida en modulosActivos.
+// Suma los módulos/funcionalidades activos según la tarifa. Precios desde modulos_catalogo
+// (nunca hardcodeados). Todos los módulos son opcionales, incluida la contabilidad ('base').
 async function calcularPrecioMensual(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,

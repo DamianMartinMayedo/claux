@@ -39,15 +39,19 @@ function EstadoBadge({ estado }: { estado: string }) {
   return <span className="badge badge-info">Guardado</span>
 }
 
-// Precarga del alta de cliente a partir del presupuesto. El email solo se precarga
-// si el contacto parece un correo (puede ser un teléfono); los módulos y la tarifa
-// vienen del presupuesto, y el pago de configuración = coste de instalación calculado.
+// Precarga del alta de cliente a partir del presupuesto. El correo (contacto
+// principal) y el sector vienen del diagnóstico de origen; si no hay diagnóstico
+// (presupuesto manual) se cae al `contacto` cuando parece un email. Los módulos y
+// la tarifa vienen del presupuesto, y el pago de configuración = coste calculado.
 function initialDesde(d: Detalle): InitialCliente {
+  const diag = d.diagnosticos ?? null
   const contacto = String(d.contacto ?? '').trim()
+  const email = String(diag?.email ?? '').trim() || (contacto.includes('@') ? contacto : '')
   return {
     nombre_empresa:  d.nombre_negocio ?? '',
     nombre_contacto: d.nombre_responsable ?? '',
-    email_admin:     contacto.includes('@') ? contacto : '',
+    email_admin:     email,
+    sector:          diag?.sector ?? '',
     tarifa:          d.tarifa === 'fundador' ? 'fundador' : 'estandar',
     modulos:         Array.isArray(d.modulos) ? d.modulos : [],
     pago_setup_usd:  Number(d.coste_instalacion_usd ?? 0),
