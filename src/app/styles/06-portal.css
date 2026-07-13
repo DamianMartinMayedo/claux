@@ -1042,7 +1042,9 @@
 /* ── Tabla ────────────────────────────────────────────────────────────────── */
 .ter-nombre        { font-weight: 600; font-size: var(--text-sm); color: var(--color-text); }
 .ter-id-fiscal     { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
-.ter-row-archivada td { opacity: .5; }
+/* Fila archivada: atenuada, pero NO la columna de acciones — su menú ⋯ va
+   dentro del <td> y heredaría el opacity, dejando las opciones ilegibles. */
+.ter-row-archivada td:not(.col-actions) { opacity: .5; }
 
 .ter-contacto      { display: flex; flex-direction: column; gap: 3px; }
 .ter-rep-nombre    { font-size: var(--text-sm); font-weight: 500; color: var(--color-text); }

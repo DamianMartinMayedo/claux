@@ -519,7 +519,12 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
   const [generandoQr, setGenerandoQr] = useState(false)
 
   const origen = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = data.slug ? `${origen}/${data.slug}/catalogo` : null
+  // Segmento de URL acorde al negocio: /menu, /carta, /servicios o /catalogo
+  // (deriva de la etiqueta). Debe coincidir con los rewrites de next.config; para
+  // cualquier etiqueta fuera de ese conjunto, cae a /catalogo (ruta física).
+  const vistaRaw = data.etiquetas.catalogo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+  const segmentoVista = ['menu', 'carta', 'servicios', 'catalogo'].includes(vistaRaw) ? vistaRaw : 'catalogo'
+  const url = data.slug ? `${origen}/${data.slug}/${segmentoVista}` : null
 
   function guardar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()

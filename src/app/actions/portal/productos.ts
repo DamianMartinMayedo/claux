@@ -287,6 +287,56 @@ export async function restaurarProducto(
   return { ok: true }
 }
 
+// Eliminar DEFINITIVAMENTE un producto ya archivado. No hay FKs a `products`
+// (acople suelto por producto_id texto), así que comprobamos a mano que no deje
+// historial huérfano: si tiene ventas, compras, movimientos, está en el catálogo
+// público o en tickets de caja, se mantiene archivado. Solo se borran sus datos
+// propios (historial de precios y stock por almacén) junto con el producto.
+export async function eliminarProducto(
+  producto_id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const db = createAdminClient()
+
+  const { data: prod } = await db
+    .from('products')
+    .select('estado')
+    .eq('producto_id', producto_id)
+    .eq('client_id', session.client_id)
+    .single()
+  if (!prod)                     return { ok: false, error: 'Producto no encontrado.' }
+  if (prod.estado !== 'INACTIVO') return { ok: false, error: 'Archiva el producto antes de eliminarlo.' }
+
+  const dependencias: { tabla: string; etiqueta: string }[] = [
+    { tabla: 'documento_lineas',       etiqueta: 'ventas u ofertas' },
+    { tabla: 'compra_lineas',          etiqueta: 'compras' },
+    { tabla: 'movimientos_inventario', etiqueta: 'movimientos de inventario' },
+    { tabla: 'catalogo_items',         etiqueta: 'tu catálogo público' },
+    { tabla: 'caja_ticket_lineas',     etiqueta: 'tickets de caja' },
+  ]
+  for (const d of dependencias) {
+    const { count } = await db.from(d.tabla).select('*', { count: 'exact', head: true }).eq('producto_id', producto_id)
+    if ((count ?? 0) > 0) {
+      return { ok: false, error: `No se puede eliminar: tiene ${d.etiqueta} asociadas. Se mantiene archivado.` }
+    }
+  }
+
+  await db.from('producto_precios_historial').delete().eq('producto_id', producto_id)
+  await db.from('stock_almacenes').delete().eq('producto_id', producto_id)
+  const { error } = await db
+    .from('products')
+    .delete()
+    .eq('producto_id', producto_id)
+    .eq('client_id', session.client_id)
+  if (error) return { ok: false, error: 'Error al eliminar.' }
+
+  revalidatePath('/portal/productos')
+  return { ok: true }
+}
+
 // ── Ajuste de stock (por almacén, vía movimiento AJUSTE) ────────────────────────
 
 // Lectura ligera del stock por almacén de un producto (sin el resto del detalle),

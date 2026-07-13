@@ -25,7 +25,11 @@ export async function middleware(request: NextRequest) {
     if (token) {
       const session = await verifyPortalToken(token)
       if (session) {
-        if (pathname === '/portal/login' || pathname === '/portal/cambiar-password') {
+        // Solo /portal/login se rebota al dashboard cuando ya hay sesión.
+        // /portal/cambiar-password NO: es justo donde debe aterrizar quien tiene
+        // must_change_password=true, y rebotarlo aquí crea un bucle infinito con
+        // el redirect del layout (app) → pantalla en blanco + "Throttling navigation".
+        if (pathname === '/portal/login') {
           return NextResponse.redirect(new URL('/portal/dashboard', request.url))
         }
         if (Math.floor(Date.now() / 1000) - session.iat >= RENEW_THROTTLE) {

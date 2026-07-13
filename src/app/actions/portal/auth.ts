@@ -60,7 +60,10 @@ export async function loginCliente(
 
 export async function logoutCliente(): Promise<void> {
   const jar = await cookies()
-  jar.delete(PORTAL_COOKIE)
+  // La cookie vive en path '/portal' (PORTAL_COOKIE_OPTS): hay que borrarla con el
+  // MISMO path o el navegador no la elimina (delete por defecto usa '/'), y la
+  // sesión sobreviviría al "cerrar sesión".
+  jar.set(PORTAL_COOKIE, '', { ...PORTAL_COOKIE_OPTS, maxAge: 0 })
   redirect('/portal/login')
 }
 

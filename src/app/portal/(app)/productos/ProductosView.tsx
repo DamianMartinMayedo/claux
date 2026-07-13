@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useState, useTransition, useMemo } from 'react'
@@ -9,6 +9,7 @@ import Link                                  from 'next/link'
 import {
   archivarProducto,
   restaurarProducto,
+  eliminarProducto,
   guardarCategoria,
   archivarCategoria,
   restaurarCategoria,
@@ -19,7 +20,7 @@ import {
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
-import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
 
 // ── CategoriaModal ────────────────────────────────────────────────────────────
 
@@ -103,6 +104,35 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
   )
 }
 
+// ── ConfirmEliminar ───────────────────────────────────────────────────────────
+
+function ConfirmEliminar({ nombre, onConfirm, onClose, isPending }: {
+  nombre: string; onConfirm: () => void; onClose: () => void; isPending: boolean
+}) {
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-sm" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Eliminar definitivamente</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="modal-body-text">
+            ¿Eliminar <strong>{nombre}</strong> para siempre? Esta acción no se puede deshacer.
+            Solo es posible si el producto no tiene ventas, compras, movimientos ni está en tu catálogo.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Eliminando…</> : 'Eliminar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Tab ───────────────────────────────────────────────────────────────────────
 
 function Tab({ active, onClick, icon, label, count }: {
@@ -128,6 +158,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const [editProducto,  setEditProducto]  = useState<Producto | null>(null)
   const [stockProducto, setStockProducto] = useState<Producto | null>(null)
   const [confirmProd,   setConfirmProd]   = useState<Producto | null>(null)
+  const [eliminarProd,  setEliminarProd]  = useState<Producto | null>(null)
   const [search,        setSearch]        = useState('')
   const [filtroTipo,    setFiltroTipo]    = useState<'TODOS' | TipoProducto>('TODOS')
   const [filtroCat,     setFiltroCat]     = useState('')
@@ -197,6 +228,15 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     startTransition(async () => {
       await archivarProducto(confirmProd.producto_id)
       setConfirmProd(null); router.refresh()
+    })
+  }
+  function confirmarEliminar() {
+    if (!eliminarProd) return
+    startTransition(async () => {
+      const res = await eliminarProducto(eliminarProd.producto_id)
+      if (!res.ok) { toastError(res.error ?? 'No se pudo eliminar.'); return }
+      toastSuccess('Producto eliminado.')
+      setEliminarProd(null); router.refresh()
     })
   }
 
@@ -407,10 +447,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                   </button>
                                 </>
                               ) : (
-                                <button className="row-actions-item"
-                                  onClick={() => handleRestaurar(p)} disabled={isPending}>
-                                  <RotateCcw size={15} strokeWidth={2} /> Restaurar
-                                </button>
+                                <>
+                                  <button className="row-actions-item"
+                                    onClick={() => handleRestaurar(p)} disabled={isPending}>
+                                    <RotateCcw size={15} strokeWidth={2} /> Restaurar
+                                  </button>
+                                  <button className="row-actions-item row-actions-item-danger"
+                                    onClick={() => setEliminarProd(p)} disabled={isPending}>
+                                    <Trash2 size={15} strokeWidth={2} /> Eliminar
+                                  </button>
+                                </>
                               )}
                             </RowActions>
                           </td>
@@ -541,6 +587,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {confirmProd && (
         <ConfirmArchivar nombre={confirmProd.nombre} onConfirm={confirmarArchivar}
           onClose={() => setConfirmProd(null)} isPending={isPending} />
+      )}
+      {eliminarProd && (
+        <ConfirmEliminar nombre={eliminarProd.nombre} onConfirm={confirmarEliminar}
+          onClose={() => setEliminarProd(null)} isPending={isPending} />
       )}
       {catModal && (
         <CategoriaModal categoria={editCat} onClose={closeCatModal} onSaved={onCatSaved} />

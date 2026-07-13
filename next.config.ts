@@ -16,6 +16,15 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    // El menú/catálogo público usa una URL acorde al negocio (/menu, /carta,
+    // /servicios) que sirve la misma página que /catalogo (ruta física canónica).
+    // Los enlaces y QR de /catalogo ya compartidos siguen funcionando igual.
+    return ['menu', 'carta', 'servicios'].map((vista) => ({
+      source: `/:slug/${vista}`,
+      destination: '/:slug/catalogo',
+    }))
+  },
 };
 
 export default nextConfig;
