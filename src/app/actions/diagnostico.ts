@@ -2,6 +2,10 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
+import { renderPlantilla } from '@/lib/email/render'
+import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
+
+const LINK_AGENDA = 'https://calendar.app.google/nqrnpDat4JoYtd1Y8'
 
 export type EstadoLead = 'nuevo' | 'contactado'
 
@@ -82,6 +86,31 @@ export async function guardarDiagnostico(
   if (error) {
     return { ok: false, error: error.message }
   }
+
+  // Fire-and-forget: un fallo de Resend no debe romper el guardado del lead.
+  if (email.trim()) {
+    void (async () => {
+      if (!(await tipoEmailActivo('diagnostico_cita'))) return
+      const { asunto, html } = await renderPlantilla('diagnostico_cita', {
+        nombre: nombre.trim(),
+        link_agenda: LINK_AGENDA,
+      })
+      await enviarEmail({
+        to: email.trim(),
+        from: 'CLAUX <contacto@claux.es>',
+        replyTo: 'contacto@claux.es',
+        subject: asunto,
+        html,
+        tipo: 'diagnostico_cita',
+      })
+    })()
+  }
+
+  void enviarAvisoInterno({
+    tipo: 'aviso_lead',
+    asunto: `Nuevo lead: ${nombre.trim()}`,
+    cuerpo: `Nuevo diagnóstico recibido.\n\nNombre: ${nombre.trim()}\nTeléfono: ${telefono.trim()}\nEmail: ${email.trim() || '—'}\nSector: ${sector}\nMódulos recomendados: ${modulosRec.join(', ') || '—'}`,
+  })
 
   return { ok: true }
 }

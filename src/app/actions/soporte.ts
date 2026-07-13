@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAuthBypassed } from '@/lib/dev-auth'
 import { revalidatePath } from 'next/cache'
+import { renderPlantilla } from '@/lib/email/render'
+import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 
 // Guard: el admin debe estar autenticado (o bypass en dev). Los datos se leen/escriben
 // con service_role, igual que el resto de la plataforma.
@@ -21,11 +23,14 @@ async function adminAutenticado(): Promise<boolean> {
 export interface MensajeSoporte {
   id:             number
   client_id:      string
+  user_id:        string | null
   nombre_empresa: string
   email:          string | null
   asunto:         string
   mensaje:        string
   estado:         'NUEVO' | 'LEIDO' | 'RESUELTO'
+  respuesta:      string | null
+  respuesta_at:   string | null
   created_at:     string
 }
 
@@ -36,7 +41,7 @@ export async function listarMensajesSoporte(): Promise<MensajeSoporte[]> {
 
   const { data: msgs } = await db
     .from('soporte_mensajes')
-    .select('id, client_id, email, asunto, mensaje, estado, created_at')
+    .select('id, client_id, user_id, email, asunto, mensaje, estado, respuesta, respuesta_at, created_at')
     .order('created_at', { ascending: false })
 
   const ids = [...new Set((msgs ?? []).map(m => m.client_id))]
@@ -124,6 +129,61 @@ export async function eliminarFaq(id: number): Promise<{ ok: boolean }> {
   if (!(await adminAutenticado())) return { ok: false }
   const { error } = await createAdminClient().from('soporte_faq').delete().eq('id', id)
   if (error) return { ok: false }
+  revalidatePath('/admin/soporte')
+  return { ok: true }
+}
+
+// ── Responder un mensaje de soporte ──────────────────────────────────────────
+// Guarda la respuesta en el propio mensaje, lo marca RESUELTO y envía un email
+// al cliente (from soporte@, Reply-To: soporte@) con el texto del admin dentro
+// de la plantilla `respuesta_soporte` (marco de marca ya incluido).
+export async function responderMensajeSoporte(
+  id: number,
+  texto: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermiso('soporte')
+  if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
+
+  const respuesta = texto.trim()
+  if (!respuesta) return { ok: false, error: 'La respuesta no puede estar vacía.' }
+
+  const db = createAdminClient()
+  const { data: msg } = await db
+    .from('soporte_mensajes')
+    .select('client_id, user_id, email, asunto')
+    .eq('id', id)
+    .maybeSingle()
+  if (!msg) return { ok: false, error: 'Mensaje no encontrado.' }
+
+  const { error } = await db
+    .from('soporte_mensajes')
+    .update({ respuesta, respuesta_at: new Date().toISOString(), estado: 'RESUELTO' })
+    .eq('id', id)
+  if (error) return { ok: false, error: 'No se pudo guardar la respuesta.' }
+
+  if (msg.email && await tipoEmailActivo('respuesta_soporte')) {
+    let nombre = msg.email
+    if (msg.user_id) {
+      const { data: usuario } = await db
+        .from('client_users').select('nombre').eq('user_id', msg.user_id).maybeSingle()
+      if (usuario?.nombre) nombre = usuario.nombre
+    }
+    const { asunto, html } = await renderPlantilla('respuesta_soporte', {
+      nombre,
+      asunto: msg.asunto,
+      mensaje_admin: respuesta,
+    })
+    await enviarEmail({
+      to: msg.email,
+      from: 'CLAUX Soporte <soporte@claux.es>',
+      replyTo: 'soporte@claux.es',
+      subject: asunto,
+      html,
+      tipo: 'respuesta_soporte',
+      clientId: msg.client_id,
+    })
+  }
+
   revalidatePath('/admin/soporte')
   return { ok: true }
 }

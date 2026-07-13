@@ -8,6 +8,12 @@ import { logActividad } from '@/lib/audit'
 import { toDateStr } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo } from '@/lib/billing'
+import { renderPlantilla } from '@/lib/email/render'
+import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
+
+function fmtFechaEs(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 // ── Datos por defecto para pre-rellenar el formulario de pago ────────
 // Modelo base + módulos: el importe sugerido sale del precio_mensual_usd del cliente y su ciclo
@@ -116,7 +122,7 @@ export async function registrarPago(formData: FormData) {
   // ── Verificar cliente ────────────────────────────────────────────
   const { data: cliente } = await supabase
     .from('clients')
-    .select('client_id, estado, fecha_expiracion')
+    .select('client_id, estado, fecha_expiracion, nombre_empresa, email_admin')
     .eq('client_id', client_id)
     .single()
   if (!cliente) return { ok: false as const, error: 'Cliente no encontrado.' }
@@ -171,7 +177,8 @@ export async function registrarPago(formData: FormData) {
   // ── Actualizar cliente ───────────────────────────────────────────
   // Reactivar si estaba en cualquier estado no-activo (igual que el original)
   const estadosReactivar = ['VENCIDO', 'DESACTIVADO', 'TRIAL', 'GRACIA']
-  const nuevoEstado = estadosReactivar.includes(cliente.estado) ? 'ACTIVO' : cliente.estado
+  const seReactiva = estadosReactivar.includes(cliente.estado)
+  const nuevoEstado = seReactiva ? 'ACTIVO' : cliente.estado
 
   await supabase
     .from('clients')
@@ -184,6 +191,28 @@ export async function registrarPago(formData: FormData) {
       notas_gracia:     null,
     })
     .eq('client_id', client_id)
+
+  // Fire-and-forget: un fallo de Resend no debe romper el registro del pago.
+  if (cliente.email_admin) {
+    void (async () => {
+      if (await tipoEmailActivo('confirmacion_pago')) {
+        const { asunto, html } = await renderPlantilla('confirmacion_pago', {
+          empresa: cliente.nombre_empresa,
+          monto: monto_usd.toFixed(2),
+          fecha_expiracion: fmtFechaEs(fecha_fin_periodo),
+        })
+        await enviarEmail({
+          to: cliente.email_admin, subject: asunto, html, tipo: 'confirmacion_pago', clientId: client_id,
+        })
+      }
+      if (seReactiva && await tipoEmailActivo('reactivacion')) {
+        const reactivado = await renderPlantilla('reactivacion', { empresa: cliente.nombre_empresa })
+        await enviarEmail({
+          to: cliente.email_admin, subject: reactivado.asunto, html: reactivado.html, tipo: 'reactivacion', clientId: client_id,
+        })
+      }
+    })()
+  }
 
   const { data: { user: up1 } } = await supabase.auth.getUser()
   await logActividad(supabase, {
@@ -231,6 +260,7 @@ export async function confirmarPago(pagoId: string) {
 
   // Si es pago de suscripción y el cliente está DESACTIVADO (pendiente del primer cobro),
   // activarlo y sincronizar fecha_expiracion con el período confirmado.
+  let seReactivo = false
   if (pago.concepto === 'suscripcion' && pago.fecha_fin_periodo) {
     const { data: clienteActual } = await supabase
       .from('clients')
@@ -238,12 +268,39 @@ export async function confirmarPago(pagoId: string) {
       .eq('client_id', pago.client_id)
       .single()
     if (clienteActual?.estado === 'DESACTIVADO') {
+      seReactivo = true
       await supabase
         .from('clients')
         .update({ estado: 'ACTIVO', fecha_expiracion: pago.fecha_fin_periodo })
         .eq('client_id', pago.client_id)
     }
   }
+
+  // Fire-and-forget: un fallo de Resend no debe romper la confirmación del pago.
+  void (async () => {
+    const { data: cliente } = await supabase
+      .from('clients')
+      .select('nombre_empresa, email_admin, fecha_expiracion')
+      .eq('client_id', pago.client_id)
+      .maybeSingle()
+    if (!cliente?.email_admin) return
+    if (await tipoEmailActivo('confirmacion_pago')) {
+      const { asunto, html } = await renderPlantilla('confirmacion_pago', {
+        empresa: cliente.nombre_empresa,
+        monto: Number(pago.monto_usd).toFixed(2),
+        fecha_expiracion: cliente.fecha_expiracion ? fmtFechaEs(cliente.fecha_expiracion) : '—',
+      })
+      await enviarEmail({
+        to: cliente.email_admin, subject: asunto, html, tipo: 'confirmacion_pago', clientId: pago.client_id,
+      })
+    }
+    if (seReactivo && await tipoEmailActivo('reactivacion')) {
+      const reactivado = await renderPlantilla('reactivacion', { empresa: cliente.nombre_empresa })
+      await enviarEmail({
+        to: cliente.email_admin, subject: reactivado.asunto, html: reactivado.html, tipo: 'reactivacion', clientId: pago.client_id,
+      })
+    }
+  })()
 
   const { data: { user } } = await supabase.auth.getUser()
   await logActividad(supabase, {

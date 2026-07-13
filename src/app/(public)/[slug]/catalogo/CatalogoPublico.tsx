@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { UtensilsCrossed, Package, CalendarDays, LayoutGrid, List } from 'lucide-react'
+import { UtensilsCrossed, Package, LayoutGrid, List } from 'lucide-react'
 import type { CatalogoPublico as CatalogoPublicoData } from '@/app/actions/portal/catalogo'
 
 type Vista = 'card' | 'lista'
@@ -35,12 +35,15 @@ export default function CatalogoPublico({ data, slug }: { data: CatalogoPublicoD
             <p className="cp-subtitle">{data.etiquetas.catalogo}</p>
           </div>
         </div>
+        {/* CTA de Reservas/Citas desactivado de momento (no se usa). Para reactivar:
+            descomentar este bloque y volver a añadir `CalendarDays` al import de lucide-react.
         {(data.tieneReservas || data.tieneCitas) && (
           <a className="cp-cta" href={`/${slug}/${data.tieneCitas ? 'citas' : 'reservar'}`}>
             <CalendarDays size={15} strokeWidth={2} />
             {data.tieneCitas ? 'Pedir cita' : 'Reservar'}
           </a>
         )}
+        */}
       </header>
 
       {data.categorias.length === 0 ? (

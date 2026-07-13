@@ -8,6 +8,10 @@ import { logActividad } from '@/lib/audit'
 import { addDays, toDateStr } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo } from '@/lib/billing'
+import { renderPlantilla } from '@/lib/email/render'
+import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
+
+const LINK_PORTAL = 'https://claux.es/portal/login'
 
 // ── Utilidades de seguridad ──────────────────────────────────────────
 async function hashPassword(password: string, salt: string): Promise<string> {
@@ -198,6 +202,43 @@ export async function crearCliente(formData: FormData) {
     estado:              'ACTIVO',
   })
 
+  // Fire-and-forget: un fallo de Resend no debe romper la creación del cliente.
+  void (async () => {
+    if (!(await tipoEmailActivo('bienvenida'))) return
+    const { asunto, html } = await renderPlantilla('bienvenida', {
+      nombre: nombre_contacto || nombre_empresa,
+      empresa: nombre_empresa,
+      usuario: email_admin,
+      password_temporal: passwordTemporal,
+      link_portal: LINK_PORTAL,
+    })
+    await enviarEmail({
+      to: email_admin,
+      subject: asunto,
+      html,
+      tipo: 'bienvenida',
+      clientId: client_id,
+    })
+  })()
+
+  void enviarAvisoInterno({
+    tipo: 'aviso_cliente',
+    asunto: `Nuevo cliente creado: ${nombre_empresa}`,
+    cuerpo: `Se creó el cliente ${nombre_empresa} (${client_id}).\n\nContacto: ${nombre_contacto || '—'}\nEmail: ${email_admin}\nTarifa: ${tarifa}/${ciclo}\nMódulos: ${modulos_activos.join(', ') || '—'}\nEstado inicial: ${estadoInicial}`,
+    clientId: client_id,
+  })
+
+  // Si el alta viene de un presupuesto aprobado, enlazamos el cliente creado al
+  // presupuesto (cierra el embudo ventas → cliente y evita duplicar el alta).
+  const presupuestoId = parseInt((formData.get('presupuesto_id') as string ?? '').trim(), 10)
+  if (Number.isFinite(presupuestoId) && presupuestoId > 0) {
+    await supabase
+      .from('presupuestos_instalacion')
+      .update({ client_id })
+      .eq('id', presupuestoId)
+    revalidatePath('/admin/presupuestos')
+  }
+
   revalidatePath('/admin/clientes')
   revalidatePath('/admin/dashboard')
   revalidatePath('/admin/pagos')
@@ -222,7 +263,7 @@ export async function regenerarPasswordCliente(
   // Verificar que el usuario pertenece a ese cliente antes de tocar nada
   const { data: usuario } = await supabase
     .from('client_users')
-    .select('user_id, email')
+    .select('user_id, email, nombre')
     .eq('user_id', user_id)
     .eq('client_id', client_id)
     .maybeSingle()
@@ -249,6 +290,30 @@ export async function regenerarPasswordCliente(
     action:      'reset_password',
     description: `Regeneró la contraseña del usuario ${usuario.email} (${user_id}) del cliente ${client_id}`,
   })
+
+  // Fire-and-forget: un fallo de Resend no debe romper la regeneración.
+  void (async () => {
+    if (!(await tipoEmailActivo('password_reset'))) return
+    const { data: cliente } = await supabase
+      .from('clients')
+      .select('nombre_empresa')
+      .eq('client_id', client_id)
+      .maybeSingle()
+    const { asunto, html } = await renderPlantilla('password_reset', {
+      nombre: usuario.nombre,
+      empresa: cliente?.nombre_empresa ?? client_id,
+      usuario: usuario.email,
+      password_temporal: passwordTemporal,
+      link_portal: LINK_PORTAL,
+    })
+    await enviarEmail({
+      to: usuario.email,
+      subject: asunto,
+      html,
+      tipo: 'password_reset',
+      clientId: client_id,
+    })
+  })()
 
   revalidatePath(`/admin/clientes/${client_id}`)
   return { ok: true, passwordTemporal }

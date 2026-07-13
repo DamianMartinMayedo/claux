@@ -22,7 +22,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${data.negocio.nombre} — ${data.etiquetas.catalogo}`,
     description: `${data.etiquetas.catalogo} de ${data.negocio.nombre}`,
     manifest: `/${slug}/catalogo/manifest.json`,
-    icons: { apple: '/simbolo-180.png' },
+    icons: {
+      icon: [
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+        { url: '/favicon.png', type: 'image/png' },
+      ],
+      apple: '/simbolo-180.png',
+    },
   }
 }
 

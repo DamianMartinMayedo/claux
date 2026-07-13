@@ -7,7 +7,7 @@ import { useToast } from '@/app/contexts/ToastContext'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 import {
-  actualizarEstadoMensaje, guardarFaq, eliminarFaq,
+  actualizarEstadoMensaje, guardarFaq, eliminarFaq, responderMensajeSoporte,
   type MensajeSoporte, type FaqAdmin,
 } from '@/app/actions/soporte'
 import { Eye, Mail, Plus, Pencil, Trash2, X } from 'lucide-react'
@@ -49,6 +49,8 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
   // ── Mensajes ──
   const [filtro, setFiltro] = useState<'TODOS' | Estado>('TODOS')
   const [verMsg, setVerMsg] = useState<MensajeSoporte | null>(null)
+  const [respuestaTexto, setRespuestaTexto] = useState('')
+  const [respondiendo, setRespondiendo]     = useState(false)
   const nuevos = mensajes.filter(m => m.estado === 'NUEVO').length
   const msgFiltrados = filtro === 'TODOS' ? mensajes : mensajes.filter(m => m.estado === filtro)
 
@@ -61,7 +63,20 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
 
   function abrirMsg(m: MensajeSoporte) {
     setVerMsg(m)
+    setRespuestaTexto('')
     if (m.estado === 'NUEVO') cambiarEstado(m.id, 'LEIDO')
+  }
+
+  async function handleResponder() {
+    if (!verMsg || !respuestaTexto.trim()) return
+    setRespondiendo(true)
+    const res = await responderMensajeSoporte(verMsg.id, respuestaTexto)
+    setRespondiendo(false)
+    if (!res.ok) { toastErr(res.error ?? 'No se pudo enviar la respuesta.'); return }
+    toastOk('Respuesta enviada')
+    setVerMsg(v => (v ? { ...v, estado: 'RESUELTO', respuesta: respuestaTexto.trim() } : v))
+    setRespuestaTexto('')
+    router.refresh()
   }
 
   // ── FAQ ──
@@ -131,10 +146,37 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
             <label>Mensaje</label>
             <p className="soporte-mensaje-texto">{verMsg.mensaje}</p>
           </div>
+
+          {verMsg.respuesta ? (
+            <div className="input-group">
+              <label>Tu respuesta{verMsg.respuesta_at ? ` · ${fmtFecha(verMsg.respuesta_at)}` : ''}</label>
+              <p className="soporte-mensaje-texto soporte-respuesta-texto">{verMsg.respuesta}</p>
+            </div>
+          ) : verMsg.email && (
+            <div className="input-group">
+              <label>Responder por email</label>
+              <textarea
+                className="input"
+                rows={4}
+                placeholder="Escribe tu respuesta…"
+                value={respuestaTexto}
+                onChange={e => setRespuestaTexto(e.target.value)}
+              />
+            </div>
+          )}
         </div>
         <div className="modal-footer">
+          {!verMsg.respuesta && verMsg.email && (
+            <button
+              className="btn btn-primary"
+              disabled={respondiendo || !respuestaTexto.trim()}
+              onClick={handleResponder}
+            >
+              {respondiendo ? <><span className="spinner spinner-sm" /> Enviando…</> : 'Enviar respuesta'}
+            </button>
+          )}
           {verMsg.estado !== 'RESUELTO'
-            ? <button className="btn btn-primary" onClick={() => cambiarEstado(verMsg.id, 'RESUELTO')}>Marcar como resuelto</button>
+            ? <button className="btn btn-secondary" onClick={() => cambiarEstado(verMsg.id, 'RESUELTO')}>Marcar como resuelto</button>
             : <button className="btn btn-secondary" onClick={() => cambiarEstado(verMsg.id, 'LEIDO')}>Reabrir</button>}
           <button className="btn btn-secondary" onClick={() => setVerMsg(null)}>Cerrar</button>
         </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { Eye, FileText, Plus, X } from 'lucide-react'
+import { Check, Eye, FileText, Plus, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -8,15 +8,22 @@ import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import VentasTabs from '@/components/admin/VentasTabs'
 import { useToast } from '@/app/contexts/ToastContext'
+import ClienteFormModal, {
+  type ModuloCatalogo,
+  type PlantillaSector,
+  type InitialCliente,
+} from '../clientes/ClienteFormModal'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
 import {
   obtenerPresupuesto,
   actualizarHorasReales,
+  aprobarPresupuesto,
   type PresupuestoRow,
 } from '@/app/actions/presupuestos'
 
 type DesgloseFase = { fase: string; horas: number; subtotalUsd: number; detalle?: string }
 type Revision = { linea: string; motivo: string }
+type Filtro = 'todos' | 'guardado' | 'aprobado' | 'instalado'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Detalle = Record<string, any>
@@ -26,22 +33,68 @@ function fmtFecha(iso: string): string {
 }
 const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
 
+function EstadoBadge({ estado }: { estado: string }) {
+  if (estado === 'aprobado')  return <span className="badge badge-success">Aprobado</span>
+  if (estado === 'instalado') return <span className="badge badge-purple">Instalado</span>
+  return <span className="badge badge-info">Guardado</span>
+}
+
+// Precarga del alta de cliente a partir del presupuesto. El email solo se precarga
+// si el contacto parece un correo (puede ser un teléfono); los módulos y la tarifa
+// vienen del presupuesto, y el pago de configuración = coste de instalación calculado.
+function initialDesde(d: Detalle): InitialCliente {
+  const contacto = String(d.contacto ?? '').trim()
+  return {
+    nombre_empresa:  d.nombre_negocio ?? '',
+    nombre_contacto: d.nombre_responsable ?? '',
+    email_admin:     contacto.includes('@') ? contacto : '',
+    tarifa:          d.tarifa === 'fundador' ? 'fundador' : 'estandar',
+    modulos:         Array.isArray(d.modulos) ? d.modulos : [],
+    pago_setup_usd:  Number(d.coste_instalacion_usd ?? 0),
+  }
+}
+
 export default function PresupuestosView({
   presupuestos,
   rol,
   permisos,
+  catalogo,
+  plantillas,
+  setupDefault,
+  descuentoAnualPct,
 }: {
   presupuestos: PresupuestoRow[]
   rol: RolAdmin
   permisos: SeccionKey[]
+  catalogo: ModuloCatalogo[]
+  plantillas: PlantillaSector[]
+  setupDefault: number
+  descuentoAnualPct: number
 }) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
+  const [filtro, setFiltro] = useState<Filtro>('todos')
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [cargando, setCargando] = useState(false)
   const [horasReales, setHorasReales] = useState('')
   const [guardando, setGuardando] = useState(false)
-  const { pageItems, ...pag } = usePagination(presupuestos)
+  const [aprobando, setAprobando] = useState(false)
+
+  // Alta de cliente desde un presupuesto aprobado (modal compartido).
+  const [clienteOpen, setClienteOpen] = useState(false)
+  const [clienteInitial, setClienteInitial] = useState<InitialCliente | undefined>(undefined)
+  const [clientePresupuestoId, setClientePresupuestoId] = useState<number | undefined>(undefined)
+
+  const visibles = presupuestos.filter(p => filtro === 'todos' || p.estado === filtro)
+  const nAprobados = presupuestos.filter(p => p.estado === 'aprobado').length
+  const { pageItems, ...pag } = usePagination(visibles)
+
+  const FILTROS: { k: Filtro; label: string }[] = [
+    { k: 'todos',     label: 'Todos' },
+    { k: 'guardado',  label: 'Guardados' },
+    { k: 'aprobado',  label: 'Aprobados' },
+    { k: 'instalado', label: 'Instalados' },
+  ]
 
   async function abrir(id: number) {
     setCargando(true)
@@ -60,8 +113,31 @@ export default function PresupuestosView({
     setGuardando(false)
     if (!r.ok) { toastError(r.error ?? 'Error al guardar'); return }
     toastSuccess('Horas reales guardadas')
-    setDetalle({ ...detalle, horas_reales: val, estado: val != null ? 'instalado' : 'guardado' })
+    setDetalle(null)
     router.refresh()
+  }
+
+  async function aprobar(id: number, aprobado: boolean) {
+    setAprobando(true)
+    const r = await aprobarPresupuesto(id, aprobado)
+    setAprobando(false)
+    if (!r.ok) { toastError(r.error ?? 'Error al guardar'); return }
+    toastSuccess(aprobado ? 'Presupuesto aprobado' : 'Aprobación retirada')
+    if (detalle?.id === id) setDetalle({ ...detalle, estado: aprobado ? 'aprobado' : 'guardado' })
+    router.refresh()
+  }
+
+  function abrirClienteConDetalle(d: Detalle) {
+    setClienteInitial(initialDesde(d))
+    setClientePresupuestoId(d.id)
+    setDetalle(null)
+    setClienteOpen(true)
+  }
+
+  async function abrirCrearClienteRow(id: number) {
+    const d = await obtenerPresupuesto(id)
+    if (!d) { toastError('No se pudo cargar el presupuesto'); return }
+    abrirClienteConDetalle(d)
   }
 
   const desglose: DesgloseFase[] = Array.isArray(detalle?.desglose) ? detalle!.desglose : []
@@ -72,7 +148,9 @@ export default function PresupuestosView({
       <div className="page-header">
         <div>
           <h1 className="page-title">Presupuestos de instalación</h1>
-          <p className="page-subtitle">{presupuestos.length} guardado{presupuestos.length !== 1 ? 's' : ''}.</p>
+          <p className="page-subtitle">
+            {presupuestos.length} guardado{presupuestos.length !== 1 ? 's' : ''} · {nAprobados} aprobado{nAprobados !== 1 ? 's' : ''}.
+          </p>
         </div>
         <Link href="/admin/presupuestos/nuevo" className="btn btn-primary">
           <Plus size={16} /> Nuevo presupuesto
@@ -81,12 +159,24 @@ export default function PresupuestosView({
 
       <VentasTabs rol={rol} permisos={permisos} />
 
-      {presupuestos.length === 0 ? (
+      <div className="ter-toolbar">
+        {FILTROS.map(f => (
+          <button
+            key={f.k}
+            className={`btn btn-sm ${filtro === f.k ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setFiltro(f.k)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {visibles.length === 0 ? (
         <div className="table-wrapper">
           <div className="table-empty">
             <FileText size={40} strokeWidth={1.5} />
             <h3 className="table-empty-title">Sin presupuestos</h3>
-            <p>Calcula el primero con el botón de arriba.</p>
+            <p>{filtro === 'todos' ? 'Calcula el primero con el botón de arriba.' : 'No hay presupuestos en este estado.'}</p>
           </div>
         </div>
       ) : (
@@ -95,6 +185,7 @@ export default function PresupuestosView({
             <table className="table">
               <thead>
                 <tr>
+                  <th>Estado</th>
                   <th>Fecha</th>
                   <th>Negocio</th>
                   <th>Comercial</th>
@@ -108,6 +199,7 @@ export default function PresupuestosView({
               <tbody>
                 {pageItems.map(p => (
                   <tr key={p.id} className="table-row-clickable" onClick={() => abrir(p.id)}>
+                    <td data-label="Estado"><EstadoBadge estado={p.estado} /></td>
                     <td data-label="Fecha" className="table-muted">{fmtFecha(p.created_at)}</td>
                     <td data-label="Negocio">{p.nombre_negocio}</td>
                     <td data-label="Comercial" className="table-muted">{p.comercial_nombre ?? '—'}</td>
@@ -120,6 +212,25 @@ export default function PresupuestosView({
                         <button className="row-actions-item" onClick={() => abrir(p.id)}>
                           <Eye size={15} strokeWidth={2} /> Ver detalles
                         </button>
+                        {p.estado !== 'instalado' && (
+                          p.estado === 'aprobado'
+                            ? <button className="row-actions-item" onClick={() => aprobar(p.id, false)}>
+                                <X size={15} strokeWidth={2} /> Quitar aprobación
+                              </button>
+                            : <button className="row-actions-item" onClick={() => aprobar(p.id, true)}>
+                                <Check size={15} strokeWidth={2} /> Aprobar
+                              </button>
+                        )}
+                        {p.estado === 'aprobado' && !p.client_id && (
+                          <button className="row-actions-item" onClick={() => abrirCrearClienteRow(p.id)}>
+                            <UserPlus size={15} strokeWidth={2} /> Crear cliente
+                          </button>
+                        )}
+                        {p.client_id && (
+                          <Link href={`/admin/clientes/${p.client_id}`} className="row-actions-item">
+                            <UserPlus size={15} strokeWidth={2} /> Ver cliente {p.client_id}
+                          </Link>
+                        )}
                       </RowActions>
                     </td>
                   </tr>
@@ -132,7 +243,7 @@ export default function PresupuestosView({
       )}
 
       {(detalle || cargando) && (
-        <div className="modal-backdrop" onClick={() => !guardando && setDetalle(null)}>
+        <div className="modal-backdrop" onClick={() => !guardando && !aprobando && setDetalle(null)}>
           <div className="modal modal-560" onClick={e => e.stopPropagation()}>
             {cargando || !detalle ? (
               <div className="modal-body"><p className="text-sm-muted"><span className="spinner" /> Cargando…</p></div>
@@ -146,11 +257,15 @@ export default function PresupuestosView({
                 </div>
                 <div className="modal-body">
                   <div className="sol-detalle">
+                    <div className="sol-row"><span className="sol-label">Estado</span><span className="sol-value"><EstadoBadge estado={detalle.estado} /></span></div>
                     <div className="sol-row"><span className="sol-label">Comercial</span><span className="sol-value">{detalle.comercial_nombre ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Responsable</span><span className="sol-value">{detalle.nombre_responsable ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Contacto</span><span className="sol-value">{detalle.contacto ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Tarifa</span><span className="sol-value">{detalle.tarifa === 'fundador' ? 'Fundador' : 'Estándar'}</span></div>
                     <div className="sol-row"><span className="sol-label">Módulos</span><span className="sol-value">{(detalle.modulos ?? []).join(', ') || '—'}</span></div>
+                    {detalle.client_id && (
+                      <div className="sol-row"><span className="sol-label">Cliente</span><span className="sol-value">{detalle.client_id}</span></div>
+                    )}
                   </div>
 
                   <div className="pres-desglose">
@@ -179,6 +294,32 @@ export default function PresupuestosView({
                     <div><span className="pres-total-label">Cuota mensual</span><span className="pres-total-valor">{usd(detalle.cuota_mensual_usd)}</span></div>
                   </div>
 
+                  {/* Acciones de venta: aprobar y convertir en cliente (no aplica si ya está instalado) */}
+                  {detalle.estado !== 'instalado' && (
+                    <div className="pres-acciones-cierre">
+                      {detalle.estado === 'aprobado' ? (
+                        <>
+                          {detalle.client_id ? (
+                            <Link href={`/admin/clientes/${detalle.client_id}`} className="btn btn-primary btn-sm">
+                              <UserPlus size={15} strokeWidth={2} /> Ver cliente {detalle.client_id}
+                            </Link>
+                          ) : (
+                            <button className="btn btn-primary btn-sm" onClick={() => abrirClienteConDetalle(detalle)}>
+                              <UserPlus size={15} strokeWidth={2} /> Crear cliente
+                            </button>
+                          )}
+                          <button className="btn btn-secondary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
+                            {aprobando ? <><span className="spinner" /> …</> : <><X size={15} strokeWidth={2} /> Quitar aprobación</>}
+                          </button>
+                        </>
+                      ) : (
+                        <button className="btn btn-success btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
+                          {aprobando ? <><span className="spinner" /> …</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <div className="input-group">
                     <label htmlFor="horas-reales">Horas reales de la instalación</label>
                     <input id="horas-reales" type="number" min="0" step="0.5" className="input"
@@ -198,6 +339,17 @@ export default function PresupuestosView({
           </div>
         </div>
       )}
+
+      <ClienteFormModal
+        open={clienteOpen}
+        onClose={() => setClienteOpen(false)}
+        catalogo={catalogo}
+        plantillas={plantillas}
+        setupDefault={setupDefault}
+        descuentoAnualPct={descuentoAnualPct}
+        initial={clienteInitial}
+        presupuestoId={clientePresupuestoId}
+      />
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
+import { enviarAvisoInterno } from '@/lib/email/enviar'
 
 export interface Faq {
   id:           number
@@ -73,5 +74,15 @@ export async function enviarMensajeSoporte(
   })
 
   if (error) return { ok: false, error: 'No se pudo enviar el mensaje. Inténtalo de nuevo.' }
+
+  const { data: cliente } = await db
+    .from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle()
+  void enviarAvisoInterno({
+    tipo: 'aviso_soporte',
+    asunto: `Nuevo mensaje de soporte: ${cliente?.nombre_empresa ?? session.client_id}`,
+    cuerpo: `Nuevo mensaje de soporte.\n\nCliente: ${cliente?.nombre_empresa ?? session.client_id} (${session.client_id})\nDe: ${session.email}\nAsunto: ${asunto}\n\n${mensaje}`,
+    clientId: session.client_id,
+  })
+
   return { ok: true }
 }

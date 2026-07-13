@@ -591,11 +591,6 @@ textarea:focus-visible {
   margin-bottom: var(--space-5);
   box-shadow: var(--shadow-sm);
 }
-.notif-section-disabled {
-  opacity: 0.55;
-  pointer-events: none;
-  user-select: none;
-}
 .notif-section-header {
   display: flex;
   align-items: flex-start;
@@ -609,7 +604,6 @@ textarea:focus-visible {
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .notif-icon-active  { background: var(--color-amber-highlight); color: var(--color-amber); }
-.notif-icon-disabled { background: var(--color-surface-offset); color: var(--color-text-muted); }
 .notif-section-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
 .notif-section-sub   { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
 
@@ -636,18 +630,36 @@ textarea:focus-visible {
   font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 500; white-space: nowrap;
 }
 
-/* Coming soon */
-.notif-coming-soon {
-  display: flex; flex-direction: column; gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  background: var(--color-surface-offset);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm); color: var(--color-text-muted);
+/* Lista de toggles por tipo de correo */
+.notif-toggle-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.notif-toggle-list .notif-field-row:not(:last-child) {
+  padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-divider);
 }
-.notif-coming-item {
-  display: flex; align-items: center; gap: var(--space-2);
+
+/* ─── Editor de plantillas de correo ────────────────────
+   Dos columnas: lista de tipos + editor (asunto/cuerpo/variables/preview). ─── */
+.plantillas-layout {
+  display: grid; grid-template-columns: 260px 1fr; gap: var(--space-5); align-items: start;
 }
-.notif-coming-item svg { flex-shrink: 0; opacity: 0.5; }
+.plantillas-lista { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); }
+.plantillas-lista-item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-3) var(--space-3); border-radius: var(--radius-md); border: 0; background: transparent;
+  font-size: var(--text-sm); color: var(--color-text); text-align: left; cursor: pointer;
+  transition: background var(--transition);
+}
+.plantillas-lista-item:hover  { background: var(--color-surface-offset); }
+.plantillas-lista-item.active { background: var(--color-primary-subtle); color: var(--color-primary-text); font-weight: 600; }
+
+.plantillas-vars { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 var(--space-4); }
+.plantillas-vars-label { font-size: var(--text-xs); color: var(--color-text-muted); margin-right: var(--space-1); }
+
+.plantillas-preview { margin-top: var(--space-5); padding-top: var(--space-5); border-top: 1px solid var(--color-border); }
+.plantillas-preview-label  { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-2); }
+.plantillas-preview-asunto { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-3); }
+.plantillas-preview-frame {
+  width: 100%; height: 420px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg);
+}
 
 /* ─── Actividad ──────────────────────────────────────── */
 .actividad-filters {
@@ -856,6 +868,7 @@ textarea:focus-visible {
   padding: var(--space-3) var(--space-4); background: var(--color-surface-2);
   border: 1px solid var(--color-border); border-radius: var(--radius-md); margin: 0;
 }
+.soporte-respuesta-texto { background: var(--color-primary-subtle); border-color: var(--color-primary-highlight); }
 
 /* ── Solicitudes de diagnóstico: detalle (modal) ── */
 .sol-detalle { display: flex; flex-direction: column; gap: var(--space-3); }

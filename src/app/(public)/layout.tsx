@@ -8,6 +8,14 @@ import './public-base.css'
 export const metadata: Metadata = {
   title: 'Reservas — CLAUX',
   description: 'Reserva tu mesa',
+  // Favicon para TODAS las rutas públicas (no hay app/favicon.ico y estas rutas
+  // están aisladas del portal): sin esto el enlace compartido no muestra icono.
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.png', type: 'image/png' },
+    ],
+  },
 }
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
