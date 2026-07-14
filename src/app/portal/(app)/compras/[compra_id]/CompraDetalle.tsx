@@ -142,9 +142,11 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
       {/* Integración contable (confirmada) */}
       {esConfirmada && (
         <div className="alert alert-success mb-4">
-          Esta compra generó un gasto <strong>«Compras»</strong> en Cuentas por pagar.{' '}
-          Pagado: <strong>{fmt(data.pagado, compra.moneda)}</strong> · Saldo: <strong>{fmt(data.saldo, compra.moneda)}</strong>.{' '}
-          <Link href="/portal/cxp" className="link-primary">Ir a Cuentas por pagar</Link> para registrar el pago.
+          <div>
+            Esta compra generó un gasto <strong>«Compras»</strong> en Cuentas por pagar.{' '}
+            Pagado: <strong>{fmt(data.pagado, compra.moneda)}</strong> · Saldo: <strong>{fmt(data.saldo, compra.moneda)}</strong>.{' '}
+            <Link href="/portal/cxp" className="link-primary">Ir a Cuentas por pagar</Link> para registrar el pago.
+          </div>
         </div>
       )}
       {compra.estado === 'ANULADA' && (

@@ -167,20 +167,26 @@
     padding: var(--space-1) var(--space-4);
   }
   .table tbody tr:hover { background: var(--color-surface); }
+  /* El acento de empresa ya lo pinta el border-left de la tarjeta; anular el
+     box-shadow de la 1ª celda (que en escritorio hace el acento de fila) para no
+     tener una segunda barra despegada dentro de la tarjeta. */
+  .row-empresa-accent > td:first-child { box-shadow: none; }
   .table td {
-    display: flex; justify-content: space-between; align-items: center;
-    gap: var(--space-4);
+    display: flex; justify-content: flex-end; align-items: center;
+    gap: var(--space-3) var(--space-4); flex-wrap: wrap;
     padding: var(--space-3) 0; text-align: right;
     border-bottom: 1px solid var(--color-divider);
-    white-space: normal;
+    white-space: normal; overflow-wrap: anywhere;
   }
   .table tbody tr td:last-child { border-bottom: none; }
   .table td.cell-truncate { max-width: none; }
+  /* Etiqueta a la izquierda; el valor (aunque tenga varias piezas: texto + badge)
+     se agrupa a la derecha en lugar de dispersarse con space-between. */
   .table td::before {
     content: attr(data-label);
     font-family: var(--font-display); font-size: var(--text-xs); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted);
-    text-align: left; flex-shrink: 0;
+    text-align: left; flex-shrink: 0; margin-right: auto;
   }
   .table td:not([data-label])::before,
   .table td[data-label=""]::before { content: none; }

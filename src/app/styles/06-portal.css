@@ -1032,6 +1032,12 @@
 .ter-search:focus { border-color: var(--color-primary); }
 .ter-search::placeholder { color: var(--color-text-muted); }
 .ter-filter-select { max-width: 200px; padding: 7px 10px; font-size: var(--text-sm); }
+/* En móvil la barra de filtros pasa a cuadrícula de 2: la búsqueda ocupa toda la
+   fila y los filtros (fechas, selects) caen de dos en dos. */
+@media (max-width: 640px) {
+  .ter-search-wrap { flex: 1 1 100%; min-width: 0; }
+  .ter-filter-select { max-width: none; flex: 1 1 calc(50% - var(--space-2)); }
+}
 .ter-archivados-toggle {
   display: flex; align-items: center; gap: var(--space-2);
   font-size: var(--text-sm); color: var(--color-text-secondary);
@@ -1088,8 +1094,8 @@
 .ter-form-section { margin-bottom: var(--space-5); }
 .ter-form-section:last-child { margin-bottom: 0; }
 .ter-form-section-title {
-  display: block; font-size: var(--text-base); font-weight: 700;
-  text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-muted);
+  display: block; font-size: var(--text-lg); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted);
   margin-bottom: var(--space-3); padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--color-border);
 }
@@ -1155,8 +1161,11 @@
   display: flex; gap: 0;
   border-bottom: 2px solid var(--color-border);
   margin-bottom: var(--space-4);
+  overflow-x: auto; scrollbar-width: none;
 }
+.prd-tabs::-webkit-scrollbar { display: none; }
 .prd-tab {
+  flex-shrink: 0;
   display: inline-flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-5);
   border: none; background: transparent;
@@ -1340,6 +1349,30 @@
 }
 .prd-stock-actual-row strong { color: var(--color-text); font-weight: 700; }
 .prd-stock-warn { color: var(--color-error) !important; font-weight: 600; }
+
+/* Selector de modo de ajuste: Añadir (+) / Quitar (−) / Fijar (=) */
+.prd-modo-seg { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
+.prd-modo-btn {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm); font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: var(--transition);
+}
+.prd-modo-btn:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.prd-modo-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+/* Previsualización del stock resultante bajo el input */
+.prd-stock-preview { color: var(--color-text-muted); }
+.prd-stock-preview strong { color: var(--color-text); font-weight: 700; }
 
 /* ── Lista de productos (tabla) ───────────────────────────────────────────── */
 .code-value         { font-size: var(--text-sm); font-weight: 600; font-family: monospace; color: var(--color-text); }
@@ -1666,8 +1699,11 @@
   display: flex; gap: 0;
   border-bottom: 2px solid var(--color-border);
   margin-bottom: var(--space-4);
+  overflow-x: auto; scrollbar-width: none;
 }
+.res-tabs::-webkit-scrollbar { display: none; }
 .res-tab {
+  flex-shrink: 0;
   display: inline-flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-5);
   border: none; background: transparent;
@@ -2007,6 +2043,24 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ia-tp-error       { display: block; color: var(--color-error); font-size: var(--text-sm); }
 .ia-tp-disclaimer  { display: block; margin-top: var(--space-3); font-size: var(--text-xs); color: var(--color-text-faint); }
 
+/* En móvil el aviso/panel de IA se ancla como sheet inferior a todo el ancho (con
+   márgenes) en vez de colgar del icono: si el touchpoint está a la derecha, el
+   posicionamiento absoluto `left: 0` se salía de la pantalla (se cortaba). */
+@media (max-width: 640px) {
+  .ia-tp-callout,
+  .ia-tp-panel {
+    position: fixed;
+    left: var(--space-4);
+    right: var(--space-4);
+    bottom: max(var(--space-4), env(safe-area-inset-bottom));
+    top: auto;
+    width: auto;
+    max-height: 70dvh;
+    overflow-y: auto;
+    z-index: 120;
+  }
+}
+
 /* Indicador "escribiendo" (puntos) — chat e insights */
 .ia-typing      { display: inline-flex; align-items: center; gap: 4px; padding: var(--space-1) 0; }
 .ia-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-faint); display: inline-block; animation: ia-typing-bounce 1.2s infinite ease-in-out; }
@@ -2095,7 +2149,28 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   font-size: var(--text-sm); cursor: pointer; transition: var(--transition);
 }
 .ia-chat-sug:hover { border-color: var(--color-primary); background: var(--color-primary-subtle); }
-.ia-chat-foot  { display: flex; gap: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--color-border); }
+.ia-chat-foot  { display: flex; gap: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--color-border); padding-bottom: max(var(--space-3), env(safe-area-inset-bottom)); }
+
+/* ── Chat de IA en móvil: pantalla completa (por encima del header) siguiendo el
+   viewport VISIBLE, para que el teclado no tape el campo de entrada. Las custom
+   properties --ia-vh/--ia-top las fija el componente desde window.visualViewport;
+   sin JS caen a 100dvh/0. ── */
+@media (max-width: 640px) {
+  .ia-chat {
+    top: var(--ia-top, 0);
+    left: 0;
+    right: 0;
+    bottom: auto;
+    width: 100%;
+    height: var(--ia-vh, 100dvh);
+    max-height: none;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    z-index: 130;
+    transform-origin: center bottom;
+  }
+}
 
 /* Historial de conversaciones */
 .ia-historial { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) 0; }

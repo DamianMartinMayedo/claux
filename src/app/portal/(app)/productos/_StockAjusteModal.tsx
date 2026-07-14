@@ -3,14 +3,18 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useEffect, useTransition } from 'react'
 import { ajustarStock, obtenerStockPorAlmacen } from '@/app/actions/portal/productos'
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, Plus, Minus, Equal, X } from 'lucide-react'
 
 // Modal único de ajuste de stock, compartido por la tabla de Productos y el
-// detalle de producto — antes eran dos componentes que se comportaban distinto.
-// El input se precarga con el stock REAL del almacén (consulta propia, nunca
-// datos que el llamador pudiera tener desactualizados) y el usuario lo edita
-// directamente al valor que quiere dejar; el delta hacia ajustarStock() se
-// calcula aquí.
+// detalle de producto. Tres modos para que no haya que calcular a mano:
+//   · Añadir (+) — entra mercancía (compra, reposición)
+//   · Quitar (−) — sale mercancía (merma, rotura, consumo)
+//   · Fijar (=)  — se deja un total exacto (conteo físico / auditoría)
+// El stock real del almacén se consulta aquí (nunca datos que el llamador pudiera
+// tener desactualizados). La acción ajustarStock() recibe un DELTA con signo, que
+// se calcula según el modo.
+
+type Modo = 'añadir' | 'quitar' | 'fijar'
 
 interface Props {
   producto_id: string
@@ -26,6 +30,7 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
   const [cargando,  setCargando]     = useState(true)
   const [stockMap,  setStockMap]     = useState<Record<string, number>>({})
   const [almacenId, setAlmacenId]    = useState(almacenes[0]?.almacen_id ?? '')
+  const [modo,      setModo]         = useState<Modo>('añadir')
   const [cantidad,  setCantidad]     = useState('')
   const [motivo,    setMotivo]       = useState('')
 
@@ -46,28 +51,43 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
         if (s > bestStock) { bestStock = s; bestId = a.almacen_id }
       }
       setAlmacenId(bestId)
-      setCantidad(String(bestStock))
       setCargando(false)
     })
     return () => { activo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [producto_id])
 
+  const stockActual = stockMap[almacenId] ?? 0
+
   function handleAlmacenChange(id: string) {
     setAlmacenId(id)
-    setCantidad(String(stockMap[id] ?? 0))
+    // En "fijar" el input arranca en el stock del almacén elegido; en añadir/quitar
+    // es una cantidad relativa que no depende del almacén.
+    if (modo === 'fijar') setCantidad(String(stockMap[id] ?? 0))
   }
 
-  const stockActual = stockMap[almacenId] ?? 0
-  const cantNum      = parseFloat(cantidad)
-  const valido        = cantidad !== '' && !isNaN(cantNum) && cantNum >= 0
-  const delta          = valido ? cantNum - stockActual : 0
+  function handleModoChange(nuevo: Modo) {
+    if (nuevo === modo) return
+    setModo(nuevo)
+    setCantidad(nuevo === 'fijar' ? String(stockMap[almacenId] ?? 0) : '')
+  }
+
+  const cantNum = parseFloat(cantidad)
+  const numOk    = cantidad !== '' && !isNaN(cantNum) && cantNum >= 0
+  // Delta con signo según el modo (lo que espera ajustarStock).
+  const delta      = !numOk ? 0
+    : modo === 'añadir' ? cantNum
+    : modo === 'quitar' ? -cantNum
+    : cantNum - stockActual
+  const resultante = stockActual + delta
+  const negativo    = numOk && resultante < 0
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!almacenId)      return toastError('Selecciona un almacén.')
-    if (!valido)          return toastError('Ingresa un stock válido.')
-    if (delta === 0)      return toastError('El stock no ha cambiado.')
+    if (!numOk)           return toastError('Ingresa una cantidad válida.')
+    if (delta === 0)      return toastError(modo === 'fijar' ? 'El stock no ha cambiado.' : 'La cantidad debe ser mayor que cero.')
+    if (negativo)         return toastError(`No puedes quitar más de lo disponible (${stockActual.toLocaleString('es-VE')} ${unidad}).`)
     if (!motivo.trim())   return toastError('El motivo del ajuste es obligatorio.')
     startTransition(async () => {
       const res = await ajustarStock(producto_id, almacenId, delta, motivo.trim())
@@ -75,6 +95,14 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
       onSaved()
     })
   }
+
+  const MODOS: { id: Modo; label: string; icon: React.ReactNode }[] = [
+    { id: 'añadir', label: 'Añadir', icon: <Plus size={15} strokeWidth={2} /> },
+    { id: 'quitar', label: 'Quitar', icon: <Minus size={15} strokeWidth={2} /> },
+    { id: 'fijar',  label: 'Fijar',  icon: <Equal size={15} strokeWidth={2} /> },
+  ]
+  const labelCantidad = modo === 'fijar' ? 'Nuevo stock (total)'
+    : modo === 'quitar' ? 'Cantidad a quitar' : 'Cantidad a añadir'
 
   return (
     <div className="modal-backdrop open">
@@ -107,18 +135,29 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
                   <strong>{stockActual.toLocaleString('es-VE')} {unidad}</strong>
                 </div>
 
+                <div className="prd-modo-seg" role="group" aria-label="Modo de ajuste">
+                  {MODOS.map(m => (
+                    <button key={m.id} type="button"
+                      className={`prd-modo-btn${modo === m.id ? ' active' : ''}`}
+                      aria-pressed={modo === m.id}
+                      onClick={() => handleModoChange(m.id)}>
+                      {m.icon} {m.label}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="input-group">
-                  <label htmlFor="stk-cant">Nuevo stock <span className="required">*</span></label>
+                  <label htmlFor="stk-cant">{labelCantidad} <span className="required">*</span></label>
                   <input id="stk-cant" className="input" type="number" step="0.001" min="0"
                     value={cantidad} onChange={e => setCantidad(e.target.value)} autoFocus />
-                  {valido && delta !== 0 && (
-                    <span className="input-hint">
-                      {delta > 0 ? `+${delta.toLocaleString('es-VE')}` : delta.toLocaleString('es-VE')} {unidad} sobre el stock actual
+                  {numOk && delta !== 0 && !negativo && (
+                    <span className="input-hint prd-stock-preview">
+                      Quedará: <strong>{resultante.toLocaleString('es-VE')} {unidad}</strong>
                     </span>
                   )}
-                  {cantidad !== '' && !valido && (
+                  {negativo && (
                     <span className="input-hint prd-stock-warn">
-                      <AlertTriangle size={13} strokeWidth={2} /> El stock no puede ser negativo
+                      <AlertTriangle size={13} strokeWidth={2} /> No puedes quitar más de lo disponible ({stockActual.toLocaleString('es-VE')} {unidad})
                     </span>
                   )}
                 </div>

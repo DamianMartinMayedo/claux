@@ -760,6 +760,7 @@ input[type="checkbox"]:checked::after {
 
 .code-block-value-text {
   color: var(--color-text);
+  overflow-wrap: anywhere; min-width: 0;
 }
 
 /* ── Login form title ── */

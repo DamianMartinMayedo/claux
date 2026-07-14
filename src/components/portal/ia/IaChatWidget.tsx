@@ -22,6 +22,28 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
   const [entrada,  setEntrada]  = useState('')
   const [pending, startTransition] = useTransition()
   const bodyRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // En móvil el panel es pantalla completa; sincronizar su alto/posición con el
+  // viewport VISIBLE (visualViewport) para que, al abrir el teclado, el campo de
+  // entrada no quede tapado. En escritorio estas custom properties no se usan.
+  useEffect(() => {
+    if (!montado) return
+    const vv = window.visualViewport
+    const panel = panelRef.current
+    if (!vv || !panel) return
+    const sync = () => {
+      panel.style.setProperty('--ia-vh', `${vv.height}px`)
+      panel.style.setProperty('--ia-top', `${vv.offsetTop}px`)
+    }
+    sync()
+    vv.addEventListener('resize', sync)
+    vv.addEventListener('scroll', sync)
+    return () => {
+      vv.removeEventListener('resize', sync)
+      vv.removeEventListener('scroll', sync)
+    }
+  }, [montado])
 
   // Estado para historial
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
@@ -154,6 +176,7 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
     <>
       {montado && (
         <div className="ia-chat" role="dialog" aria-label={`Chat con ${nombreAgente}`}
+          ref={panelRef}
           data-visible={visible}
           onTransitionEnd={e => { if (e.target === e.currentTarget && !visible) setMontado(false) }}>
           <div className="ia-chat-head">
