@@ -1,4 +1,5 @@
 import { redirect }       from 'next/navigation'
+import { FlaskConical }   from 'lucide-react'
 import { getPortalSession, debeCambiarPassword } from '@/app/actions/portal/auth'
 import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
@@ -25,7 +26,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const [{ data: cliente }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar] = await Promise.all([
     db
       .from('clients')
-      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
+      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, es_prueba')
       .eq('client_id', session.client_id)
       .single(),
     db
@@ -107,6 +108,12 @@ export default async function PortalAppLayout({ children }: { children: React.Re
       />
       <main className="portal-main">
         {session.imp && <ImpersonacionBanner adminEmail={session.imp.admin_email} />}
+        {cliente.es_prueba && (
+          <div className="imp-banner" role="status">
+            <FlaskConical className="imp-banner-icon" size={18} />
+            <p className="imp-banner-text"><strong>Entorno de prueba</strong></p>
+          </div>
+        )}
         <PortalToastWrapper>
         {bloqueado
           ? <BloqueadoScreen estado={cliente.estado} />

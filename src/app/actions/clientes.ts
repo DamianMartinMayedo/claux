@@ -63,6 +63,7 @@ export async function crearCliente(formData: FormData) {
   const email_admin     = (formData.get('email_admin')     as string ?? '').trim().toLowerCase()
   const notas           = (formData.get('notas')           as string ?? '').trim() || null
   const es_trial        = formData.get('es_trial') === 'true'
+  const es_prueba       = formData.get('es_prueba') === 'true'
   const tarifa          = (formData.get('tarifa') as string ?? 'estandar').trim()
   const ciclo           = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
   const sector          = (formData.get('sector') as string ?? '').trim() || null
@@ -115,6 +116,7 @@ export async function crearCliente(formData: FormData) {
     fecha_inicio:     toDateStr(hoy),
     fecha_expiracion: toDateStr(fechaExpiracion),
     estado:           estadoInicial,
+    es_prueba,
     notas,
   })
 
@@ -549,6 +551,7 @@ export async function editarCliente(formData: FormData) {
   const nombre_contacto = (formData.get('nombre_contacto') as string ?? '').trim() || null
   const email_admin     = (formData.get('email_admin')     as string ?? '').trim().toLowerCase()
   const notas           = (formData.get('notas')           as string ?? '').trim() || null
+  const es_prueba       = formData.get('es_prueba') === 'true'
 
   if (!client_id || !nombre_empresa || !email_admin) {
     return { ok: false, error: 'Nombre de empresa y email son obligatorios.' }
@@ -565,7 +568,7 @@ export async function editarCliente(formData: FormData) {
 
   const { error } = await supabase
     .from('clients')
-    .update({ nombre_empresa, nombre_contacto, email_admin, notas })
+    .update({ nombre_empresa, nombre_contacto, email_admin, notas, es_prueba })
     .eq('client_id', client_id)
 
   if (error) return { ok: false, error: error.message }

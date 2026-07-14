@@ -12,3 +12,8 @@ tsconfig.tsbuildinfo
 
 # Unlighthouse (artefacto generado de auditorías Lighthouse)
 .unlighthouse/
+
+# Planes de trabajo: copia local legible por cualquier agente, no se versionan
+# (evita que planes de un intento acaben en el repo). El README sí se versiona.
+docs/planes/*
+!docs/planes/README.md

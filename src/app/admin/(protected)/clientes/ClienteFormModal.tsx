@@ -299,6 +299,11 @@ export default function ClienteFormModal({
                   <span className="checkbox-label">Iniciar con período de prueba gratuita (sin cobro)</span>
                 </label>
 
+                <label className="checkbox-group">
+                  <input type="checkbox" name="es_prueba" value="true" />
+                  <span className="checkbox-label">Cliente de prueba (no cuenta en las estadísticas de CLAUX)</span>
+                </label>
+
                 <div className="input-group">
                   <label>Notas internas</label>
                   <textarea name="notas" className="input" rows={2} placeholder="Opcional" />

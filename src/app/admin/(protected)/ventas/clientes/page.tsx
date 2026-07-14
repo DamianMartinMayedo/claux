@@ -11,7 +11,7 @@ export default async function VentasClientesPage() {
 
   const { data: clientes } = await supabase
     .from('clients')
-    .select('client_id, nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion')
+    .select('client_id, nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, es_prueba')
     .order('created_at', { ascending: false })
 
   const descuentoAnual = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0

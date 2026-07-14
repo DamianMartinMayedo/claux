@@ -21,6 +21,7 @@ type Cliente = {
   fecha_fin_gracia: string | null
   created_at: string | null; notas: string | null
   archivado_at: string | null
+  es_prueba: boolean | null
 }
 
 function cicloLabel(ciclo: string | null) {
@@ -190,6 +191,7 @@ export default function ClientesTabla({
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>
                         {c.estado}
                       </span>
+                      {c.es_prueba && <span className="badge badge-purple">Prueba</span>}
                       {c.archivado_at && <span className="badge badge-neutral">Archivado</span>}
                     </td>
                     <td data-label="Expiración" className="table-muted">{formatFecha(c.fecha_expiracion)}</td>

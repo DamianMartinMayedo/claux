@@ -56,10 +56,13 @@ function exportCSV(
 export default function PagosTabla({
   pagos,
   clienteNombre,
+  clientesPrueba,
 }: {
   pagos: Pago[]
   clienteNombre: Record<string, string>
+  clientesPrueba: string[]
 }) {
+  const idsPrueba = useMemo(() => new Set(clientesPrueba), [clientesPrueba])
   const [busqueda, setBusqueda]           = useState('')
   const [filtroConcepto, setFiltroConcepto] = useState('')
   const [filtroEstado, setFiltroEstado]   = useState('')
@@ -152,7 +155,10 @@ export default function PagosTabla({
                 <tr key={p.pago_id}>
                   <td data-label="ID"><span className="table-code-muted">{p.pago_id}</span></td>
                   <td data-label="Cliente">
-                    <div className="table-empresa">{clienteNombre[p.client_id] ?? p.client_id}</div>
+                    <div className="table-empresa">
+                      {clienteNombre[p.client_id] ?? p.client_id}
+                      {idsPrueba.has(p.client_id) && <span className="badge badge-purple">Prueba</span>}
+                    </div>
                     <div className="table-empresa-contact">{p.client_id}</div>
                   </td>
                   <td data-label="Concepto">

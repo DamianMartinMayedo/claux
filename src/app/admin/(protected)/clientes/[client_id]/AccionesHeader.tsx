@@ -35,6 +35,7 @@ type Props = {
     email_admin?: string
     notas?: string | null
     archivado_at?: string | null
+    es_prueba?: boolean
   }
   tienePagosConfirmados?: boolean
 }
@@ -550,6 +551,10 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
               <label>Notas internas</label>
               <textarea name="notas" className="input" rows={3} defaultValue={cliente.notas ?? ''} />
             </div>
+            <label className="checkbox-group">
+              <input type="checkbox" name="es_prueba" value="true" defaultChecked={!!cliente.es_prueba} />
+              <span className="checkbox-label">Cliente de prueba (no cuenta en las estadísticas de CLAUX)</span>
+            </label>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>

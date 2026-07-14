@@ -43,6 +43,7 @@ Lee solo lo que tu tarea necesita.
 - Lee docs/CONTEXTO.md completo UNA vez por sesión. Del resto de docs y skills, lee solo la sección/archivo relevante a la tarea (tabla "qué leer según la tarea" arriba), nunca de más.
 - Una sola fuente por tema: prohibido duplicar contenido entre documentos. Si algo cambia, edita el documento en su sitio; no añadas changelogs, resúmenes ni archivos nuevos que repitan lo existente.
 - Prohibido crear archivos .md en la raíz. Documentación nueva solo en docs/, y solo si docs/CONTEXTO.md no puede absorberla; al crearla, regístrala en el índice de este archivo.
+- **Planes de trabajo** (features grandes, migraciones, refactors, recuperación de contexto entre agentes): al elaborar un plan de cierta envergadura, guarda una copia en `docs/planes/<nombre>.md` para que cualquier otro agente pueda leerlo y retomar. Esa carpeta está en `.gitignore` (no se versiona; es local a esta copia del repo); la convención completa vive en [docs/planes/README.md](docs/planes/README.md).
 - Si una tarea cambia la arquitectura o el estado del código, actualiza docs/CONTEXTO.md §2 al terminar, en lugar de generar informes sueltos.
 - Documento obsoleto se elimina, no se conserva "por si acaso".
 - Toda regla de estilos e implementación de UI vive en skills/ui/SKILL.md — no se duplica aquí ni en otros documentos.

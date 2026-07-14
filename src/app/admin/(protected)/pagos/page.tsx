@@ -12,12 +12,13 @@ export default async function PagosPage() {
   const [{ data: pagos }, { data: clientes }] = await Promise.all([
     supabase.from('payments').select('*').order('fecha', { ascending: false }),
     supabase.from('clients')
-      .select('client_id, nombre_empresa, precio_mensual_usd, ciclo_facturacion')
+      .select('client_id, nombre_empresa, precio_mensual_usd, ciclo_facturacion, es_prueba')
       .order('nombre_empresa'),
   ])
 
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const clienteNombre = Object.fromEntries((clientes ?? []).map(c => [c.client_id, c.nombre_empresa]))
+  const clientesPrueba = (clientes ?? []).filter(c => c.es_prueba).map(c => c.client_id)
 
   return (
     <div className="view-container">
@@ -43,6 +44,7 @@ export default async function PagosPage() {
         <PagosTabla
           pagos={pagos}
           clienteNombre={clienteNombre}
+          clientesPrueba={clientesPrueba}
         />
       )}
     </div>

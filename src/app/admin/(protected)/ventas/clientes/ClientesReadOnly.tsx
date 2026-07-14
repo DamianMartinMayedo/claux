@@ -20,6 +20,7 @@ export type ClienteRO = {
   estado: string
   precio_mensual_usd: number | null
   ciclo_facturacion: string | null
+  es_prueba: boolean | null
 }
 
 export default function ClientesReadOnly({
@@ -107,6 +108,7 @@ export default function ClientesReadOnly({
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>
                         {c.estado}
                       </span>
+                      {c.es_prueba && <span className="badge badge-purple">Prueba</span>}
                     </td>
                   </tr>
                 ))}

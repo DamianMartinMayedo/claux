@@ -1979,6 +1979,15 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dash-cta-body .dash-muted { padding-top: var(--space-1); max-width: 52ch; }
 .dash-cta-action { flex-shrink: 0; }
 
+/* ── Dashboard: aviso informativo (p. ej. crear la primera empresa) ── */
+/* Extiende `.alert .alert-info`: fila con texto a la izquierda y CTA a la derecha,
+   separado de la rejilla de widgets (que va debajo, sin ocultarse). */
+.dash-aviso { justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6); }
+.dash-aviso-main { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.dash-aviso-icon { flex-shrink: 0; }
+.dash-aviso-texto { display: flex; flex-direction: column; gap: var(--space-1); }
+.dash-aviso-texto strong { font-weight: 700; }
+
 /* Accesos rápidos (fallback) */
 .dash-accesos { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .dash-acceso {

@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
       .from('clients')
       .select('client_id, nombre_empresa, email_admin, fecha_expiracion')
       .eq('estado', 'ACTIVO')
+      .eq('es_prueba', false)
       .gte('fecha_expiracion', hoy)
       .lte('fecha_expiracion', limite)
     for (const c of (data ?? []) as ClienteVenc[]) {
@@ -108,6 +109,7 @@ export async function GET(req: NextRequest) {
       .from('clients')
       .select('client_id, nombre_empresa, email_admin, fecha_expiracion')
       .eq('estado', 'TRIAL')
+      .eq('es_prueba', false)
       .gte('fecha_expiracion', hoy)
       .lte('fecha_expiracion', limite)
     for (const c of (data ?? []) as ClienteVenc[]) {
@@ -127,6 +129,7 @@ export async function GET(req: NextRequest) {
       .from('clients')
       .select('client_id, nombre_empresa, email_admin, fecha_expiracion')
       .eq('estado', 'DESACTIVADO')
+      .eq('es_prueba', false)
       .gte('fecha_expiracion', desde)
       .lt('fecha_expiracion', hoy)
     for (const c of (data ?? []) as ClienteVenc[]) {

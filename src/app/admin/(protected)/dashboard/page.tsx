@@ -32,22 +32,26 @@ export default async function DashboardPage() {
     { data: pagosData },
     { data: vencenProntoData },
     { data: trialGraciaData },
+    { data: clientesPruebaData },
   ] = await Promise.all([
-    supabase.from('clients').select('*', { count: 'exact', head: true }),
-    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'ACTIVO'),
-    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'TRIAL'),
+    // Los clientes de prueba (es_prueba) NO cuentan en las estadísticas de CLAUX.
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('es_prueba', false),
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'ACTIVO').eq('es_prueba', false),
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'TRIAL').eq('es_prueba', false),
     supabase.from('modulos_catalogo').select('*', { count: 'exact', head: true }).eq('activo', true),
     supabase.from('clients').select('*', { count: 'exact', head: true })
       .in('estado', ['ACTIVO', 'TRIAL'])
+      .eq('es_prueba', false)
       .gte('fecha_expiracion', fechaHoyStr)
       .lte('fecha_expiracion', fechaAvisoStr),
-    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'DESACTIVADO'),
-    supabase.from('clients').select('precio_mensual_usd').in('estado', ['ACTIVO', 'TRIAL']),
-    supabase.from('payments').select('monto_usd, fecha, estado'),
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'DESACTIVADO').eq('es_prueba', false),
+    supabase.from('clients').select('precio_mensual_usd').in('estado', ['ACTIVO', 'TRIAL']).eq('es_prueba', false),
+    supabase.from('payments').select('monto_usd, fecha, estado, client_id'),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)
     supabase.from('clients')
       .select('client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia')
       .in('estado', ['ACTIVO', 'TRIAL'])
+      .eq('es_prueba', false)
       .gte('fecha_expiracion', fechaHoyStr)
       .lte('fecha_expiracion', fecha14Str)
       .order('fecha_expiracion', { ascending: true }),
@@ -55,8 +59,13 @@ export default async function DashboardPage() {
     supabase.from('clients')
       .select('client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia')
       .in('estado', ['TRIAL', 'GRACIA'])
+      .eq('es_prueba', false)
       .order('fecha_expiracion', { ascending: true }),
+    // IDs de clientes de prueba: para excluir sus pagos de los ingresos.
+    supabase.from('clients').select('client_id').eq('es_prueba', true),
   ])
+
+  const idsPrueba = new Set((clientesPruebaData ?? []).map(c => c.client_id))
 
   // Ingresos mensuales estimados (MRR): suma del precio mensual de activos + trial
   const ingresosEstimados = (clientesActivosDatos ?? []).reduce(
@@ -65,8 +74,9 @@ export default async function DashboardPage() {
 
   // Ingresos del mes actual
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
-  // Solo los pagos confirmados cuentan como ingreso
-  const confirmadosData = (pagosData ?? []).filter(p => p.estado !== 'por_confirmar')
+  // Solo los pagos confirmados cuentan como ingreso, y nunca los de clientes de prueba.
+  const confirmadosData = (pagosData ?? [])
+    .filter(p => p.estado !== 'por_confirmar' && !idsPrueba.has(p.client_id))
   const ingresosMes = confirmadosData
     .filter(p => p.fecha?.startsWith(mesActual))
     .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)

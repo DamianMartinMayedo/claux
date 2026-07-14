@@ -2,7 +2,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
-import { obtenerEmpresasSelector } from './empresas'
+import { obtenerEmpresas }   from './empresas'
+import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
@@ -62,6 +63,9 @@ export interface EmpresaLite { empresa_id: string; nombre: string; color?: strin
 export interface DashboardData {
   nombreEmpresa: string
   empresas: EmpresaLite[]
+  // true solo para admin_empresa sin ninguna empresa creada: el dashboard muestra
+  // un aviso informativo ("crea tu primera empresa") SIN ocultar los widgets.
+  avisoCrearEmpresa: boolean
   fecha: string
   etiquetas: EtiquetasSector
   suscripcion: { estado: string; diasRestantes: number | null; label: string }
@@ -112,20 +116,23 @@ function etiquetaDia(fechaISO: string): string {
 
 // ── Builders por módulo ─────────────────────────────────────────────────────────
 
-async function resumenContabilidad(db: Db, cid: string, hoy: string): Promise<ContabilidadResumen> {
+// `empresaIds` acota los datos a las empresas accesibles del usuario, igual que
+// Ventas/Gastos/Tesorería/Reportes (`.in('empresa_id', …)`). Así el resumen del
+// dashboard cuadra con lo que el usuario ve al abrir cada página.
+async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<ContabilidadResumen> {
   const meses = clavesMes(hoy, 6)
   const desde6 = `${meses[0].mes}-01`
   const mesActual = hoy.slice(0, 7)
 
   const [facturas6, gastos6, movimientos, cuentasCaja, ultimas, consolRow, tasas] = await Promise.all([
     db.from('facturas').select('fecha_emision, total, moneda')
-      .eq('client_id', cid).in('estado', ['EMITIDA', 'COBRADA']).gte('fecha_emision', desde6),
+      .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ['EMITIDA', 'COBRADA']).gte('fecha_emision', desde6),
     db.from('gastos_cobros').select('fecha, monto, moneda')
-      .eq('client_id', cid).eq('tipo', 'GASTO').gte('fecha', desde6),
-    db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid),
-    db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).eq('activa', true),
+      .eq('client_id', cid).in('empresa_id', empresaIds).eq('tipo', 'GASTO').gte('fecha', desde6),
+    db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
+    db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true),
     db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, moneda, estado')
-      .eq('client_id', cid).order('fecha_emision', { ascending: false }).limit(5),
+      .eq('client_id', cid).in('empresa_id', empresaIds).order('fecha_emision', { ascending: false }).limit(5),
     db.from('monedas').select('codigo').eq('client_id', cid).eq('es_consolidacion', true).limit(1).maybeSingle(),
     db.from('tasas_cambio').select('moneda_origen, moneda_destino, tasa, fecha')
       .eq('client_id', cid).order('fecha', { ascending: false }),
@@ -244,10 +251,10 @@ async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen
   return { totalProductos: lista.length, bajoMinimoCount: bajo.length, bajoMinimo: bajo.slice(0, 5) }
 }
 
-async function resumenRrhh(db: Db, cid: string, hoy: string): Promise<RrhhResumen> {
+async function resumenRrhh(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<RrhhResumen> {
   const inicioMes = `${hoy.slice(0, 7)}-01`
   const { data: empleados } = await db
-    .from('empleados').select('fecha_alta, fecha_baja').eq('client_id', cid)
+    .from('empleados').select('fecha_alta, fecha_baja').eq('client_id', cid).in('empresa_id', empresaIds)
 
   const lista = (empleados ?? []) as { fecha_alta: string | null; fecha_baja: string | null }[]
   const activos = lista.filter(e => !e.fecha_baja).length
@@ -298,24 +305,42 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const cid = session.client_id
   const hoy = hoyEnTz()
 
-  const { data: cliente } = await db
-    .from('clients')
-    .select('nombre_empresa, estado, modulos_activos, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
-    .eq('client_id', cid).single()
+  // El dashboard muestra SOLO lo que este usuario puede ver, no lo que el tenant
+  // tiene contratado: módulos por permiso efectivo (mismo cálculo que el sidebar,
+  // `calcularAcceso`) y datos acotados a sus empresas (igual que cada página del
+  // portal). Así cada widget coincide con lo que encuentra al abrir el módulo.
+  const [{ data: cliente }, filasUsuario, empresasAcc] = await Promise.all([
+    db.from('clients')
+      .select('nombre_empresa, estado, modulos_activos, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
+      .eq('client_id', cid).single(),
+    modulosDeUsuario(db, session.user_id),
+    obtenerEmpresas(),
+  ])
   if (!cliente) return null
 
-  const activos: string[] = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []
-  const tiene = (m: string) => activos.includes(m)
+  const modulosActivos: string[] = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []
+  const { visibles } = calcularAcceso(session, modulosActivos, filasUsuario)
+  const puedeVer = (m: string) => visibles.includes(m)
 
-  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw, empresas] = await Promise.all([
-    tiene('base')           ? resumenContabilidad(db, cid, hoy)            : Promise.resolve(undefined),
-    tiene('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
-    tiene('rrhh')           ? resumenRrhh(db, cid, hoy)                    : Promise.resolve(undefined),
-    tiene('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
-    tiene('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
+  // Empresas accesibles del usuario. Contabilidad y RRHH acotan sus datos a estas
+  // (como reportes.ts/gastos.ts/rrhh.ts); Inventario y Reservas/Citas quedan
+  // client-wide, igual que productos.ts/reservas.ts. El '__none__' replica el guard
+  // de las páginas: sin empresas asignadas no se filtra a "todo el cliente".
+  const empresaIds    = empresasAcc.map(e => e.empresa_id)
+  const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
+  const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
+  // Solo el admin puede crear empresas (guardarEmpresa lo exige); a un usuario sin
+  // empresas asignadas el aviso no le serviría (no puede actuar), así que se omite.
+  const avisoCrearEmpresa = empresasAcc.length === 0 && session.rol === 'admin_empresa'
+
+  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
+    puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
+    puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
+    puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
+    puedeVer('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
+    puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
-    obtenerEmpresasSelector(),
   ])
 
   const descuento = parseInt(descuentoRaw, 10) || 0
@@ -330,13 +355,14 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     c === 'catalogo_qr'    ? etiquetas.catalogo
     : c === 'reservas_citas' ? etiquetas.reservas
     : ACCESOS[c].label
-  const accesos: AccesoRapido[] = activos
+  const accesos: AccesoRapido[] = visibles
     .filter(c => ACCESOS[c])
     .map(c => ({ clave: c, label: labelAcceso(c), ruta: ACCESOS[c].ruta }))
 
   return {
     nombreEmpresa: cliente.nombre_empresa,
-    empresas: empresas.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
+    empresas: empresasVista.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
+    avisoCrearEmpresa,
     fecha: hoy,
     etiquetas,
     suscripcion: {
@@ -344,7 +370,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       diasRestantes,
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
-    tieneIa: tiene('asistente_ia'),
+    tieneIa: puedeVer('asistente_ia'),
     contabilidad, inventario, rrhh, reservas, citas, accesos,
   }
 }

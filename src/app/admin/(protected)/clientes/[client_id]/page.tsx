@@ -119,6 +119,7 @@ export default async function ClienteDetallePage({
             <span className={`badge badge-dot ${ESTADO_BADGE[cliente.estado] ?? 'badge-neutral'}`}>
               {cliente.estado}
             </span>
+            {cliente.es_prueba && <span className="badge badge-purple">Prueba</span>}
           </div>
         </div>
         <div className="detail-header-buttons">
@@ -133,6 +134,7 @@ export default async function ClienteDetallePage({
               email_admin:      cliente.email_admin,
               notas:            cliente.notas,
               archivado_at:     cliente.archivado_at,
+              es_prueba:        cliente.es_prueba,
             }}
             tienePagosConfirmados={confirmados.length > 0}
           />
