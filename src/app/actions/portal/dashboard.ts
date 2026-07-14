@@ -117,12 +117,13 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string): Promise<Co
   const desde6 = `${meses[0].mes}-01`
   const mesActual = hoy.slice(0, 7)
 
-  const [facturas6, gastos6, movimientos, ultimas, consolRow, tasas] = await Promise.all([
+  const [facturas6, gastos6, movimientos, cuentasCaja, ultimas, consolRow, tasas] = await Promise.all([
     db.from('facturas').select('fecha_emision, total, moneda')
       .eq('client_id', cid).in('estado', ['EMITIDA', 'COBRADA']).gte('fecha_emision', desde6),
     db.from('gastos_cobros').select('fecha, monto, moneda')
       .eq('client_id', cid).eq('tipo', 'GASTO').gte('fecha', desde6),
-    db.from('movimientos_tesoreria').select('monto, tipo, moneda').eq('client_id', cid),
+    db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid),
+    db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).eq('activa', true),
     db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, moneda, estado')
       .eq('client_id', cid).order('fecha_emision', { ascending: false }).limit(5),
     db.from('monedas').select('codigo').eq('client_id', cid).eq('es_consolidacion', true).limit(1).maybeSingle(),
@@ -191,11 +192,19 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string): Promise<Co
     }
   }
 
-  // Caja por moneda
+  // Caja por moneda (igual que Tesorería: saldo_inicial de cuentas activas + Σ INGRESO − Σ EGRESO;
+  // cuentas archivadas quedan fuera, junto con sus movimientos)
+  const cuentaMoneda = new Map<string, string>()
   const cajaMap = new Map<string, number>()
+  for (const c of (cuentasCaja.data ?? [])) {
+    cuentaMoneda.set(c.cuenta_id, c.moneda)
+    cajaMap.set(c.moneda, (cajaMap.get(c.moneda) ?? 0) + Number(c.saldo_inicial))
+  }
   for (const m of (movimientos.data ?? [])) {
-    const delta = m.tipo === 'ENTRADA' ? Number(m.monto) : -Number(m.monto)
-    cajaMap.set(m.moneda, (cajaMap.get(m.moneda) ?? 0) + (delta || 0))
+    const moneda = cuentaMoneda.get(m.cuenta_id)
+    if (!moneda) continue
+    const delta = m.tipo === 'INGRESO' ? Number(m.monto) : -Number(m.monto)
+    cajaMap.set(moneda, (cajaMap.get(moneda) ?? 0) + (delta || 0))
   }
   const caja = [...cajaMap.entries()].filter(([, s]) => Math.abs(s) > 0.005).map(([moneda, saldo]) => ({ moneda, saldo }))
 

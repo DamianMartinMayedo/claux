@@ -3,7 +3,9 @@
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
-import { enviarAvisoInterno } from '@/lib/email/enviar'
+import { enviarEmail } from '@/lib/email/enviar'
+import { envolverEmail, textoAHtml } from '@/lib/email/layout'
+import { leerSetting } from '@/lib/settings'
 
 export interface Faq {
   id:           number
@@ -49,7 +51,9 @@ export async function obtenerFaqPortal(): Promise<{ generales: Faq[]; porModulo:
   return { generales, porModulo }
 }
 
-// Envía un mensaje de soporte que el admin recibe en su bandeja. Sin correo aún.
+// Mensaje de soporte del cliente: queda registrado en el admin (soporte_mensajes)
+// y se envía directo al buzón de soporte (soporte@claux.es) con replyTo al cliente,
+// para poder responder desde el correo o gestionar la incidencia desde el admin.
 export async function enviarMensajeSoporte(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -78,10 +82,25 @@ export async function enviarMensajeSoporte(
 
   const { data: cliente } = await db
     .from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle()
-  after(() => enviarAvisoInterno({
-    tipo: 'aviso_soporte',
-    asunto: `Nuevo mensaje de soporte: ${cliente?.nombre_empresa ?? session.client_id}`,
-    cuerpo: `Nuevo mensaje de soporte.\n\nCliente: ${cliente?.nombre_empresa ?? session.client_id} (${session.client_id})\nDe: ${session.email}\nAsunto: ${asunto}\n\n${mensaje}`,
+  const empresa = cliente?.nombre_empresa ?? session.client_id
+
+  // Notificación directa al buzón de soporte. replyTo = correo del cliente, así el
+  // equipo puede responder desde el propio correo (o desde /admin/soporte).
+  const destinoSoporte = await leerSetting('email_soporte', 'soporte@claux.es')
+  const cuerpo =
+    `Nuevo mensaje de soporte.\n\n` +
+    `Cliente: ${empresa} (${session.client_id})\n` +
+    `De: ${session.email}\n` +
+    `Asunto: ${asunto}\n\n` +
+    `${mensaje}\n\n` +
+    `— Responde a este correo (llega al cliente) o gestiona la incidencia en https://claux.es/admin/soporte`
+  after(() => enviarEmail({
+    to:       destinoSoporte,
+    from:     'CLAUX Soporte <soporte@claux.es>',
+    replyTo:  session.email,
+    subject:  `[Soporte] ${asunto} — ${empresa}`,
+    html:     envolverEmail(textoAHtml(cuerpo)),
+    tipo:     'aviso_soporte',
     clientId: session.client_id,
   }))
 
