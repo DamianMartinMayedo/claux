@@ -20,6 +20,7 @@ type Cliente = {
   fecha_expiracion: string | null; fecha_inicio: string | null
   fecha_fin_gracia: string | null
   created_at: string | null; notas: string | null
+  archivado_at: string | null
 }
 
 function cicloLabel(ciclo: string | null) {
@@ -87,10 +88,15 @@ export default function ClientesTabla({
   const router = useRouter()
   const [busqueda, setBusqueda]         = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [verArchivados, setVerArchivados] = useState(false)
+
+  const nArchivados = useMemo(() => clientes.filter(c => c.archivado_at).length, [clientes])
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase()
     return clientes.filter(c => {
+      // Por defecto, los archivados no aparecen (activar "Ver archivados").
+      if (!verArchivados && c.archivado_at) return false
       const coincideBusqueda = !q ||
         c.nombre_empresa.toLowerCase().includes(q) ||
         c.email_admin.toLowerCase().includes(q) ||
@@ -98,7 +104,7 @@ export default function ClientesTabla({
       const coincideEstado = !filtroEstado || c.estado === filtroEstado
       return coincideBusqueda && coincideEstado
     })
-  }, [clientes, busqueda, filtroEstado])
+  }, [clientes, busqueda, filtroEstado, verArchivados])
 
   const { pageItems, ...pag } = usePagination(filtrados)
 
@@ -130,6 +136,13 @@ export default function ClientesTabla({
           <Download size={14} />
           Exportar CSV
         </button>
+
+        {nArchivados > 0 && (
+          <label className="checkbox-group">
+            <input type="checkbox" checked={verArchivados} onChange={e => setVerArchivados(e.target.checked)} />
+            <span className="checkbox-label">Ver archivados ({nArchivados})</span>
+          </label>
+        )}
       </div>
 
       {filtrados.length === 0 ? (
@@ -177,6 +190,7 @@ export default function ClientesTabla({
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>
                         {c.estado}
                       </span>
+                      {c.archivado_at && <span className="badge badge-neutral">Archivado</span>}
                     </td>
                     <td data-label="Expiración" className="table-muted">{formatFecha(c.fecha_expiracion)}</td>
                     <td data-label="Días" className="col-center">

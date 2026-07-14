@@ -357,6 +357,100 @@ export async function cambiarEstadoCliente(formData: FormData) {
   return { ok: true as const }
 }
 
+// ── Archivar / desarchivar cliente (soft-delete reversible) ──────────
+// Para clientes que SÍ tienen historial contable: los saca de las listas
+// activas sin borrar nada. Reversible. Nunca se pierde facturación.
+export async function archivarCliente(client_id: string): Promise<{ ok: boolean; error?: string }> {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+  if (!client_id) return { ok: false, error: 'client_id requerido.' }
+
+  const { data: cliente } = await supabase
+    .from('clients').select('nombre_empresa').eq('client_id', client_id).maybeSingle()
+  if (!cliente) return { ok: false, error: 'Cliente no encontrado.' }
+
+  const { error } = await supabase
+    .from('clients').update({ archivado_at: new Date().toISOString() }).eq('client_id', client_id)
+  if (error) return { ok: false, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'archivar',
+    description: `Archivó al cliente ${cliente.nombre_empresa} (${client_id})`,
+  })
+
+  revalidatePath('/admin/clientes')
+  revalidatePath(`/admin/clientes/${client_id}`)
+  return { ok: true }
+}
+
+export async function desarchivarCliente(client_id: string): Promise<{ ok: boolean; error?: string }> {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+  if (!client_id) return { ok: false, error: 'client_id requerido.' }
+
+  const { error } = await supabase
+    .from('clients').update({ archivado_at: null }).eq('client_id', client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/admin/clientes')
+  revalidatePath(`/admin/clientes/${client_id}`)
+  return { ok: true }
+}
+
+// ── Borrado seguro (purga total, irreversible) ───────────────────────
+// Solo para clientes de prueba: exige estar SUSPENDIDO, SIN pagos confirmados
+// (salvaguarda contable, también forzada en la función SQL) y confirmación
+// escribiendo el nombre. Purga las ~54 tablas del tenant vía RPC atómica.
+export async function eliminarCliente(
+  client_id: string,
+  confirmacion: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+  if (!client_id) return { ok: false, error: 'client_id requerido.' }
+
+  const { data: cliente } = await supabase
+    .from('clients').select('nombre_empresa, estado').eq('client_id', client_id).maybeSingle()
+  if (!cliente) return { ok: false, error: 'Cliente no encontrado.' }
+
+  if (cliente.estado !== 'DESACTIVADO') {
+    return { ok: false, error: 'Suspende el cliente antes de borrarlo.' }
+  }
+
+  const { count } = await supabase
+    .from('payments')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_id', client_id)
+    .eq('estado', 'confirmado')
+  if ((count ?? 0) > 0) {
+    return { ok: false, error: 'Tiene pagos confirmados: no se puede borrar (usa Archivar para no perder facturación).' }
+  }
+
+  if ((confirmacion ?? '').trim() !== cliente.nombre_empresa.trim()) {
+    return { ok: false, error: 'El nombre no coincide. Escríbelo exactamente para confirmar.' }
+  }
+
+  const { error } = await supabase.rpc('eliminar_cliente', { p_client_id: client_id })
+  if (error) return { ok: false, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'eliminar',
+    description: `Borró (purga total) al cliente ${cliente.nombre_empresa} (${client_id})`,
+  })
+
+  revalidatePath('/admin/clientes')
+  revalidatePath('/admin/dashboard')
+  return { ok: true }
+}
+
 // ── Aplicar período especial (GRACIA) ────────────────────────────────
 export async function aplicarGracia(formData: FormData) {
   await requirePermiso('clientes')

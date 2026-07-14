@@ -71,6 +71,7 @@
   transition: background var(--transition);
 }
 .dropdown-item:hover { background: var(--color-surface-offset); }
+.dropdown-item-danger { color: var(--color-error); }
 
 /* En móvil: ocultar los botones sueltos grandes y mostrar solo el dropdown con TODO */
 @media (max-width: 640px) {

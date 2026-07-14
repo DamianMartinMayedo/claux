@@ -1,5 +1,5 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
-import { ChevronRight, Clock, CreditCard } from 'lucide-react'
+import { Archive, ChevronRight, Clock, CreditCard } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -132,10 +132,23 @@ export default async function ClienteDetallePage({
               nombre_contacto:  cliente.nombre_contacto,
               email_admin:      cliente.email_admin,
               notas:            cliente.notas,
+              archivado_at:     cliente.archivado_at,
             }}
+            tienePagosConfirmados={confirmados.length > 0}
           />
         </div>
       </div>
+
+      {/* ── Banner archivado ── */}
+      {cliente.archivado_at && (
+        <div className="info-banner">
+          <Archive aria-hidden />
+          <div>
+            <strong>Cliente archivado</strong>
+            <span>Oculto de las listas activas. Todos sus datos se conservan; puedes desarchivarlo desde las acciones.</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Banner período especial ── */}
       {tieneGracia && (

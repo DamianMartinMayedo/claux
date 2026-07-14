@@ -1,10 +1,10 @@
 'use client'
 
-import { AlertTriangle, Ban, Clock, DollarSign, Info, MoreVertical, Pencil, X } from 'lucide-react'
+import { AlertTriangle, Archive, ArchiveRestore, Ban, Clock, DollarSign, Info, MoreVertical, Pencil, Trash2, X } from 'lucide-react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { cambiarEstadoCliente, aplicarGracia, editarCliente } from '@/app/actions/clientes'
+import { cambiarEstadoCliente, aplicarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -34,10 +34,12 @@ type Props = {
     nombre_contacto?: string | null
     email_admin?: string
     notas?: string | null
+    archivado_at?: string | null
   }
+  tienePagosConfirmados?: boolean
 }
 
-type ModalType = 'gracia' | 'estado' | 'pago' | 'editar' | null
+type ModalType = 'gracia' | 'estado' | 'pago' | 'editar' | 'archivar' | 'borrar' | null
 
 // ── Utilidades de fecha ─────────────────────────────────────────────
 function parseYMD(dateStr: string): Date {
@@ -94,11 +96,13 @@ function addDaysES(days: number): string {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
-export default function AccionesHeader({ cliente }: Props) {
+export default function AccionesHeader({ cliente, tienePagosConfirmados = false }: Props) {
   const [modal, setModal]         = useState<ModalType>(null)
   const [loading, setLoading]     = useState(false)
   const [loadingPago, setLoadingPago] = useState(false)
   const [advertencia, setAdvertencia] = useState('')
+  const [nombreConfirm, setNombreConfirm] = useState('')
+  const archivado = !!cliente.archivado_at
   const [menuMovilOpen, setMenuMovilOpen] = useState(false)
   const { success: toastSuccess, error: toastError } = useToast()
   const mounted = useMounted()
@@ -126,7 +130,7 @@ export default function AccionesHeader({ cliente }: Props) {
   const [editLoading, setEditLoading] = useState(false)
 
   const handleClose = useCallback(() => {
-    setModal(null); setAdvertencia('')
+    setModal(null); setAdvertencia(''); setNombreConfirm('')
     setDiasGracia(''); setFechaCalculada('—')
     setFechaInicio(''); setFechaFin(''); setMontoSugerido(''); setMontoBase(0)
     setDuracionDias(30); setCiclo('mensual'); setUltimoPago(null)
@@ -214,6 +218,37 @@ export default function AccionesHeader({ cliente }: Props) {
     if (!res.ok) { toastError(res.error ?? 'Error al suspender'); return }
     toastSuccess('Cliente desactivado')
     setTimeout(() => { handleClose(); router.refresh() }, 1200)
+  }
+
+  function openArchivar() { setMenuMovilOpen(false); setModal('archivar') }
+  function openBorrar()   { setMenuMovilOpen(false); setNombreConfirm(''); setModal('borrar') }
+
+  async function handleArchivar() {
+    setLoading(true)
+    const res = await archivarCliente(cliente.client_id)
+    setLoading(false)
+    if (!res.ok) { toastError(res.error ?? 'Error al archivar'); return }
+    toastSuccess('Cliente archivado')
+    setTimeout(() => { handleClose(); router.refresh() }, 1000)
+  }
+
+  async function handleDesarchivar() {
+    setMenuMovilOpen(false)
+    setLoading(true)
+    const res = await desarchivarCliente(cliente.client_id)
+    setLoading(false)
+    if (!res.ok) { toastError(res.error ?? 'Error al desarchivar'); return }
+    toastSuccess('Cliente desarchivado')
+    router.refresh()
+  }
+
+  async function handleEliminar() {
+    setLoading(true)
+    const res = await eliminarCliente(cliente.client_id, nombreConfirm)
+    setLoading(false)
+    if (!res.ok) { toastError(res.error ?? 'Error al borrar'); return }
+    toastSuccess('Cliente borrado')
+    setTimeout(() => { router.push('/admin/clientes') }, 1000)
   }
 
   async function handleGracia(e: { preventDefault(): void }) {
@@ -527,10 +562,82 @@ export default function AccionesHeader({ cliente }: Props) {
     </div>
   )
 
+  const modalArchivar = (
+    <div className="modal-backdrop">
+      <div className="modal modal-420">
+        <div className="modal-header">
+          <h2 className="modal-title">Archivar cliente</h2>
+          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-body">
+          {clienteInfo}
+          <p className="text-sm-muted">
+            Se ocultará de las listas activas, pero se conservan <strong>todos</strong> sus datos
+            (pagos, facturación e historial). Puedes desarchivarlo cuando quieras.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleArchivar} disabled={loading}>
+            {loading ? <><span className="spinner" /> Archivando...</> : 'Archivar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const modalBorrar = (
+    <div className="modal-backdrop">
+      <div className="modal modal-420">
+        <div className="modal-header">
+          <h2 className="modal-title">Borrar cliente</h2>
+          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-body">
+          {clienteInfo}
+          <div className="alert alert-error">
+            <strong>Acción irreversible.</strong> Se borrarán permanentemente TODOS los datos del
+            cliente: usuarios, ventas, inventario, reservas, caja, catálogo, presupuestos, etc.
+            No se puede deshacer.
+          </div>
+          <div className="input-group">
+            <label htmlFor="confirm-nombre">
+              Escribe <strong>{cliente.nombre_empresa}</strong> para confirmar
+            </label>
+            <input
+              id="confirm-nombre"
+              className="input"
+              value={nombreConfirm}
+              onChange={(e) => setNombreConfirm(e.target.value)}
+              placeholder={cliente.nombre_empresa}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button
+            className="btn btn-danger"
+            onClick={handleEliminar}
+            disabled={loading || nombreConfirm.trim() !== cliente.nombre_empresa.trim()}
+          >
+            {loading ? <><span className="spinner" /> Borrando...</> : 'Borrar definitivamente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   const activeModal = modal === 'gracia' ? modalGracia
-    : modal === 'estado' ? modalSuspender
-    : modal === 'pago'   ? modalPago
-    : modal === 'editar' ? modalEditar
+    : modal === 'estado'   ? modalSuspender
+    : modal === 'pago'     ? modalPago
+    : modal === 'editar'   ? modalEditar
+    : modal === 'archivar' ? modalArchivar
+    : modal === 'borrar'   ? modalBorrar
     : null
 
   // ── Botones sueltos (orden acordado: Editar, Suspender, Período especial, Registrar pago) ──
@@ -574,6 +681,28 @@ export default function AccionesHeader({ cliente }: Props) {
     </button>
   )
 
+  // Archivar (soft, reversible) / Desarchivar. Siempre disponible.
+  const btnArchivar = archivado ? (
+    <button className="btn btn-secondary btn-sm header-action" onClick={handleDesarchivar} disabled={loading}>
+      <ArchiveRestore size={14} />
+      Desarchivar
+    </button>
+  ) : (
+    <button className="btn btn-secondary btn-sm header-action" onClick={openArchivar}>
+      <Archive size={14} />
+      Archivar
+    </button>
+  )
+
+  // Borrar (purga total) solo para clientes suspendidos SIN pagos confirmados.
+  const puedeBorrar = !archivado && cliente.estado === 'DESACTIVADO' && !tienePagosConfirmados
+  const btnBorrar = puedeBorrar ? (
+    <button className="btn btn-danger btn-sm header-action" onClick={openBorrar}>
+      <Trash2 size={14} />
+      Borrar
+    </button>
+  ) : null
+
   return (
     <>
       {/* Desktop: botones sueltos en fila horizontal. Móvil: dropdown con los 3 puntos */}
@@ -582,6 +711,8 @@ export default function AccionesHeader({ cliente }: Props) {
         {btnSuspender}
         {btnGracia}
         {btnPago}
+        {btnArchivar}
+        {btnBorrar}
 
         {/* Dropdown móvil */}
         <div className="detail-header-actions-mobile" ref={menuMovilRef}>
@@ -611,6 +742,20 @@ export default function AccionesHeader({ cliente }: Props) {
               <button className="dropdown-item" onClick={openPago}>
                 Registrar pago
               </button>
+              {archivado ? (
+                <button className="dropdown-item" onClick={handleDesarchivar}>
+                  Desarchivar
+                </button>
+              ) : (
+                <button className="dropdown-item" onClick={openArchivar}>
+                  Archivar
+                </button>
+              )}
+              {puedeBorrar && (
+                <button className="dropdown-item dropdown-item-danger" onClick={openBorrar}>
+                  Borrar
+                </button>
+              )}
             </div>
           )}
         </div>
