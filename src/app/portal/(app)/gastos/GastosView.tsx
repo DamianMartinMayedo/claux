@@ -24,6 +24,7 @@ import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDow
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -573,8 +574,8 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         </div>
         {puedeEditar && (tab === 'gastos' ? (
           <div className="tes-header-actions">
-            <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
-            <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
+            <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
+            <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
           </div>
         ) : (
           <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
@@ -588,6 +589,16 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       </div>
 
       {tab === 'gastos' && (<>
+
+      {(data.empresas.length === 0 || data.monedas.length === 0) && (
+        <PrerequisitoAviso acciones={data.empresas.length === 0
+          ? [{ label: 'Crear empresa', href: '/portal/empresas' }]
+          : [{ label: 'Crear moneda', href: '/portal/monedas' }]}>
+          {data.empresas.length === 0
+            ? <>Para registrar gastos y cobros necesitas <strong>una empresa</strong>.</>
+            : <>Para registrar gastos y cobros necesitas <strong>al menos una moneda</strong> configurada.</>}
+        </PrerequisitoAviso>
+      )}
 
       {/* Pendientes */}
       {(pendientes.porPagar.length > 0 || pendientes.porCobrar.length > 0) && (

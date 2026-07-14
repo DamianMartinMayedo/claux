@@ -9,6 +9,7 @@ import {
 } from '@/app/actions/portal/compras'
 import { CompraFormModal }              from './_CompraFormModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { RowActions }                   from '@/components/portal/RowActions'
 
 function fmt(n: number, moneda: string) {
@@ -54,10 +55,9 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
       </div>
 
       {sinAlmacenes && (
-        <div className="alm-nota-info">
-          <strong className="text-muted">Necesitas un almacén</strong> para registrar compras. Crea uno en{' '}
-          <strong className="text-muted">Almacenes</strong>.
-        </div>
+        <PrerequisitoAviso acciones={[{ label: 'Crear almacén', href: '/portal/almacenes' }]}>
+          Para registrar compras necesitas <strong>al menos un almacén</strong>.
+        </PrerequisitoAviso>
       )}
 
       <div className="ter-toolbar">

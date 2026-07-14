@@ -22,6 +22,7 @@ import {
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 
@@ -277,6 +278,12 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
           </button>
         </div>
       </div>
+
+      {data.empresas.length === 0 && (
+        <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
+          Para crear una nómina necesitas <strong>una empresa</strong>.
+        </PrerequisitoAviso>
+      )}
 
       <div className="ter-toolbar">
         <EmpresaPills

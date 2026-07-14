@@ -3,6 +3,7 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
@@ -838,7 +839,7 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
         </div>
         <div className="tes-header-actions">
-          <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }}>
+          <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }} disabled={data.empresas.length === 0 || data.monedas.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
           </button>
           {cuentasActivas.length >= 2 && (
@@ -853,6 +854,16 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           )}
         </div>
       </div>
+
+      {(data.empresas.length === 0 || data.monedas.length === 0) && (
+        <PrerequisitoAviso acciones={data.empresas.length === 0
+          ? [{ label: 'Crear empresa', href: '/portal/empresas' }]
+          : [{ label: 'Crear moneda', href: '/portal/monedas' }]}>
+          {data.empresas.length === 0
+            ? <>Para crear cajas y cuentas necesitas <strong>una empresa</strong>.</>
+            : <>Para crear cajas y cuentas necesitas <strong>al menos una moneda</strong> configurada.</>}
+        </PrerequisitoAviso>
+      )}
 
       {/* Saldos por moneda */}
       {data.saldos_por_moneda.length > 0 && (

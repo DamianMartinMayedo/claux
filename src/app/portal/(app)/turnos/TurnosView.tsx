@@ -2,6 +2,7 @@
 
 import { toastError } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -196,6 +197,12 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
           </button>
         </div>
       </div>
+
+      {data.empresas.length === 0 && (
+        <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
+          Para crear turnos necesitas <strong>una empresa</strong>.
+        </PrerequisitoAviso>
+      )}
 
       {data.empresas.length > 1 && (
         <div className="ter-toolbar">

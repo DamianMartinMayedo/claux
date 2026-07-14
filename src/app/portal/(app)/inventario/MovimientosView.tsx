@@ -3,6 +3,7 @@
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -262,11 +263,12 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
       </div>
 
       {(data.almacenes.length === 0 || data.productos.length === 0) && (
-        <div className="alm-nota-info">
-          <strong className="text-muted">Para registrar movimientos</strong> necesitas al menos un{' '}
-          <strong className="text-muted">producto</strong> activo y un{' '}
-          <strong className="text-muted">almacén</strong>.
-        </div>
+        <PrerequisitoAviso acciones={[
+          ...(data.productos.length === 0 ? [{ label: 'Crear producto', href: '/portal/productos' }] : []),
+          ...(data.almacenes.length === 0 ? [{ label: 'Crear almacén', href: '/portal/almacenes' }] : []),
+        ]}>
+          Para registrar movimientos necesitas <strong>al menos un producto activo y un almacén</strong>.
+        </PrerequisitoAviso>
       )}
 
       {/* Toolbar */}

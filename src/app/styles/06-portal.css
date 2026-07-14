@@ -1005,6 +1005,26 @@
   font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.6;
 }
 
+/* ── Cartel de prerrequisito (falta empresa/moneda/almacén/producto para operar) ──
+   Texto a la izquierda + CTA(s) a la derecha; separa del elemento inferior con más
+   margen. En móvil el texto y los botones se apilan y el CTA ocupa todo el ancho. */
+.prereq-aviso {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+  margin: var(--space-4) 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.55;
+}
+.prereq-aviso-texto { margin: 0; min-width: 0; flex: 1 1 20rem; }
+.prereq-aviso-texto strong { color: var(--color-text); font-weight: 600; }
+.prereq-aviso-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .prereq-aviso-acciones { width: 100%; }
+  .prereq-aviso-acciones .btn { flex: 1 1 auto; justify-content: center; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MÓDULO TERCEROS  (reemplaza bloque anterior)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1209,6 +1229,8 @@
 .prd-tipo-labels { display: flex; flex-direction: column; gap: 2px; }
 .prd-tipo-name { font-weight: 700; font-size: var(--text-sm); }
 .prd-tipo-hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
+/* Aviso en el modal de producto: físico sin almacén → hint + CTA para crear uno. */
+.prd-almacen-req { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 .prd-tipo-btn.active .prd-tipo-desc { color: var(--color-primary-text); }
 
 /* ── Form sections ────────────────────────────────────────────────────────── */
@@ -1979,14 +2001,41 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dash-cta-body .dash-muted { padding-top: var(--space-1); max-width: 52ch; }
 .dash-cta-action { flex-shrink: 0; }
 
-/* ── Dashboard: aviso informativo (p. ej. crear la primera empresa) ── */
-/* Extiende `.alert .alert-info`: fila con texto a la izquierda y CTA a la derecha,
-   separado de la rejilla de widgets (que va debajo, sin ocultarse). */
-.dash-aviso { justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6); }
-.dash-aviso-main { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.dash-aviso-icon { flex-shrink: 0; }
-.dash-aviso-texto { display: flex; flex-direction: column; gap: var(--space-1); }
-.dash-aviso-texto strong { font-weight: 700; }
+/* ── Dashboard: checklist de puesta en marcha ──────────────────────────────────
+   Pasos base (empresa, moneda, almacén…) según módulos contratados. Fila horizontal
+   con scroll en móvil; pasos cumplidos tachados, pendientes como enlaces. */
+.onb {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+}
+.onb-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.onb-title { font-size: var(--text-base); font-weight: 700; }
+.onb-progreso { font-size: var(--text-sm); color: var(--color-text-muted); flex-shrink: 0; }
+.onb-pasos {
+  display: flex; gap: var(--space-2); list-style: none; margin: 0; padding: 0;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.onb-paso {
+  display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  font-size: var(--text-sm); color: var(--color-text); white-space: nowrap;
+}
+.onb-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.4rem; height: 1.4rem; flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-offset); color: var(--color-text-muted);
+  font-size: var(--text-xs); font-weight: 700;
+}
+.onb-link { color: var(--color-primary-text); font-weight: 600; }
+.onb-link:hover { text-decoration: underline; }
+.onb-paso-hecho { border-color: var(--color-success); }
+.onb-paso-hecho .onb-num { background: var(--color-success-bg); color: var(--color-success); }
+.onb-paso-hecho .onb-label { color: var(--color-text-muted); text-decoration: line-through; }
 
 /* Accesos rápidos (fallback) */
 .dash-accesos { display: flex; flex-wrap: wrap; gap: var(--space-3); }

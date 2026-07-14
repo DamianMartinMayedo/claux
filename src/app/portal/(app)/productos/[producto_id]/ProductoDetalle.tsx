@@ -514,6 +514,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
           categorias={data.categorias}
           proveedores={data.proveedores}
           monedas={data.monedas}
+          hayAlmacenes={data.almacenes.length > 0}
           onClose={() => setShowEdit(false)}
           onSaved={() => {
             setShowEdit(false)

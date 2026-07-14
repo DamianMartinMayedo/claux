@@ -60,12 +60,18 @@ export interface AccesoRapido { clave: string; label: string; ruta: string }
 
 export interface EmpresaLite { empresa_id: string; nombre: string; color?: string | null }
 
+// Paso de puesta en marcha: dato base que el negocio debe crear para operar un
+// módulo (empresa, moneda, almacén…). Nada se pre-crea, así que el dashboard guía
+// los pasos fundamentales según los módulos contratados.
+export interface OnboardingPaso { clave: string; label: string; hecho: boolean; href: string }
+
 export interface DashboardData {
   nombreEmpresa: string
   empresas: EmpresaLite[]
-  // true solo para admin_empresa sin ninguna empresa creada: el dashboard muestra
-  // un aviso informativo ("crea tu primera empresa") SIN ocultar los widgets.
-  avisoCrearEmpresa: boolean
+  // Pasos de setup según módulos contratados. Solo se llena para admin_empresa
+  // (es quien puede crearlos); vacío para el resto. La vista lo muestra si queda
+  // algún paso pendiente, sin ocultar los widgets.
+  onboarding: OnboardingPaso[]
   fecha: string
   etiquetas: EtiquetasSector
   suscripcion: { estado: string; diasRestantes: number | null; label: string }
@@ -295,6 +301,49 @@ async function resumenAgenda(db: Db, cid: string, hoy: string, tipo: 'reserva' |
   }
 }
 
+// Pasos fundamentales de puesta en marcha, según los módulos contratados. Cuenta
+// solo lo que cada módulo necesita (evita queries de módulos no contratados). El
+// paso "empresa" y la letra de facturación salen de `empresas` (ya cargadas), sin
+// query extra. Los conteos usan head:true (baratos: no traen filas).
+async function resumenOnboarding(
+  db: Db, cid: string, modulos: string[],
+  empresas: { estado: string; letra_facturacion?: string | null }[],
+): Promise<OnboardingPaso[]> {
+  const tiene = (m: string) => modulos.includes(m)
+  const contar = async (tabla: string, filtrar: (q: Db) => Db): Promise<number> => {
+    const { count } = await filtrar(db.from(tabla).select('*', { count: 'exact', head: true }).eq('client_id', cid))
+    return count ?? 0
+  }
+  const necesitaMoneda = tiene('base') || tiene('rrhh') || tiene('catalogo_qr')
+
+  const [monedas, almacenes, productos, franjas, servicios, recursos, catalogo] = await Promise.all([
+    necesitaMoneda        ? contar('monedas', q => q.eq('activa', true)) : Promise.resolve(1),
+    tiene('inventario')   ? contar('almacenes', q => q)                  : Promise.resolve(1),
+    tiene('inventario')   ? contar('products', q => q)                   : Promise.resolve(1),
+    tiene('reservas_citas') ? contar('reserva_franjas', q => q)          : Promise.resolve(1),
+    tiene('agenda')       ? contar('servicios', q => q)                  : Promise.resolve(1),
+    tiene('agenda')       ? contar('recursos', q => q)                   : Promise.resolve(1),
+    tiene('catalogo_qr')  ? contar('catalogo_items', q => q)             : Promise.resolve(1),
+  ])
+
+  const pasos: OnboardingPaso[] = [
+    { clave: 'empresa', label: 'Crea tu empresa', hecho: empresas.length > 0, href: '/portal/empresas' },
+  ]
+  if (necesitaMoneda)  pasos.push({ clave: 'moneda',   label: 'Configura una moneda',        hecho: monedas > 0,   href: '/portal/monedas' })
+  if (tiene('base'))   pasos.push({ clave: 'letra',    label: 'Asigna letra de facturación', hecho: empresas.some(e => !!e.letra_facturacion), href: '/portal/empresas' })
+  if (tiene('inventario')) {
+    pasos.push({ clave: 'almacen',  label: 'Crea un almacén', hecho: almacenes > 0, href: '/portal/almacenes' })
+    pasos.push({ clave: 'producto', label: 'Añade un producto', hecho: productos > 0, href: '/portal/productos' })
+  }
+  if (tiene('reservas_citas')) pasos.push({ clave: 'franja', label: 'Crea una franja de reservas', hecho: franjas > 0, href: '/portal/reservas' })
+  if (tiene('agenda')) {
+    pasos.push({ clave: 'servicio', label: 'Añade un servicio',    hecho: servicios > 0, href: '/portal/citas' })
+    pasos.push({ clave: 'recurso',  label: 'Añade un profesional', hecho: recursos > 0,  href: '/portal/citas' })
+  }
+  if (tiene('catalogo_qr')) pasos.push({ clave: 'catalogo', label: 'Añade un ítem al catálogo', hecho: catalogo > 0, href: '/portal/catalogo' })
+  return pasos
+}
+
 // ── Loader principal ─────────────────────────────────────────────────────────────
 
 export async function obtenerDashboard(): Promise<DashboardData | null> {
@@ -329,11 +378,8 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const empresaIds    = empresasAcc.map(e => e.empresa_id)
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
-  // Solo el admin puede crear empresas (guardarEmpresa lo exige); a un usuario sin
-  // empresas asignadas el aviso no le serviría (no puede actuar), así que se omite.
-  const avisoCrearEmpresa = empresasAcc.length === 0 && session.rol === 'admin_empresa'
 
-  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw, onboarding] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
     puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
@@ -341,6 +387,11 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
+    // Solo el admin_empresa puede crear estos datos base; a un usuario normal el
+    // checklist no le serviría (no tiene esas acciones), así que va vacío.
+    session.rol === 'admin_empresa'
+      ? resumenOnboarding(db, cid, modulosActivos, empresasAcc)
+      : Promise.resolve([] as OnboardingPaso[]),
   ])
 
   const descuento = parseInt(descuentoRaw, 10) || 0
@@ -362,7 +413,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   return {
     nombreEmpresa: cliente.nombre_empresa,
     empresas: empresasVista.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
-    avisoCrearEmpresa,
+    onboarding,
     fecha: hoy,
     etiquetas,
     suscripcion: {

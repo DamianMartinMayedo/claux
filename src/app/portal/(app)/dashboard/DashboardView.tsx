@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { Calendar, CalendarDays, Building2 } from 'lucide-react'
+import { Calendar, CalendarDays } from 'lucide-react'
 import type { DashboardData } from '@/app/actions/portal/dashboard'
+import OnboardingChecklist from './OnboardingChecklist'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { fechaLarga } from './format'
 import ContabilidadWidget from './ContabilidadWidget'
@@ -17,7 +17,7 @@ const ESTADO_BADGE: Record<string, string> = {
 }
 
 export default function DashboardView({ data }: { data: DashboardData }) {
-  const { contabilidad, inventario, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, avisoCrearEmpresa, fecha, accesos } = data
+  const { contabilidad, inventario, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, onboarding, fecha, accesos } = data
   const hayPaneles = Boolean(contabilidad || inventario || rrhh || reservas || citas)
 
   // Una sola empresa → su color tiñe el acento del encabezado (identidad).
@@ -51,18 +51,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         </span>
       </div>
 
-      {avisoCrearEmpresa && (
-        <div className="alert alert-info dash-aviso">
-          <div className="dash-aviso-main">
-            <Building2 size={20} className="dash-aviso-icon" />
-            <div className="dash-aviso-texto">
-              <strong>Crea tu primera empresa</strong>
-              <span>Es el primer paso: al crearla podrás empezar a registrar ventas, gastos y movimientos.</span>
-            </div>
-          </div>
-          <Link href="/portal/empresas" className="btn btn-primary btn-sm">Crear empresa</Link>
-        </div>
-      )}
+      {onboarding.some(p => !p.hecho) && <OnboardingChecklist pasos={onboarding} />}
 
       <div className="dash-grid">
         {contabilidad && <ContabilidadWidget data={contabilidad} />}

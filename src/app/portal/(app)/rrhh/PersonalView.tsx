@@ -20,6 +20,7 @@ import { RowActions }                  from '@/components/portal/RowActions'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -357,9 +358,19 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
           <p className="page-subtitle">Empleados, contratos y bajas. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
         </div>
         <div className="tes-header-actions">
-          <button className="btn btn-primary" onClick={openNuevo}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
+          <button className="btn btn-primary" onClick={openNuevo} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
         </div>
       </div>
+
+      {(data.empresas.length === 0 || data.monedas.length === 0) && (
+        <PrerequisitoAviso acciones={data.empresas.length === 0
+          ? [{ label: 'Crear empresa', href: '/portal/empresas' }]
+          : [{ label: 'Crear moneda', href: '/portal/monedas' }]}>
+          {data.empresas.length === 0
+            ? <>Para dar de alta personal necesitas <strong>una empresa</strong>.</>
+            : <>Para dar de alta personal necesitas <strong>al menos una moneda</strong> configurada.</>}
+        </PrerequisitoAviso>
+      )}
 
       <div className="ter-toolbar">
         <div className="ter-search-wrap">

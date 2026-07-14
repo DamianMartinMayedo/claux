@@ -572,6 +572,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {productoModal && (
         <ProductoFormModal producto={editProducto} categorias={data.categorias}
           proveedores={data.proveedores} monedas={data.monedas}
+          hayAlmacenes={data.almacenes.length > 0}
           onClose={closeModal} onSaved={onSaved} />
       )}
       {stockProducto && (

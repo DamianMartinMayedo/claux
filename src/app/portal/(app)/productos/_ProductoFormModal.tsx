@@ -2,7 +2,8 @@
 
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
-import { Package, X, Zap } from 'lucide-react'
+import Link from 'next/link'
+import { Package, Plus, X, Zap } from 'lucide-react'
 import {
   guardarProducto,
   type Producto,
@@ -127,14 +128,15 @@ export function UnidadSelect({ defaultValue }: { defaultValue?: string }) {
 // ── ProductoFormModal ─────────────────────────────────────────────────────────
 
 export function ProductoFormModal({
-  producto, categorias, proveedores, monedas, onClose, onSaved,
+  producto, categorias, proveedores, monedas, hayAlmacenes, onClose, onSaved,
 }: {
-  producto:    Producto | null
-  categorias:  Categoria[]
-  proveedores: { tercero_id: string; nombre: string }[]
-  monedas:     string[]
-  onClose:     () => void
-  onSaved:     () => void
+  producto:     Producto | null
+  categorias:   Categoria[]
+  proveedores:  { tercero_id: string; nombre: string }[]
+  monedas:      string[]
+  hayAlmacenes: boolean
+  onClose:      () => void
+  onSaved:      () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const [tipo,      setTipo]         = useState<TipoProducto>(producto?.tipo ?? 'PRODUCTO')
@@ -144,6 +146,9 @@ export function ProductoFormModal({
   const isEdit             = !!producto
   const categoriasActivas  = categorias.filter(c => c.estado === 'ACTIVO')
   const monedasDisponibles = monedas.length ? monedas : MONEDAS_FALLBACK
+  // Un producto FÍSICO necesita un almacén donde vivir su stock; un servicio no.
+  // Al crear un físico sin almacén, se bloquea el guardado y se ofrece crear uno.
+  const bloqueadoPorAlmacen = !isEdit && tipo === 'PRODUCTO' && !hayAlmacenes
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -252,22 +257,29 @@ export function ProductoFormModal({
             {tipo === 'PRODUCTO' && (
               <div className="ter-form-section mb-0">
                 <span className="ter-form-section-title">Inventario</span>
-                <div className="ter-form-grid">
-                  {isEdit && (
-                    <div className="input-group ter-col-span-3">
-                      <label>Stock actual</label>
-                      <input className="input input-static" readOnly
-                        value={`${producto?.stock_actual ?? 0} ${producto?.unidad ?? ''}`} />
-                      <span className="input-hint">Ajusta el stock desde el botón correspondiente.</span>
-                    </div>
-                  )}
-                  <div className="input-group ter-col-span-3">
-                    <label>Stock mínimo</label>
-                    <input className="input" type="number" name="stock_minimo"
-                      step="0.001" min="0" defaultValue={producto?.stock_minimo ?? 0} placeholder="0" />
-                    <span className="input-hint">Aviso cuando el stock baje de este nivel.</span>
+                {bloqueadoPorAlmacen ? (
+                  <div className="prd-almacen-req">
+                    <p className="input-hint">Los productos físicos necesitan un <strong>almacén</strong> donde registrar su stock. Crea uno para poder guardar (los servicios no lo necesitan).</p>
+                    <Link href="/portal/almacenes" className="btn btn-primary btn-sm"><Plus size={14} strokeWidth={2.5} /> Crear almacén</Link>
                   </div>
-                </div>
+                ) : (
+                  <div className="ter-form-grid">
+                    {isEdit && (
+                      <div className="input-group ter-col-span-3">
+                        <label>Stock actual</label>
+                        <input className="input input-static" readOnly
+                          value={`${producto?.stock_actual ?? 0} ${producto?.unidad ?? ''}`} />
+                        <span className="input-hint">Ajusta el stock desde el botón correspondiente.</span>
+                      </div>
+                    )}
+                    <div className="input-group ter-col-span-3">
+                      <label>Stock mínimo</label>
+                      <input className="input" type="number" name="stock_minimo"
+                        step="0.001" min="0" defaultValue={producto?.stock_minimo ?? 0} placeholder="0" />
+                      <span className="input-hint">Aviso cuando el stock baje de este nivel.</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -275,7 +287,7 @@ export function ProductoFormModal({
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending}>
+            <button type="submit" className="btn btn-primary" disabled={isPending || bloqueadoPorAlmacen}>
               {isPending
                 ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : `Crear ${tipo === 'SERVICIO' ? 'servicio' : 'producto'}`}

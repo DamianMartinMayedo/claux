@@ -24,6 +24,7 @@ import {
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { RowActions }                  from '@/components/portal/RowActions'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -100,14 +101,16 @@ export default function VentasView({ data }: Props) {
         )}
       </div>
 
-      {/* ── Alertas de configuración ── */}
-      {sinLetra && (
-        <div className="alert alert-warning mb-4">
-          Ninguna de tus empresas tiene <strong>letra de facturación</strong> asignada. Configúrala en{' '}
-          <Link href="/portal/empresas" className="link-primary">Mis Empresas</Link>{' '}
-          para poder crear ofertas y facturas.
-        </div>
-      )}
+      {/* ── Prerrequisitos de configuración ── */}
+      {sinSetupEmpresas ? (
+        <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
+          Para crear ofertas y facturas necesitas <strong>una empresa</strong>.
+        </PrerequisitoAviso>
+      ) : sinLetra ? (
+        <PrerequisitoAviso acciones={[{ label: 'Ir a Empresas', href: '/portal/empresas' }]}>
+          Ninguna de tus empresas tiene <strong>letra de facturación</strong> asignada; configúrala para poder crear ofertas y facturas.
+        </PrerequisitoAviso>
+      ) : null}
 
       {/* ── Tabs ── */}
       <div className="ven-tabs">

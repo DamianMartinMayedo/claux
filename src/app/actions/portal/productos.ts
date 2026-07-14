@@ -181,6 +181,15 @@ export async function guardarProducto(
   }
 
   if (!producto_id_form) {
+    // Un producto FÍSICO necesita un almacén donde registrar su stock (un servicio
+    // no). Guard de servidor además del bloqueo en la UI: no se crea un físico sin
+    // que exista al menos un almacén.
+    if (tipo === 'PRODUCTO') {
+      const { count } = await db.from('almacenes')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', session.client_id)
+      if (!count) return { ok: false, error: 'Crea un almacén antes de registrar productos físicos.' }
+    }
     const producto_id = generarProductoId(tipo)
     const codigo      = await generarCodigo(db, session.client_id, tipo)
 
