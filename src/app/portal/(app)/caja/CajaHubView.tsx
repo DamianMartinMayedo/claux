@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Settings, Power, PowerOff, Store, X } from 'lucide-react'
 import { crearCaja, setActivaCaja, type Caja } from '@/app/actions/portal/caja'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { toastError } from '@/app/contexts/ToastContext'
@@ -39,10 +40,16 @@ export default function CajaHubView({ cajas, empresas }: Props) {
           <h1 className="page-title">Cajas</h1>
           <p className="page-subtitle">Puntos de venta que funcionan sin conexión y sincronizan con Claux.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
+        <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={empresas.length === 0}>
           <Plus size={14} strokeWidth={2.5} /> Nueva caja
         </button>
       </div>
+
+      {empresas.length === 0 && (
+        <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
+          Para crear una caja (punto de venta) necesitas <strong>una empresa</strong>. El almacén es opcional: solo hace falta si quieres que las ventas descuenten stock.
+        </PrerequisitoAviso>
+      )}
 
       <div className="card card-table">
         {cajas.length === 0 ? (

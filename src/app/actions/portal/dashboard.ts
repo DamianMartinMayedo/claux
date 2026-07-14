@@ -68,10 +68,10 @@ export interface OnboardingPaso { clave: string; label: string; hecho: boolean; 
 export interface DashboardData {
   nombreEmpresa: string
   empresas: EmpresaLite[]
-  // Pasos de setup según módulos contratados. Solo se llena para admin_empresa
-  // (es quien puede crearlos); vacío para el resto. La vista lo muestra si queda
-  // algún paso pendiente, sin ocultar los widgets.
-  onboarding: OnboardingPaso[]
+  // Prerrequisitos base pendientes (solo admin_empresa, que es quien los crea;
+  // ambos false para el resto). El dashboard muestra un aviso para crearlos sin
+  // ocultar los widgets. `moneda` solo se marca si hay módulos que la usan.
+  setupPendiente: { empresa: boolean; moneda: boolean }
   fecha: string
   etiquetas: EtiquetasSector
   suscripcion: { estado: string; diasRestantes: number | null; label: string }
@@ -301,6 +301,9 @@ async function resumenAgenda(db: Db, cid: string, hoy: string, tipo: 'reserva' |
   }
 }
 
+/* Checklist de onboarding EN PAUSA (no convence de momento). Para reactivarlo:
+   volver a añadir la llamada al Promise.all del loader y descomentar la sección en
+   DashboardView.tsx.
 // Pasos fundamentales de puesta en marcha, según los módulos contratados. Cuenta
 // solo lo que cada módulo necesita (evita queries de módulos no contratados). El
 // paso "empresa" y la letra de facturación salen de `empresas` (ya cargadas), sin
@@ -343,6 +346,7 @@ async function resumenOnboarding(
   if (tiene('catalogo_qr')) pasos.push({ clave: 'catalogo', label: 'Añade un ítem al catálogo', hecho: catalogo > 0, href: '/portal/catalogo' })
   return pasos
 }
+*/
 
 // ── Loader principal ─────────────────────────────────────────────────────────────
 
@@ -379,7 +383,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw, onboarding] = await Promise.all([
+  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
     puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
@@ -387,12 +391,22 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
-    // Solo el admin_empresa puede crear estos datos base; a un usuario normal el
-    // checklist no le serviría (no tiene esas acciones), así que va vacío.
-    session.rol === 'admin_empresa'
-      ? resumenOnboarding(db, cid, modulosActivos, empresasAcc)
-      : Promise.resolve([] as OnboardingPaso[]),
   ])
+  // Aviso de setup: datos base que solo el admin puede crear. Empresa siempre;
+  // moneda solo si hay módulos que la usan (base/rrhh/catálogo). La query de moneda
+  // se hace solo cuando aplica y para admin. (El checklist completo quedó en pausa.)
+  let setupPendiente = { empresa: false, moneda: false }
+  if (session.rol === 'admin_empresa') {
+    const necesitaMoneda = modulosActivos.includes('base') || modulosActivos.includes('rrhh') || modulosActivos.includes('catalogo_qr')
+    let sinMoneda = false
+    if (necesitaMoneda) {
+      const { count } = await db.from('monedas')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', cid).eq('activa', true)
+      sinMoneda = !count
+    }
+    setupPendiente = { empresa: empresasAcc.length === 0, moneda: sinMoneda }
+  }
 
   const descuento = parseInt(descuentoRaw, 10) || 0
   const precioMes = Number(cliente.precio_mensual_usd ?? 0)
@@ -413,7 +427,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   return {
     nombreEmpresa: cliente.nombre_empresa,
     empresas: empresasVista.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
-    onboarding,
+    setupPendiente,
     fecha: hoy,
     etiquetas,
     suscripcion: {

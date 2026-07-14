@@ -1,6 +1,7 @@
 import { Calendar, CalendarDays } from 'lucide-react'
 import type { DashboardData } from '@/app/actions/portal/dashboard'
-import OnboardingChecklist from './OnboardingChecklist'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
+// En pausa (no convence de momento): checklist de onboarding ('./OnboardingChecklist').
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { fechaLarga } from './format'
 import ContabilidadWidget from './ContabilidadWidget'
@@ -17,7 +18,7 @@ const ESTADO_BADGE: Record<string, string> = {
 }
 
 export default function DashboardView({ data }: { data: DashboardData }) {
-  const { contabilidad, inventario, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, onboarding, fecha, accesos } = data
+  const { contabilidad, inventario, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos } = data
   const hayPaneles = Boolean(contabilidad || inventario || rrhh || reservas || citas)
 
   // Una sola empresa → su color tiñe el acento del encabezado (identidad).
@@ -51,7 +52,18 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         </span>
       </div>
 
-      {onboarding.some(p => !p.hecho) && <OnboardingChecklist pasos={onboarding} />}
+      {(setupPendiente.empresa || setupPendiente.moneda) && (
+        <PrerequisitoAviso acciones={[
+          ...(setupPendiente.empresa ? [{ label: 'Crear empresa', href: '/portal/empresas' }] : []),
+          ...(setupPendiente.moneda  ? [{ label: 'Configurar moneda', href: '/portal/monedas' }] : []),
+        ]}>
+          {setupPendiente.empresa && setupPendiente.moneda
+            ? <>Para empezar a operar, crea <strong>tu empresa</strong> y configura <strong>una moneda</strong>.</>
+            : setupPendiente.empresa
+              ? <>Para empezar a operar necesitas <strong>una empresa</strong>.</>
+              : <>Configura <strong>una moneda</strong> para registrar importes, ventas y cobros.</>}
+        </PrerequisitoAviso>
+      )}
 
       <div className="dash-grid">
         {contabilidad && <ContabilidadWidget data={contabilidad} />}

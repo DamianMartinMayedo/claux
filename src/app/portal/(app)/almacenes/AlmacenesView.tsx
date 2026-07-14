@@ -15,6 +15,7 @@ import {
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import PrerequisitoAviso               from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -256,10 +257,16 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
           <h1 className="page-title">Almacenes</h1>
           <p className="page-subtitle">Ubicaciones físicas y virtuales donde se gestiona el inventario.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
+        <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
           <Plus size={14} strokeWidth={2.5} /> Nuevo almacén
         </button>
       </div>
+
+      {data.empresas.length === 0 && (
+        <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
+          Para crear almacenes necesitas <strong>una empresa</strong>.
+        </PrerequisitoAviso>
+      )}
 
       {/* ── Tarjetas resumen por tipo ── */}
       {activos > 0 && (
@@ -394,13 +401,6 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
             </table>
           </div>
         )}
-      </div>
-
-      {/* ── Nota informativa ── */}
-      <div className="alm-nota-info">
-        <strong className="text-muted">Nota:</strong> Los movimientos de inventario
-        (entradas, salidas, ajustes y transferencias entre almacenes) se gestionan en el módulo{' '}
-        <strong className="text-muted">Inventario</strong> dentro de Gestión.
       </div>
 
       {/* ── Modales ── */}
