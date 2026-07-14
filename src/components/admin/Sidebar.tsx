@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, Boxes, Clock, CreditCard, LayoutGrid, LifeBuoy, LogOut, Settings, Sparkles, Stethoscope, Store, UserCog, Users } from 'lucide-react'
+import { BarChart3, Bell, Boxes, Clock, CreditCard, LayoutGrid, LifeBuoy, LogOut, Settings, Sparkles, Stethoscope, Store, UserCog, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -23,6 +23,9 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/admin/dashboard', label: 'Dashboard', key: 'dashboard', icon: (
         <LayoutGrid size={18} className="flex-shrink-0" />
+      )},
+      { href: '/admin/metricas', label: 'Métricas', key: 'metricas', icon: (
+        <BarChart3 size={18} className="flex-shrink-0" />
       )},
     ]
   },

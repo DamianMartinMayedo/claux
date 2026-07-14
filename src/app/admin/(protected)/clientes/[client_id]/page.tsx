@@ -7,6 +7,7 @@ import AccionesHeader from './AccionesHeader'
 import AccesoUsuariosCard from './AccesoUsuariosCard'
 import ModulosCard from './ModulosCard'
 import IaClienteCard from './IaClienteCard'
+import UsoClienteCard from './UsoClienteCard'
 import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { getSetting } from '@/app/actions/settings'
@@ -204,6 +205,9 @@ export default async function ClienteDetallePage({
 
       {/* ── Acceso y usuarios del cliente (regenerar contraseñas) ── */}
       <AccesoUsuariosCard clientId={client_id} usuarios={usuarios ?? []} />
+
+      {/* ── Uso y actividad del cliente ── */}
+      <UsoClienteCard clientId={client_id} />
 
       {/* ── Módulos contratados ── */}
       {catalogo && catalogo.length > 0 && (

@@ -2400,3 +2400,33 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 .caja-config-section { margin-bottom: var(--space-6); }
 .caja-actions { display: flex; justify-content: flex-end; margin-top: var(--space-5); }
+
+/* ── Banner de impersonación (equipo CLAUX dentro del portal del cliente) ── */
+.imp-banner {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  background: var(--color-warning-bg);
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-warning);
+}
+.imp-banner-icon  { flex-shrink: 0; color: var(--color-warning); }
+.imp-banner-text  { flex: 1; min-width: 0; font-size: var(--text-sm); }
+.imp-banner-email { color: var(--color-text-muted); }
+.imp-banner-btn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-warning);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm); font-weight: 600; cursor: pointer;
+  transition: all var(--transition);
+}
+.imp-banner-btn:hover:not(:disabled) { background: var(--color-surface-2); }
+.imp-banner-btn:disabled { opacity: 0.6; cursor: default; }

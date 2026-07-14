@@ -139,6 +139,17 @@
   margin-bottom: var(--space-5);
 }
 
+/* Subtítulo dentro de una tarjeta (bloques de la tarjeta de uso) */
+.detail-subsection-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* Grid de bloques dentro de la tarjeta de uso (sin el margen inferior grande) */
+.uso-cliente-grid { margin-top: var(--space-5); margin-bottom: 0; }
+
 /* Detail field — columna: label arriba, valor abajo */
 .detail-field {
   display: flex;

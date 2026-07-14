@@ -1,12 +1,13 @@
 'use client'
 
-import { Check, Key, X } from 'lucide-react'
+import { Check, Key, LogIn, X } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { toastError } from '@/app/contexts/ToastContext'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 import { regenerarPasswordCliente } from '@/app/actions/clientes'
+import { entrarComoCliente } from '@/app/actions/admin/impersonar'
 
 const ROL_LABEL: Record<string, string> = {
   admin_empresa: 'Administrador',
@@ -31,9 +32,26 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
   const [resetting, setResetting] = useState<string | null>(null)
   const [resultado, setResultado] = useState<{ email: string; password: string } | null>(null)
   const [copiado, setCopiado]     = useState(false)
+  const [confirmEntrar, setConfirmEntrar] = useState(false)
+  const [entrando, setEntrando]           = useState(false)
 
   const cerrar = useCallback(() => { setResultado(null); setCopiado(false) }, [])
   useModalKeyboard(!!resultado, cerrar)
+
+  const cerrarEntrar = useCallback(() => { if (!entrando) setConfirmEntrar(false) }, [entrando])
+  useModalKeyboard(confirmEntrar, cerrarEntrar)
+
+  async function handleEntrar() {
+    setEntrando(true)
+    // En éxito el server action redirige al portal (no retorna); solo llega aquí
+    // si hubo error.
+    const res = await entrarComoCliente(clientId)
+    setEntrando(false)
+    if (res?.error) {
+      setConfirmEntrar(false)
+      toastError(res.error)
+    }
+  }
 
   async function handleReset(u: ClientUserRow) {
     setResetting(u.user_id)
@@ -89,9 +107,42 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
     </div>
   )
 
+  const modalEntrar = confirmEntrar && (
+    <div className="modal-backdrop">
+      <div className="modal modal-420">
+        <div className="modal-header">
+          <h2 className="modal-title">Entrar al portal del cliente</h2>
+          <button onClick={cerrarEntrar} className="modal-close" aria-label="Cerrar" disabled={entrando}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <p className="text-sm-muted">
+            Vas a entrar al portal de este negocio como <strong>sesión de configuración</strong>,
+            sin necesidad de su contraseña. Verás un aviso mientras estés dentro y podrás salir
+            cuando quieras. El acceso queda registrado en Actividad y no cuenta como uso del cliente.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={cerrarEntrar} disabled={entrando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleEntrar} disabled={entrando}>
+            {entrando
+              ? <><span className="spinner spinner-xs" /> Entrando…</>
+              : <><LogIn size={15} /> Entrar al portal</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="card">
-      <h2 className="detail-section-title">Acceso y usuarios</h2>
+      <div className="card-header">
+        <h2 className="detail-section-title">Acceso y usuarios</h2>
+        <button className="btn btn-secondary btn-sm" onClick={() => setConfirmEntrar(true)}>
+          <LogIn size={14} /> Entrar al portal
+        </button>
+      </div>
 
       {usuarios.length === 0 ? (
         <p className="text-sm-muted">Este cliente no tiene usuarios registrados.</p>
@@ -140,6 +191,7 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
       )}
 
       {mounted && modal && createPortal(modal, document.body)}
+      {mounted && modalEntrar && createPortal(modalEntrar, document.body)}
     </div>
   )
 }

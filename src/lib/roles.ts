@@ -6,7 +6,7 @@
 export type RolAdmin = 'super_admin' | 'vendedor'
 
 export type SeccionKey =
-  | 'dashboard' | 'solicitudes' | 'presupuestos' | 'clientes_ro'
+  | 'dashboard' | 'metricas' | 'solicitudes' | 'presupuestos' | 'clientes_ro'
   | 'clientes' | 'modulos' | 'ia' | 'diagnostico'
   | 'pagos' | 'soporte' | 'configuracion' | 'notificaciones' | 'actividad' | 'usuarios'
 
@@ -22,6 +22,7 @@ export const SECCIONES: { key: SeccionKey; label: string }[] = [
   { key: 'pagos',          label: 'Pagos' },
   { key: 'soporte',        label: 'Soporte' },
   { key: 'dashboard',      label: 'Dashboard' },
+  { key: 'metricas',       label: 'Métricas de uso' },
   { key: 'configuracion',  label: 'Configuración' },
   { key: 'notificaciones', label: 'Notificaciones' },
   { key: 'actividad',      label: 'Actividad' },
@@ -34,6 +35,7 @@ export const PERMISOS_VENDEDOR_DEFAULT: SeccionKey[] = ['solicitudes', 'presupue
 /** Ruta de la página de cada sección (para nav y redirecciones). */
 export const RUTA_SECCION: Record<SeccionKey, string> = {
   dashboard:     '/admin/dashboard',
+  metricas:      '/admin/metricas',
   solicitudes:   '/admin/solicitudes',
   presupuestos:  '/admin/presupuestos',
   clientes_ro:   '/admin/ventas/clientes',

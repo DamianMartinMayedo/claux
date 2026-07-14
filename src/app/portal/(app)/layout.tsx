@@ -13,6 +13,7 @@ import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
 import { EmpresaColorProvider } from '@/components/portal/EmpresaColorContext'
 import IaChatWidget          from '@/components/portal/ia/IaChatWidget'
 import { IaProvider }        from '@/components/portal/ia/IaContext'
+import ImpersonacionBanner   from '@/components/portal/ImpersonacionBanner'
 import { configAgente }      from '@/lib/ia/contexto'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
@@ -102,6 +103,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         catalogoIcono={etiquetas.catalogoIcono}
       />
       <main className="portal-main">
+        {session.imp && <ImpersonacionBanner adminEmail={session.imp.admin_email} />}
         <PortalToastWrapper>
         {bloqueado
           ? <BloqueadoScreen estado={cliente.estado} />

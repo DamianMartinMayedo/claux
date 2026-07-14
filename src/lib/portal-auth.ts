@@ -26,6 +26,10 @@ export interface PortalSession {
   email:        string
   rol:          'admin_empresa' | 'usuario'
   solo_lectura: boolean
+  // Presente SOLO en sesiones de impersonación (el equipo CLAUX entra al portal
+  // del cliente para configurarlo). Ausente en sesiones normales. Sirve para el
+  // banner del portal y para EXCLUIR esta actividad de las métricas de uso.
+  imp?:         { admin_email: string }
   exp:          number
   iat:          number
 }
@@ -64,10 +68,11 @@ async function getHmacKey(usage: 'sign' | 'verify'): Promise<CryptoKey> {
 
 export async function signPortalToken(
   payload: Omit<PortalSession, 'exp' | 'iat'>,
+  durationSec: number = SESSION_DURATION,
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   const header  = b64uEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const body    = b64uEncode(JSON.stringify({ ...payload, iat: now, exp: now + SESSION_DURATION }))
+  const body    = b64uEncode(JSON.stringify({ ...payload, iat: now, exp: now + durationSec }))
   const data    = `${header}.${body}`
   const key     = await getHmacKey('sign')
   const sigBuf  = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))

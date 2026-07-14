@@ -32,7 +32,9 @@ export async function middleware(request: NextRequest) {
         if (pathname === '/portal/login') {
           return NextResponse.redirect(new URL('/portal/dashboard', request.url))
         }
-        if (Math.floor(Date.now() / 1000) - session.iat >= RENEW_THROTTLE) {
+        // Las sesiones de impersonación (imp) NO se renuevan: deben expirar en su
+        // TTL corto y nunca perder el claim `imp` al re-firmar con la forma base.
+        if (!session.imp && Math.floor(Date.now() / 1000) - session.iat >= RENEW_THROTTLE) {
           const nuevo = await signPortalToken({
             user_id:      session.user_id,
             client_id:    session.client_id,

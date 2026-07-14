@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { devPortalSession } from '@/lib/dev-auth'
 import { modulosDeUsuario, calcularAcceso, type AccesoModulos } from '@/lib/permisos'
@@ -51,6 +52,15 @@ export async function loginCliente(
 
   const jar = await cookies()
   jar.set(PORTAL_COOKIE, token, PORTAL_COOKIE_OPTS)
+
+  // Último acceso real del usuario (métricas de uso). No bloquea el login.
+  after(async () => {
+    await createAdminClient()
+      .from('client_users')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('user_id', usuario.user_id)
+      .eq('client_id', usuario.client_id)
+  })
 
   if (usuario.must_change_password) return { mustChangePassword: true }
   return {}
@@ -142,6 +152,21 @@ export async function getAccesoModulos(): Promise<AccesoModulos> {
   return accesoModulosSession(session)
 }
 
+// ── Medición de uso (métricas del admin) ───────────────────────────
+// Registra un "hit" por módulo al cargar una página gateada. Fire-and-forget
+// (no bloquea la respuesta). Se SALTA en sesiones de impersonación: la
+// configuración del equipo CLAUX no debe contar como uso del cliente.
+function registrarUso(session: PortalSession, modulo: string): void {
+  if (session.imp) return
+  after(async () => {
+    await createAdminClient().rpc('uso_portal_hit', {
+      p_client_id: session.client_id,
+      p_user_id:   session.user_id,
+      p_modulo:    modulo,
+    })
+  })
+}
+
 // ── Requerir módulo activo ──────────────────────────────────────────
 // Para páginas de módulos/funcionalidades: si el usuario no lo puede VER
 // (el tenant no lo contrató o el usuario no tiene permiso), redirige a dashboard.
@@ -152,6 +177,7 @@ export async function requireModulo(modulo: string): Promise<PortalSession> {
   const acceso = await accesoModulosSession(session)
   if (!acceso.visibles.includes(modulo)) redirect('/portal/dashboard')
 
+  registrarUso(session, modulo)
   return session
 }
 
@@ -166,6 +192,7 @@ export async function requireAccesoModulo(
   const acceso = await accesoModulosSession(session)
   if (!acceso.visibles.includes(modulo)) redirect('/portal/dashboard')
 
+  registrarUso(session, modulo)
   return { session, puedeEditar: acceso.editable.has(modulo) }
 }
 
