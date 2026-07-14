@@ -36,7 +36,10 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     obtenerEmpresasSelector(),
     obtenerEtiquetasNegocio(),
     modulosDeUsuario(db, session.user_id),
-    debeCambiarPassword(session),
+    // La sesión de configuración (imp) se salta el cambio obligatorio: esa
+    // contraseña es del cliente y la define él en su primer acceso. Forzarla aquí
+    // bloquearía justo la tarea que viene a hacer el configurador.
+    session.imp ? Promise.resolve(false) : debeCambiarPassword(session),
   ])
 
   if (!cliente) redirect('/portal/login')
