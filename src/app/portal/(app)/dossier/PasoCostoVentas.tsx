@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, Save, Check } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarCostoVentas, type CategoriaCosto } from '@/app/actions/portal/dossier'
 
@@ -33,44 +33,47 @@ export default function PasoCostoVentas({
     })
   }
 
+  const marcadas = categorias.filter(c => estado[c.categoria]).length
+
   return (
     <section className="card dos-costo-card">
       <div className="dos-body">
         <h2 className="dos-section-title">Coste de ventas</h2>
         <p className="dos-section-hint">
-          Es lo que te cuesta producir lo que vendes: ingredientes, mercancía. El alquiler
-          o la administración no lo son. Marca las categorías que sean coste de ventas.
+          Marca lo que te cuesta <strong>producir o comprar</strong> lo que vendes
+          (ingredientes, mercancía). El alquiler, la administración o los servicios, no.
         </p>
 
         {categorias.length === 0 ? (
           <p className="dos-vacio">Aún no tienes categorías de gasto registradas.</p>
         ) : (
-          <ul className="dos-costo-lista">
-            {categorias.map(c => (
-              <li key={c.categoria} className="dos-costo-item">
-                <label className="dos-costo-label">
-                  <input
-                    type="checkbox"
-                    checked={!!estado[c.categoria]}
-                    onChange={() => toggle(c.categoria)}
-                  />
-                  <span>{c.categoria}</span>
-                </label>
-                <span className={`dos-costo-tag${estado[c.categoria] ? ' is-costo' : ''}`}>
-                  {estado[c.categoria] ? 'Coste de ventas' : 'Operativo'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {categorias.length > 0 && (
-          <div className="dos-acciones">
-            <button className="btn btn-primary" onClick={guardar} disabled={pending}>
-              {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Save size={14} strokeWidth={2.5} />}
-              Guardar clasificación
-            </button>
-          </div>
+          <>
+            <div className="dos-cv-chips">
+              {categorias.map(c => {
+                const on = !!estado[c.categoria]
+                return (
+                  <button
+                    key={c.categoria} type="button"
+                    className={`dos-cv-chip${on ? ' is-costo' : ''}`}
+                    onClick={() => toggle(c.categoria)}
+                    aria-pressed={on}
+                  >
+                    <span className="dos-cv-check" aria-hidden="true">{on && <Check size={13} strokeWidth={3} />}</span>
+                    {c.categoria}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="dos-cv-nota">
+              {marcadas} de {categorias.length} marcadas como coste de ventas · el resto cuenta como gasto operativo.
+            </p>
+            <div className="dos-acciones">
+              <button className="btn btn-primary" onClick={guardar} disabled={pending}>
+                {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Save size={14} strokeWidth={2.5} />}
+                Guardar clasificación
+              </button>
+            </div>
+          </>
         )}
       </div>
     </section>

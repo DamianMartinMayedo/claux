@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
+import type { CSSProperties } from 'react'
 import { Loader2, Save } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarBasicos, type DossierBasico } from '@/app/actions/portal/dossier'
@@ -32,6 +33,12 @@ export default function PasoCrecimiento({
   const ultimoReal = historico.length > 0 ? historico[historico.length - 1] : 0
   const ultimoProy = futuro.length > 0 ? futuro[futuro.length - 1] : 0
 
+  // Relleno del slider (rango −10…30 → 40 de recorrido) como % para pintar la pista.
+  const RANGO_MIN = -10, RANGO_MAX = 30
+  const fill = ((Math.min(RANGO_MAX, Math.max(RANGO_MIN, valor)) - RANGO_MIN) / (RANGO_MAX - RANGO_MIN)) * 100
+  // X de la frontera real→proyección, para el divisor vertical del gráfico.
+  const fronteraX = historico.length > 0 && futuro.length > 0 ? g.puntos[historico.length - 1]?.x ?? null : null
+
   function guardar() {
     startTransition(async () => {
       const fd = new FormData()
@@ -60,16 +67,17 @@ export default function PasoCrecimiento({
               <div className="dos-pct-row">
                 <input
                   id="dos-crecimiento" type="range" className="dos-range"
-                  min={-10} max={30} step={0.5}
+                  min={RANGO_MIN} max={RANGO_MAX} step={1}
                   value={valor} onChange={e => setPct(e.target.value)}
+                  style={{ '--dos-fill': `${fill}%` } as CSSProperties}
                 />
                 <div className="dos-pct-campo">
                   <input
-                    type="number" inputMode="decimal" className="input dos-input dos-pct-input"
+                    type="number" inputMode="numeric" className="input dos-input dos-pct-input"
                     value={pct} onChange={e => setPct(e.target.value)}
-                    min={-10} max={30} step={0.5} aria-label="Crecimiento mensual en por ciento"
+                    min={RANGO_MIN} max={RANGO_MAX} step={1} aria-label="Crecimiento mensual en por ciento"
                   />
-                  <span className="dos-cell-simbolo">%</span>
+                  <span className="dos-pct-simbolo">%</span>
                 </div>
               </div>
             </div>
@@ -80,7 +88,17 @@ export default function PasoCrecimiento({
                 role="img" preserveAspectRatio="none"
                 aria-label={`Ingresos: ${nf.format(ultimoReal)} ${simbolo} el último mes real, ${nf.format(ultimoProy)} ${simbolo} proyectado a 12 meses con ${valor} % mensual`}
               >
+                <defs>
+                  <linearGradient id="dosAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop className="dos-grad-top" offset="0%" />
+                    <stop className="dos-grad-bot" offset="100%" />
+                  </linearGradient>
+                </defs>
                 {g.areaHistorico && <path d={g.areaHistorico} className="dos-grafico-area" />}
+                {/* Divisor real → proyección: deja claro dónde acaban los datos. */}
+                {fronteraX != null && (
+                  <line x1={fronteraX} y1={0} x2={fronteraX} y2={g.alto} className="dos-grafico-divisor" />
+                )}
                 {g.pathHistorico && <path d={g.pathHistorico} className="dos-grafico-linea" />}
                 {/* Discontinuo: lo estimado NUNCA se pinta igual que lo real. */}
                 {g.pathProyectado && <path d={g.pathProyectado} className="dos-grafico-linea dos-grafico-proy" />}

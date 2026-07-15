@@ -16,7 +16,10 @@ import { derivarPaleta, normalizarHex, contraste, paletaVars } from '@/lib/dossi
 // De un color se deriva la paleta entera con contraste GARANTIZADO — por eso el
 // preview enseña el color ya ajustado, no el que se tecleó.
 
-const SUGERIDOS = ['#00AFAA', '#C97A0C', '#2563EB', '#DC2626', '#7C3AED', '#059669', '#DB2777', '#141719']
+// Gama curada: colores ricos que rinden como portada de deck (texto blanco sobre
+// color). `derivarPaleta` garantiza ≥4.5:1 en todos — se oscurecen lo justo si
+// hace falta. El teal de marca va primero (coincide con el color por defecto).
+const SUGERIDOS = ['#00AFAA', '#2563EB', '#4F46E5', '#059669', '#B45309', '#DC2626', '#7C3AED', '#0F172A']
 
 export default function PasoMarca({
   dossier, empresaLogoUrl, onGuardado,

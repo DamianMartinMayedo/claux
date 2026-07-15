@@ -122,36 +122,40 @@ export function contraste(a: string, b: string): number {
 
 // ── Ajuste del principal para legibilidad ──────────────────────────────────────
 
+// Umbral de luminancia por encima del cual un color es "claro" (amarillo, ámbar,
+// pasteles): esos llevan texto OSCURO — oscurecerlos para meter texto blanco los
+// ensuciaría. Por debajo, preferimos texto BLANCO sobre el color (look de deck).
+const LUM_CLARO = 0.4
+
 /**
- * Devuelve el principal legible más cercano al elegido y su color de texto.
- * Prueba blanco y neutro oscuro sobre el color; si ninguno llega a 4.5:1,
- * desplaza L en pasos de 0.04 (búsqueda simétrica: el más cercano gana) hasta
- * que uno pase.
+ * Elige el color final y su color de texto, GARANTIZANDO ≥ 4.5:1. Sesgo de deck:
+ *  · Color claro con texto oscuro ya legible → déjalo, texto oscuro.
+ *  · El resto → texto BLANCO, oscureciendo el tono lo justo hasta que el blanco
+ *    pase (bajar L sube el contraste con blanco de forma monótona: basta buscar
+ *    hacia abajo). Mantiene el tono y sube el contraste; nada de dark-on-teal.
+ * Se mide siempre sobre el hex ya REDONDEADO —el color que se pinta de verdad—;
+ * validar el float de `hslToRgb` dejaría colar un 4.49 real como si fuera 4.5.
  */
 function ajustarPrincipal(hsl: Hsl): { principal: string; texto: string } {
-  const PASO = 0.04
   const wRgb = hexToRgb(BLANCO)
   const nRgb = hexToRgb(NEUTRO_OSCURO)
+  const hexEn = (l: number) => rgbToHex(hslToRgb({ h: hsl.h, s: hsl.s, l: clamp(l, 0, 1) }))
 
-  for (let paso = 0; paso <= 25; paso++) {
-    const candidatos = paso === 0 ? [hsl.l] : [hsl.l - paso * PASO, hsl.l + paso * PASO]
-    for (const lCand of candidatos) {
-      const l = clamp(lCand, 0, 1)
-      // Medir SOBRE EL HEX ya redondeado, que es el color que se pinta de verdad:
-      // `hslToRgb` devuelve coma flotante y validar ese valor deja colar un 4.49
-      // real como si fuera 4.5 (p. ej. #C31EFF). Garantizar ≠ aproximar.
-      const hex = rgbToHex(hslToRgb({ h: hsl.h, s: hsl.s, l }))
-      const rgb = hexToRgb(hex)
-      const cW = contrasteRgb(rgb, wRgb)
-      const cN = contrasteRgb(rgb, nRgb)
-      if (cW >= OBJETIVO_CONTRASTE || cN >= OBJETIVO_CONTRASTE) {
-        return { principal: hex, texto: cW >= cN ? BLANCO : NEUTRO_OSCURO }
-      }
+  const baseHex = hexEn(hsl.l)
+  const baseRgb = hexToRgb(baseHex)
+
+  if (luminanciaRelativa(baseRgb) >= LUM_CLARO && contrasteRgb(baseRgb, nRgb) >= OBJETIVO_CONTRASTE) {
+    return { principal: baseHex, texto: NEUTRO_OSCURO }
+  }
+
+  for (let paso = 0; paso <= 30; paso++) {
+    const hex = hexEn(hsl.l - paso * 0.03)
+    if (contrasteRgb(hexToRgb(hex), wRgb) >= OBJETIVO_CONTRASTE) {
+      return { principal: hex, texto: BLANCO }
     }
   }
-  // Inalcanzable en la práctica: un extremo (0 o 1) siempre da > 4.5:1 con su opuesto.
-  const l = hsl.l < 0.5 ? 0 : 1
-  return { principal: rgbToHex(hslToRgb({ h: hsl.h, s: hsl.s, l })), texto: l < 0.5 ? BLANCO : NEUTRO_OSCURO }
+  // Inalcanzable: negro puro da 21:1 con blanco.
+  return { principal: hexEn(0), texto: BLANCO }
 }
 
 // ── API pública ────────────────────────────────────────────────────────────────

@@ -2509,6 +2509,11 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 /* Crear dossier — los campos no tienen margen propio, así que el gap los separa. */
 .dos-crear .dos-body { gap: var(--space-5); }
+
+/* Lo básico en dos columnas (ahorra alto); título y período a ancho completo. */
+.dos-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.dos-form-grid .dos-col-full { grid-column: 1 / -1; }
+@media (max-width: 640px) { .dos-form-grid { grid-template-columns: 1fr; } }
 .dos-campo  { display: flex; flex-direction: column; gap: var(--space-2); }
 .dos-label  { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
 .dos-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -2524,15 +2529,21 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dos-preset:hover { border-color: var(--color-border-strong); color: var(--color-text); }
 .dos-preset.is-activo { background: var(--color-primary-subtle); border-color: var(--color-primary); color: var(--color-primary-text); }
 
-/* Coste de ventas */
+/* Coste de ventas — chips toggle (compacto y claro; marcado = coste de ventas) */
 .dos-costo-card { margin-bottom: var(--space-6); }
-.dos-costo-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-.dos-costo-item {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
-  background: var(--color-surface);
+.dos-cv-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dos-cv-chip {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border); border-radius: var(--radius-full);
+  background: var(--color-surface); color: var(--color-text-muted);
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600;
+  cursor: pointer; transition: all var(--transition);
 }
+.dos-cv-chip:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+.dos-cv-chip.is-costo { background: var(--color-amber-highlight); border-color: var(--color-amber); color: var(--color-text); }
+.dos-cv-check { display: inline-flex; align-items: center; width: 14px; color: var(--color-amber); }
+.dos-cv-nota { margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--color-text-muted); }
 .dos-costo-label { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); cursor: pointer; }
 .dos-costo-tag {
   flex-shrink: 0; font-size: var(--text-xs); font-weight: 600;
@@ -2693,17 +2704,38 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 /* Crecimiento: palanca única + gráfico en vivo */
 .dos-pct-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
-.dos-range { flex: 1; min-width: 180px; accent-color: var(--color-primary); }
+.dos-range {
+  flex: 1; min-width: 200px; height: 8px; -webkit-appearance: none; appearance: none;
+  border-radius: var(--radius-full); cursor: pointer;
+  background: linear-gradient(to right,
+    var(--color-primary) 0 var(--dos-fill, 50%),
+    var(--color-surface-2) var(--dos-fill, 50%) 100%);
+}
+.dos-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+  border-radius: var(--radius-full); background: var(--color-primary);
+  border: 3px solid var(--color-surface); box-shadow: var(--shadow-sm); cursor: pointer;
+}
+.dos-range::-moz-range-thumb {
+  width: 20px; height: 20px; border: 3px solid var(--color-surface);
+  border-radius: var(--radius-full); background: var(--color-primary); box-shadow: var(--shadow-sm); cursor: pointer;
+}
+.dos-range:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 3px; }
 .dos-pct-campo { display: flex; align-items: center; gap: var(--space-2); }
-.dos-pct-input { max-width: 90px; }
+.dos-pct-input { max-width: 96px; }
+.dos-pct-simbolo { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
 .dos-grafico { margin: var(--space-5) 0 0; }
 .dos-grafico-svg {
-  width: 100%; height: 180px; display: block;
+  width: 100%; height: 200px; display: block;
   border: 1px solid var(--color-divider); border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
-.dos-grafico-area { fill: var(--color-primary-subtle); stroke: none; }
-.dos-grafico-linea { fill: none; stroke: var(--color-primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.dos-grad-top { stop-color: var(--color-primary); stop-opacity: 0.22; }
+.dos-grad-bot { stop-color: var(--color-primary); stop-opacity: 0; }
+.dos-grafico-area { fill: url(#dosAreaGrad); stroke: none; }
+.dos-grafico-linea { fill: none; stroke: var(--color-primary); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+/* Frontera real → proyección: fina, discontinua, muy discreta. */
+.dos-grafico-divisor { stroke: var(--color-border-strong); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 /* Lo estimado NUNCA se pinta igual que lo real */
 .dos-grafico-proy { stroke: var(--color-amber); stroke-dasharray: 5 4; }
 .dos-grafico-leyenda { display: flex; gap: var(--space-5); margin-top: var(--space-3); }

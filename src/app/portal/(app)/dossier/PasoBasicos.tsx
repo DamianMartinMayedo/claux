@@ -101,48 +101,50 @@ export default function PasoBasicos({
           </PrerequisitoAviso>
         )}
 
-        <div className="dos-campo">
-          <label className="dos-label" htmlFor="dos-titulo">¿Cómo llamamos a este dossier?</label>
-          <input id="dos-titulo" className="input" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={120} />
-          <p className="dos-section-hint">Solo lo ves tú; no aparece en la presentación.</p>
+        <div className="dos-form-grid">
+          <div className="dos-campo dos-col-full">
+            <label className="dos-label" htmlFor="dos-titulo">¿Cómo llamamos a este dossier?</label>
+            <input id="dos-titulo" className="input" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={120} />
+            <p className="dos-section-hint">Solo lo ves tú; no aparece en la presentación.</p>
+          </div>
+
+          {eligeEmpresa && (
+            <div className="dos-campo">
+              <label className="dos-label" htmlFor="dos-empresa">¿De qué empresa?</label>
+              <select id="dos-empresa" className="input" value={empresaId} onChange={e => setEmpresaId(e.target.value)}>
+                <option value="">Todas (consolidado)</option>
+                {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+              </select>
+            </div>
+          )}
+
+          {eligeMoneda && (
+            <div className="dos-campo">
+              <label className="dos-label" htmlFor="dos-moneda">¿En qué moneda lo presentas?</label>
+              <select id="dos-moneda" className="input" value={moneda} onChange={e => setMoneda(e.target.value)}>
+                {data.monedas.map(m => <option key={m.codigo} value={m.codigo}>{m.codigo}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="dos-campo dos-col-full">
+            <span className="dos-label">¿Qué período cubre?</span>
+            <div className="dos-presets">
+              {opciones.map(o => (
+                <button key={o.clave} type="button"
+                  className={`dos-preset${presetActivo === o.clave ? ' is-activo' : ''}`}
+                  onClick={() => aplicarPreset(o.clave)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="dos-fechas">
+              <input className="input" type="date" value={desde} onChange={e => setDesde(e.target.value)} aria-label="Desde" />
+              <span className="dos-fechas-sep">–</span>
+              <input className="input" type="date" value={hasta} onChange={e => setHasta(e.target.value)} aria-label="Hasta" />
+            </div>
+          </div>
         </div>
-
-        {eligeEmpresa && (
-          <div className="dos-campo">
-            <label className="dos-label" htmlFor="dos-empresa">¿De qué empresa?</label>
-            <select id="dos-empresa" className="input" value={empresaId} onChange={e => setEmpresaId(e.target.value)}>
-              <option value="">Todas (consolidado)</option>
-              {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-            </select>
-          </div>
-        )}
-
-        <div className="dos-campo">
-          <span className="dos-label">¿Qué período cubre?</span>
-          <div className="dos-presets">
-            {opciones.map(o => (
-              <button key={o.clave} type="button"
-                className={`dos-preset${presetActivo === o.clave ? ' is-activo' : ''}`}
-                onClick={() => aplicarPreset(o.clave)}>
-                {o.label}
-              </button>
-            ))}
-          </div>
-          <div className="dos-fechas">
-            <input className="input" type="date" value={desde} onChange={e => setDesde(e.target.value)} aria-label="Desde" />
-            <span className="dos-fechas-sep">–</span>
-            <input className="input" type="date" value={hasta} onChange={e => setHasta(e.target.value)} aria-label="Hasta" />
-          </div>
-        </div>
-
-        {eligeMoneda && (
-          <div className="dos-campo">
-            <label className="dos-label" htmlFor="dos-moneda">¿En qué moneda lo presentas?</label>
-            <select id="dos-moneda" className="input" value={moneda} onChange={e => setMoneda(e.target.value)}>
-              {data.monedas.map(m => <option key={m.codigo} value={m.codigo}>{m.codigo}</option>)}
-            </select>
-          </div>
-        )}
 
         <div className="dos-acciones">
           <button className="btn btn-primary" onClick={enviar} disabled={pending || sinMoneda}>
