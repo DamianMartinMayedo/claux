@@ -157,6 +157,48 @@ function generarTurnoId():      string { return `TUR-${corto()}` }
 function generarAsignacionId(): string { return `TAS-${corto()}` }
 function generarConceptoId():   string { return `CPT-${corto()}` }
 
+// Copia un empleado a otra empresa como registro INDEPENDIENTE (misma persona, nueva
+// relación laboral: cada empresa tiene su contrato/salario/moneda). Se copian los
+// datos como punto de partida y queda activo; el salario/moneda se ajustan luego.
+export async function copiarEmpleadoAEmpresa(
+  empleado_id: string,
+  empresa_destino: string,
+): Promise<{ ok: boolean; error?: string; empleado_id?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  const empresas = await obtenerEmpresas()
+  if (!empresas.some(e => e.empresa_id === empresa_destino)) {
+    return { ok: false, error: 'Empresa destino no válida.' }
+  }
+
+  const db = createAdminClient()
+  const { data: src } = await db.from('empleados').select('*')
+    .eq('empleado_id', empleado_id).eq('client_id', session.client_id).maybeSingle()
+  if (!src) return { ok: false, error: 'No se encontró el empleado a copiar.' }
+  if (!empresas.some(e => e.empresa_id === src.empresa_id)) {
+    return { ok: false, error: 'Sin acceso al registro original.' }
+  }
+  if (src.empresa_id === empresa_destino) {
+    return { ok: false, error: 'El empleado ya pertenece a esa empresa.' }
+  }
+
+  const nuevo_id = generarEmpleadoId()
+  const ahora    = new Date().toISOString()
+  const { error } = await db.from('empleados').insert({
+    ...src,
+    empleado_id: nuevo_id,
+    empresa_id:  empresa_destino,
+    fecha_baja:  null,
+    motivo_baja: null,
+    created_at:  ahora,
+    updated_at:  ahora,
+  })
+  if (error) { console.error('[rrhh] copiar empleado error:', error); return { ok: false, error: `No se pudo copiar: ${error.message}` } }
+  revalidatePath('/portal/rrhh')
+  return { ok: true, empleado_id: nuevo_id }
+}
+
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
 }

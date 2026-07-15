@@ -7,6 +7,7 @@ import { useRouter }               from 'next/navigation'
 import {
   reactivarEmpleado,
   eliminarEmpleado,
+  copiarEmpleadoAEmpresa,
   guardarContrato,
   actualizarContrato,
   eliminarContrato,
@@ -22,7 +23,8 @@ import {
 } from '@/app/actions/portal/rrhh'
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { RowActions } from '@/components/portal/RowActions'
-import { FileText, Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
+import { Copy, FileText, Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
   NominaDetalleModal,
@@ -266,6 +268,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const [isPending, startTransition] = useTransition()
 
   const [showEdit,      setShowEdit]      = useState(false)
+  const [copiar,        setCopiar]        = useState(false)
   const [showBaja,      setShowBaja]      = useState(false)
   const [showDelete,    setShowDelete]    = useState(false)
   const [showNuevo,     setShowNuevo]     = useState(false)
@@ -349,6 +352,9 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
         </div>
         <div className="det-actions">
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary"><Pencil size={14} strokeWidth={2} /> Editar</button>
+          {data.empresas.length > 1 && esActivo && (
+            <button onClick={() => setCopiar(true)} className="btn btn-secondary"><Copy size={14} strokeWidth={2} /> Copiar a otra empresa</button>
+          )}
           {esActivo
             ? <button onClick={() => setShowBaja(true)} className="btn btn-secondary"><UserMinus size={14} strokeWidth={2} /> Dar de baja</button>
             : <button onClick={reactivar} disabled={isPending} className="btn btn-secondary"><RotateCcw size={14} strokeWidth={2} /> Reactivar</button>}
@@ -486,6 +492,16 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       {showEdit && (
         <EmpleadoModal empleado={empleado} data={data}
           onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); refrescar() }} />
+      )}
+      {copiar && (
+        <CopiarAEmpresaModal
+          titulo="Copiar a otra empresa"
+          descripcion="Se creará un empleado independiente en esa empresa con los mismos datos. Revisa su salario y moneda después (cada empresa tiene su propio contrato)."
+          empresas={data.empresas.filter(x => x.empresa_id !== empleado.empresa_id).map(x => ({ empresa_id: x.empresa_id, nombre: x.nombre }))}
+          onCopiar={(empresaId) => copiarEmpleadoAEmpresa(empleado.empleado_id, empresaId)}
+          onClose={() => setCopiar(false)}
+          onCopiado={() => setCopiar(false)}
+        />
       )}
       {showBaja && (
         <BajaModal empleado={empleado} onClose={() => setShowBaja(false)} onSaved={() => { setShowBaja(false); refrescar() }} />

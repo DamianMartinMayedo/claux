@@ -8,15 +8,17 @@ import {
   darBajaEmpleado,
   reactivarEmpleado,
   eliminarEmpleado,
+  copiarEmpleadoAEmpresa,
   type Empleado,
   type EmpleadoConEstado,
   type TipoContrato,
   type Periodicidad,
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
-import { Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
+import { Copy, Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -302,6 +304,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
   const [editEmpleado,  setEditEmpleado]  = useState<Empleado | null>(null)
   const [baja,          setBaja]          = useState<EmpleadoConEstado | null>(null)
   const [confirmDel,    setConfirmDel]    = useState<EmpleadoConEstado | null>(null)
+  const [copiarEmpleado, setCopiarEmpleado] = useState<EmpleadoConEstado | null>(null)
 
   const [search,        setSearch]        = useState('')
   const [filtroEstado,  setFiltroEstado]  = useState('')
@@ -453,6 +456,9 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                       <RowActions>
                         <button className="row-actions-item" onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                         <button className="row-actions-item" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                        {multiempresa && e.estado === 'ACTIVO' && (
+                          <button className="row-actions-item" onClick={() => setCopiarEmpleado(e)}><Copy size={15} strokeWidth={2} /> Copiar a otra empresa</button>
+                        )}
                         {e.estado === 'ACTIVO' ? (
                           <button className="row-actions-item" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
                         ) : (
@@ -482,6 +488,16 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
       {confirmDel && (
         <ConfirmEliminar empleado={confirmDel} onConfirm={confirmarEliminar}
           onClose={() => setConfirmDel(null)} isPending={isPending} />
+      )}
+      {copiarEmpleado && (
+        <CopiarAEmpresaModal
+          titulo="Copiar a otra empresa"
+          descripcion="Se creará un empleado independiente en esa empresa con los mismos datos. Revisa su salario y moneda después (cada empresa tiene su propio contrato)."
+          empresas={data.empresas.filter(x => x.empresa_id !== copiarEmpleado.empresa_id).map(x => ({ empresa_id: x.empresa_id, nombre: x.nombre }))}
+          onCopiar={(empresaId) => copiarEmpleadoAEmpresa(copiarEmpleado.empleado_id, empresaId)}
+          onClose={() => setCopiarEmpleado(null)}
+          onCopiado={() => { setCopiarEmpleado(null); router.refresh() }}
+        />
       )}
     </div>
   )

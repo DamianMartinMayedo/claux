@@ -6,12 +6,14 @@ import { useRouter }                from 'next/navigation'
 import {
   archivarTercero,
   restaurarTercero,
+  copiarTerceroAEmpresa,
   type TerceroDetalleData,
   type TipoTercero,
   type ViaPago,
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal } from '../_TerceroFormModal'
-import { Activity, Archive, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
+import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
+import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -301,6 +303,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   const [data,      setData]      = useState(initialData)
   const [tab,       setTab]       = useState<TabId>('datos')
   const [showEdit,  setShowEdit]  = useState(false)
+  const [copiar,    setCopiar]    = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [pending,   startT]       = useTransition()
   const router = useRouter()
@@ -362,6 +365,11 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
             <Pencil size={14} strokeWidth={2} /> Editar
           </button>
+          {empresas.length > 1 && (
+            <button onClick={() => setCopiar(true)} className="btn btn-secondary">
+              <Copy size={14} strokeWidth={2} /> Copiar a otra empresa
+            </button>
+          )}
           <button
             onClick={toggleActivo}
             disabled={pending}
@@ -399,6 +407,17 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
       {tab === 'productos' && <TabProductos count={productos_count} />}
       {tab === 'cp'        && <TabCuentasPorPagar />}
       {tab === 'historial' && <TabHistorial />}
+
+      {copiar && (
+        <CopiarAEmpresaModal
+          titulo="Copiar a otra empresa"
+          descripcion="Se creará una ficha independiente en esa empresa con los mismos datos (su propia moneda y saldos). Podrás ajustarla después."
+          empresas={empresas.filter(e => e.empresa_id !== tercero.empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
+          onCopiar={(empresaId) => copiarTerceroAEmpresa(tercero.tercero_id, empresaId)}
+          onClose={() => setCopiar(false)}
+          onCopiado={() => setCopiar(false)}
+        />
+      )}
 
       {/* Modal edición */}
       {showEdit && (

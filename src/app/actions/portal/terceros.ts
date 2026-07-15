@@ -235,6 +235,47 @@ export async function guardarTercero(
 
 // ── Archivar ──────────────────────────────────────────────────────────────────
 
+// Copia un cliente/proveedor a otra empresa como ficha INDEPENDIENTE (mismos datos,
+// nuevo id). Cada empresa mantiene su propia relación comercial (CxC/CxP, moneda),
+// por eso es un registro separado a propósito, no una identidad compartida.
+export async function copiarTerceroAEmpresa(
+  tercero_id: string,
+  empresa_destino: string,
+): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  const empresas = await obtenerEmpresas()
+  if (!empresas.some(e => e.empresa_id === empresa_destino)) {
+    return { ok: false, error: 'Empresa destino no válida.' }
+  }
+
+  const db = createAdminClient()
+  const { data: src } = await db.from('third_parties').select('*')
+    .eq('tercero_id', tercero_id).eq('client_id', session.client_id).maybeSingle()
+  if (!src) return { ok: false, error: 'No se encontró el cliente o proveedor a copiar.' }
+  if (!empresas.some(e => e.empresa_id === src.empresa_id)) {
+    return { ok: false, error: 'Sin acceso al registro original.' }
+  }
+  if (src.empresa_id === empresa_destino) {
+    return { ok: false, error: 'El cliente ya pertenece a esa empresa.' }
+  }
+
+  const nuevo_id = generarTerceroId()
+  const ahora    = new Date().toISOString()
+  const { error } = await db.from('third_parties').insert({
+    ...src,
+    tercero_id: nuevo_id,
+    empresa_id: empresa_destino,
+    activo:     true,
+    created_at: ahora,
+    updated_at: ahora,
+  })
+  if (error) { console.error('[terceros] copiar error:', error); return { ok: false, error: `No se pudo copiar: ${error.message}` } }
+  revalidatePath('/portal/terceros')
+  return { ok: true, tercero_id: nuevo_id }
+}
+
 export async function archivarTercero(
   tercero_id: string,
 ): Promise<{ ok: boolean; error?: string }> {

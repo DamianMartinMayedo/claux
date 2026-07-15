@@ -273,6 +273,7 @@
 }
 
 .emp-card {
+  display: flex; flex-direction: column;
   background: var(--color-surface);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-xl);
@@ -284,7 +285,7 @@
 
 .emp-card-band { height: 5px; width: 100%; background: var(--empresa-color, var(--color-text-muted)); }
 
-.emp-card-body { padding: var(--space-5); }
+.emp-card-body { padding: var(--space-5); flex: 1; }
 
 .emp-card-top {
   display: flex;

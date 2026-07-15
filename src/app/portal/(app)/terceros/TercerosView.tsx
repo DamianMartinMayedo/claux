@@ -5,6 +5,7 @@ import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
 import {
   archivarTercero,
+  copiarTerceroAEmpresa,
   restaurarTercero,
   type Tercero,
   type TipoTercero,
@@ -14,11 +15,12 @@ import {
 import { TerceroFormModal, VIA_BADGE } from './_TerceroFormModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import { Archive, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
+import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -97,6 +99,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   const [modalOpen,      setModalOpen]      = useState(false)
   const [editTercero,    setEditTercero]    = useState<Tercero | null>(null)
   const [confirmTercero, setConfirmTercero] = useState<Tercero | null>(null)
+  const [copiarTercero,  setCopiarTercero]  = useState<Tercero | null>(null)
 
   const [search,        setSearch]        = useState('')
   const [filtroTipo,    setFiltroTipo]    = useState<'TODOS' | TipoTercero>('TODOS')
@@ -328,6 +331,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                             <button className="row-actions-item" onClick={() => openEdit(t)}>
                               <Pencil size={15} strokeWidth={2} /> Editar
                             </button>
+                            {multiempresa && (
+                              <button className="row-actions-item" onClick={() => setCopiarTercero(t)}>
+                                <Copy size={15} strokeWidth={2} /> Copiar a otra empresa
+                              </button>
+                            )}
                             <button className="row-actions-item row-actions-item-danger"
                               onClick={() => setConfirmTercero(t)} disabled={isPending}>
                               <Archive size={15} strokeWidth={2} /> Archivar
@@ -365,6 +373,16 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           onConfirm={confirmArchivarFn}
           onClose={() => setConfirmTercero(null)}
           isPending={isPending}
+        />
+      )}
+      {copiarTercero && (
+        <CopiarAEmpresaModal
+          titulo="Copiar a otra empresa"
+          descripcion="Se creará una ficha independiente en esa empresa con los mismos datos (su propia moneda y saldos). Podrás ajustarla después."
+          empresas={empresasLista.filter(e => e.empresa_id !== copiarTercero.empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
+          onCopiar={(empresaId) => copiarTerceroAEmpresa(copiarTercero.tercero_id, empresaId)}
+          onClose={() => setCopiarTercero(null)}
+          onCopiado={() => { setCopiarTercero(null); router.refresh() }}
         />
       )}
     </div>
