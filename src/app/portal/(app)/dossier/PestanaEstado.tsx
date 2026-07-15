@@ -80,7 +80,7 @@ export default function PestanaEstado({
 
   return (
     <section className="card dos-er-card">
-      <div className="card-body">
+      <div className="dos-body">
         <div className="dos-er-head">
           <div>
             <h2 className="dos-section-title">Estado de resultados</h2>

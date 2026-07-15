@@ -87,7 +87,7 @@ export default function PasoBasicos({
 
   return (
     <section className="card dos-crear">
-      <div className="card-body">
+      <div className="dos-body">
         {!creando && (
           <div>
             <h2 className="dos-section-title">Lo básico</h2>

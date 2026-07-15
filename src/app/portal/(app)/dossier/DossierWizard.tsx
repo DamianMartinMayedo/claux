@@ -146,7 +146,7 @@ export default function DossierWizard({
 
         {paso === 'listo' && (
           <section className="card dos-listo">
-            <div className="card-body">
+            <div className="dos-body">
               <PartyPopper size={40} strokeWidth={1.5} className="dos-listo-icono" />
               <h2 className="dos-section-title">Tu dossier está listo</h2>
               <p className="dos-section-hint">

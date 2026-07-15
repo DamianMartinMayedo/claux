@@ -80,7 +80,7 @@ export default function PasoRelato({
 
   return (
     <section className="card">
-      <div className="card-body">
+      <div className="dos-body">
         <div className="dos-er-head">
           <div>
             <h2 className="dos-section-title">El relato</h2>

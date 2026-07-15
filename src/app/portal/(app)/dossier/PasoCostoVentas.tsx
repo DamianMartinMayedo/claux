@@ -35,7 +35,7 @@ export default function PasoCostoVentas({
 
   return (
     <section className="card dos-costo-card">
-      <div className="card-body">
+      <div className="dos-body">
         <h2 className="dos-section-title">Coste de ventas</h2>
         <p className="dos-section-hint">
           Es lo que te cuesta producir lo que vendes: ingredientes, mercancía. El alquiler

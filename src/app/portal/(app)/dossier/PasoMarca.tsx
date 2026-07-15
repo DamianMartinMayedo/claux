@@ -81,7 +81,7 @@ export default function PasoMarca({
 
   return (
     <section className="card">
-      <div className="card-body">
+      <div className="dos-body">
         <h2 className="dos-section-title">La marca</h2>
         <p className="dos-section-hint">
           El color y el logo son de esta presentación, no de tu negocio: cámbialos sin tocar nada más.

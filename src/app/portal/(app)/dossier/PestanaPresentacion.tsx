@@ -71,7 +71,7 @@ export default function PestanaPresentacion({
 
   return (
     <section className="card">
-      <div className="card-body">
+      <div className="dos-body">
         <h2 className="dos-section-title">Presentación</h2>
         <p className="dos-section-hint">
           Un enlace web con tus números y tu relato, pensado para enseñárselo a un inversor desde el móvil.

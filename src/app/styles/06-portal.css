@@ -2500,8 +2500,15 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dos-vacio         { font-size: var(--text-sm); color: var(--color-text-faint); padding: var(--space-4) 0; }
 .dos-acciones      { display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-5); }
 
-/* Crear dossier */
-.dos-crear .card-body { display: flex; flex-direction: column; gap: var(--space-5); }
+/* Cuerpo de tarjeta del dossier: apila las secciones en VERTICAL. La base
+   .card-body es un cluster horizontal (flex-wrap, sin dirección) pensado para
+   grupos de botones; usarla para secciones apiladas las pone en fila y estira el
+   botón de guardar a toda la altura. Los hijos llevan su propio margin-top; el
+   contenedor solo garantiza el apilado y que cada sección ocupe el ancho. */
+.dos-body { display: flex; flex-direction: column; }
+
+/* Crear dossier — los campos no tienen margen propio, así que el gap los separa. */
+.dos-crear .dos-body { gap: var(--space-5); }
 .dos-campo  { display: flex; flex-direction: column; gap: var(--space-2); }
 .dos-label  { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
 .dos-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -2648,6 +2655,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 .dos-wizard-nav { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .dos-listo { text-align: center; }
+.dos-listo .dos-body { align-items: center; }   /* centra el icono y el CTA (la columna estira por defecto) */
 .dos-listo-icono { color: var(--color-primary); margin-bottom: var(--space-3); }
 .dos-listo .dos-acciones { justify-content: center; }
 

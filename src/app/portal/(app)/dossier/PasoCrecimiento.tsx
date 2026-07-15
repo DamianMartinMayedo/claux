@@ -45,7 +45,7 @@ export default function PasoCrecimiento({
 
   return (
     <section className="card">
-      <div className="card-body">
+      <div className="dos-body">
         <h2 className="dos-section-title">Crecimiento</h2>
         <p className="dos-section-hint">
           Es tu estimación, no una promesa; el inversor la verá marcada como proyección.

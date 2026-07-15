@@ -115,7 +115,7 @@ export default function PasoNumeros({
 
   return (
     <section className="card dos-numeros-card">
-      <div className="card-body">
+      <div className="dos-body">
         <div className="dos-numeros-head">
           <div>
             <h2 className="dos-section-title">Los números</h2>
