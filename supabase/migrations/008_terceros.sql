@@ -1,8 +1,19 @@
 -- ── Módulo Terceros ───────────────────────────────────────────────────────────
 -- Clientes, proveedores y contactos comerciales unificados por empresa
+--
+-- ⚠️ ESTE `create table` NUNCA SE APLICÓ. La tabla ya existía (creada a mano
+-- antes de que hubiera migraciones — ver deuda técnica (2) en docs/CONTEXTO.md
+-- §2), así que el `if not exists` la dejó intacta. Lo de abajo se ha corregido
+-- para que refleje el esquema REAL de producción; antes declaraba
+-- `tercero_id text primary key`, y esa mentira costó un bug: copiar un tercero a
+-- otra empresa reventaba con «duplicate key ... third_parties_pkey» porque el
+-- código regeneraba `tercero_id` creyendo que era la clave, y arrastraba la `id`
+-- original. Si tocas esta tabla, comprueba el esquema real contra la BD.
 
 create table if not exists third_parties (
-  tercero_id        text        primary key,                 -- TER-XXXXXXXX
+  -- La PRIMARY KEY real. `tercero_id` es solo el código legible de negocio.
+  id                uuid        primary key default gen_random_uuid(),
+  tercero_id        text        not null,                    -- TER-XXXXXXXX
   client_id         text        not null,
   empresa_id        text        not null,
 

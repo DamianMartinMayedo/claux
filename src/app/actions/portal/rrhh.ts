@@ -205,8 +205,17 @@ export async function copiarEmpleadoAEmpresa(
 
   const nuevo_id = generarEmpleadoId()
   const ahora    = new Date().toISOString()
+
+  // Defensivo: aquí la PRIMARY KEY sí es `empleado_id` (que se regenera arriba),
+  // así que copiar la fila entera funciona. Pero varias tablas del esquema base
+  // llevan además una `id` uuid que SÍ es su PK —third_parties es una, y por eso
+  // su copia reventaba—, así que no dependemos de esa diferencia: si algún día
+  // `empleados` gana una `id`, esto seguirá copiando bien en vez de romperse.
+  const { id: _id, ...datosOrigen } = src as Record<string, unknown>
+  void _id
+
   const { error } = await db.from('empleados').insert({
-    ...src,
+    ...datosOrigen,
     empleado_id: nuevo_id,
     empresa_id:  empresa_destino,
     moneda:      monedaFinal,

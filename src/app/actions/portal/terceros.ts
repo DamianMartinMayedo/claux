@@ -329,8 +329,19 @@ export async function copiarTerceroAEmpresa(
 
   const nuevo_id = generarTerceroId()
   const ahora    = new Date().toISOString()
+
+  // OJO: la PRIMARY KEY real de third_parties es `id` (uuid), NO `tercero_id`
+  // — este último es solo el código legible TER-XXXXXXXX. La migración
+  // 008_terceros.sql declaraba `tercero_id primary key`, pero la tabla ya existía
+  // creada a mano y el `create table if not exists` nunca llegó a aplicarse.
+  // Si `id` se cuela en el spread, el INSERT reusa la del original y choca
+  // contra third_parties_pkey; hay que dejar que Postgres genere una nueva con
+  // su default gen_random_uuid().
+  const { id: _id, ...datosOrigen } = src as Record<string, unknown>
+  void _id
+
   const { error } = await db.from('third_parties').insert({
-    ...src,
+    ...datosOrigen,
     tercero_id:     nuevo_id,
     empresa_id:     empresa_destino,
     moneda_defecto: monedaFinal,
