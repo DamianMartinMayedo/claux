@@ -6,6 +6,11 @@ import { tieneModulo }       from '@/lib/modulos'
 import { configAgente }      from '@/lib/ia/contexto'
 import { generarInsight, responderChat, type TipoInsight, type TurnoChat } from '@/lib/ia/agente'
 import { sugerirDatosItem, type SugerenciaItem } from '@/lib/ia/catalogo'
+import { sugerirSeccionDossier } from '@/lib/ia/dossier'
+import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
+import { estadoDeResultados } from '@/lib/dossier/estado'
+import type { FilaSerie } from '@/lib/dossier/snapshot'
+import type { LineaDesglose } from '@/lib/dossier/base'
 import { obtenerUsoMes, type UsoMes } from '@/lib/ia/uso'
 import { IaNoConfigurada }   from '@/lib/ia/provider'
 import { etiquetasDe, ETIQUETAS_DEFAULT } from '@/lib/sector'
@@ -100,6 +105,73 @@ export async function autocompletarItemCatalogo(nombre: string): Promise<IaSuger
     return { ok: true, sugerencia }
   } catch (e) {
     console.error('[ia] autocompletarItemCatalogo', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+// ── Redactar una sección del relato del Dossier (IA de cara al dueño) ──
+// Vive aquí y no en dossier.ts porque `requireAddonIa` es privado: en un fichero
+// 'use server' todo export es una server action pública, así que el gate no puede
+// exportarse. Meter la action donde vive el gate lo mantiene en UN sitio (la
+// alternativa era duplicar el tieneModulo(…,'asistente_ia'), como citas/reservas).
+export type IaSugerenciaSeccion = { ok: true; cuerpo: string } | { ok: false; error: string }
+
+export async function redactarSeccionDossier(clave: string): Promise<IaSugerenciaSeccion> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  const espec = SECCIONES_RELATO.find(s => s.clave === clave)
+  if (!espec) return { ok: false, error: 'Sección desconocida.' }
+
+  const db = createAdminClient()
+  const [{ data: cli }, { data: dos }] = await Promise.all([
+    db.from('clients').select('sector, nombre_empresa').eq('client_id', guard.clientId).single(),
+    db.from('dossiers').select('dossier_id, moneda_presentacion')
+      .eq('client_id', guard.clientId).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+  ])
+  if (!dos) return { ok: false, error: 'Crea primero tu dossier.' }
+
+  const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }] = await Promise.all([
+    db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', guard.clientId).order('mes'),
+    db.from('dossier_lineas').select('grupo, concepto, monto, orden')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', guard.clientId).order('orden'),
+    db.from('dossier_secciones').select('clave, cuerpo')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', guard.clientId).order('orden'),
+  ])
+
+  const serie: FilaSerie[] = (serieRows ?? []).map((r: Record<string, unknown>) => ({
+    mes: r.mes as string,
+    ingresos: Number(r.ingresos), costo_ventas: Number(r.costo_ventas), gastos_operativos: Number(r.gastos_operativos),
+    moneda: r.moneda as string, origen: (r.origen === 'BASE' ? 'BASE' : 'MANUAL'),
+  }))
+  const lineas: LineaDesglose[] = (lineaRows ?? []).map((r: Record<string, unknown>) => ({
+    grupo: r.grupo as LineaDesglose['grupo'], concepto: r.concepto as string, monto: Number(r.monto), orden: Number(r.orden),
+  }))
+
+  // El CÓDIGO calcula las cifras; la IA solo las redacta. Ver la regla dura en lib/ia/dossier.ts.
+  const er = estadoDeResultados(serie, lineas)
+  const cifras = serie.length > 0
+    ? { ingresos: er.ingresos, margenBrutoPct: er.margenBrutoPct, resultadoNeto: er.resultadoNeto, meses: serie.length }
+    : null
+
+  const otras = (seccionRows ?? [])
+    .map((r: Record<string, unknown>) => ({ clave: r.clave as string, cuerpo: ((r.cuerpo as string) ?? '').trim() }))
+    .filter(s => s.clave !== clave && s.cuerpo.length > 0)
+    .map(s => ({ etiqueta: SECCIONES_RELATO.find(e => e.clave === s.clave)?.etiqueta ?? s.clave, cuerpo: s.cuerpo }))
+
+  try {
+    const sug = await sugerirSeccionDossier(guard.clientId, espec, {
+      negocio: (cli?.nombre_empresa as string) || 'Mi negocio',
+      sector: (cli?.sector as string | null) ?? null,
+      moneda: dos.moneda_presentacion as string,
+      cifras,
+      otras,
+    })
+    if (!sug?.cuerpo) return { ok: false, error: 'No pude generar un borrador ahora mismo. Inténtalo de nuevo.' }
+    return { ok: true, cuerpo: sug.cuerpo }
+  } catch (e) {
+    console.error('[ia] redactarSeccionDossier', e)
     return { ok: false, error: mensajeError(e) }
   }
 }

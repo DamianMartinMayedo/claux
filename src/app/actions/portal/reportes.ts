@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
@@ -65,7 +66,7 @@ export async function obtenerReportes(
   const [facRes, gcRes, movRes, consolRes, tasasRes] = await Promise.all([
     db.from('facturas').select('moneda, total, fecha_emision, estado')
       .eq('client_id', session.client_id).in('empresa_id', ids)
-      .in('estado', ['EMITIDA', 'COBRADA'])
+      .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desde).lte('fecha_emision', hasta),
     db.from('gastos_cobros').select('tipo, moneda, monto, categoria, fecha')
       .eq('client_id', session.client_id).in('empresa_id', ids)

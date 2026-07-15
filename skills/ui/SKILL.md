@@ -108,6 +108,9 @@ Todo `<input>` con `<label for>` asociado por `id`. Todo botón de solo icono co
 - **`.input-hint` (portal) ≠ `.rp-hint`** (solo existe en la hoja pública de reservar). No mezclarlas.
 - **Antes de tocar una vista pública, lee su hermana del mismo ámbito** (público → público): usan paleta propia, no los tokens del portal (§6).
 - **Contenedor de tamaño estable entre pasos** de un flujo (ancho fijo + `min-height`) para que la tarjeta no encoja a su contenido al cambiar de paso.
+- **Reveal al hacer scroll: el estado base es VISIBLE, y el JS opta *por* la animación.** Nunca `opacity:0` de base "y ya lo mostrará el observer": si el JS no llega (3G, JS off, error de hidratación), la página queda invisible **para siempre**. Se hace al revés: el JS añade una clase al root (`.dp-anim`) y solo bajo ella el CSS oculta y revela. Referencia: `(public)/d/[token]/DeckReveal.tsx`.
+- **Texto sobre un color de runtime necesita un color de texto calculado, no elegido a ojo.** Si el color lo pone el tenant, el contraste hay que derivarlo (`lib/dossier/paleta.ts` → `principalTexto`, ≥4.5:1 garantizado). Poner `color:#FFF` sobre un color derivado es inventarse una legibilidad que nadie ha comprobado. Si no tienes un texto calculado para ese color, no pongas texto encima: la etiqueta al lado.
+- **Hora de reloj en un componente cliente ⇒ fíjale la zona.** `toLocaleTimeString()` sin `timeZone` da una hora en el SSR (UTC en Vercel) y otra en el navegador → **mismatch de hidratación**, y encima una hora que no es la del negocio. Usa `TZ_NEGOCIO` de `src/lib/fecha-tz.ts` (America/Havana). Formatear solo la FECHA desde `'YYYY-MM-DD'` con `new Date(y, m-1, d)` es seguro y es lo que hace el resto del repo.
 
 ## 9. Checklist antes de dar por terminada una tarea de UI
 

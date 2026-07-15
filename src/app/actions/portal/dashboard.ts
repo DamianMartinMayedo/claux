@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
@@ -132,7 +133,7 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
 
   const [facturas6, gastos6, movimientos, cuentasCaja, ultimas, consolRow, tasas] = await Promise.all([
     db.from('facturas').select('fecha_emision, total, moneda')
-      .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ['EMITIDA', 'COBRADA']).gte('fecha_emision', desde6),
+      .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ESTADOS_FACTURA_INGRESO).gte('fecha_emision', desde6),
     db.from('gastos_cobros').select('fecha, monto, moneda')
       .eq('client_id', cid).in('empresa_id', empresaIds).eq('tipo', 'GASTO').gte('fecha', desde6),
     db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
@@ -393,11 +394,12 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     leerSetting('descuento_anual_pct', '10'),
   ])
   // Aviso de setup: datos base que solo el admin puede crear. Empresa siempre;
-  // moneda solo si hay módulos que la usan (base/rrhh/catálogo). La query de moneda
-  // se hace solo cuando aplica y para admin. (El checklist completo quedó en pausa.)
+  // moneda solo si hay módulos que la usan (base/rrhh/catálogo/dossier). La query
+  // de moneda se hace solo cuando aplica y para admin. (El checklist quedó en pausa.)
   let setupPendiente = { empresa: false, moneda: false }
   if (session.rol === 'admin_empresa') {
-    const necesitaMoneda = modulosActivos.includes('base') || modulosActivos.includes('rrhh') || modulosActivos.includes('catalogo_qr')
+    const MODULOS_CON_MONEDA = ['base', 'rrhh', 'catalogo_qr', 'dossier']
+    const necesitaMoneda = MODULOS_CON_MONEDA.some(m => modulosActivos.includes(m))
     let sinMoneda = false
     if (necesitaMoneda) {
       const { count } = await db.from('monedas')

@@ -11,7 +11,7 @@ import {
   Boxes, UserCircle, Building2, User, UsersRound, CreditCard, HelpCircle,
   QrCode, Calendar, Printer, Sparkles, Circle, ChevronDown, LogOut,
   CalendarClock, Banknote, BarChart3, CalendarDays, UtensilsCrossed,
-  Store, ReceiptText, Lock, RefreshCw,
+  Store, ReceiptText, Lock, RefreshCw, Presentation,
 } from 'lucide-react'
 
 interface PaginaInfo {
@@ -227,6 +227,7 @@ const ICON: Record<string, React.ReactNode> = {
   '/portal/reservas':    <Calendar size={18} strokeWidth={2} />,
   '/portal/citas':       <CalendarDays size={18} strokeWidth={2} />,
   '/portal/imprenta':    <Printer size={18} strokeWidth={2} />,
+  '/portal/dossier':     <Presentation size={18} strokeWidth={2} />,
   '/portal/caja':               <Store size={18} strokeWidth={2} />,
   '/portal/caja/operaciones':   <ReceiptText size={18} strokeWidth={2} />,
   '/portal/caja/cierres':       <Lock size={18} strokeWidth={2} />,

@@ -8,6 +8,7 @@ import EmpresaPills                from '@/components/portal/EmpresaPills'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
 import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
+import { crearCursor } from '@/lib/pdf/reporte'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -75,82 +76,44 @@ export default function ReportesView({ data }: { data: ReportesData }) {
       const pageH = doc.internal.pageSize.getHeight()
       const M     = 16
       const right = pageW - M
-      let y = M
 
-      const TEAL = MARCA.teal
       const DARK = MARCA.dark
       const GRAY = MARCA.muted
 
-      const ensure = (space: number) => { if (y + space > pageH - RESERVA_PIE - 2) { doc.addPage(); y = M } }
-      const row = (
-        label: string, amount: string,
-        opts: { bold?: boolean; color?: [number, number, number]; indent?: boolean; gap?: number } = {},
-      ) => {
-        ensure(7)
-        doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
-        doc.setFontSize(10)
-        const c = opts.color ?? DARK
-        doc.setTextColor(c[0], c[1], c[2])
-        doc.text(label, opts.indent ? M + 4 : M, y)
-        if (amount) doc.text(amount, right, y, { align: 'right' })
-        y += opts.gap ?? 6
-      }
-      const heading = (text: string) => {
-        ensure(12)
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
-        doc.setTextColor(DARK[0], DARK[1], DARK[2])
-        doc.text(text, M, y); y += 7
-      }
-      const monedaHead = (m: string) => {
-        ensure(9)
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-        doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
-        doc.text(m, M, y); doc.text('Importe', right, y, { align: 'right' })
-        y += 2
-        doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.setLineWidth(0.2)
-        doc.line(M, y, right, y)
-        y += 5
-      }
-      const totalRow = (label: string, amount: string) => {
-        ensure(13)
-        // Regla arriba del total y luego el texto debajo (evita que la línea
-        // atraviese las letras).
-        doc.setDrawColor(DARK[0], DARK[1], DARK[2]); doc.setLineWidth(0.4)
-        doc.line(M, y, right, y)
-        y += 5
-        row(label, amount, { bold: true, color: TEAL, gap: 9 })
-      }
+      // Cursor compartido (lib/pdf/reporte.ts): estos ayudantes vivían aquí
+      // duplicados y cierran sobre una `y` mutable, por eso salen como cursor.
+      const cur = crearCursor(doc, { margen: M })
 
-      y = cabeceraReporte(doc, {
+      cur.y = cabeceraReporte(doc, {
         titulo:    'Reportes financieros',
         izquierda: empresaNombre,
         derecha:   `${formatFechaCorta(data.desde)} — ${formatFechaCorta(data.hasta)}`,
       })
 
       // Estado de resultados
-      heading('Estado de resultados')
-      if (data.resultado.length === 0) row('Sin ingresos ni gastos en el período.', '', { color: GRAY })
+      cur.titulo('Estado de resultados')
+      if (data.resultado.length === 0) cur.fila('Sin ingresos ni gastos en el período.', '', { color: GRAY })
       for (const r of data.resultado) {
-        monedaHead(r.moneda)
-        row('Ingresos', formatMonto(r.total_ingresos), { bold: true })
-        row('Ventas (facturas)', formatMonto(r.ventas), { indent: true })
-        row('Cobros directos', formatMonto(r.cobros_directos), { indent: true })
-        row('Gastos', formatMonto(r.total_gastos), { bold: true })
-        for (const g of r.gastos_por_categoria) row(g.categoria, formatMonto(g.monto), { indent: true })
-        totalRow('Resultado neto', formatMonto(r.neto))
+        cur.cabeceraTabla(r.moneda, 'Importe')
+        cur.fila('Ingresos', formatMonto(r.total_ingresos), { bold: true })
+        cur.fila('Ventas (facturas)', formatMonto(r.ventas), { indent: true })
+        cur.fila('Cobros directos', formatMonto(r.cobros_directos), { indent: true })
+        cur.fila('Gastos', formatMonto(r.total_gastos), { bold: true })
+        for (const g of r.gastos_por_categoria) cur.fila(g.categoria, formatMonto(g.monto), { indent: true })
+        cur.filaTotal('Resultado neto', formatMonto(r.neto))
       }
 
       // Flujo de caja
-      y += 2
-      heading('Flujo de caja')
-      if (data.flujo.length === 0) row('Sin movimientos de efectivo en el período.', '', { color: GRAY })
+      cur.salto(2)
+      cur.titulo('Flujo de caja')
+      if (data.flujo.length === 0) cur.fila('Sin movimientos de efectivo en el período.', '', { color: GRAY })
       for (const f of data.flujo) {
-        monedaHead(f.moneda)
-        row('Entradas', formatMonto(f.entradas), { bold: true })
-        for (const e of f.detalle_entradas) row(ORIGEN_LABEL[e.origen] ?? e.origen, formatMonto(e.monto), { indent: true })
-        row('Salidas', formatMonto(f.salidas), { bold: true })
-        for (const s of f.detalle_salidas) row(ORIGEN_LABEL[s.origen] ?? s.origen, formatMonto(s.monto), { indent: true })
-        totalRow('Flujo neto', formatMonto(f.neto))
+        cur.cabeceraTabla(f.moneda, 'Importe')
+        cur.fila('Entradas', formatMonto(f.entradas), { bold: true })
+        for (const e of f.detalle_entradas) cur.fila(ORIGEN_LABEL[e.origen] ?? e.origen, formatMonto(e.monto), { indent: true })
+        cur.fila('Salidas', formatMonto(f.salidas), { bold: true })
+        for (const s of f.detalle_salidas) cur.fila(ORIGEN_LABEL[s.origen] ?? s.origen, formatMonto(s.monto), { indent: true })
+        cur.filaTotal('Flujo neto', formatMonto(f.neto))
       }
 
       // ── Consolidado (recuadro gris claro) ──
@@ -171,13 +134,15 @@ export default function ReportesView({ data }: { data: ReportesData }) {
         }
         const bodyH = lineas.reduce((s, l) => s + (l.gap ?? 5.5), 0)
         const boxH  = 14 + bodyH + (c.monedasExcluidas.length ? 6 : 0) + 4
-        y += 6
-        if (y + boxH > pageH - RESERVA_PIE - 2) { doc.addPage(); y = M }
+        // El recuadro es un dibujo a medida (no una fila): salta de página entero
+        // o no salta, así que usa su propio control en vez de cur.ensure().
+        cur.salto(6)
+        if (cur.y + boxH > pageH - RESERVA_PIE - 2) { doc.addPage(); cur.y = M }
         doc.setFillColor(MARCA.surface[0], MARCA.surface[1], MARCA.surface[2])
         doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.setLineWidth(0.2)
-        doc.roundedRect(M, y, right - M, boxH, 2, 2, 'FD')
+        doc.roundedRect(M, cur.y, right - M, boxH, 2, 2, 'FD')
         const padX = M + 5
-        let yy = y + 8
+        let yy = cur.y + 8
         doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
         doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text(`Consolidado en ${c.moneda}`, padX, yy)
         yy += 5
@@ -198,7 +163,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
           doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
           doc.text(`Sin tasa hacia ${c.moneda}: ${c.monedasExcluidas.join(', ')}`, padX, yy)
         }
-        y += boxH
+        cur.salto(boxH)
       }
 
       sellarPie(doc)

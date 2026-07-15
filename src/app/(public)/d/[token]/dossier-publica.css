@@ -1,0 +1,124 @@
+/* ── Deck público del dossier — /d/<token> ──
+   Hoja propia y autocontenida (mismo criterio que catalogo-publica.css y
+   reserva-publica.css): sin globals.css, sin tokens del portal, sin fuentes web,
+   sin librerías. Presupuesto < 100 KB (skill de UI §6 / CONTEXTO §3).
+
+   Los `--do-*` los inyecta `paletaVars()` en el wrapper `.dp-page`: son el color
+   del dueño, derivado con contraste garantizado. Aquí solo se consumen, con
+   fallback al teal de CLAUX por si el wrapper no los trajera.
+
+   LIGHT-ONLY a propósito, a diferencia de las otras hojas públicas: con un color
+   arbitrario del tenant, la superficie derivada (L≈0.96) deslumbra en oscuro, y
+   derivar una paleta oscura con contraste garantizado duplicaría paleta.ts. Esto
+   es un documento, no una app. */
+
+.dp-page {
+  --do-principal: #00afaa;
+  --do-principal-texto: #ffffff;
+  --do-acento: #00c2a8;
+  --do-superficie: #f2fbfa;
+  --do-borde: #cfe9e7;
+  --do-neutro: #141719;
+
+  --dp-bg: #ffffff;
+  --dp-text: #141719;
+  --dp-text-muted: #5c5b52;
+  --dp-border: #e5e0d8;
+  --dp-radius: 14px;
+  --dp-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  color-scheme: only light;
+  font-family: var(--dp-font);
+  background: var(--dp-bg);
+  color: var(--dp-text);
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Portada ── */
+.dp-portada {
+  background: var(--do-principal);
+  color: var(--do-principal-texto);
+  padding: clamp(3rem, 12vw, 7rem) 1.25rem;
+  text-align: center;
+}
+.dp-portada-inner { max-width: 46rem; margin: 0 auto; }
+.dp-logo {
+  width: 96px; height: 96px; object-fit: contain;
+  border-radius: var(--dp-radius); background: #ffffff;
+  padding: 8px; margin: 0 auto 1.5rem; display: block;
+}
+.dp-titulo {
+  margin: 0; font-size: clamp(2rem, 7vw, 3.5rem); font-weight: 800;
+  line-height: 1.1; letter-spacing: -0.02em;
+}
+.dp-subtitulo { margin: 0.75rem 0 0; font-size: 1.05rem; opacity: 0.9; }
+.dp-periodo { margin: 0.35rem 0 0; font-size: 0.9rem; opacity: 0.75; }
+
+/* ── Secciones ── */
+.dp-main { max-width: 46rem; margin: 0 auto; padding: 0 1.25rem; }
+.dp-seccion { padding: clamp(2.5rem, 8vw, 4.5rem) 0; border-bottom: 1px solid var(--dp-border); }
+.dp-seccion:last-child { border-bottom: none; }
+.dp-seccion-titulo {
+  margin: 0 0 1rem; font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 700;
+  letter-spacing: -0.01em; color: var(--do-principal);
+}
+.dp-seccion-cuerpo {
+  margin: 0; font-size: 1.05rem; line-height: 1.65; color: var(--dp-text);
+  white-space: pre-wrap;   /* el dueño escribe en un textarea: sus saltos cuentan */
+}
+
+/* ── Tracción ── */
+.dp-traccion { background: var(--do-superficie); border-radius: var(--dp-radius); padding: clamp(1.75rem, 5vw, 2.5rem); border-bottom: none; }
+.dp-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1.25rem; }
+.dp-cifra { display: flex; flex-direction: column; gap: 0.25rem; }
+.dp-cifra-valor {
+  font-size: clamp(1.6rem, 5vw, 2.4rem); font-weight: 800; line-height: 1.05;
+  color: var(--do-principal); font-variant-numeric: tabular-nums;
+}
+.dp-cifra-label { font-size: 0.8rem; color: var(--dp-text-muted); font-weight: 600; }
+
+/* ── Gráfico ── */
+.dp-grafico { margin: 0; }
+.dp-grafico-svg {
+  width: 100%; height: 200px; display: block;
+  border: 1px solid var(--do-borde); border-radius: var(--dp-radius);
+  background: var(--do-superficie);
+}
+.dp-area { fill: var(--do-superficie); stroke: none; }
+.dp-linea {
+  fill: none; stroke: var(--do-principal); stroke-width: 2.5;
+  stroke-linejoin: round; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+/* Lo proyectado JAMÁS se pinta como lo real */
+.dp-linea-proy { stroke: var(--do-acento); stroke-dasharray: 6 5; }
+.dp-leyenda { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.85rem; }
+.dp-leyenda-item { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--dp-text-muted); }
+.dp-leyenda-marca { width: 16px; height: 3px; border-radius: 2px; background: var(--do-principal); flex-shrink: 0; }
+.dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--do-acento) 0 5px, transparent 5px 9px); }
+
+/* ── Pie ── */
+.dp-pie {
+  max-width: 46rem; margin: 0 auto;
+  padding: 2.5rem 1.25rem 3.5rem;
+  border-top: 1px solid var(--dp-border);
+  text-align: center;
+}
+.dp-pie-dato { margin: 0 0 0.4rem; font-size: 0.78rem; color: var(--dp-text-muted); line-height: 1.5; }
+.dp-pie-marca { margin: 1rem 0 0; font-size: 0.72rem; color: var(--dp-text-muted); opacity: 0.7; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* ── Reveal OPT-IN ──
+   El estado base es VISIBLE. Solo cuando el JS confirma que puede animar añade
+   `.dp-anim` al wrapper y entonces estas reglas ocultan y revelan. Si el JS no
+   llega (3G, JS off, error), no hay `.dp-anim` y el deck se lee entero. */
+.dp-anim .dp-seccion {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+.dp-anim .dp-seccion.is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-anim .dp-seccion { opacity: 1; transform: none; transition: none; }
+}

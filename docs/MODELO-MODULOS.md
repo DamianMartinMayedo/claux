@@ -105,7 +105,8 @@ páginas internas tiene. Fuente canónica de esta clasificación.
 **Detalle de cada tipo:**
 
 - **`modulo`**: Capacidad ERP contratable (incluida la **Contabilidad**, clave `base`). Agrupa varias páginas internas bajo un grupo colapsable. Si no está contratado, el grupo **no aparece** en el sidebar (regla general: todo módulo no contratado, sea del tipo que sea, se oculta — sin candados de upsell). Las rutas se protegen con `requireModulo()`.
-- **`funcionalidad`**: Feature de sector (restaurante, peluquería, etc.). Item standalone en el sidebar, fuera de grupos. Si no está contratado, **no aparece** en el menú. Las rutas están protegidas por `requireModulo()`.
+- **`funcionalidad`**: Pieza de **ruta única** → item standalone en el sidebar, fuera de grupos. Si no está contratado, **no aparece** en el menú. Las rutas están protegidas por `requireModulo()`.
+  El criterio real que decide `modulo` vs `funcionalidad` es **cuántos dominios abarca, no si es de un sector**: varios dominios → `modulo` (Contabilidad son siete páginas porque son siete entidades distintas); **un dominio con varias vistas → `funcionalidad`**, aunque tenga pestañas dentro (Catálogo QR tiene tres; el Dossier del negocio, tres). Lo único que distingue los dos tipos en `PortalSidebar.tsx` es grupo colapsable contra item suelto. Muchas funcionalidades son además de sector (Catálogo QR, Reservas), pero eso es una coincidencia frecuente, no la definición: el Dossier del negocio no es de ningún sector.
 - **`addon`**: Desbloquea capacidad extra en una página existente o añade una feature transversal (más empresas, más usuarios, dashboards avanzados). **No genera navegación propia**. El gating se aplica en la página afectada (ej: `empresas/page.tsx` verifica `multiempresa`). En el catálogo del admin aparece como un toggle más con su precio. Siempre se muestra en el panel de activación del cliente.
 
 ### 3.2 Sidebar dirigido por datos (`paginas` JSONB) — y sus límites
