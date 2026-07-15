@@ -13,6 +13,7 @@ import {
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal } from '../_TerceroFormModal'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
+import { RowActions } from '@/components/portal/RowActions'
 import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -365,19 +366,20 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
             <Pencil size={14} strokeWidth={2} /> Editar
           </button>
-          {empresas.length > 1 && (
-            <button onClick={() => setCopiar(true)} className="btn btn-secondary">
-              <Copy size={14} strokeWidth={2} /> Copiar a otra empresa
+          <RowActions>
+            {empresas.length > 1 && (
+              <button className="row-actions-item" onClick={() => setCopiar(true)}>
+                <Copy size={15} strokeWidth={2} /> Copiar a otra empresa
+              </button>
+            )}
+            <button
+              className={`row-actions-item${tercero.activo ? ' row-actions-item-danger' : ''}`}
+              onClick={toggleActivo}
+              disabled={pending}
+            >
+              {tercero.activo ? <><Archive size={15} strokeWidth={2} /> Archivar</> : <><RotateCcw size={15} strokeWidth={2} /> Restaurar</>}
             </button>
-          )}
-          <button
-            onClick={toggleActivo}
-            disabled={pending}
-            className="btn btn-secondary"
-            style={{ color: tercero.activo ? 'var(--color-error)' : 'var(--color-success)' }}
-          >
-            {tercero.activo ? <><Archive size={14} strokeWidth={2} /> Archivar</> : <><RotateCcw size={14} strokeWidth={2} /> Restaurar</>}
-          </button>
+          </RowActions>
         </div>
       </div>
 

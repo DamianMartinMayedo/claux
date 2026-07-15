@@ -210,7 +210,7 @@ function ConceptosSection({
       <p className="text-sm-muted mb-3">Bonos y deducciones fijos del trabajador. Se aplican solos al generar la nómina.</p>
 
       <form className="nom-aplicar" onSubmit={handleAdd}>
-        <input className="input nom-aplicar-val" name="nombre" placeholder="Nombre (ej: Transporte)" required aria-label="Nombre del concepto" />
+        <input className="input nom-aplicar-nombre" name="nombre" placeholder="Nombre (ej: Transporte)" required aria-label="Nombre del concepto" />
         <select className="input nom-aplicar-sel" name="tipo" defaultValue="DEDUCCION" aria-label="Tipo">
           <option value="DEDUCCION">Deducción</option>
           <option value="BONO">Bono</option>
@@ -352,13 +352,15 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
         </div>
         <div className="det-actions">
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary"><Pencil size={14} strokeWidth={2} /> Editar</button>
-          {data.empresas.length > 1 && esActivo && (
-            <button onClick={() => setCopiar(true)} className="btn btn-secondary"><Copy size={14} strokeWidth={2} /> Copiar a otra empresa</button>
-          )}
-          {esActivo
-            ? <button onClick={() => setShowBaja(true)} className="btn btn-secondary"><UserMinus size={14} strokeWidth={2} /> Dar de baja</button>
-            : <button onClick={reactivar} disabled={isPending} className="btn btn-secondary"><RotateCcw size={14} strokeWidth={2} /> Reactivar</button>}
-          <button onClick={() => setShowDelete(true)} disabled={isPending} className="btn btn-danger"><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+          <RowActions>
+            {data.empresas.length > 1 && esActivo && (
+              <button className="row-actions-item" onClick={() => setCopiar(true)}><Copy size={15} strokeWidth={2} /> Copiar a otra empresa</button>
+            )}
+            {esActivo
+              ? <button className="row-actions-item" onClick={() => setShowBaja(true)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
+              : <button className="row-actions-item" onClick={reactivar} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Reactivar</button>}
+            <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}><Trash2 size={15} strokeWidth={2} /> Eliminar</button>
+          </RowActions>
         </div>
       </div>
 

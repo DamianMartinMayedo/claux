@@ -1636,6 +1636,8 @@
 .nom-aplicar-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
 .nom-aplicar-sel { max-width: 160px; padding: 6px 9px; font-size: var(--text-sm); }
 .nom-aplicar-val { max-width: 110px; padding: 6px 9px; font-size: var(--text-sm); }
+/* Nombre del concepto: ocupa todo el espacio libre de la fila (no queda corto). */
+.nom-aplicar-nombre { flex: 1 1 12rem; min-width: 10rem; padding: 6px 9px; font-size: var(--text-sm); }
 /* Turnos */
 .rrhh-card-gap { margin-bottom: var(--space-4); }
 .ter-card-head { padding: var(--space-4) var(--space-4) 0; }
