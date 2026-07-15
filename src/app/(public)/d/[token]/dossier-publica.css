@@ -1,21 +1,23 @@
 /* ── Deck público del dossier — /d/<token> ──
-   Hoja propia y autocontenida (mismo criterio que catalogo-publica.css y
-   reserva-publica.css): sin globals.css, sin tokens del portal, sin fuentes web,
-   sin librerías. Presupuesto < 100 KB (skill de UI §6 / CONTEXTO §3).
+   Hoja propia y autocontenida (mismo criterio que catalogo-publica.css): sin
+   globals.css, sin tokens del portal, sin fuentes web, sin librerías. Presupuesto
+   < 100 KB (skill de UI §6 / CONTEXTO §3).
 
-   Los `--do-*` los inyecta `paletaVars()` en el wrapper `.dp-page`: son el color
-   del dueño, derivado con contraste garantizado. Aquí solo se consumen, con
-   fallback al teal de CLAUX por si el wrapper no los trajera.
+   Los `--do-*` los inyecta paletaVars() en `.dp-page`: el color del dueño, ya
+   derivado con contraste garantizado. Aquí solo se consumen, con fallback al teal.
 
-   LIGHT-ONLY a propósito, a diferencia de las otras hojas públicas: con un color
-   arbitrario del tenant, la superficie derivada (L≈0.96) deslumbra en oscuro, y
-   derivar una paleta oscura con contraste garantizado duplicaría paleta.ts. Esto
-   es un documento, no una app. */
+   Presentación a PANTALLA COMPLETA: cada bloque es un slide de 100dvh con
+   scroll-snap; se pasa con scroll o con el rail de puntos. Fondos alternos
+   blanco/color. `--acc` = el color de acento del slide (la marca sobre blanco, el
+   texto sobre color), así los números/barras/gráfico se ven bien en ambos.
+
+   Animaciones OPT-IN bajo `.dp-anim` (lo añade DeckReveal solo si puede animar):
+   sin él, todo se ve entero y quieto (3G, JS off, reduced-motion). */
 
 .dp-page {
-  --do-principal: #00afaa;
+  --do-principal: #00817d;
   --do-principal-texto: #ffffff;
-  --do-acento: #00c2a8;
+  --do-acento: #0963aa;
   --do-superficie: #f2fbfa;
   --do-borde: #cfe9e7;
   --do-neutro: #141719;
@@ -23,102 +25,184 @@
   --dp-bg: #ffffff;
   --dp-text: #141719;
   --dp-text-muted: #5c5b52;
-  --dp-border: #e5e0d8;
-  --dp-radius: 14px;
   --dp-font: system-ui, -apple-system, "Segoe UI", sans-serif;
 
+  height: 100dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
   color-scheme: only light;
   font-family: var(--dp-font);
   background: var(--dp-bg);
   color: var(--dp-text);
-  min-height: 100dvh;
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
 }
+
+/* ── Slide ── */
+.dp-slide {
+  position: relative;
+  min-height: 100dvh;
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(2.5rem, 7vw, 6rem) clamp(1.25rem, 5vw, 4rem);
+}
+.dp-slide[data-bg="white"] { --acc: var(--do-principal); background: var(--dp-bg); color: var(--dp-text); }
+.dp-slide[data-bg="color"] { --acc: var(--do-principal-texto); background: var(--do-principal); color: var(--do-principal-texto); }
+
+/* Decoración futurista, muy sutil (detrás del contenido). */
+.dp-slide::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+}
+.dp-slide[data-bg="white"]::before {
+  background-image:
+    linear-gradient(var(--do-borde) 1px, transparent 1px),
+    linear-gradient(90deg, var(--do-borde) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 75%);
+  opacity: 0.5;
+}
+.dp-slide[data-bg="color"]::before {
+  background:
+    radial-gradient(60% 55% at 25% 15%, rgba(255, 255, 255, 0.16), transparent 70%),
+    radial-gradient(55% 55% at 85% 90%, var(--do-acento), transparent 70%);
+  opacity: 0.55;
+}
+.dp-slide-inner { position: relative; z-index: 1; width: 100%; max-width: 60rem; margin: 0 auto; }
+
+/* ── Kicker (etiqueta) ── */
+.dp-kicker {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--acc); opacity: 0.95;
+}
+.dp-kicker::before { content: ""; width: 1.75rem; height: 2px; background: var(--acc); border-radius: 2px; }
 
 /* ── Portada ── */
-.dp-portada {
-  background: var(--do-principal);
-  color: var(--do-principal-texto);
-  padding: clamp(3rem, 12vw, 7rem) 1.25rem;
-  text-align: center;
-}
-.dp-portada-inner { max-width: 46rem; margin: 0 auto; }
+.dp-portada { text-align: center; }
 .dp-logo {
-  width: 96px; height: 96px; object-fit: contain;
-  border-radius: var(--dp-radius); background: #ffffff;
-  padding: 8px; margin: 0 auto 1.5rem; display: block;
+  width: 88px; height: 88px; object-fit: contain; display: block; margin: 0 auto 1.75rem;
+  border-radius: 16px; background: #fff; padding: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
 }
+.dp-portada .dp-kicker { justify-content: center; }
 .dp-titulo {
-  margin: 0; font-size: clamp(2rem, 7vw, 3.5rem); font-weight: 800;
-  line-height: 1.1; letter-spacing: -0.02em;
+  margin: 1rem 0 0; font-size: clamp(2.4rem, 8vw, 5rem); font-weight: 800;
+  line-height: 1.04; letter-spacing: -0.025em;
 }
-.dp-subtitulo { margin: 0.75rem 0 0; font-size: 1.05rem; opacity: 0.9; }
-.dp-periodo { margin: 0.35rem 0 0; font-size: 0.9rem; opacity: 0.75; }
+.dp-periodo { margin: 1.1rem 0 0; font-size: 1rem; opacity: 0.72; font-variant-numeric: tabular-nums; }
+.dp-scroll-hint {
+  display: inline-block; margin-top: 3rem; font-size: 0.78rem; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6;
+}
+.dp-scroll-hint::after { content: ""; display: block; width: 1px; height: 2rem; margin: 0.6rem auto 0; background: currentColor; opacity: 0.5; }
 
-/* ── Secciones ── */
-.dp-main { max-width: 46rem; margin: 0 auto; padding: 0 1.25rem; }
-.dp-seccion { padding: clamp(2.5rem, 8vw, 4.5rem) 0; border-bottom: 1px solid var(--dp-border); }
-.dp-seccion:last-child { border-bottom: none; }
-.dp-seccion-titulo {
-  margin: 0 0 1rem; font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 700;
-  letter-spacing: -0.01em; color: var(--do-principal);
+/* ── Relato (texto de impacto) ── */
+.dp-relato-cuerpo {
+  margin: 1.25rem 0 0; font-size: clamp(1.3rem, 3.2vw, 2.2rem); font-weight: 500;
+  line-height: 1.4; letter-spacing: -0.01em; white-space: pre-wrap; max-width: 40rem;
 }
-.dp-seccion-cuerpo {
-  margin: 0; font-size: 1.05rem; line-height: 1.65; color: var(--dp-text);
-  white-space: pre-wrap;   /* el dueño escribe en un textarea: sus saltos cuentan */
-}
+.dp-relato-cierre .dp-relato-cuerpo { font-weight: 700; }
 
-/* ── Tracción ── */
-.dp-traccion { background: var(--do-superficie); border-radius: var(--dp-radius); padding: clamp(1.75rem, 5vw, 2.5rem); border-bottom: none; }
-.dp-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1.25rem; }
-.dp-cifra { display: flex; flex-direction: column; gap: 0.25rem; }
-.dp-cifra-valor {
-  font-size: clamp(1.6rem, 5vw, 2.4rem); font-weight: 800; line-height: 1.05;
-  color: var(--do-principal); font-variant-numeric: tabular-nums;
-}
-.dp-cifra-label { font-size: 0.8rem; color: var(--dp-text-muted); font-weight: 600; }
+/* ── Bloques con título ── */
+.dp-bloque-titulo { margin: 0.75rem 0 2rem; font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
 
-/* ── Gráfico ── */
-.dp-grafico { margin: 0; }
+/* ── KPIs (números grandes que cuentan) ── */
+.dp-kpis { margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: clamp(1.5rem, 4vw, 3rem); }
+.dp-kpi { display: flex; flex-direction: column; gap: 0.4rem; }
+.dp-kpi-num {
+  font-size: clamp(2.2rem, 6.5vw, 4rem); font-weight: 800; line-height: 1; letter-spacing: -0.03em;
+  color: var(--acc); font-variant-numeric: tabular-nums;
+}
+.dp-kpi-label { font-size: 0.9rem; font-weight: 600; opacity: 0.72; }
+
+/* ── Barras que se llenan ── */
+.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 42rem; }
+.dp-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.dp-bar-label { font-size: 1rem; font-weight: 600; }
+.dp-bar-monto { font-size: 1rem; font-weight: 700; color: var(--acc); font-variant-numeric: tabular-nums; }
+.dp-bar-track {
+  height: 14px; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.dp-bar-fill {
+  height: 100%; width: var(--bar-w, 0%); border-radius: 999px; background: var(--acc);
+}
+.dp-bar-fill[data-tono="coste"] { opacity: 0.5; }
+.dp-bar-fill[data-tono="gasto"] { opacity: 0.72; }
+.dp-bar-fill[data-tono="neto"]  { opacity: 1; }
+.dp-bar-pct { display: inline-block; margin-top: 0.35rem; font-size: 0.8rem; font-weight: 600; opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+/* ── Gráfico (se dibuja) ── */
+.dp-grafico { margin: 1.75rem 0 0; }
 .dp-grafico-svg {
-  width: 100%; height: 200px; display: block;
-  border: 1px solid var(--do-borde); border-radius: var(--dp-radius);
-  background: var(--do-superficie);
+  width: 100%; height: clamp(220px, 42vh, 340px); display: block;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, currentColor 5%, transparent);
 }
-.dp-area { fill: var(--do-superficie); stroke: none; }
-.dp-linea {
-  fill: none; stroke: var(--do-principal); stroke-width: 2.5;
-  stroke-linejoin: round; stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-/* Lo proyectado JAMÁS se pinta como lo real */
-.dp-linea-proy { stroke: var(--do-acento); stroke-dasharray: 6 5; }
-.dp-leyenda { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.85rem; }
-.dp-leyenda-item { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--dp-text-muted); }
-.dp-leyenda-marca { width: 16px; height: 3px; border-radius: 2px; background: var(--do-principal); flex-shrink: 0; }
-.dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--do-acento) 0 5px, transparent 5px 9px); }
+.dp-grad-a { stop-color: var(--acc); stop-opacity: 0.28; }
+.dp-grad-b { stop-color: var(--acc); stop-opacity: 0; }
+.dp-area { fill: url(#dpAreaGrad); stroke: none; }
+.dp-linea { fill: none; stroke: var(--acc); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.dp-linea-proy { stroke: var(--acc); opacity: 0.7; stroke-dasharray: 7 6; }
+.dp-divisor { stroke: currentColor; opacity: 0.28; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.dp-leyenda { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 1rem; }
+.dp-leyenda-item { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; opacity: 0.75; }
+.dp-leyenda-marca { width: 18px; height: 3px; border-radius: 2px; background: var(--acc); flex-shrink: 0; }
+.dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--acc) 0 6px, transparent 6px 11px); }
 
-/* ── Pie ── */
-.dp-pie {
-  max-width: 46rem; margin: 0 auto;
-  padding: 2.5rem 1.25rem 3.5rem;
-  border-top: 1px solid var(--dp-border);
-  text-align: center;
-}
-.dp-pie-dato { margin: 0 0 0.4rem; font-size: 0.78rem; color: var(--dp-text-muted); line-height: 1.5; }
-.dp-pie-marca { margin: 1rem 0 0; font-size: 0.72rem; color: var(--dp-text-muted); opacity: 0.7; letter-spacing: 0.04em; text-transform: uppercase; }
+/* ── Pie técnico ── */
+.dp-pie { text-align: center; max-width: 44rem; }
+.dp-pie-dato { margin: 0 0 0.5rem; font-size: 0.86rem; opacity: 0.7; line-height: 1.55; }
+.dp-pie-marca { margin: 1.5rem 0 0; font-size: 0.74rem; opacity: 0.55; letter-spacing: 0.08em; text-transform: uppercase; }
 
-/* ── Reveal OPT-IN ──
-   El estado base es VISIBLE. Solo cuando el JS confirma que puede animar añade
-   `.dp-anim` al wrapper y entonces estas reglas ocultan y revelan. Si el JS no
-   llega (3G, JS off, error), no hay `.dp-anim` y el deck se lee entero. */
-.dp-anim .dp-seccion {
-  opacity: 0;
-  transform: translateY(14px);
-  transition: opacity 500ms ease, transform 500ms ease;
+/* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
+.dp-nav {
+  position: fixed; right: clamp(0.5rem, 2vw, 1.25rem); top: 50%; transform: translateY(-50%);
+  z-index: 20; display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.55rem 0.45rem; border-radius: 999px;
+  background: rgba(20, 23, 25, 0.32);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
-.dp-anim .dp-seccion.is-visible { opacity: 1; transform: none; }
+.dp-nav-dot { display: flex; align-items: center; justify-content: center; width: 22px; height: 20px; }
+.dp-nav-dot span { display: block; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.45; transition: opacity 0.25s, transform 0.25s; }
+.dp-nav-dot:hover span { opacity: 0.85; }
+.dp-nav-dot.active span { opacity: 1; transform: scale(1.5); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
+
+/* ══ Animaciones — OPT-IN bajo .dp-anim ══ */
+.dp-anim .dp-slide .dp-slide-inner { opacity: 0; transform: translateY(26px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.dp-anim .dp-slide.is-visible .dp-slide-inner { opacity: 1; transform: none; }
+
+/* Portada visible de entrada (es lo primero; no debe aparecer "vacía"). */
+.dp-anim #portada .dp-slide-inner { opacity: 1; transform: none; }
+
+/* Barras: de 0 a su ancho al entrar. */
+.dp-anim .dp-bar-fill { width: 0; }
+.dp-anim .dp-slide.is-visible .dp-bar-fill { width: var(--bar-w, 0%); transition: width 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.25s; }
+
+/* Gráfico: la línea real se DIBUJA (pathLength=1); área/proyección/divisor entran después. */
+.dp-anim .dp-linea:not(.dp-linea-proy) { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.dp-anim .dp-slide.is-visible .dp-linea:not(.dp-linea-proy) { stroke-dashoffset: 0; transition: stroke-dashoffset 1.5s ease 0.2s; }
+.dp-anim .dp-area, .dp-anim .dp-linea-proy, .dp-anim .dp-divisor { opacity: 0; }
+.dp-anim .dp-slide.is-visible .dp-area { opacity: 1; transition: opacity 0.8s ease 0.7s; }
+.dp-anim .dp-slide.is-visible .dp-linea-proy { opacity: 0.7; transition: opacity 0.7s ease 1.1s; }
+.dp-anim .dp-slide.is-visible .dp-divisor { opacity: 0.28; transition: opacity 0.6s ease 1s; }
+
+/* Pista de scroll en la portada (respeta reduced-motion abajo). */
+.dp-scroll-hint { animation: dp-bob 1.8s ease-in-out infinite; }
+@keyframes dp-bob { 0%, 100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(5px); opacity: 0.85; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dp-anim .dp-seccion { opacity: 1; transform: none; transition: none; }
+  .dp-page { scroll-behavior: auto; }
+  .dp-scroll-hint { animation: none; }
+  /* .dp-anim no se añade con reduced-motion, pero por si acaso: todo visible/estático. */
+  .dp-anim .dp-slide .dp-slide-inner,
+  .dp-anim .dp-slide.is-visible .dp-slide-inner { opacity: 1; transform: none; transition: none; }
+  .dp-anim .dp-bar-fill { width: var(--bar-w, 0%); transition: none; }
+  .dp-anim .dp-linea:not(.dp-linea-proy) { stroke-dasharray: none; stroke-dashoffset: 0; }
+  .dp-anim .dp-area, .dp-anim .dp-linea-proy, .dp-anim .dp-divisor { opacity: 1; }
 }
