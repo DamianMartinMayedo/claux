@@ -248,6 +248,9 @@
 .det-meta-row { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-text-muted); display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center; }
 .det-meta-inline { display: inline-flex; align-items: center; gap: 4px; }
 .det-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+/* En la cabecera de detalle el disparador ⋯ va al tamaño de los botones (no el mini
+   de las tablas), para alinearse con "Editar". */
+.det-actions .row-actions-trigger { width: auto; height: auto; padding: var(--space-3) var(--space-4); border-width: 1.5px; }
 .det-field-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-5); }
 .det-field-grid-sm { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
 .det-grid-4     { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
