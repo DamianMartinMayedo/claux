@@ -71,9 +71,9 @@
     radial-gradient(55% 55% at 85% 90%, var(--do-acento), transparent 70%);
   opacity: 0.55;
 }
-/* Contenido centrado en el slide (en PC, si no, los sub-bloques con ancho propio
-   quedan pegados a la izquierda de la columna). Es una presentación, no un doc. */
-.dp-slide-inner { position: relative; z-index: 1; width: 100%; max-width: 60rem; margin: 0 auto; text-align: center; }
+/* Columna centrada en el slide; el TEXTO va a la izquierda salvo en portada y
+   cierre (ahí sí centrado, ver .dp-portada / .dp-gracias). */
+.dp-slide-inner { position: relative; z-index: 1; width: 100%; max-width: 60rem; margin: 0 auto; }
 
 /* ── Kicker (etiqueta) ── */
 .dp-kicker {
@@ -103,27 +103,37 @@
 
 /* ── Relato (texto de impacto) ── */
 .dp-relato-cuerpo {
-  margin: 1.25rem auto 0; font-size: clamp(1.3rem, 3.2vw, 2.2rem); font-weight: 500;
+  margin: 1.25rem 0 0; font-size: clamp(1.3rem, 3.2vw, 2.2rem); font-weight: 500;
   line-height: 1.4; letter-spacing: -0.01em; white-space: pre-wrap; max-width: 40rem;
 }
+/* Números del relato destacados: en blanco (color) → chip; sobre blanco → color. */
+.dp-num-destacado { font-weight: 800; }
+.dp-slide[data-bg="white"] .dp-num-destacado { color: var(--acc); }
+.dp-slide[data-bg="color"] .dp-num-destacado { background: rgba(255, 255, 255, 0.18); border-radius: 0.3em; padding: 0 0.28em; }
+
+/* Equipo jerarquizado: cuadrícula de nombre grande + puesto debajo. */
+.dp-equipo-grid { margin-top: 1.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.5rem 1.75rem; max-width: 48rem; }
+.dp-equipo-item { display: flex; flex-direction: column; gap: 0.2rem; }
+.dp-equipo-nombre { font-size: clamp(1.15rem, 2.6vw, 1.55rem); font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
+.dp-equipo-puesto { font-size: 0.9rem; opacity: 0.72; }
 .dp-relato-cierre .dp-relato-cuerpo { font-weight: 700; }
 
 /* ── Bloques con título ── */
 .dp-bloque-titulo { margin: 0.75rem 0 2rem; font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
 
 /* ── KPIs (números grandes que cuentan) ── */
-/* Cuadrícula 2×2: en una sola fila los números grandes se amontonan y colisionan. */
-.dp-kpis { margin: 2.5rem auto 0; max-width: 46rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.75rem, 4vw, 2.75rem) clamp(1.5rem, 5vw, 3.5rem); }
+/* Cuadrícula 2×2 alineada a la izquierda; números grandes sin amontonarse. */
+.dp-kpis { margin: 2.5rem 0 0; max-width: 48rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(2rem, 4vw, 3rem) clamp(1.5rem, 5vw, 3.5rem); }
 @media (max-width: 520px) { .dp-kpis { grid-template-columns: 1fr; } }
-.dp-kpi { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+.dp-kpi { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
 .dp-kpi-num {
-  font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 800; line-height: 1.02; letter-spacing: -0.03em;
+  font-size: clamp(2.6rem, 6.5vw, 4.6rem); font-weight: 800; line-height: 1.02; letter-spacing: -0.03em;
   color: var(--acc); font-variant-numeric: tabular-nums; overflow-wrap: break-word;
 }
 .dp-kpi-label { font-size: 0.9rem; font-weight: 600; opacity: 0.72; }
 
 /* ── Barras que se llenan ── */
-.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 42rem; margin: 0 auto; text-align: left; }
+.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 42rem; }
 .dp-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
 .dp-bar-label { font-size: 1rem; font-weight: 600; }
 .dp-bar-monto { font-size: 1rem; font-weight: 700; color: var(--acc); font-variant-numeric: tabular-nums; }
@@ -142,6 +152,10 @@
 
 /* ── Gráfico (se dibuja) ── */
 .dp-grafico { margin: 1.75rem 0 0; }
+.dp-grafico-caja { display: flex; align-items: stretch; gap: 0.5rem; }
+.dp-grafico-caja > .dp-grafico-svg { flex: 1; min-width: 0; }
+.dp-eje-y { align-self: center; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.72rem; font-weight: 600; opacity: 0.55; letter-spacing: 0.02em; white-space: nowrap; }
+.dp-eje-x { margin: 0.5rem 0 0; padding-left: 1.2rem; font-size: 0.72rem; font-weight: 600; opacity: 0.55; text-align: center; }
 .dp-grafico-svg {
   width: 100%; height: clamp(220px, 42vh, 340px); display: block;
   border-radius: 16px;
@@ -154,13 +168,13 @@
 .dp-linea { fill: none; stroke: var(--acc); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .dp-linea-proy { stroke: var(--acc); opacity: 0.7; stroke-dasharray: 7 6; }
 .dp-divisor { stroke: currentColor; opacity: 0.28; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
-.dp-leyenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.25rem; margin-top: 1rem; }
+.dp-leyenda { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 1rem; }
 .dp-leyenda-item { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; opacity: 0.75; }
 .dp-leyenda-marca { width: 18px; height: 3px; border-radius: 2px; background: var(--acc); flex-shrink: 0; }
 .dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--acc) 0 6px, transparent 6px 11px); }
 
-/* ── Cierre / gracias ── */
-.dp-gracias { position: relative; }
+/* ── Cierre / gracias (centrado, como la portada) ── */
+.dp-gracias { position: relative; text-align: center; }
 .dp-gracias-titulo { margin: 0; font-size: clamp(2.6rem, 9vw, 5.5rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
 .dp-gracias-fecha { margin: 1.25rem 0 0; font-size: 0.95rem; opacity: 0.72; font-variant-numeric: tabular-nums; }
 .dp-gracias-pie { margin-top: clamp(2.5rem, 9vh, 5.5rem); }

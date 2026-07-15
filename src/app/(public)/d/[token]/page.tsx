@@ -57,6 +57,33 @@ function fechaLarga(f: string | null): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Resalta los números del relato en el color de acento — dan "impacto con cifras".
+function resaltarNumeros(texto: string): ReactNode[] {
+  const partes: ReactNode[] = []
+  const re = /(?:\d[\d.,]*\d|\d)(?:\s?%)?/g   // 1.000 · 3,5 · 50 % · 12 (sin arrastrar el punto final)
+  let last = 0, m: RegExpExecArray | null, i = 0
+  while ((m = re.exec(texto)) !== null) {
+    if (m.index > last) partes.push(texto.slice(last, m.index))
+    partes.push(<span key={i++} className="dp-num-destacado">{m[0]}</span>)
+    last = m.index + m[0].length
+  }
+  if (last < texto.length) partes.push(texto.slice(last))
+  return partes
+}
+
+// Equipo → miembros {nombre, puesto} para la cuadrícula. Formato "Nombre — Puesto"
+// (guion con espacios) o "Nombre (Puesto)"; una línea por persona. Si el texto es
+// prosa (sin ese patrón), el llamador cae al párrafo normal.
+function parseEquipo(cuerpo: string): { nombre: string; puesto: string }[] {
+  return cuerpo.split(/\n+/).map(l => l.trim()).filter(Boolean).map(l => {
+    const guion = l.match(/^(.+?)\s+[—–-]\s+(.+)$/)
+    if (guion) return { nombre: guion[1].trim(), puesto: guion[2].trim() }
+    const paren = l.match(/^(.+?)\s*\((.+)\)$/)
+    if (paren) return { nombre: paren[1].trim(), puesto: paren[2].trim() }
+    return { nombre: l, puesto: '' }
+  })
+}
+
 // Número grande con conteo (el JS lo anima al entrar; sin JS ya muestra el final).
 function Cifra({ valor, dec = 0, suf = '', label }: { valor: number; dec?: number; suf?: string; label: string }) {
   return (
@@ -130,15 +157,38 @@ export default async function DeckPage({ params }: Props) {
     ),
   })
 
-  const relatoSlide = (clave: string, etiqueta: string) => ({
-    id: clave, label: etiqueta,
-    node: (
+  const nodoRelato = (clave: string, etiqueta: string): ReactNode => {
+    const cuerpo = seccion(clave)
+    // Equipo jerarquizado: si viene como lista "Nombre — Puesto", cuadrícula de
+    // nombre grande + puesto debajo. Si es prosa, cae al párrafo normal.
+    if (clave === 'equipo') {
+      const miembros = parseEquipo(cuerpo)
+      const conPuesto = miembros.filter(m => m.puesto).length
+      if (miembros.length > 0 && conPuesto >= 1 && conPuesto >= miembros.length - 1) {
+        return (
+          <div className="dp-relato dp-equipo">
+            <span className="dp-kicker">{etiqueta}</span>
+            <div className="dp-equipo-grid">
+              {miembros.map((m, i) => (
+                <div key={i} className="dp-equipo-item">
+                  <span className="dp-equipo-nombre">{m.nombre}</span>
+                  {m.puesto && <span className="dp-equipo-puesto">{m.puesto}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      }
+    }
+    return (
       <div className={`dp-relato${clave === 'cierre' ? ' dp-relato-cierre' : ''}`}>
         <span className="dp-kicker">{etiqueta}</span>
-        <p className="dp-relato-cuerpo">{seccion(clave)}</p>
+        <p className="dp-relato-cuerpo">{resaltarNumeros(cuerpo)}</p>
       </div>
-    ),
-  })
+    )
+  }
+
+  const relatoSlide = (clave: string, etiqueta: string) => ({ id: clave, label: etiqueta, node: nodoRelato(clave, etiqueta) })
 
   // Relato "antes" de los números (problema, solución, mercado).
   for (const s of SECCIONES_RELATO) {
@@ -190,15 +240,17 @@ export default async function DeckPage({ params }: Props) {
         <div className="dp-bloque">
           <span className="dp-kicker">Evolución y proyección</span>
           <figure className="dp-grafico">
-            <svg
-              viewBox={`0 0 ${g.ancho} ${g.alto}`} className="dp-grafico-svg"
-              role="img" preserveAspectRatio="none"
-              aria-label={
-                futuro.length
-                  ? `Ingresos de ${etiquetaMes(deck.serie[0].mes)} a ${etiquetaMes(deck.serie[deck.serie.length - 1].mes)}, y proyección a 12 meses hasta ${nf(0).format(ultimoProy)} ${deck.moneda}`
-                  : `Ingresos de ${etiquetaMes(deck.serie[0].mes)} a ${etiquetaMes(deck.serie[deck.serie.length - 1].mes)}`
-              }
-            >
+            <div className="dp-grafico-caja">
+              <span className="dp-eje-y">Ingresos · {deck.moneda}</span>
+              <svg
+                viewBox={`0 0 ${g.ancho} ${g.alto}`} className="dp-grafico-svg"
+                role="img" preserveAspectRatio="none"
+                aria-label={
+                  futuro.length
+                    ? `Ingresos de ${etiquetaMes(deck.serie[0].mes)} a ${etiquetaMes(deck.serie[deck.serie.length - 1].mes)}, y proyección a 12 meses hasta ${nf(0).format(ultimoProy)} ${deck.moneda}`
+                    : `Ingresos de ${etiquetaMes(deck.serie[0].mes)} a ${etiquetaMes(deck.serie[deck.serie.length - 1].mes)}`
+                }
+              >
               <defs>
                 <linearGradient id="dpAreaGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop className="dp-grad-a" offset="0%" />
@@ -209,7 +261,12 @@ export default async function DeckPage({ params }: Props) {
               {fronteraX != null && <line x1={fronteraX} y1={0} x2={fronteraX} y2={g.alto} className="dp-divisor" />}
               <path d={g.pathHistorico} className="dp-linea" pathLength={1} />
               {g.pathProyectado && <path d={g.pathProyectado} className="dp-linea dp-linea-proy" />}
-            </svg>
+              </svg>
+            </div>
+            <p className="dp-eje-x">
+              {etiquetaMes(deck.serie[0].mes)} — {etiquetaMes(deck.serie[deck.serie.length - 1].mes)}
+              {futuro.length ? ' · proyección +12 meses' : ''}
+            </p>
             <figcaption className="dp-leyenda">
               <span className="dp-leyenda-item"><span className="dp-leyenda-marca" /> Real</span>
               {futuro.length > 0 && (
