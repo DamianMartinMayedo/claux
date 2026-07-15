@@ -30,7 +30,7 @@ export interface Producto {
   categoria_id:     string | null
   proveedor_id:     string | null
   unidad:           string
-  precios:          Record<string, number>  // { USD: 25.00, VES: 150000 }
+  precios:          Record<string, number>  // { USD: 25.00, CUP: 9000 }
   costos:           Record<string, number>
   stock_actual:     number
   stock_minimo:     number
@@ -43,7 +43,7 @@ export interface ProductosPageData {
   productos:   Producto[]
   categorias:  Categoria[]
   proveedores: { tercero_id: string; nombre: string }[]
-  monedas:     string[]   // códigos de monedas activas del cliente, ej: ['USD','VES']
+  monedas:     string[]   // códigos de monedas activas del cliente, ej: ['USD','CUP']
   almacenes:   { almacen_id: string; nombre: string }[]
 }
 

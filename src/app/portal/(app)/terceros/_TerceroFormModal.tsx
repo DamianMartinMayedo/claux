@@ -1,50 +1,48 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition } from 'react'
+import { useId, useState, useTransition } from 'react'
 import { ArrowRightLeft, FileText, X } from 'lucide-react'
 import {
   guardarTercero,
   type Tercero,
   type ViaPago,
 } from '@/app/actions/portal/terceros'
+import type { MonedaOpcion } from '@/app/actions/portal/monedas'
+import { VIAS_TIPOS, VIA_BADGE } from './_vias-pago'
+import { opcionesCon }          from '@/components/portal/form-helpers'
 
-// ── Constantes ────────────────────────────────────────────────────────────────
+// ── Selector de moneda ────────────────────────────────────────────────────────
 
-export const MONEDAS_LISTA = [
-  'USD', 'VES', 'EUR', 'COP', 'BRL', 'PEN',
-  'ARS', 'MXN', 'GBP', 'CAD', 'CHF', 'CLP',
-]
-
-export const VIAS_TIPOS = [
-  'Transferencia (VES)',
-  'Transferencia (USD)',
-  'Transferencia Internacional',
-  'Pago Móvil',
-  'Zelle',
-  'TropiPay',
-  'Efectivo (VES)',
-  'Efectivo (USD)',
-] as const
-
-export const VIA_BADGE: Record<string, { label: string; cls: string }> = {
-  'Transferencia (VES)':         { label: 'TB-VES',  cls: 'via-badge-ves'      },
-  'Transferencia (USD)':         { label: 'TB-USD',  cls: 'via-badge-usd'      },
-  'Transferencia Internacional': { label: 'TBI',     cls: 'via-badge-intl'     },
-  'Pago Móvil':                  { label: 'PM',      cls: 'via-badge-pm'       },
-  'Zelle':                       { label: 'ZELLE',   cls: 'via-badge-zelle'    },
-  'TropiPay':                    { label: 'TPPAY',   cls: 'via-badge-tropipay' },
-  'Efectivo (VES)':              { label: 'EF-VES',  cls: 'via-badge-ef'       },
-  'Efectivo (USD)':              { label: 'EF-USD',  cls: 'via-badge-ef'       },
+// Monedas del cliente (Monedas y Tasas). `actual` se ofrece aunque ya no esté
+// configurada, para que editar una ficha no la borre en silencio.
+function MonedaSelect({ name, monedas, actual, id }: {
+  name:     string
+  monedas:  MonedaOpcion[]
+  actual?:  string | null
+  id?:      string
+}) {
+  const codigos  = opcionesCon(monedas.map(m => m.codigo), actual)
+  const nombreDe = (cod: string) => monedas.find(m => m.codigo === cod)?.nombre
+  return (
+    <select className="input" id={id} name={name} defaultValue={actual ?? ''}>
+      <option value="">— Sin especificar —</option>
+      {codigos.map(c => (
+        <option key={c} value={c}>{nombreDe(c) ? `${c} — ${nombreDe(c)}` : c}</option>
+      ))}
+    </select>
+  )
 }
 
 // ── ViaFields ─────────────────────────────────────────────────────────────────
 
-export function ViaFields({ tipo, value, onChange }: {
+export function ViaFields({ tipo, value, onChange, monedas }: {
   tipo:     string
   value:    ViaPago
   onChange: (v: ViaPago) => void
+  monedas:  MonedaOpcion[]
 }) {
+  const uid = useId()
   const set = (field: keyof ViaPago, val: string) =>
     onChange({ ...value, [field]: val || undefined })
   const get = (field: keyof ViaPago): string =>
@@ -58,63 +56,54 @@ export function ViaFields({ tipo, value, onChange }: {
     </div>
   )
 
-  if (tipo === 'Transferencia (VES)' || tipo === 'Transferencia (USD)') {
+  // La moneda de la vía sale de las del cliente; `via.moneda` se conserva aunque
+  // ya no esté configurada (mismo criterio que el resto de selectores). El id se
+  // deriva de useId porque hay dos editores de vía (primaria y secundaria) en el
+  // mismo formulario y el label necesita apuntar al select correcto.
+  const monedaSel = (span = 2) => {
+    const codigos = opcionesCon(monedas.map(m => m.codigo), get('moneda') || null)
     return (
-      <div className="via-pago-fields">
-        {inp('titular',    'Titular',       'Ej: Empresa ABC, C.A.',      3, 'text', true)}
-        {inp('cuenta',     'No. de cuenta', 'Ej: 0102 0000 0000 0000',    3, 'text', true)}
-        {inp('banco',      'Banco',         'Ej: Banco de Venezuela',      3)}
-        <div className="input-group ter-col-span-3">
-          <label>Tipo de cuenta</label>
-          <select className="input" value={get('tipo_cuenta')} onChange={e => set('tipo_cuenta', e.target.value)}>
-            <option value="">— Seleccionar —</option>
-            <option value="Corriente">Corriente</option>
-            <option value="Ahorro">Ahorro</option>
-          </select>
-        </div>
+      <div className={`input-group ter-col-span-${span}`} key="moneda">
+        <label htmlFor={`${uid}-moneda`}>Moneda</label>
+        <select className="input" id={`${uid}-moneda`} value={get('moneda')}
+          onChange={e => set('moneda', e.target.value)}>
+          <option value="">— Sin especificar —</option>
+          {codigos.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
       </div>
     )
   }
-  if (tipo === 'Transferencia Internacional') {
+
+  if (tipo === 'Transferencia bancaria') {
     return (
       <div className="via-pago-fields">
-        {inp('titular',    'Titular',              'Ej: John Doe LLC',          3, 'text', true)}
-        {inp('cuenta',     'No. de cuenta',        'Ej: 00123456789',           3, 'text', true)}
-        <div className="input-group ter-col-span-2">
-          <label>Moneda</label>
-          <select className="input" value={get('moneda')} onChange={e => set('moneda', e.target.value)}>
-            <option value="">— Seleccionar —</option>
-            {['USD','EUR','GBP','CAD','CHF','MXN','BRL','COP'].map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-        {inp('swift',      'SWIFT / BIC',          'Ej: ABCDUS33XXX',           2)}
-        {inp('routing',    'Routing / ABA',         'Ej: 021000021',             2)}
-        {inp('banco',      'Banco',                 'Ej: First Example Bank',    3)}
-        <div className="input-group ter-col-span-3">
-          <label>Tipo de cuenta</label>
-          <select className="input" value={get('tipo_cuenta')} onChange={e => set('tipo_cuenta', e.target.value)}>
-            <option value="">— Seleccionar —</option>
-            <option value="Checking">Checking</option>
-            <option value="Savings">Savings</option>
-          </select>
-        </div>
-        {inp('id_titular', 'ID / Passport / EIN',  'Ej: 12-3456789',            3)}
-        {inp('telefono',   'Teléfono titular',      'Ej: +1 555 123 4567',       3, 'tel')}
-        <div className="input-group ter-col-full">
-          <label>Dirección <span className="label-hint-xs">(CP, ciudad, estado, país)</span></label>
-          <textarea className="input input-textarea" rows={2} value={get('direccion')}
-            onChange={e => set('direccion', e.target.value)}
-            placeholder="Ej: 123 Main St, Springfield, FL 12345, USA" />
-        </div>
+        {inp('titular', 'Titular',            'Ej: Yusniel Pérez Gómez',   3, 'text', true)}
+        {inp('cuenta',  'Cuenta o tarjeta',   'Ej: 9227 0699 1234 5678',   3, 'text', true)}
+        {inp('banco',   'Banco',              'Ej: BANDEC, BPA, Metropolitano', 4)}
+        {monedaSel()}
       </div>
     )
   }
-  if (tipo === 'Pago Móvil') {
+  if (tipo === 'Transfermóvil' || tipo === 'EnZona') {
     return (
       <div className="via-pago-fields">
-        {inp('banco',    'Banco',    'Ej: Mercantil',     2)}
-        {inp('telefono', 'Teléfono', 'Ej: 0414 000 0000', 2, 'tel', true)}
-        {inp('cedula',   'Cédula',   'Ej: V-12345678',    2)}
+        {inp('titular',  'Titular',          'Ej: Yusniel Pérez Gómez', 4)}
+        {inp('telefono', 'Teléfono',         'Ej: +53 5 123 4567',      3, 'tel', true)}
+        {inp('cuenta',   'Tarjeta asociada', 'Ej: 9227 0699 1234 5678', 3)}
+        {monedaSel()}
+      </div>
+    )
+  }
+  if (tipo === 'Efectivo') {
+    return (
+      <div className="via-pago-fields">
+        {monedaSel(2)}
+        <div className="input-group ter-col-span-4">
+          <label>Referencia <span className="label-hint">(opcional)</span></label>
+          <input className="input" value={get('referencia')}
+            onChange={e => set('referencia', e.target.value)}
+            placeholder="Ej: Pago en caja principal" />
+        </div>
       </div>
     )
   }
@@ -129,19 +118,36 @@ export function ViaFields({ tipo, value, onChange }: {
   if (tipo === 'TropiPay') {
     return (
       <div className="via-pago-fields">
-        {inp('nombre',     'Nombre / Empresa', 'Ej: Empresa ABC',       3)}
-        {inp('email_link', 'Email o link',     'Ej: pagos@empresa.com', 3)}
+        {inp('nombre',     'Nombre / Empresa', 'Ej: Cafetería El Sol',  2)}
+        {inp('email_link', 'Email o link',     'Ej: pagos@empresa.com', 4)}
+        {monedaSel()}
       </div>
     )
   }
-  if (tipo === 'Efectivo (VES)' || tipo === 'Efectivo (USD)') {
+  if (tipo === 'Transferencia internacional') {
     return (
       <div className="via-pago-fields">
+        {inp('titular',    'Titular',              'Ej: John Doe LLC',          3, 'text', true)}
+        {inp('cuenta',     'No. de cuenta / IBAN', 'Ej: 00123456789',           3, 'text', true)}
+        {monedaSel()}
+        {inp('swift',      'SWIFT / BIC',          'Ej: ABCDUS33XXX',           2)}
+        {inp('routing',    'Routing / ABA',        'Ej: 021000021',             2)}
+        {inp('banco',      'Banco',                'Ej: First Example Bank',    3)}
+        <div className="input-group ter-col-span-3">
+          <label>Tipo de cuenta</label>
+          <select className="input" value={get('tipo_cuenta')} onChange={e => set('tipo_cuenta', e.target.value)}>
+            <option value="">— Seleccionar —</option>
+            <option value="Checking">Checking</option>
+            <option value="Savings">Savings</option>
+          </select>
+        </div>
+        {inp('id_titular', 'ID / Pasaporte / EIN', 'Ej: 12-3456789',            3)}
+        {inp('telefono',   'Teléfono titular',     'Ej: +1 555 123 4567',       3, 'tel')}
         <div className="input-group ter-col-full">
-          <label>Referencia <span className="label-hint">(opcional)</span></label>
-          <input className="input" value={get('referencia')}
-            onChange={e => set('referencia', e.target.value)}
-            placeholder="Ej: Pago en caja principal" />
+          <label>Dirección <span className="label-hint-xs">(CP, ciudad, estado, país)</span></label>
+          <textarea className="input input-textarea" rows={2} value={get('direccion')}
+            onChange={e => set('direccion', e.target.value)}
+            placeholder="Ej: 123 Main St, Springfield, FL 12345, USA" />
         </div>
       </div>
     )
@@ -151,15 +157,18 @@ export function ViaFields({ tipo, value, onChange }: {
 
 // ── ViasPagoEditor ────────────────────────────────────────────────────────────
 
-export function ViasPagoEditor({ value, onChange, label, optional = false }: {
+export function ViasPagoEditor({ value, onChange, label, monedas, optional = false }: {
   value:    ViaPago | null
   onChange: (v: ViaPago | null) => void
   label:    string
+  monedas:  MonedaOpcion[]
   optional?: boolean
 }) {
   const tipo = value?.tipo ?? ''
+  // Al cambiar de tipo se conserva la moneda: es lo único que significa lo mismo
+  // en todas las vías (el resto de campos son propios de cada una).
   function handleTipoChange(newTipo: string) {
-    onChange(newTipo ? { tipo: newTipo } : null)
+    onChange(newTipo ? { tipo: newTipo, moneda: value?.moneda } : null)
   }
   return (
     <div className="via-pago-card">
@@ -168,23 +177,35 @@ export function ViasPagoEditor({ value, onChange, label, optional = false }: {
           {label}
           {optional && <span className="via-pago-optional"> — opcional</span>}
         </span>
-        {value?.tipo && (
-          <span className={`via-badge ${VIA_BADGE[value.tipo]?.cls ?? ''}`}>
-            {VIA_BADGE[value.tipo]?.label ?? value.tipo}
-          </span>
-        )}
+        {value?.tipo && <ViaBadge via={value} />}
       </div>
       <div className="via-pago-body">
         <div className="input-group input-group-narrow">
           <label>Tipo de pago</label>
           <select className="input" value={tipo} onChange={e => handleTipoChange(e.target.value)}>
             <option value="">{optional ? '— Ninguna —' : '— Seleccionar —'}</option>
-            {VIAS_TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+            {opcionesCon(VIAS_TIPOS, tipo || null).map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-        {value && tipo && <ViaFields tipo={tipo} value={value} onChange={onChange} />}
+        {value && tipo && <ViaFields tipo={tipo} value={value} onChange={onChange} monedas={monedas} />}
       </div>
     </div>
+  )
+}
+
+// ── ViaBadge ──────────────────────────────────────────────────────────────────
+
+// Etiqueta de una vía: tipo + moneda ("TB · CUP"). La moneda va aquí porque ya
+// no forma parte del tipo. Una vía de una ficha vieja sin equivalente en el
+// catálogo se pinta con su texto crudo, no se oculta.
+export function ViaBadge({ via }: { via: ViaPago | null }) {
+  if (!via?.tipo) return null
+  const info = VIA_BADGE[via.tipo]
+  return (
+    <span className={`via-badge ${info?.cls ?? ''}`} title={[via.tipo, via.moneda].filter(Boolean).join(' · ')}>
+      {info?.label ?? via.tipo}
+      {via.moneda && <span className="via-badge-moneda">{via.moneda}</span>}
+    </span>
   )
 }
 
@@ -192,9 +213,10 @@ export function ViasPagoEditor({ value, onChange, label, optional = false }: {
 
 // ── TerceroFormModal ──────────────────────────────────────────────────────────
 
-export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSaved }: {
+export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onClose, onSaved }: {
   tercero:      Tercero | null
-  empresas:     { empresa_id: string; nombre: string }[]
+  empresas:     { empresa_id: string; nombre: string; moneda_funcional?: string | null }[]
+  monedas:      MonedaOpcion[]
   defaultTipo?: 'CLIENTE' | 'PROVEEDOR' | 'AMBOS'
   onClose:      () => void
   onSaved:      (terceroId?: string) => void
@@ -247,9 +269,9 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                   </select>
                 </div>
                 <div className="input-group ter-col-span-4">
-                  <label>RIF / NIT / Cédula</label>
+                  <label>NIT / Carné de identidad</label>
                   <input className="input" name="identificacion"
-                    defaultValue={tercero?.identificacion ?? ''} placeholder="J-12345678-9" />
+                    defaultValue={tercero?.identificacion ?? ''} placeholder="Ej: 85042012345" />
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label>Empresa <span className="required">*</span></label>
@@ -271,7 +293,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                 <div className="input-group ter-col-span-4">
                   <label>Nombre / Razón social <span className="required">*</span></label>
                   <input className="input" name="nombre" defaultValue={tercero?.nombre ?? ''}
-                    placeholder="Ej: Empresa ABC, C.A." required />
+                    placeholder="Ej: Cafetería El Sol S.R.L." required />
                 </div>
               </div>
             </div>
@@ -283,15 +305,15 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                 <div className="input-group ter-col-full">
                   <label>Dirección</label>
                   <input className="input" name="direccion" defaultValue={tercero?.direccion ?? ''}
-                    placeholder="Av. Principal, Edificio…" />
+                    placeholder="Ej: Calle 23 #456 e/ 10 y 12, Vedado" />
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Ciudad</label>
-                  <input className="input" name="ciudad" defaultValue={tercero?.ciudad ?? ''} placeholder="Caracas" />
+                  <input className="input" name="ciudad" defaultValue={tercero?.ciudad ?? ''} placeholder="La Habana" />
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>País</label>
-                  <input className="input" name="pais" defaultValue={tercero?.pais ?? ''} placeholder="Venezuela" />
+                  <input className="input" name="pais" defaultValue={tercero?.pais ?? ''} placeholder="Cuba" />
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Representante</label>
@@ -306,7 +328,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                 <div className="input-group ter-col-span-3">
                   <label>Teléfono</label>
                   <input className="input" type="tel" name="telefono" defaultValue={tercero?.telefono ?? ''}
-                    placeholder="+58 212 000 0000" />
+                    placeholder="+53 5 123 4567" />
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Email</label>
@@ -321,11 +343,14 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
               <span className="ter-form-section-title">Condiciones comerciales</span>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-2">
-                  <label>Moneda predeterminada</label>
-                  <select className="input" name="moneda_defecto" defaultValue={tercero?.moneda_defecto ?? ''}>
-                    <option value="">— Sin especificar —</option>
-                    {MONEDAS_LISTA.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <label htmlFor="ter-moneda">Moneda predeterminada</label>
+                  <MonedaSelect id="ter-moneda" name="moneda_defecto"
+                    monedas={monedas} actual={tercero?.moneda_defecto} />
+                  <span className="input-hint">
+                    {monedas.length === 0
+                      ? 'Aún no tienes monedas: créalas en Monedas y Tasas.'
+                      : 'Tus monedas configuradas en Monedas y Tasas.'}
+                  </span>
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label>Condición de pago</label>
@@ -338,10 +363,10 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                   </select>
                 </div>
                 <div className="input-group ter-col-span-2">
-                  <label>Límite de crédito (USD)</label>
+                  <label>Límite de crédito</label>
                   <input className="input" type="number" name="limite_credito"
                     defaultValue={tercero?.limite_credito ?? ''} placeholder="0.00" min="0" step="0.01" />
-                  <span className="input-hint">Monto máx. de deuda permitida.</span>
+                  <span className="input-hint">Deuda máx. permitida, en su moneda predeterminada.</span>
                 </div>
               </div>
             </div>
@@ -349,7 +374,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
             {/* ── VÍAS DE PAGO ── */}
             <div className="ter-form-section">
               <span className="ter-form-section-title">Vías de pago</span>
-              <ViasPagoEditor label="Vía principal"   value={viaP} onChange={setViaP} />
+              <ViasPagoEditor label="Vía principal"   value={viaP} onChange={setViaP} monedas={monedas} />
               <div className="via-pago-swap">
                 <div className="via-pago-swap-line" />
                 <button type="button" className="via-pago-swap-btn" onClick={handleSwap}
@@ -358,7 +383,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                 </button>
                 <div className="via-pago-swap-line" />
               </div>
-              <ViasPagoEditor label="Vía secundaria" value={viaS} onChange={setViaS} optional />
+              <ViasPagoEditor label="Vía secundaria" value={viaS} onChange={setViaS} monedas={monedas} optional />
             </div>
 
             {/* ── CONTRATO ── */}
@@ -368,7 +393,7 @@ export function TerceroFormModal({ tercero, empresas, defaultTipo, onClose, onSa
                 <div className="input-group ter-col-span-2">
                   <label>No. de contrato</label>
                   <input className="input" name="num_contrato"
-                    defaultValue={tercero?.num_contrato ?? ''} placeholder="Ej: CONT-2024-001" />
+                    defaultValue={tercero?.num_contrato ?? ''} placeholder="Ej: CONT-2026-001" />
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label>Fecha inicio</label>

@@ -10,9 +10,11 @@ import { TerceroFormModal } from '@/app/portal/(app)/terceros/_TerceroFormModal'
 // empresa y el tipo prefijados; al guardar refresca los datos y, si se indica,
 // autoselecciona el recién creado.
 export default function CrearTerceroInline({
-  empresas, defaultTipo, label, onCreated,
+  empresas, monedas, defaultTipo, label, onCreated,
 }: {
   empresas:     { empresa_id: string; nombre: string }[]
+  /** Códigos de las monedas del cliente, tal como los cargan estas vistas. */
+  monedas:      string[]
   defaultTipo?: 'CLIENTE' | 'PROVEEDOR' | 'AMBOS'
   label:        string
   onCreated?:   (terceroId?: string) => void
@@ -30,6 +32,7 @@ export default function CrearTerceroInline({
         <TerceroFormModal
           tercero={null}
           empresas={empresas}
+          monedas={monedas.map(codigo => ({ codigo }))}
           defaultTipo={defaultTipo}
           onClose={() => setOpen(false)}
           onSaved={(id) => { setOpen(false); onCreated?.(id); router.refresh() }}

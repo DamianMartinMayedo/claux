@@ -5,6 +5,8 @@ import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { mapaTasas, monedaValida } from '@/lib/tasas'
+import type { MonedaOpcion } from './monedas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -130,8 +132,10 @@ export interface RrhhPageData {
   turnos_catalogo: Turno[]
   asignaciones:    TurnoAsignacion[]
   cuentas:         { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }[]
-  empresas:        { empresa_id: string; nombre: string }[]
-  monedas:         string[]
+  empresas:        { empresa_id: string; nombre: string; moneda_funcional: string | null }[]
+  monedas:         MonedaOpcion[]
+  /** Factores entre las monedas del cliente ("ORIGEN__DESTINO" → factor). */
+  tasas:           Record<string, number>
   cargos:          string[]
   departamentos:   string[]
   turnos:          string[]
@@ -163,9 +167,12 @@ function generarConceptoId():   string { return `CPT-${corto()}` }
 export async function copiarEmpleadoAEmpresa(
   empleado_id: string,
   empresa_destino: string,
+  moneda?: string | null,
+  salario?: number | null,
 ): Promise<{ ok: boolean; error?: string; empleado_id?: string }> {
   const session = await getPortalSession()
-  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_destino)) {
@@ -183,12 +190,27 @@ export async function copiarEmpleadoAEmpresa(
     return { ok: false, error: 'El empleado ya pertenece a esa empresa.' }
   }
 
+  // La copia nace con la moneda de SU empresa (la propone el modal), no con la
+  // de origen: el mismo salario en otra moneda no es el mismo salario. El
+  // salario llega ya en esa moneda — el modal lo convierte con la tasa vigente
+  // y deja corregirlo antes de copiar.
+  const monedaFinal = moneda?.trim() || src.moneda
+  if (monedaFinal !== src.moneda && !await monedaValida(db, session.client_id, monedaFinal)) {
+    return { ok: false, error: `La moneda "${monedaFinal}" no está configurada.` }
+  }
+
+  const salario_base = (salario != null && !isNaN(salario) && salario >= 0)
+    ? salario
+    : (src.salario_base as number)
+
   const nuevo_id = generarEmpleadoId()
   const ahora    = new Date().toISOString()
   const { error } = await db.from('empleados').insert({
     ...src,
     empleado_id: nuevo_id,
     empresa_id:  empresa_destino,
+    moneda:      monedaFinal,
+    salario_base,
     fecha_baja:  null,
     motivo_baja: null,
     created_at:  ahora,
@@ -223,9 +245,10 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       .in('empresa_id', idsFiltro)
       .order('fecha_baja', { ascending: true, nullsFirst: true })
       .order('nombre', { ascending: true }),
-    db.from('monedas').select('codigo')
+    db.from('monedas').select('codigo, nombre')
       .eq('client_id', session.client_id)
       .eq('activa', true)
+      .order('es_consolidacion', { ascending: false })
       .order('codigo'),
     db.from('nominas').select('*')
       .eq('client_id', session.client_id)
@@ -317,14 +340,20 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const cuentas = ((cuRes.data ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean }[])
     .map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda }))
 
+  const monedas = (monRes.data ?? []) as MonedaOpcion[]
+  const tasas   = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
+
   return {
     empleados,
     nominas,
     turnos_catalogo,
     asignaciones,
     cuentas,
-    empresas:       empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
-    monedas:        ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
+    empresas:       empresas.map(e => ({
+      empresa_id: e.empresa_id, nombre: e.nombre, moneda_funcional: e.moneda_funcional,
+    })),
+    monedas,
+    tasas,
     cargos:         datalist(empleados.map(e => e.cargo)),
     departamentos:  datalist(empleados.map(e => e.departamento)),
     turnos:         datalist(empleados.map(e => e.turno)),
@@ -380,8 +409,12 @@ export async function guardarEmpleado(
     updated_at: new Date().toISOString(),
   }
 
+  if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
+
   if (!empleado_id) {
-    if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
+    if (!await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada en Monedas y Tasas.` }
+    }
     const nuevoId = generarEmpleadoId()
     const { error } = await db.from('empleados').insert({
       empleado_id: nuevoId,
@@ -392,9 +425,24 @@ export async function guardarEmpleado(
     })
     if (error) return { ok: false, error: error.message }
   } else {
-    // Editar — la moneda no se cambia (la nómina quedaría inconsistente).
+    // La moneda SÍ se cambia: un empleado copiado a una empresa que opera en
+    // otra moneda nacía con la de origen y, con el campo bloqueado, no había
+    // forma de arreglarlo. Las nóminas ya emitidas no se tocan — cada una
+    // guarda su moneda y sus líneas son un snapshot cerrado —, así que el
+    // cambio solo afecta a las nóminas futuras; el modal avisa antes.
+    // El salario llega ya en la moneda nueva: al cambiarla, el formulario lo
+    // convierte con la tasa vigente y el dueño puede corregirlo antes de guardar.
+    const { data: previo } = await db.from('empleados')
+      .select('moneda')
+      .eq('empleado_id', empleado_id).eq('client_id', session.client_id).maybeSingle()
+    if (!previo) return { ok: false, error: 'Empleado no encontrado.' }
+
+    if (moneda !== previo.moneda && !await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada en Monedas y Tasas.` }
+    }
+
     const { error } = await db.from('empleados')
-      .update(campos)
+      .update({ ...campos, moneda })
       .eq('empleado_id', empleado_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }

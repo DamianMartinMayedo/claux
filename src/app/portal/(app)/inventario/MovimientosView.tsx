@@ -43,7 +43,7 @@ function TipoIcon({ tipo, size = 15 }: { tipo: TipoMovimiento; size?: number }) 
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 // ── Modal: nuevo movimiento ───────────────────────────────────────────────────
@@ -233,10 +233,10 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
   function onSaved() { setModalOpen(false); startTransition(() => router.refresh()) }
 
   function signo(m: Movimiento): { txt: string; cls: string } {
-    const n = m.cantidad.toLocaleString('es-VE')
+    const n = m.cantidad.toLocaleString('es-ES')
     if (m.tipo === 'ENTRADA')       return { txt: `+${n}`, cls: 'mov-cant-pos' }
     if (m.tipo === 'SALIDA')        return { txt: `−${n}`, cls: 'mov-cant-neg' }
-    if (m.tipo === 'AJUSTE')        return { txt: m.cantidad >= 0 ? `+${n}` : `−${Math.abs(m.cantidad).toLocaleString('es-VE')}`, cls: m.cantidad >= 0 ? 'mov-cant-pos' : 'mov-cant-neg' }
+    if (m.tipo === 'AJUSTE')        return { txt: m.cantidad >= 0 ? `+${n}` : `−${Math.abs(m.cantidad).toLocaleString('es-ES')}`, cls: m.cantidad >= 0 ? 'mov-cant-pos' : 'mov-cant-neg' }
     return { txt: n, cls: 'mov-cant-neutral' }
   }
 

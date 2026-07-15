@@ -87,7 +87,7 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
     if (!almacenId)      return toastError('Selecciona un almacén.')
     if (!numOk)           return toastError('Ingresa una cantidad válida.')
     if (delta === 0)      return toastError(modo === 'fijar' ? 'El stock no ha cambiado.' : 'La cantidad debe ser mayor que cero.')
-    if (negativo)         return toastError(`No puedes quitar más de lo disponible (${stockActual.toLocaleString('es-VE')} ${unidad}).`)
+    if (negativo)         return toastError(`No puedes quitar más de lo disponible (${stockActual.toLocaleString('es-ES')} ${unidad}).`)
     if (!motivo.trim())   return toastError('El motivo del ajuste es obligatorio.')
     startTransition(async () => {
       const res = await ajustarStock(producto_id, almacenId, delta, motivo.trim())
@@ -125,14 +125,14 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
                     onChange={e => handleAlmacenChange(e.target.value)}>
                     {almacenes.map(a => {
                       const stk = stockMap[a.almacen_id] ?? 0
-                      return <option key={a.almacen_id} value={a.almacen_id}>{a.nombre} · {stk.toLocaleString('es-VE')} {unidad}</option>
+                      return <option key={a.almacen_id} value={a.almacen_id}>{a.nombre} · {stk.toLocaleString('es-ES')} {unidad}</option>
                     })}
                   </select>
                 </div>
 
                 <div className="prd-stock-actual-row">
                   <span>Stock antes del ajuste</span>
-                  <strong>{stockActual.toLocaleString('es-VE')} {unidad}</strong>
+                  <strong>{stockActual.toLocaleString('es-ES')} {unidad}</strong>
                 </div>
 
                 <div className="prd-modo-seg" role="group" aria-label="Modo de ajuste">
@@ -152,12 +152,12 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
                     value={cantidad} onChange={e => setCantidad(e.target.value)} autoFocus />
                   {numOk && delta !== 0 && !negativo && (
                     <span className="input-hint prd-stock-preview">
-                      Quedará: <strong>{resultante.toLocaleString('es-VE')} {unidad}</strong>
+                      Quedará: <strong>{resultante.toLocaleString('es-ES')} {unidad}</strong>
                     </span>
                   )}
                   {negativo && (
                     <span className="input-hint prd-stock-warn">
-                      <AlertTriangle size={13} strokeWidth={2} /> No puedes quitar más de lo disponible ({stockActual.toLocaleString('es-VE')} {unidad})
+                      <AlertTriangle size={13} strokeWidth={2} /> No puedes quitar más de lo disponible ({stockActual.toLocaleString('es-ES')} {unidad})
                     </span>
                   )}
                 </div>

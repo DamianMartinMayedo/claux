@@ -498,9 +498,15 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       {copiar && (
         <CopiarAEmpresaModal
           titulo="Copiar a otra empresa"
-          descripcion="Se creará un empleado independiente en esa empresa con los mismos datos. Revisa su salario y moneda después (cada empresa tiene su propio contrato)."
-          empresas={data.empresas.filter(x => x.empresa_id !== empleado.empresa_id).map(x => ({ empresa_id: x.empresa_id, nombre: x.nombre }))}
-          onCopiar={(empresaId) => copiarEmpleadoAEmpresa(empleado.empleado_id, empresaId)}
+          descripcion="Se creará un empleado independiente en esa empresa, con su propio contrato."
+          empresas={data.empresas.filter(x => x.empresa_id !== empleado.empresa_id)}
+          monedas={data.monedas}
+          monedaOrigen={empleado.moneda}
+          empresaOrigen={data.empresa_nombres[empleado.empresa_id] ?? 'su empresa actual'}
+          importe={{ label: 'Salario base', valor: empleado.salario_base, seConvierte: false }}
+          tasas={data.tasas}
+          onCopiar={(empresaId, moneda, salario) =>
+            copiarEmpleadoAEmpresa(empleado.empleado_id, empresaId, moneda, salario)}
           onClose={() => setCopiar(false)}
           onCopiado={() => setCopiar(false)}
         />

@@ -15,10 +15,11 @@ import {
   type Periodicidad,
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
-import { Copy, Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
+import { Copy, Eye, Info, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
+import { opcionesCon }                 from '@/components/portal/form-helpers'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -63,6 +64,50 @@ export function EmpleadoModal({
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!empleado
+
+  // La moneda es editable también al editar: hay que poder corregir la de un
+  // empleado copiado a una empresa que opera en otra moneda.
+  const [moneda,  setMoneda]  = useState(empleado?.moneda ?? '')
+  // El salario se guarda como texto para no pelear con el input: un estado
+  // numérico impide teclear "0" o dejarlo vacío mientras se escribe.
+  const [salario, setSalario] = useState(empleado?.salario_base?.toString() ?? '')
+
+  const monedaOrigen  = empleado?.moneda ?? ''
+  const salarioOrigen = empleado?.salario_base ?? 0
+  const cambiaMoneda  = isEdit && !!moneda && moneda !== monedaOrigen
+  const factor        = cambiaMoneda ? data.tasas[`${monedaOrigen}__${moneda}`] : undefined
+
+  // Cambiar la moneda vacía el salario: en otra moneda es otro salario y lo pone
+  // el dueño — un trabajador que cobra 65.000 CUP en una empresa puede cobrar
+  // 300 USD de extra en otra, no los 98 que daría la tasa. La conversión se
+  // ofrece como atajo (aplicarTasa), no se impone: un importe inventado pero
+  // plausible se guarda sin mirar, y un campo vacío se ve. Volver a la moneda
+  // original restaura su salario tal cual.
+  function handleMoneda(nueva: string) {
+    setMoneda(nueva)
+    if (!isEdit) return
+    setSalario(nueva === monedaOrigen ? salarioOrigen.toString() : '')
+  }
+  function aplicarTasa() {
+    if (factor) setSalario((salarioOrigen * factor).toFixed(2))
+  }
+
+  // Empresa del empleado (o la única, al crear): su moneda funcional es la
+  // referencia para detectar una ficha que quedó en la moneda de otra empresa.
+  const empresa       = data.empresas.find(e => e.empresa_id === (empleado?.empresa_id ?? data.empresas[0]?.empresa_id))
+  const monedaEmpresa = empresa?.moneda_funcional ?? null
+  const nombreEmpresa = empresa?.nombre ?? 'Esta empresa'
+
+  // La moneda que ya tiene el empleado se ofrece aunque esté desactivada: si no,
+  // desactivar una moneda dejaría sus fichas sin poder guardarse.
+  const opcionesMoneda = opcionesCon(data.monedas.map(m => m.codigo), empleado?.moneda)
+
+  // Nóminas donde ya aparece: conservan su moneda pase lo que pase (cada nómina
+  // guarda la suya y sus líneas son un snapshot), pero conviene avisar.
+  const nominasEmpleado = empleado
+    ? data.nominas.filter(n => n.lineas.some(l => l.empleado_id === empleado.empleado_id))
+    : []
+  const nominasBorrador = nominasEmpleado.filter(n => n.estado === 'BORRADOR').length
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -152,29 +197,58 @@ export function EmpleadoModal({
                   defaultValue={empleado?.fecha_alta?.split('T')[0] ?? hoyISO()} />
               </div>
               <div className="input-group ter-col-span-2">
-                <label>Salario base</label>
-                <input className="input" name="salario_base" type="number" min="0" step="0.01"
-                  defaultValue={empleado?.salario_base ?? ''} placeholder="0.00" />
+                <label htmlFor="emp-salario">Salario base</label>
+                <input className="input" id="emp-salario" name="salario_base" type="number" min="0" step="0.01"
+                  value={salario} onChange={e => setSalario(e.target.value)}
+                  placeholder="0.00" />
               </div>
               <div className="input-group ter-col-span-2">
-                <label>Moneda <span className="required">*</span></label>
-                {isEdit ? (
-                  <>
-                    <input className="input input-static" readOnly value={empleado!.moneda} />
-                    <span className="input-hint">La moneda no se cambia tras crear.</span>
-                  </>
-                ) : data.monedas.length === 0 ? (
+                <label htmlFor="emp-moneda">Moneda <span className="required">*</span></label>
+                {opcionesMoneda.length === 0 ? (
                   <>
                     <input className="input input-static" readOnly value="Sin monedas activas" />
                     <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
                   </>
                 ) : (
-                  <select className="input" name="moneda" defaultValue="" required>
-                    <option value="" disabled>Selecciona…</option>
-                    {data.monedas.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <>
+                    <select className="input" id="emp-moneda" name="moneda" required
+                      value={moneda} onChange={e => handleMoneda(e.target.value)}>
+                      <option value="" disabled>Selecciona…</option>
+                      {opcionesMoneda.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <span className="input-hint">
+                      {monedaEmpresa && monedaEmpresa !== moneda
+                        ? `${nombreEmpresa} opera en ${monedaEmpresa}.`
+                        : 'En la que cobra esta persona.'}
+                    </span>
+                  </>
                 )}
               </div>
+
+              {cambiaMoneda && (
+                <div className="rrhh-moneda-cambio">
+                  {salarioOrigen > 0 && (
+                    <div className="rrhh-moneda-nota">
+                      <Info size={14} strokeWidth={2} />
+                      <span>
+                        Antes cobraba {formatMonto(salarioOrigen)} {monedaOrigen}. Escribe su salario en {moneda}
+                        {factor && <> o <button type="button" className="aplicar-tasa-btn" onClick={aplicarTasa}>
+                          usa la tasa ({formatMonto(salarioOrigen * factor)} {moneda})</button></>}.
+                      </span>
+                    </div>
+                  )}
+                  {nominasEmpleado.length > 0 && (
+                    <div className="rrhh-moneda-nota">
+                      <Info size={14} strokeWidth={2} />
+                      <span>
+                        Aparece en {nominasEmpleado.length} nómina{nominasEmpleado.length !== 1 ? 's' : ''} en {monedaOrigen}:
+                        se conservan tal cual y las nuevas se harán en {moneda}.
+                        {nominasBorrador > 0 && ` Revisa ${nominasBorrador === 1 ? 'la que está en borrador' : `las ${nominasBorrador} en borrador`}.`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="input-group ter-col-full">
                 <label>Dirección</label>
@@ -492,9 +566,15 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
       {copiarEmpleado && (
         <CopiarAEmpresaModal
           titulo="Copiar a otra empresa"
-          descripcion="Se creará un empleado independiente en esa empresa con los mismos datos. Revisa su salario y moneda después (cada empresa tiene su propio contrato)."
-          empresas={data.empresas.filter(x => x.empresa_id !== copiarEmpleado.empresa_id).map(x => ({ empresa_id: x.empresa_id, nombre: x.nombre }))}
-          onCopiar={(empresaId) => copiarEmpleadoAEmpresa(copiarEmpleado.empleado_id, empresaId)}
+          descripcion="Se creará un empleado independiente en esa empresa, con su propio contrato."
+          empresas={data.empresas.filter(x => x.empresa_id !== copiarEmpleado.empresa_id)}
+          monedas={data.monedas}
+          monedaOrigen={copiarEmpleado.moneda}
+          empresaOrigen={data.empresa_nombres[copiarEmpleado.empresa_id] ?? 'su empresa actual'}
+          importe={{ label: 'Salario base', valor: copiarEmpleado.salario_base, seConvierte: false }}
+          tasas={data.tasas}
+          onCopiar={(empresaId, moneda, salario) =>
+            copiarEmpleadoAEmpresa(copiarEmpleado.empleado_id, empresaId, moneda, salario)}
           onClose={() => setCopiarEmpleado(null)}
           onCopiado={() => { setCopiarEmpleado(null); router.refresh() }}
         />

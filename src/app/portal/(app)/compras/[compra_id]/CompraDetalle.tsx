@@ -13,12 +13,12 @@ import { CompraFormModal } from '../_CompraFormModal'
 import { RowActions } from '@/components/portal/RowActions'
 
 function fmt(n: number, moneda: string) {
-  return new Intl.NumberFormat('es-VE', {
+  return new Intl.NumberFormat('es-ES', {
     style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
@@ -201,7 +201,7 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
                     <strong>{l.descripcion}</strong>
                     {!l.producto_id && <span className="text-xs-muted"> (texto libre — no afecta stock)</span>}
                   </td>
-                  <td data-label="Cantidad" className="col-num">{l.cantidad.toLocaleString('es-VE')}</td>
+                  <td data-label="Cantidad" className="col-num">{l.cantidad.toLocaleString('es-ES')}</td>
                   <td data-label="Costo unit." className="col-num">{fmt(l.costo_unitario, compra.moneda)}</td>
                   <td data-label="Total" className="col-num">{fmt(l.total, compra.moneda)}</td>
                 </tr>

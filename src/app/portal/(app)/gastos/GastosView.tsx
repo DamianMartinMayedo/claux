@@ -132,6 +132,7 @@ function RegistroModal({
                     <span className="input-hint">No tienes {tipo === 'GASTO' ? 'proveedores' : 'clientes'} todavía.</span>
                     <CrearTerceroInline
                       empresas={data.empresas}
+                      monedas={data.monedas}
                       defaultTipo={tipo === 'GASTO' ? 'PROVEEDOR' : 'CLIENTE'}
                       label={tipo === 'GASTO' ? 'Crear proveedor' : 'Crear cliente'}
                     />

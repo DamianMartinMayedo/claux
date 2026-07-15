@@ -1085,15 +1085,17 @@
 .ter-badge-proveedor { background: #fdf4ff; color: #7e22ce; }
 .ter-badge-ambos     { background: #f0fdf4; color: #15803d; }
 
-/* Vía pago badges */
+/* Vía pago badges — un color por tipo de vía; la moneda va como sufijo, ya que
+   ya no forma parte del tipo (una misma vía sirve en CUP, USD o la que sea). */
 .via-badge         { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-full); font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; font-family: monospace; }
-.via-badge-ves     { background: #f0fdf4; color: #166534; }
-.via-badge-usd     { background: #eff6ff; color: #1e40af; }
-.via-badge-intl    { background: #fdf4ff; color: #6b21a8; }
-.via-badge-pm      { background: #fff7ed; color: #9a3412; }
-.via-badge-zelle   { background: #f5f3ff; color: #5b21b6; }
-.via-badge-tropipay{ background: #f0fdfa; color: #115e59; }
-.via-badge-ef      { background: var(--color-surface-2); color: var(--color-text-muted); }
+.via-badge-tb      { background: var(--color-info-bg);    color: var(--color-info);    }
+.via-badge-tmovil  { background: var(--color-success-bg); color: var(--color-success); }
+.via-badge-enzona  { background: var(--color-indigo-bg);  color: var(--color-indigo);  }
+.via-badge-zelle   { background: var(--color-purple-bg);  color: var(--color-purple);  }
+.via-badge-tropipay{ background: var(--color-rose-bg);    color: var(--color-rose);    }
+.via-badge-intl    { background: var(--color-warning-bg); color: var(--color-warning); }
+.via-badge-ef      { background: var(--color-surface-2);  color: var(--color-text-muted); }
+.via-badge-moneda  { margin-left: var(--space-1); padding-left: var(--space-1); border-left: 1px solid currentColor; opacity: .7; }
 
 /* Acciones en fila */
 .ter-actions    { display: flex; align-items: center; gap: var(--space-1); justify-content: flex-end; }
@@ -2823,3 +2825,21 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   .dos-grid-neto { display: flex; justify-content: space-between; padding-top: var(--space-2); margin-top: var(--space-2); border-top: 1px solid var(--color-divider); font-weight: 700; }
   .dos-grid-neto::before { content: attr(data-label); font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 600; }
 }
+
+/* ── Cambio de moneda de una ficha (avisos en los modales de RRHH/terceros) ── */
+.rrhh-moneda-cambio {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); background: var(--color-surface-2);
+}
+.rrhh-moneda-nota   { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
+.rrhh-moneda-nota svg { flex-shrink: 0; margin-top: 1px; }
+.rrhh-moneda-nota-warn { color: var(--color-warning); }
+/* Atajo para rellenar un importe con la tasa: se ofrece, no se impone. */
+.aplicar-tasa-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--color-primary-text); font-weight: 600; font-size: inherit;
+  font-family: inherit; text-align: left;
+}
+.aplicar-tasa-btn:hover { text-decoration: underline; }

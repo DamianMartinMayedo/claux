@@ -206,6 +206,7 @@ export default function NuevaOfertaPage({ resumen, empresasFull }: Props) {
                   <span className="input-hint">Esta empresa no tiene clientes.</span>
                   <CrearTerceroInline
                     empresas={resumen.empresas.filter(e => e.empresa_id === empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
+                    monedas={resumen.monedas}
                     defaultTipo="CLIENTE"
                     label="Crear cliente"
                     onCreated={(id) => { if (id) onClienteChange(id) }}

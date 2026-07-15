@@ -9,10 +9,9 @@ import {
   restaurarTercero,
   type Tercero,
   type TipoTercero,
-  type ViaPago,
   type TercerosPageData,
 } from '@/app/actions/portal/terceros'
-import { TerceroFormModal, VIA_BADGE } from './_TerceroFormModal'
+import { TerceroFormModal, ViaBadge }  from './_TerceroFormModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
@@ -38,19 +37,6 @@ const TIPO_CLS: Record<TipoTercero, string> = {
 const CONDICION_LABEL: Record<string, string> = {
   CONTADO: 'Contado',
   '15': '15 días', '30': '30 días', '60': '60 días', '90': '90 días',
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function ViaBadge({ via }: { via: ViaPago | null }) {
-  if (!via?.tipo) return <span className="text-muted">—</span>
-  const info = VIA_BADGE[via.tipo]
-  if (!info) return <span className="via-badge">{via.tipo}</span>
-  return (
-    <span className={`via-badge ${info.cls}`} title={via.tipo}>
-      {info.label}
-    </span>
-  )
 }
 
 // ── Confirmación archivar ─────────────────────────────────────────────────────
@@ -106,13 +92,10 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [verArchivados, setVerArchivados] = useState(false)
 
-  const empresasLista = useMemo(() => {
-    const seen = new Set<string>()
-    return Object.entries(data.empresa_nombres)
-      .filter(([id]) => { if (seen.has(id)) return false; seen.add(id); return true })
-      .map(([empresa_id, nombre]) => ({ empresa_id, nombre, color: colorOf(empresa_id) }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre))
-  }, [data.empresa_nombres, colorOf])
+  const empresasLista = useMemo(
+    () => data.empresas.map(e => ({ ...e, color: colorOf(e.empresa_id) })),
+    [data.empresas, colorOf],
+  )
 
   const multiempresa = empresasLista.length > 1
 
@@ -125,7 +108,9 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
       if (q) {
         const hay = [
           t.nombre, t.identificacion, t.representante, t.telefono, t.email, t.ciudad,
-          t.via_primaria?.tipo, t.via_secundaria?.tipo,
+          t.moneda_defecto,
+          t.via_primaria?.tipo,   t.via_primaria?.moneda,
+          t.via_secundaria?.tipo, t.via_secundaria?.moneda,
         ].filter(Boolean).join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
@@ -182,7 +167,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <input
             type="search"
             className="ter-search"
-            placeholder="Buscar por nombre, RIF, email, vía de pago…"
+            placeholder="Buscar por nombre, NIT, email, moneda, vía de pago…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -302,8 +287,12 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     {/* Vías de pago */}
                     <td data-label="Vías de pago">
                       <div className="ter-via-stack">
-                        <ViaBadge via={t.via_primaria} />
-                        {t.via_secundaria?.tipo && <ViaBadge via={t.via_secundaria} />}
+                        {t.via_primaria?.tipo || t.via_secundaria?.tipo
+                          ? <>
+                              <ViaBadge via={t.via_primaria} />
+                              <ViaBadge via={t.via_secundaria} />
+                            </>
+                          : <span className="text-muted">—</span>}
                       </div>
                     </td>
 
@@ -363,6 +352,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
         <TerceroFormModal
           tercero={editTercero}
           empresas={empresasLista}
+          monedas={data.monedas}
           onClose={closeModal}
           onSaved={onSaved}
         />
@@ -378,9 +368,17 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
       {copiarTercero && (
         <CopiarAEmpresaModal
           titulo="Copiar a otra empresa"
-          descripcion="Se creará una ficha independiente en esa empresa con los mismos datos (su propia moneda y saldos). Podrás ajustarla después."
-          empresas={empresasLista.filter(e => e.empresa_id !== copiarTercero.empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
-          onCopiar={(empresaId) => copiarTerceroAEmpresa(copiarTercero.tercero_id, empresaId)}
+          descripcion="Se creará una ficha independiente en esa empresa, con sus propios saldos."
+          empresas={empresasLista.filter(e => e.empresa_id !== copiarTercero.empresa_id)}
+          monedas={data.monedas}
+          monedaOrigen={copiarTercero.moneda_defecto}
+          empresaOrigen={data.empresa_nombres[copiarTercero.empresa_id] ?? 'su empresa actual'}
+          importe={copiarTercero.limite_credito
+            ? { label: 'Límite de crédito', valor: copiarTercero.limite_credito, seConvierte: true }
+            : undefined}
+          tasas={data.tasas}
+          onCopiar={(empresaId, moneda, limite) =>
+            copiarTerceroAEmpresa(copiarTercero.tercero_id, empresaId, moneda, limite)}
           onClose={() => setCopiarTercero(null)}
           onCopiado={() => { setCopiarTercero(null); router.refresh() }}
         />

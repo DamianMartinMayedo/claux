@@ -11,7 +11,7 @@ import {
   type TipoTercero,
   type ViaPago,
 } from '@/app/actions/portal/terceros'
-import { TerceroFormModal } from '../_TerceroFormModal'
+import { TerceroFormModal, ViaBadge } from '../_TerceroFormModal'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { RowActions } from '@/components/portal/RowActions'
 import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
@@ -29,17 +29,6 @@ const CONDICION_LABEL: Record<string, string> = {
   '15': '15 días', '30': '30 días', '60': '60 días', '90': '90 días',
 }
 
-const VIA_BADGE: Record<string, { label: string; cls: string }> = {
-  'Transferencia (VES)':         { label: 'TB-VES',  cls: 'via-badge-ves'      },
-  'Transferencia (USD)':         { label: 'TB-USD',  cls: 'via-badge-usd'      },
-  'Transferencia Internacional': { label: 'TBI',     cls: 'via-badge-intl'     },
-  'Pago Móvil':                  { label: 'PM',      cls: 'via-badge-pm'       },
-  'Zelle':                       { label: 'ZELLE',   cls: 'via-badge-zelle'    },
-  'TropiPay':                    { label: 'TPPAY',   cls: 'via-badge-tropipay' },
-  'Efectivo (VES)':              { label: 'EF-VES',  cls: 'via-badge-ef'       },
-  'Efectivo (USD)':              { label: 'EF-USD',  cls: 'via-badge-ef'       },
-}
-
 const TIPO_BADGE: Record<TipoTercero, string> = {
   CLIENTE:   'badge-info',
   PROVEEDOR: 'badge-success',
@@ -50,7 +39,7 @@ const TIPO_BADGE: Record<TipoTercero, string> = {
 
 function fmtDate(iso: string | null) {
   if (!iso) return null
-  return new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function Campo({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -80,21 +69,9 @@ function Tab({ active, onClick, label, badge }: {
   )
 }
 
-// ── Pill de vía de pago ───────────────────────────────────────────────────────
-
-function ViaPill({ via }: { via: ViaPago | null }) {
-  if (!via?.tipo) return <span className="text-faint">—</span>
-  const info = VIA_BADGE[via.tipo]
-  if (!info) return <span className="text-xs-muted">{via.tipo}</span>
-  return (
-    <span className={`via-badge ${info.cls}`} title={via.tipo}>
-      {info.label}
-    </span>
-  )
-}
-
 // ── Detalle de vía de pago ────────────────────────────────────────────────────
 
+// La moneda no se lista: ya va en el badge de la cabecera.
 function ViaDetalle({ via, title }: { via: ViaPago | null; title: string }) {
   if (!via?.tipo) return null
   const fields: [string, string | undefined][] = [
@@ -102,10 +79,8 @@ function ViaDetalle({ via, title }: { via: ViaPago | null; title: string }) {
     ['Cuenta',        via.cuenta],
     ['Banco',         via.banco],
     ['Tipo cuenta',   via.tipo_cuenta],
-    ['Moneda',        via.moneda],
     ['SWIFT',         via.swift],
     ['Routing',       via.routing],
-    ['Cédula',        via.cedula],
     ['Nombre',        via.nombre],
     ['Contacto',      via.contacto],
     ['Email link',    via.email_link],
@@ -118,7 +93,7 @@ function ViaDetalle({ via, title }: { via: ViaPago | null; title: string }) {
     <div className="det-via-box">
       <div className="det-via-header">
         <span className="det-via-title">{title}</span>
-        <ViaPill via={via} />
+        <ViaBadge via={via} />
       </div>
       <div className="det-field-grid-sm">
         {fields.map(([label, value]) => (
@@ -188,7 +163,7 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
           <Campo label="Condición de pago" value={CONDICION_LABEL[tercero.condicion_pago] ?? tercero.condicion_pago} />
           <Campo label="Límite de crédito" value={
             tercero.limite_credito !== null
-              ? `${tercero.moneda_defecto ?? ''} ${tercero.limite_credito.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`.trim()
+              ? `${tercero.limite_credito.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${tercero.moneda_defecto ?? ''}`.trim()
               : null
           } />
           <Campo label="Moneda predeterminada" value={tercero.moneda_defecto} />
@@ -351,7 +326,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
             </span>
           </div>
           <div className="det-meta-row">
-            {tercero.identificacion && <span>RIF/CI: <strong>{tercero.identificacion}</strong></span>}
+            {tercero.identificacion && <span>NIT/CI: <strong>{tercero.identificacion}</strong></span>}
             {tercero.telefono       && <span className="det-meta-inline"><Phone size={11} strokeWidth={2} />{tercero.telefono}</span>}
             {tercero.email          && (
               <a href={`mailto:${tercero.email}`} className="det-meta-inline link-primary">
@@ -413,9 +388,17 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
       {copiar && (
         <CopiarAEmpresaModal
           titulo="Copiar a otra empresa"
-          descripcion="Se creará una ficha independiente en esa empresa con los mismos datos (su propia moneda y saldos). Podrás ajustarla después."
-          empresas={empresas.filter(e => e.empresa_id !== tercero.empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
-          onCopiar={(empresaId) => copiarTerceroAEmpresa(tercero.tercero_id, empresaId)}
+          descripcion="Se creará una ficha independiente en esa empresa, con sus propios saldos."
+          empresas={empresas.filter(e => e.empresa_id !== tercero.empresa_id)}
+          monedas={data.monedas}
+          monedaOrigen={tercero.moneda_defecto}
+          empresaOrigen={data.empresa_nombre}
+          importe={tercero.limite_credito
+            ? { label: 'Límite de crédito', valor: tercero.limite_credito, seConvierte: true }
+            : undefined}
+          tasas={data.tasas}
+          onCopiar={(empresaId, moneda, limite) =>
+            copiarTerceroAEmpresa(tercero.tercero_id, empresaId, moneda, limite)}
           onClose={() => setCopiar(false)}
           onCopiado={() => setCopiar(false)}
         />
@@ -426,6 +409,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
         <TerceroFormModal
           tercero={tercero}
           empresas={empresas}
+          monedas={data.monedas}
           onClose={() => setShowEdit(false)}
           onSaved={() => {
             setShowEdit(false)

@@ -28,6 +28,16 @@ export interface Par {
   fecha?:    string
 }
 
+/**
+ * Moneda tal como se ofrece en un selector del portal. El nombre es opcional:
+ * quien solo tiene los códigos a mano (los módulos que cargan `monedas` como
+ * string[]) puede pasar `{ codigo }` y el selector muestra solo el código.
+ */
+export interface MonedaOpcion {
+  codigo:  string
+  nombre?: string
+}
+
 // ── Constantes internas ───────────────────────────────────────────────────────
 
 // El Toque usa código propio para el Euro
@@ -71,6 +81,26 @@ export async function obtenerMonedas(): Promise<Moneda[]> {
     .order('es_consolidacion', { ascending: false })
     .order('codigo')
   return (data as Moneda[]) ?? []
+}
+
+// ── Monedas activas (para los selectores del portal) ──────────────────────────
+//
+// La ÚNICA fuente de monedas de cualquier selector: lo que el cliente tenga en
+// Monedas y Tasas. Nunca una lista fija en el código — una moneda que el cliente
+// no tiene no cotiza (no hay par ni tasa) y romperia conversiones y reportes.
+
+export async function obtenerMonedasActivas(): Promise<MonedaOpcion[]> {
+  const session = await getPortalSession()
+  if (!session) return []
+  const db = createAdminClient()
+  const { data } = await db
+    .from('monedas')
+    .select('codigo, nombre')
+    .eq('client_id', session.client_id)
+    .eq('activa', true)
+    .order('es_consolidacion', { ascending: false })
+    .order('codigo')
+  return (data ?? []) as MonedaOpcion[]
 }
 
 // ── Obtener pares con tasa vigente ────────────────────────────────────────────

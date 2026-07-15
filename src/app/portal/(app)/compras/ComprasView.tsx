@@ -13,12 +13,12 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import { RowActions }                   from '@/components/portal/RowActions'
 
 function fmt(n: number, moneda: string) {
-  return new Intl.NumberFormat('es-VE', {
+  return new Intl.NumberFormat('es-ES', {
     style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 const ESTADO_BADGE: Record<EstadoCompra, string> = {

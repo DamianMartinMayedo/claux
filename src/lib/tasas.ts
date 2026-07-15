@@ -1,4 +1,4 @@
-// ── Conversión de importes entre monedas del tenant (server-only) ──
+// ── Monedas del tenant: validación y conversión de importes (server-only) ──
 // Reutiliza el modelo de monedas del cliente: `monedas` (código + símbolo) y
 // `tasas_cambio` (tasa más reciente por par origen→destino). La lógica de factor
 // es la misma que la consolidación del dashboard (dashboard.ts): un par
@@ -26,6 +26,51 @@ export interface Conversor {
    * moneda de presentación como `origen` y la foránea como `destino`.
    */
   detalle(origen: string, destino: string): DetalleTasa | null
+}
+
+/**
+ * Factores de conversión entre las monedas indicadas, en forma serializable al
+ * cliente: "ORIGEN__DESTINO" → factor ("1 origen = factor destino"). Solo
+ * incluye los pares que tienen tasa. Un cliente tiene 2-4 monedas, así que son
+ * un puñado de entradas: mandarlas con la página sale más barato que una ida y
+ * vuelta al servidor cada vez que alguien toca un selector de moneda.
+ */
+export async function mapaTasas(
+  db: ReturnType<typeof createAdminClient>,
+  clientId: string,
+  codigos: string[],
+): Promise<Record<string, number>> {
+  const conversor = await construirConversor(db, clientId)
+  const mapa: Record<string, number> = {}
+  for (const origen of codigos) {
+    for (const destino of codigos) {
+      if (origen === destino) continue
+      const d = conversor.detalle(origen, destino)
+      if (d) mapa[`${origen}__${destino}`] = d.tasa
+    }
+  }
+  return mapa
+}
+
+/**
+ * ¿El cliente tiene esa moneda configurada y activa? Guardia de servidor para
+ * cualquier código de moneda que llegue de un formulario: los códigos se
+ * guardan como texto sin FK, así que aceptar uno que el cliente no tiene deja
+ * un importe que no cotiza (sin par ni tasa) y descuadra reportes y saldos.
+ */
+export async function monedaValida(
+  db: ReturnType<typeof createAdminClient>,
+  clientId: string,
+  codigo: string,
+): Promise<boolean> {
+  const { data } = await db
+    .from('monedas')
+    .select('moneda_id')
+    .eq('client_id', clientId)
+    .eq('codigo', codigo)
+    .eq('activa', true)
+    .maybeSingle()
+  return !!data
 }
 
 export async function construirConversor(

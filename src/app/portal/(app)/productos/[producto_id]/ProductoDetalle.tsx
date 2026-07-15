@@ -25,7 +25,7 @@ const MOV_TIPO_BADGE: Record<MovimientoProducto['tipo'], string> = {
   ENTRADA: 'badge-success', SALIDA: 'badge-warning', AJUSTE: 'badge-info', TRANSFERENCIA: 'badge-purple',
 }
 function signoMov(m: MovimientoProducto): { txt: string; cls: string } {
-  const n = Math.abs(m.cantidad).toLocaleString('es-VE')
+  const n = Math.abs(m.cantidad).toLocaleString('es-ES')
   if (m.tipo === 'ENTRADA') return { txt: `+${n}`, cls: 'mov-cant-pos' }
   if (m.tipo === 'SALIDA')  return { txt: `−${n}`, cls: 'mov-cant-neg' }
   if (m.tipo === 'AJUSTE')  return { txt: m.cantidad >= 0 ? `+${n}` : `−${n}`, cls: m.cantidad >= 0 ? 'mov-cant-pos' : 'mov-cant-neg' }
@@ -35,7 +35,7 @@ function signoMov(m: MovimientoProducto): { txt: string; cls: string } {
 // ── Helpers de formato ────────────────────────────────────────────────────────
 
 function fmt(n: number, moneda: string) {
-  return new Intl.NumberFormat('es-VE', {
+  return new Intl.NumberFormat('es-ES', {
     style:    'currency',
     currency: moneda,
     minimumFractionDigits: 2,
@@ -44,7 +44,7 @@ function fmt(n: number, moneda: string) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-VE', {
+  return new Date(iso).toLocaleDateString('es-ES', {
     day: '2-digit', month: 'short', year: 'numeric',
   })
 }
@@ -128,7 +128,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
             <div>
               <div className="det-label">Stock total</div>
               <div className={`det-stock-num${stockBajo ? ' det-stock-num-low' : ''}`}>
-                {producto.stock_actual.toLocaleString('es-VE')}
+                {producto.stock_actual.toLocaleString('es-ES')}
                 <span className="det-stock-unit">{producto.unidad}</span>
               </div>
               {stockBajo && (
@@ -137,7 +137,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
                 </div>
               )}
             </div>
-            <Campo label="Stock mínimo" value={`${producto.stock_minimo.toLocaleString('es-VE')} ${producto.unidad}`} />
+            <Campo label="Stock mínimo" value={`${producto.stock_minimo.toLocaleString('es-ES')} ${producto.unidad}`} />
           </div>
 
           {stock_por_almacen.length > 0 ? (
@@ -145,7 +145,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
               {stock_por_almacen.map(s => (
                 <div key={s.almacen_id} className="det-stock-alm-row">
                   <span>{s.nombre}</span>
-                  <strong>{s.cantidad.toLocaleString('es-VE')} {producto.unidad}</strong>
+                  <strong>{s.cantidad.toLocaleString('es-ES')} {producto.unidad}</strong>
                 </div>
               ))}
             </div>

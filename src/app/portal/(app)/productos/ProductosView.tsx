@@ -414,7 +414,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                             {p.tipo === 'PRODUCTO' ? (
                               <div className="prd-stock-cell">
                                 <span className={`prd-stock-value${stockBajo ? ' prd-stock-low' : ''}`}>
-                                  {p.stock_actual.toLocaleString('es-VE')}
+                                  {p.stock_actual.toLocaleString('es-ES')}
                                 </span>
                                 {stockBajo && (
                                   <span className="prd-stock-alert" title={`Mínimo: ${p.stock_minimo}`}>

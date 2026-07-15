@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/portal/compras'
 
 function fmt(n: number, moneda: string) {
-  return new Intl.NumberFormat('es-VE', {
+  return new Intl.NumberFormat('es-ES', {
     style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 }
