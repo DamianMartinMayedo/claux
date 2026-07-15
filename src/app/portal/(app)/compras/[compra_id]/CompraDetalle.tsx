@@ -10,6 +10,7 @@ import {
   type CompraDetalleData,
 } from '@/app/actions/portal/compras'
 import { CompraFormModal } from '../_CompraFormModal'
+import { RowActions } from '@/components/portal/RowActions'
 
 function fmt(n: number, moneda: string) {
   return new Intl.NumberFormat('es-VE', {
@@ -126,15 +127,19 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
               <button className="btn btn-primary" onClick={() => setShowConfirm(true)} disabled={isPending}>
                 <CheckCircle2 size={14} strokeWidth={2} /> Confirmar
               </button>
-              <button className="btn btn-danger-text" onClick={() => setShowDelete(true)} disabled={isPending}>
-                <Trash2 size={14} strokeWidth={2} /> Eliminar
-              </button>
+              <RowActions>
+                <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
+                  <Trash2 size={15} strokeWidth={2} /> Eliminar
+                </button>
+              </RowActions>
             </>
           )}
           {esConfirmada && (
-            <button className="btn btn-danger-text" onClick={() => setShowAnular(true)} disabled={isPending}>
-              <Ban size={14} strokeWidth={2} /> Anular
-            </button>
+            <RowActions>
+              <button className="row-actions-item row-actions-item-danger" onClick={() => setShowAnular(true)} disabled={isPending}>
+                <Ban size={15} strokeWidth={2} /> Anular
+              </button>
+            </RowActions>
           )}
         </div>
       </div>

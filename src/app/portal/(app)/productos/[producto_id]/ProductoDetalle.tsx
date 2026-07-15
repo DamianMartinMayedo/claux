@@ -13,6 +13,7 @@ import {
 import { ProductoFormModal } from '../_ProductoFormModal'
 import { StockAjusteModal } from '../_StockAjusteModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { RowActions } from '@/components/portal/RowActions'
 import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 
 // ── Config de movimientos ───────────────────────────────────────────────────────
@@ -463,14 +464,15 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
           <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
             <Pencil size={14} strokeWidth={2} /> Editar
           </button>
-          <button
-            onClick={toggleEstado}
-            disabled={pending}
-            className="btn btn-secondary"
-            style={{ color: producto.estado === 'ACTIVO' ? 'var(--color-error)' : 'var(--color-success)' }}
-          >
-            {producto.estado === 'ACTIVO' ? <><Archive size={14} strokeWidth={2} /> Archivar</> : <><RotateCcw size={14} strokeWidth={2} /> Restaurar</>}
-          </button>
+          <RowActions>
+            <button
+              className={`row-actions-item${producto.estado === 'ACTIVO' ? ' row-actions-item-danger' : ''}`}
+              onClick={toggleEstado}
+              disabled={pending}
+            >
+              {producto.estado === 'ACTIVO' ? <><Archive size={15} strokeWidth={2} /> Archivar</> : <><RotateCcw size={15} strokeWidth={2} /> Restaurar</>}
+            </button>
+          </RowActions>
         </div>
       </div>
 
