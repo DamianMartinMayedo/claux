@@ -157,6 +157,20 @@ export async function guardarEmpresa(
 
   if (!empresa_id_form) {
     // ── Crear ──────────────────────────────────────────────────────────────
+    // Invariante de moneda: no se crea una empresa sin monedas configuradas. Toda
+    // operación (ventas, gastos, compras, productos…) cuelga de la empresa y necesita
+    // una moneda válida del cliente; permitirlo antes dejaría documentos cayendo a un
+    // 'USD' hardcodeado que el cliente no tiene, descuadrando saldos y reportes. Solo
+    // aplica al crear: editar una empresa ya existente no debe bloquearse.
+    const { count: monedasCount } = await db
+      .from('monedas')
+      .select('codigo', { count: 'exact', head: true })
+      .eq('client_id', session.client_id)
+      .eq('activa', true)
+    if ((monedasCount ?? 0) === 0) {
+      return { ok: false, error: 'Crea al menos una moneda en «Monedas y tasas» antes de crear una empresa.' }
+    }
+
     // Límite por módulo: sin 'multiempresa' el cliente solo puede tener 1 empresa.
     const { data: cliente } = await db
       .from('clients')

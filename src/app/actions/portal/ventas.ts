@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { tieneModulo }       from '@/lib/modulos'
+import { monedaValida }      from '@/lib/tasas'
 import {
   calcularTotales,
   formatoNumero,
@@ -413,6 +414,9 @@ export async function guardarOferta(
 
   if (!oferta_id_form) {
     // ── Crear ──
+    if (!await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+    }
     const anio    = new Date(fecha_emision).getFullYear()
     let correlativo: number
     try {
@@ -449,13 +453,17 @@ export async function guardarOferta(
 
   // ── Editar ──
   const { data: actual } = await db
-    .from('ofertas').select('estado')
+    .from('ofertas').select('estado, moneda')
     .eq('oferta_id', oferta_id_form)
     .eq('client_id', session.client_id)
     .maybeSingle()
   if (!actual)                       return { ok: false, error: 'Oferta no encontrada.' }
   if (actual.estado !== 'BORRADOR' && actual.estado !== 'ENVIADA') {
     return { ok: false, error: `No se puede editar una oferta en estado ${actual.estado}.` }
+  }
+  // Solo si cambia la moneda: una heredada que se desactivó no debe bloquear la edición.
+  if (moneda !== actual.moneda && !await monedaValida(db, session.client_id, moneda)) {
+    return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
   }
 
   const { error } = await db.from('ofertas')
@@ -518,6 +526,9 @@ export async function guardarFactura(
 
   if (!factura_id_form) {
     // ── Crear ──
+    if (!await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+    }
     const anio    = new Date(fecha_emision).getFullYear()
     let correlativo: number
     try {
@@ -554,12 +565,16 @@ export async function guardarFactura(
 
   // ── Editar ──
   const { data: actual } = await db
-    .from('facturas').select('estado')
+    .from('facturas').select('estado, moneda')
     .eq('factura_id', factura_id_form)
     .eq('client_id', session.client_id)
     .maybeSingle()
   if (!actual)                       return { ok: false, error: 'Factura no encontrada.' }
   if (actual.estado !== 'BORRADOR')  return { ok: false, error: 'Solo se pueden editar facturas en BORRADOR.' }
+  // Solo si cambia la moneda: una heredada que se desactivó no debe bloquear la edición.
+  if (moneda !== actual.moneda && !await monedaValida(db, session.client_id, moneda)) {
+    return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+  }
 
   const { error } = await db.from('facturas')
     .update({

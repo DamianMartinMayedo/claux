@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { type CategoriaGasto } from './gastos'
+import { monedaValida }      from '@/lib/tasas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -193,6 +194,9 @@ export async function guardarCuenta(
 
   if (!cuenta_id) {
     // Crear
+    if (!await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+    }
     const { error } = await db.from('cuentas').insert({
       cuenta_id:  generarCuentaId(),
       client_id:  session.client_id,

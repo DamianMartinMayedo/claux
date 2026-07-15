@@ -5,6 +5,7 @@ import { useState, useTransition, useRef } from 'react'
 import Image from 'next/image'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
 // Debe coincidir con COLORES_EMPRESA en actions/portal/empresas.ts (fuente de verdad).
 const COLORES = [
@@ -385,9 +386,14 @@ function EmpresaModal({
 export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false, empresa: null })
   const limiteAlcanzado   = maxEmpresas !== null && init.length >= maxEmpresas
+  // Toda operación cuelga de una empresa y necesita una moneda del cliente; sin
+  // ninguna moneda, crear la empresa dejaría documentos cayendo a un 'USD' que el
+  // cliente no tiene. Se exige ≥1 moneda antes (mismo criterio que RRHH/tesorería).
+  const sinMonedas        = monedas.length === 0
+  const bloqueado         = limiteAlcanzado || sinMonedas
 
   function abrirCrear() {
-    if (limiteAlcanzado) return
+    if (bloqueado) return
     setModal({ open: true, empresa: null })
   }
 
@@ -424,14 +430,22 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
           <button
             className="btn btn-primary"
             onClick={abrirCrear}
-            disabled={limiteAlcanzado}
-            title={limiteAlcanzado ? `Límite de ${maxEmpresas} empresa${maxEmpresas === 1 ? '' : 's'} alcanzado` : undefined}
+            disabled={bloqueado}
+            title={sinMonedas
+              ? 'Crea una moneda en Monedas y Tasas primero.'
+              : limiteAlcanzado ? `Límite de ${maxEmpresas} empresa${maxEmpresas === 1 ? '' : 's'} alcanzado` : undefined}
           >
             <Plus size={16} />
             Nueva empresa
           </button>
         )}
       </div>
+
+      {sinMonedas && esAdmin && (
+        <PrerequisitoAviso acciones={[{ label: 'Crear moneda', href: '/portal/monedas' }]}>
+          Para crear una empresa necesitas <strong>al menos una moneda</strong> configurada.
+        </PrerequisitoAviso>
+      )}
 
       {limiteAlcanzado && esAdmin && (
         <div className="alert alert-warning mb-5">
@@ -444,7 +458,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
           <EmpresaCard key={emp.empresa_id} empresa={emp} onEditar={abrirEditar} />
         ))}
 
-        {esAdmin && !limiteAlcanzado && (
+        {esAdmin && !bloqueado && (
           <button className="emp-card-add" onClick={abrirCrear}>
             <Plus size={28} strokeWidth={1.5} />
             <span className="text-sm-bold">Nueva empresa</span>
@@ -455,7 +469,9 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
           <div className="emp-empty">
             <Briefcase size={48} strokeWidth={1} />
             <h3>Sin empresas configuradas</h3>
-            <p>Crea tu primera empresa para empezar a registrar operaciones.</p>
+            <p>{sinMonedas
+              ? 'Primero crea una moneda en Monedas y Tasas; después podrás crear tu empresa.'
+              : 'Crea tu primera empresa para empezar a registrar operaciones.'}</p>
           </div>
         )}
       </div>

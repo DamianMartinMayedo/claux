@@ -5,6 +5,7 @@ import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { monedaValida }      from '@/lib/tasas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -252,6 +253,9 @@ export async function guardarGastoCobro(
 
   if (!registro_id) {
     if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
+    if (!await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+    }
     const { error } = await db.from('gastos_cobros').insert({
       registro_id: generarRegistroId(tipo),
       client_id:   session.client_id,

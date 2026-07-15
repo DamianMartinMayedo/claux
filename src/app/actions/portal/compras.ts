@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { traducirErrorInventario } from './_inventario-helpers'
+import { monedaValida }      from '@/lib/tasas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -290,9 +291,13 @@ export async function guardarCompra(
   // ── Editar (solo BORRADOR) ──
   if (compra_id_form) {
     const { data: existente } = await db.from('compras')
-      .select('estado, empresa_id, numero').eq('compra_id', compra_id_form).eq('client_id', session.client_id).single()
+      .select('estado, empresa_id, numero, moneda').eq('compra_id', compra_id_form).eq('client_id', session.client_id).single()
     if (!existente)                      return { ok: false, error: 'Compra no encontrada.' }
     if (existente.estado !== 'BORRADOR') return { ok: false, error: 'Solo se pueden editar compras en borrador.' }
+    // Solo si cambia la moneda: una heredada que se desactivó no debe bloquear la edición.
+    if (moneda !== existente.moneda && !await monedaValida(db, session.client_id, moneda)) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+    }
 
     // #7: si cambia la empresa (por cambio de almacén), re-numerar para que el
     // correlativo COM-AAAA-#### siga siendo coherente por empresa.
@@ -328,6 +333,9 @@ export async function guardarCompra(
   }
 
   // ── Crear ──
+  if (!await monedaValida(db, session.client_id, moneda)) {
+    return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+  }
   const compra_id = generarCompraId()
   let numero: string
   try {
