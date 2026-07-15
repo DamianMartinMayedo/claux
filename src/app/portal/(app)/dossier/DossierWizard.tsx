@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight, PartyPopper } from 'lucide-react'
 import type { DossierData } from '@/app/actions/portal/dossier'
+import { pasosEditables, LABEL_PASO, type PasoEditable } from '@/lib/dossier/pasos'
 import PasoBasicos from './PasoBasicos'
 import PasoCostoVentas from './PasoCostoVentas'
 import PasoNumeros from './PasoNumeros'
@@ -24,26 +25,18 @@ import PasoMarca from './PasoMarca'
 // Guardado POR PASO: cada componente guarda lo suyo y al hacerlo avanza. Abandonar
 // a media pantalla deja un borrador válido, nunca basura.
 
-type Paso = 'basicos' | 'costos' | 'numeros' | 'crecimiento' | 'relato' | 'marca' | 'listo'
+// Los pasos editables (orden y etiquetas) los define lib/dossier/pasos.ts, que
+// comparte con «Mi dossier». El wizard solo añade su paso final propio, 'listo'.
+type Paso = PasoEditable | 'listo'
 
-const ETIQUETA: Record<Paso, string> = {
-  basicos: 'Lo básico',
-  costos: 'Coste de ventas',
-  numeros: 'Los números',
-  crecimiento: 'Crecimiento',
-  relato: 'El relato',
-  marca: 'La marca',
-  listo: 'Listo',
-}
+const ETIQUETA: Record<Paso, string> = { ...LABEL_PASO, listo: 'Listo' }
 
 // Los pasos que se pueden saltar sin escribir nada: el dossier sigue siendo válido
 // sin relato ni logo (quien solo quiere el PDF no debería recorrer siete pantallas).
 const OPCIONALES: Paso[] = ['costos', 'crecimiento', 'relato', 'marca']
 
 function pasosDe(tieneBase: boolean): Paso[] {
-  // Sin `base` el coste de ventas no se pregunta: es una columna más de la rejilla.
-  const costos: Paso[] = tieneBase ? ['costos'] : []
-  return ['basicos', ...costos, 'numeros', 'crecimiento', 'relato', 'marca', 'listo']
+  return [...pasosEditables(tieneBase), 'listo']
 }
 
 /**

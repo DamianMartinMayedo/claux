@@ -2659,8 +2659,35 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dos-listo-icono { color: var(--color-primary); margin-bottom: var(--space-3); }
 .dos-listo .dos-acciones { justify-content: center; }
 
-/* «Mi dossier»: los pasos sueltos, apilados */
-.dos-secciones { display: flex; flex-direction: column; gap: var(--space-5); }
+/* «Mi dossier»: navegación LIBRE entre secciones (no un scroll largo). Tira de
+   pasos (con marca de completado) + panel del paso activo. */
+.dos-secc-nav {
+  display: flex; gap: var(--space-2); margin-bottom: var(--space-5);
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; padding-bottom: var(--space-1);
+}
+.dos-secc-nav::-webkit-scrollbar { display: none; }
+.dos-secc-item {
+  display: inline-flex; align-items: center; gap: var(--space-2); flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border); border-radius: var(--radius-full);
+  background: var(--color-surface); color: var(--color-text-muted);
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600;
+  cursor: pointer; transition: all var(--transition); white-space: nowrap;
+}
+.dos-secc-item:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+.dos-secc-item.active { background: var(--color-primary-subtle); border-color: var(--color-primary); color: var(--color-primary-text); }
+.dos-secc-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: var(--radius-full);
+  background: var(--color-surface-offset); color: var(--color-text-muted);
+  font-size: var(--text-xs); font-weight: 700;
+}
+.dos-secc-item.done .dos-secc-num   { background: var(--color-success-bg); color: var(--color-success); }
+.dos-secc-item.active .dos-secc-num { background: var(--color-primary); color: var(--color-text-inv); }
+.dos-secc-panel { animation: dos-fade-in 280ms var(--ease); }
+@media (prefers-reduced-motion: reduce) { .dos-secc-panel { animation: none; } }
+
 .dos-fechas { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-3); }
 .dos-fechas-sep { color: var(--color-text-faint); }
 

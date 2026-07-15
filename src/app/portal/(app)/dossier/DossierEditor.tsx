@@ -4,12 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { DossierData } from '@/app/actions/portal/dossier'
 import DossierWizard from './DossierWizard'
-import PasoBasicos from './PasoBasicos'
-import PasoNumeros from './PasoNumeros'
-import PasoCostoVentas from './PasoCostoVentas'
-import PasoCrecimiento from './PasoCrecimiento'
-import PasoRelato from './PasoRelato'
-import PasoMarca from './PasoMarca'
+import DossierSecciones from './DossierSecciones'
 import PestanaEstado from './PestanaEstado'
 import PestanaPresentacion from './PestanaPresentacion'
 
@@ -61,31 +56,10 @@ export default function DossierEditor({ data }: { data: DossierData }) {
         <button className={`res-tab ${tab === 'estado' ? 'active' : ''}`} onClick={() => setTab('estado')}>Estado de resultados</button>
       </div>
 
-      {/* «Mi dossier»: los MISMOS componentes del wizard, abiertos sueltos como
-          secciones editables. Editar sin pasar por el wizard. */}
+      {/* «Mi dossier»: los MISMOS componentes del wizard, con navegación libre
+          entre secciones (no un scroll largo). Editar sin pasar por el wizard. */}
       {tab === 'dossier' && (
-        <div className="dos-secciones">
-          <PasoBasicos data={data} dossier={dossier} onListo={refrescar} />
-
-          {data.tieneBase && (
-            <PasoCostoVentas categorias={data.categoriasCosto} onGuardado={refrescar} />
-          )}
-
-          <PasoNumeros
-            key={dossier.snapshot_at ?? 'nuevo'}
-            dossier={dossier}
-            serie={data.serie}
-            tieneBase={data.tieneBase}
-            simbolo={simbolo}
-            onCambio={refrescar}
-          />
-
-          <PasoCrecimiento dossier={dossier} serie={data.serie} simbolo={simbolo} onGuardado={refrescar} />
-
-          <PasoRelato dossier={dossier} secciones={data.secciones} tieneRrhh={data.tieneRrhh} onGuardado={refrescar} />
-
-          <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl} onGuardado={refrescar} />
-        </div>
+        <DossierSecciones data={data} dossier={dossier} simbolo={simbolo} onRefrescar={refrescar} />
       )}
 
       {tab === 'presentacion' && (
