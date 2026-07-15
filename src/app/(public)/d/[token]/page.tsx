@@ -231,14 +231,18 @@ export default async function DeckPage({ params }: Props) {
     slides.push(relatoSlide(s.clave, s.etiqueta))
   }
 
-  // Pie técnico: la promesa del módulo (mismos números que el PDF, congelados).
+  // Cierre: gracias en grande, la fecha del snapshot pequeña debajo, y al pie
+  // "Hecho con CLAUX" (+ la nota de conversión si hubo monedas convertidas).
   slides.push({
-    id: 'datos', label: 'Datos',
+    id: 'gracias', label: 'Gracias',
     node: (
-      <div className="dp-pie">
-        <p className="dp-pie-dato">{congeladoA(deck.snapshotAt)} · Importes en {deck.moneda}.</p>
-        {nota && <p className="dp-pie-dato">{nota}</p>}
-        <p className="dp-pie-marca">Hecho con CLAUX</p>
+      <div className="dp-gracias">
+        <h2 className="dp-gracias-titulo">Muchas gracias</h2>
+        <p className="dp-gracias-fecha">{congeladoA(deck.snapshotAt)} · Importes en {deck.moneda}.</p>
+        <div className="dp-gracias-pie">
+          {nota && <p className="dp-pie-nota">{nota}</p>}
+          <p className="dp-pie-marca">Hecho con CLAUX</p>
+        </div>
       </div>
     ),
   })

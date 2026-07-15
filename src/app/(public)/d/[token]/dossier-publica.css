@@ -71,7 +71,9 @@
     radial-gradient(55% 55% at 85% 90%, var(--do-acento), transparent 70%);
   opacity: 0.55;
 }
-.dp-slide-inner { position: relative; z-index: 1; width: 100%; max-width: 60rem; margin: 0 auto; }
+/* Contenido centrado en el slide (en PC, si no, los sub-bloques con ancho propio
+   quedan pegados a la izquierda de la columna). Es una presentación, no un doc. */
+.dp-slide-inner { position: relative; z-index: 1; width: 100%; max-width: 60rem; margin: 0 auto; text-align: center; }
 
 /* ── Kicker (etiqueta) ── */
 .dp-kicker {
@@ -101,7 +103,7 @@
 
 /* ── Relato (texto de impacto) ── */
 .dp-relato-cuerpo {
-  margin: 1.25rem 0 0; font-size: clamp(1.3rem, 3.2vw, 2.2rem); font-weight: 500;
+  margin: 1.25rem auto 0; font-size: clamp(1.3rem, 3.2vw, 2.2rem); font-weight: 500;
   line-height: 1.4; letter-spacing: -0.01em; white-space: pre-wrap; max-width: 40rem;
 }
 .dp-relato-cierre .dp-relato-cuerpo { font-weight: 700; }
@@ -110,16 +112,18 @@
 .dp-bloque-titulo { margin: 0.75rem 0 2rem; font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
 
 /* ── KPIs (números grandes que cuentan) ── */
-.dp-kpis { margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: clamp(1.5rem, 4vw, 3rem); }
-.dp-kpi { display: flex; flex-direction: column; gap: 0.4rem; }
+/* Cuadrícula 2×2: en una sola fila los números grandes se amontonan y colisionan. */
+.dp-kpis { margin: 2.5rem auto 0; max-width: 46rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.75rem, 4vw, 2.75rem) clamp(1.5rem, 5vw, 3.5rem); }
+@media (max-width: 520px) { .dp-kpis { grid-template-columns: 1fr; } }
+.dp-kpi { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
 .dp-kpi-num {
-  font-size: clamp(2.2rem, 6.5vw, 4rem); font-weight: 800; line-height: 1; letter-spacing: -0.03em;
-  color: var(--acc); font-variant-numeric: tabular-nums;
+  font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 800; line-height: 1.02; letter-spacing: -0.03em;
+  color: var(--acc); font-variant-numeric: tabular-nums; overflow-wrap: break-word;
 }
 .dp-kpi-label { font-size: 0.9rem; font-weight: 600; opacity: 0.72; }
 
 /* ── Barras que se llenan ── */
-.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 42rem; }
+.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 42rem; margin: 0 auto; text-align: left; }
 .dp-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
 .dp-bar-label { font-size: 1rem; font-weight: 600; }
 .dp-bar-monto { font-size: 1rem; font-weight: 700; color: var(--acc); font-variant-numeric: tabular-nums; }
@@ -150,15 +154,18 @@
 .dp-linea { fill: none; stroke: var(--acc); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .dp-linea-proy { stroke: var(--acc); opacity: 0.7; stroke-dasharray: 7 6; }
 .dp-divisor { stroke: currentColor; opacity: 0.28; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
-.dp-leyenda { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 1rem; }
+.dp-leyenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.25rem; margin-top: 1rem; }
 .dp-leyenda-item { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; opacity: 0.75; }
 .dp-leyenda-marca { width: 18px; height: 3px; border-radius: 2px; background: var(--acc); flex-shrink: 0; }
 .dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--acc) 0 6px, transparent 6px 11px); }
 
-/* ── Pie técnico ── */
-.dp-pie { text-align: center; max-width: 44rem; }
-.dp-pie-dato { margin: 0 0 0.5rem; font-size: 0.86rem; opacity: 0.7; line-height: 1.55; }
-.dp-pie-marca { margin: 1.5rem 0 0; font-size: 0.74rem; opacity: 0.55; letter-spacing: 0.08em; text-transform: uppercase; }
+/* ── Cierre / gracias ── */
+.dp-gracias { position: relative; }
+.dp-gracias-titulo { margin: 0; font-size: clamp(2.6rem, 9vw, 5.5rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
+.dp-gracias-fecha { margin: 1.25rem 0 0; font-size: 0.95rem; opacity: 0.72; font-variant-numeric: tabular-nums; }
+.dp-gracias-pie { margin-top: clamp(2.5rem, 9vh, 5.5rem); }
+.dp-pie-nota { margin: 0 auto 0.6rem; max-width: 40rem; font-size: 0.76rem; opacity: 0.6; line-height: 1.5; }
+.dp-pie-marca { margin: 0; font-size: 0.74rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; }
 
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
 .dp-nav {
