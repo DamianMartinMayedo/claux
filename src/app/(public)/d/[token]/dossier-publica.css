@@ -173,13 +173,14 @@
 .dp-leyenda-marca { width: 18px; height: 3px; border-radius: 2px; background: var(--acc); flex-shrink: 0; }
 .dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--acc) 0 6px, transparent 6px 11px); }
 
-/* ── Cierre / gracias (centrado, como la portada) ── */
-.dp-gracias { position: relative; text-align: center; }
+/* ── Cierre / gracias ── El slide se llena entero: título + fecha centrados y
+   "Hecho con CLAUX" ANCLADO abajo (como el "Desliza" de la portada). */
+#gracias { align-items: stretch; }
+.dp-gracias { display: flex; flex-direction: column; height: 100%; text-align: center; }
+.dp-gracias-centro { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .dp-gracias-titulo { margin: 0; font-size: clamp(2.6rem, 9vw, 5.5rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
 .dp-gracias-fecha { margin: 1.25rem 0 0; font-size: 0.95rem; opacity: 0.72; font-variant-numeric: tabular-nums; }
-.dp-gracias-pie { margin-top: clamp(2.5rem, 9vh, 5.5rem); }
-.dp-pie-nota { margin: 0 auto 0.6rem; max-width: 40rem; font-size: 0.76rem; opacity: 0.6; line-height: 1.5; }
-.dp-pie-marca { margin: 0; font-size: 0.74rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; }
+.dp-pie-marca { margin: 0; padding-bottom: clamp(0.5rem, 3vh, 1.5rem); font-size: 0.74rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; }
 
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
 .dp-nav {
