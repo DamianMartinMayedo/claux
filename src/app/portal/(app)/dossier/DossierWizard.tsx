@@ -59,7 +59,13 @@ export default function DossierWizard({
   onCreado?: (dossierId: string) => void
 }) {
   const pasos = useMemo(() => pasosDe(data.tieneBase), [data.tieneBase])
-  const [paso, setPaso] = useState<Paso>(() => pasoInicial(data, pasos))
+
+  // Prerrequisitos del paso 1: sin empresa o sin moneda no hay dossier posible, así
+  // que el wizard se queda clavado en «Lo básico» (que muestra el banner con el
+  // atajo) y no deja saltar a otros pasos. Un dossier heredado de antes de este gate
+  // puede existir sin setup: por eso NO basta con `!data.dossier` para bloquear.
+  const faltaSetup = data.empresas.length === 0 || data.monedas.length === 0
+  const [paso, setPaso] = useState<Paso>(() => faltaSetup ? 'basicos' : pasoInicial(data, pasos))
 
   const idx = Math.max(0, pasos.indexOf(paso))
   const pct = Math.round((idx / (pasos.length - 1)) * 100)
@@ -122,7 +128,7 @@ export default function DossierWizard({
               key={p} type="button"
               className={`dos-progress-step${i === idx ? ' active' : ''}${i < idx ? ' done' : ''}`}
               onClick={() => setPaso(p)}
-              disabled={!data.dossier}
+              disabled={!data.dossier || faltaSetup}
               aria-current={i === idx ? 'step' : undefined}
             >
               {ETIQUETA[p]}
