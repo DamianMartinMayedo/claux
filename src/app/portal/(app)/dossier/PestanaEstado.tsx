@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Download, Loader2, BarChart3, AlertTriangle } from 'lucide-react'
+import { Download, Loader2, BarChart3 } from 'lucide-react'
 import { toastError } from '@/app/contexts/ToastContext'
 import { estadoDeResultados, notaConversion, congeladoA } from '@/lib/dossier/estado'
 import { etiquetaMes, type FilaSerie } from '@/lib/dossier/snapshot'
 import type { DossierBasico } from '@/app/actions/portal/dossier'
 import type { LineaDesglose } from '@/lib/dossier/base'
+import DossierDesfase from './DossierDesfase'
 
 // El estado de resultados en pantalla ANTES de descargarlo: en Cuba bajar un PDF
 // solo para revisarlo cuesta datos (y es lo que ya hace ReportesView). El PDF se
@@ -23,13 +24,15 @@ function slug(s: string): string {
 }
 
 export default function PestanaEstado({
-  dossier, serie, lineas, empresaNombre, simbolo,
+  dossier, serie, lineas, empresaNombre, simbolo, tieneBase, onRefrescar,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
   lineas: LineaDesglose[]
   empresaNombre: string
   simbolo: string
+  tieneBase: boolean
+  onRefrescar?: () => void
 }) {
   const er = useMemo(() => estadoDeResultados(serie, lineas), [serie, lineas])
   const nota = useMemo(
@@ -82,13 +85,17 @@ export default function PestanaEstado({
     <section className="card dos-er-card">
       <div className="dos-body">
         {dossier.snapshot_stale && (
-          <div className="dos-desfase" role="alert">
-            <AlertTriangle size={16} strokeWidth={2} />
-            <div className="dos-desfase-texto">
-              <strong>Datos desfasados.</strong> Cambiaste la moneda, la empresa o el período: este estado
-              (y el PDF que descargues) aún corresponde al snapshot anterior. Sincronízalo en «Mi dossier» → «Los números».
-            </div>
-          </div>
+          <DossierDesfase
+            dossierId={dossier.dossier_id}
+            tieneBase={tieneBase}
+            onActualizado={onRefrescar}
+            mensaje={
+              <>
+                <strong>Datos desfasados.</strong> Cambiaste la moneda, la empresa o el período: este estado
+                (y el PDF que descargues) aún corresponde al snapshot anterior.
+              </>
+            }
+          />
         )}
 
         <div className="dos-er-head">

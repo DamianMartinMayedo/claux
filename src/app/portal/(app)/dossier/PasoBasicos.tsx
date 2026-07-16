@@ -13,19 +13,25 @@ import { crearDossier, guardarBasicos, type DossierData, type DossierBasico } fr
 // Empresa solo si tiene multiempresa Y más de una; moneda solo si tiene más de
 // una activa. La mayoría de clientes ven tres campos, no seis.
 
-// Presets de período (en cliente; el servidor tiene su propio fallback).
-function presets() {
+// Presets de período (en cliente; el servidor tiene su propio fallback). Atajos
+// bien distintos entre sí, no tres variantes de "un año". "Toda la vida" solo si
+// conocemos el primer movimiento contable (lo aporta el servidor con la base).
+function presets(primerMovimiento: string | null) {
   const now = new Date()
   const y = now.getFullYear(), m = now.getMonth() // 0-based
   const dd = String(now.getDate()).padStart(2, '0')
   const iso = (yy: number, mm1: number, day: number | string) => `${yy}-${String(mm1).padStart(2, '0')}-${typeof day === 'number' ? String(day).padStart(2, '0') : day}`
   const idx = y * 12 + m - 11
   const dy = Math.floor(idx / 12), dm = (idx % 12) + 1
-  return [
-    { clave: 'u12', label: 'Últimos 12 meses', desde: iso(dy, dm, 1), hasta: iso(y, m + 1, dd) },
-    { clave: 'yp',  label: 'Año pasado',       desde: iso(y - 1, 1, 1), hasta: iso(y - 1, 12, 31) },
-    { clave: 'ea',  label: 'Este año',         desde: iso(y, 1, 1), hasta: iso(y, m + 1, dd) },
+  const lista = [
+    { clave: 'u12', label: 'Último año', desde: iso(dy, dm, 1), hasta: iso(y, m + 1, dd) },
+    { clave: 'mes', label: 'Último mes', desde: iso(y, m + 1, 1), hasta: iso(y, m + 1, dd) },
   ]
+  if (primerMovimiento) {
+    const [py, pm] = primerMovimiento.split('-')
+    lista.unshift({ clave: 'todo', label: 'Toda la vida', desde: `${py}-${pm}-01`, hasta: iso(y, m + 1, dd) })
+  }
+  return lista
 }
 
 export default function PasoBasicos({
@@ -35,7 +41,7 @@ export default function PasoBasicos({
   dossier: DossierBasico | null
   onListo?: () => void
 }) {
-  const opciones = presets()
+  const opciones = presets(data.primerMovimiento)
   const creando = dossier === null
 
   // En un tenant nuevo NADA se pre-crea: sin moneda configurada no se puede crear
@@ -45,16 +51,29 @@ export default function PasoBasicos({
   const sinMoneda = data.monedas.length === 0
   const monedaDefault = dossier?.moneda_presentacion ?? data.monedaConsolidacion ?? data.monedas[0]?.codigo ?? ''
 
+  // Defecto: "Último año" (coincide con el fallback del servidor), no "Toda la vida".
+  const porDefecto = opciones.find(o => o.clave === 'u12') ?? opciones[0]
   const [titulo, setTitulo] = useState(dossier?.titulo ?? 'Dossier para inversores')
+  // Correo de contacto de la portada: si el dossier no tiene uno, se PRECARGA con
+  // el correo de registro (todo negocio se registra con uno) para que solo tenga
+  // que confirmarlo, cambiarlo o vaciarlo.
+  const [contactoEmail, setContactoEmail] = useState(dossier?.contacto_email ?? data.emailUsuario)
   const [empresaId, setEmpresaId] = useState(dossier?.empresa_id ?? '')   // '' = todas (consolidado)
   const [moneda, setMoneda] = useState(monedaDefault)
-  const [desde, setDesde] = useState(dossier?.periodo_desde ?? opciones[0].desde)
-  const [hasta, setHasta] = useState(dossier?.periodo_hasta ?? opciones[0].hasta)
+  const [desde, setDesde] = useState(dossier?.periodo_desde ?? porDefecto.desde)
+  const [hasta, setHasta] = useState(dossier?.periodo_hasta ?? porDefecto.hasta)
   const [pending, startTransition] = useTransition()
 
   const eligeEmpresa = data.multiempresa && data.empresas.length > 1
   const eligeMoneda  = data.monedas.length > 1
   const presetActivo = opciones.find(o => o.desde === desde && o.hasta === hasta)?.clave ?? ''
+
+  // Nombre por defecto de la portada, en vivo con la empresa elegida: la empresa
+  // seleccionada, o el nombre del negocio si es consolidado (el dueño puede fijar
+  // otro en «La marca» → nombre_portada, que prevalece sobre este).
+  const nombrePortada = empresaId
+    ? (data.empresas.find(e => e.empresa_id === empresaId)?.nombre ?? data.nombreNegocio)
+    : data.nombreNegocio
 
   function aplicarPreset(clave: string) {
     const p = opciones.find(o => o.clave === clave)
@@ -66,6 +85,7 @@ export default function PasoBasicos({
     startTransition(async () => {
       const fd = new FormData()
       fd.set('titulo', titulo)
+      fd.set('contacto_email', contactoEmail.trim())
       if (eligeEmpresa) fd.set('empresa_id', empresaId)
       fd.set('moneda_presentacion', moneda)
       fd.set('periodo_desde', desde)
@@ -102,10 +122,20 @@ export default function PasoBasicos({
         )}
 
         <div className="dos-form-grid">
-          <div className="dos-campo dos-col-full">
+          <div className="dos-campo">
             <label className="dos-label" htmlFor="dos-titulo">¿Cómo llamamos a este dossier?</label>
             <input id="dos-titulo" className="input" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={120} />
             <p className="dos-section-hint">Solo lo ves tú; no aparece en la presentación.</p>
+          </div>
+
+          <div className="dos-campo">
+            <label className="dos-label" htmlFor="dos-contacto-email">Correo de contacto</label>
+            <input
+              id="dos-contacto-email" type="email" className="input" value={contactoEmail}
+              onChange={e => setContactoEmail(e.target.value)} maxLength={160}
+              placeholder="hola@tunegocio.com" spellCheck={false} autoComplete="off"
+            />
+            <p className="dos-section-hint">Aparece bajo el «Muchas gracias» del enlace. Cámbialo o déjalo vacío.</p>
           </div>
 
           {eligeEmpresa && (
@@ -115,6 +145,10 @@ export default function PasoBasicos({
                 <option value="">Todas (consolidado)</option>
                 {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
               </select>
+              <p className="dos-section-hint">
+                En la portada, el inversor verá <strong>{nombrePortada}</strong>
+                {empresaId ? '' : ' (el nombre del negocio, porque es consolidado)'}. Puedes cambiarlo en «La marca».
+              </p>
             </div>
           )}
 

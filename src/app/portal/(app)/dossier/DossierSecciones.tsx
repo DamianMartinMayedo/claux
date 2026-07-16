@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, AlertTriangle } from 'lucide-react'
+import { Check } from 'lucide-react'
 import type { DossierData, DossierBasico } from '@/app/actions/portal/dossier'
 import { pasosEditables, LABEL_PASO, type PasoEditable } from '@/lib/dossier/pasos'
+import DossierDesfase from './DossierDesfase'
 import PasoBasicos from './PasoBasicos'
 import PasoCostoVentas from './PasoCostoVentas'
 import PasoNumeros from './PasoNumeros'
@@ -52,17 +53,19 @@ export default function DossierSecciones({
   return (
     <div className="dos-secc">
       {desfasado && (
-        <div className="dos-desfase" role="alert">
-          <AlertTriangle size={16} strokeWidth={2} />
-          <div className="dos-desfase-texto">
-            <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período, pero
-            la presentación y el estado de resultados siguen mostrando el snapshot anterior
-            {data.tieneBase ? ' (importes en la moneda o empresa de antes)' : ''}. Sincronízalos para que todo cuadre.
-          </div>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => setActivo('numeros')}>
-            {data.tieneBase ? 'Actualizar números' : 'Revisar números'}
-          </button>
-        </div>
+        <DossierDesfase
+          dossierId={dossier.dossier_id}
+          tieneBase={data.tieneBase}
+          onIrANumeros={() => setActivo('numeros')}
+          onActualizado={onRefrescar}
+          mensaje={
+            <>
+              <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período, pero
+              la presentación y el estado de resultados siguen mostrando el snapshot anterior
+              {data.tieneBase ? ' (importes en la moneda o empresa de antes)' : ''}. Sincronízalos para que todo cuadre.
+            </>
+          }
+        />
       )}
 
       <nav className="dos-secc-nav" aria-label="Secciones del dossier">

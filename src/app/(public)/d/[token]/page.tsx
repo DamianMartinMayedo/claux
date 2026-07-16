@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import type { CSSProperties, ReactNode } from 'react'
 import { obtenerDeckPublico } from '@/app/actions/portal/dossier'
-import { estadoDeResultados, congeladoA } from '@/lib/dossier/estado'
+import { estadoDeResultados } from '@/lib/dossier/estado'
 import { proyectar, etiquetaMes } from '@/lib/dossier/snapshot'
 import { geometriaGrafico } from '@/lib/dossier/grafico'
 import { derivarPaleta, paletaVars } from '@/lib/dossier/paleta'
@@ -71,6 +71,15 @@ function resaltarNumeros(texto: string): ReactNode[] {
   return partes
 }
 
+// Tramo del relato: SOLO dos estados, para que el tamaño de letra sea consistente
+// entre slides. 'normal' = una columna, tamaño único (el que se ve bien en textos
+// tipo "El mercado"); 'largo' = un punto más pequeño y a dos columnas en escritorio
+// (no para "encajar por longitud", sino para no estirarse de alto ni obligar a
+// mucho scroll). El tamaño lo manda el viewport, no la longitud.
+function tramoTexto(len: number): 'normal' | 'largo' {
+  return len > 550 ? 'largo' : 'normal'
+}
+
 // Equipo → miembros {nombre, puesto} para la cuadrícula. Formato "Nombre — Puesto"
 // (guion con espacios) o "Nombre (Puesto)"; una línea por persona. Si el texto es
 // prosa (sin ese patrón), el llamador cae al párrafo normal.
@@ -85,26 +94,34 @@ function parseEquipo(cuerpo: string): { nombre: string; puesto: string }[] {
 }
 
 // Número grande con conteo (el JS lo anima al entrar; sin JS ya muestra el final).
-function Cifra({ valor, dec = 0, suf = '', label }: { valor: number; dec?: number; suf?: string; label: string }) {
+// La `unidad` (moneda o "%") va en un span aparte, más pequeño, para que no compita
+// con la cifra; el conteo solo toca el número, así que la unidad queda intacta.
+function Cifra({ valor, dec = 0, unidad, label }: { valor: number; dec?: number; unidad?: string; label: string }) {
   return (
     <div className="dp-kpi">
-      <span className="dp-kpi-num" data-count={valor} data-dec={dec} data-suf={suf}>{nf(dec).format(valor)}{suf}</span>
+      <span className="dp-kpi-valor">
+        <span className="dp-kpi-num" data-count={valor} data-dec={dec}>{nf(dec).format(valor)}</span>
+        {unidad && <span className="dp-kpi-unidad">{unidad}</span>}
+      </span>
       <span className="dp-kpi-label">{label}</span>
     </div>
   )
 }
 
 // Barra que se llena hasta su proporción de los ingresos (--bar-w es runtime).
-function Barra({ label, monto, ingresos, moneda, tono }: { label: string; monto: number; ingresos: number; moneda: string; tono: string }) {
+function Barra({ label, monto, ingresos, moneda }: { label: string; monto: number; ingresos: number; moneda: string }) {
   const pct = ingresos > 0 ? Math.max(0, Math.min(100, (monto / ingresos) * 100)) : 0
   return (
     <div className="dp-bar">
       <div className="dp-bar-head">
         <span className="dp-bar-label">{label}</span>
-        <span className="dp-bar-monto" data-count={monto} data-dec={0} data-suf={` ${moneda}`}>{nf(0).format(monto)} {moneda}</span>
+        <span className="dp-bar-monto">
+          <span data-count={monto} data-dec={0}>{nf(0).format(monto)}</span>
+          <span className="dp-bar-moneda">{moneda}</span>
+        </span>
       </div>
       <div className="dp-bar-track">
-        <div className="dp-bar-fill" data-tono={tono} style={{ '--bar-w': `${pct}%` } as CSSProperties} />
+        <div className="dp-bar-fill" style={{ '--bar-w': `${pct}%` } as CSSProperties} />
       </div>
       <span className="dp-bar-pct">{fmtPct(pct)}</span>
     </div>
@@ -182,7 +199,7 @@ export default async function DeckPage({ params }: Props) {
     return (
       <div className={`dp-relato${clave === 'cierre' ? ' dp-relato-cierre' : ''}`}>
         <span className="dp-kicker">{etiqueta}</span>
-        <p className="dp-relato-cuerpo">{resaltarNumeros(cuerpo)}</p>
+        <p className="dp-relato-cuerpo" data-largo={tramoTexto(cuerpo.length)}>{resaltarNumeros(cuerpo)}</p>
       </div>
     )
   }
@@ -203,9 +220,9 @@ export default async function DeckPage({ params }: Props) {
         <div className="dp-bloque">
           <span className="dp-kicker">Tracción</span>
           <div className="dp-kpis">
-            <Cifra valor={er.ingresos} suf={` ${deck.moneda}`} label="Ingresos del período" />
-            <Cifra valor={er.margenBrutoPct} dec={1} suf=" %" label="Margen bruto" />
-            <Cifra valor={er.resultadoNeto} suf={` ${deck.moneda}`} label="Resultado neto" />
+            <Cifra valor={er.ingresos} unidad={deck.moneda} label="Ingresos del período" />
+            <Cifra valor={er.margenBrutoPct} dec={1} unidad="%" label="Margen bruto" />
+            <Cifra valor={er.resultadoNeto} unidad={deck.moneda} label="Resultado neto" />
             <Cifra valor={deck.serie.length} label={deck.serie.length === 1 ? 'Mes registrado' : 'Meses registrados'} />
           </div>
         </div>
@@ -221,9 +238,9 @@ export default async function DeckPage({ params }: Props) {
             <span className="dp-kicker">De cada {deck.moneda} que entra</span>
             <h2 className="dp-bloque-titulo">Cómo se reparte</h2>
             <div className="dp-bars">
-              <Barra label="Coste de ventas" monto={er.costoVentas} ingresos={er.ingresos} moneda={deck.moneda} tono="coste" />
-              <Barra label="Gastos operativos" monto={er.gastosOperativos} ingresos={er.ingresos} moneda={deck.moneda} tono="gasto" />
-              <Barra label="Resultado neto" monto={Math.max(0, er.resultadoNeto)} ingresos={er.ingresos} moneda={deck.moneda} tono="neto" />
+              <Barra label="Coste de ventas" monto={er.costoVentas} ingresos={er.ingresos} moneda={deck.moneda} />
+              <Barra label="Gastos operativos" monto={er.gastosOperativos} ingresos={er.ingresos} moneda={deck.moneda} />
+              <Barra label="Resultado neto" monto={Math.max(0, er.resultadoNeto)} ingresos={er.ingresos} moneda={deck.moneda} />
             </div>
           </div>
         ),
@@ -287,15 +304,17 @@ export default async function DeckPage({ params }: Props) {
     slides.push(relatoSlide(s.clave, s.etiqueta))
   }
 
-  // Cierre: gracias en grande + fecha del snapshot, centrados; y "Hecho con
-  // CLAUX" anclado abajo (como el "Desliza" de la portada).
+  // Cierre: solo "Muchas gracias" en grande y centrado; "Hecho con CLAUX" anclado
+  // al borde inferior (como el "Desliza" de la portada). Sin más texto.
   slides.push({
     id: 'gracias', label: 'Gracias',
     node: (
       <div className="dp-gracias">
         <div className="dp-gracias-centro">
           <h2 className="dp-gracias-titulo">Muchas gracias</h2>
-          <p className="dp-gracias-fecha">{congeladoA(deck.snapshotAt)} · Importes en {deck.moneda}.</p>
+          {deck.contactoEmail && (
+            <a className="dp-gracias-email" href={`mailto:${deck.contactoEmail}`}>{deck.contactoEmail}</a>
+          )}
         </div>
         <p className="dp-pie-marca">Hecho con CLAUX</p>
       </div>
@@ -306,6 +325,16 @@ export default async function DeckPage({ params }: Props) {
     // La paleta entra como custom properties en el wrapper; la hoja solo consume
     // var(--do-*) y trae sus propios fallbacks. Ninguna regla lleva el color escrito.
     <div className="dp-page" style={paletaVars(paleta)}>
+      {/* Fuentes de marca (display=swap → el texto se ve al instante en la del
+          sistema y cambia al cargar). React 19 sube estos <link> al <head>. Solo
+          los pesos que usa el deck, para no engordar el fetch. */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link
+        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
       <DeckReveal />
 
       <nav className="dp-nav" aria-label="Ir a una sección">

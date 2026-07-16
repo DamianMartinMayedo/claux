@@ -25,7 +25,11 @@
   --dp-bg: #ffffff;
   --dp-text: #141719;
   --dp-text-muted: #5c5b52;
-  --dp-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Fuentes de marca de la plataforma (las carga el <link> del deck con
+     display=swap): display para títulos y cifras, body para el resto. Fallback a
+     la del sistema si la fuente web no llega (3G, offline): el deck sigue legible. */
+  --dp-font: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", sans-serif;
+  --dp-font-display: 'Bricolage Grotesque', system-ui, -apple-system, "Segoe UI", sans-serif;
 
   height: 100dvh;
   overflow-y: auto;
@@ -91,7 +95,7 @@
 }
 .dp-portada .dp-kicker { justify-content: center; }
 .dp-titulo {
-  margin: 1rem 0 0; font-size: clamp(2.4rem, 8vw, 5rem); font-weight: 800;
+  margin: 1rem 0 0; font-family: var(--dp-font-display); font-size: clamp(2.4rem, 8vw, 5rem); font-weight: 800;
   line-height: 1.04; letter-spacing: -0.025em;
 }
 .dp-periodo { margin: 1.1rem 0 0; font-size: 1rem; opacity: 0.72; font-variant-numeric: tabular-nums; }
@@ -101,10 +105,16 @@
 }
 .dp-scroll-hint::after { content: ""; display: block; width: 1px; height: 2rem; margin: 0.6rem auto 0; background: currentColor; opacity: 0.5; }
 
-/* ── Relato (texto de impacto) ── */
+/* ── Relato ── Solo DOS tamaños, consistentes entre slides (el tamaño lo fija el
+   viewport, no la longitud). 'normal' = una columna; 'largo' = un punto menor y a
+   dos columnas en escritorio, para no estirarse de alto ni forzar mucho scroll. */
 .dp-relato-cuerpo {
-  margin: 1.25rem 0 0; font-size: clamp(1.3rem, 3.2vw, 2.2rem); font-weight: 500;
-  line-height: 1.4; letter-spacing: -0.01em; white-space: pre-wrap; max-width: 40rem;
+  margin: 1.25rem 0 0; font-size: clamp(1.15rem, 2.6vw, 1.7rem); font-weight: 500;
+  line-height: 1.45; letter-spacing: -0.01em; white-space: pre-wrap; max-width: 44rem;
+}
+.dp-relato-cuerpo[data-largo="largo"] { font-size: clamp(1.05rem, 2vw, 1.35rem); line-height: 1.5; max-width: 46rem; }
+@media (min-width: 900px) {
+  .dp-relato-cuerpo[data-largo="largo"] { max-width: 62rem; columns: 2; column-gap: 3rem; }
 }
 /* Números del relato destacados: en blanco (color) → chip; sobre blanco → color. */
 .dp-num-destacado { font-weight: 800; }
@@ -112,42 +122,49 @@
 .dp-slide[data-bg="color"] .dp-num-destacado { background: rgba(255, 255, 255, 0.18); border-radius: 0.3em; padding: 0 0.28em; }
 
 /* Equipo jerarquizado: cuadrícula de nombre grande + puesto debajo. */
-.dp-equipo-grid { margin-top: 1.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.5rem 1.75rem; max-width: 48rem; }
+/* Hasta 3 por fila en escritorio (2 en móvil); las filas que hagan falta. */
+.dp-equipo-grid { margin-top: 1.75rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1.75rem; max-width: 52rem; }
+@media (min-width: 720px) { .dp-equipo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .dp-equipo-item { display: flex; flex-direction: column; gap: 0.2rem; }
-.dp-equipo-nombre { font-size: clamp(1.15rem, 2.6vw, 1.55rem); font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
+.dp-equipo-nombre { font-family: var(--dp-font-display); font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }
 .dp-equipo-puesto { font-size: 0.9rem; opacity: 0.72; }
-.dp-relato-cierre .dp-relato-cuerpo { font-weight: 700; }
 
-/* ── Bloques con título ── */
-.dp-bloque-titulo { margin: 0.75rem 0 2rem; font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
+/* ── Bloques con título ── Hereda el color del slide (oscuro sobre blanco, blanco
+   sobre color): el titular va en el texto normal, no en un color de marca. */
+.dp-bloque-titulo { margin: 0.75rem 0 2rem; font-family: var(--dp-font-display); font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
 
 /* ── KPIs (números grandes que cuentan) ── */
 /* Cuadrícula 2×2 alineada a la izquierda; números grandes sin amontonarse. */
-.dp-kpis { margin: 2.5rem 0 0; max-width: 48rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(2rem, 4vw, 3rem) clamp(1.5rem, 5vw, 3.5rem); }
+.dp-kpis { margin: 2.5rem 0 0; max-width: 60rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(2rem, 4vw, 3rem) clamp(2rem, 6vw, 4.5rem); }
 @media (max-width: 520px) { .dp-kpis { grid-template-columns: 1fr; } }
 .dp-kpi { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
+/* Cifra grande + unidad (moneda/%) pequeña al lado, alineadas por la base. */
+.dp-kpi-valor { display: flex; align-items: baseline; gap: 0.4rem; min-width: 0; flex-wrap: nowrap; }
 .dp-kpi-num {
-  font-size: clamp(2.6rem, 6.5vw, 4.6rem); font-weight: 800; line-height: 1.02; letter-spacing: -0.03em;
-  color: var(--acc); font-variant-numeric: tabular-nums; overflow-wrap: break-word;
+  font-family: var(--dp-font-display);
+  font-size: clamp(3rem, 7.5vw, 6rem); font-weight: 800; line-height: 1.0; letter-spacing: -0.03em;
+  color: var(--acc); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+.dp-kpi-unidad { font-size: clamp(1.1rem, 2.4vw, 1.9rem); font-weight: 700; color: var(--acc); opacity: 0.68; letter-spacing: 0.01em; }
 .dp-kpi-label { font-size: 0.9rem; font-weight: 600; opacity: 0.72; }
 
 /* ── Barras que se llenan ── */
-.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 42rem; }
+.dp-bars { display: flex; flex-direction: column; gap: 1.6rem; max-width: 60rem; }
 .dp-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
 .dp-bar-label { font-size: 1rem; font-weight: 600; }
 .dp-bar-monto { font-size: 1rem; font-weight: 700; color: var(--acc); font-variant-numeric: tabular-nums; }
+.dp-bar-moneda { margin-left: 0.3rem; font-size: 0.78em; font-weight: 700; opacity: 0.7; }
 .dp-bar-track {
   height: 14px; border-radius: 999px; overflow: hidden;
   background: rgba(255, 255, 255, 0.18);
   background: color-mix(in srgb, currentColor 12%, transparent);
 }
+/* Degradado principal → acento, sin opacidad (cada barra ya se distingue por su
+   etiqueta e importe; no hace falta atenuarlas). */
 .dp-bar-fill {
-  height: 100%; width: var(--bar-w, 0%); border-radius: 999px; background: var(--acc);
+  height: 100%; width: var(--bar-w, 0%); border-radius: 999px;
+  background: linear-gradient(90deg, var(--do-principal), var(--do-acento));
 }
-.dp-bar-fill[data-tono="coste"] { opacity: 0.5; }
-.dp-bar-fill[data-tono="gasto"] { opacity: 0.72; }
-.dp-bar-fill[data-tono="neto"]  { opacity: 1; }
 .dp-bar-pct { display: inline-block; margin-top: 0.35rem; font-size: 0.8rem; font-weight: 600; opacity: 0.6; font-variant-numeric: tabular-nums; }
 
 /* ── Gráfico (se dibuja) ── */
@@ -173,14 +190,15 @@
 .dp-leyenda-marca { width: 18px; height: 3px; border-radius: 2px; background: var(--acc); flex-shrink: 0; }
 .dp-leyenda-proy { background: repeating-linear-gradient(to right, var(--acc) 0 6px, transparent 6px 11px); }
 
-/* ── Cierre / gracias ── El slide se llena entero: título + fecha centrados y
-   "Hecho con CLAUX" ANCLADO abajo (como el "Desliza" de la portada). */
-#gracias { align-items: stretch; }
+/* ── Cierre / gracias ── El slide se llena entero: solo "Muchas gracias" centrado
+   y "Hecho con CLAUX" ANCLADO al borde inferior (como el "Desliza" de la portada). */
+#gracias { align-items: stretch; padding-bottom: clamp(1rem, 2.5vh, 1.75rem); }
 .dp-gracias { display: flex; flex-direction: column; height: 100%; text-align: center; }
 .dp-gracias-centro { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.dp-gracias-titulo { margin: 0; font-size: clamp(2.6rem, 9vw, 5.5rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
-.dp-gracias-fecha { margin: 1.25rem 0 0; font-size: 0.95rem; opacity: 0.72; font-variant-numeric: tabular-nums; }
-.dp-pie-marca { margin: 0; padding-bottom: clamp(0.5rem, 3vh, 1.5rem); font-size: 0.74rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; }
+.dp-gracias-titulo { margin: 0; font-family: var(--dp-font-display); font-size: clamp(2.6rem, 9vw, 5.5rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
+.dp-gracias-email { margin-top: 1.5rem; font-size: clamp(1rem, 2.4vw, 1.35rem); font-weight: 600; color: inherit; opacity: 0.82; border-bottom: 1px solid currentColor; padding-bottom: 1px; transition: opacity var(--dp-t, 0.2s ease); }
+.dp-gracias-email:hover { opacity: 1; }
+.dp-pie-marca { margin: 0; font-size: 0.74rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; }
 
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
 .dp-nav {

@@ -7,15 +7,17 @@ import {
   publicarDossier, despublicarDossier, revocarEnlace,
   type DossierBasico,
 } from '@/app/actions/portal/dossier'
+import DossierDesfase from './DossierDesfase'
 
 // Panel de control del enlace público. El deck vive en /d/<token>: una capability
 // URL (quien la tiene, la ve). No hay login que ponerle delante —el inversor no es
 // usuario de CLAUX—, así que la protección real es poder revocarla.
 
 export default function PestanaPresentacion({
-  dossier, onCambio,
+  dossier, tieneBase, onCambio,
 }: {
   dossier: DossierBasico
+  tieneBase: boolean
   onCambio?: () => void
 }) {
   const [pending, startTransition] = useTransition()
@@ -82,15 +84,19 @@ export default function PestanaPresentacion({
         </p>
 
         {desfasado && (
-          <div className="dos-desfase" role="alert">
-            <AlertTriangle size={16} strokeWidth={2} />
-            <div className="dos-desfase-texto">
-              <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período.
-              {publicado
-                ? ' El enlace en vivo sigue mostrando el snapshot anterior; sincronízalos en «Los números».'
-                : ' No podrás publicar hasta sincronizarlos en «Los números».'}
-            </div>
-          </div>
+          <DossierDesfase
+            dossierId={dossier.dossier_id}
+            tieneBase={tieneBase}
+            onActualizado={onCambio}
+            mensaje={
+              <>
+                <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período.
+                {publicado
+                  ? ' El enlace en vivo sigue mostrando el snapshot anterior.'
+                  : ' No podrás publicar hasta actualizarlos.'}
+              </>
+            }
+          />
         )}
 
         {sinNumeros ? (

@@ -63,7 +63,7 @@ export default function DossierEditor({ data }: { data: DossierData }) {
       )}
 
       {tab === 'presentacion' && (
-        <PestanaPresentacion dossier={dossier} onCambio={refrescar} />
+        <PestanaPresentacion dossier={dossier} tieneBase={data.tieneBase} onCambio={refrescar} />
       )}
 
       {tab === 'estado' && (
@@ -73,6 +73,8 @@ export default function DossierEditor({ data }: { data: DossierData }) {
           lineas={data.lineas}
           empresaNombre={empresaNombre}
           simbolo={simbolo}
+          tieneBase={data.tieneBase}
+          onRefrescar={refrescar}
         />
       )}
     </div>

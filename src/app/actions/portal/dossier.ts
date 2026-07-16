@@ -8,6 +8,7 @@ import { optimizarImagen } from '@/lib/imagen/optimizar'
 import { getPortalSession } from './auth'
 import { obtenerEmpresas } from './empresas'
 import { construirSnapshotDesdeBase, type LineaDesglose } from '@/lib/dossier/base'
+import { construirConversor } from '@/lib/tasas'
 import { fusionarSerie, resolverFusion, type FilaSerie, type PlanFusion } from '@/lib/dossier/snapshot'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { normalizarHex } from '@/lib/dossier/paleta'
@@ -25,6 +26,7 @@ export interface DossierBasico {
   estado:                  'BORRADOR' | 'PUBLICADO'
   empresa_id:              string | null
   nombre_portada:          string | null   // nombre público elegido; vacío → se deriva
+  contacto_email:          string | null   // correo de contacto para la portada de cierre
   moneda_presentacion:     string
   color_principal:         string
   logo_url:                string | null
@@ -53,6 +55,8 @@ export interface DossierData {
   tieneRrhh:          boolean                 // solo habilita precargar Equipo
   multiempresa:       boolean
   nombreNegocio:      string                  // nombre de la cuenta: defecto de portada en consolidado
+  emailUsuario:       string                  // correo de registro: precarga del contacto del dossier
+  primerMovimiento:   string | null           // fecha del 1er dato contable → atajo "Toda la vida"
   empresas:           { empresa_id: string; nombre: string }[]
   monedas:            { codigo: string; simbolo: string }[]
   monedaConsolidacion: string | null
@@ -129,6 +133,15 @@ async function escribirSnapshot(
   return { ok: true }
 }
 
+// El deck es caché de por vida (revalidate = false) y solo se rebusca por evento.
+// Cualquier cambio a un dossier PUBLICADO (números, relato, marca) tiene que
+// invalidar su ruta pública, o el enlace en vivo se queda con lo de antes.
+async function revalidarDeck(db: Db, dossierId: string, clientId: string): Promise<void> {
+  const { data } = await db.from('dossiers').select('token, estado')
+    .eq('dossier_id', dossierId).eq('client_id', clientId).maybeSingle()
+  if (data?.estado === 'PUBLICADO' && data.token) revalidatePath(`/d/${data.token}`)
+}
+
 // ── Lectura ─────────────────────────────────────────────────────────────────────
 
 export async function obtenerDossier(): Promise<DossierData | null> {
@@ -157,10 +170,22 @@ export async function obtenerDossier(): Promise<DossierData | null> {
   const categoriasCosto = tieneBase ? await obtenerCategoriasGasto() : []
   const listaEmpresas = empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))
 
+  // Fecha del primer movimiento contable (para el atajo de período "Toda la vida").
+  // Solo con base: sin ella no hay serie de dónde sacar un "desde el principio".
+  let primerMovimiento: string | null = null
+  if (tieneBase) {
+    const [{ data: fMin }, { data: gMin }] = await Promise.all([
+      db.from('facturas').select('fecha_emision').eq('client_id', session.client_id).order('fecha_emision', { ascending: true }).limit(1).maybeSingle(),
+      db.from('gastos_cobros').select('fecha').eq('client_id', session.client_id).order('fecha', { ascending: true }).limit(1).maybeSingle(),
+    ])
+    const fechas = [fMin?.fecha_emision, gMin?.fecha].filter(Boolean) as string[]
+    if (fechas.length) primerMovimiento = fechas.sort()[0]
+  }
+
   if (!dosRow) {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
-      tieneBase, tieneRrhh, multiempresa, nombreNegocio, empresas: listaEmpresas,
+      tieneBase, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
       monedas, monedaConsolidacion, categoriasCosto, empresaLogoUrl: null,
     }
   }
@@ -193,6 +218,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
     estado: dosRow.estado,
     empresa_id: dosRow.empresa_id ?? null,
     nombre_portada: dosRow.nombre_portada ?? null,
+    contacto_email: dosRow.contacto_email ?? null,
     moneda_presentacion: dosRow.moneda_presentacion,
     color_principal: dosRow.color_principal,
     logo_url: dosRow.logo_url ?? null,
@@ -200,7 +226,10 @@ export async function obtenerDossier(): Promise<DossierData | null> {
     periodo_hasta: dosRow.periodo_hasta ?? null,
     crecimiento_mensual_pct: Number(dosRow.crecimiento_mensual_pct) || 0,
     snapshot_at: dosRow.snapshot_at ?? null,
-    snapshot_stale: !!dosRow.snapshot_stale,
+    // Desfasado si lo marcó guardarBasicos (cambio de parámetro) O si la serie no
+    // está toda en la moneda de presentación (mezcla heredada de fusiones previas):
+    // en ambos casos hay que re-sincronizar antes de enseñarla.
+    snapshot_stale: !!dosRow.snapshot_stale || serie.some(f => f.moneda !== dosRow.moneda_presentacion),
     token: dosRow.token ?? null,
     monedas_faltantes: Array.isArray(dosRow.monedas_faltantes) ? dosRow.monedas_faltantes : [],
     tasas_usadas: (dosRow.tasas_usadas && typeof dosRow.tasas_usadas === 'object') ? dosRow.tasas_usadas as Record<string, TasaUsada> : {},
@@ -208,7 +237,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
 
   return {
     dossier, serie, lineas, secciones,
-    tieneBase, tieneRrhh, multiempresa, nombreNegocio, empresas: listaEmpresas,
+    tieneBase, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
     monedas, monedaConsolidacion, categoriasCosto,
     empresaLogoUrl: await logoDeEmpresa(dossier.empresa_id),
   }
@@ -249,6 +278,10 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
   const empresaId = (formData.get('empresa_id') as string)?.trim() || null
   const moneda   = (formData.get('moneda_presentacion') as string)?.trim()
   if (!moneda) return { ok: false, error: 'Falta la moneda de presentación.' }
+  const contactoEmail = ((formData.get('contacto_email') as string) ?? '').trim() || null
+  if (contactoEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactoEmail)) {
+    return { ok: false, error: 'El correo de contacto no parece válido.' }
+  }
 
   const fallback = periodo12()
   const desde = (formData.get('periodo_desde') as string)?.trim() || fallback.desde
@@ -257,7 +290,7 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
   const dossier_id = genId('DOS')
   const { error } = await db.from('dossiers').insert({
     dossier_id, client_id: session.client_id,
-    empresa_id: empresaId, titulo, estado: 'BORRADOR',
+    empresa_id: empresaId, titulo, estado: 'BORRADOR', contacto_email: contactoEmail,
     moneda_presentacion: moneda, periodo_desde: desde, periodo_hasta: hasta,
   })
   if (error) return { ok: false, error: 'No se pudo crear el dossier.' }
@@ -292,6 +325,13 @@ export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean;
   set('periodo_hasta', (formData.get('periodo_hasta') as string)?.trim())
   if (formData.has('empresa_id')) patch.empresa_id = (formData.get('empresa_id') as string)?.trim() || null
   if (formData.has('crecimiento_mensual_pct')) patch.crecimiento_mensual_pct = Number(formData.get('crecimiento_mensual_pct')) || 0
+  // Correo de contacto: se puede fijar o VACIAR (por eso no usa `set`, que ignora
+  // el vacío). Vacío → null (el deck no lo enseña).
+  if (formData.has('contacto_email')) {
+    const email = ((formData.get('contacto_email') as string) ?? '').trim()
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: 'El correo de contacto no parece válido.' }
+    patch.contacto_email = email || null
+  }
 
   // ¿Cambió algún parámetro del snapshot frente a lo guardado? Solo tiene sentido
   // si ya hay números congelados (si no, no hay nada que desfasar). El flag se
@@ -306,6 +346,7 @@ export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean;
   if (error) return { ok: false, error: 'No se pudo guardar.' }
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
 
@@ -348,6 +389,7 @@ export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; e
   if (!res.ok) return res
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
 
@@ -418,6 +460,7 @@ export async function guardarSecciones(formData: FormData): Promise<{ ok: boolea
   }
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
 
@@ -439,19 +482,15 @@ export async function sugerirEquipoDesdeRrhh(): Promise<string | null> {
     .order('cargo')
   if (!data || data.length === 0) return null
 
-  // Agrupa por cargo: "3 Cocineros · 2 Camareros" lee mejor que 17 nombres sueltos.
-  const porCargo = new Map<string, string[]>()
-  for (const e of data as { nombre: string; cargo: string | null }[]) {
-    const cargo = (e.cargo || 'Sin puesto').trim()
-    const lista = porCargo.get(cargo) ?? []
-    lista.push(e.nombre)
-    porCargo.set(cargo, lista)
-  }
-
-  const partes = [...porCargo.entries()].map(([cargo, nombres]) =>
-    nombres.length === 1 ? `${cargo}: ${nombres[0]}` : `${cargo} (${nombres.length})`)
-
-  return `Somos un equipo de ${data.length} ${data.length === 1 ? 'persona' : 'personas'}: ${partes.join(' · ')}.`
+  // Una línea por persona, formato "Nombre — Puesto": es lo que el editor del
+  // Equipo parsea a filas y el deck pinta en cuadrícula. El dueño quita las que no
+  // quiera enseñar (el llenado es aditivo, no una lista definitiva).
+  return (data as { nombre: string; cargo: string | null }[])
+    .map(e => {
+      const cargo = (e.cargo || '').trim()
+      return cargo ? `${e.nombre} — ${cargo}` : e.nombre
+    })
+    .join('\n')
 }
 
 // ── Marca (color y logo PROPIOS del dossier, no del negocio) ───────────────────
@@ -469,7 +508,8 @@ export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; e
 
   const color = normalizarHex((formData.get('color_principal') as string) || '')
   // Nombre de portada: vacío → null (el deck lo deriva de la empresa/cuenta). Se
-  // guarda junto al color porque ambos son la identidad PÚBLICA del dossier.
+  // guarda junto al color porque ambos son la identidad PÚBLICA del dossier. El
+  // correo de contacto vive en «Lo básico» (guardarBasicos), no aquí.
   const nombrePortada = (formData.get('nombre_portada') as string ?? '').trim() || null
 
   const db = createAdminClient()
@@ -479,6 +519,7 @@ export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; e
   if (error) return { ok: false, error: 'No se pudo guardar el color.' }
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
 
@@ -531,6 +572,7 @@ export async function subirLogoDossier(formData: FormData): Promise<{ ok: boolea
   if (error) return { ok: false, error: 'No se pudo guardar el logo.' }
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true, logo_url }
 }
 
@@ -558,6 +600,7 @@ export async function usarLogoEmpresa(formData: FormData): Promise<{ ok: boolean
   if (error) return { ok: false, error: 'No se pudo copiar el logo.' }
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true, logo_url }
 }
 
@@ -581,6 +624,7 @@ export async function quitarLogoDossier(formData: FormData): Promise<{ ok: boole
   if (error) return { ok: false, error: 'No se pudo quitar el logo.' }
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
 
@@ -600,14 +644,18 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
 
   const db = createAdminClient()
-  const { data: dos } = await db.from('dossiers').select('token, snapshot_at, snapshot_stale')
+  const { data: dos } = await db.from('dossiers').select('token, snapshot_at, snapshot_stale, moneda_presentacion')
     .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
   if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
   // Publicar un deck sin números es enseñar un gráfico vacío a un inversor.
   if (!dos.snapshot_at) return { ok: false, error: 'Carga tus números antes de publicar.' }
   // Publicar un snapshot desfasado enseñaría importes en la moneda vieja (o de otra
-  // empresa) al inversor. Que lo sincronice primero en «Los números».
-  if (dos.snapshot_stale) return { ok: false, error: 'Cambiaste la moneda, la empresa o el período: sincroniza tus números en «Los números» antes de publicar.' }
+  // empresa) al inversor. Que lo sincronice primero en «Los números». También si la
+  // serie quedó mezclada de monedas (fusiones previas): no es uniforme → desfasado.
+  const { data: mezcla } = await db.from('dossier_serie').select('mes')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id)
+    .neq('moneda', dos.moneda_presentacion).limit(1).maybeSingle()
+  if (dos.snapshot_stale || mezcla) return { ok: false, error: 'Cambiaste la moneda, la empresa o el período: sincroniza tus números en «Los números» antes de publicar.' }
 
   const token = (dos.token as string | null) ?? nuevoToken()
   const { error } = await db.from('dossiers').update({
@@ -677,6 +725,7 @@ export async function revocarEnlace(formData: FormData): Promise<{ ok: boolean; 
 
 export interface DeckPublico {
   nombre: string
+  contactoEmail: string | null
   logoUrl: string | null
   color: string
   moneda: string
@@ -728,11 +777,18 @@ export async function obtenerDeckPublico(token: string): Promise<DeckPublico | n
   const nombrePortada = (dos.nombre_portada as string | null)?.trim()
   if (nombrePortada) nombre = nombrePortada
 
+  // Moneda del deck: la CONGELADA en la serie, no la `moneda_presentacion` en vivo.
+  // Si el dueño cambió la moneda sin re-sincronizar, los importes siguen en la
+  // moneda vieja; rotular con esa (y no con la nueva) mantiene el deck veraz. Al
+  // sincronizar, la serie se reescribe en la nueva y el rótulo la sigue solo.
+  const monedaDeck = (serieRows?.[0]?.moneda as string) || dos.moneda_presentacion
+
   return {
     nombre,
+    contactoEmail: (dos.contacto_email as string | null)?.trim() || null,
     logoUrl: dos.logo_url ?? null,
     color: dos.color_principal || '#00AFAA',
-    moneda: dos.moneda_presentacion,
+    moneda: monedaDeck,
     periodoDesde: dos.periodo_desde ?? null,
     periodoHasta: dos.periodo_hasta ?? null,
     snapshotAt: dos.snapshot_at ?? null,
@@ -838,5 +894,82 @@ export async function aplicarActualizacion(formData: FormData): Promise<{ ok: bo
   if (!res.ok) return res
 
   revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
+  return { ok: true }
+}
+
+// Re-sincroniza un snapshot DESFASADO: reconstruye la serie ENTERA desde la base
+// en la moneda/empresa/período actuales. A diferencia de `aplicarActualizacion`
+// (fusión incremental que conserva lo tecleado a mano), esto REEMPLAZA todo: tras
+// cambiar la moneda, conservar filas en la moneda vieja dejaría la serie mezclada
+// (importes en dos monedas, etiqueta equivocada). Solo con base; sin ella el dueño
+// revisa a mano en «Los números». El flag snapshot_stale lo limpia la RPC al escribir.
+export async function resincronizarSnapshot(dossierId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!dossierId)           return { ok: false, error: 'Falta el dossier.' }
+
+  const db = createAdminClient()
+  const modulos = await modulosDelCliente(db, session.client_id)
+  if (!tieneModulo(modulos, 'base')) return { ok: false, error: 'Necesitas la Contabilidad para actualizar tus números.' }
+
+  const { data: dos } = await db.from('dossiers')
+    .select('empresa_id, moneda_presentacion, periodo_desde, periodo_hasta')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
+
+  const moneda = dos.moneda_presentacion
+  const fallback = periodo12()
+  const [conversor, empresaIds, costoMap, { data: serieRows }] = await Promise.all([
+    construirConversor(db, session.client_id),
+    empresaIdsDe(dos.empresa_id ?? null),
+    clasificacionCosto(db, session.client_id),
+    db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+      .eq('dossier_id', dossierId).eq('client_id', session.client_id),
+  ])
+
+  // Filas de la base, ya en la moneda nueva (origen BASE): mandan para sus meses.
+  const snap = await construirSnapshotDesdeBase(
+    db, session.client_id, empresaIds,
+    dos.periodo_desde ?? fallback.desde, dos.periodo_hasta ?? fallback.hasta,
+    moneda, costoMap,
+  )
+
+  const baseMeses = new Set(snap.serie.map(f => f.mes))
+  const faltantes = new Set(snap.monedasFaltantes)
+  const tasas: Record<string, unknown> = { ...snap.tasasUsadas }
+  const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
+  // Filas MANUAL de meses que la base NO conoce: se CONSERVAN, pero convertidas a
+  // la moneda nueva por tasa (no se tiran ni se quedan en la moneda vieja — eso es
+  // lo que dejaba la serie mezclada). Sin tasa hacia la nueva, no se pueden
+  // presentar: se excluyen y se informan como faltantes (mismo criterio que la base).
+  const manual: FilaSerie[] = []
+  for (const r of (serieRows ?? []) as Record<string, unknown>[]) {
+    if (r.origen !== 'MANUAL' || baseMeses.has(r.mes as string)) continue
+    const rowMoneda = r.moneda as string
+    const ing = Number(r.ingresos) || 0, cv = Number(r.costo_ventas) || 0, go = Number(r.gastos_operativos) || 0
+    if (rowMoneda === moneda) {
+      manual.push({ mes: r.mes as string, ingresos: ing, costo_ventas: cv, gastos_operativos: go, moneda, origen: 'MANUAL' })
+      continue
+    }
+    const factor = conversor.convertir(1, rowMoneda, moneda)
+    if (factor == null) { faltantes.add(rowMoneda); continue }
+    manual.push({
+      mes: r.mes as string,
+      ingresos: round2(ing * factor), costo_ventas: round2(cv * factor), gastos_operativos: round2(go * factor),
+      moneda, origen: 'MANUAL',
+    })
+    const d = conversor.detalle(moneda, rowMoneda)
+    if (d) tasas[rowMoneda] = d
+  }
+
+  const serieFinal = [...snap.serie, ...manual].sort((a, b) => a.mes.localeCompare(b.mes))
+  const res = await escribirSnapshot(db, dossierId, session.client_id, serieFinal, snap.lineas, tasas, [...faltantes].sort())
+  if (!res.ok) return res
+
+  revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
