@@ -97,7 +97,7 @@ export default function DossierSecciones({
           <PasoNumeros
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
-            simbolo={simbolo} onCambio={onRefrescar}
+            simbolo={simbolo} onGuardado={onRefrescar} onCambio={onRefrescar}
           />
         )}
         {activo === 'crecimiento' && (
@@ -108,7 +108,7 @@ export default function DossierSecciones({
         )}
         {activo === 'marca' && (
           <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl}
-            nombrePorDefecto={nombrePortadaDefault} onGuardado={onRefrescar} />
+            nombrePorDefecto={nombrePortadaDefault} onGuardado={onRefrescar} onCambio={onRefrescar} />
         )}
       </div>
     </div>

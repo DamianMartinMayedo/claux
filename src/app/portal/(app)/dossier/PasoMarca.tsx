@@ -22,12 +22,21 @@ import { derivarPaleta, normalizarHex, contraste, paletaVars } from '@/lib/dossi
 const SUGERIDOS = ['#00AFAA', '#2563EB', '#4F46E5', '#059669', '#B45309', '#DC2626', '#7C3AED', '#0F172A']
 
 export default function PasoMarca({
-  dossier, empresaLogoUrl, nombrePorDefecto, onGuardado,
+  dossier, empresaLogoUrl, nombrePorDefecto, onGuardado, onCambio,
 }: {
   dossier: DossierBasico
   empresaLogoUrl: string | null
   nombrePorDefecto: string
+  // OJO: son DOS cosas distintas y confundirlas rompe el paso.
+  //   · onGuardado = «este paso está terminado» → en el wizard AVANZA. Solo lo
+  //     llama el botón «Guardar marca», que es lo único que persiste color y nombre.
+  //   · onCambio   = «algo se guardó por su cuenta, refresca» → el logo, que tiene
+  //     su propia acción y se sube al instante.
+  // El logo llamaba a onGuardado: en el wizard eso te empujaba a la pantalla final
+  // nada más subirlo, y como el botón «Guardar marca» ya no llegabas a pulsarlo, el
+  // color y el nombre de portada elegidos NO se guardaban nunca.
   onGuardado?: () => void
+  onCambio?: () => void
 }) {
   const [hex, setHex] = useState(dossier.color_principal || '#00AFAA')
   const [nombrePortada, setNombrePortada] = useState(dossier.nombre_portada ?? '')
@@ -60,7 +69,7 @@ export default function PasoMarca({
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('logo', file)
       const res = await subirLogoDossier(fd)
-      if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo subido'); onGuardado?.() }
+      if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo subido'); onCambio?.() }
       else toastError(res.error || 'No se pudo subir el logo')
     })
   }
@@ -70,7 +79,7 @@ export default function PasoMarca({
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await quitarLogoDossier(fd)
-      if (res.ok) { setLogoUrl(null); onGuardado?.() }
+      if (res.ok) { setLogoUrl(null); onCambio?.() }
       else toastError(res.error || 'No se pudo quitar el logo')
     })
   }
@@ -80,7 +89,7 @@ export default function PasoMarca({
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await usarLogoEmpresa(fd)
-      if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo copiado de tu empresa'); onGuardado?.() }
+      if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo copiado de tu empresa'); onCambio?.() }
       else toastError(res.error || 'No se pudo copiar el logo')
     })
   }

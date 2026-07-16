@@ -2594,6 +2594,26 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 /* Presentación: panel de control del enlace público (/d/<token>) */
 .dos-enlace-estado { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
 .dos-enlace-nota { margin: 0; }
+/* Listado de dossiers (addon multidossier) */
+/* `.page-header` es flex con wrap, y un bloque de texto sin acotar se lleva la fila
+   entera: el botón acaba debajo y a la izquierda, que es justo donde no se busca una
+   acción principal. Con `flex:1` el texto ocupa solo el hueco que deja el botón y
+   envuelve DENTRO; `min-width:0` lo deja encoger por debajo de su ancho intrínseco
+   (si no, flex respeta el min-content y vuelve a empujar). La base de 20rem es el
+   punto en el que sí interesa que envuelva: en móvil, título y botón apilados. */
+.dos-lista-intro { flex: 1 1 20rem; min-width: 0; }
+/* Vuelta a la lista desde un dossier abierto. No es `.btn`: es navegación de
+   contexto sobre el título, no una acción de la página. */
+.dos-volver {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-text-muted); transition: color var(--transition);
+}
+.dos-volver:hover { color: var(--color-primary-text); }
+/* Estado + desfase en la misma celda: dos badges que se apilan si no caben. */
+.dos-lista-estado { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: center; }
+
 .dos-enlace-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .dos-enlace-input { flex: 1; min-width: 220px; font-family: var(--font-body); font-size: var(--text-sm); }
 .dos-enlace-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-4); }
@@ -2645,10 +2665,19 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   transition: width 350ms var(--ease);
 }
 .dos-progress-steps { display: flex; justify-content: space-between; gap: var(--space-2); }
+/* La tira de pasos es NAVEGABLE (son <button>): en cuanto el dossier existe, cada
+   paso guarda lo suyo por su cuenta, así que saltar a uno anterior a rectificar no
+   puede romper nada — y no poder hacerlo obligaba a terminar el wizard y volver a
+   entrar por «Mi dossier». Sin dossier todavía van disabled: no hay nada que editar. */
 .dos-progress-step {
   font-size: var(--text-xs); font-weight: 600; color: var(--color-text-faint);
   transition: color var(--transition); white-space: nowrap;
+  background: none; border: 0; padding: 0; font-family: inherit;
 }
+.dos-progress-step:enabled { cursor: pointer; }
+/* `:not(.active)`: el paso en el que estás ya va resaltado; que el hover le cambiara
+   el tono solo sería un parpadeo. Y `-text` porque aquí el color es TINTA (skill §2). */
+.dos-progress-step:enabled:not(.active):hover { color: var(--color-primary-text); }
 .dos-progress-step.active, .dos-progress-step.done { color: var(--color-primary); }
 
 .dos-step-content { animation: dos-fade-in 280ms var(--ease); }

@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
 import type { DossierData } from '@/app/actions/portal/dossier'
 import DossierWizard from './DossierWizard'
 import DossierSecciones from './DossierSecciones'
@@ -13,7 +15,9 @@ import PestanaPresentacion from './PestanaPresentacion'
 // dos flujos: los tres leen la misma serie congelada.
 type Tab = 'dossier' | 'presentacion' | 'estado'
 
-export default function DossierEditor({ data }: { data: DossierData }) {
+// `volver`: solo lo pasa la ruta /portal/dossier/[dossierId] del addon; sin él la
+// página ES el módulo entero y no hay ninguna lista a la que volver.
+export default function DossierEditor({ data, volver }: { data: DossierData; volver?: string }) {
   const router = useRouter()
   const refrescar = () => router.refresh()
   const [tab, setTab] = useState<Tab>('dossier')
@@ -43,6 +47,11 @@ export default function DossierEditor({ data }: { data: DossierData }) {
     <div className="view-container">
       <div className="page-header">
         <div>
+          {volver && (
+            <Link className="dos-volver" href={volver}>
+              <ArrowLeft size={14} strokeWidth={2.5} /> Mis dossiers
+            </Link>
+          )}
           <h1 className="page-title">{dossier.titulo}</h1>
           <p className="page-subtitle">
             Período {dossier.periodo_desde} – {dossier.periodo_hasta} · moneda {dossier.moneda_presentacion}

@@ -28,12 +28,19 @@ interface Fila { ingresos: string; costo_ventas: string; gastos_operativos: stri
 type Campo = 'ingresos' | 'costo_ventas' | 'gastos_operativos'
 
 export default function PasoNumeros({
-  dossier, serie, tieneBase, simbolo, onCambio,
+  dossier, serie, tieneBase, simbolo, onGuardado, onCambio,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
   tieneBase: boolean
   simbolo: string
+  // Dos cosas distintas, y confundirlas se lleva por delante el paso entero:
+  //   · onGuardado = «he terminado con los números» → en el wizard AVANZA. Solo el
+  //     botón de guardar, que es el único gesto que dice que el dueño ya los da por buenos.
+  //   · onCambio   = «la rejilla cambió sola» → traer desde Contabilidad. Refresca y
+  //     SE QUEDA: traer datos es justo el momento en que hay que revisarlos, y
+  //     avanzar aquí los daba por buenos sin que nadie los mirara.
+  onGuardado?: () => void
   onCambio?: () => void
 }) {
   const meses = useMemo(() => mesesDe(dossier.periodo_desde, dossier.periodo_hasta), [dossier.periodo_desde, dossier.periodo_hasta])
@@ -78,7 +85,7 @@ export default function PasoNumeros({
         gastos_operativos: num(filas[m].gastos_operativos), origen: filas[m].origen,
       }))))
       const res = await guardarSerie(fd)
-      if (res.ok) { toastSuccess('Números guardados'); onCambio?.() }
+      if (res.ok) { toastSuccess('Números guardados'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })
   }
@@ -98,7 +105,9 @@ export default function PasoNumeros({
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('conflictos_aceptados', JSON.stringify([...aceptados]))
       const res = await aplicarActualizacion(fd)
-      if (res.ok) { toastSuccess('Números actualizados desde tu Contabilidad'); setPreview(null); onCambio?.() }
+      // Refresca la rejilla con lo traído y se queda: es el momento de revisarlo,
+      // no de darlo por bueno. Avanza cuando el dueño pulse Guardar.
+      if (res.ok) { toastSuccess('Números traídos: revísalos y guarda'); setPreview(null); onCambio?.() }
       else toastError(res.error || 'No se pudo actualizar')
     })
   }

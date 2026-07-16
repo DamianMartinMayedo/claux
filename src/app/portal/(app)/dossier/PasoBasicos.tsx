@@ -39,16 +39,23 @@ export default function PasoBasicos({
 }: {
   data: DossierData
   dossier: DossierBasico | null
-  onListo?: () => void
+  // Al CREAR se pasa el id del dossier nuevo: con varios dossiers, quien llama no
+  // puede averiguarlo releyendo (la lectura sin id devuelve el más antiguo).
+  onListo?: (dossierId?: string) => void
 }) {
   const opciones = presets(data.primerMovimiento)
   const creando = dossier === null
 
-  // En un tenant nuevo NADA se pre-crea: sin moneda configurada no se puede crear
-  // el dossier (`crearDossier` la exige, y los importes del snapshot se guardan
-  // en ella). Antes se ofrecía una lista inventada USD/EUR/CUP/MLC — eso fabricaba
-  // configuración que el cliente no tiene. Se avisa y se ofrece el atajo.
-  const sinMoneda = data.monedas.length === 0
+  // En un tenant nuevo NADA se pre-crea, y el dossier tiene DOS prerrequisitos en
+  // orden: primero una EMPRESA (sin ella el snapshot no tiene de qué negocio sacar
+  // números — el consolidado sobre cero empresas está vacío), y solo entonces una
+  // MONEDA (la de presentación, en la que se guardan los importes). Se piden en ese
+  // orden: tener moneda pero ninguna empresa NO habilita crear. Antes se ofrecía una
+  // lista inventada USD/EUR/CUP/MLC — eso fabricaba configuración que el cliente no
+  // tiene. Se avisa del primero que falte y se ofrece el atajo.
+  const sinEmpresa = data.empresas.length === 0
+  const sinMoneda  = data.monedas.length === 0
+  const faltaPrerequisito = sinEmpresa || sinMoneda
   const monedaDefault = dossier?.moneda_presentacion ?? data.monedaConsolidacion ?? data.monedas[0]?.codigo ?? ''
 
   // Defecto: "Último año" (coincide con el fallback del servidor), no "Toda la vida".
@@ -93,7 +100,7 @@ export default function PasoBasicos({
 
       if (creando) {
         const res = await crearDossier(fd)
-        if (res.ok) onListo?.()
+        if (res.ok) onListo?.(res.dossier_id)
         else toastError(res.error || 'No se pudo crear el dossier')
         return
       }
@@ -115,7 +122,11 @@ export default function PasoBasicos({
           </div>
         )}
 
-        {sinMoneda && (
+        {sinEmpresa ? (
+          <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
+            Para crear tu dossier necesitas <strong>al menos una empresa</strong>: es el negocio cuyos números presentarás al inversor.
+          </PrerequisitoAviso>
+        ) : sinMoneda && (
           <PrerequisitoAviso acciones={[{ label: 'Configurar moneda', href: '/portal/monedas' }]}>
             Para crear tu dossier necesitas <strong>al menos una moneda</strong>: es la moneda en la que le presentarás los números al inversor.
           </PrerequisitoAviso>
@@ -181,7 +192,7 @@ export default function PasoBasicos({
         </div>
 
         <div className="dos-acciones">
-          <button className="btn btn-primary" onClick={enviar} disabled={pending || sinMoneda}>
+          <button className="btn btn-primary" onClick={enviar} disabled={pending || faltaPrerequisito}>
             {pending
               ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" />
               : creando ? <Plus size={14} strokeWidth={2.5} /> : <Save size={14} strokeWidth={2.5} />}

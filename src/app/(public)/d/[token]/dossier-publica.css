@@ -200,6 +200,23 @@
 .dp-gracias-email:hover { opacity: 1; }
 .dp-pie-marca { margin: 0; font-size: 0.74rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; }
 
+/* ── Botón de descarga (misma pastilla translúcida que el rail) ──
+   Solo existe con JS, y está bien: window.print() tampoco existiría sin él, y
+   Ctrl/Cmd+P sigue dando el mismo PDF porque el trabajo lo hace el @media print
+   de abajo, no este botón. */
+.dp-print-btn {
+  position: fixed; right: clamp(0.5rem, 2vw, 1.25rem); bottom: clamp(0.75rem, 3vh, 1.5rem);
+  z-index: 20; display: inline-flex; align-items: center; gap: 0.45rem;
+  padding: 0.6rem 0.9rem; border: 0; border-radius: 999px; cursor: pointer;
+  font-family: inherit; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #fff;
+  background: rgba(20, 23, 25, 0.32);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: background 0.25s;
+}
+.dp-print-btn:hover { background: rgba(20, 23, 25, 0.55); }
+.dp-print-btn svg { flex-shrink: 0; }
+
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
 .dp-nav {
   position: fixed; right: clamp(0.5rem, 2vw, 1.25rem); top: 50%; transform: translateY(-50%);
@@ -256,4 +273,73 @@
   .dp-anim .dp-bar-fill { width: var(--bar-w, 0%); transition: none; }
   .dp-anim .dp-linea:not(.dp-linea-proy) { stroke-dasharray: none; stroke-dashoffset: 0; }
   .dp-anim .dp-area, .dp-anim .dp-linea-proy, .dp-anim .dp-divisor { opacity: 1; }
+}
+
+/* ══ Impresión / PDF ══
+   El PDF no es un documento aparte: es ESTA página paginada. No hay plantilla que
+   mantener en paralelo ni segundo renderizado que se desincronice — lo que cambie
+   en el deck cambia en el PDF, porque son el mismo HTML y el mismo CSS.
+
+   16:9 apaisado, la proporción de un deck. 297mm ≈ 1122px CSS, así que se activan
+   los MISMOS breakpoints que en escritorio (relato largo a dos columnas desde
+   900px, equipo a tres desde 720px): el papel se parece al portátil donde el dueño
+   revisó el deck antes de enviarlo, que es justo lo que espera ver. */
+@page { size: 297mm 167mm; margin: 0; }
+
+@media print {
+  /* ── Lo único que hace falta para que la página se comporte como una pantalla ──
+     La página son 1122×631px CSS: bastante menos lienzo que el escritorio para el
+     que están calibrados los clamp() de esta hoja (~1500px). Y como todos topan en
+     un valor ABSOLUTO en rem, al encoger el lienzo el texto conserva sus píxeles y
+     el deck sale inflado: el título pasa de ocupar el 5,3% del ancho al 7,1%.
+     Escalando la raíz en la misma proporción (1122/1512 ≈ 0,74), CADA medida en rem
+     —tipografías, anchos de columna, paddings— recupera de golpe el tamaño RELATIVO
+     que tiene en pantalla. Los vw no se tocan: ya escalan solos.
+     Ojo: esto es lo que mantiene la promesa de «el PDF es el deck». Cualquier
+     retoque suelto de tamaños aquí dentro estaría peleándose con esta línea. */
+  html { font-size: 74%; }
+
+  /* En pantalla el que scrollea es este contenedor; en papel el flujo lo lleva el
+     documento. Sin soltarlo, el PDF es una sola página: la primera pantalla. */
+  .dp-page { height: auto; overflow: visible; scroll-snap-type: none; }
+
+  /* Un slide, una página. `height` exacto y no `min-height`: con min-height el
+     redondeo de mm→px mete páginas fantasma en blanco entre slide y slide. */
+  .dp-slide { height: 167mm; min-height: 0; break-after: page; break-inside: avoid; overflow: hidden; }
+  .dp-slide:last-child { break-after: auto; }
+
+  /* La capa decorativa es cromo de PANTALLA: dos degradados radiales sobre el color
+     y una máscara radial que difumina la rejilla. Chrome no sabe exportar nada de
+     eso a vector, así que lo rasteriza — y salen bandas en los degradados, bordes
+     sucios donde muere la máscara y un bitmap por página. En pantalla da
+     profundidad; en el PDF solo ensucia y pesa. El color de fondo se queda: ese sí
+     es la marca, y es plano, así que se exporta limpio. */
+  .dp-slide::before { display: none; }
+
+  /* El box-shadow obliga a Chrome a rasterizar el logo CON su sombra: lo exporta
+     como JPEG —con pérdida y sin canal alfa— más una máscara gris aparte, y de ahí
+     los halos y el borde sucio. Sin sombra entra como imagen limpia. */
+  .dp-logo { box-shadow: none; }
+
+  /* El color de fondo ES el diseño: por defecto el navegador lo descarta al
+     imprimir —para ahorrar tinta— y el deck saldría en blanco con texto suelto. */
+  .dp-page, .dp-slide,
+  .dp-bar-track, .dp-bar-fill, .dp-grafico-svg, .dp-logo {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  /* Cromo de pantalla: en papel no navega nadie. */
+  .dp-nav, .dp-scroll-hint, .dp-print-btn { display: none; }
+
+  /* ⚠️ SIN ESTO EL PDF SALE CON CASI TODAS LAS PÁGINAS EN BLANCO.
+     Bajo `.dp-anim` el contenido de cada slide arranca en opacity:0 y solo lo
+     revela `.is-visible`, que el observer pone únicamente en los slides que han
+     pasado por el viewport. Nadie recorre el deck entero antes de pulsar
+     Descargar, así que la mayoría siguen invisibles justo cuando se imprime.
+     Misma neutralización que el bloque de reduced-motion de arriba. */
+  .dp-anim .dp-slide .dp-slide-inner { opacity: 1; transform: none; transition: none; }
+  .dp-anim .dp-bar-fill { width: var(--bar-w, 0%); transition: none; }
+  .dp-anim .dp-linea:not(.dp-linea-proy) { stroke-dasharray: none; stroke-dashoffset: 0; }
+  .dp-anim .dp-area, .dp-anim .dp-linea-proy { opacity: 1; }
+  .dp-anim .dp-divisor { opacity: 0.28; }
 }

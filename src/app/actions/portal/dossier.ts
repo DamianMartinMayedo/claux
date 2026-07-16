@@ -16,7 +16,10 @@ import { normalizarHex } from '@/lib/dossier/paleta'
 // ── Funcionalidad "Dossier del negocio" (clave `dossier`) ──
 // Independiente: funciona a mano sin la base. Con `base`, puede TRAER los números
 // (llenado rápido) con fusión NO destructiva. Todo scoped por `client_id`.
-// v1 gestiona UN dossier por cliente (el modelo ya soporta varios).
+//
+// VARIOS dossiers por cliente los desbloquea el addon `multidossier`. Sin él:
+// un dossier y un enlace publicado. Los gates son de aplicación (bloqueoCrear /
+// bloqueoPublicar), no de esquema — la base soporta N desde la 098.
 
 export interface TasaUsada { tasa: number; fecha: string | null }
 
@@ -40,6 +43,23 @@ export interface DossierBasico {
   token:                   string | null
   monedas_faltantes:       string[]
   tasas_usadas:            Record<string, TasaUsada>
+}
+
+// Cabecera para el listado (addon `multidossier`): lo justo para decidir cuál
+// abrir y cuál está listo para enviar. Sin serie ni relato — una fila de tabla no
+// necesita el snapshot entero, y son N dossiers.
+export interface ResumenDossier {
+  dossier_id:          string
+  titulo:              string
+  estado:              'BORRADOR' | 'PUBLICADO'
+  empresa_id:          string | null
+  moneda_presentacion: string
+  periodo_desde:       string | null
+  periodo_hasta:       string | null
+  snapshot_at:         string | null
+  snapshot_stale:      boolean
+  token:               string | null
+  updated_at:          string
 }
 
 export interface CategoriaCosto { categoria: string; es_costo_ventas: boolean }
@@ -90,6 +110,35 @@ type Db = ReturnType<typeof createAdminClient>
 async function modulosDelCliente(db: Db, clientId: string): Promise<string[]> {
   const { data } = await db.from('clients').select('modulos_activos').eq('client_id', clientId).maybeSingle()
   return Array.isArray(data?.modulos_activos) ? (data!.modulos_activos as string[]) : []
+}
+
+// ── Gates del addon `multidossier` ──
+// Van en el servidor y no en el botón: estas actions son públicas y ocultar la UI
+// no es control de acceso (MODELO-MODULOS §3.2). Devuelven el mensaje de error, o
+// null si puede seguir; el mensaje ES el upsell —aparece justo cuando el dueño
+// quiere la capacidad—, así que no hacen falta candados en el portal.
+
+// Duplicar ES crear, así que las dos actions comparten este gate.
+async function bloqueoCrear(db: Db, clientId: string): Promise<string | null> {
+  if (tieneModulo(await modulosDelCliente(db, clientId), 'multidossier')) return null
+  const { count } = await db.from('dossiers')
+    .select('dossier_id', { count: 'exact', head: true }).eq('client_id', clientId)
+  return (count ?? 0) >= 1
+    ? 'Tu suscripción permite un solo dossier. Activa Multidossier para tener varios.'
+    : null
+}
+
+// El enlace ES el producto, así que este es el gate con dientes: sin él, alguien
+// contrata un mes, publica cinco enlaces y se da de baja con los cinco vivos. No
+// destruye nada —los dossiers se siguen viendo y editando, regla de independencia—,
+// solo impide un segundo enlace publicado a la vez.
+async function bloqueoPublicar(db: Db, clientId: string, dossierId: string): Promise<string | null> {
+  if (tieneModulo(await modulosDelCliente(db, clientId), 'multidossier')) return null
+  const { count } = await db.from('dossiers').select('dossier_id', { count: 'exact', head: true })
+    .eq('client_id', clientId).eq('estado', 'PUBLICADO').neq('dossier_id', dossierId)
+  return (count ?? 0) >= 1
+    ? 'Ya tienes una presentación publicada. Despublícala, o activa Multidossier para tener varias a la vez.'
+    : null
 }
 
 // Resuelve las empresas del dossier: null = todas las accesibles (consolidado).
@@ -144,19 +193,52 @@ async function revalidarDeck(db: Db, dossierId: string, clientId: string): Promi
 
 // ── Lectura ─────────────────────────────────────────────────────────────────────
 
-export async function obtenerDossier(): Promise<DossierData | null> {
+// Cabeceras de todos los dossiers, para el listado del addon. Una sola query.
+export async function obtenerDossiers(): Promise<ResumenDossier[]> {
+  const session = await getPortalSession()
+  if (!session) return []
+
+  const db = createAdminClient()
+  const { data } = await db.from('dossiers')
+    .select('dossier_id, titulo, estado, empresa_id, moneda_presentacion, periodo_desde, periodo_hasta, snapshot_at, snapshot_stale, token, updated_at')
+    .eq('client_id', session.client_id)
+    .order('created_at', { ascending: true })
+
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    dossier_id: r.dossier_id as string,
+    titulo: r.titulo as string,
+    estado: (r.estado === 'PUBLICADO' ? 'PUBLICADO' : 'BORRADOR') as ResumenDossier['estado'],
+    empresa_id: (r.empresa_id as string) ?? null,
+    moneda_presentacion: r.moneda_presentacion as string,
+    periodo_desde: (r.periodo_desde as string) ?? null,
+    periodo_hasta: (r.periodo_hasta as string) ?? null,
+    snapshot_at: (r.snapshot_at as string) ?? null,
+    // Ojo: aquí NO se comprueba la mezcla de monedas de la serie (el OR que sí hace
+    // obtenerDossier). Eso costaría una query por fila y el listado solo pinta un
+    // badge; el desfase real lo vuelve a mirar el editor, y publicar lo verifica
+    // contra la base. Un listado que se queda corto avisando es aceptable; uno que
+    // hace N+1 queries, no.
+    snapshot_stale: !!r.snapshot_stale,
+    token: (r.token as string) ?? null,
+    updated_at: r.updated_at as string,
+  }))
+}
+
+// Sin `id` devuelve el más antiguo: es el camino sin addon, y se comporta
+// exactamente igual que antes de que existiera multidossier.
+export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db = createAdminClient()
+  const base = db.from('dossiers').select('*').eq('client_id', session.client_id)
   const [modulos, empresas, { data: monedasRows }, { data: dosRow }, { data: clienteRow }] = await Promise.all([
     modulosDelCliente(db, session.client_id),
     obtenerEmpresas(),
     // `activa`: mismo criterio que el aviso de setup del dashboard — una moneda
     // dada de baja no es una opción de presentación.
     db.from('monedas').select('codigo, simbolo, es_consolidacion').eq('client_id', session.client_id).eq('activa', true),
-    db.from('dossiers').select('*').eq('client_id', session.client_id)
-      .order('created_at', { ascending: true }).limit(1).maybeSingle(),
+    (id ? base.eq('dossier_id', id) : base.order('created_at', { ascending: true }).limit(1)).maybeSingle(),
     db.from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle(),
   ])
   const nombreNegocio = (clienteRow?.nombre_empresa as string) || 'Mi negocio'
@@ -270,9 +352,16 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
 
   const db = createAdminClient()
 
-  // v1: un dossier por cliente. Si ya existe, no se crea otro.
-  const { data: ya } = await db.from('dossiers').select('dossier_id').eq('client_id', session.client_id).limit(1).maybeSingle()
-  if (ya) return { ok: false, error: 'Ya existe un dossier.' }
+  const bloqueo = await bloqueoCrear(db, session.client_id)
+  if (bloqueo) return { ok: false, error: bloqueo }
+
+  // Prerrequisito raíz: sin ninguna empresa no hay negocio del que sacar números
+  // (el consolidado sobre cero empresas está vacío). Va en el servidor, no solo en
+  // el banner: ocultar la UI no es control de acceso. Tener moneda pero ninguna
+  // empresa NO habilita crear.
+  const { count: numEmpresas } = await db.from('companies')
+    .select('id', { count: 'exact', head: true }).eq('client_id', session.client_id)
+  if (!numEmpresas) return { ok: false, error: 'Necesitas crear al menos una empresa antes de crear un dossier.' }
 
   const titulo   = (formData.get('titulo') as string)?.trim() || 'Dossier para inversores'
   const empresaId = (formData.get('empresa_id') as string)?.trim() || null
@@ -297,6 +386,118 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
 
   revalidatePath('/portal/dossier')
   return { ok: true, dossier_id }
+}
+
+// Duplicar: el atajo del addon. El caso real es "el mismo negocio contado a otro
+// inversor" — los números ya están, lo que cambia es el relato. Volver a teclear
+// doce meses para eso es justo la fricción por la que el addon no se renovaría.
+export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string; dossier_id?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const origenId = (formData.get('dossier_id') as string)?.trim()
+  if (!origenId) return { ok: false, error: 'Falta el dossier.' }
+
+  const db = createAdminClient()
+  const bloqueo = await bloqueoCrear(db, session.client_id)   // duplicar ES crear
+  if (bloqueo) return { ok: false, error: bloqueo }
+
+  const { data: origen } = await db.from('dossiers').select('*')
+    .eq('dossier_id', origenId).eq('client_id', session.client_id).maybeSingle()
+  if (!origen) return { ok: false, error: 'Dossier no encontrado.' }
+
+  const dossier_id = genId('DOS')
+  // Copia campo a campo, NUNCA {...origen}. Dos motivos, y el primero es la razón
+  // de ser del addon:
+  //  · `token` es unique: arrastrarlo revienta el insert. Y si algún día dejara de
+  //    serlo sería peor —dos dossiers compartiendo el enlace en vivo, que es
+  //    exactamente lo que este addon existe para evitar—. La copia nace en BORRADOR
+  //    sin token y se gana el suyo al publicar; el enlace del original ni se entera.
+  //  · Los NÚMEROS se heredan (snapshot_at, tasas_usadas: es el mismo negocio); la
+  //    historia de publicación no (publicado_at, created_at).
+  const { error } = await db.from('dossiers').insert({
+    dossier_id, client_id: session.client_id,
+    titulo: `${origen.titulo} (copia)`,
+    estado: 'BORRADOR', token: null, publicado_at: null,
+    empresa_id: origen.empresa_id,
+    nombre_portada: origen.nombre_portada,
+    contacto_email: origen.contacto_email,
+    moneda_presentacion: origen.moneda_presentacion,
+    color_principal: origen.color_principal,
+    logo_url: origen.logo_url,
+    periodo_desde: origen.periodo_desde,
+    periodo_hasta: origen.periodo_hasta,
+    crecimiento_mensual_pct: origen.crecimiento_mensual_pct,
+    snapshot_at: origen.snapshot_at,
+    snapshot_stale: origen.snapshot_stale,
+    tasas_usadas: origen.tasas_usadas,
+    monedas_faltantes: origen.monedas_faltantes,
+  })
+  if (error) return { ok: false, error: 'No se pudo duplicar el dossier.' }
+
+  // Filas hijas. El `select` enumera columnas de NEGOCIO a propósito: las tres
+  // tablas llevan además un `id` identity que no se ve en el modelo de dominio, y
+  // un select('*') lo arrastraría al insert. En serie y secciones el unique lo
+  // cazaría; en dossier_lineas, que no tiene unique, pasaría callando.
+  // dossier_costo_ventas NO se copia: es de nivel client_id, ya se hereda.
+  const [{ data: serie }, { data: lineas }, { data: secciones }] = await Promise.all([
+    db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+      .eq('dossier_id', origenId).eq('client_id', session.client_id),
+    db.from('dossier_lineas').select('grupo, concepto, monto, orden')
+      .eq('dossier_id', origenId).eq('client_id', session.client_id),
+    db.from('dossier_secciones').select('clave, titulo, cuerpo, bullets, orden, visible, generado_ia')
+      .eq('dossier_id', origenId).eq('client_id', session.client_id),
+  ])
+
+  const conDestino = <T extends object>(filas: T[] | null) =>
+    (filas ?? []).map(f => ({ ...f, dossier_id, client_id: session.client_id }))
+
+  const hijas = await Promise.all([
+    serie?.length     ? db.from('dossier_serie').insert(conDestino(serie))         : null,
+    lineas?.length    ? db.from('dossier_lineas').insert(conDestino(lineas))       : null,
+    secciones?.length ? db.from('dossier_secciones').insert(conDestino(secciones)) : null,
+  ])
+  // Si alguna hija falla, la copia queda a medias (sin transacción entre tablas):
+  // mejor no dejarla suelta en la lista con la mitad de los números del original.
+  if (hijas.some(r => r?.error)) {
+    await eliminarFilas(db, dossier_id, session.client_id)
+    return { ok: false, error: 'No se pudo duplicar el dossier.' }
+  }
+
+  revalidatePath('/portal/dossier')
+  return { ok: true, dossier_id }
+}
+
+// Borra las filas de un dossier (hijas primero). Sin FKs declaradas no hay cascade:
+// el orden lo lleva el código, y las huérfanas no las limpiaría nadie.
+async function eliminarFilas(db: Db, dossierId: string, clientId: string): Promise<void> {
+  for (const t of ['dossier_serie', 'dossier_lineas', 'dossier_secciones'] as const) {
+    await db.from(t).delete().eq('dossier_id', dossierId).eq('client_id', clientId)
+  }
+  await db.from('dossiers').delete().eq('dossier_id', dossierId).eq('client_id', clientId)
+}
+
+export async function eliminarDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  const dossierId = (formData.get('dossier_id') as string)?.trim()
+  if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
+
+  const db = createAdminClient()
+  const { data: dos } = await db.from('dossiers').select('token, estado')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
+
+  await eliminarFilas(db, dossierId, session.client_id)
+
+  revalidatePath('/portal/dossier')
+  // El deck es caché de por vida: sin esto, el enlace repartido seguiría sirviendo
+  // un dossier que ya no existe.
+  if (dos.token) revalidatePath(`/d/${dos.token}`)
+  return { ok: true }
 }
 
 // Actualiza lo básico (título, empresa, período, moneda, crecimiento).
@@ -656,6 +857,9 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
     .eq('dossier_id', dossierId).eq('client_id', session.client_id)
     .neq('moneda', dos.moneda_presentacion).limit(1).maybeSingle()
   if (dos.snapshot_stale || mezcla) return { ok: false, error: 'Cambiaste la moneda, la empresa o el período: sincroniza tus números en «Los números» antes de publicar.' }
+
+  const bloqueo = await bloqueoPublicar(db, session.client_id, dossierId)
+  if (bloqueo) return { ok: false, error: bloqueo }
 
   const token = (dos.token as string | null) ?? nuevoToken()
   const { error } = await db.from('dossiers').update({

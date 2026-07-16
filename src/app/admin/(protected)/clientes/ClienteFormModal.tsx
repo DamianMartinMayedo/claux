@@ -60,7 +60,7 @@ export default function ClienteFormModal({
   open, onClose, catalogo, plantillas, setupDefault, descuentoAnualPct, initial, presupuestoId,
 }: Props) {
   const [loading, setLoading] = useState(false)
-  const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string; estado: string } | null>(null)
+  const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string; estado: string; email?: string } | null>(null)
   const mounted = useMounted()
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
@@ -69,6 +69,11 @@ export default function ClienteFormModal({
   const [sector, setSector] = useState('')
   const [tarifa, setTarifa] = useState<'estandar' | 'fundador'>('estandar')
   const [ciclo, setCiclo]   = useState<'mensual' | 'anual'>('mensual')
+  // Va arriba del todo y en estado (no `defaultChecked`) porque decide qué se
+  // muestra del resto: a un entorno de prueba no se le cobra, así que tarifa,
+  // ciclo, precio y pago de configuración no pintan nada y solo son campos que
+  // rellenar. Los ocultos no se envían, y `crearCliente` los ignora igualmente.
+  const [esPrueba, setEsPrueba] = useState(false)
 
   // Al abrir, (re)inicializa el formulario con los valores de precarga. Si no hay
   // precarga, arranca en los valores por defecto del alta manual.
@@ -79,6 +84,7 @@ export default function ClienteFormModal({
     setSector(initial?.sector ?? '')
     setTarifa(initial?.tarifa ?? 'estandar')
     setCiclo(initial?.ciclo ?? 'mensual')
+    setEsPrueba(false)
   }, [open, initial])
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
@@ -145,6 +151,15 @@ export default function ClienteFormModal({
                 <label className="code-block-label">ID Cliente</label>
                 <p className="code-block-value">{resultado.client_id}</p>
               </div>
+              {/* El correo se enseña SIEMPRE, no solo cuando se le ha puesto sufijo:
+                  es el usuario con el que se inicia sesión, y en los de prueba puede
+                  no ser el que se tecleó (ver `emailConSufijo` en actions/clientes). */}
+              {resultado.email && (
+                <div className="code-block-field">
+                  <label className="code-block-label">Usuario (correo)</label>
+                  <p className="code-block-value code-block-value-text">{resultado.email}</p>
+                </div>
+              )}
               <div className="code-block-field">
                 <label className="code-block-label">Contraseña temporal</label>
                 <p className="code-block-value code-block-value-text">{resultado.passwordTemporal}</p>
@@ -179,6 +194,24 @@ export default function ClienteFormModal({
                   <input type="hidden" name="presupuesto_id" value={presupuestoId} />
                 )}
 
+                {/* Lo primero: decide la mitad del formulario. */}
+                <label className="checkbox-group">
+                  <input
+                    type="checkbox"
+                    name="es_prueba"
+                    value="true"
+                    checked={esPrueba}
+                    onChange={e => setEsPrueba(e.target.checked)}
+                  />
+                  <span className="checkbox-label">
+                    Cliente de prueba — entorno interno, sin cobros ni caducidad
+                    <span className="input-hint">
+                      No cuenta en las estadísticas de CLAUX. Se crea en prueba permanente:
+                      no se le registra ningún cobro y no vence nunca.
+                    </span>
+                  </span>
+                </label>
+
                 <div className="input-group">
                   <label>Nombre de la empresa <span className="required">*</span></label>
                   <input name="nombre_empresa" className="input" required placeholder="Ej: Empresa Ejemplo S.L." defaultValue={initial?.nombre_empresa ?? ''} />
@@ -206,6 +239,7 @@ export default function ClienteFormModal({
                 </div>
 
                 {/* Tarifa */}
+                {!esPrueba && (
                 <div className="seg-field">
                   <span className="seg-field-label">Tarifa</span>
                   <div className="seg">
@@ -218,6 +252,7 @@ export default function ClienteFormModal({
                     ))}
                   </div>
                 </div>
+                )}
 
                 {/* Lista de módulos con switch */}
                 {GRUPOS.map(grupo => {
@@ -256,6 +291,9 @@ export default function ClienteFormModal({
                   )
                 })}
 
+                {/* Cobro: nada de esto aplica a un entorno de prueba. */}
+                {!esPrueba && (
+                <>
                 {/* Ciclo de cobro */}
                 <div className="seg-field">
                   <span className="seg-field-label">Ciclo de cobro</span>
@@ -299,15 +337,15 @@ export default function ClienteFormModal({
                   <span className="input-hint">Pago único inicial. Pon 0 para omitirlo. Se registra aparte de la suscripción.</span>
                 </div>
 
+                {/* Marcada por defecto: el alta normal empieza con prueba gratuita.
+                    Desmarcarla es decir «este ya paga», y entonces nace bloqueado
+                    hasta que confirmes su primer cobro. */}
                 <label className="checkbox-group">
-                  <input type="checkbox" name="es_trial" value="true" />
+                  <input type="checkbox" name="es_trial" value="true" defaultChecked />
                   <span className="checkbox-label">Iniciar con período de prueba gratuita (sin cobro)</span>
                 </label>
-
-                <label className="checkbox-group">
-                  <input type="checkbox" name="es_prueba" value="true" />
-                  <span className="checkbox-label">Cliente de prueba (no cuenta en las estadísticas de CLAUX)</span>
-                </label>
+                </>
+                )}
 
                 <div className="input-group">
                   <label>Notas internas</label>

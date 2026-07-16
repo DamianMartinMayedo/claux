@@ -3,12 +3,24 @@
 import { useEffect } from 'react'
 
 // Todo el JS del deck: reveal al entrar, conteo de números, punto de navegación
-// activo y teclado (↑/↓). Sin librerías — el presupuesto es < 100 KB (skill UI §6).
+// activo, teclado (↑/↓) y la descarga en PDF. Sin librerías — el presupuesto es
+// < 100 KB (skill UI §6).
 //
 // Las ANIMACIONES son OPT-IN: el estado base (sin `.dp-anim`) muestra el deck
 // entero y quieto. Solo si este componente confirma que puede animar añade
 // `.dp-anim` y entonces el CSS oculta/rellena/dibuja. Si el JS no llega —3G cubano,
 // JS off, error de hidratación— el inversor lee el deck completo igualmente.
+
+// Texto final de un contador: el mismo que ya pintó el servidor. Lo usan el conteo
+// al terminar y `beforeprint`, para que una cifra a medias no se congele en el PDF.
+function textoFinal(el: HTMLElement): string {
+  const objetivo = parseFloat(el.dataset.count ?? '')
+  if (Number.isNaN(objetivo)) return el.textContent ?? ''
+  const dec = parseInt(el.dataset.dec ?? '0', 10)
+  const fmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+  return fmt.format(objetivo) + (el.dataset.suf ?? '')
+}
+
 export default function DeckReveal() {
   useEffect(() => {
     const root = document.querySelector<HTMLElement>('.dp-page')
@@ -85,7 +97,7 @@ export default function DeckReveal() {
         const e = 1 - Math.pow(1 - t, 3)
         el.textContent = fmt.format(objetivo * e) + suf
         if (t < 1) requestAnimationFrame(paso)
-        else el.textContent = fmt.format(objetivo) + suf
+        else el.textContent = textoFinal(el)
       }
       requestAnimationFrame(paso)
     }
@@ -109,5 +121,43 @@ export default function DeckReveal() {
     }
   }, [])
 
-  return null
+  // ── PDF ──
+  // El @media print de la hoja hace todo el trabajo (una diapositiva, una página).
+  // Aquí solo queda disparar el diálogo y tapar el único agujero que el CSS no
+  // puede: los contadores son JS, así que imprimir con una cifra a medio contar la
+  // congelaría a medias en el PDF. El resto de la animación ya la neutraliza el CSS.
+  useEffect(() => {
+    const fijarCifras = () => {
+      document.querySelectorAll<HTMLElement>('[data-count]').forEach(el => { el.textContent = textoFinal(el) })
+    }
+    window.addEventListener('beforeprint', fijarCifras)
+
+    // El portal pide el PDF con ?print=1. Se lee AQUÍ, en cliente, a propósito:
+    // leer searchParams en el servidor volvería dinámica una página que es caché
+    // de por vida (revalidate = false) y cada inversor pagaría un render.
+    // Al `load` y no al montar: las fuentes de marca entran por <link> con
+    // display=swap, e imprimir antes las congelaría en la del sistema.
+    if (!new URLSearchParams(window.location.search).has('print')) {
+      return () => window.removeEventListener('beforeprint', fijarCifras)
+    }
+    const imprimir = () => window.print()
+    if (document.readyState === 'complete') imprimir()
+    else window.addEventListener('load', imprimir, { once: true })
+
+    return () => {
+      window.removeEventListener('beforeprint', fijarCifras)
+      window.removeEventListener('load', imprimir)
+    }
+  }, [])
+
+  return (
+    <button type="button" className="dp-print-btn" onClick={() => window.print()}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+      PDF
+    </button>
+  )
 }

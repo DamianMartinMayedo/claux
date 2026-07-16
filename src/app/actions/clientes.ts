@@ -31,6 +31,25 @@ function generateSalt(): string {
   return crypto.randomUUID()
 }
 
+/**
+ * `ana@gmail.com` + `CLI-0005` → `ana+cli0005@gmail.com` (plus-addressing).
+ *
+ * Sirve para dar de alta varios clientes de PRUEBA con el mismo buzón: el correo
+ * sigue llegando a la misma bandeja, pero la dirección es única y no rompe el
+ * login (ver la nota de «Email único» en `crearCliente`).
+ *
+ * El sufijo se corta del local-part antes de añadir el nuevo: si no, recrear un
+ * cliente iría encadenando `ana+cli0005+cli0006@…`. Y sale del client_id, que ya
+ * es único, así que el resultado tampoco puede chocar.
+ */
+function emailConSufijo(email: string, client_id: string): string {
+  const arroba = email.lastIndexOf('@')
+  if (arroba < 1) return email                       // sin @ no hay nada que sufijar
+  const local   = email.slice(0, arroba).split('+')[0]
+  const dominio = email.slice(arroba + 1)
+  return `${local}+${client_id.toLowerCase().replace(/-/g, '')}@${dominio}`
+}
+
 
 // ── Helper: precio mensual a partir de los módulos activos ───────────
 // Suma los módulos/funcionalidades activos según la tarifa. Precios desde modulos_catalogo
@@ -76,13 +95,32 @@ export async function crearCliente(formData: FormData) {
   if (!['fundador', 'estandar'].includes(tarifa)) return { ok: false, error: 'Tarifa inválida.' }
   if (!['mensual', 'anual'].includes(ciclo))      return { ok: false, error: 'Ciclo de facturación inválido.' }
 
-  // Verificar email único
+  // Generar client_id secuencial. Va antes que la resolución del email porque el
+  // sufijo de los clientes de prueba se construye con él.
+  const { count } = await supabase.from('clients').select('*', { count: 'exact', head: true })
+  const client_id = `CLI-${String((count ?? 0) + 1).padStart(4, '0')}`
+
+  // ── Email único ──
+  // No es una formalidad: `loginCliente` busca al usuario SOLO por email, sin
+  // client_id, y no hay índice único en client_users.email. Dos clientes con el
+  // mismo correo hacen que el `maybeSingle()` del login devuelva error con dos
+  // filas → los DOS se quedan fuera, con un «Credenciales incorrectas» que no
+  // explica nada. El correo es la identidad de login, global entre tenants.
+  //
+  // Para los clientes de PRUEBA, que se crean a puñados con el mismo correo de
+  // siempre, en vez de rechazar se desambigua con plus-addressing: el buzón es el
+  // mismo (Gmail y compañía entregan igual) pero la dirección es única, así que el
+  // login sigue funcionando.
+  let email_final = email_admin
   const { data: emailExiste } = await supabase
     .from('clients')
     .select('client_id')
     .eq('email_admin', email_admin)
     .maybeSingle()
-  if (emailExiste) return { ok: false, error: 'Ya existe un cliente con ese email.' }
+  if (emailExiste) {
+    if (!es_prueba) return { ok: false, error: 'Ya existe un cliente con ese email.' }
+    email_final = emailConSufijo(email_admin, client_id)
+  }
 
   // Módulos seleccionados (la contabilidad 'base' es opcional, como cualquier
   // módulo) y precio mensual resultante.
@@ -92,18 +130,15 @@ export async function crearCliente(formData: FormData) {
   // Estado y vigencia: trial → TRIAL por días configurables; sin trial → DESACTIVADO hasta que
   // se confirme el primer pago de suscripción (confirmarPago lo pasa a ACTIVO).
   //
-  // El cliente de PRUEBA es la excepción a todo esto, porque no es una venta: es un
-  // entorno interno nuestro, de por vida. Entra ACTIVO (si cayera en DESACTIVADO por
-  // no tener pago, el portal lo bloquearía y no serviría para probar) y no se le
-  // guarda fecha de expiración: no vence.
-  const estadoInicial = es_prueba ? 'ACTIVO' : es_trial ? 'TRIAL' : 'DESACTIVADO'
+  // El cliente de PRUEBA es la excepción, porque no es una venta: es un entorno
+  // interno nuestro, de por vida. Es TRIAL siempre —nunca DESACTIVADO, que lo
+  // bloquearía, ni ACTIVO, que lo haría pasar por cliente de pago— y sin fecha de
+  // expiración: un trial que no caduca. Los botones de cobro y suspensión no se le
+  // ofrecen (ver AccionesHeader).
+  const estadoInicial = (es_prueba || es_trial) ? 'TRIAL' : 'DESACTIVADO'
   const diasVigencia  = es_trial
     ? (parseInt(await getSetting('dias_trial_default', '15'), 10) || 15)
     : diasCiclo(ciclo)
-
-  // Generar client_id secuencial
-  const { count } = await supabase.from('clients').select('*', { count: 'exact', head: true })
-  const client_id = `CLI-${String((count ?? 0) + 1).padStart(4, '0')}`
 
   const hoy = new Date()
   const fechaExpiracion = addDays(hoy, diasVigencia)
@@ -112,7 +147,7 @@ export async function crearCliente(formData: FormData) {
     client_id,
     nombre_empresa,
     nombre_contacto: nombre_contacto || null,
-    email_admin,
+    email_admin: email_final,
     sector,
     modulos_activos,
     tarifa,
@@ -205,7 +240,7 @@ export async function crearCliente(formData: FormData) {
     user_id,
     client_id,
     nombre:              nombre_contacto || nombre_empresa,
-    email:               email_admin,
+    email:               email_final,
     password_hash,
     salt,
     rol:                 'admin_empresa',
@@ -221,12 +256,12 @@ export async function crearCliente(formData: FormData) {
     const { asunto, html } = await renderPlantilla('bienvenida', {
       nombre: nombre_contacto || nombre_empresa,
       empresa: nombre_empresa,
-      usuario: email_admin,
+      usuario: email_final,
       password_temporal: passwordTemporal,
       link_portal: LINK_PORTAL,
     })
     await enviarEmail({
-      to: email_admin,
+      to: email_final,
       subject: asunto,
       html,
       tipo: 'bienvenida',
@@ -237,7 +272,7 @@ export async function crearCliente(formData: FormData) {
   after(() => enviarAvisoInterno({
     tipo: 'aviso_cliente',
     asunto: `Nuevo cliente creado: ${nombre_empresa}`,
-    cuerpo: `Se creó el cliente ${nombre_empresa} (${client_id}).\n\nContacto: ${nombre_contacto || '—'}\nEmail: ${email_admin}\nTarifa: ${tarifa}/${ciclo}\nMódulos: ${modulos_activos.join(', ') || '—'}\nEstado inicial: ${estadoInicial}`,
+    cuerpo: `Se creó el cliente ${nombre_empresa} (${client_id}).\n\nContacto: ${nombre_contacto || '—'}\nEmail: ${email_final}\nTarifa: ${tarifa}/${ciclo}\nMódulos: ${modulos_activos.join(', ') || '—'}\nEstado inicial: ${estadoInicial}`,
     clientId: client_id,
   }))
 
@@ -255,7 +290,10 @@ export async function crearCliente(formData: FormData) {
   revalidatePath('/admin/clientes')
   revalidatePath('/admin/dashboard')
   revalidatePath('/admin/pagos')
-  return { ok: true, client_id, passwordTemporal, estado: estadoInicial }
+  // `email_final` viaja de vuelta porque puede NO ser el que se tecleó (ver
+  // «Email único»): si se le sufijó, el modal tiene que enseñar el de verdad —es
+  // con el que se inicia sesión— y no el que escribió quien lo creó.
+  return { ok: true, client_id, passwordTemporal, estado: estadoInicial, email: email_final }
 }
 
 // ── Regenerar contraseña de un usuario del cliente ───────────────────
@@ -424,20 +462,29 @@ export async function eliminarCliente(
   if (!client_id) return { ok: false, error: 'client_id requerido.' }
 
   const { data: cliente } = await supabase
-    .from('clients').select('nombre_empresa, estado').eq('client_id', client_id).maybeSingle()
+    .from('clients').select('nombre_empresa, estado, es_prueba').eq('client_id', client_id).maybeSingle()
   if (!cliente) return { ok: false, error: 'Cliente no encontrado.' }
 
-  if (cliente.estado !== 'DESACTIVADO') {
-    return { ok: false, error: 'Suspende el cliente antes de borrarlo.' }
-  }
+  // Los dos candados de abajo protegen la facturación de un cliente real: obligan a
+  // suspenderlo primero (para que borrar sea deliberado) y prohíben destruir pagos
+  // cobrados. A un cliente de PRUEBA no le aplican: no se le cobra, está fuera de
+  // todas las estadísticas y su razón de ser es crearlo y tirarlo. Obligarle a pasar
+  // por «suspender» solo para poder borrarlo era fricción sin nada que proteger.
+  // La confirmación por nombre sí se le exige: contra el borrado accidental, no
+  // contra la pérdida de dinero.
+  if (!cliente.es_prueba) {
+    if (cliente.estado !== 'DESACTIVADO') {
+      return { ok: false, error: 'Suspende el cliente antes de borrarlo.' }
+    }
 
-  const { count } = await supabase
-    .from('payments')
-    .select('*', { count: 'exact', head: true })
-    .eq('client_id', client_id)
-    .eq('estado', 'confirmado')
-  if ((count ?? 0) > 0) {
-    return { ok: false, error: 'Tiene pagos confirmados: no se puede borrar (usa Archivar para no perder facturación).' }
+    const { count } = await supabase
+      .from('payments')
+      .select('*', { count: 'exact', head: true })
+      .eq('client_id', client_id)
+      .eq('estado', 'confirmado')
+    if ((count ?? 0) > 0) {
+      return { ok: false, error: 'Tiene pagos confirmados: no se puede borrar (usa Archivar para no perder facturación).' }
+    }
   }
 
   if ((confirmacion ?? '').trim() !== cliente.nombre_empresa.trim()) {

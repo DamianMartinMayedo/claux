@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { ExternalLink, Copy, Check, Loader2, Globe, EyeOff, RefreshCw, AlertTriangle } from 'lucide-react'
+import { ExternalLink, Copy, Check, Loader2, Globe, EyeOff, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import {
   publicarDossier, despublicarDossier, revocarEnlace,
@@ -129,6 +129,13 @@ export default function PestanaPresentacion({
               </button>
               <a className="btn btn-secondary" href={url} target="_blank" rel="noreferrer">
                 <ExternalLink size={14} strokeWidth={2.5} /> Ver
+              </a>
+              {/* El PDF es la propia presentación paginada, así que el diálogo tiene
+                  que salir en el deck, no aquí: `?print=1` lo abre y lo dispara solo.
+                  Sí, abre una pestaña; pero no hay descarga por red que ahorrar —el
+                  archivo se genera en el dispositivo— y es el mismo gesto que «Ver». */}
+              <a className="btn btn-secondary" href={`${url}?print=1`} target="_blank" rel="noreferrer">
+                <Download size={14} strokeWidth={2.5} /> PDF
               </a>
             </div>
 

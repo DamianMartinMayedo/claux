@@ -290,6 +290,13 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
   const vencidoPorFecha = !!cliente.fecha_expiracion && cliente.fecha_expiracion.split('T')[0] <= hoyYMD
   const puedeGracia = vencidoPorFecha || ['VENCIDO', 'DESACTIVADO', 'GRACIA'].includes(cliente.estado)
 
+  // Al cliente de PRUEBA no se le cobra ni se le suspende: es un entorno interno,
+  // TRIAL de por vida. Cobrarle, darle período de gracia o suspenderlo no significan
+  // nada, así que esos botones ni se le ofrecen — dejarlos ahí solo invita a pulsarlos
+  // y a ensuciar la facturación con datos que luego hay que limpiar. Se queda con
+  // Editar, Archivar y Borrar.
+  const esPrueba = !!cliente.es_prueba
+
   const clienteInfo = (
     <div className="info-box">
       <strong className="info-box-title">{cliente.nombre_empresa}</strong>
@@ -656,7 +663,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     </button>
   )
 
-  const btnSuspender = esActivo ? (
+  const btnSuspender = esActivo && !esPrueba ? (
     <button
       className="btn btn-danger btn-sm header-action"
       onClick={openEstado}
@@ -666,7 +673,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     </button>
   ) : null
 
-  const btnGracia = puedeGracia ? (
+  const btnGracia = puedeGracia && !esPrueba ? (
     <button
       className="btn btn-secondary btn-sm header-action"
       onClick={openGracia}
@@ -676,7 +683,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     </button>
   ) : null
 
-  const btnPago = (
+  const btnPago = !esPrueba ? (
     <button
       className="btn btn-primary btn-sm header-action"
       onClick={openPago}
@@ -684,7 +691,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
       <DollarSign size={14} />
       Registrar pago
     </button>
-  )
+  ) : null
 
   // Archivar (soft, reversible) / Desarchivar. Siempre disponible.
   const btnArchivar = archivado ? (
@@ -699,8 +706,13 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     </button>
   )
 
-  // Borrar (purga total) solo para clientes suspendidos SIN pagos confirmados.
-  const puedeBorrar = !archivado && cliente.estado === 'DESACTIVADO' && !tienePagosConfirmados
+  // Borrar (purga total) solo para clientes suspendidos SIN pagos confirmados: esos
+  // dos requisitos protegen la facturación de un cliente real. El de PRUEBA no tiene
+  // facturación que proteger y su ciclo de vida es crear/tirar, así que se borra
+  // directamente (`eliminarCliente` salta los mismos candados en servidor; la
+  // confirmación por nombre se sigue pidiendo).
+  const puedeBorrar = !archivado &&
+    (esPrueba || (cliente.estado === 'DESACTIVADO' && !tienePagosConfirmados))
   const btnBorrar = puedeBorrar ? (
     <button className="btn btn-danger btn-sm header-action" onClick={openBorrar}>
       <Trash2 size={14} />
@@ -734,19 +746,25 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
               <button className="dropdown-item" onClick={openEditar}>
                 Editar
               </button>
-              {esActivo && (
+              {/* OJO: este menú repite las condiciones de los botones de escritorio
+                  en vez de reutilizarlos, así que cualquier regla nueva hay que
+                  ponerla en los DOS sitios o el móvil ofrece lo que el escritorio
+                  esconde (los de prueba, sin ir más lejos). */}
+              {esActivo && !esPrueba && (
                 <button className="dropdown-item" onClick={openEstado}>
                   Suspender
                 </button>
               )}
-              {puedeGracia && (
+              {puedeGracia && !esPrueba && (
                 <button className="dropdown-item" onClick={openGracia}>
                   Período especial
                 </button>
               )}
-              <button className="dropdown-item" onClick={openPago}>
-                Registrar pago
-              </button>
+              {!esPrueba && (
+                <button className="dropdown-item" onClick={openPago}>
+                  Registrar pago
+                </button>
+              )}
               {archivado ? (
                 <button className="dropdown-item" onClick={handleDesarchivar}>
                   Desarchivar

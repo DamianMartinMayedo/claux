@@ -50,11 +50,13 @@ function pasoInicial(data: DossierData, pasos: Paso[]): Paso {
 }
 
 export default function DossierWizard({
-  data, onRefrescar, onTerminar,
+  data, onRefrescar, onTerminar, onCreado,
 }: {
   data: DossierData
   onRefrescar: () => void
   onTerminar: () => void
+  // Solo lo pasa la ruta /nuevo (addon multidossier): ver `creado()`.
+  onCreado?: (dossierId: string) => void
 }) {
   const pasos = useMemo(() => pasosDe(data.tieneBase), [data.tieneBase])
   const [paso, setPaso] = useState<Paso>(() => pasoInicial(data, pasos))
@@ -75,8 +77,13 @@ export default function DossierWizard({
     setPaso(pasos[Math.max(idx - 1, 0)])
   }
 
-  // Al crear, el dossier aún no existe: refrescamos para que el resto de pasos lo reciban.
-  function creado() {
+  // Al crear, el dossier aún no existe: refrescamos para que el resto de pasos lo
+  // reciban. Con varios dossiers (ruta /nuevo) refrescar NO basta: la lectura sin
+  // id devuelve el más antiguo, así que el wizard seguiría editando otro dossier.
+  // Por eso ahí se navega a la ruta del recién creado, donde `pasoInicial` reanuda
+  // sola en el paso que toca — sin puntero que mantener.
+  function creado(id?: string) {
+    if (onCreado && id) { onCreado(id); return }
     onRefrescar()
     setPaso(pasos[1])
   }
@@ -104,11 +111,22 @@ export default function DossierWizard({
         <div className="dos-progress-bar">
           <div className="dos-progress-fill" style={{ '--dos-progress': `${pct}%` } as CSSProperties} />
         </div>
+        {/* Navegable en cuanto el dossier existe: cada paso guarda lo suyo de forma
+            independiente, así que volver a rectificar un dato no puede dejar nada a
+            medias. Antes eran <span> y la única salida era terminar el wizard entero
+            y reentrar por «Mi dossier» — el propio flujo empujaba a saltarse pasos.
+            Sin dossier no hay a dónde ir: el paso 1 es el que lo crea. */}
         <div className="dos-progress-steps">
           {pasos.map((p, i) => (
-            <span key={p} className={`dos-progress-step${i === idx ? ' active' : ''}${i < idx ? ' done' : ''}`}>
+            <button
+              key={p} type="button"
+              className={`dos-progress-step${i === idx ? ' active' : ''}${i < idx ? ' done' : ''}`}
+              onClick={() => setPaso(p)}
+              disabled={!data.dossier}
+              aria-current={i === idx ? 'step' : undefined}
+            >
               {ETIQUETA[p]}
-            </span>
+            </button>
           ))}
         </div>
       </div>
@@ -127,7 +145,7 @@ export default function DossierWizard({
           <PasoNumeros
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
-            simbolo={simbolo} onCambio={avanzar}
+            simbolo={simbolo} onGuardado={avanzar} onCambio={onRefrescar}
           />
         )}
 
@@ -141,7 +159,7 @@ export default function DossierWizard({
 
         {paso === 'marca' && dossier && (
           <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl}
-            nombrePorDefecto={nombrePortadaDefault} onGuardado={avanzar} />
+            nombrePorDefecto={nombrePortadaDefault} onGuardado={avanzar} onCambio={onRefrescar} />
         )}
 
         {paso === 'listo' && (
