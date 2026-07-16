@@ -1,6 +1,7 @@
 // Cabecera y pie compartidos de las páginas públicas de captación
-// (landing + diagnóstico). Antes estaban duplicados literalmente en ambas.
+// (landing + diagnóstico + legales). Antes estaban duplicados literalmente.
 import Link from 'next/link'
+import EnlacesLegales from './EnlacesLegales'
 
 export function PublicHeader() {
   return (
@@ -31,6 +32,9 @@ export function PublicFooter() {
       <p className="ld-footer-text">
         Hecho para hacer crecer tu negocio. Simple, rápido, sin complicaciones.
       </p>
+      {/* Los legales van en el pie COMPARTIDO: deben estar accesibles desde
+          cualquier página pública, no solo desde la landing. */}
+      <EnlacesLegales className="ld-footer-legal" />
     </footer>
   )
 }

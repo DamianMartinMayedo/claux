@@ -6,6 +6,7 @@ import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
 import { type IaPanel } from '@/app/actions/portal/ia'
 import IaUsoCard from '@/components/portal/ia/IaUsoCard'
+import EnlacesLegales from '@/components/publico/EnlacesLegales'
 import { Lock } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -197,6 +198,10 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
           </div>
         </form>
       </div>
+
+      {/* En pestaña nueva: quien está trabajando en el portal no debería perder
+          lo que tenga a medias por consultar las cookies. */}
+      <EnlacesLegales nuevaPestana className="prf-legal" />
 
     </div>
   )

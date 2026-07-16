@@ -33,5 +33,9 @@ export async function guardarSetting(key: string, value: string) {
 
   revalidatePath('/admin/notificaciones')
   revalidatePath('/admin/dashboard')
+  // Las páginas legales son ISR (1 h) y su texto sale de aquí: sin esto, un
+  // cambio tardaría hasta una hora en verse. Con 'layout' caen las tres rutas
+  // de /legal/[slug] de una vez.
+  if (key.startsWith('legal_')) revalidatePath('/legal', 'layout')
   return { ok: true as const }
 }

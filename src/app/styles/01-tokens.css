@@ -11,10 +11,18 @@
   --color-primary-subtle:    #E9F9F8;
   --color-primary-text:      #00716D;   /* teal accesible para TEXTO sobre fondo claro (≥4.5:1) */
 
-  /* ── Secundario — Ámbar Caribe ── */
-  --color-amber:             #C97A0C;
-  --color-amber-hover:       #A86208;
-  --color-amber-active:      #864D06;
+  /* ── Secundario — Ámbar Caribe ──
+     «Ámbar vivo»: escala 500/600/700. El anterior (#C97A0C/#A86208/#864D06) venía
+     oscurecido para valer como texto y leía a ocre; el degradado de marca salía
+     caqui. `-active` sobre blanco da 5.0:1 → pasa AA.
+     La rampa se cambia ENTERA, no solo `--color-amber`: las bandas de la landing
+     tiran de `-active`, y `-light` es el realce del titular (.ld-hero-realce).
+     Probado también coral (#FF6B4A/#E85539/#C63C1E/#FFEDE9/#FBDDD5): descartado
+     de momento — su tono cae junto al de --color-error y el CTA se leía como
+     alerta. El secundario definitivo está por decidir (ver docs/planes). */
+  --color-amber:             #F59E0B;
+  --color-amber-hover:       #D97706;
+  --color-amber-active:      #B45309;
   --color-amber-light:       #FEF3C7;   /* alias legacy */
   --color-amber-highlight:   #F2E2C4;
   --color-orange:            #B45309;   /* naranja accesible como TEXTO sobre claro (badge sin fondo, ≥4.5:1) */
@@ -68,14 +76,15 @@
   --paper-surface:    #EFEDE8;   /* recuadros suaves  (= --color-surface-2 claro) */
   --paper-teal:       #00AFAA;   /* banda de tabla / acento (= --color-primary) */
   --paper-teal-ink:   #00716D;   /* teal de texto     (= --color-primary-text) */
-  --paper-amber:      #C97A0C;   /* nota — acento     (= --color-amber) */
+  --paper-amber:      #C97A0C;   /* nota — acento. Era el antiguo --color-amber; NO
+                                    lo sigas: el papel no cambia con la marca. */
   --paper-amber-bg:   #FEF3C7;   /* nota — fondo      (= --color-warning-bg claro) */
   --paper-amber-ink:  #78350F;   /* nota — texto (marrón oscuro legible) */
 
   --space-1:  0.25rem;  --space-2:  0.5rem;   --space-3:  0.75rem;
   --space-4:  1rem;     --space-5:  1.25rem;  --space-6:  1.5rem;
   --space-8:  2rem;     --space-10: 2.5rem;   --space-12: 3rem;
-  --space-16: 4rem;
+  --space-16: 4rem;     --space-20: 5rem;     --space-24: 6rem;
 
   --radius-sm:   0.375rem;  --radius-md:   0.5rem;
   --radius-lg:   0.75rem;   --radius-xl:   1rem;
@@ -105,13 +114,26 @@
   --text-xs:   0.8125rem; --text-sm:   0.9375rem; --text-base: 1rem;   /* xs 13px · sm 15px (subida moderada) */
   --text-lg:   1.125rem;  --text-xl:   1.25rem;   --text-2xl:  1.5rem;
   --text-3xl:  1.875rem;  --text-4xl:  2.25rem;   --text-5xl:  3rem;
-  --text-hero: clamp(2.5rem, 1.3rem + 5vw, 4rem); /* titular de landing, fluido */
+  /* Titulares de landing, fluidos: el clamp ya resuelve el móvil, así que no
+     deben pisarse con media queries (aplastaban el titular a 30px justo en el
+     95% del tráfico). hero 44→80px · section 28→44px. */
+  --text-hero:    clamp(2.75rem, 1.2rem + 6.5vw, 5rem);
+  --text-section: clamp(1.75rem, 1.1rem + 2.8vw, 2.75rem);
 
-  /* ── Degradado de marca (landing / acentos) ── */
-  --gradient-brand: linear-gradient(100deg, var(--color-primary) 0%, var(--color-amber) 100%);
+  /* ── Degradados de marca (landing / acentos) ──
+     `in oklch` NO es decoración: teal y ámbar son casi complementarios, y al
+     interpolarlos en sRGB (el defecto) el punto medio se desatura y cae en un
+     oliva sucio — el caqui que se veía en la banda de IA y en el CTA. En OKLCH
+     el camino mantiene la saturación y pasa por tonos limpios.
+     Si algún día se quita `in oklch`, vuelve el barro. */
+  --gradient-brand: linear-gradient(100deg in oklch, var(--color-primary) 0%, var(--color-amber) 100%);
   /* Banda oscura para secciones (IA, CTA): lineal ~30°, texto en blanco.
      Tonos estables en claro/oscuro (active no cambia por tema) → contraste seguro. */
-  --gradient-band: linear-gradient(30deg, var(--color-primary-active) 0%, var(--color-amber-active) 135%);
+  --gradient-band: linear-gradient(30deg in oklch, var(--color-primary-active) 0%, var(--color-amber-active) 135%);
+  /* Hermana de la anterior: mismos dos tonos en dirección opuesta. Para que las
+     dos bandas fuertes de la landing (IA y CTA) no sean el mismo truco repetido.
+     Mismo contraste, misma regla: texto en blanco. */
+  --gradient-band-alt: linear-gradient(200deg in oklch, var(--color-amber-active) 0%, var(--color-primary-active) 120%);
 
   --sidebar-w:   240px;
   --header-h:    64px;
@@ -156,9 +178,11 @@
     --color-border:            #34322D;   /* bordes más definidos en dark */
     --color-border-strong:     #504D45;   /* hover de bordes en dark */
     --color-border-focus:      #3FD4CF;
+    /* --color-band-* NO se redefine aquí a propósito: son tonos estables, como
+       --gradient-band. Ver la nota en :root. */
     /* En oscuro, el ámbar de marca se sustituye por el ámbar claro para que el
        degradado de texto del hero conserve contraste sobre fondo oscuro. */
-    --gradient-brand: linear-gradient(100deg, var(--color-primary) 0%, var(--color-warning) 100%);
+    --gradient-brand: linear-gradient(100deg in oklch, var(--color-primary) 0%, var(--color-warning) 100%);
     --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
     --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
@@ -203,7 +227,8 @@
   --color-border:            #34322D;
   --color-border-strong:     #504D45;
   --color-border-focus:      #3FD4CF;
-  --gradient-brand: linear-gradient(100deg, var(--color-primary) 0%, var(--color-warning) 100%);
+  /* --color-band-* NO se redefine: tonos estables. Ver la nota en :root. */
+  --gradient-brand: linear-gradient(100deg in oklch, var(--color-primary) 0%, var(--color-warning) 100%);
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
   --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.35);

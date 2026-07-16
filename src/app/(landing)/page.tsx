@@ -3,16 +3,25 @@ import Link from 'next/link'
 import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
 import type { ModuloPublico, SectorPublico } from '@/lib/publico/tipos'
 import { PublicHeader, PublicFooter } from '@/components/publico/Chrome'
-import { DotOrb } from '@/components/publico/DotOrb'
+import LandingAnim from '@/components/publico/LandingAnim'
 import { Reveal } from '@/components/publico/Reveal'
 import {
   iconoModulo,
   colorModulo,
   iconoSector,
+  colorSector,
   SparklesIcon,
   AiChatIcon,
   CalendarIcon,
   CalculatorIcon,
+  ArrowRightIcon,
+  PuzzleIcon,
+  CheckIcon,
+  ChevronIcon,
+  CajaIcon,
+  DossierIcon,
+  InventarioIcon,
+  type ColorModulo,
 } from '@/components/publico/iconos'
 
 export const metadata: Metadata = {
@@ -35,22 +44,35 @@ export const revalidate = 3600
 export default async function LandingPage() {
   const { modulos, sectores } = await obtenerCatalogoPublico()
 
+  // El fondo de puntos interactivo (DotOrb) está retirado del render mientras
+  // decidimos qué hacer con él: era `position: fixed`, así que no daba ritmo al
+  // scroll y mantenía un requestAnimationFrame vivo toda la visita. El ritmo lo
+  // dan ahora las bandas de color. El componente sigue intacto en
+  // components/publico/DotOrb.tsx (y su CSS en 08-landing.css): para recuperarlo
+  // basta importarlo y montarlo aquí de nuevo.
   return (
     <>
-      <DotOrb />
       <div className="ld-page">
+        {/* La cabecera va FUERA de .ld-hero-zona aunque flote sobre ella: es
+            `fixed` (no ocupa flujo) y tiene fondo propio, así que anidarla solo
+            servía para que las reglas de color de la zona —pensadas para el
+            degradado— se le colaran y le dejaran los botones en blanco también
+            al bajar, sobre el crema. */}
         <PublicHeader />
-        <Hero />
+        <div className="ld-hero-zona">
+          <Hero />
+          <div className="ld-hero-fin" aria-hidden="true" />
+        </div>
         <ValueSection />
         <ModulesSection modulos={modulos} />
         <SectorsSection sectores={sectores} />
         <IaSection />
         <StepsSection />
-        <TrustSection />
         <FaqSection />
         <FinalCTA />
         <PublicFooter />
       </div>
+      <LandingAnim />
       <JsonLd />
     </>
   )
@@ -62,24 +84,23 @@ function Hero() {
   return (
     <section className="ld-hero">
       <h1 className="ld-hero-title">
-        Tu negocio,{' '}
-        <span className="ld-text-gradient">digital y al día</span>.
+        Tu negocio, <span className="ld-hero-realce">digital y al día</span>.
       </h1>
       <p className="ld-hero-subtitle">
-        Contabilidad, Catálogo / Menú digital, Caja registradora offline, Reservas, Control de stock y mucho más en una
-        sola plataforma. Accede desde cualquier dispositivo, estés donde estés.
+        Contabilidad, punto de venta, catálogo digital, reservas y presentaciones
+        para inversores. Todo en una plataforma, y activas solo lo que necesitas.
       </p>
       <div className="ld-hero-actions">
         <Link href="/diagnostico" className="btn btn-primary btn-lg">
           Hacer mi diagnóstico gratis
-          <ArrowRightIcon />
+          <ArrowRightIcon size={18} />
         </Link>
         <a href="#como-funciona" className="btn btn-ghost btn-lg">
           Ver cómo funciona
         </a>
       </div>
       <p className="ld-hero-trust">
-        Sin permanencia · Personalizado para ti· Soporte cercano
+        Sin permanencia · Personalizado para ti · Soporte cercano
       </p>
     </section>
   )
@@ -90,7 +111,7 @@ function Hero() {
 function ValueSection() {
   return (
     <section className="ld-section">
-      <Reveal className="ld-section-head">
+      <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">¿Por qué CLAUX?</div>
         <h2 className="ld-section-title">
           Todo lo que necesitas para operar, en un solo lugar
@@ -105,33 +126,59 @@ function ValueSection() {
       <Reveal stagger className="ld-value-grid">
         <ValueItem
           icon={<CalculatorIcon />}
+          color="teal"
           title="Contabilidad simple y completa"
           text="Ventas, gastos, tesorería y reportes. Sin partidas dobles ni complicaciones."
         />
         <ValueItem
           icon={<PuzzleIcon />}
+          color="amber"
           title="Solo lo que necesitas"
-          text="Activas módulos a la carta: inventario, RRHH, reservas, catálogo… y pagas por lo que usas."
+          text="Cada módulo funciona por su cuenta: activas los que quieras y pagas solo por esos."
         />
         <ValueItem
-          icon={<MobileIcon />}
-          title="Siempre a mano"
-          text="Todo tu negocio en el móvil: consulta, gestiona y decide desde donde quieras, sin depender de un ordenador."
+          icon={<CajaIcon />}
+          color="green"
+          title="Un punto de venta que no se para"
+          text="Cobra, registra las ventas y cierra caja aunque estés sin conexión. Luego se sincroniza solo."
+        />
+        <ValueItem
+          icon={<DossierIcon />}
+          color="indigo"
+          title="Tus números, listos para enseñar"
+          text="Convierte tu contabilidad en una presentación para inversores: un enlace para enseñar y un PDF para enviar."
         />
         <ValueItem
           icon={<AiChatIcon />}
+          color="purple"
           title="Un asistente con IA"
-          text="Atiende a tus clientes por Telegram, toma reservas y te resume la semana."
+          text="Atiende a tus clientes, toma reservas y responde a lo que le preguntes sobre tu negocio."
+        />
+        <ValueItem
+          icon={<InventarioIcon />}
+          color="rose"
+          title="Control de tu inventario"
+          text="Qué tienes, dónde está y cuánto queda. Con las compras y las salidas al día."
         />
       </Reveal>
     </section>
   )
 }
 
-function ValueItem({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+function ValueItem({
+  icon,
+  color,
+  title,
+  text,
+}: {
+  icon: React.ReactNode
+  color: ColorModulo
+  title: string
+  text: string
+}) {
   return (
     <div className="ld-value-item">
-      <div className="ld-value-icon">{icon}</div>
+      <div className={`ld-value-icon ld-ac-${color}`}>{icon}</div>
       <div>
         <div className="ld-value-title">{title}</div>
         <div className="ld-value-text">{text}</div>
@@ -146,24 +193,26 @@ function ModulesSection({ modulos }: { modulos: ModuloPublico[] }) {
   const cards = modulos.filter((m) => m.mostrarEnLanding)
 
   return (
-    <section className="ld-section ld-section-alt">
-      <Reveal className="ld-section-head">
+    <section className="ld-section ld-band-amber">
+      <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Módulos disponibles</div>
         <h2 className="ld-section-title">
           Los módulos que tú eliges
         </h2>
         <p className="ld-section-text">
-          Activas solo los módulos que tu negocio necesita —contabilidad,
-          inventario, punto de venta, reservas, citas…— y pagas únicamente por lo que usas.
+          Cada módulo funciona por su cuenta: activas los que necesitas —punto de
+          venta, contabilidad, reservas, presentación para inversores…— y pagas
+          solo por esos.
         </p>
       </Reveal>
 
       <Reveal stagger className="ld-modules-grid">
         {cards.map((m) => {
           const Icon = iconoModulo(m.clave)
+          const color = colorModulo(m.clave)
           return (
             <div key={m.clave} className="ld-module-card">
-              <div className={`ld-module-icon ${colorModulo(m.clave)}`}>
+              <div className={`ld-module-icon ld-ac-${color}`}>
                 <Icon />
               </div>
               <h3>{m.nombre}</h3>
@@ -184,7 +233,7 @@ function SectorsSection({ sectores }: { sectores: SectorPublico[] }) {
 
   return (
     <section className="ld-section">
-      <Reveal className="ld-section-head">
+      <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Para todo tipo de negocio</div>
         <h2 className="ld-section-title">Una plataforma que se adapta a tu sector</h2>
         <p className="ld-section-text">
@@ -205,8 +254,10 @@ function SectorsSection({ sectores }: { sectores: SectorPublico[] }) {
         {sectores.map((s) => {
           const Icon = iconoSector(s.sector)
           return (
-            <div key={s.sector} className="ld-sector-badge">
-              <Icon />
+            <div key={s.sector} className="ld-sector-card">
+              <span className={`ld-sector-icon ld-ac-${colorSector(s.sector)}`}>
+                <Icon />
+              </span>
               {s.nombre}
             </div>
           )
@@ -227,26 +278,31 @@ function IaSection() {
           <h2 className="ld-spotlight-title">El asistente que atiende por ti</h2>
           <p className="ld-spotlight-text">
             Un chat con IA que habla con tus clientes por Telegram y desde tu
-            propio catálogo: responde dudas, toma reservas y pedidos en lenguaje
-            natural, y a ti te resume cómo va la semana.
+            propio catálogo: responde dudas y toma reservas y pedidos escribiendo
+            normal. Y a ti te ayuda a decidir, con los números de tu negocio
+            delante.
           </p>
           <ul className="ld-spotlight-list">
             <li>
-              <CheckMini />
+              <CheckIcon size={18} />
               Atiende a tus clientes 24/7 por Telegram y en tu catálogo
             </li>
             <li>
-              <CheckMini />
+              <CheckIcon size={18} />
               Reservas y pedidos sin que tengas que estar pendiente
             </li>
             <li>
-              <CheckMini />
-              Pregúntale por tus números y recibe un resumen semanal
+              <CheckIcon size={18} />
+              Pregúntale lo que quieras de tu negocio y decide con datos
+            </li>
+            <li>
+              <CheckIcon size={18} />
+              Te ayuda a escribir tu presentación para inversores
             </li>
           </ul>
           <Link href="/diagnostico" className="btn btn-primary btn-lg">
             Quiero verlo en mi negocio
-            <ArrowRightIcon />
+            <ArrowRightIcon size={18} />
           </Link>
         </div>
         <div className="ld-spotlight-visual" aria-hidden="true">
@@ -276,15 +332,15 @@ function IaSection() {
 
 function StepsSection() {
   return (
-    <section className="ld-section ld-section-alt" id="como-funciona">
-      <Reveal className="ld-section-head">
+    <section className="ld-section" id="como-funciona">
+      <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Así de simple</div>
         <h2 className="ld-section-title">Tres pasos para digitalizar tu negocio</h2>
       </Reveal>
 
       <Reveal stagger className="ld-steps">
         <div className="ld-step">
-          <div className="ld-step-number">1</div>
+          <div className="ld-step-number ld-ac-teal">1</div>
           <h3>Cuéntanos tu negocio</h3>
           <p>
             Responde unas preguntas rápidas sobre qué haces y qué necesitas. Sin
@@ -292,7 +348,7 @@ function StepsSection() {
           </p>
         </div>
         <div className="ld-step">
-          <div className="ld-step-number">2</div>
+          <div className="ld-step-number ld-ac-purple">2</div>
           <h3>Te lo dejamos listo</h3>
           <p>
             Configuramos tus módulos, tu catálogo y tus canales. Tú solo revisas y
@@ -300,7 +356,7 @@ function StepsSection() {
           </p>
         </div>
         <div className="ld-step">
-          <div className="ld-step-number">3</div>
+          <div className="ld-step-number ld-ac-amber">3</div>
           <h3>Empieza a operar</h3>
           <p>
             En cuestión de días tienes tu negocio funcionando en digital. Con
@@ -308,29 +364,12 @@ function StepsSection() {
           </p>
         </div>
       </Reveal>
-    </section>
-  )
-}
 
-/* ════════════════════════════════════════════════ Confianza ════ */
-
-function TrustSection() {
-  const items = [
-    { icon: <ShieldIcon />, label: 'Sin permanencia' },
-    { icon: <StarIcon />, label: 'Precios justos y transparentes' },
-    { icon: <MobileIcon />, label: 'Todo tu negocio en el móvil' },
-    { icon: <LockIcon />, label: 'Tus datos, seguros' },
-    { icon: <ChatIcon />, label: 'Soporte cercano y real' },
-  ]
-  return (
-    <section className="ld-section">
-      <Reveal stagger className="ld-trust-grid">
-        {items.map((it) => (
-          <div key={it.label} className="ld-trust-item">
-            <span className="ld-trust-icon">{it.icon}</span>
-            {it.label}
-          </div>
-        ))}
+      <Reveal className="ld-steps-cta">
+        <Link href="/diagnostico" className="btn btn-primary btn-lg">
+          Empezar por el paso 1
+          <ArrowRightIcon size={18} />
+        </Link>
       </Reveal>
     </section>
   )
@@ -341,12 +380,16 @@ function TrustSection() {
 function FaqSection() {
   const faqs = [
     {
-      q: '¿Puedo usarlo desde cualquier dispositivo?',
-      a: 'Sí. CLAUX está diseñado para funcionar en cualquier móvil, tableta u ordenador. Accede a tu negocio estés donde estés.',
+      q: '¿La caja funciona sin conexión?',
+      a: 'Sí. El punto de venta cobra, registra las ventas y cierra caja offline. Cuando vuelve la conexión, se sincroniza solo.',
     },
     {
       q: '¿Tengo que contratar todo de golpe?',
-      a: 'No. La base es la Contabilidad; el resto de módulos los activas solo si los necesitas y pagas por lo que usas.',
+      a: 'No. Cada módulo funciona solo: puedes empezar con el punto de venta y no llevar contabilidad, o al revés. Pagas solo por lo que actives.',
+    },
+    {
+      q: '¿Puedo enseñarle mis números a un inversor?',
+      a: 'Sí. El Dossier convierte tu contabilidad en una presentación con enlace web y un estado de resultados en PDF, a partir de los datos que ya tienes.',
     },
     {
       q: '¿Necesito tener WhatsApp Business?',
@@ -362,8 +405,8 @@ function FaqSection() {
     },
   ]
   return (
-    <section className="ld-section ld-section-alt">
-      <Reveal className="ld-section-head">
+    <section className="ld-section">
+      <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Preguntas frecuentes</div>
         <h2 className="ld-section-title">Lo que la gente nos pregunta</h2>
       </Reveal>
@@ -372,7 +415,7 @@ function FaqSection() {
           <details key={f.q} className="ld-faq-item">
             <summary className="ld-faq-q">
               {f.q}
-              <ChevronIcon />
+              <ChevronIcon className="ld-faq-chevron" size={18} />
             </summary>
             <p className="ld-faq-a">{f.a}</p>
           </details>
@@ -394,7 +437,7 @@ function FinalCTA() {
         </p>
         <Link href="/diagnostico" className="btn btn-primary btn-lg">
           Empezar diagnóstico gratis
-          <ArrowRightIcon />
+          <ArrowRightIcon size={18} />
         </Link>
       </Reveal>
     </section>
@@ -427,70 +470,3 @@ function JsonLd() {
   )
 }
 
-/* ════════════════════════════════════════════════ Iconos UI ════ */
-
-function ArrowRightIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 12h14M12 5l7 7-7 7" />
-    </svg>
-  )
-}
-function PuzzleIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M15.5 3.5a2 2 0 0 1 4 0c0 .5-.2 1-.5 1.4l-.5.6h2a1.5 1.5 0 0 1 1.5 1.5v2l-.6-.5a2 2 0 1 0 0 3l.6-.5v2a1.5 1.5 0 0 1-1.5 1.5h-2l.5.6a2 2 0 1 1-4 0l.5-.6h-2A1.5 1.5 0 0 1 10 16v-2l-.6.5a2 2 0 1 1 0-3l.6.5V10a1.5 1.5 0 0 1 1.5-1.5h2l-.5-.6c-.3-.4-.5-.9-.5-1.4z" />
-    </svg>
-  )
-}
-function MobileIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="5" y="2" width="14" height="20" rx="2" />
-      <path d="M12 18h.01" />
-    </svg>
-  )
-}
-function CheckMini() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  )
-}
-function ShieldIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  )
-}
-function StarIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  )
-}
-function LockIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
-function ChatIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  )
-}
-function ChevronIcon() {
-  return (
-    <svg className="ld-faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  )
-}

@@ -89,9 +89,14 @@ export default function ClienteFormModal({
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
 
   const etiquetaCatalogo = plantillas.find(p => p.sector === sector)?.etiquetas?.catalogo
+  // El catálogo se nombra según el sector: un restaurante ve «Menú digital»; una
+  // tienda, «Catálogo digital». Se COMPONE en vez de parchear `m.nombre`: antes
+  // era un replace sobre /^Catálogo\b/, así que renombrar el módulo desde el
+  // admin lo rompía en silencio (y al pasar a «Menú/catálogo digital» dejó de
+  // aplicar). Así el nombre del catálogo puede cambiar sin tocar esto.
   function nombreModulo(m: ModuloCatalogo): string {
     return m.clave === 'catalogo_qr' && etiquetaCatalogo
-      ? m.nombre.replace(/^Catálogo\b/, etiquetaCatalogo)
+      ? `${etiquetaCatalogo} digital`
       : m.nombre
   }
 

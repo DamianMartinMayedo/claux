@@ -806,3 +806,24 @@ input[type="checkbox"]:checked::after {
 }
 .img-upload-remove { align-self: flex-start; }
 
+/* ═══════════════════════════════════════════════════
+   ENLACES LEGALES
+   ═══════════════════════════════════════════════════
+   Genérico a propósito: lo usan el pie público y el perfil del portal, que son
+   dominios distintos. Cada superficie solo aporta sus márgenes. */
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.legal-links a {
+  color: var(--color-text-faint);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.legal-links a:hover { color: var(--color-primary-text); text-decoration: underline; }
+.legal-links-sep { color: var(--color-border-strong); user-select: none; }
+

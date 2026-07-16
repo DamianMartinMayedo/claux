@@ -323,6 +323,16 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
 }
+/* Ocupa las dos columnas del grid: los textos legales son cuadros de texto
+   largos y a media anchura se escriben fatal. */
+.config-section-wide { grid-column: 1 / -1; }
+.legal-textarea {
+  min-height: 180px;
+  font-family: var(--font-body);
+  line-height: 1.6;
+  resize: vertical;
+}
+.legal-hint-link { color: var(--color-primary-text); text-decoration: underline; }
 .config-section-header {
   display: flex;
   align-items: flex-start;

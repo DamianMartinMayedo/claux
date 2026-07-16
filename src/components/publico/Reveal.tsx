@@ -1,13 +1,12 @@
-'use client'
-
-// Revelado al hacer scroll, ultraligero (IntersectionObserver, sin librerías).
-// La transición vive en CSS (.reveal / .reveal-stagger en 08-landing.css) y bajo
-// prefers-reduced-motion solo hace fade, sin desplazamiento. El componente solo
-// añade la clase `is-visible` cuando el bloque entra en pantalla.
+// Marca un bloque para el revelado al hacer scroll. Solo pone la clase: no hay
+// estado ni efecto, así que la landing sigue siendo un Server Component puro.
+// Quien anima es LandingAnim (un único observer para toda la página), y solo si
+// el JS arranca: el estado base de este bloque es VISIBLE. La transición vive en
+// CSS (.ld-anim .reveal / .reveal-stagger en 08-landing.css).
 //
 // - tag: etiqueta a renderizar (div por defecto; útil para envolver una sección).
 // - stagger: si los hijos directos deben aparecer en cascada (tarjetas de un grid).
-import { createElement, useEffect, useRef, useState, type ElementType, type ReactNode } from 'react'
+import { createElement, type ElementType, type ReactNode } from 'react'
 
 interface RevealProps {
   children: ReactNode
@@ -19,31 +18,7 @@ interface RevealProps {
 }
 
 export function Reveal({ children, className = '', tag = 'div', stagger = false, id }: RevealProps) {
-  const ref = useRef<HTMLElement | null>(null)
-  const [visible, setVisible] = useState(false)
+  const cls = [stagger ? 'reveal-stagger' : 'reveal', className].filter(Boolean).join(' ')
 
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    if (typeof IntersectionObserver === 'undefined') {
-      setVisible(true)
-      return
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisible(true)
-          io.disconnect()
-        }
-      },
-      { rootMargin: '0px 0px -10% 0px', threshold: 0.1 },
-    )
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
-
-  const base = stagger ? 'reveal-stagger' : 'reveal'
-  const cls = [base, visible ? 'is-visible' : '', className].filter(Boolean).join(' ')
-
-  return createElement(tag, { ref, id, className: cls }, children)
+  return createElement(tag, { id, className: cls }, children)
 }

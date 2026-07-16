@@ -33,10 +33,15 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function adaptarModulo(m: ModuloPublico, et: EtiquetasSector): { nombre: string; desc: string } {
   switch (m.clave) {
     case 'base':
-      return { nombre: 'Contabilidad', desc: 'Ventas, gastos, tesorería y reportes. Incluida siempre.' }
+      // Ni «incluida siempre» ni «la base»: la contabilidad es un módulo más y
+      // solo se recomienda si el cliente marca esa necesidad (ver la nota de
+      // generarRecomendacion en lib/publico/recomendacion.ts).
+      return { nombre: 'Contabilidad', desc: 'Ventas, gastos, tesorería y reportes. Sin partidas dobles ni complicaciones.' }
     case 'catalogo_qr':
       return {
-        nombre: `Catálogo digital (${et.catalogo})`,
+        // «Menú digital» / «Catálogo digital» según el sector, en vez de
+        // «Catálogo digital (Menú)», que repetía la palabra dos veces.
+        nombre: `${et.catalogo} digital`,
         desc: `Tu ${et.catalogo.toLowerCase()} con fotos y precios, que tus clientes ven al escanear un QR.`,
       }
     case 'reservas_citas':

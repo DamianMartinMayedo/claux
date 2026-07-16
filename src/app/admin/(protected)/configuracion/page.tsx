@@ -1,9 +1,11 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
-import { CreditCard, Lock, User } from 'lucide-react'
+import { CreditCard, Lock, Scale, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
+import { PAGINAS_LEGALES } from '@/lib/publico/legal'
 import PerfilForm from './PerfilForm'
 import FacturacionForm from './FacturacionForm'
+import LegalForm from './LegalForm'
 
 export default async function ConfiguracionPage() {
   await requireAccesoPagina('configuracion')
@@ -17,6 +19,13 @@ export default async function ConfiguracionPage() {
   const setupDefault   = parseFloat(await getSetting('pago_setup_usd_default', '1000')) || 0
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const diasTrial      = parseInt(await getSetting('dias_trial_default', '15'), 10) || 0
+
+  const slugsLegales = Object.keys(PAGINAS_LEGALES)
+  const textosLegales = Object.fromEntries(
+    await Promise.all(
+      slugsLegales.map(async (slug) => [slug, await getSetting(PAGINAS_LEGALES[slug].clave, '')] as const),
+    ),
+  )
 
   return (
     <div className="view-container">
@@ -99,6 +108,23 @@ export default async function ConfiguracionPage() {
             descuentoAnual={descuentoAnual}
             diasTrial={diasTrial}
           />
+        </section>
+
+        {/* Textos legales */}
+        <section className="card card-lg config-section config-section-wide">
+          <div className="config-section-header">
+            <div className="config-section-icon">
+              <Scale size={20} />
+            </div>
+            <div>
+              <h2 className="config-section-title">Textos legales</h2>
+              <p className="config-section-sub">
+                Aviso legal, privacidad y cookies: se publican en el acto, sin desplegar
+              </p>
+            </div>
+          </div>
+
+          <LegalForm textos={textosLegales} />
         </section>
 
       </div>
