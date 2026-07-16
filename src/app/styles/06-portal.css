@@ -568,7 +568,7 @@
 .mon-badge-info    { background: var(--color-info-bg);    color: var(--color-primary); }
 .mon-badge-success { background: var(--color-success-bg); color: var(--color-success); }
 .mon-badge-neutral { background: var(--color-surface-2);  color: var(--color-text-muted); }
-.mon-badge-warn    { background: var(--color-warning-bg, #fff7e6); color: var(--color-warning, #b45309); }
+.mon-badge-warn    { background: var(--color-warning-bg); color: var(--color-warning); }
 
 /* Estado vacío */
 .mon-empty {
@@ -757,7 +757,7 @@
   padding: 2px 8px; border-radius: var(--radius-full);
   white-space: nowrap;
 }
-.usr-badge-admin   { background: var(--color-warning-bg, #fff7e6); color: #b45309; }
+.usr-badge-admin   { background: var(--color-warning-bg); color: #b45309; }
 .usr-badge-usuario { background: var(--color-info-bg); color: var(--color-primary); }
 .usr-badge-lectura { opacity: 0.8; font-style: italic; }
 
@@ -915,8 +915,8 @@
 .prf-badge        { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-full); }
 .prf-badge-activo { background: var(--color-success-bg); color: var(--color-success); }
 .prf-badge-trial  { background: var(--color-info-bg); color: var(--color-primary); }
-.prf-badge-gracia { background: var(--color-warning-bg, #fff7e6); color: var(--color-warning, #b45309); }
-.prf-badge-vencido { background: var(--color-error-bg, #fef2f2); color: var(--color-error); }
+.prf-badge-gracia { background: var(--color-warning-bg); color: var(--color-warning); }
+.prf-badge-vencido { background: var(--color-error-bg); color: var(--color-error); }
 
 /* Fila 2 columnas en el form de usuario */
 .prf-form-row {
@@ -974,8 +974,8 @@
 /* Badge días restantes */
 .fac-dias      { font-size: var(--text-xs); font-weight: 600; padding: 2px 10px; border-radius: var(--radius-full); }
 .fac-dias-ok   { background: var(--color-success-bg); color: var(--color-success); }
-.fac-dias-warn { background: var(--color-warning-bg, #fff7e6); color: var(--color-warning, #b45309); }
-.fac-dias-venc { background: var(--color-error-bg, #fef2f2); color: var(--color-error); }
+.fac-dias-warn { background: var(--color-warning-bg); color: var(--color-warning); }
+.fac-dias-venc { background: var(--color-error-bg); color: var(--color-error); }
 
 /* Tabla pagos */
 .fac-pago-id  { font-family: monospace; font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); letter-spacing: .04em; }
@@ -2483,19 +2483,11 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imp-banner-icon  { flex-shrink: 0; color: var(--color-warning); }
 .imp-banner-text  { flex: 1; min-width: 0; font-size: var(--text-sm); }
 .imp-banner-email { color: var(--color-text-muted); }
-.imp-banner-btn {
-  flex-shrink: 0;
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-warning);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--text-sm); font-weight: 600; cursor: pointer;
-  transition: all var(--transition);
-}
-.imp-banner-btn:hover:not(:disabled) { background: var(--color-surface-2); }
-.imp-banner-btn:disabled { opacity: 0.6; cursor: default; }
+/* El aspecto lo pone `.btn-aviso` (03-components): este botón ERA el original de
+   ese estilo, pero escrito a mano y clavado a este banner, así que el dossier no
+   podía reutilizarlo y acabó con un btn-primary teal sobre ámbar. Aquí solo queda
+   lo que es de este banner y de ningún otro: que no lo encoja el flex. */
+.imp-banner-btn { flex-shrink: 0; }
 
 /* ── Dossier del negocio (funcionalidad `dossier`) ── */
 .dos-spin { animation: spin 0.8s linear infinite; }
@@ -2546,8 +2538,8 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   cursor: pointer; transition: all var(--transition);
 }
 .dos-cv-chip:hover { border-color: var(--color-border-strong); color: var(--color-text); }
-.dos-cv-chip.is-costo { background: var(--color-amber-highlight); border-color: var(--color-amber); color: var(--color-text); }
-.dos-cv-check { display: inline-flex; align-items: center; width: 14px; color: var(--color-amber); }
+.dos-cv-chip.is-costo { background: var(--color-amber-highlight); border-color: var(--color-amber-text); color: var(--color-text); }
+.dos-cv-check { display: inline-flex; align-items: center; width: 14px; color: var(--color-amber-text); }
 .dos-cv-nota { margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--color-text-muted); }
 .dos-costo-label { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); cursor: pointer; }
 .dos-costo-tag {
@@ -2820,10 +2812,19 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .dos-paleta-titulo { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; }
 .dos-paleta-sub { font-size: var(--text-sm); opacity: 0.85; }
-.dos-paleta-muestras { display: flex; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-3) var(--space-5); background: var(--do-superficie); }
+/* OJO: de aquí arriba, esta tarjeta es un PREVIEW del deck, y el deck es siempre
+   claro. Todo lo que se pinte dentro sale de la paleta `--do-*`, NUNCA de los
+   tokens del portal: esos giran con el tema y aquí no hay tema que valga. Con
+   `--color-text` las etiquetas se volvían casi blancas en oscuro y desaparecían
+   sobre la superficie clara del deck. La nota de abajo sí es del portal (es
+   explicación, no preview) y por eso sí usa sus tokens.
+   El fondo de la tira es un neutro fijo y no `--do-superficie`: la muestra
+   «Fondo» ES `--do-superficie`, así que se pintaba sobre sí misma y solo se veía
+   su borde — el color que faltaba. */
+.dos-paleta-muestras { display: flex; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-3) var(--space-5); background: var(--color-surface-fixed); }
 .dos-paleta-muestra {
   display: inline-flex; align-items: center; gap: var(--space-2);
-  font-size: var(--text-xs); font-weight: 600; color: var(--color-text);
+  font-size: var(--text-xs); font-weight: 600; color: var(--do-neutro);
 }
 .dos-muestra-color {
   width: 18px; height: 18px; flex-shrink: 0;

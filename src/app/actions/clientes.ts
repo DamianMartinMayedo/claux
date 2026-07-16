@@ -91,7 +91,12 @@ export async function crearCliente(formData: FormData) {
 
   // Estado y vigencia: trial → TRIAL por días configurables; sin trial → DESACTIVADO hasta que
   // se confirme el primer pago de suscripción (confirmarPago lo pasa a ACTIVO).
-  const estadoInicial = es_trial ? 'TRIAL' : 'DESACTIVADO'
+  //
+  // El cliente de PRUEBA es la excepción a todo esto, porque no es una venta: es un
+  // entorno interno nuestro, de por vida. Entra ACTIVO (si cayera en DESACTIVADO por
+  // no tener pago, el portal lo bloquearía y no serviría para probar) y no se le
+  // guarda fecha de expiración: no vence.
+  const estadoInicial = es_prueba ? 'ACTIVO' : es_trial ? 'TRIAL' : 'DESACTIVADO'
   const diasVigencia  = es_trial
     ? (parseInt(await getSetting('dias_trial_default', '15'), 10) || 15)
     : diasCiclo(ciclo)
@@ -114,7 +119,7 @@ export async function crearCliente(formData: FormData) {
     ciclo_facturacion: ciclo,
     precio_mensual_usd,
     fecha_inicio:     toDateStr(hoy),
-    fecha_expiracion: toDateStr(fechaExpiracion),
+    fecha_expiracion: es_prueba ? null : toDateStr(fechaExpiracion),
     estado:           estadoInicial,
     es_prueba,
     notas,
@@ -134,8 +139,11 @@ export async function crearCliente(formData: FormData) {
   // ── Pre-crear los cobros esperados como "por confirmar" ──────────────
   // Configuración (pago único, si > 0) + primera suscripción (si no es trial).
   // Se confirman cuando el cliente paga de verdad; solo entonces cuentan como ingreso.
+  // Al cliente de PRUEBA no se le cobra nada, así que no se le crea ningún cobro:
+  // si no, saldría en cuentas por cobrar como una deuda que nadie va a pagar jamás
+  // y que habría que ir marcando a mano cada ciclo.
   const descuentoAnual   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
-  const montoSuscripcion = es_trial ? 0 : importeCiclo(precio_mensual_usd, ciclo, descuentoAnual)
+  const montoSuscripcion = (es_prueba || es_trial) ? 0 : importeCiclo(precio_mensual_usd, ciclo, descuentoAnual)
 
   // Numerador correlativo de pago_id (puede crear hasta 2 pagos)
   const { data: ultPago } = await supabase
@@ -148,7 +156,7 @@ export async function crearCliente(formData: FormData) {
   const nuevoPagoId = () => `PAG-${String(pagoNum++).padStart(4, '0')}`
 
   const pagosPre: Record<string, unknown>[] = []
-  if (pago_setup_usd > 0) {
+  if (!es_prueba && pago_setup_usd > 0) {
     pagosPre.push({
       pago_id:  nuevoPagoId(),
       client_id,

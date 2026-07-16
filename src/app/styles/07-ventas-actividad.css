@@ -147,8 +147,8 @@
   font-size: var(--text-sm); font-weight: 600;
   white-space: nowrap;
 }
-.ven-monto-neg { color: var(--color-error, #dc2626); }
-.ven-monto-pos { color: var(--color-success, #16a34a); }
+.ven-monto-neg { color: var(--color-error); }
+.ven-monto-pos { color: var(--color-success); }
 
 .ven-ajuste-tag-sm {
   display: inline-block;
@@ -588,13 +588,16 @@
   margin-top: 2px;
 }
 
-/* Notas internas — fondo diferenciado */
+/* Notas internas — fondo diferenciado.
+   Tinta, no cromo: aquí el ámbar es etiqueta, filete y fondo de un badge con
+   texto blanco encima. Los tres piden `-text` (ver la nota de la rampa en
+   01-tokens.css); con el ámbar vivo el badge daba 2.15:1 y no se leía. */
 .ven-notas-internas {
-  background: var(--color-amber-light, #fef3c7);
-  border-left-color: var(--color-amber, #C97A0C);
+  background: var(--color-amber-light);
+  border-left-color: var(--color-amber-text);
 }
 .ven-notas-internas .ven-info-label {
-  color: var(--color-amber, #C97A0C);
+  color: var(--color-amber-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -602,7 +605,7 @@
 .ven-notas-internas-badge {
   font-size: 10px;
   font-weight: 600;
-  background: var(--color-amber, #C97A0C);
+  background: var(--color-amber-text);
   color: #fff;
   padding: 1px 6px;
   border-radius: 999px;
@@ -776,9 +779,11 @@
   position: absolute; inset: 0; border-radius: var(--radius-full);
   background: var(--color-border); transition: background var(--transition); pointer-events: none;
 }
+/* El pomo va SIEMPRE claro (--color-surface-fixed, no --color-surface): su pista
+   es gris-borde o teal, y en oscuro un pomo que gire con el tema se vuelve negro. */
 .switch-track::after {
   content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
-  border-radius: var(--radius-full); background: var(--color-surface);
+  border-radius: var(--radius-full); background: var(--color-surface-fixed);
   box-shadow: var(--shadow-sm); transition: transform var(--transition);
 }
 .switch input[type="checkbox"]:checked + .switch-track          { background: var(--color-primary); }

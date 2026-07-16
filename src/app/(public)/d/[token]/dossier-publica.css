@@ -213,24 +213,35 @@
 .dp-nav-dot:hover span { opacity: 0.85; }
 .dp-nav-dot.active span { opacity: 1; transform: scale(1.5); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
 
-/* ══ Animaciones — OPT-IN bajo .dp-anim ══ */
+/* ══ Animaciones — OPT-IN bajo .dp-anim ══
+   Lo que ya está en pantalla cuando arranca el JS no se anima: DeckReveal le pone
+   `.is-visible` ANTES de activar `.dp-anim`, así que entra directo a su estado
+   final. Aquí había una excepción con `#portada` para lo mismo, pero tapaba solo
+   esa diapositiva y con un selector de ID; el resto seguía parpadeando al recargar
+   en mitad del deck. Ya no hace falta: la portada es solo el caso más frecuente
+   de «esto ya se está viendo». */
 .dp-anim .dp-slide .dp-slide-inner { opacity: 0; transform: translateY(26px); transition: opacity 0.6s ease, transform 0.6s ease; }
 .dp-anim .dp-slide.is-visible .dp-slide-inner { opacity: 1; transform: none; }
-
-/* Portada visible de entrada (es lo primero; no debe aparecer "vacía"). */
-.dp-anim #portada .dp-slide-inner { opacity: 1; transform: none; }
 
 /* Barras: de 0 a su ancho al entrar. */
 .dp-anim .dp-bar-fill { width: 0; }
 .dp-anim .dp-slide.is-visible .dp-bar-fill { width: var(--bar-w, 0%); transition: width 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.25s; }
 
 /* Gráfico: la línea real se DIBUJA (pathLength=1); área/proyección/divisor entran después. */
+/* El ORDEN de estos retardos es el efecto, y es fácil de romper: el área tiene la
+   MISMA silueta que la línea, así que si aparece mientras la línea aún se dibuja,
+   revela la curva entera de golpe y luego la línea la vuelve a trazar por encima
+   — se ve como si el gráfico se pintara dos veces. El área entraba a 0.7s con la
+   línea dibujándose hasta 1.7s, justo eso. Nada que comparta silueta con la línea
+   debe entrar antes de que la línea termine.
+   Secuencia: la línea se dibuja (0.2→1.7), el área la rellena por debajo
+   (1.5→2.1), y de ahí sale la proyección (1.75→2.35). */
 .dp-anim .dp-linea:not(.dp-linea-proy) { stroke-dasharray: 1; stroke-dashoffset: 1; }
 .dp-anim .dp-slide.is-visible .dp-linea:not(.dp-linea-proy) { stroke-dashoffset: 0; transition: stroke-dashoffset 1.5s ease 0.2s; }
 .dp-anim .dp-area, .dp-anim .dp-linea-proy, .dp-anim .dp-divisor { opacity: 0; }
-.dp-anim .dp-slide.is-visible .dp-area { opacity: 1; transition: opacity 0.8s ease 0.7s; }
-.dp-anim .dp-slide.is-visible .dp-linea-proy { opacity: 0.7; transition: opacity 0.7s ease 1.1s; }
-.dp-anim .dp-slide.is-visible .dp-divisor { opacity: 0.28; transition: opacity 0.6s ease 1s; }
+.dp-anim .dp-slide.is-visible .dp-area { opacity: 1; transition: opacity 0.6s ease 1.5s; }
+.dp-anim .dp-slide.is-visible .dp-linea-proy { opacity: 0.7; transition: opacity 0.6s ease 1.75s; }
+.dp-anim .dp-slide.is-visible .dp-divisor { opacity: 0.28; transition: opacity 0.5s ease 1.6s; }
 
 /* Pista de scroll en la portada (respeta reduced-motion abajo). */
 .dp-scroll-hint { animation: dp-bob 1.8s ease-in-out infinite; }

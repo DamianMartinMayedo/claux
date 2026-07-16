@@ -105,7 +105,7 @@ export default function IaTouchpoint({
               : <span className="ia-tp-body">{texto}</span>}
 
           {!pending && !error && texto && (
-            <span className="ia-tp-disclaimer">Generado por IA a partir de tus datos · puede equivocarse.</span>
+            <span className="ia-tp-disclaimer">Generado por IA a partir de tus datos · revísalo antes de decidir.</span>
           )}
         </span>
       )}

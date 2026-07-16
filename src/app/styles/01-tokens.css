@@ -1,73 +1,145 @@
 /* ═══════════════════════════════════════════════════
    TOKENS DE DISEÑO — CLAUX Design System v1.0
-   ═══════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════
+
+   ── Un solo bloque para los dos temas ──
+   Cada token declara su par claro/oscuro en la MISMA línea, con
+   `light-dark(claro, oscuro)`. Antes había tres bloques —`:root`, un
+   `@media (prefers-color-scheme: dark)` y un `[data-theme="dark"]`— y los dos
+   últimos eran cuarenta líneas idénticas copiadas a mano. Eso obligaba a tocar
+   cada token dos veces, y el día que alguien tocara solo uno el tema automático
+   y el manual dejaban de coincidir sin que nada fallara ni avisara. Aquí el par
+   no puede desalinearse porque es una sola declaración.
+
+   ── Quién decide el tema ──
+   `light-dark()` mira el `color-scheme` que hereda el elemento:
+   - `:root` declara `light dark` → manda el sistema operativo. Es lo que ve
+     quien no tiene JS, o quien tiene el almacenamiento bloqueado (el try/catch
+     del script de layout.tsx se traga el error y no llega a poner el atributo).
+   - El script de layout.tsx pone `data-theme` (localStorage, o el SO si no hay
+     preferencia guardada) y las reglas del final fijan el `color-scheme` → manda
+     la elección del usuario. Al ser un <script> bloqueante en <head>, esto pasa
+     antes del primer pintado: no hay parpadeo.
+
+   ⚠️ `color-scheme` no es solo el interruptor de `light-dark()`: también le dice
+   al navegador de qué color pintar lo que dibuja él —barras de scroll, controles
+   nativos, selectores de fecha, el fondo del autorrelleno—. Antes no se declaraba
+   en ningún sitio, así que en oscuro salían blancos. Declararlo lo arregla de
+   paso, pero es un cambio visible en toda la app, no solo aquí.
+
+   ⚠️ Lo que ves en devtools no es lo que escribes: Lightning CSS (dentro de
+   Tailwind) traduce `light-dark()` a un truco de dos variables
+   —`var(--lightningcss-light, X) var(--lightningcss-dark, Y)`— porque su target
+   por defecto es anterior a esta función. Funciona, y engancha bien tanto el
+   @media como `[data-theme]`. Dos consecuencias: el valor computado de un token
+   lleva un espacio pegado (cualquier JS que lea un token con
+   `getPropertyValue` debe hacer `.trim()`, como hace DotOrb), y el CSS servido
+   sale algo MÁS grande que con los bloques duplicados. Lo que se gana aquí es que
+   no haya dos fuentes de verdad, no bytes.
+
+   SOPORTE: `light-dark()` pide Chrome 123 / Safari 17.5 / Firefox 120 (2024), y
+   con el polyfill de arriba ni eso. Menos exigente que el `in oklch` de los
+   degradados, que ya se está enviando.
+*/
 :root {
+  color-scheme: light dark;
+
   /* ── Primario — Teal CLAUX ── */
-  --color-primary:           #00AFAA;
-  --color-primary-hover:     #00928E;
+  --color-primary:           light-dark(#00AFAA, #3FD4CF);
+  --color-primary-hover:     light-dark(#00928E, #2BBBB6);
+  /* `-active` no lleva par a propósito: es un TONO ESTABLE. Es el fondo de las
+     bandas y degradados, que siempre llevan texto blanco encima; si se aclarara
+     en oscuro, el blanco dejaría de leerse. Lo mismo vale para --color-amber-active. */
   --color-primary-active:    #007571;
-  --color-primary-dark:      #008C88;   /* alias legacy */
-  --color-primary-highlight: #C8ECEA;
-  --color-primary-subtle:    #E9F9F8;
-  --color-primary-text:      #00716D;   /* teal accesible para TEXTO sobre fondo claro (≥4.5:1) */
+  --color-primary-dark:      light-dark(#008C88, #00AFAA);   /* alias legacy */
+  --color-primary-highlight: light-dark(#C8ECEA, #0D3533);
+  --color-primary-subtle:    light-dark(#E9F9F8, #091F1E);
+  --color-primary-text:      light-dark(#00716D, #3FD4CF);   /* teal accesible para TEXTO (≥4.5:1 en ambos temas) */
 
   /* ── Secundario — Ámbar Caribe ──
      «Ámbar vivo»: escala 500/600/700. El anterior (#C97A0C/#A86208/#864D06) venía
      oscurecido para valer como texto y leía a ocre; el degradado de marca salía
-     caqui. `-active` sobre blanco da 5.0:1 → pasa AA.
-     La rampa se cambia ENTERA, no solo `--color-amber`: las bandas de la landing
-     tiran de `-active`, y `-light` es el realce del titular (.ld-hero-realce).
-     Probado también coral (#FF6B4A/#E85539/#C63C1E/#FFEDE9/#FBDDD5): descartado
-     de momento — su tono cae junto al de --color-error y el CTA se leía como
-     alerta. El secundario definitivo está por decidir (ver docs/planes). */
-  --color-amber:             #F59E0B;
-  --color-amber-hover:       #D97706;
-  --color-amber-active:      #B45309;
-  --color-amber-light:       #FEF3C7;   /* alias legacy */
-  --color-amber-highlight:   #F2E2C4;
-  --color-orange:            #B45309;   /* naranja accesible como TEXTO sobre claro (badge sin fondo, ≥4.5:1) */
-  --color-orange-highlight:  #FFF7ED;
+     caqui. Probado también coral (#FF6B4A/#E85539/#C63C1E/#FFEDE9/#FBDDD5):
+     descartado — su tono cae junto al de --color-error y el CTA se leía como
+     alerta. El secundario definitivo está por decidir (ver docs/planes).
+
+     ⚠️ MARCA vs TINTA — la regla que rompió el cambio a ámbar vivo:
+     `--color-amber` es CROMO DE MARCA y por eso es vivo. Sirve de RELLENO grande
+     (degradado, banda, barra de gráfico), donde el color lo pone todo y el
+     contraste lo da el texto blanco encima. NO sirve de TINTA: #F59E0B sobre
+     `-light` da 1.9:1, así que un icono pintado con él desaparece (el mínimo es
+     3:1). Para tinta —icono, texto, borde, trazo sobre fondo pálido— está
+     `--color-amber-text`. Es el mismo par que ya tiene el teal
+     (--color-primary cromo / --color-primary-text tinta): un solo valor no puede
+     ser vivo en la banda y legible en el chip a la vez. */
+  --color-amber:             light-dark(#F59E0B, #E8A830);
+  --color-amber-hover:       light-dark(#D97706, #F2B54A);   /* sin usar hoy; se conserva como 600 de la rampa */
+  --color-amber-active:      #B45309;   /* tono estable — ver --color-primary-active */
+  --color-amber-light:       light-dark(#FEF3C7, #2D1E04);   /* superficie pálida (chip, callout) */
+  --color-amber-highlight:   light-dark(#F2E2C4, #3A2A08);   /* superficie pálida, un punto más cálida */
+  /* Ámbar accesible como TINTA sobre las superficies de arriba: 5.0:1 sobre
+     `-light` y 4.0:1 sobre `-highlight` en claro; 7.8:1 y 6.7:1 en oscuro.
+     En claro coincide con `-active`, pero se declara aparte a propósito:
+     `-active` es el 700 de la rampa (puede moverse al recolorear la marca) y
+     este es un compromiso de contraste (no puede). Si cambias la rampa, re-mide
+     este valor contra las dos superficies, en los dos temas. */
+  --color-amber-text:        light-dark(#B45309, #E8A830);
+  /* Ámbar pálido ESTABLE, para texto sobre banda/degradado (.ld-hero-realce).
+     No lleva par justo por lo contrario que los de arriba: el fondo sobre el que
+     vive (--gradient-band) tampoco cambia con el tema, así que invertirlo dejaría
+     el titular en marrón sobre teal profundo. Da 5.0:1 y 4.5:1 sobre cada extremo
+     del degradado, y es texto grande. */
+  --color-amber-on-band:     #FEF3C7;
+  --color-orange:            light-dark(#B45309, #EFA23C);   /* naranja accesible como TEXTO (badge, ≥4.5:1) */
+  --color-orange-highlight:  light-dark(#FFF7ED, #2D1E04);
 
   /* ── Superficies ── */
-  --color-bg:               #F5F4EF;
-  --color-surface:          #F8F7F2;
-  --color-surface-2:        #EFEDE8;
-  --color-surface-offset:   #EEEDE8;
-  --color-surface-offset-2: #E7E6E0;
-  --color-surface-dynamic:  #DDDBD4;
-  --color-divider:          #C7C5BC;
+  --color-bg:               light-dark(#F5F4EF, #131210);
+  --color-surface:          light-dark(#F8F7F2, #181714);
+  --color-surface-2:        light-dark(#EFEDE8, #1E1D1A);
+  --color-surface-offset:   light-dark(#EEEDE8, #252420);
+  --color-surface-offset-2: light-dark(#E7E6E0, #2A2925);
+  --color-divider:          light-dark(#C7C5BC, #3A3833);
+  /* Superficie ESTABLE, para lo que va montado sobre un control de color y tiene
+     que leerse claro en los dos temas: hoy, el pomo del switch. No sirve
+     --color-surface pese a valer lo mismo en claro — al girar con el tema dejaba
+     el pomo en #181714, o sea un bulto negro sobre la pista. Su pista es
+     --color-border o --color-primary, y ninguna de las dos se aclara lo bastante
+     en oscuro como para que un pomo oscuro funcione. */
+  --color-surface-fixed:    #F8F7F2;
 
   /* ── Texto (carbón cálido) ── */
-  --color-text:         #1C1B16;
-  --color-text-muted:   #5C5B52;   /* secundario, más nítido (~6:1) */
-  --color-text-faint:   #76746A;   /* terciario accesible (~4.3:1; antes #AEADA6 fallaba 2:1) */
-  --color-text-inv:     #F8F7F2;   /* texto sobre fondos oscuros */
+  --color-text:         light-dark(#1C1B16, #F5F4EF);
+  --color-text-muted:   light-dark(#5C5B52, #A8A69C);   /* secundario (~6:1) */
+  --color-text-faint:   light-dark(#76746A, #8E8C82);   /* terciario accesible (~4.3:1) */
+  --color-text-inv:     light-dark(#F8F7F2, #1C1B16);   /* texto sobre fondos oscuros */
 
   /* ── Estados funcionales ── */
-  --color-success:      #2E7D32;
-  --color-success-bg:   #E8F5E9;
-  --color-error:        #B71C1C;
-  --color-error-bg:     #FFEBEE;
-  --color-warning:      #A86208;   /* texto de warning legible sobre claro y sobre warning-bg */
-  --color-warning-bg:   #FEF3C7;
-  --color-info:         #00716D;   /* teal de texto/icono en badges (sobre info-bg, accesible) */
-  --color-info-bg:      #E0F7F6;
-  --color-purple:       #7c3aed;   /* violet — badges VIRTUAL, etc. */
-  --color-purple-bg:    #f3e8ff;
-  --color-indigo:       #3730a3;   /* indigo — ajuste CARGO */
-  --color-indigo-bg:    #e0e7ff;
-  --color-rose:         #9d174d;   /* rose — ajuste IMPUESTO */
-  --color-rose-bg:      #fce7f3;
+  --color-success:      light-dark(#2E7D32, #66BB6A);
+  --color-success-bg:   light-dark(#E8F5E9, #0D2B0F);
+  --color-error:        light-dark(#B71C1C, #EF5350);
+  --color-error-bg:     light-dark(#FFEBEE, #2D0A0A);
+  --color-warning:      light-dark(#A86208, #E8A830);   /* texto de warning, legible sobre claro y sobre warning-bg */
+  --color-warning-bg:   light-dark(#FEF3C7, #2D1E04);
+  --color-info:         light-dark(#00716D, #3FD4CF);   /* teal de texto/icono en badges */
+  --color-info-bg:      light-dark(#E0F7F6, #0A2625);
+  --color-purple:       light-dark(#7c3aed, #c4b5fd);   /* violet — badges VIRTUAL, etc. */
+  --color-purple-bg:    light-dark(#f3e8ff, #1e1048);
+  --color-indigo:       light-dark(#3730a3, #a5b4fc);   /* indigo — ajuste CARGO */
+  --color-indigo-bg:    light-dark(#e0e7ff, #1e1b4b);
+  --color-rose:         light-dark(#9d174d, #fda4af);   /* rose — ajuste IMPUESTO */
+  --color-rose-bg:      light-dark(#fce7f3, #2d0f1e);
 
   /* ── Bordes ── */
-  --color-border:       #D9D7D0;   /* más definido (antes #E8E7E2 casi invisible) */
-  --color-border-strong:#B8B5AC;   /* hover de bordes — más oscuro que --color-border */
-  --color-border-focus: #00AFAA;
+  --color-border:       light-dark(#D9D7D0, #34322D);
+  --color-border-strong:light-dark(#B8B5AC, #504D45);   /* hover de bordes */
+  --color-border-focus: light-dark(#00AFAA, #3FD4CF);
 
   /* ── Papel — documentos imprimibles (factura/oferta/reporte) ──
      Tinta sobre papel blanco; NO se invierten con el tema (una hoja impresa es
-     siempre clara). Reflejan la paleta de marca en su versión clara y son la
-     fuente única compartida con el generador vectorial (src/lib/pdf). */
+     siempre clara), y por eso ninguno lleva light-dark(). Reflejan la paleta de
+     marca en su versión clara y son la fuente única compartida con el generador
+     vectorial (src/lib/pdf). */
   --paper-bg:         #FFFFFF;   /* hoja */
   --paper-ink:        #1C1B16;   /* texto principal   (= --color-text claro) */
   --paper-ink-muted:  #5C5B52;   /* texto secundario  (= --color-text-muted claro) */
@@ -90,11 +162,12 @@
   --radius-lg:   0.75rem;   --radius-xl:   1rem;
   --radius-2xl:  1.5rem;    --radius-full: 9999px;
 
-  --shadow-xs:  0 1px 2px rgba(28,27,22,0.04);
-  --shadow-sm:  0 1px 4px rgba(28,27,22,0.08);
-  --shadow-md:  0 4px 12px rgba(28,27,22,0.10);
-  --shadow-lg:  0 8px 24px rgba(28,27,22,0.12);
-  --shadow-xl:  0 16px 40px rgba(28,27,22,0.14);
+  /* Solo el color cambia con el tema; la geometría de la sombra no. */
+  --shadow-xs:  0 1px 2px   light-dark(rgba(28,27,22,0.04), rgba(0,0,0,0.2));
+  --shadow-sm:  0 1px 4px   light-dark(rgba(28,27,22,0.08), rgba(0,0,0,0.3));
+  --shadow-md:  0 4px 12px  light-dark(rgba(28,27,22,0.10), rgba(0,0,0,0.35));
+  --shadow-lg:  0 8px 24px  light-dark(rgba(28,27,22,0.12), rgba(0,0,0,0.4));
+  --shadow-xl:  0 16px 40px light-dark(rgba(28,27,22,0.14), rgba(0,0,0,0.45));
 
   --ease:       cubic-bezier(0.16, 1, 0.3, 1);
   --duration:   180ms;
@@ -104,7 +177,7 @@
   --font-body:    'IBM Plex Sans', system-ui, sans-serif;
   /* ── Tipografías anteriores (comentadas para switch rápido) ──
   --font-display: 'Schibsted Grotesk', system-ui, sans-serif;
-  --font-display: 'Public Sans', system-ui, sans-serif;          
+  --font-display: 'Public Sans', system-ui, sans-serif;
   --font-display: 'Funnel Display', system-ui, sans-serif;
   --font-body:    'Funnel Sans', system-ui, sans-serif;
   --font-display: 'Space Grotesk', system-ui, sans-serif;
@@ -125,14 +198,27 @@
      interpolarlos en sRGB (el defecto) el punto medio se desatura y cae en un
      oliva sucio — el caqui que se veía en la banda de IA y en el CTA. En OKLCH
      el camino mantiene la saturación y pasa por tonos limpios.
-     Si algún día se quita `in oklch`, vuelve el barro. */
+     Si algún día se quita `in oklch`, vuelve el barro.
+
+     ⚠️ SOPORTE: `in oklch` pide Chrome/Edge 111+, Safari 16.2+, Firefox 128+
+     (mediados de 2024). En un navegador anterior la declaración entera es
+     inválida y el degradado NO se pinta: la banda se queda sin fondo y su texto
+     blanco cae sobre la crema → ilegible, no solo feo. Se asume porque el parque
+     real de Cuba es Chrome al día. Si algún día deja de serlo, el arreglo es
+     declarar antes el mismo degradado sin `in oklch` y dejar que este lo pise:
+     el navegador viejo se queda con el caqui (legible) y el moderno con el bueno.
+     Coste cero — no se hace ya solo por no cargar CSS muerto. */
+
+  /* Se declara UNA vez: sus dos tokens ya saben cambiar de tema solos. En claro
+     va teal→ámbar vivo sobre texto pálido; en oscuro, teal claro→ámbar claro
+     sobre texto oscuro (--color-text-inv se invierte con él). */
   --gradient-brand: linear-gradient(100deg in oklch, var(--color-primary) 0%, var(--color-amber) 100%);
-  /* Banda oscura para secciones (IA, CTA): lineal ~30°, texto en blanco.
-     Tonos estables en claro/oscuro (active no cambia por tema) → contraste seguro. */
+  /* Bandas oscuras de sección (hero, IA, CTA): texto siempre en blanco. Tiran de
+     los tonos `-active`, que son estables, así que estos degradados son iguales
+     en los dos temas y su contraste está garantizado sin depender del tema. */
   --gradient-band: linear-gradient(30deg in oklch, var(--color-primary-active) 0%, var(--color-amber-active) 135%);
-  /* Hermana de la anterior: mismos dos tonos en dirección opuesta. Para que las
-     dos bandas fuertes de la landing (IA y CTA) no sean el mismo truco repetido.
-     Mismo contraste, misma regla: texto en blanco. */
+  /* Hermana de la anterior: mismos dos tonos en dirección opuesta, para que las
+     dos bandas fuertes de la landing (IA y CTA) no sean el mismo truco repetido. */
   --gradient-band-alt: linear-gradient(200deg in oklch, var(--color-amber-active) 0%, var(--color-primary-active) 120%);
 
   --sidebar-w:   240px;
@@ -140,99 +226,9 @@
   --content-max: 1200px;
 }
 
-/* Auto-oscuro SOLO si el usuario no ha elegido tema manualmente (data-theme).
-   Con data-theme presente, mandan las reglas [data-theme="…"] de abajo. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --color-primary:           #3FD4CF;
-    --color-primary-hover:     #2BBBB6;
-    --color-primary-dark:      #00AFAA;
-    --color-primary-highlight: #0D3533;
-    --color-primary-subtle:    #091F1E;
-    --color-primary-text:      #3FD4CF;   /* en dark el teal claro ya pasa como texto (~10:1) */
-    --color-bg:                #131210;
-    --color-surface:           #181714;
-    --color-surface-2:         #1E1D1A;
-    --color-surface-offset:    #252420;
-    --color-surface-offset-2:  #2A2925;
-    --color-divider:           #3A3833;
-    --color-text:              #F5F4EF;
-    --color-text-muted:        #A8A69C;
-    --color-text-faint:        #8E8C82;   /* legible en dark (antes #6A6960 ~3.2:1) */
-    --color-text-inv:          #1C1B16;
-    --color-success:           #66BB6A;
-    --color-success-bg:        #0D2B0F;
-    --color-error:             #EF5350;
-    --color-error-bg:          #2D0A0A;
-    --color-warning:           #E8A830;
-    --color-warning-bg:        #2D1E04;
-    --color-orange:            #EFA23C;   /* amber badge — se aclara en oscuro como el resto */
-    --color-info:              #3FD4CF;
-    --color-info-bg:           #0A2625;
-    --color-purple:            #c4b5fd;
-    --color-purple-bg:         #1e1048;
-    --color-indigo:            #a5b4fc;
-    --color-indigo-bg:         #1e1b4b;
-    --color-rose:              #fda4af;
-    --color-rose-bg:           #2d0f1e;
-    --color-border:            #34322D;   /* bordes más definidos en dark */
-    --color-border-strong:     #504D45;   /* hover de bordes en dark */
-    --color-border-focus:      #3FD4CF;
-    /* --color-band-* NO se redefine aquí a propósito: son tonos estables, como
-       --gradient-band. Ver la nota en :root. */
-    /* En oscuro, el ámbar de marca se sustituye por el ámbar claro para que el
-       degradado de texto del hero conserve contraste sobre fondo oscuro. */
-    --gradient-brand: linear-gradient(100deg in oklch, var(--color-primary) 0%, var(--color-warning) 100%);
-    --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
-    --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
-    --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
-    --shadow-xl: 0 16px 40px rgba(0,0,0,0.45);
-  }
-}
-
-/* Toggle manual de tema (atributo data-theme en <html>) */
-[data-theme="dark"] {
-  --color-primary:           #3FD4CF;
-  --color-primary-hover:     #2BBBB6;
-  --color-primary-dark:      #00AFAA;
-  --color-primary-highlight: #0D3533;
-  --color-primary-subtle:    #091F1E;
-  --color-primary-text:      #3FD4CF;
-  --color-bg:                #131210;
-  --color-surface:           #181714;
-  --color-surface-2:         #1E1D1A;
-  --color-surface-offset:    #252420;
-  --color-surface-offset-2:  #2A2925;
-  --color-divider:           #3A3833;
-  --color-text:              #F5F4EF;
-  --color-text-muted:        #A8A69C;
-  --color-text-faint:        #8E8C82;
-  --color-text-inv:          #1C1B16;
-  --color-success:           #66BB6A;
-  --color-success-bg:        #0D2B0F;
-  --color-error:             #EF5350;
-  --color-error-bg:          #2D0A0A;
-  --color-warning:           #E8A830;
-  --color-warning-bg:        #2D1E04;
-  --color-orange:            #EFA23C;   /* amber badge — se aclara en oscuro como el resto */
-  --color-info:              #3FD4CF;
-  --color-info-bg:           #0A2625;
-  --color-purple:            #c4b5fd;
-  --color-purple-bg:         #1e1048;
-  --color-indigo:            #a5b4fc;
-  --color-indigo-bg:         #1e1b4b;
-  --color-rose:              #fda4af;
-  --color-rose-bg:           #2d0f1e;
-  --color-border:            #34322D;
-  --color-border-strong:     #504D45;
-  --color-border-focus:      #3FD4CF;
-  /* --color-band-* NO se redefine: tonos estables. Ver la nota en :root. */
-  --gradient-brand: linear-gradient(100deg in oklch, var(--color-primary) 0%, var(--color-warning) 100%);
-  --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
-  --shadow-xl: 0 16px 40px rgba(0,0,0,0.45);
-}
-
+/* El interruptor del tema. Estas reglas no repintan nada por sí solas: solo
+   fijan el `color-scheme`, y de ahí cuelga todo el `light-dark()` de arriba.
+   Misma especificidad que `:root` (0,1,0), así que ganan por ir después: si el
+   SO dice oscuro pero el usuario eligió claro, manda el usuario. */
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"]  { color-scheme: dark; }

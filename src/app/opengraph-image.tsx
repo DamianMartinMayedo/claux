@@ -19,7 +19,13 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '80px',
-          background: 'linear-gradient(135deg, #00716D 0%, #00AFAA 60%, #C97A0C 140%)',
+          // Eco de --gradient-band: tonos estables de marca con texto claro encima.
+          // Copiado a mano porque Satori no ve los tokens; si tocas la rampa, pasa
+          // por aquí. El ámbar es el `-active` (#B45309) y no el vivo: sobre este
+          // fondo va texto casi blanco, y el ámbar vivo lo dejaría en 2.1:1.
+          // Satori tampoco entiende `in oklch`, así que esto interpola en sRGB y el
+          // tramo teal→ámbar pasa por un caqui apagado. Se asume: es una miniatura.
+          background: 'linear-gradient(135deg, #00716D 0%, #00AFAA 60%, #B45309 140%)',
           color: '#F8F7F2',
           fontFamily: 'sans-serif',
         }}

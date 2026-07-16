@@ -83,7 +83,14 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     cliente.estado === 'GRACIA' &&
     !!cliente.fecha_fin_gracia &&
     cliente.fecha_fin_gracia.split('T')[0] >= hoy
+  // El cliente de PRUEBA no vence NUNCA por fecha: es un entorno interno de por vida.
+  // Se comprueba aquí y no solo al crearlo porque `es_prueba` se puede marcar
+  // después, sobre un cliente que ya tiene fecha guardada — así nació CLI-0003
+  // (Negocio Test), con expiración puesta. Mirando solo la fecha, se bloquearía solo
+  // el día que llegue, y nadie se acordaría de por qué.
+  // Un DESACTIVADO o VENCIDO explícito sí lo bloquea: eso lo decide una persona.
   const expiradoPorFecha =
+    !cliente.es_prueba &&
     !!cliente.fecha_expiracion &&
     cliente.fecha_expiracion.split('T')[0] < hoy
   const bloqueado =

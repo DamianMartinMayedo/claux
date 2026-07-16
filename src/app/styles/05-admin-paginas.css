@@ -118,9 +118,9 @@
 .info-banner strong { display: block; font-weight: 700; margin-bottom: var(--space-1); }
 .info-banner-gracia {
   background: var(--color-amber-highlight);
-  border-color: var(--color-amber-hover);
+  border-color: var(--color-amber-text);
 }
-.info-banner-gracia svg { color: var(--color-amber); }
+.info-banner-gracia svg { color: var(--color-amber-text); }
 
 /* Detail grid (2 columns) */
 .detail-grid {
@@ -628,7 +628,7 @@ textarea:focus-visible {
   width: 40px; height: 40px; border-radius: var(--radius-md);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.notif-icon-active  { background: var(--color-amber-highlight); color: var(--color-amber); }
+.notif-icon-active  { background: var(--color-amber-highlight); color: var(--color-amber-text); }
 .notif-section-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
 .notif-section-sub   { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
 

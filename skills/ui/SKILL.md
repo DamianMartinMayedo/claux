@@ -33,6 +33,8 @@ Nunca escribas `style={{ ... }}` en JSX ni `style=""` en HTML. Sin excepciones d
 2. **Reutiliza** si existe; **extiende** con un modificador si casi existe (`.btn-danger` junto a `.btn-primary`).
 3. **Crea** la clase en el parcial de su dominio (tabla §0), en kebab-case con prefijo de componente (`.reserva-card`, `.menu-item-precio`), bajo un comentario separador `/* ── Componente ── */`.
 
+Si lo que necesitas es una **variante de algo compartido** (un botón, un badge), va en `03-components.css` con el resto de la familia — no la reescribas a mano dentro de tu componente. `.imp-banner-btn` se escribió así, clavado a su banner, y el resultado fue que el dossier no pudo reutilizarlo y acabó con un botón teal sobre un aviso ámbar. Botones disponibles: `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-danger(-text)`, `.btn-success`, `.btn-info` y **`.btn-aviso`** (la acción de dentro de un aviso ámbar: `--color-warning-bg` de fondo, como `.dos-desfase` o `.imp-banner`; no es «un botón ámbar» para usar suelto). Tamaños: `.btn-sm`, `.btn-lg`, `.btn-full`.
+
 **Única excepción válida:** un valor que solo se conoce en runtime (ancho de barra de progreso, color elegido por el tenant). Aun así no se estila inline: se pasa como custom property y la clase la consume:
 
 ```tsx
@@ -48,12 +50,13 @@ Todo color, espaciado, tamaño de texto, radio, sombra y transición sale de cus
 
 Resumen de familias (nombres, no valores — mira `01-tokens.css`):
 - **Paleta:** teal de marca (`--color-primary*`) + ámbar caribe (`--color-amber*`). El color se reserva para CTA/acentos.
+- **Cromo vs tinta** — la trampa que más veces se ha roto. El tono vivo (`--color-primary`, `--color-amber`) es RELLENO grande: banda, degradado, barra de gráfico, con texto blanco encima. Como TINTA —icono, texto, borde o trazo sobre fondo pálido— desaparece (el ámbar vivo da 1.9:1 sobre su propio chip; el mínimo es 3:1). Para tinta hay token propio: `--color-primary-text`, `--color-amber-text`. Y `-active` es un tercer papel: tono estable de banda, no cambia con el tema porque siempre lleva blanco encima.
 - **Superficies** (crema cálida): `--color-bg`, `--color-surface`, `--color-surface-2`, `--color-surface-offset(-2)`, `--color-divider`, `--color-border(-strong/-focus)`.
 - **Texto** (carbón cálido): `--color-text`, `--color-text-muted`, `--color-text-faint`, `--color-text-inv`.
 - **Estados**: cada uno es un **par color + fondo**: `--color-success` + `--color-success-bg` (idem `error`, `warning`, `info`, y `purple/indigo/rose` para badges). Ojo al naming: el fondo es **`-bg`**, no `-highlight`.
 - **Tipografía:** dos familias vía `--font-display` (títulos y `--text-xl`↑) y `--font-body` (todo lo operativo: labels, cuerpo, botones, tablas). Escala `--text-xs … --text-5xl` + `--text-hero`. Nunca fijes `font-family` a mano.
 
-**Dark mode gratis:** los colores por token cubren claro y oscuro (auto por `prefers-color-scheme` y toggle `[data-theme="dark"]`). Verifica visualmente cualquier componente nuevo en **ambos temas**.
+**Dark mode gratis:** cada token de color declara su par en una sola línea con `light-dark(claro, oscuro)`, y el tema lo elige `color-scheme` (el SO en `:root`, el usuario vía `[data-theme]`). **Nunca añadas un bloque `[data-theme="dark"]` con paleta**: había dos copiados a mano y se desincronizaban en silencio. Token nuevo = una línea con su par. Excepción: los tonos de banda (`-active`) y `--paper-*` no llevan par, a propósito. Verifica cualquier componente nuevo en **ambos temas** — y si su fondo es un token sin par, en oscuro te queda un recuadro crema.
 
 **Tailwind v4 está SOLO como reset** (`@import "tailwindcss"`). Prohibido usar clases utilitarias de Tailwind en el markup.
 

@@ -36,11 +36,14 @@
   margin-bottom: var(--space-5);
 }
 /* Realce del titular sobre el degradado: ámbar claro, que contrasta con el teal
-   del arranque y armoniza con el ámbar del final (≈4.8:1 y 5.9:1 sobre cada
-   extremo, y es texto grande). --color-amber-light es tono estable: OJO, no
-   sirve --color-warning-bg pese a valer lo mismo en claro, porque en oscuro se
-   invierte a marrón y dejaría el titular ilegible. */
-.ld-hero-realce { color: var(--color-amber-light); }
+   del arranque y armoniza con el ámbar del final (5.0:1 y 4.5:1 sobre cada
+   extremo, y es texto grande).
+   OJO con el token: tiene que ser uno ESTABLE, porque --gradient-band tampoco
+   cambia con el tema; cualquier ámbar pálido que se invierta en oscuro deja el
+   titular en marrón sobre teal profundo. No sirven --color-warning-bg ni
+   --color-amber-light pese a valer los tres lo mismo en claro. Para eso existe
+   --color-amber-on-band, que no lleva par a propósito. */
+.ld-hero-realce { color: var(--color-amber-on-band); }
 .ld-hero-subtitle {
   font-size: var(--text-lg);
   color: rgba(255, 255, 255, 0.88);
@@ -231,9 +234,22 @@
 /* ── Acentos de color — reutilizables por cualquier pastilla de icono ──
    Los seis colores del design system, en pares fondo/color ya validados y con
    override en dark. Los usan módulos, sectores, valor y pasos: son la fuente del
-   color «vivo» de la página, y evitan que todo icono acabe siendo teal. */
+   color «vivo» de la página, y evitan que todo icono acabe siendo teal.
+
+   El «con override en dark» es el requisito duro, no un detalle: el layout pone
+   data-theme desde el SO, así que la landing se ve en oscuro sin que el visitante
+   pida nada. Un par cuyo fondo no cambie con el tema deja un recuadro crema en
+   medio de una página negra — comprueba eso antes de meter aquí un token nuevo.
+
+   `-amber` tira de la rampa ámbar (no de --color-warning*, que es lo que usaba
+   cuando la rampa aún no existía en oscuro): así el acento ámbar de la landing
+   SIGUE al secundario de marca y recolorear la marca lo mueve con ella, que es
+   justo lo que se espera. Los otros cinco siguen colgando de tokens semánticos
+   —indigo es «ajuste CARGO», purple «badge VIRTUAL», rose «ajuste IMPUESTO»—, así
+   que cambiar el color de un badge del portal mueve un icono de la home. Está
+   pendiente de desacoplar. */
 .ld-ac-teal   { background: var(--color-primary-subtle); color: var(--color-primary-text); }
-.ld-ac-amber  { background: var(--color-warning-bg);     color: var(--color-warning); }
+.ld-ac-amber  { background: var(--color-amber-light);    color: var(--color-amber-text); }
 .ld-ac-green  { background: var(--color-success-bg);     color: var(--color-success); }
 .ld-ac-indigo { background: var(--color-indigo-bg);      color: var(--color-indigo); }
 .ld-ac-purple { background: var(--color-purple-bg);      color: var(--color-purple); }
@@ -979,6 +995,18 @@ input.dg-option-input {
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.92);
   margin-bottom: var(--space-5);
+}
+/* Error al pedir contacto. Va sobre la banda de degradado, así que NO usa
+   --color-error (rojo oscuro pensado para fondo claro: aquí no se leería).
+   Se resuelve como el resto de la banda: blanco, y el peso lo pone la pastilla. */
+.dg-report-cta-error {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
 }
 .dg-report-actions .btn-primary { background: #fff; color: var(--color-primary-active); border-color: #fff; }
 .dg-report-actions .btn-secondary { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.55); }

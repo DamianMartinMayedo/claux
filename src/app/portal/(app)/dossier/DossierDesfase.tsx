@@ -35,12 +35,12 @@ export default function DossierDesfase({
       <AlertTriangle size={16} strokeWidth={2} />
       <div className="dos-desfase-texto">{mensaje}</div>
       {tieneBase ? (
-        <button type="button" className="btn btn-primary btn-sm" onClick={actualizar} disabled={pending}>
+        <button type="button" className="btn btn-aviso btn-sm" onClick={actualizar} disabled={pending}>
           {pending ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <RefreshCw size={13} strokeWidth={2.5} />}
           Actualizar números
         </button>
       ) : onIrANumeros ? (
-        <button type="button" className="btn btn-primary btn-sm" onClick={onIrANumeros}>Revisar números</button>
+        <button type="button" className="btn btn-aviso btn-sm" onClick={onIrANumeros}>Revisar números</button>
       ) : null}
     </div>
   )

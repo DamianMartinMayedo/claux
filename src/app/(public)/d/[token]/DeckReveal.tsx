@@ -53,6 +53,21 @@ export default function DeckReveal() {
     }
 
     // ── A partir de aquí, animaciones ──
+    // ORDEN CRÍTICO: primero se marcan como ya reveladas las diapositivas que el
+    // visitante YA tiene delante, y solo DESPUÉS se activa `.dp-anim`.
+    // Al revés se ve el parpadeo de «se carga dos veces»: el servidor pintó el
+    // deck entero y el navegador ya lo mostró, así que activar `.dp-anim` de
+    // primeras oculta lo que está en pantalla —el gráfico se borra— y el
+    // observer lo vuelve a dibujar un frame después. Se nota sobre todo al
+    // recargar en mitad del deck, porque el navegador restaura el scroll.
+    // Haciéndolo en este orden, esas diapositivas pasan directas a su estado
+    // final en el mismo recálculo y no llegan a moverse. Solo se anima lo que
+    // el visitante aún no ha visto, que es de lo que va la animación.
+    const rootRect = root.getBoundingClientRect()
+    for (const s of slides) {
+      const r = s.getBoundingClientRect()
+      if (r.top < rootRect.bottom && r.bottom > rootRect.top) s.classList.add('is-visible')
+    }
     root.classList.add('dp-anim')
 
     // Conteo de un número de 0 → objetivo (easeOutCubic), formateado como es-ES.

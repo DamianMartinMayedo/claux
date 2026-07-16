@@ -34,10 +34,13 @@ function mix(a: Rgb, b: Rgb, t: number): string {
   return `${m(0)}, ${m(1)}, ${m(2)}`
 }
 
+// El .trim() no es cosmético: los tokens se declaran con light-dark(), y el
+// compilador lo baja a un truco de dos variables que deja un espacio pegado al
+// valor computado. Sin trim, hexToRgb recibe " #f59e0b" y no parsea.
 function getThemeColors() {
   const cs = getComputedStyle(document.documentElement)
   const bg = hexToRgb(cs.getPropertyValue('--color-bg').trim() || '#F5F4EF')
-  const amber = hexToRgb(cs.getPropertyValue('--color-amber').trim() || '#C97A0C')
+  const amber = hexToRgb(cs.getPropertyValue('--color-amber').trim() || '#F59E0B')
   return {
     bgRgb: `${bg[0]}, ${bg[1]}, ${bg[2]}`,
     haloRgb: mix(amber, bg, HALO_MIX),

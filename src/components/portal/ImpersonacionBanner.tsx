@@ -19,7 +19,8 @@ export default function ImpersonacionBanner({ adminEmail }: { adminEmail: string
         <span className="imp-banner-email"> · {adminEmail}</span>
       </p>
       <button
-        className="imp-banner-btn"
+        type="button"
+        className="btn btn-aviso btn-sm imp-banner-btn"
         onClick={() => startSalir(() => { void salirDeImpersonacion() })}
         disabled={saliendo}
       >

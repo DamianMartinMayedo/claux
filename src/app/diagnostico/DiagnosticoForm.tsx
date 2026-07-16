@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { guardarDiagnostico } from '@/app/actions/diagnostico'
+import { guardarDiagnostico, solicitarContactoDiagnostico } from '@/app/actions/diagnostico'
 import { generarRecomendacion } from '@/lib/publico/recomendacion'
 import type {
   EtiquetasSector,
@@ -84,6 +84,12 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
   const [submitError, setSubmitError] = useState('')
   const [recClaves, setRecClaves] = useState<string[] | null>(null)
   const [contactado, setContactado] = useState(false)
+  // Id de la fila de `diagnosticos`: lo devuelve el guardado y es lo único que
+  // necesita el botón de contacto — el correo se manda a la dirección guardada,
+  // no a la que diga esta pantalla.
+  const [leadId, setLeadId] = useState<number | null>(null)
+  const [contactando, setContactando] = useState(false)
+  const [contactoError, setContactoError] = useState('')
 
   const progressPct = ((step + 1) / TOTAL_STEPS) * 100
   const sectorSel = sectores.find((s) => s.sector === sector)
@@ -138,7 +144,28 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
     }
 
     setRecClaves(claves)
+    setLeadId(resultado.id ?? null)
     setStep(4)
+  }
+
+  // El botón «Quiero que me contacten gratis». Antes esto era solo
+  // `setContactado(true)`: pintaba «¡Gracias!» sin enviar ni registrar nada,
+  // mientras el correo salía al ver el informe. Ahora la pantalla de gracias solo
+  // aparece si el envío se ha encargado de verdad.
+  async function pedirContacto() {
+    if (leadId == null) {
+      setContactoError('No pudimos registrar tu solicitud. Escríbenos a contacto@claux.es.')
+      return
+    }
+    setContactando(true)
+    setContactoError('')
+    const r = await solicitarContactoDiagnostico(leadId)
+    setContactando(false)
+    if (!r.ok) {
+      setContactoError(r.error ?? 'No pudimos registrar tu solicitud. Inténtalo de nuevo.')
+      return
+    }
+    setContactado(true)
   }
 
   function back() {
@@ -453,13 +480,15 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
                   Demos el siguiente paso juntos. Te contactamos para ayudarte a
                   ponerlo en marcha. Sin compromiso.
                 </p>
+                {contactoError && <p className="dg-report-cta-error">{contactoError}</p>}
                 <div className="dg-report-actions">
                   <button
                     type="button"
                     className="btn btn-primary btn-lg"
-                    onClick={() => setContactado(true)}
+                    onClick={pedirContacto}
+                    disabled={contactando}
                   >
-                    Quiero que me contacten gratis
+                    {contactando ? 'Enviando…' : 'Quiero que me contacten gratis'}
                   </button>
                   {/* Botón de agendar cita (Calendly u otro) — oculto por ahora,
                       NO borrar; reactivar cuando esté conectado:

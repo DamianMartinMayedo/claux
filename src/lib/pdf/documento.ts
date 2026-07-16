@@ -8,26 +8,30 @@
 //   · cabecera de marca opcional
 //   · sello discreto de pie en TODAS las páginas (la "marca de agua")
 //
-// Nota de color: el PDF no tiene modo oscuro; se usan SIEMPRE los valores del
-// tema claro de 01-tokens.css. Si un token cambia allí, actualízalo aquí.
+// Nota de color: el PDF no tiene modo oscuro. Su espejo son los tokens `--paper-*`
+// de 01-tokens.css, NO los `--color-*`: una hoja impresa es siempre clara y no
+// cambia cuando cambia la marca. Ojo con el ámbar en particular — `--color-amber`
+// es cromo de marca y ya se ha movido dos veces; `--paper-amber` no se ha movido
+// nunca y no debe. Si algún día quieres recolorear el papel, cambia `--paper-*` y
+// refleja ESO aquí.
 // ────────────────────────────────────────────────────────────────────────────
 
 export type RGB = [number, number, number]
 
-/** Paleta CLAUX en RGB — reflejo de los tokens de `01-tokens.css` (tema claro). */
+/** Paleta CLAUX en RGB — reflejo de los tokens `--paper-*` de `01-tokens.css`. */
 export const MARCA = {
-  teal:     [  0, 175, 170] as RGB,  // --color-primary        #00AFAA
-  tealText: [  0, 113, 109] as RGB,  // --color-primary-text   #00716D
-  dark:     [ 28,  27,  22] as RGB,  // --color-text           #1C1B16
-  muted:    [ 92,  91,  82] as RGB,  // --color-text-muted     #5C5B52
-  faint:    [118, 116, 106] as RGB,  // --color-text-faint     #76746A
-  divider:  [199, 197, 188] as RGB,  // --color-divider        #C7C5BC
-  border:   [217, 215, 208] as RGB,  // --color-border         #D9D7D0
-  surface:  [239, 237, 232] as RGB,  // --color-surface-2      #EFEDE8
-  amber:    [201, 122,  12] as RGB,  // --color-amber          #C97A0C
-  amberBg:  [254, 243, 199] as RGB,  // --color-warning-bg     #FEF3C7
-  amberTxt: [120,  53,  15] as RGB,  // texto sobre nota ámbar (marrón oscuro)
-  white:    [255, 255, 255] as RGB,
+  teal:     [  0, 175, 170] as RGB,  // --paper-teal        #00AFAA
+  tealText: [  0, 113, 109] as RGB,  // --paper-teal-ink    #00716D
+  dark:     [ 28,  27,  22] as RGB,  // --paper-ink         #1C1B16
+  muted:    [ 92,  91,  82] as RGB,  // --paper-ink-muted   #5C5B52
+  faint:    [118, 116, 106] as RGB,  // --paper-ink-faint   #76746A
+  divider:  [199, 197, 188] as RGB,  // #C7C5BC — sin equivalente en --paper-*; es el divisor fuerte
+  border:   [217, 215, 208] as RGB,  // --paper-line        #D9D7D0
+  surface:  [239, 237, 232] as RGB,  // --paper-surface     #EFEDE8
+  amber:    [201, 122,  12] as RGB,  // --paper-amber       #C97A0C (≠ --color-amber, a propósito)
+  amberBg:  [254, 243, 199] as RGB,  // --paper-amber-bg    #FEF3C7
+  amberTxt: [120,  53,  15] as RGB,  // --paper-amber-ink   #78350F
+  white:    [255, 255, 255] as RGB,  // --paper-bg          #FFFFFF
 }
 
 /** Margen A4 estándar (mm) del documento. */

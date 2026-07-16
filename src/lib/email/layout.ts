@@ -2,9 +2,12 @@
 // desde el admin): garantiza que todo salga on-brand y que nadie rompa el HTML.
 // El HTML de email no soporta custom properties ni hojas externas — los valores
 // están tomados a mano de src/app/styles/01-tokens.css (modo claro, fijo).
+// Al ser una copia, no se entera de los cambios de la marca: si tocas los tokens,
+// pasa por aquí. Copia SIEMPRE la variante de tinta (`-text`), no la de cromo:
+// aquí todo son enlaces y texto sobre fondo claro, nunca rellenos grandes.
 
-const TEAL_TEXT  = '#00716D'
-const AMBER      = '#C97A0C'
+const TEAL_TEXT  = '#00716D'   // = --color-primary-text
+const AMBER      = '#B45309'   // = --color-amber-text (antes #C97A0C: 3.05:1 sobre BG, no llegaba a AA)
 const TEXT       = '#1C1B16'
 const TEXT_MUTED = '#5C5B52'
 const BG         = '#F5F4EF'
