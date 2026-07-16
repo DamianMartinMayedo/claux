@@ -24,6 +24,10 @@ export default function PestanaPresentacion({
 
   const publicado = dossier.estado === 'PUBLICADO'
   const sinNumeros = !dossier.snapshot_at
+  // Snapshot desfasado: cambió moneda/empresa/período tras congelar. Publicar así
+  // enseñaría importes viejos al inversor; y si ya está publicado, el enlace en vivo
+  // ya los muestra. El servidor bloquea publicar; aquí lo avisamos y lo deshabilitamos.
+  const desfasado = dossier.snapshot_stale && !!dossier.snapshot_at
   // En el navegador siempre hay origin; el fallback es solo para el render de servidor.
   const url = dossier.token
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/d/${dossier.token}`
@@ -77,6 +81,18 @@ export default function PestanaPresentacion({
           Un enlace web con tus números y tu relato, pensado para enseñárselo a un inversor desde el móvil.
         </p>
 
+        {desfasado && (
+          <div className="dos-desfase" role="alert">
+            <AlertTriangle size={16} strokeWidth={2} />
+            <div className="dos-desfase-texto">
+              <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período.
+              {publicado
+                ? ' El enlace en vivo sigue mostrando el snapshot anterior; sincronízalos en «Los números».'
+                : ' No podrás publicar hasta sincronizarlos en «Los números».'}
+            </div>
+          </div>
+        )}
+
         {sinNumeros ? (
           <p className="dos-vacio">Carga tus números en «Mi dossier» y podrás publicar tu presentación.</p>
         ) : !publicado ? (
@@ -86,7 +102,7 @@ export default function PestanaPresentacion({
               solo funciona para quien se lo des.
             </p>
             <div className="dos-acciones">
-              <button className="btn btn-primary" onClick={publicar} disabled={pending}>
+              <button className="btn btn-primary" onClick={publicar} disabled={pending || desfasado}>
                 {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Globe size={14} strokeWidth={2.5} />}
                 Publicar presentación
               </button>

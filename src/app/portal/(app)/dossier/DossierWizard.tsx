@@ -83,6 +83,12 @@ export default function DossierWizard({
 
   const dossier = data.dossier
 
+  // Defecto de la portada: la empresa del dossier, o el nombre de la cuenta si es
+  // consolidado (mismo criterio que deriva el deck cuando no hay nombre fijado).
+  const nombrePortadaDefault = dossier?.empresa_id
+    ? (data.empresas.find(e => e.empresa_id === dossier.empresa_id)?.nombre ?? data.nombreNegocio)
+    : data.nombreNegocio
+
   return (
     <div className="view-container dos-wizard">
       <div className="page-header">
@@ -134,7 +140,8 @@ export default function DossierWizard({
         )}
 
         {paso === 'marca' && dossier && (
-          <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl} onGuardado={avanzar} />
+          <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl}
+            nombrePorDefecto={nombrePortadaDefault} onGuardado={avanzar} />
         )}
 
         {paso === 'listo' && (

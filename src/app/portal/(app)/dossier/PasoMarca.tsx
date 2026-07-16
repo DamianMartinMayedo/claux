@@ -22,13 +22,15 @@ import { derivarPaleta, normalizarHex, contraste, paletaVars } from '@/lib/dossi
 const SUGERIDOS = ['#00AFAA', '#2563EB', '#4F46E5', '#059669', '#B45309', '#DC2626', '#7C3AED', '#0F172A']
 
 export default function PasoMarca({
-  dossier, empresaLogoUrl, onGuardado,
+  dossier, empresaLogoUrl, nombrePorDefecto, onGuardado,
 }: {
   dossier: DossierBasico
   empresaLogoUrl: string | null
+  nombrePorDefecto: string
   onGuardado?: () => void
 }) {
   const [hex, setHex] = useState(dossier.color_principal || '#00AFAA')
+  const [nombrePortada, setNombrePortada] = useState(dossier.nombre_portada ?? '')
   const [logoUrl, setLogoUrl] = useState(dossier.logo_url)
   const [pending, startTransition] = useTransition()
   const [subiendo, startSubida] = useTransition()
@@ -44,8 +46,9 @@ export default function PasoMarca({
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('color_principal', normalizado)
+      fd.set('nombre_portada', nombrePortada.trim())
       const res = await guardarMarca(fd)
-      if (res.ok) { toastSuccess('Color guardado'); onGuardado?.() }
+      if (res.ok) { toastSuccess('Marca guardada'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })
   }
@@ -87,8 +90,20 @@ export default function PasoMarca({
       <div className="dos-body">
         <h2 className="dos-section-title">La marca</h2>
         <p className="dos-section-hint">
-          El color y el logo son de esta presentación, no de tu negocio: cámbialos sin tocar nada más.
+          El nombre, el color y el logo son de esta presentación, no de tu negocio: cámbialos sin tocar nada más.
         </p>
+
+        <div className="dos-campo">
+          <label className="dos-label" htmlFor="dos-nombre-portada">¿Qué nombre va en la portada?</label>
+          <input
+            id="dos-nombre-portada" className="input" value={nombrePortada}
+            onChange={e => setNombrePortada(e.target.value)} maxLength={120}
+            placeholder={nombrePorDefecto} spellCheck={false}
+          />
+          <p className="dos-section-hint">
+            Es el nombre que verá el inversor en la portada. Si lo dejas vacío, usamos <strong>{nombrePorDefecto}</strong>.
+          </p>
+        </div>
 
         <div className="dos-campo">
           <span className="dos-label">¿Cuál es tu color?</span>
@@ -164,7 +179,7 @@ export default function PasoMarca({
         <div className="dos-acciones">
           <button className="btn btn-primary" onClick={guardar} disabled={pending}>
             {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Save size={14} strokeWidth={2.5} />}
-            Guardar color
+            Guardar marca
           </button>
         </div>
       </div>

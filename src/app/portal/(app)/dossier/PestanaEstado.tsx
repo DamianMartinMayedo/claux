@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Download, Loader2, BarChart3 } from 'lucide-react'
+import { Download, Loader2, BarChart3, AlertTriangle } from 'lucide-react'
 import { toastError } from '@/app/contexts/ToastContext'
 import { estadoDeResultados, notaConversion, congeladoA } from '@/lib/dossier/estado'
 import { etiquetaMes, type FilaSerie } from '@/lib/dossier/snapshot'
@@ -81,6 +81,16 @@ export default function PestanaEstado({
   return (
     <section className="card dos-er-card">
       <div className="dos-body">
+        {dossier.snapshot_stale && (
+          <div className="dos-desfase" role="alert">
+            <AlertTriangle size={16} strokeWidth={2} />
+            <div className="dos-desfase-texto">
+              <strong>Datos desfasados.</strong> Cambiaste la moneda, la empresa o el período: este estado
+              (y el PDF que descargues) aún corresponde al snapshot anterior. Sincronízalo en «Mi dossier» → «Los números».
+            </div>
+          </div>
+        )}
+
         <div className="dos-er-head">
           <div>
             <h2 className="dos-section-title">Estado de resultados</h2>

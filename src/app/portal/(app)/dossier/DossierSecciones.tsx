@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, AlertTriangle } from 'lucide-react'
 import type { DossierData, DossierBasico } from '@/app/actions/portal/dossier'
 import { pasosEditables, LABEL_PASO, type PasoEditable } from '@/lib/dossier/pasos'
 import PasoBasicos from './PasoBasicos'
@@ -28,6 +28,16 @@ export default function DossierSecciones({
   const pasos = pasosEditables(data.tieneBase)
   const [activo, setActivo] = useState<PasoEditable>('basicos')
 
+  // Defecto de la portada: la empresa del dossier, o el nombre de la cuenta si es
+  // consolidado (mismo criterio que deriva el deck cuando no hay nombre fijado).
+  const nombrePortadaDefault = dossier.empresa_id
+    ? (data.empresas.find(e => e.empresa_id === dossier.empresa_id)?.nombre ?? data.nombreNegocio)
+    : data.nombreNegocio
+
+  // Snapshot desfasado: cambió la moneda/empresa/período tras congelar y la serie
+  // todavía es la anterior. Solo tiene sentido si ya hay números que enseñar.
+  const desfasado = dossier.snapshot_stale && data.serie.length > 0
+
   // Completado = tiene contenido guardado. Heurística suave, solo para el indicador:
   // 'basicos' y 'numeros' existen siempre aquí (se entra a las pestañas con serie).
   const completado: Record<PasoEditable, boolean> = {
@@ -41,6 +51,20 @@ export default function DossierSecciones({
 
   return (
     <div className="dos-secc">
+      {desfasado && (
+        <div className="dos-desfase" role="alert">
+          <AlertTriangle size={16} strokeWidth={2} />
+          <div className="dos-desfase-texto">
+            <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período, pero
+            la presentación y el estado de resultados siguen mostrando el snapshot anterior
+            {data.tieneBase ? ' (importes en la moneda o empresa de antes)' : ''}. Sincronízalos para que todo cuadre.
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setActivo('numeros')}>
+            {data.tieneBase ? 'Actualizar números' : 'Revisar números'}
+          </button>
+        </div>
+      )}
+
       <nav className="dos-secc-nav" aria-label="Secciones del dossier">
         {pasos.map((p, i) => (
           <button
@@ -80,7 +104,8 @@ export default function DossierSecciones({
           <PasoRelato dossier={dossier} secciones={data.secciones} tieneRrhh={data.tieneRrhh} onGuardado={onRefrescar} />
         )}
         {activo === 'marca' && (
-          <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl} onGuardado={onRefrescar} />
+          <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl}
+            nombrePorDefecto={nombrePortadaDefault} onGuardado={onRefrescar} />
         )}
       </div>
     </div>

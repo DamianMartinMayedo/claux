@@ -24,6 +24,7 @@ export interface DossierBasico {
   titulo:                  string
   estado:                  'BORRADOR' | 'PUBLICADO'
   empresa_id:              string | null
+  nombre_portada:          string | null   // nombre público elegido; vacío → se deriva
   moneda_presentacion:     string
   color_principal:         string
   logo_url:                string | null
@@ -31,6 +32,9 @@ export interface DossierBasico {
   periodo_hasta:           string | null
   crecimiento_mensual_pct: number
   snapshot_at:             string | null
+  // moneda/empresa/período definen el snapshot; si cambian tras congelar, la serie
+  // queda desfasada (importes en la moneda vieja, o de otra empresa) hasta reescribirla.
+  snapshot_stale:          boolean
   token:                   string | null
   monedas_faltantes:       string[]
   tasas_usadas:            Record<string, TasaUsada>
@@ -48,6 +52,7 @@ export interface DossierData {
   tieneBase:          boolean
   tieneRrhh:          boolean                 // solo habilita precargar Equipo
   multiempresa:       boolean
+  nombreNegocio:      string                  // nombre de la cuenta: defecto de portada en consolidado
   empresas:           { empresa_id: string; nombre: string }[]
   monedas:            { codigo: string; simbolo: string }[]
   monedaConsolidacion: string | null
@@ -131,7 +136,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
   if (!session) return null
 
   const db = createAdminClient()
-  const [modulos, empresas, { data: monedasRows }, { data: dosRow }] = await Promise.all([
+  const [modulos, empresas, { data: monedasRows }, { data: dosRow }, { data: clienteRow }] = await Promise.all([
     modulosDelCliente(db, session.client_id),
     obtenerEmpresas(),
     // `activa`: mismo criterio que el aviso de setup del dashboard — una moneda
@@ -139,7 +144,9 @@ export async function obtenerDossier(): Promise<DossierData | null> {
     db.from('monedas').select('codigo, simbolo, es_consolidacion').eq('client_id', session.client_id).eq('activa', true),
     db.from('dossiers').select('*').eq('client_id', session.client_id)
       .order('created_at', { ascending: true }).limit(1).maybeSingle(),
+    db.from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle(),
   ])
+  const nombreNegocio = (clienteRow?.nombre_empresa as string) || 'Mi negocio'
 
   const tieneBase    = tieneModulo(modulos, 'base')
   const tieneRrhh    = tieneModulo(modulos, 'rrhh')
@@ -153,7 +160,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
   if (!dosRow) {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
-      tieneBase, tieneRrhh, multiempresa, empresas: listaEmpresas,
+      tieneBase, tieneRrhh, multiempresa, nombreNegocio, empresas: listaEmpresas,
       monedas, monedaConsolidacion, categoriasCosto, empresaLogoUrl: null,
     }
   }
@@ -185,6 +192,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
     titulo: dosRow.titulo,
     estado: dosRow.estado,
     empresa_id: dosRow.empresa_id ?? null,
+    nombre_portada: dosRow.nombre_portada ?? null,
     moneda_presentacion: dosRow.moneda_presentacion,
     color_principal: dosRow.color_principal,
     logo_url: dosRow.logo_url ?? null,
@@ -192,6 +200,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
     periodo_hasta: dosRow.periodo_hasta ?? null,
     crecimiento_mensual_pct: Number(dosRow.crecimiento_mensual_pct) || 0,
     snapshot_at: dosRow.snapshot_at ?? null,
+    snapshot_stale: !!dosRow.snapshot_stale,
     token: dosRow.token ?? null,
     monedas_faltantes: Array.isArray(dosRow.monedas_faltantes) ? dosRow.monedas_faltantes : [],
     tasas_usadas: (dosRow.tasas_usadas && typeof dosRow.tasas_usadas === 'object') ? dosRow.tasas_usadas as Record<string, TasaUsada> : {},
@@ -199,7 +208,7 @@ export async function obtenerDossier(): Promise<DossierData | null> {
 
   return {
     dossier, serie, lineas, secciones,
-    tieneBase, tieneRrhh, multiempresa, empresas: listaEmpresas,
+    tieneBase, tieneRrhh, multiempresa, nombreNegocio, empresas: listaEmpresas,
     monedas, monedaConsolidacion, categoriasCosto,
     empresaLogoUrl: await logoDeEmpresa(dossier.empresa_id),
   }
@@ -266,6 +275,15 @@ export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean;
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
 
+  const db = createAdminClient()
+  // Estado actual: moneda/empresa/período son los PARÁMETROS del snapshot; si el
+  // dueño cambia cualquiera, la serie congelada deja de corresponder (importes en
+  // la moneda vieja, o de otra empresa). Lo comparamos para marcar el desfase.
+  const { data: prev } = await db.from('dossiers')
+    .select('empresa_id, moneda_presentacion, periodo_desde, periodo_hasta, snapshot_at')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!prev) return { ok: false, error: 'Dossier no encontrado.' }
+
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   const set = (k: string, v: unknown) => { if (v !== null && v !== undefined && v !== '') patch[k] = v }
   set('titulo', (formData.get('titulo') as string)?.trim())
@@ -275,7 +293,15 @@ export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean;
   if (formData.has('empresa_id')) patch.empresa_id = (formData.get('empresa_id') as string)?.trim() || null
   if (formData.has('crecimiento_mensual_pct')) patch.crecimiento_mensual_pct = Number(formData.get('crecimiento_mensual_pct')) || 0
 
-  const db = createAdminClient()
+  // ¿Cambió algún parámetro del snapshot frente a lo guardado? Solo tiene sentido
+  // si ya hay números congelados (si no, no hay nada que desfasar). El flag se
+  // limpia solo al reescribir el snapshot (RPC dossier_guardar_snapshot).
+  const cambia = (k: 'moneda_presentacion' | 'periodo_desde' | 'periodo_hasta' | 'empresa_id') =>
+    k in patch && (patch[k] ?? null) !== (prev[k] ?? null)
+  if (prev.snapshot_at && (cambia('moneda_presentacion') || cambia('periodo_desde') || cambia('periodo_hasta') || cambia('empresa_id'))) {
+    patch.snapshot_stale = true
+  }
+
   const { error } = await db.from('dossiers').update(patch).eq('dossier_id', dossierId).eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'No se pudo guardar.' }
 
@@ -442,10 +468,13 @@ export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; e
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
 
   const color = normalizarHex((formData.get('color_principal') as string) || '')
+  // Nombre de portada: vacío → null (el deck lo deriva de la empresa/cuenta). Se
+  // guarda junto al color porque ambos son la identidad PÚBLICA del dossier.
+  const nombrePortada = (formData.get('nombre_portada') as string ?? '').trim() || null
 
   const db = createAdminClient()
   const { error } = await db.from('dossiers')
-    .update({ color_principal: color, updated_at: new Date().toISOString() })
+    .update({ color_principal: color, nombre_portada: nombrePortada, updated_at: new Date().toISOString() })
     .eq('dossier_id', dossierId).eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'No se pudo guardar el color.' }
 
@@ -571,11 +600,14 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
 
   const db = createAdminClient()
-  const { data: dos } = await db.from('dossiers').select('token, snapshot_at')
+  const { data: dos } = await db.from('dossiers').select('token, snapshot_at, snapshot_stale')
     .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
   if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
   // Publicar un deck sin números es enseñar un gráfico vacío a un inversor.
   if (!dos.snapshot_at) return { ok: false, error: 'Carga tus números antes de publicar.' }
+  // Publicar un snapshot desfasado enseñaría importes en la moneda vieja (o de otra
+  // empresa) al inversor. Que lo sincronice primero en «Los números».
+  if (dos.snapshot_stale) return { ok: false, error: 'Cambiaste la moneda, la empresa o el período: sincroniza tus números en «Los números» antes de publicar.' }
 
   const token = (dos.token as string | null) ?? nuevoToken()
   const { error } = await db.from('dossiers').update({
@@ -684,14 +716,17 @@ export async function obtenerDeckPublico(token: string): Promise<DeckPublico | n
     db.from('clients').select('nombre_empresa').eq('client_id', dos.client_id).maybeSingle(),
   ])
 
-  // Nombre de la portada: el de la empresa del dossier; si es consolidado, el del
-  // negocio. `titulo` NO: es interno ("solo lo ves tú").
+  // Nombre de la portada: si el dueño lo fijó, manda ese (holding, nombre
+  // comercial…). Si no, se DERIVA: el de la empresa del dossier; si es consolidado,
+  // el del negocio. `titulo` NO: es interno ("solo lo ves tú").
   let nombre = (cliente?.nombre_empresa as string) || 'Mi negocio'
   if (dos.empresa_id) {
     const { data: emp } = await db.from('empresas').select('nombre')
       .eq('empresa_id', dos.empresa_id).eq('client_id', dos.client_id).maybeSingle()
     if (emp?.nombre) nombre = emp.nombre as string
   }
+  const nombrePortada = (dos.nombre_portada as string | null)?.trim()
+  if (nombrePortada) nombre = nombrePortada
 
   return {
     nombre,
