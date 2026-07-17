@@ -6,6 +6,7 @@ import { guardarSetting } from '@/app/actions/settings'
 import { TIPOS_EMAIL, type TipoEmail } from '@/lib/email/variables'
 import type { PlantillaEmailAdmin } from '@/app/actions/email-plantillas'
 import PlantillasEditor from './PlantillasEditor'
+import Tabs from '@/components/Tabs'
 
 type Props = {
   diasAviso:            number
@@ -61,79 +62,82 @@ export default function NotificacionesForm({ diasAviso, emailAvisosInternos, tog
 
   return (
     <>
-      <div className="usr-tabs">
-        <button className={`usr-tab${tab === 'alertas' ? ' active' : ''}`} onClick={() => setTab('alertas')}>
-          Alertas
-        </button>
-        <button className={`usr-tab${tab === 'plantillas' ? ' active' : ''}`} onClick={() => setTab('plantillas')}>
-          Plantillas de correo
-        </button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones de notificaciones"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'alertas', label: 'Alertas' },
+          { id: 'plantillas', label: 'Plantillas de correo' },
+        ]}
+      />
 
       {tab === 'alertas' && (
-        <div className="page-content-narrow">
+        <div className="notif-alertas">
           <form onSubmit={handleSubmit}>
 
-            {/* ── Alertas del dashboard ── */}
-            <div className="notif-section">
-              <div className="notif-section-header">
-                <div className="notif-section-icon notif-icon-active">
-                  <AlertTriangle size={18} />
+            <div className="grid-cols-2">
+              {/* ── Alertas del dashboard ── */}
+              <div className="notif-section">
+                <div className="notif-section-header">
+                  <div className="notif-section-icon notif-icon-active">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div>
+                    <p className="notif-section-title">Alertas del dashboard</p>
+                    <p className="notif-section-sub">Controla cuándo aparecen los clientes en la métrica «Próximos a vencer»</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="notif-section-title">Alertas del dashboard</p>
-                  <p className="notif-section-sub">Controla cuándo aparecen los clientes en la métrica «Próximos a vencer»</p>
-                </div>
-              </div>
 
-              <div className="notif-field-row">
-                <div className="notif-field-info">
-                  <p className="notif-field-label">Días de aviso de vencimiento</p>
-                  <p className="notif-field-hint">
-                    Los clientes activos y en trial cuya suscripción venza en los próximos
-                    <strong> N días</strong> se contabilizarán en el contador del dashboard.
-                    La tabla de alertas siempre muestra hasta 14 días.
-                  </p>
-                </div>
-                <div className="notif-field-control">
-                  <div className="notif-number-wrap">
-                    <input
-                      type="number"
-                      className="input notif-number-input"
-                      min={1}
-                      max={60}
-                      value={dias}
-                      onChange={e => { setDias(e.target.value); setMsg(null) }}
-                      required
-                    />
-                    <span className="notif-number-suffix">días</span>
+                <div className="notif-field-row">
+                  <div className="notif-field-info">
+                    <p className="notif-field-label">Días de aviso de vencimiento</p>
+                    <p className="notif-field-hint">
+                      Los clientes activos y en trial cuya suscripción venza en los próximos
+                      <strong> N días</strong> se contabilizarán en el contador del dashboard.
+                      La tabla de alertas siempre muestra hasta 14 días.
+                    </p>
+                  </div>
+                  <div className="notif-field-control">
+                    <div className="notif-number-wrap">
+                      <input
+                        type="number"
+                        className="input notif-number-input"
+                        min={1}
+                        max={60}
+                        value={dias}
+                        onChange={e => { setDias(e.target.value); setMsg(null) }}
+                        required
+                      />
+                      <span className="notif-number-suffix">días</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* ── Avisos internos al equipo ── */}
-            <div className="notif-section">
-              <div className="notif-section-header">
-                <div className="notif-section-icon notif-icon-active">
-                  <Mail size={18} />
+              {/* ── Avisos internos al equipo ── */}
+              <div className="notif-section">
+                <div className="notif-section-header">
+                  <div className="notif-section-icon notif-icon-active">
+                    <Mail size={18} />
+                  </div>
+                  <div>
+                    <p className="notif-section-title">Avisos internos al equipo</p>
+                    <p className="notif-section-sub">Buzón que recibe los avisos de nuevo lead, nuevo cliente y nuevo mensaje de soporte</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="notif-section-title">Avisos internos al equipo</p>
-                  <p className="notif-section-sub">Buzón que recibe los avisos de nuevo lead, nuevo cliente y nuevo mensaje de soporte</p>
-                </div>
-              </div>
 
-              <div className="input-group">
-                <label htmlFor="email-avisos-internos">Correo de avisos internos</label>
-                <input
-                  id="email-avisos-internos"
-                  type="email"
-                  className="input"
-                  value={emailAvisos}
-                  onChange={e => { setEmailAvisos(e.target.value); setMsg(null) }}
-                  required
-                />
+                <div className="input-group">
+                  <label htmlFor="email-avisos-internos">Correo de avisos internos</label>
+                  <input
+                    id="email-avisos-internos"
+                    type="email"
+                    className="input"
+                    value={emailAvisos}
+                    onChange={e => { setEmailAvisos(e.target.value); setMsg(null) }}
+                    required
+                  />
+                </div>
               </div>
             </div>
 

@@ -40,10 +40,22 @@ type Modulo = {
   paginas?: Pagina[] | null
 }
 
-export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
+export default function EditarModuloModal({
+  modulo,
+  open: openProp,
+  onClose: onCloseProp,
+}: {
+  modulo: Modulo
+  /** Modo controlado: si se pasa, el padre gobierna la apertura y no se
+   *  renderiza el botón disparador (se usa desde el menú RowActions). */
+  open?: boolean
+  onClose?: () => void
+}) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
-  const [open, setOpen]       = useState(false)
+  const isControlled = openProp !== undefined
+  const [openState, setOpen] = useState(false)
+  const open = isControlled ? openProp : openState
   const [loading, setLoading] = useState(false)
   const [paginas, setPaginas] = useState<Pagina[]>(() => ensurePages(modulo.paginas))
   const [nuevaRuta, setNuevaRuta]   = useState('')
@@ -64,11 +76,13 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleClose = useCallback(() => {
-    setOpen(false); setAddError('')
+    if (isControlled) onCloseProp?.()
+    else setOpen(false)
+    setAddError('')
     setNuevaRuta(''); setNuevoLabel(''); setRouteEdited(false)
     setPaginas(ensurePages(modulo.paginas))
     setEditTipo(modulo.tipo)
-  }, [modulo.paginas, modulo.tipo])
+  }, [isControlled, onCloseProp, modulo.paginas, modulo.tipo])
 
   useModalKeyboard(open, handleClose)
 
@@ -263,7 +277,9 @@ export default function EditarModuloModal({ modulo }: { modulo: Modulo }) {
 
   return (
     <>
-      <button className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>Editar</button>
+      {!isControlled && (
+        <button className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>Editar</button>
+      )}
       {mounted && open && createPortal(modal, document.body)}
     </>
   )

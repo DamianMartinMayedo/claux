@@ -60,6 +60,9 @@ export interface JsPdfDoc {
   splitTextToSize(text: string, maxWidth: number): string[]
   getTextWidth(text: string): number
   save(filename: string): void
+  // 'datauristring' → "data:application/pdf;...;base64,XXXX" (para adjuntar el PDF
+  // en el envío al asesor sin volver a generarlo en servidor).
+  output(type: string): string
 }
 
 interface JsPdfCtor { new (o: object): JsPdfDoc }

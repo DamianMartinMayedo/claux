@@ -12,6 +12,7 @@ import {
 } from '@/app/actions/soporte'
 import { Eye, Mail, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
+import Tabs from '@/components/Tabs'
 
 type Estado = 'NUEVO' | 'LEIDO' | 'RESUELTO'
 
@@ -256,14 +257,15 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
   return (
     <>
       {/* Tabs */}
-      <div className="usr-tabs">
-        <button className={`usr-tab${tab === 'mensajes' ? ' active' : ''}`} onClick={() => setTab('mensajes')}>
-          Mensajes {nuevos > 0 && <span className="badge badge-warning">{nuevos}</span>}
-        </button>
-        <button className={`usr-tab${tab === 'faq' ? ' active' : ''}`} onClick={() => setTab('faq')}>
-          Preguntas frecuentes ({faqs.length})
-        </button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones de soporte"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'mensajes', label: 'Mensajes', count: nuevos > 0 ? nuevos : undefined, countTone: 'warning' },
+          { id: 'faq', label: 'Preguntas frecuentes', count: faqs.length },
+        ]}
+      />
 
       {/* ── Tab Mensajes ── */}
       {tab === 'mensajes' && (

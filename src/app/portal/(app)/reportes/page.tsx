@@ -1,6 +1,7 @@
 import { notFound }        from 'next/navigation'
 import { requireModulo }    from '@/app/actions/portal/auth'
 import { obtenerReportes } from '@/app/actions/portal/reportes'
+import { obtenerAsesores } from '@/app/actions/portal/asesores'
 import ReportesView        from './ReportesView'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,10 @@ export default async function ReportesPage({ searchParams }: PageProps) {
   const hasta   = sp.hasta   || def.hasta
   const empresa = sp.empresa || ''
 
-  const data = await obtenerReportes(desde, hasta, empresa)
+  const [data, asesores] = await Promise.all([
+    obtenerReportes(desde, hasta, empresa),
+    obtenerAsesores(),
+  ])
   if (!data) notFound()
-  return <ReportesView data={data} />
+  return <ReportesView data={data} asesores={asesores} />
 }

@@ -19,6 +19,9 @@ interface EnviarEmailInput {
   // (Fase 2) como guard de idempotencia: p. ej. { fecha_expiracion: '2026-08-15' }
   // para no reenviar el mismo aviso al mismo cliente por el mismo vencimiento.
   meta?:     Record<string, unknown>
+  // Adjuntos (Resend): `content` en base64. Lo usa el envío de reportes al asesor
+  // (PDF generado en cliente + CSV técnico generado en servidor).
+  attachments?: { filename: string; content: string }[]
 }
 
 const REMITENTE_DEFAULT = 'CLAUX <notificaciones@claux.es>'
@@ -43,6 +46,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
       subject: input.subject,
       html:    input.html,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     })
 
     if (error) {

@@ -6,6 +6,7 @@ import { PAGINAS_LEGALES } from '@/lib/publico/legal'
 import PerfilForm from './PerfilForm'
 import FacturacionForm from './FacturacionForm'
 import LegalForm from './LegalForm'
+import ConfiguracionTabs from './ConfiguracionTabs'
 
 export default async function ConfiguracionPage() {
   await requireAccesoPagina('configuracion')
@@ -36,98 +37,100 @@ export default async function ConfiguracionPage() {
         </div>
       </div>
 
-      <div className="config-grid">
+      <ConfiguracionTabs
+        cuenta={
+          <>
+            {/* Perfil */}
+            <section className="card card-lg config-section">
+              <div className="config-section-header">
+                <div className="config-section-icon">
+                  <User size={20} />
+                </div>
+                <div>
+                  <h2 className="config-section-title">Perfil</h2>
+                  <p className="config-section-sub">Datos de tu cuenta de administrador</p>
+                </div>
+              </div>
 
-        {/* Perfil */}
-        <section className="card card-lg config-section">
-          <div className="config-section-header">
-            <div className="config-section-icon">
-              <User size={20} />
-            </div>
-            <div>
-              <h2 className="config-section-title">Perfil</h2>
-              <p className="config-section-sub">Datos de tu cuenta de administrador</p>
-            </div>
-          </div>
+              {/* Avatar + info */}
+              <div className="profile-hero">
+                <div className="profile-avatar-lg">
+                  {displayName.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'}
+                </div>
+                <div>
+                  <p className="profile-name">{displayName}</p>
+                  <p className="profile-email">{user?.email}</p>
+                  <span className="badge badge-info mt-2">Super Admin</span>
+                </div>
+              </div>
 
-          {/* Avatar + info */}
-          <div className="profile-hero">
-            <div className="profile-avatar-lg">
-              {displayName.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'}
-            </div>
-            <div>
-              <p className="profile-name">{displayName}</p>
-              <p className="profile-email">{user?.email}</p>
-              <span className="badge badge-info mt-2">Super Admin</span>
-            </div>
-          </div>
+              <PerfilForm
+                initialName={displayName}
+                email={user?.email ?? ''}
+              />
+            </section>
 
-          <PerfilForm
-            initialName={displayName}
-            email={user?.email ?? ''}
-          />
-        </section>
+            {/* Seguridad */}
+            <section className="card card-lg config-section">
+              <div className="config-section-header">
+                <div className="config-section-icon">
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h2 className="config-section-title">Seguridad</h2>
+                  <p className="config-section-sub">Contraseña y acceso al panel</p>
+                </div>
+              </div>
 
-        {/* Seguridad */}
-        <section className="card card-lg config-section">
-          <div className="config-section-header">
-            <div className="config-section-icon">
-              <Lock size={20} />
+              <div className="config-security-block">
+                <div>
+                  <p className="config-field-label">Contraseña</p>
+                  <p className="config-field-hint">
+                    Recibirás un enlace en tu correo para establecer una nueva contraseña de forma segura.
+                  </p>
+                </div>
+                <PerfilForm email={user?.email ?? ''} initialName={displayName} passwordOnly />
+              </div>
+            </section>
+          </>
+        }
+        facturacion={
+          <section className="card card-lg config-section">
+            <div className="config-section-header">
+              <div className="config-section-icon">
+                <CreditCard size={20} />
+              </div>
+              <div>
+                <h2 className="config-section-title">Facturación</h2>
+                <p className="config-section-sub">Pago de configuración, descuento anual y días de prueba</p>
+              </div>
             </div>
-            <div>
-              <h2 className="config-section-title">Seguridad</h2>
-              <p className="config-section-sub">Contraseña y acceso al panel</p>
-            </div>
-          </div>
 
-          <div className="config-security-block">
-            <div>
-              <p className="config-field-label">Contraseña</p>
-              <p className="config-field-hint">
-                Recibirás un enlace en tu correo para establecer una nueva contraseña de forma segura.
-              </p>
+            <FacturacionForm
+              setupDefault={setupDefault}
+              descuentoAnual={descuentoAnual}
+              diasTrial={diasTrial}
+            />
+          </section>
+        }
+        legales={
+          <section className="card card-lg config-section">
+            <div className="config-section-header">
+              <div className="config-section-icon">
+                <Scale size={20} />
+              </div>
+              <div>
+                <h2 className="config-section-title">Textos legales</h2>
+                <p className="config-section-sub">
+                  Aviso legal, privacidad y cookies: se publican en el acto, sin desplegar
+                </p>
+              </div>
             </div>
-            <PerfilForm email={user?.email ?? ''} initialName={displayName} passwordOnly />
-          </div>
-        </section>
 
-        {/* Facturación */}
-        <section className="card card-lg config-section">
-          <div className="config-section-header">
-            <div className="config-section-icon">
-              <CreditCard size={20} />
-            </div>
-            <div>
-              <h2 className="config-section-title">Facturación</h2>
-              <p className="config-section-sub">Pago de configuración, descuento anual y días de prueba</p>
-            </div>
-          </div>
-
-          <FacturacionForm
-            setupDefault={setupDefault}
-            descuentoAnual={descuentoAnual}
-            diasTrial={diasTrial}
-          />
-        </section>
-
-        {/* Textos legales */}
-        <section className="card card-lg config-section config-section-wide">
-          <div className="config-section-header">
-            <div className="config-section-icon">
-              <Scale size={20} />
-            </div>
-            <div>
-              <h2 className="config-section-title">Textos legales</h2>
-              <p className="config-section-sub">
-                Aviso legal, privacidad y cookies: se publican en el acto, sin desplegar
-              </p>
-            </div>
-          </div>
-
-          <LegalForm textos={textosLegales} />
-        </section>
-
-      </div>
+            <LegalForm textos={textosLegales} />
+          </section>
+        }
+      />
     </div>
   )
 }

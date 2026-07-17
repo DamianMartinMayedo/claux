@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { enviarEmail }       from '@/lib/email/enviar'
+import { envolverEmail }     from '@/lib/email/layout'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -205,4 +207,185 @@ export async function obtenerReportes(
     flujo,
     consolidado,
   }
+}
+
+// ── Envío de reportes al asesor ─────────────────────────────────────────────────
+// El PDF llega YA generado desde el cliente (mismo que se descarga → paridad visual
+// y "el usuario sabe lo que envía"). El CSV técnico se genera aquí en servidor a
+// partir de los MISMOS datos re-obtenidos con obtenerReportes (fuente autoritativa).
+
+const ORIGEN_LABEL_SRV: Record<string, string> = {
+  MANUAL: 'Manual', COBRO: 'Cobros', PAGO: 'Pagos', TRANSFERENCIA: 'Transferencias',
+}
+
+// Número técnico para CSV: 2 decimales con coma (Excel ES). El separador de columna
+// es ';', así que la coma decimal no colisiona.
+function numCsv(n: number): string { return n.toFixed(2).replace('.', ',') }
+// Escapa un valor de celda si contiene ; " o salto de línea.
+function celdaCsv(v: string): string {
+  return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+}
+
+// CSV técnico normalizado: 6 columnas fijas, una fila por cifra, sin banners.
+function construirCsvTecnico(
+  data: ReportesData,
+  empresaLabel: string,
+  incluirConsolidado: boolean,
+): string {
+  const rows: string[][] = [['empresa', 'moneda', 'reporte', 'seccion', 'concepto', 'importe']]
+  const push = (moneda: string, reporte: string, seccion: string, concepto: string, importe: number) =>
+    rows.push([empresaLabel, moneda, reporte, seccion, concepto, numCsv(importe)])
+
+  const RES = 'Estado de resultados'
+  for (const r of data.resultado) {
+    push(r.moneda, RES, 'Ingresos', 'Ventas (facturas)', r.ventas)
+    push(r.moneda, RES, 'Ingresos', 'Cobros directos', r.cobros_directos)
+    push(r.moneda, RES, 'Ingresos', 'Total ingresos', r.total_ingresos)
+    for (const g of r.gastos_por_categoria) push(r.moneda, RES, 'Gastos', g.categoria, g.monto)
+    push(r.moneda, RES, 'Gastos', 'Total gastos', r.total_gastos)
+    push(r.moneda, RES, 'Resultado', 'Resultado neto', r.neto)
+  }
+
+  const FLU = 'Flujo de caja'
+  for (const f of data.flujo) {
+    for (const e of f.detalle_entradas) push(f.moneda, FLU, 'Entradas', ORIGEN_LABEL_SRV[e.origen] ?? e.origen, e.monto)
+    push(f.moneda, FLU, 'Entradas', 'Total entradas', f.entradas)
+    for (const s of f.detalle_salidas) push(f.moneda, FLU, 'Salidas', ORIGEN_LABEL_SRV[s.origen] ?? s.origen, s.monto)
+    push(f.moneda, FLU, 'Salidas', 'Total salidas', f.salidas)
+    push(f.moneda, FLU, 'Flujo', 'Flujo neto', f.neto)
+  }
+
+  const c = data.consolidado
+  if (incluirConsolidado && c) {
+    if (c.resultado) {
+      push(c.moneda, 'Consolidado', 'Estado de resultados', 'Ingresos', c.resultado.total_ingresos)
+      push(c.moneda, 'Consolidado', 'Estado de resultados', 'Gastos', c.resultado.total_gastos)
+      push(c.moneda, 'Consolidado', 'Estado de resultados', 'Resultado neto', c.resultado.neto)
+    }
+    if (c.flujo) {
+      push(c.moneda, 'Consolidado', 'Flujo de caja', 'Entradas', c.flujo.entradas)
+      push(c.moneda, 'Consolidado', 'Flujo de caja', 'Salidas', c.flujo.salidas)
+      push(c.moneda, 'Consolidado', 'Flujo de caja', 'Flujo neto', c.flujo.neto)
+    }
+  }
+
+  // BOM para que Excel (ES) respete acentos; separador ; para locale español.
+  return '﻿' + rows.map(r => r.map(celdaCsv).join(';')).join('\r\n')
+}
+
+function fmtMonto(n: number): string {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export interface EnviarReportesAsesorInput {
+  asesor_id:          string
+  desde:              string
+  hasta:              string
+  empresa_id:         string   // '' = todas
+  incluirConsolidado: boolean
+  incluirPDF:         boolean
+  incluirCSV:         boolean
+  nota?:              string
+  pdfBase64?:         string   // sin prefijo data:; obligatorio si incluirPDF
+  pdfNombre?:         string
+  csvNombre?:         string
+}
+
+export async function enviarReportesAsesor(
+  input: EnviarReportesAsesorInput,
+): Promise<{ ok: boolean; error?: string; email?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+
+  if (!input.incluirPDF && !input.incluirCSV) {
+    return { ok: false, error: 'Selecciona al menos un archivo (PDF o CSV).' }
+  }
+  if (input.incluirPDF && !input.pdfBase64) {
+    return { ok: false, error: 'No se pudo adjuntar el PDF. Reintenta.' }
+  }
+
+  const db = createAdminClient()
+
+  // Asesor destinatario (validado contra el directorio del cliente).
+  const { data: asesor } = await db.from('asesores')
+    .select('nombre, email, empresa_id')
+    .eq('asesor_id', input.asesor_id).eq('client_id', session.client_id).eq('activo', true)
+    .maybeSingle()
+  if (!asesor) return { ok: false, error: 'Asesor no encontrado.' }
+
+  // Datos autoritativos: se re-obtienen en servidor, no se confía en el cliente.
+  const data = await obtenerReportes(input.desde, input.hasta, input.empresa_id)
+  if (!data) return { ok: false, error: 'No se pudieron leer los reportes.' }
+
+  const empresaLabel = input.empresa_id
+    ? (data.empresas.find(e => e.empresa_id === input.empresa_id)?.nombre ?? input.empresa_id)
+    : 'Todas las empresas'
+
+  const { data: cli } = await db.from('clients')
+    .select('nombre_empresa').eq('client_id', session.client_id).maybeSingle()
+  const negocio = (cli?.nombre_empresa as string) || 'el negocio'
+
+  // Adjuntos
+  const attachments: { filename: string; content: string }[] = []
+  if (input.incluirPDF && input.pdfBase64) {
+    attachments.push({ filename: (input.pdfNombre || 'reportes.pdf').replace(/[^\w.-]+/g, '_'), content: input.pdfBase64 })
+  }
+  if (input.incluirCSV) {
+    const csv = construirCsvTecnico(data, empresaLabel, input.incluirConsolidado)
+    attachments.push({
+      filename: (input.csvNombre || 'reportes.csv').replace(/[^\w.-]+/g, '_'),
+      content:  Buffer.from(csv, 'utf-8').toString('base64'),
+    })
+  }
+  if (!attachments.length) return { ok: false, error: 'No hay nada que adjuntar.' }
+
+  // Resumen "lo que se envía": neto por moneda + consolidado si se incluye.
+  const fechaTxt = `${input.desde} — ${input.hasta}`
+  const lineasRes = data.resultado.map(r =>
+    `<tr><td style="padding:2px 0;">Resultado neto (${r.moneda})</td><td style="padding:2px 0;text-align:right;font-weight:600;">${fmtMonto(r.neto)}</td></tr>`)
+  const lineasFlu = data.flujo.map(f =>
+    `<tr><td style="padding:2px 0;">Flujo neto (${f.moneda})</td><td style="padding:2px 0;text-align:right;font-weight:600;">${fmtMonto(f.neto)}</td></tr>`)
+  const lineaConsol = (input.incluirConsolidado && data.consolidado?.resultado)
+    ? `<tr><td style="padding:2px 0;">Resultado neto consolidado (${data.consolidado.moneda})</td><td style="padding:2px 0;text-align:right;font-weight:600;">${fmtMonto(data.consolidado.resultado.neto)}</td></tr>`
+    : ''
+  const resumenTabla = (lineasRes.length || lineasFlu.length)
+    ? `<table role="presentation" width="100%" style="border-collapse:collapse;font-size:14px;margin:12px 0;">${lineasRes.join('')}${lineasFlu.join('')}${lineaConsol}</table>`
+    : '<p style="margin:12px 0;color:#5C5B52;">Sin movimientos en el período.</p>'
+
+  const notaHtml = input.nota?.trim()
+    ? `<p style="margin:0 0 16px;padding:12px 16px;background:#F5F4EF;border-radius:8px;">${input.nota.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`
+    : ''
+
+  const adjuntosTxt = attachments.map(a => a.filename).join(' · ')
+
+  const cuerpo = `
+    <p style="margin:0 0 16px;">Hola ${asesor.nombre.replace(/</g, '&lt;')},</p>
+    <p style="margin:0 0 16px;">Te comparto los reportes financieros de <strong>${negocio.replace(/</g, '&lt;')}</strong>.</p>
+    ${notaHtml}
+    <p style="margin:0 0 4px;font-size:13px;color:#5C5B52;">Alcance: <strong>${empresaLabel.replace(/</g, '&lt;')}</strong> · Período: <strong>${fechaTxt}</strong></p>
+    ${resumenTabla}
+    <p style="margin:0 0 16px;font-size:13px;color:#5C5B52;">Adjuntos: ${adjuntosTxt}</p>
+    <p style="margin:0;font-size:12px;color:#5C5B52;">Cifras operativas generadas por CLAUX a partir de la actividad del negocio; no constituyen un cierre contable oficial.</p>
+  `
+
+  const asunto = `Reportes financieros · ${empresaLabel} · ${fechaTxt}`
+
+  const res = await enviarEmail({
+    to:          asesor.email,
+    subject:     asunto,
+    html:        envolverEmail(cuerpo),
+    tipo:        'reporte_asesor',
+    clientId:    session.client_id,
+    replyTo:     session.email,   // el asesor responde directo al dueño
+    attachments,
+    meta: {
+      asesor_id: input.asesor_id, empresa: empresaLabel,
+      desde: input.desde, hasta: input.hasta,
+      archivos: attachments.map(a => a.filename),
+    },
+  })
+
+  if (!res.ok) return { ok: false, error: 'No se pudo enviar el correo. Revisa la conexión e inténtalo de nuevo.' }
+  return { ok: true, email: asesor.email }
 }

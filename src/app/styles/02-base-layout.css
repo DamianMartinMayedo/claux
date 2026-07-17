@@ -263,4 +263,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 .page-title { font-size: var(--text-3xl); font-weight: 800; }
 .page-subtitle { font-size: var(--text-lg); color: var(--color-text-muted); margin-top: var(--space-1); }
+/* El bloque de texto (título+subtítulo) es flexible y encogible; la acción no
+   encoge y se mantiene arriba-derecha aunque el subtítulo sea largo. Solo al
+   quedarse sin sitio (móvil) envuelve limpio por el flex-wrap del contenedor. */
+.page-header > :first-child { flex: 1 1 20rem; min-width: 0; }
+.page-header > :not(:first-child) { flex-shrink: 0; }
 

@@ -134,3 +134,83 @@ export async function reordenarModulos(claves: string[]) {
   revalidatePath('/admin/modulos')
   return { ok: true as const }
 }
+
+// ── Archivar / reactivar módulo ──────────────────────────────────────
+// Archivar = ocultarlo del alta de clientes sin borrarlo (activo=false).
+// Los clientes que ya lo tienen contratado lo conservan.
+export async function archivarModulo(clave: string, archivar: boolean) {
+  await requirePermiso('modulos')
+  const supabase = await createClient()
+
+  const { data: mod } = await supabase
+    .from('modulos_catalogo')
+    .select('es_base, nombre')
+    .eq('clave', clave)
+    .maybeSingle()
+  if (!mod) return { ok: false, error: 'Módulo no encontrado.' }
+  if (mod.es_base) return { ok: false, error: 'La base no se puede archivar.' }
+
+  const { error } = await supabase
+    .from('modulos_catalogo')
+    .update({ activo: !archivar, updated_at: new Date().toISOString() })
+    .eq('clave', clave)
+  if (error) return { ok: false, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'modulo_catalogo',
+    entity_id:   clave,
+    action:      archivar ? 'archivar' : 'reactivar',
+    description: `${archivar ? 'Archivó' : 'Reactivó'} el módulo ${mod.nombre} (${clave})`,
+  })
+
+  revalidatePath('/admin/modulos')
+  return { ok: true as const }
+}
+
+// ── Eliminar módulo (con guardia) ────────────────────────────────────
+// Solo si no es la base y ningún cliente lo tiene contratado; si está en uso,
+// se bloquea y se sugiere archivar.
+export async function eliminarModulo(clave: string) {
+  await requirePermiso('modulos')
+  const supabase = await createClient()
+
+  const { data: mod } = await supabase
+    .from('modulos_catalogo')
+    .select('es_base, nombre')
+    .eq('clave', clave)
+    .maybeSingle()
+  if (!mod) return { ok: false, error: 'Módulo no encontrado.' }
+  if (mod.es_base) return { ok: false, error: 'La base es obligatoria; no se puede eliminar.' }
+
+  // Guardia: ¿algún cliente lo tiene activo? modulos_activos es text[].
+  const { count } = await supabase
+    .from('clients')
+    .select('client_id', { count: 'exact', head: true })
+    .contains('modulos_activos', [clave])
+  if ((count ?? 0) > 0) {
+    return {
+      ok: false,
+      error: `No se puede eliminar: ${count} cliente(s) lo tienen contratado. Archívalo en su lugar.`,
+    }
+  }
+
+  const { error } = await supabase
+    .from('modulos_catalogo')
+    .delete()
+    .eq('clave', clave)
+  if (error) return { ok: false, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'modulo_catalogo',
+    entity_id:   clave,
+    action:      'eliminar',
+    description: `Eliminó el módulo ${mod.nombre} (${clave})`,
+  })
+
+  revalidatePath('/admin/modulos')
+  return { ok: true as const }
+}

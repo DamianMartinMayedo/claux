@@ -2903,3 +2903,53 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   font-family: inherit; text-align: left;
 }
 .aplicar-tasa-btn:hover { text-decoration: underline; }
+
+/* ── Enviar reportes al asesor (modal) ── */
+.env-asesor-add-btn { align-self: flex-start; }
+.env-asesor-add {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); background: var(--color-surface-offset);
+}
+.env-asesor-add-acciones { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.env-asesor-check {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  font-size: var(--text-sm); color: var(--color-text); cursor: pointer; padding: 2px 0;
+}
+.env-asesor-check input { margin-top: 2px; flex-shrink: 0; }
+.env-asesor-check-hint { color: var(--color-text-muted); font-style: normal; }
+.env-asesor-opt { color: var(--color-text-faint); font-weight: 400; }
+.env-asesor-nota { resize: vertical; min-height: 2.5rem; }
+.env-asesor-resumen {
+  padding: var(--space-4); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); background: var(--color-surface-offset);
+}
+.env-asesor-resumen-head {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: var(--space-2);
+}
+
+/* ── Asesores en Perfil ── */
+.prf-asesores-hint { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-4); }
+.prf-asesores-form { margin-bottom: var(--space-4); }
+.prf-asesores-empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  padding: var(--space-6); text-align: center; color: var(--color-text-muted); font-size: var(--text-sm);
+}
+.prf-asesores-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.prf-asesor-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0; border-top: 1px solid var(--color-divider);
+}
+.prf-asesor-row:first-child { border-top: none; }
+.prf-asesor-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.prf-asesor-nombre { font-weight: 600; color: var(--color-text); }
+.prf-asesor-email { font-size: var(--text-sm); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prf-asesor-ambito {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  background: var(--color-surface-offset); padding: 2px var(--space-2);
+  border-radius: var(--radius-sm); white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .prf-asesor-ambito { display: none; }
+}

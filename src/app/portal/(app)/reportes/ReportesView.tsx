@@ -4,9 +4,11 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { Download, ChevronDown, BarChart3, Search } from 'lucide-react'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
+import type { Asesor }             from '@/app/actions/portal/asesores'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
+import EnviarAsesorModal           from './EnviarAsesorModal'
 import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
 import { crearCursor } from '@/lib/pdf/reporte'
 
@@ -36,9 +38,10 @@ function slug(s: string): string {
 
 // ── Vista ─────────────────────────────────────────────────────────────────────
 
-export default function ReportesView({ data }: { data: ReportesData }) {
+export default function ReportesView({ data, asesores }: { data: ReportesData; asesores: Asesor[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [enviarOpen, setEnviarOpen] = useState(false)
 
   const [desde,   setDesde]   = useState(data.desde)
   const [hasta,   setHasta]   = useState(data.hasta)
@@ -65,12 +68,10 @@ export default function ReportesView({ data }: { data: ReportesData }) {
   const empresaSlug = data.empresa_id ? slug(empresaNombre) : 'todas'
   const nombreArchivo = `reportes_${empresaSlug}_${data.desde}_${data.hasta}`
 
-  // PDF construido con texto real (jsPDF), no una captura de la página.
-  async function descargarPDF() {
-    setMenuOpen(false)
-    if (descargando) return
-    setDescargando(true)
-    try {
+  // PDF real (jsPDF). Se construye aquí para reutilizarlo en la descarga y en el
+  // envío al asesor; `incluirConsolidado` controla si se pinta ese bloque (que
+  // pesa y no siempre interesa mandarlo).
+  async function construirDoc(incluirConsolidado: boolean) {
       const doc   = await crearDoc()
       const pageW = doc.internal.pageSize.getWidth()
       const pageH = doc.internal.pageSize.getHeight()
@@ -118,7 +119,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
 
       // ── Consolidado (recuadro gris claro) ──
       const c = data.consolidado
-      if (c) {
+      if (c && incluirConsolidado) {
         const lineas: { label: string; val: string; bold?: boolean; muted?: boolean; gap?: number }[] = []
         if (c.resultado) {
           lineas.push({ label: 'Estado de resultados', val: '', bold: true, muted: true })
@@ -167,10 +168,25 @@ export default function ReportesView({ data }: { data: ReportesData }) {
       }
 
       sellarPie(doc)
+      return doc
+  }
+
+  async function descargarPDF() {
+    setMenuOpen(false)
+    if (descargando) return
+    setDescargando(true)
+    try {
+      const doc = await construirDoc(true)
       doc.save(`${nombreArchivo}.pdf`)
     } finally {
       setDescargando(false)
     }
+  }
+
+  // Mismo PDF, devuelto en base64 (sin prefijo data:) para adjuntarlo en el envío.
+  async function construirPdfBase64(incluirConsolidado: boolean): Promise<string> {
+    const doc = await construirDoc(incluirConsolidado)
+    return doc.output('datauristring').split('base64,')[1] ?? ''
   }
 
   function descargarCSV() {
@@ -278,6 +294,7 @@ export default function ReportesView({ data }: { data: ReportesData }) {
                 <div className="rep-dl-menu">
                   <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
                   <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
+                  <button className="dropdown-item" onClick={() => { setMenuOpen(false); setEnviarOpen(true) }}>Enviar al asesor…</button>
                 </div>
               </>
             )}
@@ -435,6 +452,22 @@ export default function ReportesView({ data }: { data: ReportesData }) {
             </div>
           )}
         </>
+      )}
+
+      {enviarOpen && (
+        <EnviarAsesorModal
+          data={data}
+          desde={data.desde}
+          hasta={data.hasta}
+          empresaId={data.empresa_id}
+          empresaNombre={empresaNombre}
+          nombreArchivo={nombreArchivo}
+          asesores={asesores}
+          empresas={data.empresas}
+          construirPdfBase64={construirPdfBase64}
+          onClose={() => setEnviarOpen(false)}
+          onEnviado={() => setEnviarOpen(false)}
+        />
       )}
     </div>
   )

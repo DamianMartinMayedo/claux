@@ -1,9 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Pencil, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 import EditarModuloModal from './EditarModuloModal'
 import NuevoModuloModal  from './NuevoModuloModal'
-import { reordenarModulos } from '@/app/actions/modulos'
+import { RowActions } from '@/components/portal/RowActions'
+import { reordenarModulos, archivarModulo, eliminarModulo } from '@/app/actions/modulos'
 import { useToast } from '@/app/contexts/ToastContext'
 
 const TIPO_LABEL: Record<string, string> = {
@@ -39,13 +42,25 @@ function countPaginas(paginas: Pagina[] | null | undefined): number {
 }
 
 export default function ModulosPageClient({ modulos: initial }: { modulos: Modulo[] }) {
+  const router = useRouter()
+  const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [modulos, setModulos] = useState<Modulo[]>(() => initial.map(m => ({ ...m })))
-  const { success: toastSuccess, loading: toastLoading } = useToast()
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [hasDragged, setHasDragged] = useState(false)
 
-  function handleDragStart(index: number) { setDragIndex(index) }
+  // Sincroniza con las props cuando el servidor manda datos nuevos (router.refresh
+  // tras reordenar/editar/archivar/eliminar): el inicializador de useState solo
+  // corre al montar, así que sin esto la lista mostraría datos viejos.
+  const [prevInitial, setPrevInitial] = useState(initial)
+  if (initial !== prevInitial) {
+    setPrevInitial(initial)
+    setModulos(initial.map(m => ({ ...m })))
+  }
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const movedRef = useRef(false)
+  const orderRef = useRef<string[]>([])
+  const [editing, setEditing] = useState<Modulo | null>(null)
+
+  function handleDragStart(index: number) { setDragIndex(index); movedRef.current = false }
   function handleDragOver(e: React.DragEvent, index: number) {
     e.preventDefault()
     if (dragIndex === null || dragIndex === index) return
@@ -53,22 +68,38 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
     const [moved] = reordered.splice(dragIndex, 1)
     reordered.splice(index, 0, moved)
     setModulos(reordered)
+    orderRef.current = reordered.map(m => m.clave)
     setDragIndex(index)
-    setHasDragged(true)
+    movedRef.current = true
   }
-  function handleDragEnd() { setDragIndex(null) }
 
-  async function saveOrder() {
+  // Auto-guardar al soltar: si el orden cambió, persiste sin botón extra.
+  async function handleDragEnd() {
+    setDragIndex(null)
+    if (!movedRef.current) return
+    movedRef.current = false
     const ld = toastLoading('Guardando orden…')
-    setSaving(true)
-    await reordenarModulos(modulos.map(m => m.clave))
-    setHasDragged(false)
-    setSaving(false)
+    const res = await reordenarModulos(orderRef.current)
     await ld.dismiss()
+    if (!res.ok) { toastError('No se pudo guardar el orden'); return }
     toastSuccess('Orden guardado')
+    router.refresh()
   }
 
-  const showSave = hasDragged && !saving
+  async function handleArchivar(m: Modulo, archivar: boolean) {
+    const res = await archivarModulo(m.clave, archivar)
+    if (!res.ok) { toastError(res.error ?? 'Error al archivar'); return }
+    toastSuccess(archivar ? 'Módulo archivado' : 'Módulo reactivado')
+    router.refresh()
+  }
+
+  async function handleEliminar(m: Modulo) {
+    if (!window.confirm(`¿Eliminar el módulo "${m.nombre}"? Esta acción no se puede deshacer.`)) return
+    const res = await eliminarModulo(m.clave)
+    if (!res.ok) { toastError(res.error ?? 'Error al eliminar'); return }
+    toastSuccess('Módulo eliminado')
+    router.refresh()
+  }
 
   return (
     <div className="view-container">
@@ -76,20 +107,15 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
         <div>
           <h1 className="page-title">Catálogo de módulos</h1>
           <p className="page-subtitle">
-            Gestiona módulos y funcionalidades. Arrastra para reordenar. Edita para cambiar precios y páginas internas.
+            Gestiona módulos y funcionalidades. Arrastra para reordenar (se guarda solo).
+            Edita para cambiar precios y páginas internas.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {showSave && (
-            <button className="btn btn-secondary" onClick={saveOrder} disabled={saving}>
-              {saving ? 'Guardando…' : 'Guardar orden'}
-            </button>
-          )}
-          <NuevoModuloModal />
-        </div>
+        <NuevoModuloModal />
       </div>
 
-      <div className="table-wrapper">
+      <div className="card card-table">
+        <div className="table-wrapper">
         <table className="table">
           <thead>
             <tr>
@@ -99,7 +125,7 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
               <th>Páginas</th>
               <th className="col-num">Fundador</th>
               <th className="col-num">Estándar</th>
-              <th>Activo</th>
+              <th>Estado</th>
               <th className="col-actions"></th>
             </tr>
           </thead>
@@ -127,19 +153,42 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
                 <td data-label="Páginas">{countPaginas(m.paginas) || '—'}</td>
                 <td data-label="Fundador" className="col-num table-price">${Number(m.precio_fundador_usd).toFixed(2)}</td>
                 <td data-label="Estándar" className="col-num table-price">${Number(m.precio_estandar_usd).toFixed(2)}</td>
-                <td data-label="Activo">
+                <td data-label="Estado">
                   <span className={`badge ${m.activo ? 'badge-success' : 'badge-neutral'}`}>
-                    {m.activo ? 'Sí' : 'No'}
+                    {m.activo ? 'Activo' : 'Archivado'}
                   </span>
                 </td>
                 <td className="col-actions">
-                  <EditarModuloModal modulo={m} />
+                  <RowActions>
+                    <button className="row-actions-item" onClick={() => setEditing(m)}>
+                      <Pencil size={15} strokeWidth={2} /> Editar
+                    </button>
+                    {!m.es_base && (m.activo ? (
+                      <button className="row-actions-item" onClick={() => handleArchivar(m, true)}>
+                        <Archive size={15} strokeWidth={2} /> Archivar
+                      </button>
+                    ) : (
+                      <button className="row-actions-item row-actions-item-success" onClick={() => handleArchivar(m, false)}>
+                        <ArchiveRestore size={15} strokeWidth={2} /> Reactivar
+                      </button>
+                    ))}
+                    {!m.es_base && (
+                      <button className="row-actions-item row-actions-item-danger" onClick={() => handleEliminar(m)}>
+                        <Trash2 size={14} strokeWidth={2} /> Eliminar
+                      </button>
+                    )}
+                  </RowActions>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
+
+      {editing && (
+        <EditarModuloModal modulo={editing} open onClose={() => setEditing(null)} />
+      )}
     </div>
   )
 }

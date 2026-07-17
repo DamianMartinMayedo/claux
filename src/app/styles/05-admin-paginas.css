@@ -310,22 +310,19 @@ textarea:focus-visible {
 /* ═══════════════════════════════════════════════════
    CONFIGURACIÓN PAGE
    ═══════════════════════════════════════════════════ */
-.config-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* Panel de una pestaña: columna única enfocada. Cada pestaña apila sus cards
+   con un gap uniforme, sin la retícula 2-col irregular anterior (dejaba medio
+   panel vacío). Ancho acotado para que los forms no se estiren en desktop. */
+.config-panel {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-6);
-  align-items: start;
-}
-@media (max-width: 768px) {
-  .config-grid { grid-template-columns: 1fr; }
+  max-width: 760px;
 }
 .config-section {
   display: flex;
   flex-direction: column;
 }
-/* Ocupa las dos columnas del grid: los textos legales son cuadros de texto
-   largos y a media anchura se escriben fatal. */
-.config-section-wide { grid-column: 1 / -1; }
 .legal-textarea {
   min-height: 180px;
   font-family: var(--font-body);
@@ -608,6 +605,13 @@ textarea:focus-visible {
 /* ═══════════════════════════════════════════════════
    NOTIFICACIONES PAGE
    ═══════════════════════════════════════════════════ */
+/* Contenedor de la pestaña Alertas: más ancho que el 680px de antes para que
+   las dos tarjetas de un solo campo quepan lado a lado en desktop. */
+.notif-alertas { max-width: 960px; }
+/* En la fila de dos tarjetas, el gap del grid ya separa; sin doble margen. */
+.notif-alertas .grid-cols-2 > .notif-section { margin-bottom: 0; }
+/* La card de toggles (hija directa, tras el form) mantiene separación arriba. */
+.notif-alertas > .notif-section { margin-top: var(--space-5); }
 .notif-section {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
