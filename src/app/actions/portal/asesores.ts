@@ -2,8 +2,18 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { tieneModulo }       from '@/lib/modulos'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+
+// Los asesores solo existen si el cliente tiene Contabilidad (`base`): la única
+// función que los usa es enviarles los reportes. El gate va en el servidor porque
+// ocultar la UI no es control de acceso.
+type Db = ReturnType<typeof createAdminClient>
+async function tieneBase(db: Db, clientId: string): Promise<boolean> {
+  const { data } = await db.from('clients').select('modulos_activos').eq('client_id', clientId).maybeSingle()
+  return tieneModulo(data?.modulos_activos, 'base')
+}
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +39,7 @@ export async function obtenerAsesores(): Promise<Asesor[]> {
   if (!session) return []
 
   const db = createAdminClient()
+  if (!await tieneBase(db, session.client_id)) return []
   const { data } = await db
     .from('asesores')
     .select('asesor_id, nombre, email, empresa_id')
@@ -72,6 +83,7 @@ export async function guardarAsesor(input: {
   }
 
   const db = createAdminClient()
+  if (!await tieneBase(db, session.client_id)) return { ok: false, error: 'El módulo de Contabilidad no está activo.' }
 
   if (input.asesor_id) {
     const { error } = await db.from('asesores')
@@ -105,6 +117,7 @@ export async function eliminarAsesor(asesor_id: string): Promise<{ ok: boolean; 
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
 
   const db = createAdminClient()
+  if (!await tieneBase(db, session.client_id)) return { ok: false, error: 'El módulo de Contabilidad no está activo.' }
   const { error } = await db.from('asesores')
     .update({ activo: false, updated_at: new Date().toISOString() })
     .eq('asesor_id', asesor_id).eq('client_id', session.client_id)

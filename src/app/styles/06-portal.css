@@ -2918,6 +2918,18 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .env-asesor-check input { margin-top: 2px; flex-shrink: 0; }
 .env-asesor-check-hint { color: var(--color-text-muted); font-style: normal; }
+.env-asesor-check-mt { margin-top: var(--space-3); }
+/* Selector segmentado de formato (PDF · CSV · Ambas) */
+.env-formato { display: flex; gap: var(--space-1); background: var(--color-surface-offset); padding: 3px; border-radius: var(--radius-md); }
+.env-formato-opt {
+  flex: 1; padding: var(--space-2) var(--space-3); border: none; background: none;
+  font-size: var(--text-sm); font-family: var(--font-body); font-weight: 600;
+  color: var(--color-text-muted); cursor: pointer; border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+}
+.env-formato-opt:hover { color: var(--color-text); }
+.env-formato-opt.is-activo { background: var(--color-surface); color: var(--color-primary-text); box-shadow: var(--shadow-sm); }
+.rep-actions { display: flex; gap: var(--space-2); align-items: center; }
 .env-asesor-opt { color: var(--color-text-faint); font-weight: 400; }
 .env-asesor-nota { resize: vertical; min-height: 2.5rem; }
 .env-asesor-resumen {

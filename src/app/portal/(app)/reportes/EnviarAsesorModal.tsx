@@ -45,9 +45,12 @@ export default function EnviarAsesorModal({
   const [asesorId, setAsesorId] = useState(asesoresFiltrados[0]?.asesor_id ?? '')
 
   const hayConsolidado = !!data.consolidado
-  const [incluirConsolidado, setIncluirConsolidado] = useState(hayConsolidado)
-  const [incluirPDF, setIncluirPDF] = useState(true)
-  const [incluirCSV, setIncluirCSV] = useState(true)
+  // Consolidado DESMARCADO por defecto (pesa y no siempre interesa).
+  const [incluirConsolidado, setIncluirConsolidado] = useState(false)
+  // Un solo selector de formato en vez de dos checks: CSV · PDF · Ambas.
+  const [formato, setFormato] = useState<'ambas' | 'pdf' | 'csv'>('ambas')
+  const incluirPDF = formato !== 'csv'
+  const incluirCSV = formato !== 'pdf'
   const [nota, setNota] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -156,19 +159,23 @@ export default function EnviarAsesorModal({
             </div>
           )}
 
-          {/* Qué se envía */}
+          {/* Qué se envía: formato (selector único) + consolidado aparte */}
           <div className="input-group">
-            <span className="modal-section-label">Qué enviar</span>
-            <label className="env-asesor-check">
-              <input type="checkbox" checked={incluirPDF} onChange={e => setIncluirPDF(e.target.checked)} />
-              <span>PDF con marca <em className="env-asesor-check-hint">— para leer</em></span>
-            </label>
-            <label className="env-asesor-check">
-              <input type="checkbox" checked={incluirCSV} onChange={e => setIncluirCSV(e.target.checked)} />
-              <span>CSV para Excel <em className="env-asesor-check-hint">— columnas para trabajar los números</em></span>
-            </label>
+            <span className="modal-section-label">Formato</span>
+            <div className="env-formato" role="group" aria-label="Formato de los archivos">
+              {([['pdf', 'PDF'], ['csv', 'CSV'], ['ambas', 'Ambas']] as const).map(([val, txt]) => (
+                <button
+                  key={val} type="button"
+                  className={`env-formato-opt${formato === val ? ' is-activo' : ''}`}
+                  aria-pressed={formato === val}
+                  onClick={() => setFormato(val)}
+                >
+                  {txt}
+                </button>
+              ))}
+            </div>
             {hayConsolidado && (
-              <label className="env-asesor-check">
+              <label className="env-asesor-check env-asesor-check-mt">
                 <input type="checkbox" checked={incluirConsolidado} onChange={e => setIncluirConsolidado(e.target.checked)} />
                 <span>Incluir consolidado <em className="env-asesor-check-hint">en {data.consolidado!.moneda}</em></span>
               </label>

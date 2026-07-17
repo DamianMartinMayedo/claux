@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { tieneModulo }       from '@/lib/modulos'
 import { enviarEmail }       from '@/lib/email/enviar'
 import { envolverEmail }     from '@/lib/email/layout'
 
@@ -306,6 +307,10 @@ export async function enviarReportesAsesor(
   }
 
   const db = createAdminClient()
+
+  // Gate de módulo: los reportes y su envío viven en Contabilidad (`base`).
+  const { data: cliMod } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle()
+  if (!tieneModulo(cliMod?.modulos_activos, 'base')) return { ok: false, error: 'El módulo de Contabilidad no está activo.' }
 
   // Asesor destinatario (validado contra el directorio del cliente).
   const { data: asesor } = await db.from('asesores')

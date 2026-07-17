@@ -5,9 +5,7 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
 import { type IaPanel } from '@/app/actions/portal/ia'
-import type { Asesor } from '@/app/actions/portal/asesores'
 import IaUsoCard from '@/components/portal/ia/IaUsoCard'
-import AsesoresCard from './AsesoresCard'
 import EnlacesLegales from '@/components/publico/EnlacesLegales'
 import { Lock } from 'lucide-react'
 
@@ -44,12 +42,7 @@ function fmt(dateStr: string | null) {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function PerfilView({ perfil, panelIa, asesores, empresas }: {
-  perfil: PerfilData
-  panelIa: IaPanel | null
-  asesores: Asesor[]
-  empresas: { empresa_id: string; nombre: string }[]
-}) {
+export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; panelIa: IaPanel | null }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [showPwd,   setShowPwd]      = useState(false)
@@ -123,9 +116,6 @@ export default function PerfilView({ perfil, panelIa, asesores, empresas }: {
 
       {/* ── Asistente IA: consumo informativo (solo con el addon contratado) ── */}
       {panelIa && <IaUsoCard panel={panelIa} />}
-
-      {/* ── Asesores: directorio para enviarles los reportes ── */}
-      <AsesoresCard asesores={asesores} empresas={empresas} />
 
       {/* ── Mi usuario ── */}
       <div className="card">

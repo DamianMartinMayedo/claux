@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
-import { Download, ChevronDown, BarChart3, Search } from 'lucide-react'
+import { Download, ChevronDown, BarChart3, Search, Send } from 'lucide-react'
 import type { ReportesData }       from '@/app/actions/portal/reportes'
 import type { Asesor }             from '@/app/actions/portal/asesores'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
@@ -283,21 +283,25 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
           <p className="page-subtitle">Estado de resultados (devengado) y flujo de caja (efectivo) del período seleccionado.</p>
         </div>
         {!sinDatos && (
-          <div className="rep-dl">
-            <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} disabled={descargando}>
-              <Download size={14} /> {descargando ? 'Generando…' : 'Descargar'}
-              <ChevronDown size={13} />
+          <div className="rep-actions">
+            <button className="btn btn-primary" onClick={() => setEnviarOpen(true)}>
+              <Send size={14} strokeWidth={2.5} /> Enviar al asesor
             </button>
-            {menuOpen && (
-              <>
-                <div className="rep-dl-overlay" onClick={() => setMenuOpen(false)} />
-                <div className="rep-dl-menu">
-                  <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
-                  <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
-                  <button className="dropdown-item" onClick={() => { setMenuOpen(false); setEnviarOpen(true) }}>Enviar al asesor…</button>
-                </div>
-              </>
-            )}
+            <div className="rep-dl">
+              <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} disabled={descargando}>
+                <Download size={14} /> {descargando ? 'Generando…' : 'Descargar'}
+                <ChevronDown size={13} />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="rep-dl-overlay" onClick={() => setMenuOpen(false)} />
+                  <div className="rep-dl-menu">
+                    <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
+                    <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

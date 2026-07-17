@@ -9,10 +9,11 @@ import { guardarAsesor, eliminarAsesor } from '@/app/actions/portal/asesores'
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
-// Gestión del directorio de asesores desde Perfil (el otro punto de gestión es el
-// alta rápida dentro del modal "Enviar al asesor" de Reportes). Cada asesor tiene
-// un ámbito: una empresa concreta o "todas".
-export default function AsesoresCard({
+// Página de gestión del directorio de asesores (ruta /portal/asesores, gateada por
+// el módulo `base`/Contabilidad). El otro punto de gestión es el alta rápida dentro
+// del modal "Enviar al asesor" de Reportes. Cada asesor tiene un ámbito: una empresa
+// concreta o "todas".
+export default function AsesoresView({
   asesores, empresas,
 }: {
   asesores: Asesor[]
@@ -29,9 +30,7 @@ export default function AsesoresCard({
   const empresaNombre = (id: string | null) =>
     id ? (empresas.find(e => e.empresa_id === id)?.nombre ?? id) : 'Todas las empresas'
 
-  function abrirAlta() {
-    setForm('new'); setNombre(''); setEmail(''); setEmpresa('')
-  }
+  function abrirAlta() { setForm('new'); setNombre(''); setEmail(''); setEmpresa('') }
   function abrirEdicion(a: Asesor) {
     setForm(a); setNombre(a.nombre); setEmail(a.email); setEmpresa(a.empresa_id ?? '')
   }
@@ -65,21 +64,21 @@ export default function AsesoresCard({
   }
 
   return (
-    <div className="card mb-5">
-      <div className="prf-card-header">
-        <h2 className="prf-section-title">Asesores</h2>
+    <div className="view-container">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Asesores</h1>
+          <p className="page-subtitle">Contactos a los que envías tus reportes financieros por correo.</p>
+        </div>
         {!form && (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={abrirAlta}>
+          <button type="button" className="btn btn-primary" onClick={abrirAlta}>
             <Plus size={14} strokeWidth={2.5} /> Añadir asesor
           </button>
         )}
       </div>
-      <p className="prf-asesores-hint">
-        Contactos a los que puedes enviarles los reportes desde el módulo de Reportes.
-      </p>
 
       {form && (
-        <div className="env-asesor-add prf-asesores-form">
+        <div className="card env-asesor-add prf-asesores-form">
           <div className="input-group">
             <label htmlFor="asr-nombre">Nombre</label>
             <input id="asr-nombre" className="input" value={nombre}
@@ -97,6 +96,7 @@ export default function AsesoresCard({
               <option value="">Todas las empresas</option>
               {empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
             </select>
+            <span className="input-hint">Un asesor «para todas» aparece en el envío de cualquier empresa.</span>
           </div>
           <div className="env-asesor-add-acciones">
             <button type="button" className="btn btn-secondary btn-sm" onClick={cerrar} disabled={isPending}>Cancelar</button>
@@ -108,12 +108,12 @@ export default function AsesoresCard({
       )}
 
       {lista.length === 0 && !form ? (
-        <div className="prf-asesores-empty">
+        <div className="card prf-asesores-empty">
           <Users size={32} strokeWidth={1} opacity={0.3} />
           <p>Aún no tienes asesores. Añade uno para poder enviarle tus reportes.</p>
         </div>
-      ) : (
-        <ul className="prf-asesores-list">
+      ) : lista.length > 0 && (
+        <ul className="card prf-asesores-list">
           {lista.map(a => (
             <li key={a.asesor_id} className="prf-asesor-row">
               <div className="prf-asesor-info">
