@@ -10,6 +10,8 @@ import {
   copiarTerceroAEmpresa,
   type TerceroDetalleData,
   type TerceroHistorial,
+  type TerceroProducto,
+  type TerceroCxP,
   type TipoTercero,
   type ViaPago,
 } from '@/app/actions/portal/terceros'
@@ -244,40 +246,127 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
   )
 }
 
-// ── Tab: Productos del proveedor (placeholder) ────────────────────────────────
+// ── Tab: Productos del proveedor ──────────────────────────────────────────────
 
-function TabProductos({ count }: { count: number }) {
+function TabProductos({ productos }: { productos: TerceroProducto[] }) {
+  if (productos.length === 0) {
+    return (
+      <div className="det-tab-body">
+        <div className="det-empty">
+          <div className="det-empty-icon"><Package size={40} strokeWidth={1} opacity={0.2} /></div>
+          <div className="det-empty-title">Sin productos asignados</div>
+          <div className="det-empty-text mb-5">Este proveedor no tiene productos vinculados en el catálogo.</div>
+          <Link href="/portal/productos" className="btn btn-secondary">Ir a Productos</Link>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="det-tab-body">
-      <div className="det-empty">
-        <div className="det-empty-icon"><Package size={40} strokeWidth={1} opacity={0.2} /></div>
-        {count === 0 ? (
-          <>
-            <div className="det-empty-title">Sin productos asignados</div>
-            <div className="det-empty-text">Este proveedor no tiene productos vinculados en el catálogo.</div>
-          </>
-        ) : (
-          <>
-            <div className="det-empty-title">{count} producto{count !== 1 ? 's' : ''} de este proveedor</div>
-            <div className="det-empty-text mb-5">Listado detallado disponible próximamente.</div>
-            <Link href="/portal/productos" className="btn btn-primary">
-              Ver catálogo de productos →
-            </Link>
-          </>
-        )}
+      <div className="card card-table">
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th className="col-num">Stock</th>
+                <th>Estado</th>
+                <th className="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {productos.map(p => (
+                <tr key={p.producto_id} className={p.estado === 'INACTIVO' ? 'row-inactive' : ''}>
+                  <td data-label="Código" className="text-sm-muted">{p.codigo || '—'}</td>
+                  <td data-label="Producto"><span className="table-empresa">{p.nombre}</span></td>
+                  <td data-label="Stock" className="col-num">{p.stock.toLocaleString('es-ES')} {p.unidad}</td>
+                  <td data-label="Estado">
+                    <span className={`badge ${p.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
+                      {p.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td className="col-actions">
+                    <Link href={`/portal/productos/${p.producto_id}`} className="ter-action-btn" title="Ver producto" aria-label={`Ver ${p.nombre}`}>
+                      <FileText size={15} strokeWidth={2} />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
 }
 
-// ── Tab: Cuentas por pagar (placeholder) ─────────────────────────────────────
+// ── Tab: Cuentas por pagar ────────────────────────────────────────────────────
 
-function TabCuentasPorPagar() {
+function tramoCxP(dias: number | null): { cls: string; label: string } | null {
+  if (dias == null) return null
+  if (dias > 0)  return { cls: 'badge-error',   label: `Vencido ${dias} d` }
+  if (dias === 0) return { cls: 'badge-warning', label: 'Vence hoy' }
+  return { cls: 'badge-neutral', label: `Vence en ${-dias} d` }
+}
+
+function TabCuentasPorPagar({ cxp }: { cxp: TerceroCxP }) {
+  if (cxp.docs.length === 0) {
+    return (
+      <div className="det-tab-body">
+        <div className="det-empty">
+          <div className="det-empty-icon"><CreditCard size={40} strokeWidth={1} opacity={0.2} /></div>
+          <div className="det-empty-title">Sin saldos pendientes</div>
+          <div className="det-empty-text">No le debes nada a este proveedor ahora mismo.</div>
+        </div>
+      </div>
+    )
+  }
   return (
-    <div className="det-empty">
-      <div className="det-empty-icon"><CreditCard size={40} strokeWidth={1} opacity={0.2} /></div>
-      <div className="det-empty-title">Cuentas por pagar</div>
-      <div className="det-empty-text">Aquí se mostrarán las facturas y saldos pendientes con este proveedor.</div>
+    <div className="det-tab-body">
+      <div className="det-card">
+        <div className="dash-kpis">
+          {cxp.porMoneda.map(m => (
+            <div key={m.moneda} className="dash-kpi">
+              <span className="dash-kpi-label">Pendiente {m.moneda}</span>
+              <span className="dash-kpi-value dash-kpi-value-sm">{fmtMoneda(m.saldo, m.moneda)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Concepto</th>
+                <th>Fecha</th>
+                <th className="col-num">Saldo</th>
+                <th>Vencimiento</th>
+                <th className="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {cxp.docs.map(d => {
+                const t = tramoCxP(d.dias_vencido)
+                return (
+                  <tr key={d.doc_id}>
+                    <td data-label="Concepto" className="cell-truncate">{d.numero}</td>
+                    <td data-label="Fecha" className="text-sm-muted">{fmtFecha(d.fecha)}</td>
+                    <td data-label="Saldo" className="col-num"><strong>{fmtMoneda(d.saldo, d.moneda)}</strong></td>
+                    <td data-label="Vencimiento">
+                      {t ? <span className={`badge ${t.cls}`}>{t.label}</span> : <span className="text-faint">—</span>}
+                    </td>
+                    <td className="col-actions">
+                      <Link href="/portal/cxp" className="ter-action-btn" title="Ir a Cuentas por pagar" aria-label="Ir a Cuentas por pagar">
+                        <CreditCard size={15} strokeWidth={2} />
+                      </Link>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
@@ -430,7 +519,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   const [pending,   startT]       = useTransition()
   const router = useRouter()
 
-  const { tercero, productos_count, empresas } = data
+  const { tercero, empresas } = data
 
   function toggleActivo() {
     startT(async () => {
@@ -446,9 +535,17 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
     })
   }
 
-  // Productos y Cuentas por pagar son cosa del proveedor; el Historial no se
-  // gatea por tipo (lo enseña todo: ventas, compras o ambas).
+  // Gating de pestañas: por TIPO de tercero Y por MÓDULO visible. Contabilidad
+  // (base) ya no es un cimiento obligatorio, así que la ficha no asume que exista.
+  // Si una pestaña no se puede engranar con lo que el cliente tiene, no se muestra.
   const esProveedor = tercero.tipo === 'PROVEEDOR' || tercero.tipo === 'AMBOS'
+  const esCliente   = tercero.tipo === 'CLIENTE'   || tercero.tipo === 'AMBOS'
+  const verProductos = esProveedor && data.tieneInventario          // productos son de Inventario
+  const verCxP       = esProveedor && data.tieneBase && !!data.cuentasPorPagar // deuda = Contabilidad
+  // Ventas (a clientes) con Contabilidad; compras (a proveedores) con Inventario.
+  // Un proveedor en un cliente solo-Contabilidad no ve Historial (su deuda está en
+  // CxP), y un cliente en solo-Inventario tampoco (no hay ventas sin base).
+  const verHistorial = (esCliente && data.tieneBase) || (esProveedor && data.tieneInventario)
 
   return (
     <div className="view-container">
@@ -512,22 +609,22 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
       {/* Tabs */}
       <div className="detail-tabs">
         <Tab active={tab === 'datos'}    onClick={() => setTab('datos')}    label="Datos" />
-        {esProveedor && (
-          <Tab active={tab === 'productos'} onClick={() => setTab('productos')} label="Productos" badge={productos_count} />
+        {verProductos && (
+          <Tab active={tab === 'productos'} onClick={() => setTab('productos')} label="Productos" badge={data.productos_count} />
         )}
-        {esProveedor && (
+        {verCxP && (
           <Tab active={tab === 'cp'}      onClick={() => setTab('cp')}      label="Cuentas por pagar" />
         )}
-        {/* Sin gating por tipo: a un cliente le facturamos, a un proveedor le
-            compramos y a un AMBOS las dos cosas. El historial enseña lo que haya. */}
-        <Tab active={tab === 'historial'} onClick={() => setTab('historial')} label="Historial" />
+        {verHistorial && (
+          <Tab active={tab === 'historial'} onClick={() => setTab('historial')} label="Historial" />
+        )}
       </div>
 
       {/* Contenido */}
       {tab === 'datos'     && <TabDatos    data={data} />}
-      {tab === 'productos' && <TabProductos count={productos_count} />}
-      {tab === 'cp'        && <TabCuentasPorPagar />}
-      {tab === 'historial' && <TabHistorial historial={data.historial} />}
+      {tab === 'productos' && verProductos && <TabProductos productos={data.productos} />}
+      {tab === 'cp'        && verCxP && data.cuentasPorPagar && <TabCuentasPorPagar cxp={data.cuentasPorPagar} />}
+      {tab === 'historial' && verHistorial && <TabHistorial historial={data.historial} />}
 
       {copiar && (
         <CopiarAEmpresaModal

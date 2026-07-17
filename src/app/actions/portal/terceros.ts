@@ -2,12 +2,12 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, accesoModulosSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerMonedasActivas, type MonedaOpcion } from './monedas'
 import { mapaTasas, monedaValida, construirConversor } from '@/lib/tasas'
 import { ESTADOS_FACTURA_INGRESO, ESTADOS_COMPRA_GASTO } from '@/lib/contabilidad'
-import { mesesEntre } from '@/lib/fecha-tz'
+import { mesesEntre, hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -434,10 +434,42 @@ export interface TerceroHistorial {
   consolidado: TerceroMonedaResumen | null
 }
 
+// ── Productos del proveedor (pestaña Productos, requiere módulo `inventario`) ───
+export interface TerceroProducto {
+  producto_id: string
+  codigo:      string
+  nombre:      string
+  unidad:      string
+  stock:       number
+  estado:      'ACTIVO' | 'INACTIVO'
+}
+
+// ── Cuentas por pagar del proveedor (pestaña CxP, requiere módulo `base`) ───────
+export interface TerceroCxPDoc {
+  doc_id:       string
+  numero:       string   // descripción del gasto
+  fecha:        string
+  vencimiento:  string | null
+  moneda:       string
+  saldo:        number
+  dias_vencido: number | null   // >0 vencido; null = sin fecha de vencimiento
+}
+export interface TerceroCxP {
+  /** Saldo pendiente por moneda; no se suman monedas distintas. */
+  porMoneda: { moneda: string; saldo: number }[]
+  docs:      TerceroCxPDoc[]   // pendientes, del más vencido al menos
+}
+
 export interface TerceroDetalleData {
   tercero:          Tercero
   empresa_nombre:   string
-  productos_count:  number   // cuántos productos tiene asignado este proveedor
+  /** Módulos VISIBLES del usuario (tenant ∩ permisos), para gatear las pestañas
+   *  igual que el sidebar. base = Contabilidad; inventario = Inventario. */
+  tieneBase:        boolean
+  tieneInventario:  boolean
+  productos:        TerceroProducto[]   // vacío si el cliente no tiene inventario
+  productos_count:  number
+  cuentasPorPagar:  TerceroCxP | null   // null si el cliente no tiene base
   empresas:         EmpresaDestino[]
   monedas:          MonedaOpcion[]
   tasas:            Record<string, number>
@@ -462,13 +494,20 @@ const r2 = (n: number) => Math.round(n * 100) / 100
  */
 async function historialDeTercero(
   db: DbAdmin, clientId: string, terceroId: string, empresaIds: string[],
+  mods: { tieneBase: boolean; tieneInventario: boolean },
 ): Promise<TerceroHistorial> {
   const scope = empresaIds.length ? empresaIds : ['__none__']
+  // Ventas (facturas) solo con Contabilidad; compras solo con Inventario. Sin el
+  // módulo, esa mitad ni se consulta: no hay nada que enseñar y no debe contar.
   const [facRes, comRes] = await Promise.all([
-    db.from('facturas').select('factura_id, numero, fecha_emision, total, moneda, estado')
-      .eq('client_id', clientId).eq('cliente_id', terceroId).in('empresa_id', scope),
-    db.from('compras').select('compra_id, numero, fecha, total, moneda, estado')
-      .eq('client_id', clientId).eq('proveedor_id', terceroId).in('empresa_id', scope),
+    mods.tieneBase
+      ? db.from('facturas').select('factura_id, numero, fecha_emision, total, moneda, estado')
+          .eq('client_id', clientId).eq('cliente_id', terceroId).in('empresa_id', scope)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    mods.tieneInventario
+      ? db.from('compras').select('compra_id, numero, fecha, total, moneda, estado')
+          .eq('client_id', clientId).eq('proveedor_id', terceroId).in('empresa_id', scope)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ])
 
   const docs: TerceroDoc[] = [
@@ -559,6 +598,85 @@ async function historialDeTercero(
   return { docs, porMoneda, consolidado }
 }
 
+const EPS = 0.005
+
+function diasVencido(venc: string | null, hoy: string): number | null {
+  if (!venc) return null
+  return Math.floor((new Date(hoy).getTime() - new Date(venc).getTime()) / 86400000)
+}
+
+/** Productos que tienen a este tercero como proveedor. `products` es por cliente
+ *  (no por empresa), así que no se filtra por empresa. */
+async function productosDeProveedor(
+  db: DbAdmin, clientId: string, terceroId: string,
+): Promise<TerceroProducto[]> {
+  const { data } = await db.from('products')
+    .select('producto_id, codigo, nombre, unidad, stock_actual, estado')
+    .eq('client_id', clientId).eq('proveedor_id', terceroId)
+    .order('nombre')
+  return ((data ?? []) as Record<string, unknown>[]).map(p => ({
+    producto_id: p.producto_id as string,
+    codigo:      (p.codigo as string) ?? '',
+    nombre:      (p.nombre as string) ?? '',
+    unidad:      (p.unidad as string) ?? '',
+    stock:       Number(p.stock_actual) || 0,
+    estado:      (p.estado as 'ACTIVO' | 'INACTIVO') ?? 'ACTIVO',
+  }))
+}
+
+/**
+ * Lo que se le debe a este proveedor. Misma fuente y criterio que la página
+ * global de Cuentas por pagar (`cargarCuentas('PAGAR')`): gastos_cobros tipo
+ * GASTO menos lo ya liquidado en su moneda (movimientos_tesoreria PAGO →
+ * monto_ref). Una compra confirmada llega aquí como su gasto automático, así que
+ * NO se lee `compras` (contarían dos veces).
+ */
+async function cuentasPorPagarDeTercero(
+  db: DbAdmin, clientId: string, terceroId: string, empresaIds: string[],
+): Promise<TerceroCxP> {
+  const scope = empresaIds.length ? empresaIds : ['__none__']
+  const { data: gastos } = await db.from('gastos_cobros')
+    .select('registro_id, descripcion, fecha, vencimiento, moneda, monto')
+    .eq('client_id', clientId).eq('tercero_id', terceroId).eq('tipo', 'GASTO')
+    .in('empresa_id', scope)
+
+  const filas = (gastos ?? []) as Record<string, unknown>[]
+  if (!filas.length) return { porMoneda: [], docs: [] }
+
+  const ids = filas.map(g => g.registro_id as string)
+  const { data: movs } = await db.from('movimientos_tesoreria')
+    .select('referencia_id, monto, monto_ref')
+    .eq('client_id', clientId).eq('origen', 'PAGO').in('referencia_id', ids)
+
+  const liquidado = new Map<string, number>()
+  for (const m of (movs ?? []) as Record<string, unknown>[]) {
+    const ref = m.referencia_id as string
+    liquidado.set(ref, (liquidado.get(ref) ?? 0) + Number(m.monto_ref ?? m.monto))
+  }
+
+  const hoy = hoyEnTz()
+  const docs: TerceroCxPDoc[] = []
+  for (const g of filas) {
+    const id    = g.registro_id as string
+    const monto = Number(g.monto) || 0
+    const saldo = monto - (liquidado.get(id) ?? 0)
+    if (saldo <= EPS) continue
+    const venc = (g.vencimiento as string | null) ?? null
+    docs.push({
+      doc_id: id, numero: (g.descripcion as string) ?? '—',
+      fecha: g.fecha as string, vencimiento: venc, moneda: g.moneda as string,
+      saldo: r2(saldo), dias_vencido: diasVencido(venc, hoy),
+    })
+  }
+  docs.sort((a, b) => (b.dias_vencido ?? -Infinity) - (a.dias_vencido ?? -Infinity))
+
+  const porMoneda = [...new Set(docs.map(d => d.moneda))].sort().map(moneda => ({
+    moneda,
+    saldo: r2(docs.filter(d => d.moneda === moneda).reduce((s, d) => s + d.saldo, 0)),
+  }))
+  return { porMoneda, docs }
+}
+
 export async function obtenerTerceroDetalle(
   tercero_id: string,
 ): Promise<TerceroDetalleData | null> {
@@ -567,22 +685,32 @@ export async function obtenerTerceroDetalle(
 
   const db = createAdminClient()
 
+  // Módulos visibles del usuario: gatean qué pestañas se pueden armar. Se calcula
+  // con la misma fuente que el sidebar (accesoModulosSession = tenant ∩ permisos).
+  const acceso = await accesoModulosSession(session)
+  const tieneBase       = acceso.visibles.includes('base')
+  const tieneInventario = acceso.visibles.includes('inventario')
+
   const [empresas, monedas] = await Promise.all([obtenerEmpresas(), obtenerMonedasActivas()])
   const tasas       = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
   const empresa_ids = empresas.map(e => e.empresa_id)
 
-  const [terRes, prodCountRes, historial] = await Promise.all([
+  const [terRes, productos, cuentasPorPagar, historial] = await Promise.all([
     db.from('third_parties')
       .select('*')
       .eq('tercero_id', tercero_id)
       .eq('client_id', session.client_id)
       .in('empresa_id', empresa_ids.length ? empresa_ids : ['__none__'])
       .single(),
-    db.from('products')
-      .select('producto_id', { count: 'exact', head: true })
-      .eq('client_id', session.client_id)
-      .eq('proveedor_id', tercero_id),
-    historialDeTercero(db, session.client_id, tercero_id, empresa_ids),
+    // Solo se consulta la parte que el cliente puede ver: nada de Inventario sin
+    // el módulo, nada de contabilidad sin `base`.
+    tieneInventario
+      ? productosDeProveedor(db, session.client_id, tercero_id)
+      : Promise.resolve([] as TerceroProducto[]),
+    tieneBase
+      ? cuentasPorPagarDeTercero(db, session.client_id, tercero_id, empresa_ids)
+      : Promise.resolve(null),
+    historialDeTercero(db, session.client_id, tercero_id, empresa_ids, { tieneBase, tieneInventario }),
   ])
 
   if (!terRes.data) return null
@@ -594,7 +722,11 @@ export async function obtenerTerceroDetalle(
   return {
     tercero,
     empresa_nombre:  empresa_nombres[tercero.empresa_id] ?? tercero.empresa_id,
-    productos_count: prodCountRes.count ?? 0,
+    tieneBase,
+    tieneInventario,
+    productos,
+    productos_count: productos.length,
+    cuentasPorPagar,
     empresas:        empresas.map(e => ({
       empresa_id: e.empresa_id, nombre: e.nombre, moneda_funcional: e.moneda_funcional,
     })),

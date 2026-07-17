@@ -132,8 +132,10 @@ export async function getPortalSession(): Promise<PortalSession | null> {
 
 // ── Acceso efectivo a módulos (tenant ∩ permisos por usuario) ────────
 // Combina los módulos contratados por el tenant con los permisos por usuario
-// (tabla usuario_modulo). Ver semántica en @/lib/permisos.
-async function accesoModulosSession(session: PortalSession): Promise<AccesoModulos> {
+// (tabla usuario_modulo). Ver semántica en @/lib/permisos. Exportada para que
+// un data-loader que ya tiene la sesión (p. ej. la ficha del tercero) gatee sus
+// pestañas con el MISMO conjunto `visibles` que el sidebar, sin re-derivarla.
+export async function accesoModulosSession(session: PortalSession): Promise<AccesoModulos> {
   const db = createAdminClient()
   const [{ data: cliente }, filas] = await Promise.all([
     db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single(),
@@ -178,6 +180,21 @@ export async function requireModulo(modulo: string): Promise<PortalSession> {
   if (!acceso.visibles.includes(modulo)) redirect('/portal/dashboard')
 
   registrarUso(session, modulo)
+  return session
+}
+
+// Para páginas COMPARTIDAS por varios módulos (p. ej. Clientes y proveedores, que
+// necesitan tanto Contabilidad como Inventario): basta con que el usuario vea UNO.
+// El uso se registra contra el primero presente. Redirige a dashboard si ninguno.
+export async function requireAlgunModulo(modulos: string[]): Promise<PortalSession> {
+  const session = await getPortalSession()
+  if (!session) redirect('/portal/login')
+
+  const acceso = await accesoModulosSession(session)
+  const presente = modulos.find(m => acceso.visibles.includes(m))
+  if (!presente) redirect('/portal/dashboard')
+
+  registrarUso(session, presente)
   return session
 }
 

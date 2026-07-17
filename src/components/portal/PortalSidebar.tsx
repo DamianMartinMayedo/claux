@@ -115,6 +115,9 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
   const navRutas: string[] = ['/portal/dashboard']
   for (const f of funcionalidades) if (modulosVisibles.includes(f.clave)) for (const p of ensurePages(f.paginas)) navRutas.push(p.ruta)
   for (const m of modulos)         if (modulosVisibles.includes(m.clave)) for (const p of ensurePages(m.paginas)) navRutas.push(p.ruta)
+  // Cliente solo-Inventario: «Clientes y proveedores» se inyecta en Inventario
+  // (abajo), así que su ruta debe entrar en navRutas para que se resalte activa.
+  if (modulosVisibles.includes('inventario') && !modulosVisibles.includes('base')) navRutas.push('/portal/terceros')
   const activeRuta = navRutas
     .filter(r => pathname === r || pathname.startsWith(r + '/'))
     .reduce<string | null>((best, r) => (best === null || r.length > best.length ? r : best), null)
@@ -180,12 +183,23 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
           })}
 
         {/* Módulos (incluida Contabilidad) — grupos colapsables; solo los
-            contratados, sin candados. */}
+            contratados, sin candados.
+            «Clientes y proveedores» vive en Contabilidad, pero Inventario también
+            la necesita (proveedores de compras/productos). Regla: una sola entrada,
+            prioridad Contabilidad › Inventario. Si el cliente NO tiene Contabilidad,
+            se inyecta en el grupo de Inventario; con Contabilidad ya sale ahí, así
+            que nunca se duplica. Un cliente CON base no entra en el `if`: cero cambio. */}
         {modulos
           .filter(m => modulosVisibles.includes(m.clave))
           .map(m => {
             const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
-            return renderCollapsibleGroup(m.clave, m.nombre, pages)
+            const tercerosCompartida = ensurePages(modulos.find(x => x.clave === 'base')?.paginas)
+              .find(p => p.ruta === '/portal/terceros')
+            const conCompartida =
+              m.clave === 'inventario' && tercerosCompartida && !modulosVisibles.includes('base')
+                ? [...pages, tercerosCompartida]
+                : pages
+            return renderCollapsibleGroup(m.clave, m.nombre, conCompartida)
           })}
       </nav>
 

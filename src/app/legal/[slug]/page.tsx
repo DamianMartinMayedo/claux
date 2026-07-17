@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
 import { PublicHeader, PublicFooter } from '@/components/publico/Chrome'
 import { leerSetting } from '@/lib/settings'
 import { PAGINAS_LEGALES, parsearLegal, type BloqueLegal } from '@/lib/publico/legal'
+import VolverLink from './VolverLink'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -49,10 +48,7 @@ export default async function LegalPage({ params }: Props) {
     <div className="ld-page">
       <PublicHeader />
       <main className="lg-page">
-        <Link href="/" className="lg-volver">
-          <ArrowLeft size={16} />
-          Volver al inicio
-        </Link>
+        <VolverLink />
 
         <h1 className="lg-titulo">{pagina.titulo}</h1>
 
