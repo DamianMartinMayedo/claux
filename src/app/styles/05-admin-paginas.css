@@ -310,13 +310,19 @@ textarea:focus-visible {
 /* ═══════════════════════════════════════════════════
    CONFIGURACIÓN PAGE
    ═══════════════════════════════════════════════════ */
-/* Panel de una pestaña: columna única enfocada. Cada pestaña apila sus cards
-   con un gap uniforme, sin la retícula 2-col irregular anterior (dejaba medio
-   panel vacío). Ancho acotado para que los forms no se estiren en desktop. */
+/* Panel de una pestaña: las cards fluyen a 2 columnas en cuanto hay sitio para
+   ellas (Cuenta = Perfil + Seguridad) y caen a una sola por debajo de 24rem de
+   columna, sin media query. `start` para que la card corta no se estire a la
+   altura de la larga.
+   Una pestaña de una sola card (Facturación, Textos legales) se acota: un form
+   suelto estirado a todo el ancho no se lee mejor, se lee peor. */
 .config-panel {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
   gap: var(--space-6);
+  align-items: start;
+}
+.config-panel > .config-section:only-child {
   max-width: 760px;
 }
 .config-section {

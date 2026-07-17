@@ -535,8 +535,9 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
     if (!confirmDel) return
     startTransition(async () => {
       const res = await eliminarGastoCobro(confirmDel.registro_id)
-      if (res.ok) { setConfirmDel(null); router.refresh() }
-      else { alert(res.error); setConfirmDel(null) }
+      setConfirmDel(null)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      router.refresh()
     })
   }
 

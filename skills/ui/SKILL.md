@@ -77,6 +77,10 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 
 **Color de empresa** (tablas multi-empresa): `<tr className="… row-empresa-accent" style={empresaColorVar(colorOf(id))}>` (única excepción al no-inline: custom property de runtime). Acento lateral izquierdo; en tarjeta pasa a `border-left`. No añadas más color que ese acento.
 
+## 3.1 Pestañas internas — un solo componente
+
+Toda pestaña interna usa **`<Tabs>`** (`src/components/Tabs.tsx`) + clases `.tabs`/`.tab`/`.tab-count` de `03-components.css`. Es presentacional y **controlado**: el padre guarda la pestaña activa (`useState`) y pasa `tabs`, `active`, `onChange`. Conteos opcionales con `count` (pill); `countTone: 'warning'` para conteos de alerta (p. ej. sin leer). **No crees familias nuevas** de pestañas: `.usr-/.ven-/.detail-/.prd-/.res-/.rrhh-/.caja-/.pv-` son **legado a converger**, no a imitar. El portal todavía usa algunas; al tocar esas vistas, migra a `<Tabs>`. Desde un Server Component, extrae un envoltorio cliente (patrón: `configuracion/ConfiguracionTabs.tsx`, recibe los paneles ya resueltos como props).
+
 ## 4. Iconos
 
 Sin emojis en la UI. Iconos **exclusivamente SVG inline** con `width`/`height` como atributos (no solo CSS), `viewBox="0 0 24 24"`, `fill="none" stroke="currentColor" strokeWidth="2"`. Para que no se compriman en el sidebar, usa una clase con `flex-shrink:0` en CSS — **no** `style={{flexShrink:0}}` inline.
@@ -87,6 +91,7 @@ Sin emojis en la UI. Iconos **exclusivamente SVG inline** con `width`/`height` c
 - El botón de acción se deshabilita inmediatamente tras el clic; se reactiva solo si la operación falla.
 - Sin respuesta en 15 s → mensaje amigable con opción de cancelar. Nunca pantalla congelada.
 - Acciones críticas (registrar pago, anular factura, confirmar reserva, cerrar período) → resumen + confirmación explícita.
+- **Prohibidos `confirm()`, `alert()` y `prompt()` del navegador**: son del sistema, no de CLAUX, y en móvil se ven como un aviso del navegador. Todo borrado (y cualquier acción irreversible) confirma con **`<ConfirmDialog>`** de `src/components/portal/Dialog.tsx` (`danger`, `confirmLabel="Eliminar"`); los errores van a toast, no a `alert()`. El estado de confirmación vive en el **padre** (`const [confirmarBorrado, setConfirmarBorrado] = useState<T|null>(null)`), nunca dentro de la fila o del menú `RowActions`: el botón solo hace `setConfirmarBorrado(item)`. Referencia: `CatalogoEditor.tsx`, `ModulosPageClient.tsx`. Sobre un panel flotante (chat IA), el diálogo ya va en `dialog-top` (z-index por encima).
 - Tras guardar, feedback de éxito visible con el identificador generado.
 
 ## 6. Rutas públicas por-negocio (menú/catálogo QR, reservar, citas) — presupuesto Cuba, INNEGOCIABLE
@@ -113,6 +118,7 @@ Todo `<input>` con `<label for>` asociado por `id`. Todo botón de solo icono co
 - **Contenedor de tamaño estable entre pasos** de un flujo (ancho fijo + `min-height`) para que la tarjeta no encoja a su contenido al cambiar de paso.
 - **Reveal al hacer scroll: el estado base es VISIBLE, y el JS opta *por* la animación.** Nunca `opacity:0` de base "y ya lo mostrará el observer": si el JS no llega (3G, JS off, error de hidratación), la página queda invisible **para siempre**. Se hace al revés: el JS añade una clase al root (`.dp-anim`) y solo bajo ella el CSS oculta y revela. Referencia: `(public)/d/[token]/DeckReveal.tsx`.
 - **Texto sobre un color de runtime necesita un color de texto calculado, no elegido a ojo.** Si el color lo pone el tenant, el contraste hay que derivarlo (`lib/dossier/paleta.ts` → `principalTexto`, ≥4.5:1 garantizado). Poner `color:#FFF` sobre un color derivado es inventarse una legibilidad que nadie ha comprobado. Si no tienes un texto calculado para ese color, no pongas texto encima: la etiqueta al lado.
+- **Botón de acción del `.page-header` que se cae debajo del título:** el header es `flex-wrap:wrap`; si el bloque de texto no encoge, un subtítulo largo copa la fila y empuja la acción abajo (era el caso de Diagnóstico/Módulos). Ya resuelto en la base: el primer hijo lleva `flex:1 1 20rem; min-width:0` y las acciones `flex-shrink:0` (`02-base-layout.css`). Regla: el bloque de texto y la acción son **hermanos** dentro de `.page-header`; nunca metas el botón dentro del bloque de texto.
 - **Hora de reloj en un componente cliente ⇒ fíjale la zona.** `toLocaleTimeString()` sin `timeZone` da una hora en el SSR (UTC en Vercel) y otra en el navegador → **mismatch de hidratación**, y encima una hora que no es la del negocio. Usa `TZ_NEGOCIO` de `src/lib/fecha-tz.ts` (America/Havana). Formatear solo la FECHA desde `'YYYY-MM-DD'` con `new Date(y, m-1, d)` es seguro y es lo que hace el resto del repo.
 
 ## 9. Checklist antes de dar por terminada una tarea de UI

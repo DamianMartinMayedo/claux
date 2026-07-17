@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NecesidadModal, { type ModuloLite, type Necesidad } from './NecesidadModal'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { eliminarNecesidad, reordenarNecesidades } from '@/app/actions/diagnostico-necesidades'
 import { useToast } from '@/app/contexts/ToastContext'
 
@@ -29,6 +30,7 @@ export default function NecesidadesPageClient({
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasDragged, setHasDragged] = useState(false)
+  const [confirmarBorrado, setConfirmarBorrado] = useState<Necesidad | null>(null)
 
   const nombreModulo = new Map(modulos.map((m) => [m.clave, m.nombre]))
 
@@ -56,8 +58,10 @@ export default function NecesidadesPageClient({
     router.refresh()
   }
 
-  async function handleEliminar(n: Necesidad) {
-    if (!window.confirm(`¿Eliminar la necesidad "${n.etiqueta}"?`)) return
+  // Confirmación in-app (ConfirmDialog, patrón de la plataforma), centralizada
+  // en el padre para no anidar el modal dentro de la fila.
+  async function doEliminar(n: Necesidad) {
+    setConfirmarBorrado(null)
     const res = await eliminarNecesidad(n.clave)
     if (!res.ok) { toastError(res.error ?? 'Error al eliminar'); return }
     setNecesidades((prev) => prev.filter((x) => x.clave !== n.clave))
@@ -140,7 +144,7 @@ export default function NecesidadesPageClient({
                     <td className="col-actions">
                       <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
                         <NecesidadModal modulos={modulos} necesidad={n} />
-                        <button className="btn btn-ghost btn-sm" onClick={() => handleEliminar(n)}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarBorrado(n)}>
                           Eliminar
                         </button>
                       </div>
@@ -151,6 +155,16 @@ export default function NecesidadesPageClient({
             </tbody>
           </table>
         </div>
+      )}
+
+      {confirmarBorrado && (
+        <ConfirmDialog
+          title={`¿Eliminar "${confirmarBorrado.etiqueta}"?`}
+          body="Dejará de aparecer como opción en el diagnóstico. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarBorrado(null)}
+          onConfirm={() => doEliminar(confirmarBorrado)}
+        />
       )}
     </div>
   )

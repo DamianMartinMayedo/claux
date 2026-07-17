@@ -118,7 +118,8 @@
     grid-template-columns: 1fr;
   }
 
-  .grid-cols-2 {
+  .grid-cols-2,
+  .grid-cols-3 {
     grid-template-columns: 1fr;
   }
 

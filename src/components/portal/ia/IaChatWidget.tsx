@@ -10,6 +10,7 @@ import {
   eliminarConversacion as eliminarConversacionAction,
   type ConversacionResumen
 } from '@/app/actions/portal/ia'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import type { TurnoChat } from '@/lib/ia/agente'
 
 // Botón flotante (abajo-derecha) con chat libre del dueño hacia su agente.
@@ -20,6 +21,7 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
   const [visible,  setVisible]  = useState(false)   // panel ya animado a su estado abierto
   const [mensajes, setMensajes] = useState<TurnoChat[]>([])
   const [entrada,  setEntrada]  = useState('')
+  const [confirmarBorrado, setConfirmarBorrado] = useState<ConversacionResumen | null>(null)
   const [pending, startTransition] = useTransition()
   const bodyRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -56,13 +58,6 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' })
   }, [mensajes, pending])
 
-  // Cargar historial cuando se abre
-  useEffect(() => {
-    if (abierto && conversaciones.length === 0) {
-      cargarHistorial()
-    }
-  }, [abierto])
-
   async function cargarHistorial() {
     setCargandoHistorial(true)
     const result = await obtenerConversaciones()
@@ -84,11 +79,14 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
     setCargandoHistorial(false)
   }
 
-  async function eliminarConversacion(convId: string) {
-    const result = await eliminarConversacionAction(convId)
+  // Confirmación in-app (ConfirmDialog, patrón de la plataforma): el borrado no
+  // se puede deshacer. El diálogo va en `dialog-top`, por encima del panel.
+  async function eliminarConversacion(conv: ConversacionResumen) {
+    setConfirmarBorrado(null)
+    const result = await eliminarConversacionAction(conv.conversacion_id)
     if (result.ok) {
-      setConversaciones(prev => prev.filter(c => c.conversacion_id !== convId))
-      if (conversacionActualId === convId) {
+      setConversaciones(prev => prev.filter(c => c.conversacion_id !== conv.conversacion_id))
+      if (conversacionActualId === conv.conversacion_id) {
         nuevaConversacion()
       }
     }
@@ -108,12 +106,18 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
     setAbierto(true)
     setMontado(true)
     setVisible(true)   // la entrada la anima @starting-style (CSS); la salida, [data-visible=false]
+    // El historial se trae al abrir —evento del usuario, no efecto— y solo la
+    // primera vez; a partir de ahí lo refresca el botón «Historial».
+    if (conversaciones.length === 0) cargarHistorial()
   }
   function cerrarChat() {
     setAbierto(false)
     setVisible(false)   // dispara la salida; al terminar la transición se desmonta
   }
-  function toggleChat() { abierto ? cerrarChat() : abrirChat() }
+  function toggleChat() {
+    if (abierto) cerrarChat()
+    else abrirChat()
+  }
 
   async function enviarTexto(texto: string) {
     const t = texto.trim()
@@ -235,7 +239,7 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
                         <button
                           type="button"
                           className="ia-historial-item-delete"
-                          onClick={() => eliminarConversacion(conv.conversacion_id)}
+                          onClick={() => setConfirmarBorrado(conv)}
                           aria-label="Eliminar conversación"
                         >
                           <Trash2 size={14} strokeWidth={2} />
@@ -296,6 +300,16 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
       >
         {abierto ? <X size={22} strokeWidth={2} /> : <Sparkles size={22} strokeWidth={2} />}
       </button>
+
+      {confirmarBorrado && (
+        <ConfirmDialog
+          title={`¿Eliminar "${confirmarBorrado.titulo}"?`}
+          body="Se borrará la conversación completa. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarBorrado(null)}
+          onConfirm={() => eliminarConversacion(confirmarBorrado)}
+        />
+      )}
     </>
   )
 }

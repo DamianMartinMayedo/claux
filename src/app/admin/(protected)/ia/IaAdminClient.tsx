@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -43,6 +44,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [prin, setPrin]   = useState(principal)
   const [fb, setFb]       = useState(fallbackGratis)
   const [cupo, setCupo]   = useState(String(cupoGlobal))
+  const [confirmarBorrado, setConfirmarBorrado] = useState<ModeloIa | null>(null)
 
   const activos = modelos.filter(m => m.activo)
   const activosGratis = activos.filter(m => m.gratis)
@@ -68,9 +70,12 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
     })
   }
 
-  function eliminar(id: string) {
+  // Confirmación in-app (ConfirmDialog, patrón de la plataforma) antes de un
+  // borrado que no se puede deshacer.
+  function doEliminar(m: ModeloIa) {
+    setConfirmarBorrado(null)
     startTransition(async () => {
-      const r = await eliminarModeloIa(id)
+      const r = await eliminarModeloIa(m.id)
       if (!r.ok) { toastError(r.error); return }
       toastSuccess('Modelo eliminado')
       router.refresh()
@@ -185,7 +190,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                   </td>
                   <td className="col-actions">
                     {m.id !== principal && m.id !== fallbackGratis && (
-                      <button type="button" className="ia-icon-btn" onClick={() => eliminar(m.id)}
+                      <button type="button" className="ia-icon-btn" onClick={() => setConfirmarBorrado(m)}
                               aria-label={`Eliminar ${m.nombre}`} disabled={isPending}>
                         <Trash2 size={15} strokeWidth={2} />
                       </button>
@@ -250,6 +255,16 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         )}
         <TablePagination {...consumoPag} label="cliente" />
       </div>
+
+      {confirmarBorrado && (
+        <ConfirmDialog
+          title={`¿Eliminar "${confirmarBorrado.nombre}"?`}
+          body="Dejará de estar disponible para los clientes. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarBorrado(null)}
+          onConfirm={() => doEliminar(confirmarBorrado)}
+        />
+      )}
     </div>
   )
 }

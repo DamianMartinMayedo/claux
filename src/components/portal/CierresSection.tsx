@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { guardarCierre, eliminarCierre, type Cierre } from '@/app/actions/portal/reservas'
 import { Plus, Trash2 } from 'lucide-react'
 
@@ -16,6 +17,7 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [confirmarBorrado, setConfirmarBorrado] = useState<Cierre | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -26,9 +28,12 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
       toastSuccess('Cierre guardado.'); setMostrarForm(false); router.refresh()
     })
   }
-  function doEliminar(id: string) {
+  // Confirmación in-app (ConfirmDialog, patrón de la plataforma) antes de un
+  // borrado que no se puede deshacer: reabre las reservas de esas fechas.
+  function doEliminar(c: Cierre) {
+    setConfirmarBorrado(null)
     startTransition(async () => {
-      const res = await eliminarCierre(id)
+      const res = await eliminarCierre(c.cierre_id)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Cierre eliminado.'); router.refresh()
     })
@@ -91,7 +96,7 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
                   <td className="col-actions">
                     <div className="ter-actions">
                       <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                        onClick={() => doEliminar(c.cierre_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+                        onClick={() => setConfirmarBorrado(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                     </div>
                   </td>
                 </tr>
@@ -99,6 +104,18 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
             </tbody>
           </table>
         </div>
+      )}
+
+      {confirmarBorrado && (
+        <ConfirmDialog
+          title="¿Eliminar este cierre?"
+          body={`${confirmarBorrado.fecha_desde === confirmarBorrado.fecha_hasta
+            ? fmt(confirmarBorrado.fecha_desde)
+            : `${fmt(confirmarBorrado.fecha_desde)} – ${fmt(confirmarBorrado.fecha_hasta)}`}. Volverán a admitirse reservas y citas esos días.`}
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarBorrado(null)}
+          onConfirm={() => doEliminar(confirmarBorrado)}
+        />
       )}
     </div>
   )

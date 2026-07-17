@@ -6,6 +6,7 @@ import { Pencil, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 import EditarModuloModal from './EditarModuloModal'
 import NuevoModuloModal  from './NuevoModuloModal'
 import { RowActions } from '@/components/portal/RowActions'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { reordenarModulos, archivarModulo, eliminarModulo } from '@/app/actions/modulos'
 import { useToast } from '@/app/contexts/ToastContext'
 
@@ -59,6 +60,7 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
   const movedRef = useRef(false)
   const orderRef = useRef<string[]>([])
   const [editing, setEditing] = useState<Modulo | null>(null)
+  const [confirmarBorrado, setConfirmarBorrado] = useState<Modulo | null>(null)
 
   function handleDragStart(index: number) { setDragIndex(index); movedRef.current = false }
   function handleDragOver(e: React.DragEvent, index: number) {
@@ -93,11 +95,13 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
     router.refresh()
   }
 
-  async function handleEliminar(m: Modulo) {
-    if (!window.confirm(`¿Eliminar el módulo "${m.nombre}"? Esta acción no se puede deshacer.`)) return
+  // Confirmación in-app (ConfirmDialog, patrón de la plataforma), centralizada
+  // en el padre para no anidar el modal dentro del menú de acciones de la fila.
+  async function doEliminar(m: Modulo) {
+    setConfirmarBorrado(null)
     const res = await eliminarModulo(m.clave)
     if (!res.ok) { toastError(res.error ?? 'Error al eliminar'); return }
-    toastSuccess('Módulo eliminado')
+    toastSuccess(`${TIPO_LABEL[m.tipo] ?? 'Módulo'} eliminado`)
     router.refresh()
   }
 
@@ -173,7 +177,7 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
                       </button>
                     ))}
                     {!m.es_base && (
-                      <button className="row-actions-item row-actions-item-danger" onClick={() => handleEliminar(m)}>
+                      <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarBorrado(m)}>
                         <Trash2 size={14} strokeWidth={2} /> Eliminar
                       </button>
                     )}
@@ -188,6 +192,16 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
 
       {editing && (
         <EditarModuloModal modulo={editing} open onClose={() => setEditing(null)} />
+      )}
+
+      {confirmarBorrado && (
+        <ConfirmDialog
+          title={`¿Eliminar "${confirmarBorrado.nombre}"?`}
+          body="Esta acción no se puede deshacer. Si solo quieres dejar de ofrecerlo, archívalo en su lugar."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarBorrado(null)}
+          onConfirm={() => doEliminar(confirmarBorrado)}
+        />
       )}
     </div>
   )

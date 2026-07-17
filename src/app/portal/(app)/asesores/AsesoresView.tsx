@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { Plus, Pencil, Trash2, Users } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import type { Asesor } from '@/app/actions/portal/asesores'
 import { guardarAsesor, eliminarAsesor } from '@/app/actions/portal/asesores'
 
@@ -25,6 +26,7 @@ export default function AsesoresView({
   const [nombre,  setNombre]  = useState('')
   const [email,   setEmail]   = useState('')
   const [empresa, setEmpresa] = useState('')
+  const [confirmarBorrado, setConfirmarBorrado] = useState<Asesor | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const empresaNombre = (id: string | null) =>
@@ -54,7 +56,10 @@ export default function AsesoresView({
     })
   }
 
-  function borrar(a: Asesor) {
+  // Confirmación in-app (ConfirmDialog, patrón de la plataforma), centralizada
+  // en el padre para no anidar el modal dentro del menú de acciones de la fila.
+  function doBorrar(a: Asesor) {
+    setConfirmarBorrado(null)
     startTransition(async () => {
       const r = await eliminarAsesor(a.asesor_id)
       if (!r.ok) { toastError(r.error ?? 'No se pudo eliminar.'); return }
@@ -78,7 +83,7 @@ export default function AsesoresView({
       </div>
 
       {form && (
-        <div className="card env-asesor-add prf-asesores-form">
+        <div className="card env-asesor-add mb-4">
           <div className="input-group">
             <label htmlFor="asr-nombre">Nombre</label>
             <input id="asr-nombre" className="input" value={nombre}
@@ -108,30 +113,58 @@ export default function AsesoresView({
       )}
 
       {lista.length === 0 && !form ? (
-        <div className="card prf-asesores-empty">
-          <Users size={32} strokeWidth={1} opacity={0.3} />
-          <p>Aún no tienes asesores. Añade uno para poder enviarle tus reportes.</p>
+        <div className="card card-table">
+          <div className="mon-empty">
+            <Users size={36} strokeWidth={1} />
+            <p>Aún no tienes asesores. Añade uno para poder enviarle tus reportes.</p>
+          </div>
         </div>
       ) : lista.length > 0 && (
-        <ul className="card prf-asesores-list">
-          {lista.map(a => (
-            <li key={a.asesor_id} className="prf-asesor-row">
-              <div className="prf-asesor-info">
-                <span className="prf-asesor-nombre">{a.nombre}</span>
-                <span className="prf-asesor-email">{a.email}</span>
-              </div>
-              <span className="prf-asesor-ambito">{empresaNombre(a.empresa_id)}</span>
-              <RowActions>
-                <button className="row-actions-item" onClick={() => abrirEdicion(a)}>
-                  <Pencil size={15} strokeWidth={2} /> Editar
-                </button>
-                <button className="row-actions-item row-actions-item-danger" onClick={() => borrar(a)}>
-                  <Trash2 size={14} strokeWidth={2} /> Eliminar
-                </button>
-              </RowActions>
-            </li>
-          ))}
-        </ul>
+        <div className="card card-table">
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Correo</th>
+                  <th>Para</th>
+                  <th className="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map(a => (
+                  <tr key={a.asesor_id}>
+                    <td data-label="Nombre"><span className="table-empresa">{a.nombre}</span></td>
+                    <td data-label="Correo" className="cell-truncate">{a.email}</td>
+                    <td data-label="Para">
+                      <span className="badge badge-neutral">{empresaNombre(a.empresa_id)}</span>
+                    </td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => abrirEdicion(a)}>
+                          <Pencil size={15} strokeWidth={2} /> Editar
+                        </button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarBorrado(a)}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      </RowActions>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {confirmarBorrado && (
+        <ConfirmDialog
+          title={`¿Eliminar a "${confirmarBorrado.nombre}"?`}
+          body="Dejará de estar disponible al enviar reportes. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarBorrado(null)}
+          onConfirm={() => doBorrar(confirmarBorrado)}
+        />
       )}
     </div>
   )

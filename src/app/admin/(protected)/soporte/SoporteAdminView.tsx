@@ -13,6 +13,7 @@ import {
 import { Eye, Mail, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs from '@/components/Tabs'
+import { usePagination, TablePagination } from '@/components/TablePagination'
 
 type Estado = 'NUEVO' | 'LEIDO' | 'RESUELTO'
 
@@ -54,6 +55,8 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
   const [respondiendo, setRespondiendo]     = useState(false)
   const nuevos = mensajes.filter(m => m.estado === 'NUEVO').length
   const msgFiltrados = filtro === 'TODOS' ? mensajes : mensajes.filter(m => m.estado === filtro)
+  const { pageItems: msgItems, ...msgPag } = usePagination(msgFiltrados)
+  const { pageItems: faqItems, ...faqPag } = usePagination(faqs)
 
   async function cambiarEstado(id: number, estado: Estado) {
     const res = await actualizarEstadoMensaje(id, estado)
@@ -301,7 +304,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {msgFiltrados.map(m => (
+                    {msgItems.map(m => (
                       <tr key={m.id} className="table-row-clickable" onClick={() => abrirMsg(m)}>
                         <td data-label="Cliente">
                           <div className="text-sm-bold">{m.nombre_empresa}</div>
@@ -321,6 +324,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                 </table>
               </div>
             )}
+            <TablePagination {...msgPag} label="mensaje" />
           </div>
         </>
       )}
@@ -351,7 +355,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {faqs.map(f => (
+                    {faqItems.map(f => (
                       <tr key={f.id} className={f.activo ? '' : 'row-inactive'}>
                         <td data-label="Módulo"><span className="badge badge-neutral">{modLabel.get(f.modulo_clave) ?? f.modulo_clave}</span></td>
                         <td data-label="Pregunta" className="cell-truncate">{f.pregunta}</td>
@@ -376,6 +380,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                 </table>
               </div>
             )}
+            <TablePagination {...faqPag} label="pregunta" />
           </div>
         </>
       )}
