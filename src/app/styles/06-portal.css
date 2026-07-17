@@ -1967,6 +1967,8 @@
 .dash-tip-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--dot, var(--color-primary)); }
 .dash-tip-dot[data-serie="ventas"] { background: var(--color-primary); }
 .dash-tip-dot[data-serie="gastos"] { background: var(--color-amber); }
+/* Historial de un tercero: comprarle es el lado saliente, como los gastos. */
+.dash-tip-dot[data-serie="compras"] { background: var(--color-amber); }
 
 /* Tooltip de gráfico (custom, sin estilos inline de la librería) */
 .dash-tip {

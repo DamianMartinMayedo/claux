@@ -357,26 +357,28 @@ function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
           </div>
           <div className="dash-split-side">
             <div className="dash-subtitle"><span>Cambios registrados</span></div>
-            <div className="table-wrapper">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th className="col-num">Precio</th>
-                    <th className="col-num">Costo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map(h => (
-                    <tr key={h.historial_id}>
-                      <td data-label="Fecha" className="text-sm-muted tes-nowrap">{fmtDate(h.created_at)}</td>
-                      <td data-label="Precio" className="col-num tes-monto-cell">{h.precio != null ? fmt(h.precio, sel) : '—'}</td>
-                      <td data-label="Costo" className="col-num tes-monto-cell">{h.costo != null ? fmt(h.costo, sel) : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {/* Mismo patrón que «Últimas facturas» del dashboard (.dash-list):
+                es una lista de eventos junto a un gráfico, no un dataset que se
+                ordene o se recorra en columnas. Cada fila es la FOTO del estado
+                tras el cambio (precio y costo vigentes), no un delta: null =
+                ese producto no tiene ese importe en esta moneda. */}
+            <ul className="dash-list">
+              {items.map(h => (
+                <li key={h.historial_id} className="dash-list-item">
+                  <div className="dash-list-main">
+                    <span className="dash-list-title">{fmtDate(h.created_at)}</span>
+                    {h.costo != null && (
+                      <span className="dash-list-meta">Costo {fmt(h.costo, sel)}</span>
+                    )}
+                  </div>
+                  <span className="dash-list-aside">
+                    <span className="dash-list-amount">
+                      {h.precio != null ? fmt(h.precio, sel) : '—'}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>

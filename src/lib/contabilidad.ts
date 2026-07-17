@@ -11,3 +11,12 @@
 export const ESTADOS_FACTURA_INGRESO = ['EMITIDA', 'COBRADA'] as const
 
 export type EstadoFacturaIngreso = (typeof ESTADOS_FACTURA_INGRESO)[number]
+
+/**
+ * Estados de compra que cuentan como gasto/volumen real con el proveedor.
+ * Simétrico a ESTADOS_FACTURA_INGRESO: BORRADOR aún no es un compromiso y
+ * ANULADA dejó de serlo; solo CONFIRMADA es dinero comprometido.
+ */
+export const ESTADOS_COMPRA_GASTO = ['CONFIRMADA'] as const
+
+export type EstadoCompraGasto = (typeof ESTADOS_COMPRA_GASTO)[number]

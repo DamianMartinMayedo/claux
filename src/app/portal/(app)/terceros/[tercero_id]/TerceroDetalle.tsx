@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import dynamic                      from 'next/dynamic'
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
 import {
@@ -8,6 +9,7 @@ import {
   restaurarTercero,
   copiarTerceroAEmpresa,
   type TerceroDetalleData,
+  type TerceroHistorial,
   type TipoTercero,
   type ViaPago,
 } from '@/app/actions/portal/terceros'
@@ -37,9 +39,30 @@ const TIPO_BADGE: Record<TipoTercero, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string | null) {
+const OPTS_FECHA = { day: '2-digit', month: 'short', year: 'numeric' } as const
+
+/** Para timestamptz (created_at/updated_at): el instante es real, se localiza. */
+function fmtTimestamp(iso: string | null) {
   if (!iso) return null
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', OPTS_FECHA)
+}
+
+/**
+ * Para columnas `date` ('YYYY-MM-DD'): fecha_inicio/fin_contrato y la fecha de
+ * los documentos. NO puede pasar por `new Date(iso)`, que la lee como medianoche
+ * UTC y en La Habana (UTC−4) la retrasa un día entero.
+ */
+function fmtFecha(iso: string | null) {
+  if (!iso) return null
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', OPTS_FECHA)
+}
+
+function fmtMoneda(n: number, moneda: string) {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: moneda,
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(n)
 }
 
 function Campo({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -186,8 +209,8 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
           <div className="det-section-title">Contrato</div>
           <div className="det-field-grid">
             <Campo label="N° contrato"  value={tercero.num_contrato} />
-            <Campo label="Inicio"       value={fmtDate(tercero.fecha_inicio_contrato)} />
-            <Campo label="Vencimiento"  value={fmtDate(tercero.fecha_fin_contrato)} />
+            <Campo label="Inicio"       value={fmtFecha(tercero.fecha_inicio_contrato)} />
+            <Campo label="Vencimiento"  value={fmtFecha(tercero.fecha_fin_contrato)} />
             {tercero.contrato_url && (
               <div>
                 <div className="det-label">Documento</div>
@@ -212,8 +235,8 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
       <div className="det-card">
         <div className="det-section-title">Registro</div>
         <div className="det-field-grid">
-          <Campo label="Creado"      value={fmtDate(tercero.created_at)} />
-          <Campo label="Actualizado" value={fmtDate(tercero.updated_at)} />
+          <Campo label="Creado"      value={fmtTimestamp(tercero.created_at)} />
+          <Campo label="Actualizado" value={fmtTimestamp(tercero.updated_at)} />
           <Campo label="ID interno"  value={<code className="code-id">{tercero.tercero_id}</code>} />
         </div>
       </div>
@@ -259,14 +282,137 @@ function TabCuentasPorPagar() {
   )
 }
 
-// ── Tab: Historial de transacciones (placeholder) ─────────────────────────────
+// ── Tab: Historial de transacciones ───────────────────────────────────────────
 
-function TabHistorial() {
+// recharts fuera del SSR (mide el contenedor al montar), igual que el gráfico
+// del historial de precios en ProductoDetalle.
+const TerceroHistorialChart = dynamic(() => import('./TerceroHistorialChart'), { ssr: false })
+
+const ESTADO_DOC: Record<string, { cls: string; label: string }> = {
+  BORRADOR:   { cls: 'badge-neutral', label: 'Borrador' },
+  EMITIDA:    { cls: 'badge-info',    label: 'Emitida' },
+  COBRADA:    { cls: 'badge-success', label: 'Cobrada' },
+  CONFIRMADA: { cls: 'badge-success', label: 'Confirmada' },
+  ANULADA:    { cls: 'badge-error',   label: 'Anulada' },
+}
+
+function TabHistorial({ historial }: { historial: TerceroHistorial }) {
+  const { docs, porMoneda, consolidado } = historial
+
+  // Consolidado primero (si hay), luego cada moneda: mismo switch que la card de
+  // Contabilidad del dashboard (ContabResumen).
+  const opciones = [
+    ...(consolidado ? [{ key: 'consolidado', label: 'Consolidado', entry: consolidado }] : []),
+    ...porMoneda.map(pm => ({ key: pm.moneda, label: pm.moneda, entry: pm })),
+  ]
+  const [monedaSel, setMonedaSel] = useState(opciones[0]?.key ?? '')
+
+  if (docs.length === 0) {
+    return (
+      <div className="det-empty">
+        <div className="det-empty-icon"><Activity size={40} strokeWidth={1} opacity={0.2} /></div>
+        <div className="det-empty-title">Historial de transacciones</div>
+        <div className="det-empty-text">Aquí se mostrará el historial de ventas y compras con este contacto.</div>
+      </div>
+    )
+  }
+
+  const activa = opciones.find(o => o.key === monedaSel) ?? opciones[0]
+  const e = activa?.entry
+  // Un mes con movimiento real; los meses vacíos del tramo van a 0 y no cuentan.
+  const mesesConDatos = e ? e.serie.filter(s => s.ventas > 0 || s.compras > 0).length : 0
+
   return (
-    <div className="det-empty">
-      <div className="det-empty-icon"><Activity size={40} strokeWidth={1} opacity={0.2} /></div>
-      <div className="det-empty-title">Historial de transacciones</div>
-      <div className="det-empty-text">Aquí se mostrará el historial de ventas y compras con este contacto.</div>
+    <div className="det-tab-body">
+      <div className="det-card">
+        <div className="det-section-head">
+          <div className="det-section-title">Historial de transacciones</div>
+        </div>
+
+        <div className="dash-split">
+          <div className="dash-split-main">
+            {e ? (
+              <>
+                {opciones.length > 1 && (
+                  <div className="dash-moneda-switch" role="tablist" aria-label="Moneda">
+                    {opciones.map(o => (
+                      <button
+                        key={o.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={o.key === activa.key}
+                        className={o.key === activa.key ? 'active' : ''}
+                        onClick={() => setMonedaSel(o.key)}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="dash-kpis">
+                  {e.ventasTotal > 0 && (
+                    <div className="dash-kpi">
+                      <span className="dash-kpi-label">Facturado</span>
+                      <span className="dash-kpi-value dash-kpi-value-sm">{fmtMoneda(e.ventasTotal, e.moneda)}</span>
+                    </div>
+                  )}
+                  {e.comprasTotal > 0 && (
+                    <div className="dash-kpi">
+                      <span className="dash-kpi-label">Comprado</span>
+                      <span className="dash-kpi-value dash-kpi-value-sm">{fmtMoneda(e.comprasTotal, e.moneda)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Con un solo mes el gráfico es una barra suelta: no dice nada
+                    que no diga ya el KPI, así que no se dibuja. */}
+                {mesesConDatos >= 2 ? (
+                  <TerceroHistorialChart
+                    serie={e.serie}
+                    moneda={e.moneda}
+                    hayVentas={e.ventasTotal > 0}
+                    hayCompras={e.comprasTotal > 0}
+                  />
+                ) : (
+                  <p className="text-xs-hint">Se necesitan al menos dos meses con movimiento para dibujar la evolución.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs-hint">
+                Hay documentos, pero ninguno cuenta todavía: los borradores y los anulados no suman.
+              </p>
+            )}
+          </div>
+
+          <div className="dash-split-side">
+            <div className="dash-subtitle"><span>Documentos</span></div>
+            <ul className="dash-list">
+              {docs.map(d => (
+                <li key={`${d.clase}-${d.doc_id}`} className="dash-list-item">
+                  <Link
+                    href={d.clase === 'VENTA'
+                      ? `/portal/ventas/facturas/${d.doc_id}`
+                      : `/portal/compras/${d.doc_id}`}
+                    className="dash-list-main"
+                  >
+                    <span className="dash-list-title">{d.numero}</span>
+                    <span className="dash-list-meta">
+                      {d.clase === 'VENTA' ? 'Venta' : 'Compra'} · {fmtFecha(d.fecha)}
+                    </span>
+                  </Link>
+                  <span className="dash-list-aside">
+                    <span className="dash-list-amount">{fmtMoneda(d.total, d.moneda)}</span>
+                    <span className={`badge ${ESTADO_DOC[d.estado]?.cls ?? 'badge-neutral'}`}>
+                      {ESTADO_DOC[d.estado]?.label ?? d.estado}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -300,8 +446,9 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
     })
   }
 
+  // Productos y Cuentas por pagar son cosa del proveedor; el Historial no se
+  // gatea por tipo (lo enseña todo: ventas, compras o ambas).
   const esProveedor = tercero.tipo === 'PROVEEDOR' || tercero.tipo === 'AMBOS'
-  const esCliente   = tercero.tipo === 'CLIENTE'   || tercero.tipo === 'AMBOS'
 
   return (
     <div className="view-container">
@@ -371,19 +518,16 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
         {esProveedor && (
           <Tab active={tab === 'cp'}      onClick={() => setTab('cp')}      label="Cuentas por pagar" />
         )}
-        {esCliente && (
-          <Tab active={tab === 'historial'} onClick={() => setTab('historial')} label="Historial" />
-        )}
-        {tercero.tipo === 'AMBOS' && (
-          <Tab active={tab === 'historial'} onClick={() => setTab('historial')} label="Historial" />
-        )}
+        {/* Sin gating por tipo: a un cliente le facturamos, a un proveedor le
+            compramos y a un AMBOS las dos cosas. El historial enseña lo que haya. */}
+        <Tab active={tab === 'historial'} onClick={() => setTab('historial')} label="Historial" />
       </div>
 
       {/* Contenido */}
       {tab === 'datos'     && <TabDatos    data={data} />}
       {tab === 'productos' && <TabProductos count={productos_count} />}
       {tab === 'cp'        && <TabCuentasPorPagar />}
-      {tab === 'historial' && <TabHistorial />}
+      {tab === 'historial' && <TabHistorial historial={data.historial} />}
 
       {copiar && (
         <CopiarAEmpresaModal

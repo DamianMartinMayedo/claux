@@ -5,7 +5,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerMonedasActivas, type MonedaOpcion } from './monedas'
-import { mapaTasas, monedaValida } from '@/lib/tasas'
+import { mapaTasas, monedaValida, construirConversor } from '@/lib/tasas'
+import { ESTADOS_FACTURA_INGRESO, ESTADOS_COMPRA_GASTO } from '@/lib/contabilidad'
+import { mesesEntre } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -397,6 +399,41 @@ export async function restaurarTercero(
 
 // ── Detalle de tercero ────────────────────────────────────────────────────────
 
+// ── Historial de transacciones del tercero ────────────────────────────────────
+
+/** Un documento del historial. `clase` distingue las dos naturalezas: a un
+ *  tercero AMBOS le vendemos (facturas) y le compramos (compras). */
+export interface TerceroDoc {
+  doc_id: string
+  clase:  'VENTA' | 'COMPRA'
+  numero: string
+  fecha:  string   // YYYY-MM-DD
+  total:  number
+  moneda: string
+  estado: string
+}
+
+export interface TerceroSerieMes { mes: string; etiqueta: string; ventas: number; compras: number }
+
+export interface TerceroMonedaResumen {
+  moneda:       string
+  ventasTotal:  number
+  comprasTotal: number
+  serie:        TerceroSerieMes[]
+}
+
+export interface TerceroHistorial {
+  /** Todos los documentos, del más reciente al más antiguo. Incluye borradores y
+   *  anulados: la lista es el registro de lo que ha pasado. */
+  docs:        TerceroDoc[]
+  /** Series y totales SOLO de lo que cuenta (ESTADOS_*), separadas por moneda:
+   *  sumar importes de monedas distintas no significa nada. */
+  porMoneda:   TerceroMonedaResumen[]
+  /** Todas las monedas convertidas a la de consolidación. null si no hay moneda
+   *  de consolidación, si solo hay una moneda, o si ninguna tiene tasa. */
+  consolidado: TerceroMonedaResumen | null
+}
+
 export interface TerceroDetalleData {
   tercero:          Tercero
   empresa_nombre:   string
@@ -404,6 +441,122 @@ export interface TerceroDetalleData {
   empresas:         EmpresaDestino[]
   monedas:          MonedaOpcion[]
   tasas:            Record<string, number>
+  historial:        TerceroHistorial
+}
+
+type DbAdmin = ReturnType<typeof createAdminClient>
+
+const r2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Historial de transacciones con un tercero: lo que le hemos facturado (ventas)
+ * y lo que le hemos comprado. `facturas.cliente_id` y `compras.proveedor_id`
+ * guardan directamente el `tercero_id`, así que el cruce es directo.
+ *
+ * Sin ofertas: un presupuesto no es una transacción (puede no convertirse nunca)
+ * y sumarlo inflaría los totales con dinero que no existe.
+ *
+ * La serie abarca del primer al último documento (no una ventana fija): un
+ * tercero con dos facturas de hace un año tiene historial, y una ventana de 6
+ * meses se lo enseñaría vacío.
+ */
+async function historialDeTercero(
+  db: DbAdmin, clientId: string, terceroId: string, empresaIds: string[],
+): Promise<TerceroHistorial> {
+  const scope = empresaIds.length ? empresaIds : ['__none__']
+  const [facRes, comRes] = await Promise.all([
+    db.from('facturas').select('factura_id, numero, fecha_emision, total, moneda, estado')
+      .eq('client_id', clientId).eq('cliente_id', terceroId).in('empresa_id', scope),
+    db.from('compras').select('compra_id, numero, fecha, total, moneda, estado')
+      .eq('client_id', clientId).eq('proveedor_id', terceroId).in('empresa_id', scope),
+  ])
+
+  const docs: TerceroDoc[] = [
+    ...(facRes.data ?? []).map((f: Record<string, unknown>) => ({
+      doc_id: f.factura_id as string, clase: 'VENTA' as const,
+      numero: (f.numero as string) ?? '—', fecha: f.fecha_emision as string,
+      total: Number(f.total) || 0, moneda: f.moneda as string, estado: f.estado as string,
+    })),
+    ...(comRes.data ?? []).map((c: Record<string, unknown>) => ({
+      doc_id: c.compra_id as string, clase: 'COMPRA' as const,
+      numero: (c.numero as string) ?? '—', fecha: c.fecha as string,
+      total: Number(c.total) || 0, moneda: c.moneda as string, estado: c.estado as string,
+    })),
+  ].sort((a, b) => b.fecha.localeCompare(a.fecha))
+
+  if (!docs.length) return { docs: [], porMoneda: [], consolidado: null }
+
+  // Solo lo reconocido entra en series y totales; la lista de arriba sí lo muestra todo.
+  const cuentan = docs.filter(d => d.clase === 'VENTA'
+    ? (ESTADOS_FACTURA_INGRESO as readonly string[]).includes(d.estado)
+    : (ESTADOS_COMPRA_GASTO as readonly string[]).includes(d.estado))
+
+  if (!cuentan.length) return { docs, porMoneda: [], consolidado: null }
+
+  const fechas = cuentan.map(d => d.fecha).sort()
+  const meses  = mesesEntre(fechas[0].slice(0, 7), fechas[fechas.length - 1].slice(0, 7))
+
+  const serieDe = (filtro: (d: TerceroDoc) => boolean): TerceroMonedaResumen['serie'] => {
+    const mapa = new Map(meses.map(m => [m.mes, { ...m, ventas: 0, compras: 0 }]))
+    for (const d of cuentan) {
+      if (!filtro(d)) continue
+      const b = mapa.get(d.fecha.slice(0, 7))
+      if (!b) continue
+      if (d.clase === 'VENTA') b.ventas += d.total
+      else                     b.compras += d.total
+    }
+    return [...mapa.values()]
+  }
+  const totalDe = (ds: TerceroDoc[], clase: TerceroDoc['clase']) =>
+    r2(ds.filter(d => d.clase === clase).reduce((s, d) => s + d.total, 0))
+
+  const porMoneda: TerceroMonedaResumen[] = [...new Set(cuentan.map(d => d.moneda))].sort()
+    .map(moneda => {
+      const ds = cuentan.filter(d => d.moneda === moneda)
+      return {
+        moneda,
+        ventasTotal:  totalDe(ds, 'VENTA'),
+        comprasTotal: totalDe(ds, 'COMPRA'),
+        serie:        serieDe(d => d.moneda === moneda),
+      }
+    })
+
+  // Consolidado: mismo criterio que el dashboard —convertir a la moneda marcada
+  // `es_consolidacion`— pero delegando en el conversor compartido en vez de
+  // recalcular factores aquí. Un documento cuya moneda no cotiza se excluye:
+  // mejor un consolidado incompleto que uno inventado.
+  let consolidado: TerceroMonedaResumen | null = null
+  const { data: consolRow } = await db.from('monedas').select('codigo')
+    .eq('client_id', clientId).eq('es_consolidacion', true).limit(1).maybeSingle()
+  const consolCode: string | null = consolRow?.codigo ?? null
+
+  if (consolCode && porMoneda.length > 1) {
+    const conv = await construirConversor(db, clientId)
+    const enConsol = cuentan
+      .map(d => {
+        const total = d.moneda === consolCode ? d.total : conv.convertir(d.total, d.moneda, consolCode)
+        return total == null ? null : { ...d, total, moneda: consolCode }
+      })
+      .filter((d): d is TerceroDoc => d !== null)
+
+    if (enConsol.length) {
+      const mapa = new Map(meses.map(m => [m.mes, { ...m, ventas: 0, compras: 0 }]))
+      for (const d of enConsol) {
+        const b = mapa.get(d.fecha.slice(0, 7))
+        if (!b) continue
+        if (d.clase === 'VENTA') b.ventas += d.total
+        else                     b.compras += d.total
+      }
+      consolidado = {
+        moneda:       consolCode,
+        ventasTotal:  totalDe(enConsol, 'VENTA'),
+        comprasTotal: totalDe(enConsol, 'COMPRA'),
+        serie:        [...mapa.values()].map(b => ({ ...b, ventas: r2(b.ventas), compras: r2(b.compras) })),
+      }
+    }
+  }
+
+  return { docs, porMoneda, consolidado }
 }
 
 export async function obtenerTerceroDetalle(
@@ -418,7 +571,7 @@ export async function obtenerTerceroDetalle(
   const tasas       = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
   const empresa_ids = empresas.map(e => e.empresa_id)
 
-  const [terRes, prodCountRes] = await Promise.all([
+  const [terRes, prodCountRes, historial] = await Promise.all([
     db.from('third_parties')
       .select('*')
       .eq('tercero_id', tercero_id)
@@ -429,6 +582,7 @@ export async function obtenerTerceroDetalle(
       .select('producto_id', { count: 'exact', head: true })
       .eq('client_id', session.client_id)
       .eq('proveedor_id', tercero_id),
+    historialDeTercero(db, session.client_id, tercero_id, empresa_ids),
   ])
 
   if (!terRes.data) return null
@@ -446,5 +600,6 @@ export async function obtenerTerceroDetalle(
     })),
     monedas,
     tasas,
+    historial,
   }
 }
