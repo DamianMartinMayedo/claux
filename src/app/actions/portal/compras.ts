@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { traducirErrorInventario } from './_inventario-helpers'
 import { monedaValida }      from '@/lib/tasas'
@@ -264,7 +264,7 @@ export async function guardarCompra(
 ): Promise<{ ok: boolean; error?: string; compra_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -376,7 +376,7 @@ export async function guardarCompra(
 export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.rpc('inv_confirmar_compra', {
@@ -399,7 +399,7 @@ export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean;
 export async function anularCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.rpc('inv_anular_compra', {
@@ -422,7 +422,7 @@ export async function anularCompra(compra_id: string): Promise<{ ok: boolean; er
 export async function eliminarCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: compra } = await db.from('compras')

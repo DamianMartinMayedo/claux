@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ export async function registrarPagoDoc(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -355,7 +355,7 @@ export async function registrarPagoDoc(
 export async function anularPagoDoc(movimiento_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 

@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { tieneModulo }       from '@/lib/modulos'
 import { monedaValida }      from '@/lib/tasas'
@@ -385,7 +385,7 @@ export async function guardarOferta(
 ): Promise<{ ok: boolean; error?: string; oferta_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const oferta_id_form  = (formData.get('oferta_id')      as string)?.trim() || ''
   const empresa_id      = (formData.get('empresa_id')     as string)?.trim()
@@ -497,7 +497,7 @@ export async function guardarFactura(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const factura_id_form  = (formData.get('factura_id')        as string)?.trim() || ''
   const empresa_id       = (formData.get('empresa_id')        as string)?.trim()
@@ -651,7 +651,7 @@ export async function cambiarEstadoOferta(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: oferta } = await db
@@ -697,7 +697,7 @@ export async function cambiarEstadoFactura(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: factura } = await db
@@ -732,6 +732,7 @@ export async function convertirOfertaEnFactura(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: oferta } = await db
@@ -838,7 +839,7 @@ export async function duplicarOferta(
 ): Promise<{ ok: boolean; error?: string; oferta_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -933,7 +934,7 @@ export async function duplicarFactura(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 

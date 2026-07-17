@@ -3,6 +3,7 @@ import {
   obtenerOfertaDetalle,
   obtenerVentasResumen,
 } from '@/app/actions/portal/ventas'
+import { requireModulo } from '@/app/actions/portal/auth'
 import OfertaDetalle from './OfertaDetalle'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,7 @@ interface PageProps {
 }
 
 export default async function OfertaDetallePage({ params }: PageProps) {
+  await requireModulo('base')
   const { oferta_id } = await params
   const [detalle, resumen] = await Promise.all([
     obtenerOfertaDetalle(oferta_id),

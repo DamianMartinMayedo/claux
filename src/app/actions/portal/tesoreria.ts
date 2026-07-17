@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { type CategoriaGasto } from './gastos'
 import { monedaValida }      from '@/lib/tasas'
@@ -167,7 +167,7 @@ export async function guardarCuenta(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -228,7 +228,7 @@ export async function guardarCuenta(
 export async function archivarCuenta(cuenta_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient()
     .from('cuentas')
@@ -244,7 +244,7 @@ export async function archivarCuenta(cuenta_id: string): Promise<{ ok: boolean; 
 export async function restaurarCuenta(cuenta_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient()
     .from('cuentas')
@@ -267,7 +267,7 @@ export async function registrarMovimiento(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -428,7 +428,7 @@ export async function registrarTransferencia(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -625,7 +625,7 @@ export async function registrarTransferencia(
 export async function eliminarMovimiento(movimiento_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 

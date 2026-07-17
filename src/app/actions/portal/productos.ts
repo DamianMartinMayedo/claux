@@ -2,7 +2,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ export async function guardarProducto(
 ): Promise<{ ok: boolean; error?: string; producto_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre es obligatorio.' }
@@ -263,7 +263,7 @@ export async function archivarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -282,7 +282,7 @@ export async function restaurarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -306,7 +306,7 @@ export async function eliminarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -374,7 +374,7 @@ export async function ajustarStock(
 ): Promise<{ ok: boolean; error?: string; stock_nuevo?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   if (!almacen_id) return { ok: false, error: 'Selecciona un almacén.' }
   if (isNaN(cantidad) || cantidad === 0)
@@ -428,7 +428,7 @@ export async function guardarCategoria(
 ): Promise<{ ok: boolean; error?: string; categoria_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
@@ -474,7 +474,7 @@ export async function archivarCategoria(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -493,7 +493,7 @@ export async function restaurarCategoria(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db

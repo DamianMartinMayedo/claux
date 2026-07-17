@@ -4,6 +4,7 @@ import {
   obtenerVentasResumen,
 } from '@/app/actions/portal/ventas'
 import { obtenerCobrosFactura } from '@/app/actions/portal/cobranza'
+import { requireModulo }        from '@/app/actions/portal/auth'
 import FacturaDetalle from './FacturaDetalle'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,7 @@ interface PageProps {
 }
 
 export default async function FacturaDetallePage({ params }: PageProps) {
+  await requireModulo('base')
   const { factura_id } = await params
   const [detalle, resumen, cobros] = await Promise.all([
     obtenerFacturaDetalle(factura_id),
