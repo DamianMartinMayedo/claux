@@ -359,9 +359,12 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
   // (el consolidado sobre cero empresas está vacío). Va en el servidor, no solo en
   // el banner: ocultar la UI no es control de acceso. Tener moneda pero ninguna
   // empresa NO habilita crear.
-  const { count: numEmpresas } = await db.from('companies')
-    .select('id', { count: 'exact', head: true }).eq('client_id', session.client_id)
-  if (!numEmpresas) return { ok: false, error: 'Necesitas crear al menos una empresa antes de crear un dossier.' }
+  // Se cuenta con obtenerEmpresas(), la MISMA fuente que llena data.empresas y
+  // decide el banner del wizard: una consulta propia aquí puede divergir de lo
+  // que ve el usuario (esta contaba `companies`, que ni siquiera es la tabla de
+  // empresas, así que bloqueaba a todo el mundo).
+  const empresas = await obtenerEmpresas()
+  if (!empresas.length) return { ok: false, error: 'Necesitas crear al menos una empresa antes de crear un dossier.' }
 
   const titulo   = (formData.get('titulo') as string)?.trim() || 'Dossier para inversores'
   const empresaId = (formData.get('empresa_id') as string)?.trim() || null
