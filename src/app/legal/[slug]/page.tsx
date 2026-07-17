@@ -10,13 +10,17 @@ interface Props {
   params: Promise<{ slug: string }>
 }
 
-// Las tres páginas se prerenderizan; cualquier otro slug es 404 (no hay
-// `dynamicParams` que valga: el mapa de PAGINAS_LEGALES es la lista blanca).
+// NO se prerenderizan en el build: leer el texto usa el service_role de Supabase,
+// que como variable «sensitive» de Vercel NO llega al entorno de build (solo al
+// runtime). Con generateStaticParams vacío + dynamicParams, cada página se genera
+// en su PRIMERA visita —ya en runtime, con la clave disponible— y se cachea con
+// ISR (revalidate abajo). La lista blanca la sigue aplicando el componente vía
+// notFound(): cualquier slug fuera de PAGINAS_LEGALES es 404 igual que antes.
 export function generateStaticParams() {
-  return Object.keys(PAGINAS_LEGALES).map((slug) => ({ slug }))
+  return []
 }
 
-export const dynamicParams = false
+export const dynamicParams = true
 
 // El texto lo edita el equipo desde /admin/configuracion; `guardarSetting`
 // revalida estas rutas al guardar, así que el cambio sale sin redeploy.

@@ -37,9 +37,15 @@ export const metadata: Metadata = {
   },
 }
 
-// ISR: el catálogo cambia poco; revalidamos cada hora para que al activar un
-// módulo o sector en el admin la landing se actualice sola sin redeploy.
-export const revalidate = 3600
+// Render en RUNTIME, no en el build: el catálogo se lee con el service_role de
+// Supabase, que como variable «sensitive» no llega al entorno de build. Si se
+// prerenderizara en build, saldría con el catálogo VACÍO (obtenerCatalogoPublico
+// degrada a vacío ante el fallo) y esa versión vacía quedaría servida a los
+// visitantes hasta la siguiente revalidación. En runtime la clave está y la
+// página muestra el catálogo real; si la BD falla puntualmente, degrada a vacío
+// solo en esa petición, sin cachearlo. Es una landing de marketing de bajo
+// tráfico: el coste de renderizar por petición es despreciable.
+export const dynamic = 'force-dynamic'
 
 export default async function LandingPage() {
   const { modulos, sectores } = await obtenerCatalogoPublico()

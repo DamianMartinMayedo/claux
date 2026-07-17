@@ -15,9 +15,12 @@ export const metadata: Metadata = {
   },
 }
 
-// ISR: las opciones (sectores y módulos) salen del catálogo real; revalidamos
-// para reflejar cambios del admin sin redeploy.
-export const revalidate = 3600
+// Render en RUNTIME, no en el build (mismo motivo que la landing): las opciones
+// del diagnóstico salen del catálogo, que se lee con el service_role «sensitive»
+// —ausente en el build—. Prerenderizarlo aquí dejaría el formulario SIN opciones
+// (sectores y necesidades vacíos) hasta la primera revalidación: no es un detalle
+// estético, rompe el embudo. En runtime la clave está y las opciones cargan.
+export const dynamic = 'force-dynamic'
 
 export default async function DiagnosticoPage() {
   const { modulos, sectores, necesidades } = await obtenerCatalogoPublico()
