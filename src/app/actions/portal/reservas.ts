@@ -627,9 +627,15 @@ export async function crearReservaPublica(
 
   // Confirmación automática + datos para notificar al dueño
   const { data: cliente } = await db.from('clients')
-    .select('bot_config, nombre_empresa')
+    .select('bot_config, nombre_empresa, modulos_activos')
     .eq('client_id', client_id)
     .single()
+
+  // Gating del tenant: un POST directo saltaría la página (que ya lo comprueba en
+  // obtenerReservasPublicas). Sin el módulo, el negocio no acepta reservas.
+  const modulos = Array.isArray(cliente?.modulos_activos) ? cliente!.modulos_activos as string[] : []
+  if (!modulos.includes('reservas_citas')) return { ok: false, error: 'Este negocio no acepta reservas en línea.' }
+
   const botCfg = parseBotConfig(cliente?.bot_config)
 
   const reservaId = generarReservaId()
@@ -705,11 +711,16 @@ export async function obtenerReservasPublicas(slug: string): Promise<{
   const db = createAdminClient()
 
   const { data: cliente } = await db.from('clients')
-    .select('client_id, nombre_empresa, slug, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
+    .select('client_id, nombre_empresa, slug, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
     .eq('slug', slug)
     .single()
 
   if (!cliente) return { negocio: null, franjas: [], client_id: null, reglas: { ...REGLAS_DEFAULT } }
+
+  // Gating: el negocio debe tener las reservas contratadas. Si no, se devuelve
+  // vacío → la página pública hace notFound() (mismo criterio que las citas).
+  const modulos = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos as string[] : []
+  if (!modulos.includes('reservas_citas')) return { negocio: null, franjas: [], client_id: null, reglas: { ...REGLAS_DEFAULT } }
 
   const { data: franjas } = await db.from('reserva_franjas')
     .select('franja_id, nombre, hora_inicio, hora_fin, capacidad, duracion_minutos, dias_semana')

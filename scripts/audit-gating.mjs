@@ -24,9 +24,12 @@ const DIR = 'src/app/actions/portal'
 // Añadir aquí es una decisión CONSCIENTE (público, self-service o excepción de
 // negocio), no una vía para saltarse el gating.
 const ALLOWLIST = {
-  // Flujo público sin login (cliente final reservando). Protección propia:
-  // rate-limit + honeypot. OJO: la página pública NO valida hoy el módulo del
-  // tenant (ver TODO en AGENTS.md) — hardening pendiente en otro eje.
+  // Flujo público sin login (cliente final reservando). Sin sesión → el candado
+  // NO es por usuario sino por TENANT: crear*Publica valida modulos_activos del
+  // negocio (dueño del slug/client_id) e insert solo si tiene el módulo; los
+  // loaders públicos hacen lo mismo → la página hace notFound(). Protección extra:
+  // rate-limit + honeypot. cancelar*Publica gestiona una reserva YA existente por
+  // token (el cliente debe poder cancelar aunque el negocio deje el módulo).
   'reservas.ts': ['crearReservaPublica', 'cancelarReservaPublica', 'obtenerSlotsAforo', 'obtenerProximoDiaAforo', 'obtenerDiasDisponiblesAforo'],
   'citas.ts':    ['crearCitaPublica', 'obtenerSlotsCita', 'obtenerDiasDisponiblesCita'],
   // Excepción de negocio: un usuario de solo-lectura SÍ puede actualizar tasas.
