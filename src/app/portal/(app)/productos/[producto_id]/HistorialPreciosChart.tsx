@@ -38,6 +38,25 @@ function diaDe(iso: string): string {
   return iso.slice(0, 10) // YYYY-MM-DD
 }
 
+interface PuntoSerie { ts: string; precio: number | null; costo: number | null }
+
+// Filtra por moneda, ordena ascendente y rellena los huecos con el último valor
+// conocido (carry forward). Vive a nivel de módulo —fuera del render— para poder
+// arrastrar el acumulador con reasignación sin violar las reglas de inmutabilidad
+// de React (reasignar dentro de un useMemo está prohibido).
+function serieConCarry(historial: HistorialPrecio[], moneda: string): PuntoSerie[] {
+  const items = historial
+    .filter(h => h.moneda === moneda)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  let lastPrecio: number | null = null
+  let lastCosto: number | null = null
+  return items.map(h => {
+    if (h.precio != null) lastPrecio = h.precio
+    if (h.costo != null) lastCosto = h.costo
+    return { ts: h.created_at, precio: lastPrecio, costo: lastCosto }
+  })
+}
+
 interface TooltipPayload { dataKey: string; name: string; value: number; color: string }
 function ChartTooltip({ active, payload, label, moneda }: { active?: boolean; payload?: TooltipPayload[]; label?: string; moneda: string }) {
   if (!active || !payload?.length) return null
@@ -59,20 +78,7 @@ export default function HistorialPreciosChart({ historial, moneda }: { historial
   // La clave del eje X es el timestamp COMPLETO (`ts`), no la fecha formateada: si
   // varios cambios ocurren el mismo día compartirían etiqueta y recharts los
   // colapsaría (mismos datos en cada punto). Con `ts` único cada punto es distinto.
-  const data = useMemo(() => {
-    const items = historial.filter(h => h.moneda === moneda).sort((a, b) => a.created_at.localeCompare(b.created_at))
-    let lastPrecio: number | null = null
-    let lastCosto: number | null = null
-    return items.map(h => {
-      if (h.precio != null) lastPrecio = h.precio
-      if (h.costo != null) lastCosto = h.costo
-      return {
-        ts: h.created_at,
-        precio: lastPrecio,
-        costo: lastCosto,
-      }
-    })
-  }, [historial, moneda])
+  const data = useMemo(() => serieConCarry(historial, moneda), [historial, moneda])
 
   if (data.length < 2) return null // necesita al menos 2 puntos para un gráfico
 

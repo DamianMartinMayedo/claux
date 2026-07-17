@@ -8,7 +8,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { ingestarLote, type LotePayload, type CajaRow } from '@/lib/caja/ingesta'
 import { tieneModulo }      from '@/lib/modulos'
@@ -111,7 +111,7 @@ export async function crearCaja(
 ): Promise<{ ok: boolean; caja_id?: string; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
   if (!nombre?.trim())      return { ok: false, error: 'El nombre de la caja es obligatorio.' }
 
   const db       = createAdminClient()
@@ -188,7 +188,7 @@ export async function guardarConfigCaja(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
   if (!cfg.nombre?.trim())  return { ok: false, error: 'El nombre es obligatorio.' }
 
   const db = createAdminClient()
@@ -211,7 +211,7 @@ export async function guardarConfigCaja(
 export async function regenerarToken(caja_id: string): Promise<{ ok: boolean; token?: string; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const token = generarToken()
   const { error } = await createAdminClient().from('cajas')
@@ -226,7 +226,7 @@ export async function regenerarToken(caja_id: string): Promise<{ ok: boolean; to
 export async function setActivaCaja(caja_id: string, activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient().from('cajas')
     .update({ activa, updated_at: new Date().toISOString() })
@@ -308,7 +308,7 @@ export async function ingestarLoteArchivo(
 ): Promise<{ ok: boolean; resultado?: Awaited<ReturnType<typeof ingestarLote>>; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')

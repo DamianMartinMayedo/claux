@@ -221,3 +221,13 @@ export async function puedeEditarModulo(modulo: string): Promise<boolean> {
   const acceso = await accesoModulosSession(session)
   return acceso.editable.has(modulo)
 }
+
+// Igual que `puedeEditarModulo` pero para recursos COMPARTIDOS por varios módulos
+// (p. ej. terceros = base ∨ inventario): basta con poder editar UNO de ellos. Evita
+// que un cliente solo-Inventario no pueda crear proveedores (ver ficha del tercero).
+export async function puedeEditarAlgunModulo(modulos: string[]): Promise<boolean> {
+  const session = await getPortalSession()
+  if (!session) return false
+  const acceso = await accesoModulosSession(session)
+  return modulos.some(m => acceso.editable.has(m))
+}

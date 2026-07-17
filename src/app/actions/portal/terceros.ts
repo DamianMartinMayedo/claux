@@ -2,7 +2,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession, accesoModulosSession }  from './auth'
+import { getPortalSession, accesoModulosSession, puedeEditarAlgunModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerMonedasActivas, type MonedaOpcion } from './monedas'
 import { mapaTasas, monedaValida, construirConversor } from '@/lib/tasas'
@@ -168,7 +168,7 @@ export async function guardarTercero(
 ): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
   const session = await getPortalSession()
   if (!session)          return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre del tercero es obligatorio.' }
@@ -300,7 +300,7 @@ export async function copiarTerceroAEmpresa(
 ): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_destino)) {
@@ -362,7 +362,7 @@ export async function archivarTercero(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -383,7 +383,7 @@ export async function restaurarTercero(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db

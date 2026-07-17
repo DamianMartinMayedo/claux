@@ -2,7 +2,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import {
   aplicarMovimiento,
@@ -124,7 +124,7 @@ export async function registrarMovimiento(
 ): Promise<{ ok: boolean; error?: string; movimiento_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const tipo        = ((formData.get('tipo')        as string) ?? '').trim() as TipoMovimiento
   const producto_id = ((formData.get('producto_id') as string) ?? '').trim()
@@ -211,7 +211,7 @@ export async function registrarMovimiento(
 export async function reconciliarStock(): Promise<{ ok: boolean; error?: string; productos?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data, error } = await db.rpc('inv_recalcular_stock', { p_client_id: session.client_id })

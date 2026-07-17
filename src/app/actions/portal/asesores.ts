@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { tieneModulo }       from '@/lib/modulos'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 
 // Los asesores solo existen si el cliente tiene Contabilidad (`base`): la única
@@ -66,7 +66,7 @@ export async function guardarAsesor(input: {
 }): Promise<{ ok: boolean; error?: string; asesor?: Asesor }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = input.nombre?.trim()
   const email  = input.email?.trim().toLowerCase()
@@ -114,7 +114,7 @@ export async function guardarAsesor(input: {
 export async function eliminarAsesor(asesor_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   if (!await tieneBase(db, session.client_id)) return { ok: false, error: 'El módulo de Contabilidad no está activo.' }

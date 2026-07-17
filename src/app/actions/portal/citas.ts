@@ -9,7 +9,7 @@ import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sect
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo } from '@/lib/modulos'
 import { type Cierre, type ReglasReserva } from './reservas'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -221,7 +221,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
 export async function guardarServicio(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const servicio_id = (formData.get('servicio_id') as string)?.trim()
   const nombre      = (formData.get('nombre')      as string)?.trim()
@@ -256,7 +256,7 @@ export async function guardarServicio(formData: FormData): Promise<{ ok: boolean
 export async function eliminarServicio(servicio_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -280,7 +280,7 @@ export async function eliminarServicio(servicio_id: string): Promise<{ ok: boole
 export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const recurso_id  = (formData.get('recurso_id')  as string)?.trim()
   const nombre      = (formData.get('nombre')      as string)?.trim()
@@ -339,7 +339,7 @@ export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean;
 export async function eliminarRecurso(recurso_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -364,7 +364,7 @@ export async function eliminarRecurso(recurso_id: string): Promise<{ ok: boolean
 export async function importarPersonalRRHH(): Promise<{ ok: boolean; error?: string; importados?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -403,7 +403,7 @@ export async function importarPersonalRRHH(): Promise<{ ok: boolean; error?: str
 export async function crearCitaManual(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const recurso_id     = (formData.get('recurso_id')     as string)?.trim()
   const servicio_id    = (formData.get('servicio_id')    as string)?.trim()
@@ -451,7 +451,7 @@ export async function crearCitaManual(formData: FormData): Promise<{ ok: boolean
 export async function cambiarEstadoCita(reserva_id: string, nuevoEstado: EstadoReserva): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('bot_config_citas, nombre_empresa').eq('client_id', session.client_id).single()
@@ -636,7 +636,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
 export async function guardarBotConfigCitas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const r = await guardarBotConfigCol(createAdminClient(), session.client_id, 'bot_config_citas', {
     token:                  (formData.get('token')  as string)?.trim() || null,
@@ -652,7 +652,7 @@ export async function guardarBotConfigCitas(formData: FormData): Promise<{ ok: b
 export async function guardarConfirmacionCitas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const r = await guardarConfirmacionCol(createAdminClient(), session.client_id, 'bot_config_citas', activa)
   if (!r.ok) return r
@@ -663,7 +663,7 @@ export async function guardarConfirmacionCitas(activa: boolean): Promise<{ ok: b
 export async function toggleActivoBotCitas(activo: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const r = await toggleActivoBotCol(createAdminClient(), session.client_id, 'bot_config_citas', activo)
   if (!r.ok) return r
@@ -674,7 +674,7 @@ export async function toggleActivoBotCitas(activo: boolean): Promise<{ ok: boole
 export async function toggleIaBotCitas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
@@ -689,7 +689,7 @@ export async function toggleIaBotCitas(activa: boolean): Promise<{ ok: boolean; 
 export async function eliminarBotConfigCitas(): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const r = await eliminarBotConfigCol(createAdminClient(), session.client_id, 'bot_config_citas')
   if (!r.ok) return r
