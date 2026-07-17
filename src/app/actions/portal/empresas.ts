@@ -103,7 +103,7 @@ export async function guardarEmpresa(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string; empresa_id?: string }> {
   const session = await getPortalSession()
-  if (!session || session.rol !== 'admin_empresa') {
+  if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) {
     return { ok: false, error: 'Solo el administrador puede gestionar empresas.' }
   }
 
@@ -231,7 +231,7 @@ export async function subirLogoEmpresa(
   formData: FormData,
 ): Promise<{ ok: boolean; logo_url?: string; error?: string }> {
   const session = await getPortalSession()
-  if (!session || session.rol !== 'admin_empresa') {
+  if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) {
     return { ok: false, error: 'Sin permisos.' }
   }
 

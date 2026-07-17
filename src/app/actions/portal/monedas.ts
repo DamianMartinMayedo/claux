@@ -144,7 +144,7 @@ export async function guardarMoneda(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
-  if (!session || session.rol !== 'admin_empresa') return { ok: false, error: 'Sin permisos.' }
+  if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) return { ok: false, error: 'Sin permisos.' }
 
   const codigoOriginal = ((formData.get('codigo_original') as string) ?? '').trim()
   const catalogo       = ((formData.get('catalogo')        as string) ?? '').trim()
@@ -355,7 +355,7 @@ export async function cambiarMonedaConsolidacion(
   nuevoCodigo: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
-  if (!session || session.rol !== 'admin_empresa') return { ok: false, error: 'Sin permisos.' }
+  if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) return { ok: false, error: 'Sin permisos.' }
 
   const db = createAdminClient()
   const { data: mon } = await db
@@ -551,7 +551,7 @@ export async function eliminarMoneda(
   fusionarEn?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
-  if (!session || session.rol !== 'admin_empresa') return { ok: false, error: 'Sin permisos.' }
+  if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) return { ok: false, error: 'Sin permisos.' }
 
   const db = createAdminClient()
 
