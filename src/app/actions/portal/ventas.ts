@@ -10,6 +10,8 @@ import { monedaValida }      from '@/lib/tasas'
 import {
   calcularTotales,
   formatoNumero,
+  ESTADO_OFERTA_LABEL,
+  ESTADO_FACTURA_LABEL,
   type AjusteInput,
   type AjusteModo,
   type AjusteTipo,
@@ -37,6 +39,7 @@ export interface Oferta {
   notas:          string | null
   notas_internas: string | null
   factura_id:     string | null
+  archivado:      boolean
   created_at:     string
   updated_at:     string
 }
@@ -57,6 +60,7 @@ export interface Factura {
   total:             number
   notas:             string | null
   notas_internas:    string | null
+  archivado:         boolean
   created_at:        string
   updated_at:        string
 }
@@ -1030,4 +1034,256 @@ export async function duplicarFactura(
   revalidatePath('/portal/ventas')
   revalidarFinanzas()
   return { ok: true, factura_id: nueva_id }
+}
+
+// ── Acciones en lote ──────────────────────────────────────────────────────────
+//
+// Reutilizan las acciones individuales (misma validación de gating, dueño,
+// transición y efectos secundarios: aprobar genera factura, etc.). La capa de
+// lote solo decide la ELEGIBILIDAD por estado — aplica a las válidas y reporta
+// las omitidas con su número y motivo — y, en duplicar, fuerza el orden
+// SECUENCIAL para que el correlativo (read-modify-write, no atómico) no colisione.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { numero: string; motivo: string }[]
+  errores:  { numero: string; error: string }[]
+  error?:   string   // fallo global (sesión / permiso / destino no válido)
+}
+
+// Estados desde los que es válido cada estado destino en lote.
+const DESDE_OFERTA: Record<EstadoOferta, EstadoOferta[]> = {
+  BORRADOR:  [],                        // no es destino de lote
+  ENVIADA:   ['BORRADOR'],
+  APROBADA:  ['BORRADOR', 'ENVIADA'],
+  RECHAZADA: ['BORRADOR', 'ENVIADA'],
+  CADUCADA:  ['BORRADOR', 'ENVIADA'],
+}
+const DESDE_FACTURA: Record<EstadoFactura, EstadoFactura[]> = {
+  BORRADOR: [],
+  EMITIDA:  ['BORRADOR'],
+  COBRADA:  [],                         // cobrar va por registrarPagoDoc
+  ANULADA:  ['BORRADOR', 'EMITIDA'],
+}
+const OFERTA_ELIMINABLE:  EstadoOferta[]  = ['BORRADOR', 'RECHAZADA', 'CADUCADA']
+const FACTURA_ELIMINABLE: EstadoFactura[] = ['BORRADOR']
+
+function loteVacio(error?: string): ResultadoLote {
+  return { hechas: 0, omitidas: [], errores: [], error }
+}
+
+async function guardaLote(): Promise<{ session: NonNullable<Awaited<ReturnType<typeof getPortalSession>>> } | { error: string }> {
+  const session = await getPortalSession()
+  if (!session) return { error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('base'))) return { error: 'No tienes permiso para editar en este módulo.' }
+  return { session }
+}
+
+// ── Cambiar estado en lote ────────────────────────────────────────────────────
+
+export async function cambiarEstadoOfertasEnLote(
+  ids: string[], nuevoEstado: EstadoOferta,
+): Promise<ResultadoLote> {
+  const g = await guardaLote()
+  if ('error' in g) return loteVacio(g.error)
+  const validos = DESDE_OFERTA[nuevoEstado]
+  if (!validos.length) return loteVacio('Estado destino no válido para lote.')
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('ofertas')
+    .select('oferta_id, numero, estado')
+    .eq('client_id', g.session.client_id).in('oferta_id', ids)
+
+  const res = loteVacio()
+  for (const d of (docs ?? []) as { oferta_id: string; numero: string; estado: EstadoOferta }[]) {
+    if (d.estado === nuevoEstado) { res.omitidas.push({ numero: d.numero, motivo: 'ya estaba en ese estado' }); continue }
+    if (!validos.includes(d.estado)) {
+      res.omitidas.push({ numero: d.numero, motivo: `no se puede desde ${ESTADO_OFERTA_LABEL[d.estado]}` }); continue
+    }
+    const r = await cambiarEstadoOferta(d.oferta_id, nuevoEstado)
+    if (r.ok) res.hechas++
+    else res.errores.push({ numero: d.numero, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/ventas')
+  return res
+}
+
+export async function cambiarEstadoFacturasEnLote(
+  ids: string[], nuevoEstado: EstadoFactura,
+): Promise<ResultadoLote> {
+  const g = await guardaLote()
+  if ('error' in g) return loteVacio(g.error)
+  const validos = DESDE_FACTURA[nuevoEstado]
+  if (!validos.length) return loteVacio('Estado destino no válido para lote.')
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('facturas')
+    .select('factura_id, numero, estado')
+    .eq('client_id', g.session.client_id).in('factura_id', ids)
+
+  const res = loteVacio()
+  for (const d of (docs ?? []) as { factura_id: string; numero: string; estado: EstadoFactura }[]) {
+    if (d.estado === nuevoEstado) { res.omitidas.push({ numero: d.numero, motivo: 'ya estaba en ese estado' }); continue }
+    if (!validos.includes(d.estado)) {
+      res.omitidas.push({ numero: d.numero, motivo: `no se puede desde ${ESTADO_FACTURA_LABEL[d.estado]}` }); continue
+    }
+    const r = await cambiarEstadoFactura(d.factura_id, nuevoEstado)
+    if (r.ok) res.hechas++
+    else res.errores.push({ numero: d.numero, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/ventas')
+  revalidarFinanzas()
+  return res
+}
+
+// ── Duplicar en lote (SECUENCIAL: correlativos sin colisión) ──────────────────
+
+export async function duplicarOfertasEnLote(
+  ids: string[],
+): Promise<ResultadoLote & { ids: string[] }> {
+  const g = await guardaLote()
+  if ('error' in g) return { ...loteVacio(g.error), ids: [] }
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('ofertas')
+    .select('oferta_id, numero').eq('client_id', g.session.client_id).in('oferta_id', ids)
+  const numeroDe = new Map((docs ?? []).map((d: { oferta_id: string; numero: string }) => [d.oferta_id, d.numero]))
+
+  const res: ResultadoLote & { ids: string[] } = { ...loteVacio(), ids: [] }
+  for (const id of ids) {
+    if (!numeroDe.has(id)) continue
+    const r = await duplicarOferta(id)   // secuencial a propósito
+    if (r.ok && r.oferta_id) { res.hechas++; res.ids.push(r.oferta_id) }
+    else res.errores.push({ numero: numeroDe.get(id) ?? id, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/ventas')
+  return res
+}
+
+export async function duplicarFacturasEnLote(
+  ids: string[],
+): Promise<ResultadoLote & { ids: string[] }> {
+  const g = await guardaLote()
+  if ('error' in g) return { ...loteVacio(g.error), ids: [] }
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('facturas')
+    .select('factura_id, numero').eq('client_id', g.session.client_id).in('factura_id', ids)
+  const numeroDe = new Map((docs ?? []).map((d: { factura_id: string; numero: string }) => [d.factura_id, d.numero]))
+
+  const res: ResultadoLote & { ids: string[] } = { ...loteVacio(), ids: [] }
+  for (const id of ids) {
+    if (!numeroDe.has(id)) continue
+    const r = await duplicarFactura(id)  // secuencial a propósito
+    if (r.ok && r.factura_id) { res.hechas++; res.ids.push(r.factura_id) }
+    else res.errores.push({ numero: numeroDe.get(id) ?? id, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/ventas')
+  return res
+}
+
+// ── Archivar / desarchivar en lote (soft, cualquier estado) ───────────────────
+
+// Candado inline (no vía helper) en las que ESCRIBEN directo, para que el
+// audit-gating lo vea: puedeEditarModulo('base') es el módulo de ventas.
+export async function archivarOfertasEnLote(
+  ids: string[], archivar: boolean,
+): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data, error } = await db.from('ofertas')
+    .update({ archivado: archivar, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('oferta_id', ids)
+    .select('oferta_id')
+  if (error) return loteVacio(error.message)
+  revalidatePath('/portal/ventas')
+  return { ...loteVacio(), hechas: (data ?? []).length }
+}
+
+export async function archivarFacturasEnLote(
+  ids: string[], archivar: boolean,
+): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data, error } = await db.from('facturas')
+    .update({ archivado: archivar, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('factura_id', ids)
+    .select('factura_id')
+  if (error) return loteVacio(error.message)
+  revalidatePath('/portal/ventas')
+  return { ...loteVacio(), hechas: (data ?? []).length }
+}
+
+// ── Eliminar en lote (borrado real, con guardas de estado) ────────────────────
+
+export async function eliminarOfertasEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('ofertas')
+    .select('oferta_id, numero, estado, factura_id')
+    .eq('client_id', session.client_id).in('oferta_id', ids)
+
+  const res = loteVacio()
+  const borrables: string[] = []
+  for (const d of (docs ?? []) as { oferta_id: string; numero: string; estado: EstadoOferta; factura_id: string | null }[]) {
+    if (d.factura_id) { res.omitidas.push({ numero: d.numero, motivo: 'tiene factura asociada' }); continue }
+    if (!OFERTA_ELIMINABLE.includes(d.estado)) {
+      res.omitidas.push({ numero: d.numero, motivo: `no se elimina en estado ${ESTADO_OFERTA_LABEL[d.estado]}` }); continue
+    }
+    borrables.push(d.oferta_id)
+  }
+  if (borrables.length) {
+    await db.from('documento_lineas').delete().eq('documento_tipo', 'OFERTA').in('documento_id', borrables)
+    await db.from('documento_ajustes').delete().eq('documento_tipo', 'OFERTA').in('documento_id', borrables)
+    const { error } = await db.from('ofertas').delete()
+      .eq('client_id', session.client_id).in('oferta_id', borrables)
+    if (error) res.errores.push({ numero: '—', error: error.message })
+    else res.hechas = borrables.length
+  }
+  revalidatePath('/portal/ventas')
+  return res
+}
+
+export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('facturas')
+    .select('factura_id, numero, estado')
+    .eq('client_id', session.client_id).in('factura_id', ids)
+
+  const res = loteVacio()
+  const borrables: string[] = []
+  for (const d of (docs ?? []) as { factura_id: string; numero: string; estado: EstadoFactura }[]) {
+    if (!FACTURA_ELIMINABLE.includes(d.estado)) {
+      res.omitidas.push({ numero: d.numero, motivo: `no se elimina en estado ${ESTADO_FACTURA_LABEL[d.estado]} (anúlala)` }); continue
+    }
+    borrables.push(d.factura_id)
+  }
+  if (borrables.length) {
+    // Una factura BORRADOR puede venir de una oferta aprobada: soltar el enlace
+    // para no dejar la oferta apuntando a una factura inexistente.
+    await db.from('ofertas').update({ factura_id: null })
+      .eq('client_id', session.client_id).in('factura_id', borrables)
+    await db.from('documento_lineas').delete().eq('documento_tipo', 'FACTURA').in('documento_id', borrables)
+    await db.from('documento_ajustes').delete().eq('documento_tipo', 'FACTURA').in('documento_id', borrables)
+    const { error } = await db.from('facturas').delete()
+      .eq('client_id', session.client_id).in('factura_id', borrables)
+    if (error) res.errores.push({ numero: '—', error: error.message })
+    else res.hechas = borrables.length
+  }
+  revalidatePath('/portal/ventas')
+  revalidarFinanzas()
+  return res
 }

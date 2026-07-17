@@ -122,6 +122,14 @@ textarea.input { resize: vertical; min-height: 80px; }
 .table th.col-actions, .table td.col-actions {
   width: 1%; white-space: nowrap; text-align: right;
 }
+/* Columna de checkbox para selección en lote (misma clase en <th> y <td>) */
+.table th.col-check, .table td.col-check {
+  width: 1%; white-space: nowrap; text-align: center; padding-right: 0;
+}
+.row-check {
+  width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--color-primary);
+  vertical-align: middle;
+}
 .table td.cell-truncate {
   max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -384,6 +392,55 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 @media (prefers-reduced-motion: reduce) {
   .toast-alert { animation: none; }
   .toast-exit  { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════
+   BULK BAR — barra flotante de acciones en lote (reutilizable)
+   ═══════════════════════════════════════════════════ */
+.bulk-bar {
+  position: fixed; left: 0; right: 0; bottom: var(--space-5);
+  z-index: 500; display: flex; justify-content: center;
+  padding: 0 var(--space-4); pointer-events: none;
+  animation: bulk-bar-in var(--transition);
+}
+.bulk-bar-inner {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: var(--space-5);
+  max-width: 100%; flex-wrap: wrap; justify-content: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+}
+.bulk-bar-count {
+  display: flex; align-items: center; gap: var(--space-3);
+  font-size: var(--text-sm); color: var(--color-text); white-space: nowrap;
+}
+.bulk-bar-count strong { color: var(--color-primary-text); }
+.bulk-bar-clear {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  background: none; border: none; cursor: pointer;
+  color: var(--color-text-muted); font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-md);
+  transition: background var(--transition), color var(--transition);
+}
+.bulk-bar-clear:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.bulk-bar-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Toggle inline «Ver archivadas / mostrar X» junto a los filtros (reutilizable) */
+.filtro-toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-sm); color: var(--color-text-muted);
+  cursor: pointer; white-space: nowrap; user-select: none;
+}
+
+@keyframes bulk-bar-in {
+  from { opacity: 0; transform: translateY(var(--space-4)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bulk-bar { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════

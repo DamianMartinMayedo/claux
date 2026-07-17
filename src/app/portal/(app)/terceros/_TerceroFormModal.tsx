@@ -48,9 +48,9 @@ export function ViaFields({ tipo, value, onChange, monedas }: {
   const get = (field: keyof ViaPago): string =>
     ((value as unknown) as Record<string, string>)[field] ?? ''
 
-  const inp = (field: keyof ViaPago, label: string, ph = '', span = 3, type = 'text', req = false) => (
+  const inp = (field: keyof ViaPago, label: string, ph = '', span = 3, type = 'text') => (
     <div className={`input-group ter-col-span-${span}`} key={String(field)}>
-      <label>{label}{req && <span className="required"> *</span>}</label>
+      <label>{label}</label>
       <input className="input" type={type} value={get(field)}
         onChange={e => set(field, e.target.value)} placeholder={ph} />
     </div>
@@ -77,8 +77,8 @@ export function ViaFields({ tipo, value, onChange, monedas }: {
   if (tipo === 'Transferencia bancaria') {
     return (
       <div className="via-pago-fields">
-        {inp('titular', 'Titular',            'Ej: Yusniel Pérez Gómez',   3, 'text', true)}
-        {inp('cuenta',  'Cuenta o tarjeta',   'Ej: 9227 0699 1234 5678',   3, 'text', true)}
+        {inp('titular', 'Titular',            'Ej: Yusniel Pérez Gómez',   3)}
+        {inp('cuenta',  'Cuenta o tarjeta',   'Ej: 9227 0699 1234 5678',   3)}
         {inp('banco',   'Banco',              'Ej: BANDEC, BPA, Metropolitano', 4)}
         {monedaSel()}
       </div>
@@ -88,7 +88,7 @@ export function ViaFields({ tipo, value, onChange, monedas }: {
     return (
       <div className="via-pago-fields">
         {inp('titular',  'Titular',          'Ej: Yusniel Pérez Gómez', 4)}
-        {inp('telefono', 'Teléfono',         'Ej: +53 5 123 4567',      3, 'tel', true)}
+        {inp('telefono', 'Teléfono',         'Ej: +53 5 123 4567',      3, 'tel')}
         {inp('cuenta',   'Tarjeta asociada', 'Ej: 9227 0699 1234 5678', 3)}
         {monedaSel()}
       </div>
@@ -127,8 +127,8 @@ export function ViaFields({ tipo, value, onChange, monedas }: {
   if (tipo === 'Transferencia internacional') {
     return (
       <div className="via-pago-fields">
-        {inp('titular',    'Titular',              'Ej: John Doe LLC',          3, 'text', true)}
-        {inp('cuenta',     'No. de cuenta / IBAN', 'Ej: 00123456789',           3, 'text', true)}
+        {inp('titular',    'Titular',              'Ej: John Doe LLC',          3)}
+        {inp('cuenta',     'No. de cuenta / IBAN', 'Ej: 00123456789',           3)}
         {monedaSel()}
         {inp('swift',      'SWIFT / BIC',          'Ej: ABCDUS33XXX',           2)}
         {inp('routing',    'Routing / ABA',        'Ej: 021000021',             2)}
