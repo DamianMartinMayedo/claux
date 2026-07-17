@@ -11,6 +11,7 @@ import {
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
+import Tabs from '@/components/Tabs'
 import { Info, Key, Pencil, Plus, User, X } from 'lucide-react'
 
 // Módulos/funcionalidades que el tenant tiene contratados (para repartir por usuario).
@@ -358,14 +359,15 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
       </div>
 
       {/* Tabs */}
-      <div className="usr-tabs">
-        <button className={`usr-tab${tab === 'usuarios' ? ' active' : ''}`} onClick={() => setTab('usuarios')}>
-          Usuarios ({usuarios.length})
-        </button>
-        <button className={`usr-tab${tab === 'roles' ? ' active' : ''}`} onClick={() => setTab('roles')}>
-          Roles y permisos
-        </button>
-      </div>
+      <Tabs<TabKind>
+        ariaLabel="Secciones de usuarios"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'usuarios', label: 'Usuarios', count: usuarios.length },
+          { id: 'roles',    label: 'Roles y permisos' },
+        ]}
+      />
 
       {/* ── Tab Usuarios ── */}
       {tab === 'usuarios' && (

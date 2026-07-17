@@ -28,6 +28,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
+import Tabs                            from '@/components/Tabs'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -368,20 +369,6 @@ function ConfirmEliminar({
   )
 }
 
-// ── Tab ─────────────────────────────────────────────────────────────────────────
-
-function Tab({ active, onClick, icon, label, count }: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count: number
-}) {
-  return (
-    <button onClick={onClick} className={`prd-tab${active ? ' active' : ''}`}>
-      {icon}
-      {label}
-      <span className="prd-tab-count">{count}</span>
-    </button>
-  )
-}
-
 // ── Modal: crear / editar categoría de gasto ─────────────────────────────────────
 
 function CategoriaModal({ categoria, onClose, onSaved }: {
@@ -585,10 +572,15 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       </div>
 
       {/* Tabs */}
-      <div className="prd-tabs">
-        <Tab active={tab === 'gastos'}     onClick={() => setTab('gastos')}     icon={<Receipt size={15} strokeWidth={2} />} label="Gastos y cobros" count={data.registros.length} />
-        <Tab active={tab === 'categorias'} onClick={() => setTab('categorias')} icon={<Tag size={15} strokeWidth={2} />}     label="Categorías"     count={categoriasActivas.length} />
-      </div>
+      <Tabs
+        ariaLabel="Secciones de gastos y cobros"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'gastos',     label: 'Gastos y cobros', count: data.registros.length },
+          { id: 'categorias', label: 'Categorías',      count: categoriasActivas.length },
+        ]}
+      />
 
       {tab === 'gastos' && (<>
 

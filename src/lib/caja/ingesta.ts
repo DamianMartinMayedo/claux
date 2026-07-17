@@ -82,10 +82,12 @@ export async function construirSeed(db: Db, caja: CajaRow) {
   const tieneInv = tieneModulo(cli?.modulos_activos, 'inventario')
 
   const [prodRes, monRes, tasaRes] = await Promise.all([
+    // Solo productos FÍSICOS: la caja es para venta física. Los servicios se
+    // deciden más adelante; de momento no bajan al dispositivo (tipo NOT NULL).
     tieneInv
       ? db.from('products')
           .select('producto_id, codigo, nombre, precios, unidad')
-          .eq('client_id', caja.client_id).eq('estado', 'ACTIVO').order('nombre')
+          .eq('client_id', caja.client_id).eq('estado', 'ACTIVO').eq('tipo', 'PRODUCTO').order('nombre')
       : Promise.resolve({ data: [] }),
     db.from('monedas').select('codigo, simbolo').eq('client_id', caja.client_id).eq('activa', true).order('codigo'),
     db.from('tasas_cambio')

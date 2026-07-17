@@ -14,6 +14,7 @@ import { ProductoFormModal } from '../_ProductoFormModal'
 import { StockAjusteModal } from '../_StockAjusteModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
+import Tabs, { type TabItem } from '@/components/Tabs'
 import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 
 // ── Config de movimientos ───────────────────────────────────────────────────────
@@ -47,24 +48,6 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-ES', {
     day: '2-digit', month: 'short', year: 'numeric',
   })
-}
-
-// ── Componente Tab ────────────────────────────────────────────────────────────
-
-function Tab({ active, onClick, label, badge }: {
-  active:  boolean
-  onClick: () => void
-  label:   string
-  badge?:  string | number
-}) {
-  return (
-    <button onClick={onClick} className={`detail-tab${active ? ' active' : ''}`}>
-      {label}
-      {badge !== undefined && (
-        <span className="detail-tab-count">{badge}</span>
-      )}
-    </button>
-  )
 }
 
 // ── Campos info ───────────────────────────────────────────────────────────────
@@ -405,6 +388,13 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
   const { producto } = data
   const esServicio   = producto.tipo === 'SERVICIO'
 
+  const tabs: TabItem<TabId>[] = [
+    { id: 'info',    label: 'Información' },
+    { id: 'precios', label: 'Precios y costos' },
+    ...(!esServicio ? [{ id: 'movimientos' as const, label: 'Movimientos' }] : []),
+    { id: 'historial', label: 'Historial de precios' },
+  ]
+
   function handleSaved() {
     setShowStock(false)
     setStatusMsg('Stock actualizado')
@@ -484,14 +474,8 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
       )}
 
       {/* Tabs */}
-      <div className="detail-tabs">
-        <Tab active={tab === 'info'}        onClick={() => setTab('info')}        label="Información" />
-        <Tab active={tab === 'precios'}     onClick={() => setTab('precios')}     label="Precios y costos" />
-        {!esServicio && (
-          <Tab active={tab === 'movimientos'} onClick={() => setTab('movimientos')} label="Movimientos" />
-        )}
-        <Tab active={tab === 'historial'}   onClick={() => setTab('historial')}   label="Historial de precios" />
-      </div>
+      <Tabs ariaLabel="Secciones del producto" active={tab} onChange={setTab} tabs={tabs} />
+
 
       {/* Contenido del tab */}
       {tab === 'info'        && <TabInfo     data={data} />}

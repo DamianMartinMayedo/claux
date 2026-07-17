@@ -723,22 +723,7 @@
    MÓDULO USUARIOS
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Tabs */
-.usr-tabs {
-  display: flex; gap: 0;
-  border-bottom: 2px solid var(--color-border);
-  margin-bottom: var(--space-5);
-}
-.usr-tab {
-  padding: var(--space-3) var(--space-5);
-  font-size: var(--text-sm); font-weight: 500;
-  color: var(--color-text-muted);
-  background: none; border: none; cursor: pointer;
-  border-bottom: 2px solid transparent; margin-bottom: -2px;
-  transition: all var(--transition);
-}
-.usr-tab:hover { color: var(--color-text); }
-.usr-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); font-weight: 600; }
+/* Pestañas → componente canónico <Tabs> (.tabs/.tab). */
 
 /* Avatar de usuario */
 .usr-avatar {
@@ -1182,33 +1167,7 @@
    MÓDULO PRODUCTOS
 ══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Tabs ─────────────────────────────────────────────────────────────────── */
-.prd-tabs {
-  display: flex; gap: 0;
-  border-bottom: 2px solid var(--color-border);
-  margin-bottom: var(--space-4);
-  overflow-x: auto; scrollbar-width: none;
-}
-.prd-tabs::-webkit-scrollbar { display: none; }
-.prd-tab {
-  flex-shrink: 0;
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  border: none; background: transparent;
-  font-size: var(--text-sm); font-weight: 600;
-  color: var(--color-text-muted); cursor: pointer;
-  border-bottom: 2px solid transparent; margin-bottom: -2px;
-  white-space: nowrap;
-  transition: color var(--transition), border-color var(--transition);
-}
-.prd-tab:hover   { color: var(--color-text); }
-.prd-tab.active  { color: var(--color-primary); border-bottom-color: var(--color-primary); }
-.prd-tab-count {
-  font-size: var(--text-xs); font-weight: 700; line-height: 18px;
-  background: var(--color-surface-2); color: var(--color-text-muted);
-  border-radius: var(--radius-full); padding: 1px 7px;
-}
-.prd-tab.active .prd-tab-count { background: var(--color-primary); color: #fff; }
+/* Pestañas → componente canónico <Tabs> (.tabs/.tab). */
 
 /* ── Tipo selector ────────────────────────────────────────────────────────── */
 .prd-tipo-selector {
@@ -1449,20 +1408,9 @@
 .tes-section-title { font-size: var(--text-lg); font-weight: 700; color: var(--color-text); }
 .tes-mov-titulo { margin-bottom: var(--space-3); }
 
-/* Tarjetas de cuenta */
-.tes-cuentas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
-.tes-cuenta-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
-.tes-cuenta-archivada { opacity: 0.6; }
-.tes-cuenta-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
-.tes-cuenta-nombre { font-weight: 700; font-size: var(--text-base); color: var(--color-text); margin-bottom: var(--space-1); }
-.tes-cuenta-empresa { font-size: var(--text-xs); color: var(--color-text-muted); margin-left: var(--space-2); }
-.tes-cuenta-saldo { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
-.tes-cuenta-saldo-mon { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
-.tes-cuenta-meta { display: flex; gap: var(--space-3); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-.tes-meta-in { color: var(--color-success); }
-.tes-meta-out { color: var(--color-error); }
-.tes-meta-num { color: var(--color-text-muted); margin-left: auto; }
-.tes-cuenta-mov-btn { align-self: flex-start; }
+/* Fila de cuenta archivada en la tabla: se atenúan las celdas de datos, no las
+   acciones ni el checkbox de selección. */
+.tes-row-archivada td:not(.col-actions):not(.col-check) { opacity: 0.6; }
 
 /* Toggle tipo de movimiento (ingreso / egreso) */
 .tes-tipo-toggle { display: flex; gap: var(--space-2); }
@@ -1618,7 +1566,6 @@
 .crear-tercero-link:hover { text-decoration: underline; }
 
 /* ── RRHH (Personal y nómina) ────────────────────────────────────────────── */
-.rrhh-tabs { margin-bottom: var(--space-4); overflow-x: auto; }
 /* Bloque "PDF actual" en el modal de editar contrato */
 .con-pdf-actual {
   display: flex; flex-direction: column; gap: 2px;
@@ -1724,27 +1671,7 @@
 .res-dias-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .res-dias-item { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); cursor: pointer; }
 
-/* ── Reservas · Tabs ── */
-.res-tabs {
-  display: flex; gap: 0;
-  border-bottom: 2px solid var(--color-border);
-  margin-bottom: var(--space-4);
-  overflow-x: auto; scrollbar-width: none;
-}
-.res-tabs::-webkit-scrollbar { display: none; }
-.res-tab {
-  flex-shrink: 0;
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  border: none; background: transparent;
-  font-size: var(--text-sm); font-weight: 600;
-  color: var(--color-text-muted); cursor: pointer;
-  border-bottom: 2px solid transparent; margin-bottom: -2px;
-  white-space: nowrap;
-  transition: color var(--transition), border-color var(--transition);
-}
-.res-tab:hover   { color: var(--color-text); }
-.res-tab.active  { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+/* ── Reservas · Tabs → componente canónico <Tabs> (.tabs/.tab) ── */
 
 /* ── Reservas · Switch con texto ── */
 .res-switch-wrap { display: flex; align-items: center; gap: var(--space-3); }
@@ -2330,46 +2257,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .cat-empty svg { opacity: 0.2; }
 
-/* Lista de ítems (filas): miniatura opcional + nombre/descripción + precio +
-   menú de acciones. Sigue el patrón de .emp-card (tokens del design system). */
-.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-5); }
-.cat-card {
-  display: flex; flex-direction: column;
-  background: var(--color-surface); border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); overflow: hidden;
-  transition: box-shadow var(--transition), transform var(--transition);
-}
-/* Sin transform en hover: un transform en el ancestro convierte a .cat-card en
-   bloque contenedor de los position:fixed hijos (el menú ⋯ de RowActions), lo
-   que descolocaba el menú. El realce se hace solo con sombra/borde. */
-.cat-card:hover { box-shadow: var(--shadow-md); border-color: var(--color-text-muted); }
-.cat-card-link { cursor: pointer; text-align: left; color: inherit; font: inherit; }
-/* "Agotado": se atenúan foto y textos, NUNCA el contenedor (opacity en el
-   contenedor heredaría al menú ⋯ fixed y crearía un stacking context que lo
-   deja transparente y por detrás de otras tarjetas). */
-.cat-card-agotado .cat-card-photo,
-.cat-card-agotado .cat-card-nombre,
-.cat-card-agotado .cat-card-desc,
-.cat-card-agotado .cat-card-precio,
-.cat-card-agotado .cat-card-stock { opacity: 0.5; }
-.cat-card-photo {
-  position: relative; aspect-ratio: 4 / 3; background: var(--color-surface-2);
-  display: flex; align-items: center; justify-content: center;
-}
-.cat-card-photo-img { position: absolute; inset: 0; width: 100%; height: 100%; background-image: var(--preview); background-size: cover; background-position: center; }
-.cat-card-photo-empty { color: var(--color-text-faint); opacity: 0.5; }
-.cat-card-badge { position: absolute; top: var(--space-3); left: var(--space-3); }
-.cat-card-badge-desc { position: absolute; top: var(--space-3); right: var(--space-3); }
-.cat-card-body { padding: var(--space-4) var(--space-5) var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
-.cat-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
-.cat-card-nombre { font-size: var(--text-base); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-.cat-card-desc {
-  font-size: var(--text-sm); color: var(--color-text-muted); margin: 0;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.cat-card-precio { display: block; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: var(--space-2); }
-.cat-card-stock { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
-/* Precio anterior tachado cuando hay descuento (tarjeta, fila y detalle). */
+/* Precio anterior tachado cuando hay descuento (fila y detalle). */
 .cat-precio-antes { text-decoration: line-through; color: var(--color-text-faint); font-weight: 500; margin-right: var(--space-2); }
 /* Fila "agotada" en la tabla: se atenúan las celdas de datos, no las acciones. */
 .cat-row-agotado td:not(.col-actions) { opacity: 0.5; }
@@ -2382,20 +2270,9 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .cat-page-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .cat-cat-sin { color: var(--color-text-faint); font-style: italic; }
 
-/* Barra de herramientas de la pestaña Ítems: filtros a la izquierda, toggle de
-   vista a la derecha. */
-.cat-items-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5); }
+/* Barra de herramientas de la pestaña Ítems: filtros de categoría. */
+.cat-items-toolbar { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5); }
 .cat-items-toolbar .cat-filtros { margin-bottom: 0; }
-
-/* Toggle segmentado tarjetas/lista. */
-.cat-viewtoggle { display: inline-flex; gap: 2px; padding: 2px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
-.cat-viewtoggle-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 30px; border: none; background: transparent; border-radius: calc(var(--radius-md) - 3px);
-  color: var(--color-text-muted); cursor: pointer; transition: all var(--transition);
-}
-.cat-viewtoggle-btn:hover  { color: var(--color-text); }
-.cat-viewtoggle-btn.active { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-sm); }
 
 /* Miniatura dentro de la tabla de ítems (vista lista del portal). Columna
    estrecha y ceñida; el icono/placeholder queda centrado. */
@@ -2407,13 +2284,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .cat-row-thumb-img { position: absolute; inset: 0; background-image: var(--preview); background-size: cover; background-position: center; }
 
-/* Secciones por categoría en la pestaña Ítems (rejilla y tabla). */
-.cat-cat-section { margin-bottom: var(--space-8); }
-.cat-cat-section-title {
-  display: flex; align-items: center; gap: var(--space-3);
-  font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700;
-  margin-bottom: var(--space-4);
-}
+/* Cabecera de categoría dentro de la tabla de ítems. */
 .cat-cat-header-row td {
   background: var(--color-surface-2);
   font-family: var(--font-display); font-size: var(--text-xs); font-weight: 700;
@@ -2446,24 +2317,31 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .cat-qr-preview img { border-radius: var(--radius-md); border: 1px solid var(--color-border); }
 
 /* ── Caja (POS offline) ─────────────────────────────────────────── */
-.caja-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--color-divider); margin-bottom: var(--space-4); }
-.caja-tab {
-  padding: var(--space-2) var(--space-4);
-  background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--color-text-muted); font-family: var(--font-body);
-  font-size: var(--text-sm); font-weight: 500; cursor: pointer; transition: var(--transition);
-}
-.caja-tab:hover { color: var(--color-text); }
-.caja-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
-
+/* Pestañas → componente canónico <Tabs> (.tabs/.tab). */
 .caja-install { display: flex; flex-direction: column; gap: var(--space-3); }
 .caja-link-row { display: flex; gap: var(--space-2); align-items: center; }
 .caja-link-field { flex: 1; font-size: var(--text-xs); overflow-x: auto; }
 .caja-install-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
+/* Descripción bajo un título de sección: legible y separada del título y del contenido. */
+.caja-section-sub {
+  margin: var(--space-2) 0 var(--space-4);
+  font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
+}
+
+/* Card «Cómo instalar la caja»: pasos legibles para el dueño, no un hint diminuto. */
+.caja-entrega-pasos {
+  margin: var(--space-3) 0 0; padding-left: var(--space-5);
+  list-style: decimal; color: var(--color-text);
+  font-size: var(--text-sm); line-height: 1.55;
+}
+.caja-entrega-pasos li { margin-top: var(--space-2); }
+.caja-entrega-pasos li:first-child { margin-top: 0; }
+.caja-entrega-pasos li::marker { color: var(--color-text-muted); font-weight: 600; }
 
 .caja-moneda-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .caja-moneda-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .caja-moneda-check { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 500; }
+.caja-moneda-sin-cuenta { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
 .caja-moneda-row select { flex: 1; min-width: 0; }
 
 .caja-config-section { margin-bottom: var(--space-6); }

@@ -18,6 +18,7 @@ import {
 import { TerceroFormModal, ViaBadge } from '../_TerceroFormModal'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { RowActions } from '@/components/portal/RowActions'
+import Tabs, { type TabItem } from '@/components/Tabs'
 import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -73,24 +74,6 @@ function Campo({ label, value }: { label: string; value?: React.ReactNode }) {
       <div className="det-label">{label}</div>
       <div className="det-value">{value ?? <span className="text-faint">—</span>}</div>
     </div>
-  )
-}
-
-// ── Tab ───────────────────────────────────────────────────────────────────────
-
-function Tab({ active, onClick, label, badge }: {
-  active:  boolean
-  onClick: () => void
-  label:   string
-  badge?:  number
-}) {
-  return (
-    <button onClick={onClick} className={`detail-tab${active ? ' active' : ''}`}>
-      {label}
-      {badge !== undefined && (
-        <span className="detail-tab-count">{badge}</span>
-      )}
-    </button>
   )
 }
 
@@ -287,9 +270,7 @@ function TabProductos({ productos }: { productos: TerceroProducto[] }) {
                     </span>
                   </td>
                   <td className="col-actions">
-                    <Link href={`/portal/productos/${p.producto_id}`} className="ter-action-btn" title="Ver producto" aria-label={`Ver ${p.nombre}`}>
-                      <FileText size={15} strokeWidth={2} />
-                    </Link>
+                    <Link href={`/portal/productos/${p.producto_id}`} className="link-primary">Ver</Link>
                   </td>
                 </tr>
               ))}
@@ -356,9 +337,7 @@ function TabCuentasPorPagar({ cxp }: { cxp: TerceroCxP }) {
                       {t ? <span className={`badge ${t.cls}`}>{t.label}</span> : <span className="text-faint">—</span>}
                     </td>
                     <td className="col-actions">
-                      <Link href="/portal/cxp" className="ter-action-btn" title="Ir a Cuentas por pagar" aria-label="Ir a Cuentas por pagar">
-                        <CreditCard size={15} strokeWidth={2} />
-                      </Link>
+                      <Link href="/portal/cxp" className="link-primary">Ver</Link>
                     </td>
                   </tr>
                 )
@@ -547,6 +526,13 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   // CxP), y un cliente en solo-Inventario tampoco (no hay ventas sin base).
   const verHistorial = (esCliente && data.tieneBase) || (esProveedor && data.tieneInventario)
 
+  const tabs: TabItem<TabId>[] = [
+    { id: 'datos', label: 'Datos' },
+    ...(verProductos ? [{ id: 'productos' as const, label: 'Productos', count: data.productos_count }] : []),
+    ...(verCxP ? [{ id: 'cp' as const, label: 'Cuentas por pagar' }] : []),
+    ...(verHistorial ? [{ id: 'historial' as const, label: 'Historial' }] : []),
+  ]
+
   return (
     <div className="view-container">
 
@@ -607,18 +593,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
       )}
 
       {/* Tabs */}
-      <div className="detail-tabs">
-        <Tab active={tab === 'datos'}    onClick={() => setTab('datos')}    label="Datos" />
-        {verProductos && (
-          <Tab active={tab === 'productos'} onClick={() => setTab('productos')} label="Productos" badge={data.productos_count} />
-        )}
-        {verCxP && (
-          <Tab active={tab === 'cp'}      onClick={() => setTab('cp')}      label="Cuentas por pagar" />
-        )}
-        {verHistorial && (
-          <Tab active={tab === 'historial'} onClick={() => setTab('historial')} label="Historial" />
-        )}
-      </div>
+      <Tabs ariaLabel="Secciones del contacto" active={tab} onChange={setTab} tabs={tabs} />
 
       {/* Contenido */}
       {tab === 'datos'     && <TabDatos    data={data} />}

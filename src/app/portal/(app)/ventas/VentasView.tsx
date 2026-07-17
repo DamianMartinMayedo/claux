@@ -40,6 +40,7 @@ import { ConfirmDialog }               from '@/components/portal/Dialog'
 import BulkBar                         from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
+import Tabs                            from '@/components/Tabs'
 
 interface Props { data: VentasResumenData }
 
@@ -175,22 +176,15 @@ export default function VentasView({ data }: Props) {
       ) : null}
 
       {/* ── Tabs ── */}
-      <div className="ven-tabs">
-        <button
-          className={`ven-tab${tab === 'ofertas' ? ' active' : ''}`}
-          onClick={() => setTab('ofertas')}
-        >
-          Ofertas
-          <span className="ven-tab-count">{conteoOfertas}</span>
-        </button>
-        <button
-          className={`ven-tab${tab === 'facturas' ? ' active' : ''}`}
-          onClick={() => setTab('facturas')}
-        >
-          Facturas
-          <span className="ven-tab-count">{conteoFacturas}</span>
-        </button>
-      </div>
+      <Tabs
+        ariaLabel="Ofertas y facturas"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'ofertas',  label: 'Ofertas',  count: conteoOfertas },
+          { id: 'facturas', label: 'Facturas', count: conteoFacturas },
+        ]}
+      />
 
       {/* ── Toolbar de filtros ── */}
       <div className="ter-toolbar">

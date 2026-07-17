@@ -2,14 +2,19 @@
 
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import BulkBar from '@/components/portal/BulkBar'
+import { useRowSelection } from '@/components/portal/useRowSelection'
 import { usePagination, TablePagination } from '@/components/TablePagination'
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
 import {
   archivarProducto,
   restaurarProducto,
   eliminarProducto,
+  archivarProductosEnLote,
+  eliminarProductosEnLote,
   guardarCategoria,
   archivarCategoria,
   restaurarCategoria,
@@ -17,10 +22,12 @@ import {
   type Categoria,
   type TipoProducto,
   type ProductosPageData,
+  type ResultadoLoteProductos,
 } from '@/app/actions/portal/productos'
 import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
 import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
+import Tabs from '@/components/Tabs'
 
 // ── CategoriaModal ────────────────────────────────────────────────────────────
 
@@ -133,17 +140,15 @@ function ConfirmEliminar({ nombre, onConfirm, onClose, isPending }: {
   )
 }
 
-// ── Tab ───────────────────────────────────────────────────────────────────────
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
 
-function Tab({ active, onClick, icon, label, count }: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count: number
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
 }) {
   return (
-    <button onClick={onClick} className={`prd-tab${active ? ' active' : ''}`}>
-      {icon}
-      {label}
-      <span className="prd-tab-count">{count}</span>
-    </button>
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }
 
@@ -210,6 +215,37 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
 
+  // ── Selección múltiple (archivar/restaurar/eliminar en lote) ──
+  // Solo en la pestaña de productos. Lista activos XOR archivados: la acción es
+  // homogénea según `verArchivados`.
+  const idsVisibles = useMemo(() => productosFiltrados.map(p => p.producto_id), [productosFiltrados])
+  const sel = useRowSelection(idsVisibles)
+  const [confirmLote, setConfirmLote] = useState<'archivar' | 'eliminar' | null>(null)
+  useEffect(() => { sel.clear() }, [verArchivados, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plural = (n: number) => n === 1 ? '' : 's'
+
+  function ejecutarLote(fn: () => Promise<ResultadoLoteProductos>, exito: (n: number) => string) {
+    startTransition(async () => {
+      const r = await fn()
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(exito(r.hechas))
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitido${plural(r.omitidas.length)}`)
+      if (r.hechas > 0)      toastSuccess(partes.join(' · '))
+      else                   toastError(r.omitidas[0]?.motivo ? `No se aplicó a ninguno — ${r.omitidas[0].motivo}` : 'Nada que hacer')
+      sel.clear()
+      router.refresh()
+    })
+  }
+  function doArchivarLote() {
+    setConfirmLote(null)
+    ejecutarLote(() => archivarProductosEnLote(sel.selectedIds, true), n => `${n} producto${plural(n)} archivado${plural(n)}`)
+  }
+  function doEliminarLote() {
+    setConfirmLote(null)
+    ejecutarLote(() => eliminarProductosEnLote(sel.selectedIds), n => `${n} producto${plural(n)} eliminado${plural(n)}`)
+  }
+
   const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
   const archivados        = data.productos.filter(p => p.estado === 'INACTIVO').length
   const categoriasActivas = data.categorias.filter(c => c.estado === 'ACTIVO')
@@ -272,10 +308,15 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       </div>
 
       {/* ── Tabs ── */}
-      <div className="prd-tabs">
-        <Tab active={tab === 'productos'}  onClick={() => setTab('productos')}  icon={<Package size={15} strokeWidth={2} />} label="Productos y servicios" count={activos} />
-        <Tab active={tab === 'categorias'} onClick={() => setTab('categorias')} icon={<Tag size={15} strokeWidth={2} />} label="Categorías" count={categoriasActivas.length} />
-      </div>
+      <Tabs
+        ariaLabel="Secciones de productos"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'productos',  label: 'Productos y servicios', count: activos },
+          { id: 'categorias', label: 'Categorías',            count: categoriasActivas.length },
+        ]}
+      />
 
       {/* ══ TAB PRODUCTOS ══ */}
       {tab === 'productos' && (
@@ -343,6 +384,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 <table className="table">
                   <thead>
                     <tr>
+                      <th className="col-check">
+                        <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                      </th>
                       <th>Nombre</th>
                       <th>Código</th>
                       <th>Tipo</th>
@@ -361,6 +405,13 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           className={`table-row-clickable${p.estado === 'INACTIVO' ? ' ter-row-archivada' : ''}`}
                           onClick={() => router.push(`/portal/productos/${p.producto_id}`)}
                         >
+                          {/* Selección */}
+                          <td className="col-check" onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" className="row-check"
+                              checked={sel.isSelected(p.producto_id)}
+                              onChange={() => sel.toggle(p.producto_id)}
+                              aria-label={`Seleccionar ${p.nombre}`} />
+                          </td>
                           {/* Nombre */}
                           <td data-label="Nombre">
                             <Link
@@ -469,6 +520,29 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
             )}
             <TablePagination {...prodPag} label="producto" />
           </div>
+
+          {/* Barra de acciones en lote */}
+          <BulkBar count={sel.count} onClear={sel.clear}>
+            {verArchivados ? (
+              <>
+                <button className="btn btn-secondary btn-sm" disabled={isPending}
+                  onClick={() => ejecutarLote(
+                    () => archivarProductosEnLote(sel.selectedIds, false),
+                    n => `${n} producto${plural(n)} restaurado${plural(n)}`)}>
+                  <RotateCcw size={14} strokeWidth={2} /> Restaurar
+                </button>
+                <button className="btn btn-danger-text btn-sm" disabled={isPending}
+                  onClick={() => setConfirmLote('eliminar')}>
+                  <Trash2 size={14} strokeWidth={2} /> Eliminar
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-danger-text btn-sm" disabled={isPending}
+                onClick={() => setConfirmLote('archivar')}>
+                <Archive size={14} strokeWidth={2} /> Archivar
+              </button>
+            )}
+          </BulkBar>
         </>
       )}
 
@@ -599,6 +673,24 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {confirmCat && (
         <ConfirmArchivar nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}
           onClose={() => setConfirmCat(null)} isPending={isPending} />
+      )}
+      {confirmLote === 'archivar' && (
+        <ConfirmDialog
+          title={`¿Archivar ${sel.count} producto${plural(sel.count)}?`}
+          body="No aparecerán en el catálogo activo, pero podrás restaurarlos cuando quieras."
+          confirmLabel="Archivar" danger
+          onCancel={() => setConfirmLote(null)}
+          onConfirm={doArchivarLote}
+        />
+      )}
+      {confirmLote === 'eliminar' && (
+        <ConfirmDialog
+          title={`¿Eliminar ${sel.count} producto${plural(sel.count)} para siempre?`}
+          body="Solo se eliminan los que no tengan ventas, compras, movimientos, catálogo ni tickets; el resto se omite. No se puede deshacer."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmLote(null)}
+          onConfirm={doEliminarLote}
+        />
       )}
     </div>
   )

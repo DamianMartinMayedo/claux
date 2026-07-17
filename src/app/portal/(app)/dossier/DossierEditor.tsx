@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import type { DossierData } from '@/app/actions/portal/dossier'
+import Tabs from '@/components/Tabs'
 import DossierWizard from './DossierWizard'
 import DossierSecciones from './DossierSecciones'
 import PestanaEstado from './PestanaEstado'
@@ -59,11 +60,16 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
         </div>
       </div>
 
-      <div className="res-tabs">
-        <button className={`res-tab ${tab === 'dossier' ? 'active' : ''}`} onClick={() => setTab('dossier')}>Mi dossier</button>
-        <button className={`res-tab ${tab === 'presentacion' ? 'active' : ''}`} onClick={() => setTab('presentacion')}>Presentación</button>
-        <button className={`res-tab ${tab === 'estado' ? 'active' : ''}`} onClick={() => setTab('estado')}>Estado de resultados</button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones del dossier"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'dossier', label: 'Mi dossier' },
+          { id: 'presentacion', label: 'Presentación' },
+          { id: 'estado', label: 'Estado de resultados' },
+        ]}
+      />
 
       {/* «Mi dossier»: los MISMOS componentes del wizard, con navegación libre
           entre secciones (no un scroll largo). Editar sin pasar por el wizard. */}

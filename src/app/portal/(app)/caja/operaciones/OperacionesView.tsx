@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Search, ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import Tabs from '@/components/Tabs'
 
 interface Props {
   data: { tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string> }
@@ -47,14 +48,15 @@ export default function OperacionesView({ data }: Props) {
         </div>
       </div>
 
-      <div className="caja-tabs">
-        <button className={`caja-tab${tab === 'ventas' ? ' active' : ''}`} onClick={() => setTab('ventas')}>
-          Ventas
-        </button>
-        <button className={`caja-tab${tab === 'stock' ? ' active' : ''}`} onClick={() => setTab('stock')}>
-          Movimientos de stock
-        </button>
-      </div>
+      <Tabs<'ventas' | 'stock'>
+        ariaLabel="Tipos de operación"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'ventas', label: 'Ventas' },
+          { id: 'stock',  label: 'Movimientos de stock' },
+        ]}
+      />
 
       <div className="ter-toolbar">
         <div className="ter-search-wrap">

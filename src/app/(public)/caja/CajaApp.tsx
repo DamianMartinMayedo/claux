@@ -11,6 +11,13 @@ type Vista = 'vender' | 'ventas' | 'turno' | 'sync'
 interface CartLine { key: string; producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number }
 type InstallPromptEvent = Event & { prompt: () => Promise<void> }
 
+// Moneda inicial de venta: preferimos CUP (la de curso legal); solo si la caja no
+// la acepta caemos a la primera aceptada/disponible.
+function monedaPorDefecto(cfg: CajaConfig | null): string {
+  const aceptadas   = cfg?.caja.monedas_aceptadas ?? []
+  const disponibles = aceptadas.length ? aceptadas : (cfg?.monedas?.map(m => m.codigo) ?? [])
+  return disponibles.includes('CUP') ? 'CUP' : (disponibles[0] ?? 'CUP')
+}
 const uid    = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
 const money  = (n: number) => Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -96,7 +103,7 @@ export default function CajaApp() {
       }
       if (cancelled) return
       setToken(tk); setConfig(cfg); setProds(prods)
-      setMoneda(cfg?.caja.monedas_aceptadas?.[0] ?? cfg?.monedas?.[0]?.codigo ?? 'CUP')
+      setMoneda(monedaPorDefecto(cfg))
       setOnline(navigator.onLine)
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true
       setStandalone(isStandalone)
@@ -237,7 +244,7 @@ export default function CajaApp() {
     if (!token) return
     if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Necesitas conexión para actualizar productos.' }); return }
     setBusy(true)
-    try { const s = await fetchSeed(token); await metaSet('config', s.config); await saveProductos(s.productos); setConfig(s.config); setProds(s.productos); if (!monedas.includes(moneda)) setMoneda(s.config.caja.monedas_aceptadas?.[0] ?? s.config.monedas?.[0]?.codigo ?? moneda); setMsg({ t: 'ok', x: `Caja actualizada: ${s.productos.length} productos y sus monedas.` }) }
+    try { const s = await fetchSeed(token); await metaSet('config', s.config); await saveProductos(s.productos); setConfig(s.config); setProds(s.productos); if (!monedas.includes(moneda)) setMoneda(monedaPorDefecto(s.config)); setMsg({ t: 'ok', x: `Caja actualizada: ${s.productos.length} productos y sus monedas.` }) }
     catch { setMsg({ t: 'err', x: 'No se pudo actualizar la caja.' }) }
     finally { setBusy(false) }
   }

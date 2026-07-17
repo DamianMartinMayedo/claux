@@ -16,7 +16,7 @@ export default function VentasTabs({ rol, permisos }: { rol: RolAdmin; permisos:
   if (visibles.length <= 1) return null
 
   return (
-    <nav className="ven-tabs" aria-label="Secciones de ventas">
+    <nav className="tabs" aria-label="Secciones de ventas">
       {visibles.map(t => {
         const activo = t.match.some(p => pathname === p || pathname.startsWith(p + '/'))
         return (
@@ -24,7 +24,7 @@ export default function VentasTabs({ rol, permisos }: { rol: RolAdmin; permisos:
             key={t.href}
             href={t.href}
             prefetch
-            className={`ven-tab${activo ? ' active' : ''}`}
+            className={`tab${activo ? ' active' : ''}`}
           >
             {t.label}
           </Link>

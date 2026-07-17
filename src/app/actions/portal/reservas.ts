@@ -117,11 +117,6 @@ async function cargarCierres(db: ReturnType<typeof createAdminClient>, client_id
 function hoy(): string { return hoyEnTz() }
 function horaAhora(): string { return ahoraEnTz() }
 
-function formatFecha(f: string): string {
-  const [y, m, d] = f.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' })
-}
-
 // ── Obtener datos de Reservas ─────────────────────────────────────────────────
 
 export async function obtenerReservas(): Promise<ReservaPageData | null> {

@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Informes generados por Unlighthouse (JS minificado de terceros): no es
+    // código nuestro y ESLint no lee .gitignore en flat config, así que hay que
+    // excluirlo aquí para que no ahogue el lint con miles de falsos positivos.
+    ".unlighthouse/**",
   ]),
 ]);
 

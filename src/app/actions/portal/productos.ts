@@ -346,6 +346,60 @@ export async function eliminarProducto(
   return { ok: true }
 }
 
+// ── Acciones en lote (Fase 1) ───────────────────────────────────────────────────
+//
+// Candado `inventario` inline (audit-gating). Archivar/restaurar es un UPDATE
+// atómico del estado. Eliminar REUTILIZA la acción individual en bucle: conserva
+// sus guardas (INACTIVO + sin ventas/compras/movimientos/catálogo/caja) y reporta
+// las que se omiten con su motivo, en vez de borrar a ciegas.
+
+export interface ResultadoLoteProductos {
+  ok: boolean
+  hechas: number
+  omitidas: { nombre: string; motivo: string }[]
+  error?: string
+}
+
+export async function archivarProductosEnLote(
+  ids: string[], archivar: boolean,
+): Promise<ResultadoLoteProductos> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
+
+  const db = createAdminClient()
+  const { data, error } = await db.from('products')
+    .update({ estado: archivar ? 'INACTIVO' : 'ACTIVO', updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('producto_id', ids)
+    .select('producto_id')
+  if (error) return { ok: false, hechas: 0, omitidas: [], error: error.message }
+  revalidatePath('/portal/productos')
+  return { ok: true, hechas: (data ?? []).length, omitidas: [] }
+}
+
+export async function eliminarProductosEnLote(ids: string[]): Promise<ResultadoLoteProductos> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
+
+  const db = createAdminClient()
+  const { data: prods } = await db.from('products')
+    .select('producto_id, nombre').eq('client_id', session.client_id).in('producto_id', ids)
+  const nombreDe = new Map((prods ?? []).map(p => [p.producto_id as string, p.nombre as string]))
+
+  const res: ResultadoLoteProductos = { ok: true, hechas: 0, omitidas: [] }
+  for (const id of ids) {
+    if (!nombreDe.has(id)) continue
+    const r = await eliminarProducto(id)   // conserva guardas de dependencias
+    if (r.ok) res.hechas++
+    else res.omitidas.push({ nombre: nombreDe.get(id) ?? id, motivo: r.error ?? 'No se pudo eliminar' })
+  }
+  revalidatePath('/portal/productos')
+  return res
+}
+
 // ── Ajuste de stock (por almacén, vía movimiento AJUSTE) ────────────────────────
 
 // Lectura ligera del stock por almacén de un producto (sin el resto del detalle),

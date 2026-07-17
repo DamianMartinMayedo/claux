@@ -270,18 +270,7 @@
 .det-stock-num  { font-size: 28px; font-weight: 800; }
 .det-stock-unit { font-size: var(--text-sm); font-weight: 500; margin-left: 6px; color: var(--color-text-muted); }
 .det-stock-alert { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--color-error); margin-top: var(--space-1); }
-/* Detail tabs (shared across entity detail pages) */
-.detail-tabs { display: flex; border-bottom: 1px solid var(--color-border); overflow-x: auto; margin-bottom: var(--space-1); }
-.detail-tab {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  padding: 10px 18px; border: none; border-bottom: 2px solid transparent;
-  background: transparent; border-radius: 0;
-  font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted);
-  cursor: pointer; white-space: nowrap; transition: color var(--transition);
-}
-.detail-tab.active { font-weight: 700; color: var(--color-primary); border-bottom-color: var(--color-primary); }
-.detail-tab-count  { font-size: var(--text-xs); font-weight: 700; padding: 1px 6px; border-radius: var(--radius-full); background: var(--color-border); color: var(--color-text-muted); }
-.detail-tab.active .detail-tab-count { background: var(--color-primary); color: #fff; }
+/* Pestañas de fichas de detalle → componente canónico <Tabs> (.tabs/.tab). */
 
 /* ═══════════════════════════════════════════════════
    ACCESSIBILITY
@@ -536,46 +525,10 @@ textarea:focus-visible {
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--color-border);
 }
-.pv-tabs {
-  display: flex;
-  gap: var(--space-1);
-  background: var(--color-surface-offset);
-  border-radius: var(--radius-md);
-  padding: 3px;
-}
-.pv-tab {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: calc(var(--radius-md) - 2px);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition);
-  white-space: nowrap;
-}
-.pv-tab.active {
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: var(--shadow-xs);
-}
-.pv-badge {
-  background: var(--color-error);
-  color: #fff;
-  border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 700;
-  min-width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-}
+/* Pestañas Vencen | Trial → componente canónico <Tabs> (.tabs/.tab). El bar va
+   dentro de .pv-header (que ya aporta su borde inferior): se neutraliza el borde
+   y el margen propios de .tabs para que encaje en la fila junto a «Ver todos». */
+.pv-header .tabs { margin-bottom: 0; border-bottom: none; }
 .pv-ver-todos {
   font-size: var(--text-xs);
   color: var(--color-primary-text);

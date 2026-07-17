@@ -3,6 +3,7 @@
 import { CheckCircle } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
+import Tabs from '@/components/Tabs'
 
 type ClienteAlerta = {
   client_id: string
@@ -90,26 +91,15 @@ export default function ProximosVencer({
   return (
     <div className="pv-card">
       <div className="pv-header">
-        <div className="pv-tabs">
-          <button
-            className={`pv-tab${tab === 'vencen' ? ' active' : ''}`}
-            onClick={() => setTab('vencen')}
-          >
-            Vencen pronto
-            {vencenPronto.length > 0 && (
-              <span className="pv-badge">{vencenPronto.length}</span>
-            )}
-          </button>
-          <button
-            className={`pv-tab${tab === 'trial' ? ' active' : ''}`}
-            onClick={() => setTab('trial')}
-          >
-            Trial / Gracia
-            {trialGracia.length > 0 && (
-              <span className="pv-badge">{trialGracia.length}</span>
-            )}
-          </button>
-        </div>
+        <Tabs<Tab>
+          ariaLabel="Alertas de vencimiento"
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'vencen', label: 'Vencen pronto',  count: vencenPronto.length > 0 ? vencenPronto.length : undefined },
+            { id: 'trial',  label: 'Trial / Gracia', count: trialGracia.length  > 0 ? trialGracia.length  : undefined },
+          ]}
+        />
         <Link href="/admin/clientes" className="pv-ver-todos">
           Ver todos →
         </Link>

@@ -5,7 +5,6 @@ import { useState, useTransition } from 'react'
 import {
   guardarLineaNomina,
   aplicarConceptoNomina,
-  confirmarNomina,
   type NominaConLineas,
   type NominaLinea,
 } from '@/app/actions/portal/rrhh'

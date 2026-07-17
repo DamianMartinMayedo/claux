@@ -343,6 +343,61 @@ export async function marcarDisponible(item_id: string, disponible: boolean): Pr
   return { ok: true }
 }
 
+// ── Acciones en lote (Fase 1 — sin correlativo, sin efectos secundarios) ────────
+//
+// El catálogo no tiene estados ni numeración: disponibilidad y borrado se aplican
+// a todos los seleccionados con un solo UPDATE/DELETE atómico, siempre scoped por
+// `client_id` (multi-tenant) + `.in('item_id', ids)`. Candado `catalogo_qr` inline
+// para que audit-gating lo vea. Público en ISR: se revalida al final.
+
+export interface ResultadoLoteCatalogo { ok: boolean; hechas: number; error?: string }
+
+// Marcar disponible / agotado en lote ("se acabó todo esto").
+export async function marcarDisponibleEnLote(
+  ids: string[], disponible: boolean,
+): Promise<ResultadoLoteCatalogo> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0 }
+
+  const db = createAdminClient()
+  const { data, error } = await db.from('catalogo_items')
+    .update({ disponible, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('item_id', ids)
+    .select('item_id')
+  if (error) return { ok: false, hechas: 0, error: error.message }
+  revalidatePath('/portal/catalogo')
+  await revalidarPublico(db, session.client_id)
+  return { ok: true, hechas: (data ?? []).length }
+}
+
+// Eliminar ítems en lote. Sin guardas de estado (el catálogo no tiene). Borra las
+// fotos del bucket (best-effort) antes de las filas, como la acción individual.
+export async function eliminarItemsEnLote(ids: string[]): Promise<ResultadoLoteCatalogo> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0 }
+
+  const db = createAdminClient()
+  const { data: items } = await db.from('catalogo_items')
+    .select('foto_path').eq('client_id', session.client_id).in('item_id', ids)
+  const paths: string[] = []
+  for (const it of (items ?? []) as { foto_path: string | null }[]) {
+    if (it.foto_path) paths.push(it.foto_path, it.foto_path.replace(/\.webp$/, '_thumb.webp'))
+  }
+  if (paths.length) await db.storage.from('catalogo').remove(paths)
+
+  const { data, error } = await db.from('catalogo_items').delete()
+    .eq('client_id', session.client_id).in('item_id', ids)
+    .select('item_id')
+  if (error) return { ok: false, hechas: 0, error: error.message }
+  revalidatePath('/portal/catalogo')
+  await revalidarPublico(db, session.client_id)
+  return { ok: true, hechas: (data ?? []).length }
+}
+
 // ── Subir foto del ítem (optimización servidor) ────────────────────────────────
 
 export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; error?: string; foto_url?: string; foto_thumb_url?: string }> {

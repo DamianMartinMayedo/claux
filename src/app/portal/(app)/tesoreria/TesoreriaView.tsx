@@ -1,9 +1,16 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import BulkBar from '@/components/portal/BulkBar'
+import { RowActions } from '@/components/portal/RowActions'
+import { useRowSelection } from '@/components/portal/useRowSelection'
+import Tabs from '@/components/Tabs'
+import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { useEmpresas } from '@/components/portal/EmpresaColorContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
@@ -11,6 +18,7 @@ import {
   guardarCuenta,
   archivarCuenta,
   restaurarCuenta,
+  archivarCuentasEnLote,
   registrarMovimiento,
   registrarTransferencia,
   eliminarMovimiento,
@@ -21,6 +29,7 @@ import {
   type TipoCuenta,
   type TipoMovimiento,
   type TesoreriaPageData,
+  type ResultadoLoteCuentas,
 } from '@/app/actions/portal/tesoreria'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
 
@@ -756,11 +765,25 @@ function ConfirmEliminar({
   )
 }
 
+// ── Checkbox de cabecera (con estado indeterminado) ──────────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
+  )
+}
+
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
 export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPageData; pendientes: Pendientes }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const { colorOf } = useEmpresas()
+  const multiempresa = data.empresas.length > 1
 
   const [cuentaModal,    setCuentaModal]    = useState(false)
   const [editCuenta,     setEditCuenta]     = useState<Cuenta | null>(null)
@@ -781,6 +804,27 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
     [data.cuentas, verArchivadas],
   )
   const archivadas = data.cuentas.filter(c => !c.activa).length
+
+  // ── Selección múltiple de cuentas (archivar/restaurar en lote) ──
+  const cuentaIds = useMemo(() => cuentasVista.map(c => c.cuenta_id), [cuentasVista])
+  const selCuentas = useRowSelection(cuentaIds)
+  const [confirmLote, setConfirmLote] = useState(false)
+  useEffect(() => { selCuentas.clear() }, [verArchivadas, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plural = (n: number) => n === 1 ? '' : 's'
+
+  function ejecutarLoteCuentas(fn: () => Promise<ResultadoLoteCuentas>, mensaje: (n: number) => string) {
+    startTransition(async () => {
+      const r = await fn()
+      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      toastSuccess(mensaje(r.hechas))
+      selCuentas.clear()
+      router.refresh()
+    })
+  }
+  function doArchivarLoteCuentas() {
+    setConfirmLote(false)
+    ejecutarLoteCuentas(() => archivarCuentasEnLote(selCuentas.selectedIds, true), n => `${n} cuenta${plural(n)} archivada${plural(n)}.`)
+  }
 
   const cuentaNombre = useMemo(() => {
     const m: Record<string, string> = {}
@@ -881,14 +925,15 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       )}
 
       {/* Pestañas: Cuentas | Movimientos (evita el scroll infinito de la tabla) */}
-      <div className="ven-tabs">
-        <button type="button" className={`ven-tab${tab === 'cuentas' ? ' active' : ''}`} onClick={() => setTab('cuentas')}>
-          Cuentas <span className="ven-tab-count">{cuentasActivas.length}</span>
-        </button>
-        <button type="button" className={`ven-tab${tab === 'movimientos' ? ' active' : ''}`} onClick={() => setTab('movimientos')}>
-          Movimientos <span className="ven-tab-count">{data.movimientos.length}</span>
-        </button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones de tesorería"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'cuentas', label: 'Cuentas', count: cuentasActivas.length },
+          { id: 'movimientos', label: 'Movimientos', count: data.movimientos.length },
+        ]}
+      />
 
       {tab === 'cuentas' && (<>
       {/* Cuentas */}
@@ -910,49 +955,76 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           </p>
         </div>
       ) : (
-        <div className="tes-cuentas-grid">
-          {cuentasVista.map(c => (
-            <div key={c.cuenta_id} className={`tes-cuenta-card${!c.activa ? ' tes-cuenta-archivada' : ''}`}>
-              <div className="tes-cuenta-top">
-                <div>
-                  <div className="tes-cuenta-nombre">{c.nombre}</div>
-                  <span className={`badge ${TIPO_CUENTA_BADGE[c.tipo]}`}>{TIPO_CUENTA_LABEL[c.tipo]}</span>
-                  {data.empresas.length > 1 && (
-                    <span className="tes-cuenta-empresa">{data.empresa_nombres[c.empresa_id]}</span>
-                  )}
-                </div>
-                <div className="ter-actions">
-                  {c.activa ? (
-                    <>
-                      <button className="ter-action-btn" title="Editar"
-                        onClick={() => { setEditCuenta(c); setCuentaModal(true) }}><Pencil size={15} /></button>
-                      <button className="ter-action-btn ter-action-danger" title="Archivar"
-                        onClick={() => setConfirmCuenta(c)} disabled={isPending}><Archive size={15} /></button>
-                    </>
-                  ) : (
-                    <button className="ter-action-btn ter-action-restore" title="Restaurar"
-                      onClick={() => handleRestaurar(c)} disabled={isPending}><RotateCcw size={15} /></button>
-                  )}
-                </div>
-              </div>
-
-              <div className={`tes-cuenta-saldo${c.saldo < 0 ? ' tes-saldo-neg' : ''}`}>
-                {formatMonto(c.saldo)} <span className="tes-cuenta-saldo-mon">{c.moneda}</span>
-              </div>
-
-              <div className="tes-cuenta-meta">
-                <span className="tes-meta-in">↓ {formatMonto(c.total_ingresos)}</span>
-                <span className="tes-meta-out">↑ {formatMonto(c.total_egresos)}</span>
-                <span className="tes-meta-num">{c.num_movimientos} mov.</span>
-              </div>
-
-              {c.activa && (
-                <button className="btn btn-secondary btn-sm tes-cuenta-mov-btn" onClick={() => openMovimiento(c.cuenta_id)}>
-                  <Plus size={14} strokeWidth={2.5} /> Movimiento
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="card card-table">
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th className="col-check">
+                    <HeaderCheck checked={selCuentas.allSelected} indeterminate={selCuentas.someSelected} onChange={selCuentas.toggleAll} />
+                  </th>
+                  <th>Cuenta</th>
+                  <th className="col-center">Tipo</th>
+                  {multiempresa && <th>Empresa</th>}
+                  <th className="col-num">Saldo</th>
+                  <th className="col-num">Ingresos</th>
+                  <th className="col-num">Egresos</th>
+                  <th className="col-num">Mov.</th>
+                  <th className="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuentasVista.map(c => (
+                  <tr key={c.cuenta_id}
+                    className={`${!c.activa ? 'tes-row-archivada ' : ''}${multiempresa ? 'row-empresa-accent' : ''}`}
+                    style={multiempresa ? empresaColorVar(colorOf(c.empresa_id)) : undefined}>
+                    <td className="col-check" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="row-check"
+                        checked={selCuentas.isSelected(c.cuenta_id)}
+                        onChange={() => selCuentas.toggle(c.cuenta_id)}
+                        aria-label={`Seleccionar ${c.nombre}`} />
+                    </td>
+                    <td data-label="Cuenta"><strong>{c.nombre}</strong></td>
+                    <td data-label="Tipo" className="col-center">
+                      <span className={`badge ${TIPO_CUENTA_BADGE[c.tipo]}`}>{TIPO_CUENTA_LABEL[c.tipo]}</span>
+                    </td>
+                    {multiempresa && (
+                      <td data-label="Empresa">
+                        <EmpresaTag color={colorOf(c.empresa_id)} nombre={data.empresa_nombres[c.empresa_id]} />
+                      </td>
+                    )}
+                    <td data-label="Saldo" className={`col-num${c.saldo < 0 ? ' tes-saldo-neg' : ''}`}>
+                      <strong>{formatMonto(c.saldo)} {c.moneda}</strong>
+                    </td>
+                    <td data-label="Ingresos" className="col-num tes-monto-in">{formatMonto(c.total_ingresos)}</td>
+                    <td data-label="Egresos" className="col-num tes-monto-out">{formatMonto(c.total_egresos)}</td>
+                    <td data-label="Mov." className="col-num">{c.num_movimientos}</td>
+                    <td className="col-actions">
+                      <RowActions>
+                        {c.activa ? (
+                          <>
+                            <button className="row-actions-item" onClick={() => openMovimiento(c.cuenta_id)}>
+                              <Plus size={15} strokeWidth={2} /> Registrar movimiento
+                            </button>
+                            <button className="row-actions-item" onClick={() => { setEditCuenta(c); setCuentaModal(true) }}>
+                              <Pencil size={15} strokeWidth={2} /> Editar
+                            </button>
+                            <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCuenta(c)} disabled={isPending}>
+                              <Archive size={15} strokeWidth={2} /> Archivar
+                            </button>
+                          </>
+                        ) : (
+                          <button className="row-actions-item" onClick={() => handleRestaurar(c)} disabled={isPending}>
+                            <RotateCcw size={15} strokeWidth={2} /> Restaurar
+                          </button>
+                        )}
+                      </RowActions>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       </>)}
@@ -1019,6 +1091,35 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
         <TablePagination {...pag} label="movimiento" />
       </div>
       </>)}
+
+      {/* Barra de acciones en lote (solo pestaña de cuentas) */}
+      {tab === 'cuentas' && (
+        <BulkBar count={selCuentas.count} onClear={selCuentas.clear}>
+          {verArchivadas ? (
+            <button className="btn btn-secondary btn-sm" disabled={isPending}
+              onClick={() => ejecutarLoteCuentas(
+                () => archivarCuentasEnLote(selCuentas.selectedIds, false),
+                n => `${n} cuenta${plural(n)} restaurada${plural(n)}.`)}>
+              <RotateCcw size={14} strokeWidth={2} /> Restaurar
+            </button>
+          ) : (
+            <button className="btn btn-danger-text btn-sm" disabled={isPending}
+              onClick={() => setConfirmLote(true)}>
+              <Archive size={14} strokeWidth={2} /> Archivar
+            </button>
+          )}
+        </BulkBar>
+      )}
+
+      {confirmLote && (
+        <ConfirmDialog
+          title={`¿Archivar ${selCuentas.count} cuenta${plural(selCuentas.count)}?`}
+          body="Sus saldos dejarán de contar en los totales. Los movimientos se conservan y podrás restaurarlas."
+          confirmLabel="Archivar" danger
+          onCancel={() => setConfirmLote(false)}
+          onConfirm={doArchivarLoteCuentas}
+        />
+      )}
 
       {/* Modales */}
       {cuentaModal && (

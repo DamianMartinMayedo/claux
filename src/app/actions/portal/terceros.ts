@@ -397,6 +397,32 @@ export async function restaurarTercero(
   return { ok: true }
 }
 
+// ── Acciones en lote (Fase 1 — archivar/restaurar, soft y reversible) ───────────
+//
+// Recurso compartido → candado `puedeEditarAlgunModulo(['base','inventario'])`
+// inline (audit-gating). Un solo UPDATE atómico scoped por client_id + tercero_id.
+// No hay eliminar: los terceros se referencian en documentos; solo se archivan.
+
+export interface ResultadoLoteTerceros { ok: boolean; hechas: number; error?: string }
+
+export async function archivarTercerosEnLote(
+  ids: string[], archivar: boolean,
+): Promise<ResultadoLoteTerceros> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0 }
+
+  const db = createAdminClient()
+  const { data, error } = await db.from('third_parties')
+    .update({ activo: !archivar, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('tercero_id', ids)
+    .select('tercero_id')
+  if (error) return { ok: false, hechas: 0, error: error.message }
+  revalidatePath('/portal/terceros')
+  return { ok: true, hechas: (data ?? []).length }
+}
+
 // ── Detalle de tercero ────────────────────────────────────────────────────────
 
 // ── Historial de transacciones del tercero ────────────────────────────────────

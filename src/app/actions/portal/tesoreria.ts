@@ -257,6 +257,29 @@ export async function restaurarCuenta(cuenta_id: string): Promise<{ ok: boolean;
   return { ok: true }
 }
 
+// ── Archivar / restaurar cuentas en lote (Fase 1) ───────────────────────────────
+// Candado `base` inline (audit-gating). UPDATE atómico de `activa`. No hay borrado:
+// una cuenta con movimientos se archiva, nunca se elimina.
+
+export interface ResultadoLoteCuentas { ok: boolean; hechas: number; error?: string }
+
+export async function archivarCuentasEnLote(
+  ids: string[], archivar: boolean,
+): Promise<ResultadoLoteCuentas> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0 }
+
+  const { data, error } = await createAdminClient().from('cuentas')
+    .update({ activa: !archivar, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('cuenta_id', ids)
+    .select('cuenta_id')
+  if (error) return { ok: false, hechas: 0, error: error.message }
+  revalidatePath('/portal/tesoreria')
+  return { ok: true, hechas: (data ?? []).length }
+}
+
 // ── Registrar movimiento manual (INGRESO / EGRESO) ─────────────────────────────
 // Si registrar_gasto está activo, crea también un gasto_cobro vinculado
 // (GASTO si es EGRESO, COBRO si es INGRESO) y el movimiento queda con

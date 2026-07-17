@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, ChevronRight, X } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useToast } from '@/app/contexts/ToastContext'

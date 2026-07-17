@@ -1,19 +1,25 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
+import { toastError, toastSuccess }          from '@/app/contexts/ToastContext'
 import {
   archivarTercero,
   copiarTerceroAEmpresa,
   restaurarTercero,
+  archivarTercerosEnLote,
   type Tercero,
   type TipoTercero,
   type TercerosPageData,
+  type ResultadoLoteTerceros,
 } from '@/app/actions/portal/terceros'
 import { TerceroFormModal, ViaBadge }  from './_TerceroFormModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import { ConfirmDialog }               from '@/components/portal/Dialog'
+import BulkBar                         from '@/components/portal/BulkBar'
+import { useRowSelection }             from '@/components/portal/useRowSelection'
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
@@ -75,6 +81,18 @@ function ConfirmArchivar({
   )
 }
 
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
+  )
+}
+
 // ── Vista principal ───────────────────────────────────────────────────────────
 
 export default function TercerosView({ data }: { data: TercerosPageData }) {
@@ -119,6 +137,29 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   }, [data.terceros, search, filtroTipo, filtroEmpresa, verArchivados])
 
   const { pageItems, ...pag } = usePagination(tercerosFiltrados)
+
+  // ── Selección múltiple (archivar/restaurar en lote) ──
+  // La lista muestra activos XOR archivados, así que la acción es homogénea:
+  // «Archivar» cuando se ven activos, «Restaurar» cuando se ven archivados.
+  const idsVisibles = useMemo(() => tercerosFiltrados.map(t => t.tercero_id), [tercerosFiltrados])
+  const sel = useRowSelection(idsVisibles)
+  const [confirmLote, setConfirmLote] = useState(false)
+  useEffect(() => { sel.clear() }, [verArchivados]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plural = (n: number) => n === 1 ? '' : 's'
+
+  function ejecutarLote(fn: () => Promise<ResultadoLoteTerceros>, mensaje: (n: number) => string) {
+    startTransition(async () => {
+      const r = await fn()
+      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      toastSuccess(mensaje(r.hechas))
+      sel.clear()
+      router.refresh()
+    })
+  }
+  function doArchivarLote() {
+    setConfirmLote(false)
+    ejecutarLote(() => archivarTercerosEnLote(sel.selectedIds, true), n => `${n} registro${plural(n)} archivado${plural(n)}.`)
+  }
 
   function openCreate() { setEditTercero(null); setModalOpen(true) }
   function openEdit(t: Tercero) { setEditTercero(t); setModalOpen(true) }
@@ -217,6 +258,9 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             <table className="table">
               <thead>
                 <tr>
+                  <th className="col-check">
+                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                  </th>
                   <th>Nombre / ID fiscal</th>
                   <th>Tipo</th>
                   {multiempresa && <th>Empresa</th>}
@@ -234,6 +278,14 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     style={multiempresa ? empresaColorVar(colorOf(t.empresa_id)) : undefined}
                     onClick={() => router.push(`/portal/terceros/${t.tercero_id}`)}
                   >
+
+                    {/* Selección */}
+                    <td className="col-check" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="row-check"
+                        checked={sel.isSelected(t.tercero_id)}
+                        onChange={() => sel.toggle(t.tercero_id)}
+                        aria-label={`Seleccionar ${t.nombre}`} />
+                    </td>
 
                     {/* Nombre / ID */}
                     <td data-label="Nombre">
@@ -347,6 +399,23 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
         <TablePagination {...pag} label="registro" />
       </div>
 
+      {/* ── Barra de acciones en lote ── */}
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        {verArchivados ? (
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => ejecutarLote(
+              () => archivarTercerosEnLote(sel.selectedIds, false),
+              n => `${n} registro${plural(n)} restaurado${plural(n)}.`)}>
+            <RotateCcw size={14} strokeWidth={2} /> Restaurar
+          </button>
+        ) : (
+          <button className="btn btn-danger-text btn-sm" disabled={isPending}
+            onClick={() => setConfirmLote(true)}>
+            <Archive size={14} strokeWidth={2} /> Archivar
+          </button>
+        )}
+      </BulkBar>
+
       {/* ── Modales ── */}
       {modalOpen && (
         <TerceroFormModal
@@ -363,6 +432,15 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           onConfirm={confirmArchivarFn}
           onClose={() => setConfirmTercero(null)}
           isPending={isPending}
+        />
+      )}
+      {confirmLote && (
+        <ConfirmDialog
+          title={`¿Archivar ${sel.count} registro${plural(sel.count)}?`}
+          body="No aparecerán en las listas activas, pero podrás restaurarlos cuando quieras."
+          confirmLabel="Archivar" danger
+          onCancel={() => setConfirmLote(false)}
+          onConfirm={doArchivarLote}
         />
       )}
       {copiarTercero && (

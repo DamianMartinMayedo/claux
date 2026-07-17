@@ -1,38 +1,43 @@
 'use client'
 
-import { useState, useTransition, useMemo, Fragment } from 'react'
+import { useState, useTransition, useMemo, useEffect, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import {
   guardarCategoria, eliminarCategoria, eliminarItem,
-  marcarDisponible, guardarSlug, guardarMonedaCatalogo, importarDesdeProductos,
+  marcarDisponible, marcarDisponibleEnLote, eliminarItemsEnLote,
+  guardarSlug, guardarMonedaCatalogo, importarDesdeProductos,
   type CatalogoData, type CatalogoItem, type CatalogoCategoria,
+  type ResultadoLoteCatalogo,
 } from '@/app/actions/portal/catalogo'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import Tabs from '@/components/Tabs'
+import BulkBar from '@/components/portal/BulkBar'
+import { useRowSelection } from '@/components/portal/useRowSelection'
 import ItemModal from './ItemModal'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useIa } from '@/components/portal/ia/IaContext'
 import {
   Plus, Pencil, Trash2, X, Check, Loader2, EyeOff, Eye, QrCode, Copy,
-  Download, Package, LayoutGrid, List, FolderTree,
+  Download, Package, FolderTree,
 } from 'lucide-react'
 
 type Tab = 'items' | 'categorias' | 'configuracion'
-type Vista = 'card' | 'lista'
 
 export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   const router = useRouter()
   const { tieneIa } = useIa()
   const [tab, setTab] = useState<Tab>('items')
-  const [vista, setVista] = useState<Vista>('card')
   const [modalCategoria, setModalCategoria] = useState<CatalogoCategoria | null | 'nueva'>(null)
   const [modalItem, setModalItem] = useState<CatalogoItem | null | 'nuevo'>(null)
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todas')
   const [confirmarItem, setConfirmarItem] = useState<CatalogoItem | null>(null)
   const [confirmarCat, setConfirmarCat] = useState<CatalogoCategoria | null>(null)
+  const [confirmarLote, setConfirmarLote] = useState(false)
   const [, startDelete] = useTransition()
+  const [isBulk, startBulk] = useTransition()
 
   function onSaved() { router.refresh() }
 
@@ -85,7 +90,35 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   const hayItems = data.items.length > 0
   // Sin cabecera de sección cuando el único grupo es "Sin categoría".
   const soloSin = gruposFiltrados.length === 1 && gruposFiltrados[0].id === '__sin__'
-  const colSpanLista = data.tieneInventario ? 6 : 5
+  // +1 por la columna de selección (col-check) al inicio de la vista lista.
+  const colSpanLista = data.tieneInventario ? 7 : 6
+
+  // ── Selección múltiple (acciones en lote) ──
+  // Sobre los ítems VISIBLES (respeta el chip de categoría). Se limpia al cambiar
+  // de pestaña o de filtro para no arrastrar contexto oculto.
+  const itemsVisibles = useMemo(() => gruposFiltrados.flatMap(g => g.items), [gruposFiltrados])
+  const itemIds = useMemo(() => itemsVisibles.map(i => i.item_id), [itemsVisibles])
+  const sel = useRowSelection(itemIds)
+  useEffect(() => { sel.clear() }, [tab, filtroCategoria]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const itemsSel     = itemsVisibles.filter(i => sel.isSelected(i.item_id))
+  const hayDisponibles = itemsSel.some(i => i.disponible)
+  const hayAgotados    = itemsSel.some(i => !i.disponible)
+
+  function ejecutarLote(fn: () => Promise<ResultadoLoteCatalogo>, mensaje: (n: number) => string) {
+    startBulk(async () => {
+      const r = await fn()
+      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      toastSuccess(mensaje(r.hechas))
+      sel.clear()
+      onSaved()
+    })
+  }
+  const plural = (n: number) => n === 1 ? '' : 's'
+  function doEliminarLote() {
+    setConfirmarLote(false)
+    ejecutarLote(() => eliminarItemsEnLote(sel.selectedIds), n => `${n} producto${plural(n)} eliminado${plural(n)}.`)
+  }
 
   return (
     <div className="view-container">
@@ -109,16 +142,21 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
         )}
       </div>
 
-      <div className="res-tabs">
-        <button className={`res-tab ${tab === 'items' ? 'active' : ''}`} onClick={() => setTab('items')}>Ítems</button>
-        <button className={`res-tab ${tab === 'categorias' ? 'active' : ''}`} onClick={() => setTab('categorias')}>Categorías</button>
-        <button className={`res-tab ${tab === 'configuracion' ? 'active' : ''}`} onClick={() => setTab('configuracion')}>Configuración y QR</button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones del catálogo"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'items', label: 'Ítems', count: data.items.length },
+          { id: 'categorias', label: 'Categorías', count: data.categorias.length },
+          { id: 'configuracion', label: 'Configuración y QR' },
+        ]}
+      />
 
       {tab === 'items' && (
         <>
-          <div className="cat-items-toolbar">
-            {data.categorias.length > 0 ? (
+          {data.categorias.length > 0 && (
+            <div className="cat-items-toolbar">
               <div className="cat-filtros">
                 <button className={`cat-filtro-chip ${filtroCategoria === 'todas' ? 'active' : ''}`} onClick={() => setFiltroCategoria('todas')}>
                   Todas
@@ -131,18 +169,8 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                   </button>
                 ))}
               </div>
-            ) : <span />}
-            <div className="cat-viewtoggle" role="group" aria-label="Cambiar vista">
-              <button className={`cat-viewtoggle-btn ${vista === 'card' ? 'active' : ''}`}
-                onClick={() => setVista('card')} aria-label="Vista de tarjetas" aria-pressed={vista === 'card'}>
-                <LayoutGrid size={16} strokeWidth={2} />
-              </button>
-              <button className={`cat-viewtoggle-btn ${vista === 'lista' ? 'active' : ''}`}
-                onClick={() => setVista('lista')} aria-label="Vista de lista" aria-pressed={vista === 'lista'}>
-                <List size={16} strokeWidth={2} />
-              </button>
             </div>
-          </div>
+          )}
 
           {!hayItems ? (
             <div className="card cat-empty">
@@ -152,29 +180,15 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                 <Plus size={16} strokeWidth={2} /> Añadir el primero
               </button>
             </div>
-          ) : vista === 'card' ? (
-            gruposFiltrados.map(g => (
-              <section key={g.id} className="cat-cat-section">
-                {!soloSin && (
-                  <h3 className="cat-cat-section-title">
-                    {g.nombre}
-                    {g.descuento > 0 && <span className="badge badge-fill badge-success cat-desc-badge">-{g.descuento}%</span>}
-                  </h3>
-                )}
-                <div className="cat-grid">
-                  {g.items.map(item => (
-                    <ItemCard key={item.item_id} item={item} tieneInventario={data.tieneInventario}
-                      onEdit={() => setModalItem(item)} onDelete={() => setConfirmarItem(item)} onSaved={onSaved} />
-                  ))}
-                </div>
-              </section>
-            ))
           ) : (
             <div className="card card-table">
               <div className="table-wrapper">
                 <table className="table">
                   <thead>
                     <tr>
+                      <th className="col-check">
+                        <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                      </th>
                       <th></th>
                       <th>Producto</th>
                       <th className="col-num">Precio</th>
@@ -196,6 +210,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                         )}
                         {g.items.map(item => (
                           <ItemRow key={item.item_id} item={item} tieneInventario={data.tieneInventario}
+                            selected={sel.isSelected(item.item_id)} onToggle={() => sel.toggle(item.item_id)}
                             onEdit={() => setModalItem(item)} onDelete={() => setConfirmarItem(item)} onSaved={onSaved} />
                         ))}
                       </Fragment>
@@ -220,6 +235,31 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
 
       {tab === 'configuracion' && (
         <ConfiguracionTab data={data} onSaved={onSaved} />
+      )}
+
+      {tab === 'items' && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          {hayAgotados && (
+            <button className="btn btn-secondary btn-sm" disabled={isBulk}
+              onClick={() => ejecutarLote(
+                () => marcarDisponibleEnLote(sel.selectedIds, true),
+                n => `${n} producto${plural(n)} marcado${plural(n)} como disponible${plural(n)}.`)}>
+              <Eye size={14} strokeWidth={2} /> Marcar disponible
+            </button>
+          )}
+          {hayDisponibles && (
+            <button className="btn btn-secondary btn-sm" disabled={isBulk}
+              onClick={() => ejecutarLote(
+                () => marcarDisponibleEnLote(sel.selectedIds, false),
+                n => `${n} producto${plural(n)} marcado${plural(n)} como agotado${plural(n)}.`)}>
+              <EyeOff size={14} strokeWidth={2} /> Marcar agotado
+            </button>
+          )}
+          <button className="btn btn-danger-text btn-sm" disabled={isBulk}
+            onClick={() => setConfirmarLote(true)}>
+            <Trash2 size={14} strokeWidth={2} /> Eliminar
+          </button>
+        </BulkBar>
       )}
 
       {modalCategoria !== null && (
@@ -261,59 +301,29 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
           onConfirm={() => doEliminarCategoria(confirmarCat)}
         />
       )}
+
+      {confirmarLote && (
+        <ConfirmDialog
+          title={`¿Eliminar ${sel.count} producto${plural(sel.count)}?`}
+          body={`Se quitará${plural(sel.count) ? 'n' : ''} de tu ${data.etiquetas.catalogo.toLowerCase()}. Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmarLote(false)}
+          onConfirm={doEliminarLote}
+        />
+      )}
     </div>
   )
 }
 
-// ── Tarjeta de ítem ────────────────────────────────────────────────────────────
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
 
-function ItemCard({ item, tieneInventario, onEdit, onDelete, onSaved }: {
-  item: CatalogoItem; tieneInventario: boolean; onEdit: () => void; onDelete: () => void; onSaved: () => void
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
 }) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-
-  function toggleDisponible() {
-    startTransition(async () => {
-      const r = await marcarDisponible(item.item_id, !item.disponible)
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
-      onSaved()
-    })
-  }
-
   return (
-    <div className={`cat-card cat-card-link ${!item.disponible ? 'cat-card-agotado' : ''}`}
-      role="button" tabIndex={0}
-      onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}
-      onKeyDown={e => { if (e.key === 'Enter') router.push(`/portal/catalogo/${item.item_id}`) }}>
-      <div className="cat-card-photo">
-        {item.foto_thumb_url
-          ? <span className="cat-card-photo-img" style={{ '--preview': `url(${item.foto_thumb_url})` } as React.CSSProperties} />
-          : <span className="cat-card-photo-empty"><Package size={28} strokeWidth={1.5} /></span>}
-        {!item.disponible && <span className="badge badge-neutral cat-card-badge">Agotado</span>}
-        {item.descuentoPct ? <span className="badge badge-fill badge-success cat-card-badge-desc">-{item.descuentoPct}%</span> : null}
-      </div>
-      <div className="cat-card-body">
-        <div className="cat-card-top">
-          <strong className="cat-card-nombre">{item.nombre}</strong>
-          <RowActions>
-            <button className="row-actions-item" onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-            <button className="row-actions-item" onClick={onEdit}><Pencil size={15} strokeWidth={2} /> Editar</button>
-            <button className="row-actions-item" onClick={toggleDisponible} disabled={isPending}>
-              {item.disponible ? <><EyeOff size={15} strokeWidth={2} /> Marcar agotado</> : <><Eye size={15} strokeWidth={2} /> Marcar disponible</>}
-            </button>
-            <button className="row-actions-item row-actions-item-danger" onClick={onDelete} disabled={isPending}>
-              <Trash2 size={14} strokeWidth={2} /> Eliminar
-            </button>
-          </RowActions>
-        </div>
-        {item.descripcion && <p className="cat-card-desc">{item.descripcion}</p>}
-        <Precio item={item} className="cat-card-precio" antesClassName="cat-precio-antes" />
-        {tieneInventario && item.stock != null && (
-          <p className="cat-card-stock">Stock: {item.stock}</p>
-        )}
-      </div>
-    </div>
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }
 
@@ -336,8 +346,9 @@ function Precio({ item, className, antesClassName }: {
 
 // ── Fila de ítem (vista lista) ───────────────────────────────────────────────
 
-function ItemRow({ item, tieneInventario, onEdit, onDelete, onSaved }: {
-  item: CatalogoItem; tieneInventario: boolean; onEdit: () => void; onDelete: () => void; onSaved: () => void
+function ItemRow({ item, tieneInventario, selected, onToggle, onEdit, onDelete, onSaved }: {
+  item: CatalogoItem; tieneInventario: boolean; selected: boolean; onToggle: () => void
+  onEdit: () => void; onDelete: () => void; onSaved: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -353,6 +364,10 @@ function ItemRow({ item, tieneInventario, onEdit, onDelete, onSaved }: {
   return (
     <tr className={`table-row-clickable ${!item.disponible ? 'cat-row-agotado' : ''}`}
       onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}>
+      <td className="col-check" onClick={e => e.stopPropagation()}>
+        <input type="checkbox" className="row-check" checked={selected}
+          onChange={onToggle} aria-label={`Seleccionar ${item.nombre}`} />
+      </td>
       <td data-label="" className="cat-row-thumb-cell">
         <span className="cat-row-thumb">
           {item.foto_thumb_url

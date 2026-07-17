@@ -12,6 +12,7 @@ import {
   type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita, type DiaDisponible,
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
+import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -711,12 +712,17 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         </div>
       </div>
 
-      <div className="res-tabs">
-        <button className={`res-tab ${activeTab === 'agenda' ? 'active' : ''}`} onClick={() => setActiveTab('agenda')}>Agenda</button>
-        <button className={`res-tab ${activeTab === 'recursos' ? 'active' : ''}`} onClick={() => setActiveTab('recursos')}>{et.recurso_pl}</button>
-        <button className={`res-tab ${activeTab === 'servicios' ? 'active' : ''}`} onClick={() => setActiveTab('servicios')}>{servicioPlural}</button>
-        <button className={`res-tab ${activeTab === 'configuracion' ? 'active' : ''}`} onClick={() => setActiveTab('configuracion')}>Configuración</button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones de citas"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'agenda', label: 'Agenda' },
+          { id: 'recursos', label: et.recurso_pl, count: data.recursos.length },
+          { id: 'servicios', label: servicioPlural, count: data.servicios.length },
+          { id: 'configuracion', label: 'Configuración' },
+        ]}
+      />
 
       {/* ── Tab: Agenda ──────────────────────────────────────────────────── */}
       {activeTab === 'agenda' && (

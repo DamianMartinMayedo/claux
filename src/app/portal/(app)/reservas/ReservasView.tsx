@@ -21,6 +21,7 @@ import {
   type ReservaPageData,
 } from '@/app/actions/portal/reservas'
 import { type EstadoReserva } from '@/lib/reservas/estado'
+import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -714,14 +715,16 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
         </div>
       </div>
 
-      <div className="res-tabs">
-        <button className={`res-tab ${activeTab === 'reservas' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reservas')}>Reservas</button>
-        <button className={`res-tab ${activeTab === 'turnos' ? 'active' : ''}`}
-          onClick={() => setActiveTab('turnos')}>Turnos</button>
-        <button className={`res-tab ${activeTab === 'configuracion' ? 'active' : ''}`}
-          onClick={() => setActiveTab('configuracion')}>Configuración</button>
-      </div>
+      <Tabs
+        ariaLabel="Secciones de reservas"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'reservas', label: 'Reservas', count: data.reservas.length },
+          { id: 'turnos', label: 'Turnos', count: data.franjas.length },
+          { id: 'configuracion', label: 'Configuración' },
+        ]}
+      />
 
       {/* ── Tab: Reservas ────────────────────────────────────────────────── */}
       {activeTab === 'reservas' && (
