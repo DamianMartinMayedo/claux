@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { tieneModulo } from '@/lib/modulos'
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { optimizarImagen } from '@/lib/imagen/optimizar'
-import { getPortalSession } from './auth'
+import { getPortalSession, puedeEditarModulo } from './auth'
 import { obtenerEmpresas } from './empresas'
 import { construirSnapshotDesdeBase, type LineaDesglose } from '@/lib/dossier/base'
 import { construirConversor } from '@/lib/tasas'
@@ -348,7 +348,7 @@ export async function obtenerCategoriasGasto(): Promise<CategoriaCosto[]> {
 export async function crearDossier(formData: FormData): Promise<{ ok: boolean; error?: string; dossier_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -397,7 +397,7 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
 export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string; dossier_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const origenId = (formData.get('dossier_id') as string)?.trim()
   if (!origenId) return { ok: false, error: 'Falta el dossier.' }
@@ -484,7 +484,7 @@ async function eliminarFilas(db: Db, dossierId: string, clientId: string): Promi
 export async function eliminarDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -507,7 +507,7 @@ export async function eliminarDossier(formData: FormData): Promise<{ ok: boolean
 export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -559,7 +559,7 @@ export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean;
 export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -601,7 +601,7 @@ export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; e
 export async function guardarCostoVentas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   let entrada: CategoriaCosto[]
   try { entrada = JSON.parse((formData.get('clasificacion') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
@@ -628,7 +628,7 @@ export async function guardarCostoVentas(formData: FormData): Promise<{ ok: bool
 export async function guardarSecciones(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -705,7 +705,7 @@ export async function sugerirEquipoDesdeRrhh(): Promise<string | null> {
 export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -737,7 +737,7 @@ const rutaLogo = (clientId: string, dossierId: string) => `${clientId}/dossier-$
 export async function subirLogoDossier(formData: FormData): Promise<{ ok: boolean; error?: string; logo_url?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   const file = formData.get('logo') as File | null
@@ -785,7 +785,7 @@ export async function subirLogoDossier(formData: FormData): Promise<{ ok: boolea
 export async function usarLogoEmpresa(formData: FormData): Promise<{ ok: boolean; error?: string; logo_url?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -811,7 +811,7 @@ export async function usarLogoEmpresa(formData: FormData): Promise<{ ok: boolean
 export async function quitarLogoDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -842,7 +842,7 @@ const nuevoToken = () => crypto.randomUUID().replace(/-/g, '')
 export async function publicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -881,7 +881,7 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
 export async function despublicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -906,7 +906,7 @@ export async function despublicarDossier(formData: FormData): Promise<{ ok: bool
 export async function revocarEnlace(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1059,7 +1059,7 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
 export async function aplicarActualizacion(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1114,7 +1114,7 @@ export async function aplicarActualizacion(formData: FormData): Promise<{ ok: bo
 export async function resincronizarSnapshot(dossierId: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
   if (!dossierId)           return { ok: false, error: 'Falta el dossier.' }
 
   const db = createAdminClient()

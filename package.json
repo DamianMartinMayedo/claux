@@ -8,7 +8,8 @@
     "fix-native": "xattr -dr com.apple.quarantine node_modules 2>/dev/null; rm -rf .next; echo 'Cuarentena de binarios nativos limpiada y cache .next borrada.'",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "audit:gating": "node scripts/audit-gating.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

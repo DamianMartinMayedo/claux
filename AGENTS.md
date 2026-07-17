@@ -30,6 +30,19 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 
 Lee solo lo que tu tarea necesita.
 
+> ## ⚠️ REGLA DE GATING — candado comercial
+>
+> Toda **server action del portal que ESCRIBE** en BD (insert/update/delete/upsert/
+> rpc) debe comprobar que el cliente contrató el módulo, con `puedeEditarModulo(
+> '<modulo>')` (o `puedeEditarAlgunModulo([...])` para recursos compartidos como
+> terceros). Comprobar solo `session.solo_lectura` NO basta: bloquea al de solo-
+> lectura pero deja pasar a quien no pagó el módulo — la UI oculta no es control de
+> acceso. Excepciones (públicas sin login, self-service, la tasa de cambio que
+> solo-lectura sí puede tocar) van justificadas en el ALLOWLIST de
+> `scripts/audit-gating.mjs`. **Al añadir o tocar acciones/módulos, corre
+> `npm run audit:gating`** — debe salir en verde. Si aparece un módulo futuro sin
+> candado, el script lo lista (exit 1). Semántica del modelo: `docs/MODELO-MODULOS.md`.
+
 ## Índice de documentación (`docs/`)
 
 | Documento | Qué contiene | Cuándo consultarlo |
