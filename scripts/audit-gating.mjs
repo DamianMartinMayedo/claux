@@ -41,7 +41,11 @@ const ALLOWLIST = {
 }
 
 const WRITE = /\.(insert|update|delete|upsert)\s*\(|\.rpc\s*\(/
-const GATE  = /puedeEditarModulo\s*\(|puedeEditarAlgunModulo\s*\(|tieneModulo\s*\(|require(Modulo|AlgunModulo|AccesoModulo)\s*\(|requireAddonIa\s*\(|rol\s*!==\s*'admin_empresa'/
+// `sesionAdmin()` es el guard de notificaciones.ts: devuelve la sesión SOLO si
+// rol === 'admin_empresa' (si no, null y la acción sale). Cuenta como candado
+// porque es más estricto que un módulo, no una excepción: las notificaciones son
+// plataforma (no se contratan) y su bandeja es del negocio, no del usuario.
+const GATE  = /puedeEditarModulo\s*\(|puedeEditarAlgunModulo\s*\(|tieneModulo\s*\(|require(Modulo|AlgunModulo|AccesoModulo)\s*\(|requireAddonIa\s*\(|rol\s*!==\s*'admin_empresa'|sesionAdmin\s*\(/
 
 const files = readdirSync(DIR).filter(f => f.endsWith('.ts') && f !== 'auth.ts')
 const holes = []

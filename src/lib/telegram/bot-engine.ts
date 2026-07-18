@@ -7,6 +7,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
+import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
 import { tieneModulo } from '@/lib/modulos'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { conversarReserva, type TurnoConv } from '@/lib/ia/telegram'
@@ -530,6 +531,14 @@ export async function manejarPasoReserva(
       },
       (cliente?.nombre_empresa as string) ?? ctx.nombre_empresa,
     )
+
+    // Bandeja interna del portal: el dueño la ve aunque no mire Telegram.
+    await notificarReservaEntrante({
+      clientId: ctx.client_id, reservaId, modo: 'reserva',
+      nombreCliente: datos.nombre!, fecha: datos.fecha!, hora: datos.hora!,
+      detalle: `${datos.personas} persona${datos.personas === 1 ? '' : 's'}`,
+      pendiente: !confirmAuto,
+    })
 
     const estado = confirmAuto ? 'confirmada' : 'pendiente de confirmación'
     return {

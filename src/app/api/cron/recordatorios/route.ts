@@ -4,6 +4,7 @@ import { leerSetting } from '@/lib/settings'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { barrerVencidos } from '@/lib/clientes/vencimientos'
+import { generarNotificacionesInternas } from '@/lib/notificaciones/generador'
 import { toDateStr, addDays, fmtFechaEs } from '@/lib/date-utils'
 // Los 3 tipos que dispara el cron (subconjunto de TipoEmail).
 type TipoCron = 'recordatorio_pago' | 'fin_prueba' | 'suspension'
@@ -137,5 +138,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, ...resumen })
+  // 4. Notificaciones internas del portal (campana del dueño). Van al final: son
+  //    independientes del correo y no deben impedir que este se envíe.
+  const notificaciones = await generarNotificacionesInternas()
+
+  return NextResponse.json({ ok: true, ...resumen, notificaciones })
 }

@@ -8,6 +8,7 @@ import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo } from '@/lib/modulos'
+import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
 import { type Cierre, type ReglasReserva } from './reservas'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 
@@ -659,6 +660,13 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
       estado: bot.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE', telegram_chat_id: null },
     (cli?.nombre_empresa as string) ?? 'Tu negocio',
   )
+
+  // Bandeja interna del portal (además del aviso de Telegram, que exige bot).
+  await notificarReservaEntrante({
+    clientId: client_id, reservaId, modo: 'cita',
+    nombreCliente: nombre_cliente, fecha, hora,
+    pendiente: !bot.confirmacion_automatica,
+  })
 
   // Token público para que el cliente pueda gestionar/cancelar su cita
   const { data: tk } = await db.from('reservas').select('token').eq('reserva_id', reservaId).single()

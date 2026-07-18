@@ -4,6 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type EstadoReserva } from '@/lib/reservas/estado'
+import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { tieneModulo } from '@/lib/modulos'
 import { enviarMensaje } from '@/lib/telegram/enviar'
@@ -708,6 +709,14 @@ export async function crearReservaPublica(
     },
     (cliente?.nombre_empresa as string) ?? 'Tu negocio',
   )
+
+  // Bandeja interna del portal (además del aviso de Telegram, que exige bot).
+  await notificarReservaEntrante({
+    clientId: client_id, reservaId: reservaId, modo: 'reserva',
+    nombreCliente: nombre_cliente, fecha, hora: horaVal,
+    detalle: `${personas} persona${personas === 1 ? '' : 's'}`,
+    pendiente: !botCfg.confirmacion_automatica,
+  })
 
   // Token público para que el cliente pueda gestionar/cancelar su reserva
   const { data: tk } = await db.from('reservas').select('token').eq('reserva_id', reservaId).single()

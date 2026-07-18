@@ -6,6 +6,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
+import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { tieneModulo } from '@/lib/modulos'
@@ -252,6 +253,14 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
         estado: bot.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE', telegram_chat_id: chatId },
       (cli?.nombre_empresa as string) ?? ctx.nombre_empresa,
     )
+
+    // Bandeja interna del portal: el dueño la ve aunque no mire Telegram.
+    await notificarReservaEntrante({
+      clientId: ctx.client_id, reservaId, modo: 'cita',
+      nombreCliente: datos.nombre!, fecha: datos.fecha!, hora: datos.hora!,
+      detalle: datos.servicio_nombre ?? null,
+      pendiente: !bot.confirmacion_automatica,
+    })
 
     const estado = bot.confirmacion_automatica ? 'confirmada' : 'pendiente de confirmación'
     return {

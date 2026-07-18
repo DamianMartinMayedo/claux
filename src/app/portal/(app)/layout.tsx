@@ -8,13 +8,16 @@ import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
-import PortalRealtimeSync    from '@/components/portal/PortalRealtimeSync'
+import PortalSync            from '@/components/portal/PortalSync'
 import TopLoader             from '@/components/portal/TopLoader'
 import PortalToastWrapper     from '@/components/portal/PortalToastWrapper'
 import { EmpresaColorProvider } from '@/components/portal/EmpresaColorContext'
 import IaChatWidget          from '@/components/portal/ia/IaChatWidget'
 import { IaProvider }        from '@/components/portal/ia/IaContext'
 import ImpersonacionBanner   from '@/components/portal/ImpersonacionBanner'
+import { NotificacionesProvider } from '@/components/portal/notificaciones/NotificacionesContext'
+import NotificacionesPopups  from '@/components/portal/notificaciones/NotificacionesPopups'
+import { contarNoLeidas, listarNotificaciones, popupsPendientes } from '@/app/actions/portal/notificaciones'
 import { configAgente }      from '@/lib/ia/contexto'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
@@ -98,10 +101,18 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     cliente.estado === 'VENCIDO' ||
     (expiradoPorFecha && !enGraciaActiva)
 
-  return (
-    <div className="portal-shell">
+  // Notificaciones internas: solo para administradores del negocio (la bandeja es
+  // compartida) y solo si el portal está operativo — con el portal bloqueado, la
+  // pantalla de bloqueo es el único mensaje que toca dar.
+  const verNotificaciones = session.rol === 'admin_empresa' && !bloqueado
+  const notifInicial = verNotificaciones
+    ? await cargaInicialNotificaciones()
+    : { noLeidas: 0, recientes: [], popups: [] }
+
+  const shell = (
+    <>
       <TopLoader />
-      <PortalRealtimeSync clientId={session.client_id} />
+      <PortalSync />
       <PortalHeader
         session={session}
         nombreEmpresa={cliente.nombre_empresa}
@@ -129,7 +140,27 @@ export default async function PortalAppLayout({ children }: { children: React.Re
             </EmpresaColorProvider>}
         </PortalToastWrapper>
         {!bloqueado && tieneIa && <IaChatWidget nombreAgente={nombreAgente} sugerencias={sugerenciasIa.slice(0, 4)} />}
+        {verNotificaciones && <NotificacionesPopups />}
       </main>
+    </>
+  )
+
+  return (
+    <div className="portal-shell">
+      {verNotificaciones
+        ? <NotificacionesProvider inicial={notifInicial}>{shell}</NotificacionesProvider>
+        : shell}
     </div>
   )
+}
+
+// Carga inicial de la campana: evita que el contador parpadee de 0 al valor real
+// en cuanto monta el cliente.
+async function cargaInicialNotificaciones() {
+  const [noLeidas, recientes, popups] = await Promise.all([
+    contarNoLeidas(),
+    listarNotificaciones('todas', 8),
+    popupsPendientes(),
+  ])
+  return { noLeidas, recientes, popups }
 }

@@ -2835,3 +2835,205 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    sistema de tablas (.card-table + .table): era una lista a mano con su propia
    fila, chip de ámbito y responsive. Lo que se comparte con el modal «Enviar al
    asesor» de Reportes es .env-asesor-add, arriba. */
+
+/* ═══════════════════════════════════════════════════
+   NOTIFICACIONES — campana, panel y centro (.ntf-*)
+   ═══════════════════════════════════════════════════
+   La severidad, el badge y los popups son genéricos y viven en
+   03-components.css. Aquí solo lo que pertenece al shell del portal.
+   Solo lo ve el rol admin_empresa (la bandeja es del negocio). */
+
+.ntf-campana { position: relative; }
+/* Extiende .theme-toggle-btn (mismo tamaño y trato que el resto de la cabecera);
+   `relative` para que el badge se ancle al botón, no a la cabecera. */
+.ntf-campana-btn { position: relative; }
+
+/* ── Panel desplegable de la campana ────────────────
+   Mismo anclaje que .portal-account-menu, que es su vecino en la cabecera. */
+.ntf-panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  width: min(340px, calc(100vw - var(--space-6)));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  overflow: hidden;
+}
+.ntf-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.ntf-panel-titulo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.ntf-panel-accion {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-primary-text);
+  cursor: pointer;
+}
+.ntf-panel-accion:hover { text-decoration: underline; }
+.ntf-panel-lista { max-height: 380px; overflow-y: auto; }
+
+.ntf-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.ntf-item:last-child { border-bottom: 0; }
+.ntf-item:hover { background: var(--color-surface-offset); }
+/* Sin leer: superficie levemente elevada + título en negrita. El color fuerte se
+   deja para la severidad (icono), que si no compiten entre sí. */
+.ntf-item-nueva { background: var(--color-surface-2); }
+.ntf-item-cuerpo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ntf-item-titulo {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+.ntf-item-nueva .ntf-item-titulo { font-weight: 600; }
+.ntf-tiempo { font-size: var(--text-xs); color: var(--color-text-faint); }
+
+.ntf-vacio {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.ntf-panel-pie {
+  display: block;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-primary-text);
+  text-decoration: none;
+}
+.ntf-panel-pie:hover { background: var(--color-surface-offset); }
+
+/* ── Centro de notificaciones (/portal/notificaciones) ── */
+.ntf-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.ntf-filtros-grupo { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ntf-filtro {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.ntf-filtro:hover:not(:disabled) { border-color: var(--color-border-strong); color: var(--color-text); }
+.ntf-filtro.active {
+  background: var(--color-info-bg);
+  border-color: var(--color-primary-text);
+  color: var(--color-primary-text);
+}
+.ntf-filtro:disabled { opacity: .6; cursor: default; }
+
+.ntf-lista { list-style: none; margin: 0; padding: 0; }
+.ntf-fila {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.ntf-fila:last-child { border-bottom: 0; }
+.ntf-fila-cuerpo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.ntf-fila-texto { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
+.ntf-fila-archivar {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.ntf-fila-archivar:hover { background: var(--color-surface-offset); color: var(--color-text); }
+
+.ntf-vacio-bloque {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-faint);
+  text-align: center;
+  font-size: var(--text-sm);
+}
+
+/* ── Preferencias ─────────────────────────────────── */
+.ntf-prefs-intro {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-bottom: var(--space-5);
+}
+.ntf-prefs { list-style: none; margin: 0; padding: 0; }
+.ntf-pref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.ntf-pref:last-child { border-bottom: 0; }
+.ntf-pref-texto { display: flex; flex-direction: column; gap: 2px; flex: 1 1 16rem; min-width: 0; }
+.ntf-pref-etiqueta { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.ntf-pref-desc { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; }
+.ntf-pref-controles {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+.ntf-pref-select { width: auto; min-width: 11rem; }

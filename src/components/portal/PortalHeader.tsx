@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon } from 'lucide-react'
+import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon, Bell } from 'lucide-react'
 import type { PortalSession } from '@/lib/portal-auth'
 import { empresaColorVar } from './EmpresaTag'
 import MobileNavToggle from '@/components/MobileNavToggle'
+import NotificacionesCampana from './notificaciones/NotificacionesCampana'
 
 interface EmpresaLite {
   empresa_id: string
@@ -67,7 +68,10 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
   const opciones = [
     { ruta: '/portal/perfil',      label: 'Mi perfil',    icon: <User size={16} strokeWidth={2} /> },
     ...(session.rol === 'admin_empresa'
-      ? [{ ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> }]
+      ? [
+          { ruta: '/portal/notificaciones', label: 'Notificaciones', icon: <Bell size={16} strokeWidth={2} /> },
+          { ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> },
+        ]
       : []),
     { ruta: '/portal/empresas',    label: 'Mis Empresas', icon: <Building2 size={16} strokeWidth={2} /> },
     { ruta: '/portal/monedas',     label: 'Monedas y tasas', icon: <DollarSign size={16} strokeWidth={2} /> },
@@ -85,6 +89,8 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
         </Link>
       </div>
       <div className="portal-header-right">
+        {/* La bandeja es del negocio y compartida: solo la ven sus administradores. */}
+        {session.rol === 'admin_empresa' && <NotificacionesCampana />}
         <button
           type="button"
           className="theme-toggle-btn"
