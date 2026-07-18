@@ -928,6 +928,110 @@ export async function revocarEnlace(formData: FormData): Promise<{ ok: boolean; 
   return { ok: true, token }
 }
 
+// ── Acciones en lote (la lista del addon opera sobre varios a la vez) ──────────
+//
+// Cada acción ENVUELVE la individual en un bucle: construye el `FormData` que esta
+// espera y hereda su validación, gating y efectos (borrado de hijas, revalidación
+// del deck, gate del addon al duplicar). No se duplica su lógica. El candado de
+// módulo va INLINE al principio de cada una —audit-gating lo exige visible, no tras
+// un helper de otro archivo— aunque la individual lo vuelva a comprobar.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string   // fallo global (sesión / permiso)
+}
+
+const loteVacio = (error?: string): ResultadoLote => ({ hechas: 0, omitidas: [], errores: [], error })
+
+// Título + estado de los dossiers del lote en UNA query: etiqueta legible para el
+// resumen y estado para decidir elegibilidad, sin una consulta por fila.
+async function cabecerasLote(
+  db: Db, clientId: string, ids: string[],
+): Promise<Map<string, { titulo: string; estado: string }>> {
+  const { data } = await db.from('dossiers').select('dossier_id, titulo, estado')
+    .eq('client_id', clientId).in('dossier_id', ids)
+  return new Map((data ?? []).map((d: { dossier_id: string; titulo: string; estado: string }) =>
+    [d.dossier_id, { titulo: d.titulo, estado: d.estado }]))
+}
+
+// Eliminar en lote: envuelve `eliminarDossier` (borra hijas + dossier y revalida el
+// deck publicado). Cualquier fallo de la individual → errores con su título.
+export async function eliminarDossiersEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('dossier'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const meta = await cabecerasLote(db, session.client_id, ids)
+
+  const res = loteVacio()
+  for (const id of ids) {
+    const etiqueta = meta.get(id)?.titulo ?? id
+    const fd = new FormData()
+    fd.set('dossier_id', id)
+    const r = await eliminarDossier(fd)
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/dossier')
+  return res
+}
+
+// Despublicar en lote: solo tiene sentido sobre los PUBLICADO. Un borrador ya está
+// despublicado → omitido con su motivo (no es un error, no hay nada que hacer).
+export async function despublicarDossiersEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('dossier'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const meta = await cabecerasLote(db, session.client_id, ids)
+
+  const res = loteVacio()
+  for (const id of ids) {
+    const info = meta.get(id)
+    const etiqueta = info?.titulo ?? id
+    if (!info) { res.errores.push({ etiqueta, error: 'Dossier no encontrado.' }); continue }
+    if (info.estado !== 'PUBLICADO') { res.omitidas.push({ etiqueta, motivo: 'no está publicado' }); continue }
+    const fd = new FormData()
+    fd.set('dossier_id', id)
+    const r = await despublicarDossier(fd)
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/dossier')
+  return res
+}
+
+// Duplicar en lote: SECUENCIAL a propósito. Duplicar ES crear y el gate del addon
+// cuenta los dossiers existentes; en paralelo todas leerían el mismo conteo y se
+// saltarían el límite de golpe. La individual ya nace en BORRADOR con `token:null`.
+// El tope de Multidossier no es un error sino el límite del plan → a omitidas (es el
+// upsell), el resto de fallos → errores.
+export async function duplicarDossiersEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('dossier'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const meta = await cabecerasLote(db, session.client_id, ids)
+
+  const res = loteVacio()
+  for (const id of ids) {
+    const etiqueta = meta.get(id)?.titulo ?? id
+    const fd = new FormData()
+    fd.set('dossier_id', id)
+    const r = await duplicarDossier(fd)   // secuencial: el gate del addon no es atómico
+    if (r.ok) { res.hechas++; continue }
+    if (r.error?.includes('Multidossier')) res.omitidas.push({ etiqueta, motivo: 'límite: activa Multidossier' })
+    else res.errores.push({ etiqueta, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/dossier')
+  return res
+}
+
 // ── Lectura pública del deck (sin sesión, solo por token) ──────────────────────
 
 export interface DeckPublico {

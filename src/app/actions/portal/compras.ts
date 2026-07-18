@@ -438,3 +438,72 @@ export async function eliminarCompra(compra_id: string): Promise<{ ok: boolean; 
   revalidatePath('/portal/compras')
   return { ok: true }
 }
+
+// ── Acciones en lote ──────────────────────────────────────────────────────────
+//
+// Reutilizan las acciones individuales (misma validación de gating, dueño y
+// efectos: eliminar solo borra borradores; anular revierte stock + elimina el
+// gasto y sus pagos de forma atómica). La capa de lote solo decide la
+// ELEGIBILIDAD por estado — aplica a las válidas y reporta las omitidas con su
+// número y motivo. Gating INLINE en cada acción para que audit-gating lo vea.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string   // fallo global (sesión / permiso)
+}
+
+function loteVacio(error?: string): ResultadoLote {
+  return { hechas: 0, omitidas: [], errores: [], error }
+}
+
+// ── Eliminar en lote (solo borradores) ────────────────────────────────────────
+
+export async function eliminarComprasEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('inventario'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('compras')
+    .select('compra_id, numero, estado')
+    .eq('client_id', session.client_id).in('compra_id', ids)
+
+  const res = loteVacio()
+  for (const d of (docs ?? []) as { compra_id: string; numero: string; estado: EstadoCompra }[]) {
+    if (d.estado !== 'BORRADOR') {
+      res.omitidas.push({ etiqueta: d.numero, motivo: 'no es borrador (anúlala primero)' }); continue
+    }
+    const r = await eliminarCompra(d.compra_id)
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta: d.numero, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/compras')
+  return res
+}
+
+// ── Anular en lote (SECUENCIAL: revierte stock + elimina gasto en cadena) ──────
+
+export async function anularComprasEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('inventario'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data: docs } = await db.from('compras')
+    .select('compra_id, numero, estado')
+    .eq('client_id', session.client_id).in('compra_id', ids)
+
+  const res = loteVacio()
+  for (const d of (docs ?? []) as { compra_id: string; numero: string; estado: EstadoCompra }[]) {
+    if (d.estado === 'ANULADA')  { res.omitidas.push({ etiqueta: d.numero, motivo: 'ya anulada' });         continue }
+    if (d.estado === 'BORRADOR') { res.omitidas.push({ etiqueta: d.numero, motivo: 'aún no confirmada' });  continue }
+    const r = await anularCompra(d.compra_id)   // secuencial a propósito (efecto en cadena: stock + gasto)
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta: d.numero, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/compras')
+  revalidarFinanzas()
+  return res
+}

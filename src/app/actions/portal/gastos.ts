@@ -314,6 +314,43 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
   return { ok: true }
 }
 
+// ── Eliminar gastos / cobros en lote ───────────────────────────────────────────
+// Reutiliza la acción individual en bucle SECUENCIAL (misma guarda de negocio):
+// un registro con pagos/cobros registrados NO se borra → es una omisión esperada,
+// no un fallo. La capa de lote solo agrega el resultado.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string   // fallo global (sesión / permiso)
+}
+
+function loteVacio(error?: string): ResultadoLote {
+  return { hechas: 0, omitidas: [], errores: [], error }
+}
+
+export async function eliminarGastosCobrosEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session) return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+
+  const db = createAdminClient()
+  const { data: regs } = await db.from('gastos_cobros')
+    .select('registro_id, descripcion')
+    .eq('client_id', session.client_id).in('registro_id', ids)
+
+  const res = loteVacio()
+  for (const r of (regs ?? []) as { registro_id: string; descripcion: string }[]) {
+    const out = await eliminarGastoCobro(r.registro_id)   // reutiliza guarda + gating
+    if (out.ok) res.hechas++
+    else res.omitidas.push({ etiqueta: r.descripcion, motivo: out.error ?? 'Error' })
+  }
+  revalidatePath('/portal/gastos')
+  revalidarFinanzas()
+  return res
+}
+
 // ── Registrar liquidación (pago de un gasto / cobro de un ingreso) ──────────────
 // Crea un movimiento de Tesorería (origen PAGO/COBRO). Admite pagos parciales.
 

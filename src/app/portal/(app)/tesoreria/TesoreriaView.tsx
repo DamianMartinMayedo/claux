@@ -22,6 +22,7 @@ import {
   registrarMovimiento,
   registrarTransferencia,
   eliminarMovimiento,
+  eliminarMovimientosEnLote,
   obtenerTasaTransferencia,
   type Cuenta,
   type CuentaConSaldo,
@@ -842,6 +843,31 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
 
   const { pageItems, ...pag } = usePagination(movimientosFiltrados)
 
+  // ── Selección múltiple de movimientos (eliminar en lote) ──
+  // Sobre los movimientos VISIBLES filtrados (persiste entre páginas; se limpia al
+  // cambiar de filtro o de pestaña). Solo se eliminan los manuales: los que vienen
+  // de cobro/pago o de transferencias los omite la acción de lote con su motivo.
+  const movIds = useMemo(() => movimientosFiltrados.map(m => m.movimiento_id), [movimientosFiltrados])
+  const selMov = useRowSelection(movIds)
+  const [confirmLoteMov, setConfirmLoteMov] = useState(false)
+  useEffect(() => { selMov.clear() }, [filtroCuenta, filtroTipo, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function doEliminarLoteMov() {
+    setConfirmLoteMov(false)
+    startTransition(async () => {
+      const r = await eliminarMovimientosEnLote(selMov.selectedIds)
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} eliminado${plural(r.hechas)}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitido${plural(r.omitidas.length)}`)
+      const msg = partes.join(' · ') || 'Nada que eliminar'
+      if (r.hechas > 0) toastSuccess(msg)
+      else              toastError(r.omitidas[0]?.motivo ? `Nada eliminado — ${r.omitidas[0].motivo}` : msg)
+      selMov.clear()
+      router.refresh()
+    })
+  }
+
   function onSaved() {
     setCuentaModal(false); setEditCuenta(null)
     setMovModal(false); setMovCuentaIni(null)
@@ -1054,6 +1080,9 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
             <table className="table">
               <thead>
                 <tr>
+                  <th className="col-check">
+                    <HeaderCheck checked={selMov.allSelected} indeterminate={selMov.someSelected} onChange={selMov.toggleAll} />
+                  </th>
                   <th>Fecha</th>
                   <th>Concepto</th>
                   <th>Cuenta</th>
@@ -1064,6 +1093,12 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
               <tbody>
                 {pageItems.map(m => (
                   <tr key={m.movimiento_id}>
+                    <td className="col-check">
+                      <input type="checkbox" className="row-check"
+                        checked={selMov.isSelected(m.movimiento_id)}
+                        onChange={() => selMov.toggle(m.movimiento_id)}
+                        aria-label={`Seleccionar ${m.concepto}`} />
+                    </td>
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(m.fecha)}</td>
                     <td data-label="Concepto">
                       <strong>{m.concepto}</strong>
@@ -1118,6 +1153,26 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           confirmLabel="Archivar" danger
           onCancel={() => setConfirmLote(false)}
           onConfirm={doArchivarLoteCuentas}
+        />
+      )}
+
+      {/* Barra de acciones en lote (solo pestaña de movimientos) */}
+      {tab === 'movimientos' && (
+        <BulkBar count={selMov.count} onClear={selMov.clear}>
+          <button className="btn btn-danger-text btn-sm" disabled={isPending}
+            onClick={() => setConfirmLoteMov(true)}>
+            <Trash2 size={14} strokeWidth={2} /> Eliminar
+          </button>
+        </BulkBar>
+      )}
+
+      {confirmLoteMov && (
+        <ConfirmDialog
+          title={`¿Eliminar ${selMov.count} movimiento${plural(selMov.count)}?`}
+          body="Solo se eliminan los movimientos manuales. Los que provienen de un cobro/pago o de una transferencia se omitirán (anúlalos desde su documento)."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmLoteMov(false)}
+          onConfirm={doEliminarLoteMov}
         />
       )}
 

@@ -86,9 +86,11 @@ export default function LiquidarCuentaFields({
     }
   }, [monto, tasaCompleta, cambiaMoneda, editandoCaja, montoNum])
 
-  // Reportar estado al padre sin re-suscribir al cambiar la referencia de onChange
+  // Reportar estado al padre sin re-suscribir al cambiar la referencia de onChange.
+  // La asignación va en su propio efecto (no en el render) para no escribir en un
+  // ref durante el render: bajo render concurrente eso daría valores inestables.
   const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
+  useEffect(() => { onChangeRef.current = onChange })
   useEffect(() => {
     onChangeRef.current({
       cuentaId, monto, tasa: cambiaMoneda ? tasaCompleta : 1,

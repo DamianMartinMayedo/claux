@@ -701,3 +701,43 @@ export async function eliminarMovimiento(movimiento_id: string): Promise<{ ok: b
   revalidarFinanzas()
   return { ok: true }
 }
+
+// ── Eliminar movimientos en lote (Fase 2) ───────────────────────────────────────
+// Candado `base` inline (audit-gating). Solo son elegibles los MANUALES sin
+// transfer_grupo: reutiliza la guarda de eliminarMovimiento en bucle secuencial.
+// Los provenientes de cobro/pago o de transferencias se OMITEN con su motivo (no
+// se borran a ciegas: descuadran saldos y estados derivados).
+
+export interface ResultadoLoteMovimientos {
+  ok: boolean
+  hechas: number
+  omitidas: { concepto: string; motivo: string }[]
+  error?: string
+}
+
+export async function eliminarMovimientosEnLote(ids: string[]): Promise<ResultadoLoteMovimientos> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
+
+  const db = createAdminClient()
+  const { data: movs } = await db.from('movimientos_tesoreria')
+    .select('movimiento_id, concepto, origen, transfer_grupo')
+    .eq('client_id', session.client_id).in('movimiento_id', ids)
+
+  const res: ResultadoLoteMovimientos = { ok: true, hechas: 0, omitidas: [] }
+  for (const m of (movs ?? []) as { movimiento_id: string; concepto: string; origen: string; transfer_grupo: string | null }[]) {
+    if (m.transfer_grupo) {
+      res.omitidas.push({ concepto: m.concepto, motivo: 'es una transferencia (elimínala desde su detalle)' }); continue
+    }
+    if (m.origen !== 'MANUAL') {
+      res.omitidas.push({ concepto: m.concepto, motivo: 'proviene de un cobro o pago (anúlalo desde su documento)' }); continue
+    }
+    const r = await eliminarMovimiento(m.movimiento_id)   // secuencial; conserva la guarda individual
+    if (r.ok) res.hechas++
+    else res.omitidas.push({ concepto: m.concepto, motivo: r.error ?? 'No se pudo eliminar' })
+  }
+  revalidatePath('/portal/tesoreria')
+  return res
+}

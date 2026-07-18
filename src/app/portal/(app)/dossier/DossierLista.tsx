@@ -1,12 +1,19 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Copy, ExternalLink, Pencil, Files, Trash2, Loader2, X } from 'lucide-react'
+import { Plus, Copy, ExternalLink, Pencil, Files, Trash2, Loader2, X, EyeOff } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
+import BulkBar from '@/components/portal/BulkBar'
+import { useRowSelection } from '@/components/portal/useRowSelection'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
-import { duplicarDossier, eliminarDossier, type ResumenDossier } from '@/app/actions/portal/dossier'
+import {
+  duplicarDossier, eliminarDossier,
+  eliminarDossiersEnLote, despublicarDossiersEnLote, duplicarDossiersEnLote,
+  type ResumenDossier, type ResultadoLote,
+} from '@/app/actions/portal/dossier'
 
 // ── Listado de dossiers (addon `multidossier`) ────────────────────────────────
 //
@@ -42,6 +49,29 @@ export default function DossierLista({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [porBorrar, setPorBorrar] = useState<ResumenDossier | null>(null)
+
+  // ── Selección múltiple (acciones en lote) ──
+  const ids = useMemo(() => dossiers.map(d => d.dossier_id), [dossiers])
+  const sel = useRowSelection(ids)
+  const [confirmLote, setConfirmLote] = useState(false)
+
+  function ejecutar(fn: () => Promise<ResultadoLote>) {
+    startTransition(async () => {
+      const r = await fn()
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} aplicado${r.hechas === 1 ? '' : 's'}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitido${r.omitidas.length === 1 ? '' : 's'}`)
+      if (r.errores.length)  partes.push(`${r.errores.length} con error`)
+      const msg = partes.join(' · ') || 'Nada que hacer'
+      if (r.hechas > 0 && r.errores.length === 0) toastSuccess(msg)
+      else if (r.hechas > 0)                      toastError(msg)
+      else                                        toastError(r.omitidas[0]?.motivo ? `Nada aplicado — ${r.omitidas[0].motivo}` : msg)
+      sel.clear()
+      router.refresh()
+    })
+  }
+  function doEliminarLote() { setConfirmLote(false); ejecutar(() => eliminarDossiersEnLote(sel.selectedIds)) }
 
   const nombreEmpresa = (id: string | null) =>
     id ? (empresas.find(e => e.empresa_id === id)?.nombre ?? 'Mi empresa') : 'Todas las empresas'
@@ -99,6 +129,9 @@ export default function DossierLista({
           <table className="table">
             <thead>
               <tr>
+                <th className="col-check">
+                  <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                </th>
                 <th>Dossier</th>
                 <th>Empresa</th>
                 <th>Período</th>
@@ -111,6 +144,12 @@ export default function DossierLista({
               {dossiers.map(d => (
                 <tr key={d.dossier_id} className="table-row-clickable"
                   onClick={() => router.push(`/portal/dossier/${d.dossier_id}`)}>
+                  <td className="col-check" onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" className="row-check"
+                      checked={sel.isSelected(d.dossier_id)}
+                      onChange={() => sel.toggle(d.dossier_id)}
+                      aria-label={`Seleccionar ${d.titulo}`} />
+                  </td>
                   <td data-label="Dossier" className="cell-truncate">
                     <Link href={`/portal/dossier/${d.dossier_id}`} onClick={e => e.stopPropagation()}>
                       {d.titulo}
@@ -163,6 +202,31 @@ export default function DossierLista({
         </div>
       </div>
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <button className="btn btn-secondary btn-sm" disabled={pending}
+          onClick={() => ejecutar(() => duplicarDossiersEnLote(sel.selectedIds))}>
+          <Files size={14} strokeWidth={2} /> Duplicar
+        </button>
+        <button className="btn btn-secondary btn-sm" disabled={pending}
+          onClick={() => ejecutar(() => despublicarDossiersEnLote(sel.selectedIds))}>
+          <EyeOff size={14} strokeWidth={2} /> Despublicar
+        </button>
+        <button className="btn btn-danger-text btn-sm" disabled={pending}
+          onClick={() => setConfirmLote(true)}>
+          <Trash2 size={14} strokeWidth={2} /> Eliminar
+        </button>
+      </BulkBar>
+
+      {confirmLote && (
+        <ConfirmDialog
+          title={`¿Eliminar ${sel.count} dossier${sel.count === 1 ? '' : 's'}?`}
+          body="Se borran sus números, su relato y su marca. Los que estén publicados dejarán de funcionar para quien ya tenga el enlace. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmLote(false)}
+          onConfirm={doEliminarLote}
+        />
+      )}
+
       {/* Borrar un dossier publicado tumba un enlace que puede estar ya en el correo
           de un inversor: se dice en voz alta antes, no después. */}
       {porBorrar && (
@@ -194,5 +258,17 @@ export default function DossierLista({
         </div>
       )}
     </div>
+  )
+}
+
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }

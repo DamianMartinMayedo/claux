@@ -1,11 +1,12 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo } from 'react'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
   guardarGastoCobro,
   eliminarGastoCobro,
+  eliminarGastosCobrosEnLote,
   registrarLiquidacion,
   anularLiquidacion,
   guardarCategoriaGasto,
@@ -17,6 +18,7 @@ import {
   type TipoRegistro,
   type EstadoRegistro,
   type GastosCobrosPageData,
+  type ResultadoLote,
 } from '@/app/actions/portal/gastos'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
@@ -29,6 +31,9 @@ import { useEmpresas }                 from '@/components/portal/EmpresaColorCon
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
+import { useRowSelection }             from '@/components/portal/useRowSelection'
+import BulkBar                         from '@/components/portal/BulkBar'
+import { ConfirmDialog }               from '@/components/portal/Dialog'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -456,6 +461,18 @@ function ConfirmArchivarCat({ nombre, onConfirm, onClose, isPending }: {
   )
 }
 
+// ── Checkbox de cabecera (con estado indeterminado) ──────────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
+  )
+}
+
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
 export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPageData; puedeEditar: boolean }) {
@@ -512,6 +529,33 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
 
   const { pageItems: regItems, ...regPag } = usePagination(registros)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias_gastos)
+
+  // ── Selección múltiple (solo pestaña gastos) ──
+  const ids = useMemo(() => registros.map(r => r.registro_id), [registros])
+  const sel = useRowSelection(ids)
+  const [confirmLote, setConfirmLote] = useState(false)
+  useEffect(() => { sel.clear() }, [tab, filtroTipo, filtroEstado, filtroEmpresa]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function ejecutar(fn: () => Promise<ResultadoLote>) {
+    startTransition(async () => {
+      const r = await fn()
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} eliminada${r.hechas === 1 ? '' : 's'}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitida${r.omitidas.length === 1 ? '' : 's'}`)
+      if (r.errores.length)  partes.push(`${r.errores.length} con error`)
+      const msg = partes.join(' · ') || 'Nada que hacer'
+      if (r.hechas > 0 && r.errores.length === 0) toastSuccess(msg)
+      else if (r.hechas > 0)                      toastError(msg)
+      else                                        toastError(r.omitidas[0]?.motivo ? `Nada aplicado — ${r.omitidas[0].motivo}` : msg)
+      sel.clear()
+      router.refresh()
+    })
+  }
+  function doEliminarLote() {
+    setConfirmLote(false)
+    ejecutar(() => eliminarGastosCobrosEnLote(sel.selectedIds))
+  }
 
   function openNuevo(tipo: TipoRegistro) { setTipoNuevo(tipo); setEditRegistro(null); setModalRegistro(true) }
   function openEdit(r: GastoCobro)       { setEditRegistro(r); setModalRegistro(true) }
@@ -661,6 +705,11 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
             <table className="table">
               <thead>
                 <tr>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    </th>
+                  )}
                   <th>Fecha</th>
                   <th>Descripción</th>
                   {multiempresa && <th>Empresa</th>}
@@ -676,6 +725,14 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                   <tr key={r.registro_id}
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(r.registro_id)}
+                          onChange={() => sel.toggle(r.registro_id)}
+                          aria-label={`Seleccionar ${r.descripcion}`} />
+                      </td>
+                    )}
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(r.fecha)}</td>
                     <td data-label="Descripción">
                       <strong>{r.descripcion}</strong>
@@ -803,6 +860,26 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       {confirmCat && (
         <ConfirmArchivarCat nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}
           onClose={() => setConfirmCat(null)} isPending={isPending} />
+      )}
+
+      {/* Barra de acciones en lote (solo pestaña de gastos y con permiso de edición) */}
+      {tab === 'gastos' && puedeEditar && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          <button className="btn btn-danger-text btn-sm" disabled={isPending}
+            onClick={() => setConfirmLote(true)}>
+            <Trash2 size={14} strokeWidth={2} /> Eliminar
+          </button>
+        </BulkBar>
+      )}
+
+      {confirmLote && (
+        <ConfirmDialog
+          title={`¿Eliminar ${sel.count} registro${sel.count === 1 ? '' : 's'}?`}
+          body="Se eliminarán los seleccionados. Los que tengan pagos o cobros registrados en Tesorería se omitirán (anúlalos antes)."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmLote(false)}
+          onConfirm={doEliminarLote}
+        />
       )}
     </div>
   )
