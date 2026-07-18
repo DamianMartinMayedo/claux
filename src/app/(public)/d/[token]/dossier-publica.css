@@ -229,6 +229,13 @@
 .dp-nav-dot span { display: block; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.45; transition: opacity 0.25s, transform 0.25s; }
 .dp-nav-dot:hover span { opacity: 0.85; }
 .dp-nav-dot.active span { opacity: 1; transform: scale(1.5); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
+/* En móvil el contenido llega casi al borde y el rail (fixed, a la derecha) se
+   solapa con el final de las líneas, que parecían cortadas. Se oculta: en pantalla
+   estrecha se navega con el dedo, el rail es una ayuda de escritorio. Los .dp-nav-dot
+   siguen en el DOM (display:none no los quita), así que el JS de DeckReveal no falla. */
+@media (max-width: 768px) {
+  .dp-nav { display: none; }
+}
 
 /* ══ Animaciones — OPT-IN bajo .dp-anim ══
    Lo que ya está en pantalla cuando arranca el JS no se anima: DeckReveal le pone
