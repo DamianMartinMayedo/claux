@@ -115,7 +115,13 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
     }
     startTransition(async () => {
       const r = accion === 'leer' ? await marcarLeidasLote(ids) : await archivarLote(ids)
-      if (!r.ok) { toastError('No se pudo completar la acción.'); return }
+      if (!r.ok) {
+        toastError('No se pudo completar la acción.')
+        // Deshacer el optimismo: la lista se recarga del servidor, que es quien
+        // tiene razón. Si no, quedarían filas archivadas solo en pantalla.
+        setLista(await listarNotificaciones(filtro, 100))
+        return
+      }
       toastSuccess(accion === 'leer'
         ? `${ids.length} marcada${ids.length === 1 ? '' : 's'} como leída${ids.length === 1 ? '' : 's'}.`
         : `${ids.length} archivada${ids.length === 1 ? '' : 's'}.`)
