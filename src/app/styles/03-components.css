@@ -549,9 +549,14 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    Fuente única de pestañas internas. Consúmelo vía src/components/Tabs.tsx.
    Las familias .usr-/.ven-/.detail-/.prd-/.res-/.rrhh-/.caja-/.pv- son legado a
    converger; no crear nuevas. Sirve para <button> (state-driven) y <a>/<Link>. */
+/* La línea inferior gris va como box-shadow inset, NO como border-bottom: con
+   `overflow-x: auto` el contenedor recorta el margin-bottom:-2px del tab activo, y
+   su borde de color quedaba cortado dejando solo el gris. Con inset shadow (tanto
+   la línea del contenedor como el indicador del activo) no hay margen negativo que
+   recortar, y el shadow del tab pinta sobre el del contenedor. */
 .tabs {
   display: flex; gap: 0;
-  border-bottom: 2px solid var(--color-border);
+  box-shadow: inset 0 -2px 0 var(--color-border);
   margin-bottom: var(--space-5);
   overflow-x: auto; scrollbar-width: none;
 }
@@ -564,11 +569,11 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
   text-decoration: none;
   font-size: var(--text-sm); font-weight: 600;
   color: var(--color-text-muted);
-  border-bottom: 2px solid transparent; margin-bottom: -2px;
-  transition: color var(--transition), border-color var(--transition);
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color var(--transition), box-shadow var(--transition);
 }
 .tab:hover { color: var(--color-text); }
-.tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.tab.active { color: var(--color-primary); box-shadow: inset 0 -2px 0 var(--color-primary); }
 .tab-count {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 22px; height: 18px; padding: 0 6px;

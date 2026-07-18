@@ -21,6 +21,9 @@ export async function lanzarNavegador(): Promise<Browser> {
   // En Vercel (o cualquier build de producción) → Chromium serverless.
   if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
     const chromium = (await import('@sparticuz/chromium')).default
+    // WebGL off: el PDF no lo necesita, y así no se extrae swiftshader (menos peso
+    // en la función y arranque más rápido/estable).
+    chromium.setGraphicsMode = false
     return puppeteer.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),

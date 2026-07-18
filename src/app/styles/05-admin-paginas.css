@@ -528,7 +528,7 @@ textarea:focus-visible {
 /* Pestañas Vencen | Trial → componente canónico <Tabs> (.tabs/.tab). El bar va
    dentro de .pv-header (que ya aporta su borde inferior): se neutraliza el borde
    y el margen propios de .tabs para que encaje en la fila junto a «Ver todos». */
-.pv-header .tabs { margin-bottom: 0; border-bottom: none; }
+.pv-header .tabs { margin-bottom: 0; box-shadow: none; }
 .pv-ver-todos {
   font-size: var(--text-xs);
   color: var(--color-primary-text);

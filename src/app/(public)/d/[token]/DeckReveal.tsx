@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 // Todo el JS del deck: reveal al entrar, conteo de números, punto de navegación
 // activo, teclado (↑/↓) y la descarga en PDF. Sin librerías — el presupuesto es
@@ -21,9 +21,7 @@ function textoFinal(el: HTMLElement): string {
   return fmt.format(objetivo) + (el.dataset.suf ?? '')
 }
 
-export default function DeckReveal({ titulo }: { titulo: string }) {
-  const [generando, setGenerando] = useState(false)
-
+export default function DeckReveal() {
   useEffect(() => {
     const root = document.querySelector<HTMLElement>('.dp-page')
     if (!root) return
@@ -152,44 +150,14 @@ export default function DeckReveal({ titulo }: { titulo: string }) {
     }
   }, [])
 
-  // ── Descarga del PDF: dos caminos según el dispositivo ──
-  // Desktop: `window.print()` — el navegador respeta @page apaisado y sale perfecto.
-  // Móvil: NO. Chrome/Safari de móvil ignoran @page y meten cabecera/pie propios,
-  // así que el PDF sale vertical y roto. En su lugar lo pide a la ruta de servidor
-  // (/d/<token>/pdf), donde un Chrome que controlamos lo renderiza igual que en
-  // escritorio, y el teléfono solo descarga el archivo ya hecho.
-  const descargar = async () => {
-    const esMovil = window.matchMedia('(max-width: 768px)').matches
-    if (!esMovil) { window.print(); return }
-    try {
-      setGenerando(true)
-      const base = window.location.pathname.replace(/\/+$/, '')
-      const res = await fetch(`${base}/pdf`)
-      if (!res.ok) throw new Error('pdf')
-      const blob = await res.blob()
-      const href = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = href
-      a.download = `${titulo} — Dossier.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(href)
-    } catch {
-      window.print()   // si el servidor falla, al menos el print del navegador
-    } finally {
-      setGenerando(false)
-    }
-  }
-
   return (
-    <button type="button" className="dp-print-btn" onClick={descargar} disabled={generando} aria-busy={generando}>
+    <button type="button" className="dp-print-btn" onClick={() => window.print()}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <polyline points="7 10 12 15 17 10" />
         <line x1="12" y1="15" x2="12" y2="3" />
       </svg>
-      {generando ? 'Generando…' : 'PDF'}
+      PDF
     </button>
   )
 }

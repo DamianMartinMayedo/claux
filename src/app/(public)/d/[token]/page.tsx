@@ -335,7 +335,7 @@ export default async function DeckPage({ params }: Props) {
         href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet"
       />
-      <DeckReveal titulo={deck.nombre} />
+      <DeckReveal />
 
       <nav className="dp-nav" aria-label="Ir a una sección">
         {slides.map((s, i) => (

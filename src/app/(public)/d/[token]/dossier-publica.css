@@ -215,7 +215,6 @@
   transition: background 0.25s;
 }
 .dp-print-btn:hover { background: rgba(20, 23, 25, 0.55); }
-.dp-print-btn:disabled { opacity: 0.6; cursor: progress; }
 .dp-print-btn svg { flex-shrink: 0; }
 
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
@@ -236,6 +235,14 @@
    siguen en el DOM (display:none no los quita), así que el JS de DeckReveal no falla. */
 @media (max-width: 768px) {
   .dp-nav { display: none; }
+
+  /* En una pantalla de móvil (muy alta) el centrado vertical dejaba una franja
+     vacía enorme arriba y abajo de cada sección — el "espacio sin sentido". Se
+     ancla el contenido en la zona alta para que el ojo caiga en el titular y el
+     texto de inmediato; portada y cierre se excluyen (su diseño sí se centra /
+     estira). El kicker, a 0.8rem, se veía diminuto en el móvil: sube un punto. */
+  .dp-slide:not(#portada):not(#gracias) { align-items: flex-start; padding-top: 12vh; }
+  .dp-kicker { font-size: 0.95rem; }
 }
 
 /* ══ Animaciones — OPT-IN bajo .dp-anim ══
