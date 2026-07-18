@@ -21,6 +21,8 @@ export interface Empleado {
   nombre:        string
   apellidos:     string | null
   documento:     string | null
+  documento_vencimiento: string | null
+  fecha_nacimiento:      string | null
   telefono:      string | null
   email:         string | null
   direccion:     string | null
@@ -436,6 +438,8 @@ export async function guardarEmpleado(
   const nombre       = (formData.get('nombre')       as string)?.trim()
   const apellidos    = (formData.get('apellidos')    as string)?.trim() || null
   const documento    = (formData.get('documento')    as string)?.trim() || null
+  const doc_vence    = (formData.get('documento_vencimiento') as string)?.trim() || null
+  const fecha_nac    = (formData.get('fecha_nacimiento')      as string)?.trim() || null
   const telefono     = (formData.get('telefono')     as string)?.trim() || null
   const email        = (formData.get('email')        as string)?.trim() || null
   const direccion    = (formData.get('direccion')    as string)?.trim() || null
@@ -463,6 +467,7 @@ export async function guardarEmpleado(
 
   const campos = {
     nombre, apellidos, documento, telefono, email, direccion,
+    documento_vencimiento: doc_vence, fecha_nacimiento: fecha_nac,
     cargo, departamento, turno, tipo_contrato, fecha_alta,
     salario_base, periodicidad, notas,
     updated_at: new Date().toISOString(),

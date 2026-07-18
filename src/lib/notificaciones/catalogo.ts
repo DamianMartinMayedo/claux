@@ -150,6 +150,10 @@ export const CATALOGO = {
   },
 
   // ── Inventario ─────────────────────────────────────────────────────────────
+  // Falta el aviso de CADUCIDAD, y no por descuido: exige lotes. Un solo campo
+  // `fecha_caducidad` en el producto miente en cuanto el negocio repone (tres
+  // tandas de leche, tres fechas). Es una feature de Inventario con su plan
+  // propio: docs/planes/inventario-lotes-caducidad.md.
   stock_bajo: {
     categoria: 'inventario', modulo: 'inventario', severidad: 'aviso', implementado: true,
     etiqueta: 'Stock bajo',
@@ -172,6 +176,23 @@ export const CATALOGO = {
     categoria: 'rrhh', modulo: 'rrhh', severidad: 'urgente', implementado: true,
     etiqueta: 'Contrato de empleado vencido',
     descripcion: 'Un contrato temporal ya pasó su fecha de fin.',
+    umbrales: ['vencido'],
+  },
+  cumpleanos_empleado: {
+    categoria: 'rrhh', modulo: 'rrhh', severidad: 'info', implementado: true,
+    etiqueta: 'Cumpleaños de un empleado',
+    descripcion: 'El día que alguien de tu equipo cumple años.',
+  },
+  documento_empleado_vence: {
+    categoria: 'rrhh', modulo: 'rrhh', severidad: 'aviso', implementado: true,
+    etiqueta: 'Documento por caducar',
+    descripcion: 'El carné o documento de un empleado se acerca a su caducidad.',
+    ...ESCALA_VENCIMIENTO,
+  },
+  documento_empleado_vencido: {
+    categoria: 'rrhh', modulo: 'rrhh', severidad: 'urgente', implementado: true,
+    etiqueta: 'Documento caducado',
+    descripcion: 'El carné o documento de un empleado ya caducó.',
     umbrales: ['vencido'],
   },
   nomina_pendiente: {

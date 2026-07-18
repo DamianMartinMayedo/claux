@@ -360,7 +360,7 @@ export async function escanearRrhh(
   const [conRes, empRes, nomRes] = await Promise.all([
     db.from('contratos').select('contrato_id, client_id, empleado_id, fecha_fin')
       .in('client_id', ids).not('fecha_fin', 'is', null),
-    db.from('empleados').select('empleado_id, client_id, nombre, apellidos, fecha_baja')
+    db.from('empleados').select('empleado_id, client_id, nombre, apellidos, fecha_baja, fecha_nacimiento, documento_vencimiento')
       .in('client_id', ids),
     db.from('nominas').select('client_id, periodo').in('client_id', ids),
   ])
@@ -409,6 +409,63 @@ export async function escanearRrhh(
       db, t.clientId,
       ['contrato_empleado_vence', 'contrato_empleado_vencido'],
       'contrato', vivas.de(t.clientId),
+    )
+  }
+
+  // Cumpleaños y caducidad de documentos (migración 111). Solo de quien sigue
+  // de alta y solo si la fecha está puesta: son campos opcionales.
+  const vivasDoc = new Vivas()
+  for (const e of empRes.data ?? []) {
+    if (e.fecha_baja) continue
+    const nombre = `${e.nombre}${e.apellidos ? ` ${e.apellidos}` : ''}`
+
+    // Cumpleaños: se compara mes y día, no la fecha entera. La entidad lleva el
+    // año para que vuelva a felicitarse el que viene y no se repita este.
+    if (e.fecha_nacimiento && (e.fecha_nacimiento as string).slice(5) === hoy.slice(5)) {
+      const ok = await crearNotificacion({
+        clientId:    e.client_id as string,
+        tipo:        'cumpleanos_empleado',
+        titulo:      `Hoy cumple años ${nombre}`,
+        cuerpo:      'Un detalle hoy vale más que un aumento en diciembre.',
+        enlace:      `/portal/rrhh/${e.empleado_id}`,
+        entidadTipo: 'cumpleanos',
+        entidadId:   `${e.empleado_id}:${hoy.slice(0, 4)}`,
+      }, ctxDe.get(e.client_id as string))
+      if (ok) creadas++
+    }
+
+    if (e.documento_vencimiento) {
+      const dias    = diasHasta(e.documento_vencimiento as string, hoy)
+      const vencido = dias < 0
+      const tipo: 'documento_empleado_vencido' | 'documento_empleado_vence' =
+        vencido ? 'documento_empleado_vencido' : 'documento_empleado_vence'
+      const umbral: Umbral | null = vencido ? 'vencido' : umbralParaFecha(tipo, dias)
+      if (umbral) {
+        vivasDoc.add(e.client_id as string, e.empleado_id as string)
+        const ok = await crearNotificacion({
+          clientId: e.client_id as string,
+          tipo,
+          titulo:   vencido
+            ? `Documento caducado — ${nombre}`
+            : `Documento por caducar — ${nombre}`,
+          cuerpo:   vencido
+            ? `Su documento caducó el ${fmtFechaEs(e.documento_vencimiento as string)}.`
+            : `Su documento caduca el ${fmtFechaEs(e.documento_vencimiento as string)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
+          enlace:      `/portal/rrhh/${e.empleado_id}`,
+          entidadTipo: 'documento_empleado',
+          entidadId:   e.empleado_id as string,
+          umbral,
+          sustituyeA:  ['documento_empleado_vence', 'documento_empleado_vencido'],
+        }, ctxDe.get(e.client_id as string))
+        if (ok) creadas++
+      }
+    }
+  }
+  for (const t of tenants) {
+    await resolverNotificaciones(
+      db, t.clientId,
+      ['documento_empleado_vence', 'documento_empleado_vencido'],
+      'documento_empleado', vivasDoc.de(t.clientId),
     )
   }
 

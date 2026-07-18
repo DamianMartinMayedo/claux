@@ -49,7 +49,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
       <div className="page-header">
         <div>
           {volver && (
-            <Link className="dos-volver" href={volver}>
+            <Link className="volver-link" href={volver}>
               <ArrowLeft size={14} strokeWidth={2.5} /> Mis dossiers
             </Link>
           )}

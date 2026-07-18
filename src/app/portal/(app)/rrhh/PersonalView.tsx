@@ -155,6 +155,18 @@ export function EmpleadoModal({
                 <input className="input" name="documento" defaultValue={empleado?.documento ?? ''} placeholder="Carné de identidad" />
               </div>
               <div className="input-group ter-col-span-2">
+                <label>Caduca el</label>
+                <input className="input" name="documento_vencimiento" type="date"
+                  defaultValue={empleado?.documento_vencimiento?.split('T')[0] ?? ''} />
+                <span className="input-hint">Te avisamos antes de que venza.</span>
+              </div>
+              <div className="input-group ter-col-span-2">
+                <label>Fecha de nacimiento</label>
+                <input className="input" name="fecha_nacimiento" type="date"
+                  defaultValue={empleado?.fecha_nacimiento?.split('T')[0] ?? ''} />
+                <span className="input-hint">Para avisarte de su cumpleaños.</span>
+              </div>
+              <div className="input-group ter-col-span-2">
                 <label>Teléfono</label>
                 <input className="input" name="telefono" defaultValue={empleado?.telefono ?? ''} placeholder="+53 5…" />
               </div>

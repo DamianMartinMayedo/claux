@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCheck, Archive, BellOff } from 'lucide-react'
+import { CheckCheck, Archive, BellOff, ArrowLeft } from 'lucide-react'
 import Tabs from '@/components/Tabs'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { IconoSeveridad, TiempoRelativo } from '@/components/portal/notificaciones/presentacion'
@@ -28,11 +28,23 @@ export default function NotificacionesView({
 }) {
   const [pestana, setPestana] = useState<Pestana>('bandeja')
   const { noLeidas } = useNotificaciones()
+  const router = useRouter()
+
+  // Aquí se entra desde CUALQUIER página (la campana está en la cabecera, y hay
+  // acceso desde el menú de cuenta), así que "volver" es el historial, no un
+  // padre fijo. Si se llegó por URL directa no hay historial: al panel.
+  function volver() {
+    if (window.history.length > 1) router.back()
+    else router.push('/portal/dashboard')
+  }
 
   return (
     <div className="view-container">
       <div className="page-header">
         <div>
+          <button type="button" className="volver-link" onClick={volver}>
+            <ArrowLeft size={16} strokeWidth={2} /> Volver
+          </button>
           <h1 className="page-title">Notificaciones</h1>
           <p className="page-subtitle">
             Avisos de tu negocio. La bandeja es compartida: si la marcas leída, la ven leída todos los administradores.

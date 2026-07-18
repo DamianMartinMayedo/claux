@@ -1061,3 +1061,27 @@ input[type="checkbox"]:checked::after {
 @media (prefers-reduced-motion: reduce) {
   .ntf-popup { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════
+   VOLVER — navegación de contexto sobre el título
+   ═══════════════════════════════════════════════════
+   NO es un `.btn`: no es una acción de la página, es salir de ella. Va encima
+   del `.page-title`. Nació clavado al dossier (`.dos-volver`) y por eso el
+   detalle de catálogo tuvo que apañarse con un `.btn-ghost`; vive aquí para que
+   toda vuelta atrás del portal se vea igual. */
+.volver-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition: color var(--transition);
+}
+.volver-link:hover { color: var(--color-primary-text); }

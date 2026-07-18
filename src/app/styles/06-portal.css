@@ -2482,15 +2482,9 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    (si no, flex respeta el min-content y vuelve a empujar). La base de 20rem es el
    punto en el que sí interesa que envuelva: en móvil, título y botón apilados. */
 .dos-lista-intro { flex: 1 1 20rem; min-width: 0; }
-/* Vuelta a la lista desde un dossier abierto. No es `.btn`: es navegación de
-   contexto sobre el título, no una acción de la página. */
-.dos-volver {
-  display: inline-flex; align-items: center; gap: var(--space-1);
-  margin-bottom: var(--space-2);
-  font-size: var(--text-sm); font-weight: 600;
-  color: var(--color-text-muted); transition: color var(--transition);
-}
-.dos-volver:hover { color: var(--color-primary-text); }
+/* La vuelta atrás vive ahora en 03-components.css como `.volver-link`: no era
+   nada del dossier, era navegación de contexto y la necesitaba también
+   Notificaciones. Se movió en vez de copiarse. */
 /* Estado + desfase en la misma celda: dos badges que se apilan si no caben. */
 .dos-lista-estado { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: center; }
 
