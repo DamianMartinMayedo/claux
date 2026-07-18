@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
   // Chromium headless (PDF del deck en móvil): binarios nativos que NO deben
   // pasar por el bundler; se cargan desde node_modules en runtime Node.
   serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
+  // El binario de Chromium (bin/*.br) lo lee @sparticuz por FS en runtime, no con
+  // import, así que el tracer de Vercel NO lo empaqueta y executablePath() peta con
+  // 500. Hay que forzar su inclusión en la función de la ruta del PDF.
+  outputFileTracingIncludes: {
+    '/d/[token]/pdf': ['./node_modules/@sparticuz/chromium/bin/**'],
+  },
   images: {
     // Logos de empresas servidos desde Supabase Storage (bucket público).
     remotePatterns: [

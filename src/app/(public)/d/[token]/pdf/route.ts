@@ -68,8 +68,10 @@ export async function GET(req: NextRequest, { params }: Ctx): Promise<Response> 
         'Cache-Control': 'private, no-store',
       },
     })
-  } catch {
-    return new Response('No se pudo generar el PDF', { status: 500 })
+  } catch (err) {
+    // TEMPORAL: superficie el error real para diagnosticar el fallo en Vercel.
+    const detalle = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err)
+    return new Response(`No se pudo generar el PDF\n\n${detalle}`, { status: 500 })
   } finally {
     await navegador.close()
   }
