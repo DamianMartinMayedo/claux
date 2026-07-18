@@ -12,6 +12,7 @@ import {
   darBajaEmpleadosEnLote,
   reactivarEmpleadosEnLote,
   eliminarEmpleadosEnLote,
+  copiarEmpleadosAEmpresaEnLote,
   type Empleado,
   type EmpleadoConEstado,
   type TipoContrato,
@@ -26,6 +27,7 @@ import BulkBar                         from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
+import CopiarLoteEmpresaModal          from '@/components/portal/CopiarLoteEmpresaModal'
 import { opcionesCon }                 from '@/components/portal/form-helpers'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
@@ -439,6 +441,11 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
     ejecutarLote(() => darBajaEmpleadosEnLote(sel.selectedIds, fecha, motivo))
   }
   function doEliminarLote() { setConfirmLoteDel(false); ejecutarLote(() => eliminarEmpleadosEnLote(sel.selectedIds)) }
+  const [copiarLote, setCopiarLote] = useState(false)
+  function doCopiarLote(empresaDestino: string) {
+    setCopiarLote(false)
+    ejecutarLote(() => copiarEmpleadosAEmpresaEnLote(sel.selectedIds, empresaDestino))
+  }
 
   const activos = data.empleados.filter(e => e.estado === 'ACTIVO').length
 
@@ -630,6 +637,12 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
       )}
 
       <BulkBar count={sel.count} onClear={sel.clear}>
+        {multiempresa && (
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setCopiarLote(true)}>
+            <Copy size={14} strokeWidth={2} /> Copiar a empresa
+          </button>
+        )}
         {hayActivos && (
           <button className="btn btn-secondary btn-sm" disabled={isPending}
             onClick={() => setBajaLote(true)}>
@@ -650,6 +663,15 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
 
       {bajaLote && (
         <BajaLoteModal count={sel.count} onClose={() => setBajaLote(false)} onConfirm={doBajaLote} />
+      )}
+      {copiarLote && (
+        <CopiarLoteEmpresaModal
+          count={sel.count}
+          sustantivo="empleado"
+          empresas={data.empresas}
+          onClose={() => setCopiarLote(false)}
+          onConfirm={doCopiarLote}
+        />
       )}
       {confirmLoteDel && (
         <ConfirmDialog

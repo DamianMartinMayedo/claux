@@ -9,6 +9,7 @@ import {
   copiarTerceroAEmpresa,
   restaurarTercero,
   archivarTercerosEnLote,
+  copiarTercerosAEmpresaEnLote,
   type Tercero,
   type TipoTercero,
   type TercerosPageData,
@@ -21,6 +22,7 @@ import { ConfirmDialog }               from '@/components/portal/Dialog'
 import BulkBar                         from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
+import CopiarLoteEmpresaModal          from '@/components/portal/CopiarLoteEmpresaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
@@ -159,6 +161,25 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   function doArchivarLote() {
     setConfirmLote(false)
     ejecutarLote(() => archivarTercerosEnLote(sel.selectedIds, true), n => `${n} registro${plural(n)} archivado${plural(n)}.`)
+  }
+
+  // Copiar a otra empresa en lote (un solo destino; la acción deduplica por nombre
+  // y omite los que ya estén en el destino, reportando cuántos).
+  const [copiarLote, setCopiarLote] = useState(false)
+  function doCopiarLote(empresaDestino: string) {
+    setCopiarLote(false)
+    startTransition(async () => {
+      const r = await copiarTercerosAEmpresaEnLote(sel.selectedIds, empresaDestino)
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} copiado${plural(r.hechas)}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitido${plural(r.omitidas.length)}`)
+      const msg = partes.join(' · ') || 'Nada que copiar'
+      if (r.hechas > 0) toastSuccess(msg)
+      else              toastError(r.omitidas[0]?.motivo ? `Nada copiado — ${r.omitidas[0].motivo}` : msg)
+      sel.clear()
+      router.refresh()
+    })
   }
 
   function openCreate() { setEditTercero(null); setModalOpen(true) }
@@ -409,10 +430,18 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             <RotateCcw size={14} strokeWidth={2} /> Restaurar
           </button>
         ) : (
-          <button className="btn btn-danger-text btn-sm" disabled={isPending}
-            onClick={() => setConfirmLote(true)}>
-            <Archive size={14} strokeWidth={2} /> Archivar
-          </button>
+          <>
+            {multiempresa && (
+              <button className="btn btn-secondary btn-sm" disabled={isPending}
+                onClick={() => setCopiarLote(true)}>
+                <Copy size={14} strokeWidth={2} /> Copiar a empresa
+              </button>
+            )}
+            <button className="btn btn-danger-text btn-sm" disabled={isPending}
+              onClick={() => setConfirmLote(true)}>
+              <Archive size={14} strokeWidth={2} /> Archivar
+            </button>
+          </>
         )}
       </BulkBar>
 
@@ -459,6 +488,15 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             copiarTerceroAEmpresa(copiarTercero.tercero_id, empresaId, moneda, limite)}
           onClose={() => setCopiarTercero(null)}
           onCopiado={() => { setCopiarTercero(null); router.refresh() }}
+        />
+      )}
+      {copiarLote && (
+        <CopiarLoteEmpresaModal
+          count={sel.count}
+          sustantivo="registro"
+          empresas={empresasLista}
+          onClose={() => setCopiarLote(false)}
+          onConfirm={doCopiarLote}
         />
       )}
     </div>

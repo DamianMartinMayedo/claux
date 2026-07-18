@@ -423,6 +423,50 @@ export async function archivarTercerosEnLote(
   return { ok: true, hechas: (data ?? []).length }
 }
 
+// ── Copiar a otra empresa en lote (Fase 3 — máximo cuidado, Regla A) ─────────────
+// Envuelve la individual (que ya excluye la PK `id` y regenera el código). AÑADE la
+// tercera guarda que la individual no trae: DEDUP por nombre en la empresa destino,
+// porque no hay índice único → copiar en lote duplicaría en silencio. Un solo
+// destino por operación; cada registro conserva SU moneda/límite (no se convierte).
+
+export interface ResultadoLoteCopiaTerceros {
+  ok: boolean
+  hechas: number
+  omitidas: { etiqueta: string; motivo: string }[]
+  error?: string
+}
+
+export async function copiarTercerosAEmpresaEnLote(
+  ids: string[], empresa_destino: string,
+): Promise<ResultadoLoteCopiaTerceros> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!empresa_destino) return { ok: false, hechas: 0, omitidas: [], error: 'Elige una empresa destino.' }
+  if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
+
+  const db = createAdminClient()
+  const { data: origen } = await db.from('third_parties')
+    .select('tercero_id, nombre, empresa_id')
+    .eq('client_id', session.client_id).in('tercero_id', ids)
+  const { data: enDestino } = await db.from('third_parties')
+    .select('nombre')
+    .eq('client_id', session.client_id).eq('empresa_id', empresa_destino)
+  const existentes = new Set((enDestino ?? []).map((t: { nombre: string }) => t.nombre.trim().toLowerCase()))
+
+  const res: ResultadoLoteCopiaTerceros = { ok: true, hechas: 0, omitidas: [] }
+  for (const t of (origen ?? []) as { tercero_id: string; nombre: string; empresa_id: string }[]) {
+    const clave = t.nombre.trim().toLowerCase()
+    if (t.empresa_id === empresa_destino) { res.omitidas.push({ etiqueta: t.nombre, motivo: 'ya pertenece a esa empresa' }); continue }
+    if (existentes.has(clave))            { res.omitidas.push({ etiqueta: t.nombre, motivo: 'ya existe en la empresa destino' }); continue }
+    const r = await copiarTerceroAEmpresa(t.tercero_id, empresa_destino)   // conserva su moneda/límite
+    if (r.ok) { res.hechas++; existentes.add(clave) }   // evita duplicar dos seleccionados homónimos
+    else res.omitidas.push({ etiqueta: t.nombre, motivo: r.error ?? 'No se pudo copiar' })
+  }
+  revalidatePath('/portal/terceros')
+  return res
+}
+
 // ── Detalle de tercero ────────────────────────────────────────────────────────
 
 // ── Historial de transacciones del tercero ────────────────────────────────────

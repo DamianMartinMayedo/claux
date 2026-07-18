@@ -230,6 +230,44 @@ export async function copiarEmpleadoAEmpresa(
   return { ok: true, empleado_id: nuevo_id }
 }
 
+// ── Copiar a otra empresa en lote (Fase 3 — máximo cuidado, Regla A) ─────────────
+// Envuelve la individual (excluye la PK y regenera el código). Añade la DEDUP que la
+// individual no trae: por nombre+apellidos en la empresa destino (no hay índice único
+// → copiar en lote duplicaría). Un destino por operación; cada uno conserva SU
+// moneda/salario (no se convierte a ciegas). Usa el ResultadoLote/loteVacio de abajo.
+export async function copiarEmpleadosAEmpresaEnLote(
+  ids: string[], empresa_destino: string,
+): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!empresa_destino) return loteVacio('Elige una empresa destino.')
+  if (!ids.length) return loteVacio()
+
+  const db = createAdminClient()
+  const { data: origen } = await db.from('empleados')
+    .select('empleado_id, nombre, apellidos, empresa_id')
+    .eq('client_id', session.client_id).in('empleado_id', ids)
+  const { data: enDestino } = await db.from('empleados')
+    .select('nombre, apellidos')
+    .eq('client_id', session.client_id).eq('empresa_id', empresa_destino)
+  const claveDe = (n: string, a: string | null) => `${n.trim().toLowerCase()}|${(a ?? '').trim().toLowerCase()}`
+  const existentes = new Set((enDestino ?? []).map((e: { nombre: string; apellidos: string | null }) => claveDe(e.nombre, e.apellidos)))
+
+  const res = loteVacio()
+  for (const e of (origen ?? []) as { empleado_id: string; nombre: string; apellidos: string | null; empresa_id: string }[]) {
+    const etiqueta = `${e.nombre}${e.apellidos ? ' ' + e.apellidos : ''}`
+    const k = claveDe(e.nombre, e.apellidos)
+    if (e.empresa_id === empresa_destino) { res.omitidas.push({ etiqueta, motivo: 'ya pertenece a esa empresa' }); continue }
+    if (existentes.has(k))                { res.omitidas.push({ etiqueta, motivo: 'ya existe en la empresa destino' }); continue }
+    const r = await copiarEmpleadoAEmpresa(e.empleado_id, empresa_destino)   // conserva su moneda/salario
+    if (r.ok) { res.hechas++; existentes.add(k) }
+    else res.omitidas.push({ etiqueta, motivo: r.error ?? 'No se pudo copiar' })
+  }
+  revalidatePath('/portal/rrhh')
+  return res
+}
+
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
 }
