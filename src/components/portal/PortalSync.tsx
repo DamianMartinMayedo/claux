@@ -29,9 +29,13 @@ const MS_ENTRE_REFRESCOS = 60_000
 
 export default function PortalSync() {
   const router = useRouter()
-  const ultimoRef = useRef<number>(Date.now())
+  // Arranca en 0 y se sella al montar: `Date.now()` en el cuerpo del componente
+  // es una llamada impura durante el render y React 19 lo marca como error.
+  const ultimoRef = useRef<number>(0)
 
   useEffect(() => {
+    ultimoRef.current = Date.now()
+
     function alVolver() {
       if (document.visibilityState !== 'visible') return
       if (Date.now() - ultimoRef.current < MS_ENTRE_REFRESCOS) return

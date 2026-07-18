@@ -8,9 +8,25 @@ import { usePathname } from 'next/navigation'
 // esperar a que pinte la página nueva. Arranca con:
 //   · clics en enlaces (<Link>/<a> del mismo origen),
 //   · clics en filas de tabla clicables (.table-row-clickable → router.push),
-//   · history.pushState / popstate (navegación programática y atrás/adelante).
+//   · history.pushState / popstate (navegación programática y atrás/adelante),
+//   · `avisarNavegacion()`, para un router.push() disparado desde un botón.
 // Se completa cuando cambia el pathname (ruta nueva lista). Un tope de seguridad
 // la retira si la navegación no llega a cambiar la ruta.
+
+const EVENTO_NAV = 'claux:nav-inicio'
+
+/**
+ * Enciende la barra ANTES de un `router.push()` hecho a mano.
+ *
+ * Hace falta porque el detector de clics solo entiende `<a>` y filas de tabla:
+ * un botón que navega (una notificación de la bandeja, por ejemplo) no lo
+ * dispara. Y esperar al `history.pushState` del router no vale — el App Router
+ * lo llama DESPUÉS de traerse la ruta, que es justo el rato en el que el usuario
+ * se queda sin saber si su clic hizo algo. En Cuba ese rato son segundos.
+ */
+export function avisarNavegacion(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENTO_NAV))
+}
 export default function TopLoader() {
   const pathname = usePathname()
   const [progress, setProgress] = useState(0)
@@ -84,11 +100,13 @@ export default function TopLoader() {
       return origPush.apply(this, args)
     }
     window.addEventListener('popstate', begin)
+    window.addEventListener(EVENTO_NAV, begin)
     document.addEventListener('click', onClick, true)
 
     return () => {
       history.pushState = origPush
       window.removeEventListener('popstate', begin)
+      window.removeEventListener(EVENTO_NAV, begin)
       document.removeEventListener('click', onClick, true)
       parar()
       if (ocultar) clearTimeout(ocultar)

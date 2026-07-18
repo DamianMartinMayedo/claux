@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCheck, Archive, BellOff, ArrowLeft, ChevronDown } from 'lucide-react'
 import Tabs from '@/components/Tabs'
 import BulkBar from '@/components/portal/BulkBar'
+import { avisarNavegacion } from '@/components/portal/TopLoader'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { IconoSeveridad, TiempoRelativo } from '@/components/portal/notificaciones/presentacion'
@@ -130,6 +131,9 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
   }
 
   async function abrir(n: NotificacionFila) {
+    // La barra de carga primero: marcar leída es una ida y vuelta al servidor y
+    // sin esto el clic se queda mudo hasta que llega la página nueva.
+    if (n.enlace) avisarNavegacion()
     if (n.estado === 'nueva') {
       await leer(n.id)
       setLista(l => l.map(x => (x.id === n.id ? { ...x, estado: 'leida' } : x)))
@@ -203,7 +207,10 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
               />
               <span className="ntf-item-icono"><IconoSeveridad severidad={n.severidad} size={18} /></span>
               <button type="button" className="ntf-fila-cuerpo" onClick={() => void abrir(n)}>
-                <span className="ntf-item-titulo">{n.titulo}</span>
+                <span className="ntf-item-linea">
+                  {n.estado === 'nueva' && <span className="ntf-punto" aria-hidden="true" />}
+                  <span className="ntf-item-titulo">{n.titulo}</span>
+                </span>
                 {n.cuerpo && <span className="ntf-fila-texto">{n.cuerpo}</span>}
                 <TiempoRelativo iso={n.created_at} />
               </button>

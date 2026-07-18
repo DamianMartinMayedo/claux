@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { X } from 'lucide-react'
+import { avisarNavegacion } from '@/components/portal/TopLoader'
 import { useNotificaciones } from './NotificacionesContext'
 import { IconoSeveridad } from './presentacion'
 import type { NotificacionFila } from '@/app/actions/portal/notificaciones'
@@ -21,6 +22,11 @@ const MAX_POPUPS = 3
 
 export default function NotificacionesPopups() {
   const { popups } = useNotificaciones()
+  const pathname = usePathname()
+
+  // En el propio centro de notificaciones no sale ninguno: el usuario ya está
+  // mirando la lista entera, y el popup encima tapa justo lo que viene a leer.
+  if (pathname.startsWith('/portal/notificaciones')) return null
   if (popups.length === 0) return null
 
   return (
@@ -56,7 +62,7 @@ function PopupResumen() {
         <button
           type="button"
           className="ntf-popup-accion"
-          onClick={() => router.push('/portal/notificaciones')}
+          onClick={() => { avisarNavegacion(); router.push('/portal/notificaciones') }}
         >
           Verlos todos
         </button>
@@ -85,6 +91,7 @@ function Popup({ n }: { n: NotificacionFila }) {
   }, [urgente, n.id, cerrarPopup])
 
   async function ir() {
+    if (n.enlace) avisarNavegacion()
     await leer(n.id)
     if (n.enlace) router.push(n.enlace)
   }

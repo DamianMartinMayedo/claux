@@ -45,7 +45,10 @@ export function NotificacionesProvider({ inicial, children }: Props) {
   const [noLeidas,  setNoLeidas]  = useState(inicial.noLeidas)
   const [recientes, setRecientes] = useState(inicial.recientes)
   const [popups,    setPopups]    = useState(inicial.popups)
-  const ultimoRef = useRef<number>(Date.now())
+  // Arranca en 0 y se sella al montar, dentro del efecto: `Date.now()` en el
+  // cuerpo del componente es una llamada impura durante el render y React 19 lo
+  // marca como error.
+  const ultimoRef = useRef<number>(0)
 
   const refrescar = useCallback(async () => {
     const [n, r, p] = await Promise.all([
@@ -71,6 +74,10 @@ export function NotificacionesProvider({ inicial, children }: Props) {
   // Es además lo que encaja con la conexión cubana: cero tráfico mientras el
   // portal está en segundo plano, y los avisos al día en cuanto se vuelve a él.
   useEffect(() => {
+    // Sella el arranque: los datos vienen frescos del servidor, así que la
+    // ventana de throttle cuenta desde el montaje.
+    ultimoRef.current = Date.now()
+
     function alVolver() {
       if (document.visibilityState !== 'visible') return
       // El cron corre una vez al día: no tiene sentido repreguntar cada rato.

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Bell } from 'lucide-react'
+import { avisarNavegacion } from '@/components/portal/TopLoader'
 import { useNotificaciones } from './NotificacionesContext'
 import { IconoSeveridad, TiempoRelativo } from './presentacion'
 import type { NotificacionFila } from '@/app/actions/portal/notificaciones'
@@ -32,6 +33,7 @@ export default function NotificacionesCampana() {
 
   async function abrir(n: NotificacionFila) {
     setOpen(false)
+    if (n.enlace) avisarNavegacion()
     if (n.estado === 'nueva') await leer(n.id)
     if (n.enlace) router.push(n.enlace)
   }
@@ -77,7 +79,10 @@ export default function NotificacionesCampana() {
                 >
                   <span className="ntf-item-icono"><IconoSeveridad severidad={n.severidad} /></span>
                   <span className="ntf-item-cuerpo">
-                    <span className="ntf-item-titulo">{n.titulo}</span>
+                    <span className="ntf-item-linea">
+                      {n.estado === 'nueva' && <span className="ntf-punto" aria-hidden="true" />}
+                      <span className="ntf-item-titulo">{n.titulo}</span>
+                    </span>
                     <TiempoRelativo iso={n.created_at} />
                   </span>
                 </button>
