@@ -135,6 +135,40 @@ export async function marcarTodasLeidas(): Promise<{ ok: boolean }> {
   return { ok: !error }
 }
 
+// ── Acciones en lote ──────────────────────────────────────────────────────────
+// Mismo candado que el resto (rol admin + filtro por client_id): los ids llegan
+// del navegador, así que el `.eq('client_id')` es lo que impide tocar la bandeja
+// de otro tenant aunque alguien mande ids ajenos.
+
+export async function marcarLeidasLote(ids: number[]): Promise<{ ok: boolean }> {
+  const session = await sesionAdmin()
+  if (!session || ids.length === 0) return { ok: false }
+
+  const { error } = await createAdminClient()
+    .from('notificaciones')
+    .update({ estado: 'leida', leida_por: session.email, leida_at: new Date().toISOString() })
+    .eq('client_id', session.client_id)
+    .in('id', ids)
+    .eq('estado', 'nueva')
+
+  revalidatePath('/portal/notificaciones')
+  return { ok: !error }
+}
+
+export async function archivarLote(ids: number[]): Promise<{ ok: boolean }> {
+  const session = await sesionAdmin()
+  if (!session || ids.length === 0) return { ok: false }
+
+  const { error } = await createAdminClient()
+    .from('notificaciones')
+    .update({ estado: 'archivada' })
+    .eq('client_id', session.client_id)
+    .in('id', ids)
+
+  revalidatePath('/portal/notificaciones')
+  return { ok: !error }
+}
+
 export async function archivarNotificacion(id: number): Promise<{ ok: boolean }> {
   const session = await sesionAdmin()
   if (!session) return { ok: false }
@@ -189,6 +223,50 @@ export async function listarPreferencias(): Promise<PreferenciaFila[]> {
       severidad_default: def.severidad,
     }
   })
+}
+
+/** Activa o desactiva de golpe todos los tipos de una categoría. */
+export async function guardarPreferenciasLote(
+  tipos: TipoClave[],
+  activa: boolean,
+): Promise<{ ok: boolean }> {
+  const session = await sesionAdmin()
+  if (!session) return { ok: false }
+
+  // Solo claves del catálogo: la lista viaja desde el navegador.
+  const validos = tipos.filter(t => t in CATALOGO)
+  if (validos.length === 0) return { ok: false }
+
+  const db = createAdminClient()
+
+  // Un upsert manda la fila ENTERA: sin leer antes el `severidad_override`, el
+  // interruptor del grupo borraría en silencio el nivel que el dueño hubiera
+  // elegido tipo a tipo. Se conserva.
+  const { data: previas } = await db
+    .from('notificacion_config')
+    .select('tipo, severidad_override')
+    .eq('client_id', session.client_id)
+    .in('tipo', validos)
+
+  const overrideDe = new Map(
+    (previas ?? []).map(p => [p.tipo as string, (p.severidad_override ?? null) as Severidad | null]),
+  )
+
+  const { error } = await db
+    .from('notificacion_config')
+    .upsert(
+      validos.map(tipo => ({
+        client_id: session.client_id,
+        tipo,
+        activa,
+        severidad_override: overrideDe.get(tipo) ?? null,
+        updated_at: new Date().toISOString(),
+      })),
+      { onConflict: 'client_id,tipo' },
+    )
+
+  revalidatePath('/portal/notificaciones')
+  return { ok: !error }
 }
 
 export async function guardarPreferencia(

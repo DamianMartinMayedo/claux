@@ -977,7 +977,9 @@ input[type="checkbox"]:checked::after {
   height: 17px;
   padding: 0 4px;
   border-radius: var(--radius-full);
-  background: var(--color-error);
+  /* Primary, no rojo: el contador dice CUÁNTAS hay, no que ardan. El rojo es
+     para la severidad de cada aviso, y gastarlo aquí lo devalúa. */
+  background: var(--color-primary);
   color: var(--color-text-inv);
   font-family: var(--font-body);
   font-size: 10px;
@@ -1002,32 +1004,36 @@ input[type="checkbox"]:checked::after {
   width: min(360px, calc(100vw - var(--space-6)));
   pointer-events: none;
 }
+/* Mismo lenguaje que los toasts de acción: fondo del color en su tono claro y
+   SIN borde. El borde de color sobre superficie neutra pesaba mucho y hacía que
+   tres avisos apilados parecieran una alarma. */
 .ntf-popup {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  border: 1px solid var(--ntf-color);
-  border-left-width: 3px;
+  background: var(--ntf-bg);
   box-shadow: var(--shadow-lg);
   pointer-events: auto;
   animation: ntf-popup-in 280ms var(--ease);
 }
-.ntf-popup .ntf-item-icono { width: 24px; height: 24px; }
+/* El chip del icono se queda sin fondo: el fondo YA es el del color. */
+.ntf-popup .ntf-item-icono { width: 24px; height: 24px; background: none; }
 .ntf-popup-cuerpo { flex: 1; min-width: 0; }
+/* Sobre el fondo teñido, el titular va en el color del estado (como los toasts)
+   y el cuerpo en tinta normal, que contrasta en ambos temas. */
 .ntf-popup-titulo {
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--ntf-color);
   line-height: 1.35;
 }
 .ntf-popup-texto {
   margin-top: var(--space-1);
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text);
   line-height: 1.4;
 }
 .ntf-popup-accion {
@@ -1036,11 +1042,12 @@ input[type="checkbox"]:checked::after {
   border: 0;
   background: none;
   font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-primary-text);
+  font-weight: 700;
+  /* Hereda el color del estado: el teal del enlace se perdía sobre ámbar. */
+  color: var(--ntf-color);
+  text-decoration: underline;
   cursor: pointer;
 }
-.ntf-popup-accion:hover { text-decoration: underline; }
 .ntf-popup-cerrar {
   flex-shrink: 0;
   display: inline-flex;
@@ -1048,11 +1055,12 @@ input[type="checkbox"]:checked::after {
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
-  color: var(--color-text-faint);
+  color: var(--ntf-color);
+  opacity: .65;
   cursor: pointer;
-  transition: var(--transition);
+  transition: opacity var(--transition);
 }
-.ntf-popup-cerrar:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.ntf-popup-cerrar:hover { opacity: 1; }
 
 @keyframes ntf-popup-in {
   from { opacity: 0; transform: translateX(16px); }

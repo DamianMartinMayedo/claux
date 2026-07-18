@@ -2,13 +2,16 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCheck, Archive, BellOff, ArrowLeft } from 'lucide-react'
+import { CheckCheck, Archive, BellOff, ArrowLeft, ChevronDown } from 'lucide-react'
 import Tabs from '@/components/Tabs'
+import BulkBar from '@/components/portal/BulkBar'
+import { useRowSelection } from '@/components/portal/useRowSelection'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { IconoSeveridad, TiempoRelativo } from '@/components/portal/notificaciones/presentacion'
 import { useNotificaciones } from '@/components/portal/notificaciones/NotificacionesContext'
 import {
-  listarNotificaciones, guardarPreferencia,
+  listarNotificaciones, guardarPreferencia, guardarPreferenciasLote,
+  marcarLeidasLote, archivarLote,
   type NotificacionFila, type PreferenciaFila, type FiltroBandeja,
 } from '@/app/actions/portal/notificaciones'
 import {
@@ -81,17 +84,43 @@ const FILTROS: { id: FiltroBandeja; label: string }[] = [
 ]
 
 function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
-  const { leer, leerTodas, archivar, noLeidas } = useNotificaciones()
+  const { leer, leerTodas, archivar, refrescar, noLeidas } = useNotificaciones()
   const [filtro, setFiltro] = useState<FiltroBandeja>('todas')
   const [lista, setLista]   = useState(inicial)
   const [cargando, setCargando] = useState(false)
+  const [, startTransition] = useTransition()
   const router = useRouter()
+
+  const sel = useRowSelection(lista.map(n => String(n.id)))
 
   async function cambiarFiltro(f: FiltroBandeja) {
     setFiltro(f)
     setCargando(true)
+    sel.clear()   // la selección era de la lista anterior
     setLista(await listarNotificaciones(f, 100))
     setCargando(false)
+  }
+
+  // Acciones en lote. Se aplican en local y se confirman contra el servidor:
+  // en una conexión lenta, esperar el ida y vuelta para ver el cambio se siente
+  // roto (CONTEXTO §7).
+  function enLote(accion: 'leer' | 'archivar') {
+    const ids = sel.selectedIds.map(Number)
+    if (ids.length === 0) return
+    sel.clear()
+    if (accion === 'leer') {
+      setLista(l => l.map(n => (ids.includes(n.id) ? { ...n, estado: 'leida' as const } : n)))
+    } else {
+      setLista(l => l.filter(n => !ids.includes(n.id)))
+    }
+    startTransition(async () => {
+      const r = accion === 'leer' ? await marcarLeidasLote(ids) : await archivarLote(ids)
+      if (!r.ok) { toastError('No se pudo completar la acción.'); return }
+      toastSuccess(accion === 'leer'
+        ? `${ids.length} marcada${ids.length === 1 ? '' : 's'} como leída${ids.length === 1 ? '' : 's'}.`
+        : `${ids.length} archivada${ids.length === 1 ? '' : 's'}.`)
+      void refrescar()
+    })
   }
 
   async function abrir(n: NotificacionFila) {
@@ -123,14 +152,28 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
             </button>
           ))}
         </div>
-        {noLeidas > 0 && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
-            void leerTodas()
-            setLista(l => l.map(x => ({ ...x, estado: 'leida' as const })))
-          }}>
-            <CheckCheck size={14} strokeWidth={2} /> Marcar todas como leídas
-          </button>
-        )}
+        <div className="ntf-filtros-acciones">
+          {lista.length > 0 && (
+            <label className="filtro-toggle">
+              <input
+                type="checkbox"
+                className="row-check"
+                checked={sel.allSelected}
+                ref={el => { if (el) el.indeterminate = sel.someSelected }}
+                onChange={sel.toggleAll}
+              />
+              Seleccionar todo
+            </label>
+          )}
+          {noLeidas > 0 && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
+              void leerTodas()
+              setLista(l => l.map(x => ({ ...x, estado: 'leida' as const })))
+            }}>
+              <CheckCheck size={14} strokeWidth={2} /> Marcar todas como leídas
+            </button>
+          )}
+        </div>
       </div>
 
       {lista.length === 0 ? (
@@ -145,6 +188,13 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
               key={n.id}
               className={`ntf-fila ntf-sev-${n.severidad}${n.estado === 'nueva' ? ' ntf-item-nueva' : ''}`}
             >
+              <input
+                type="checkbox"
+                className="row-check ntf-fila-check"
+                checked={sel.isSelected(String(n.id))}
+                onChange={() => sel.toggle(String(n.id))}
+                aria-label={`Seleccionar: ${n.titulo}`}
+              />
               <span className="ntf-item-icono"><IconoSeveridad severidad={n.severidad} size={18} /></span>
               <button type="button" className="ntf-fila-cuerpo" onClick={() => void abrir(n)}>
                 <span className="ntf-item-titulo">{n.titulo}</span>
@@ -164,6 +214,15 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
           ))}
         </ul>
       )}
+
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => enLote('leer')}>
+          <CheckCheck size={14} strokeWidth={2} /> Marcar leídas
+        </button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => enLote('archivar')}>
+          <Archive size={14} strokeWidth={2} /> Archivar
+        </button>
+      </BulkBar>
     </div>
   )
 }
@@ -188,6 +247,23 @@ function Preferencias({ inicial }: { inicial: PreferenciaFila[] }) {
     })
   }
 
+  function guardarGrupo(categoria: Categoria, activa: boolean) {
+    const tipos = filas.filter(f => f.categoria === categoria).map(f => f.tipo)
+    const previas = filas
+    setFilas(fs => fs.map(f => (f.categoria === categoria ? { ...f, activa } : f)))
+    startTransition(async () => {
+      const r = await guardarPreferenciasLote(tipos, activa)
+      if (!r.ok) {
+        setFilas(previas)
+        toastError('No se pudo guardar el grupo.')
+        return
+      }
+      toastSuccess(activa
+        ? `Avisos de ${ETIQUETA_CATEGORIA[categoria].toLowerCase()} activados.`
+        : `Avisos de ${ETIQUETA_CATEGORIA[categoria].toLowerCase()} desactivados.`)
+    })
+  }
+
   return (
     <div className="card">
       <p className="ntf-prefs-intro">
@@ -196,16 +272,73 @@ function Preferencias({ inicial }: { inicial: PreferenciaFila[] }) {
       </p>
 
       {agrupar(filas).map(([categoria, delGrupo]) => (
-        <section key={categoria} className="ntf-prefs-grupo">
-          <h2 className="ntf-prefs-titulo">{ETIQUETA_CATEGORIA[categoria]}</h2>
-          <ul className="ntf-prefs">
-            {delGrupo.map(f => (
-              <PrefFila key={f.tipo} f={f} isPending={isPending} onGuardar={guardar} />
-            ))}
-          </ul>
-        </section>
+        <GrupoPrefs
+          key={categoria}
+          categoria={categoria}
+          filas={delGrupo}
+          isPending={isPending}
+          onGuardar={guardar}
+          onGuardarGrupo={guardarGrupo}
+        />
       ))}
     </div>
+  )
+}
+
+/**
+ * Categoría plegable. Empieza cerrada: son ~20 tipos y desplegados de golpe la
+ * pestaña es un muro. El interruptor de la cabecera enciende o apaga el grupo
+ * entero — es lo que de verdad quiere quien entra aquí ("no me avises de nada
+ * de inventario"), sin tener que tocar cinco switches.
+ */
+function GrupoPrefs({ categoria, filas, isPending, onGuardar, onGuardarGrupo }: {
+  categoria: Categoria
+  filas: PreferenciaFila[]
+  isPending: boolean
+  onGuardar: (tipo: TipoClave, activa: boolean, severidad: Severidad) => void
+  onGuardarGrupo: (categoria: Categoria, activa: boolean) => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const activas = filas.filter(f => f.activa).length
+  const todas   = activas === filas.length
+  const ninguna = activas === 0
+
+  return (
+    <section className="ntf-prefs-grupo">
+      <div className="ntf-prefs-cabecera">
+        <button
+          type="button"
+          className="ntf-prefs-toggle"
+          onClick={() => setAbierto(a => !a)}
+          aria-expanded={abierto}
+        >
+          <ChevronDown size={16} strokeWidth={2} className={abierto ? 'ntf-chevron abierto' : 'ntf-chevron'} />
+          <span className="ntf-prefs-titulo">{ETIQUETA_CATEGORIA[categoria]}</span>
+          <span className="ntf-prefs-conteo">
+            {ninguna ? 'Ninguna activa' : todas ? `${filas.length} activas` : `${activas} de ${filas.length}`}
+          </span>
+        </button>
+
+        <label className="switch" title={`Activar o desactivar todo: ${ETIQUETA_CATEGORIA[categoria]}`}>
+          <input
+            type="checkbox"
+            checked={!ninguna}
+            disabled={isPending}
+            aria-label={`Activar todo el grupo: ${ETIQUETA_CATEGORIA[categoria]}`}
+            onChange={e => onGuardarGrupo(categoria, e.target.checked)}
+          />
+          <span className="switch-track" aria-hidden="true" />
+        </label>
+      </div>
+
+      {abierto && (
+        <ul className="ntf-prefs">
+          {filas.map(f => (
+            <PrefFila key={f.tipo} f={f} isPending={isPending} onGuardar={onGuardar} />
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

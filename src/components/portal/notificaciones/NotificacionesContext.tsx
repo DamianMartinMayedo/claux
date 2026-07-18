@@ -20,6 +20,8 @@ interface Ctx {
   leerTodas:  () => Promise<void>
   archivar:   (id: number) => Promise<void>
   cerrarPopup:(id: number) => void
+  /** Recarga contador, lista y popups. Lo usan las acciones en lote de la bandeja. */
+  refrescar:  () => Promise<void>
 }
 
 const NotificacionesCtx = createContext<Ctx | null>(null)
@@ -120,7 +122,7 @@ export function NotificacionesProvider({ inicial, children }: Props) {
 
   return (
     <NotificacionesCtx.Provider
-      value={{ noLeidas, recientes, popups, leer, leerTodas, archivar, cerrarPopup }}
+      value={{ noLeidas, recientes, popups, leer, leerTodas, archivar, cerrarPopup, refrescar }}
     >
       {children}
     </NotificacionesCtx.Provider>

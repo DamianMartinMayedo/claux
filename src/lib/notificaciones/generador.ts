@@ -42,13 +42,27 @@ interface Tenant {
   modulos_activos:  unknown
 }
 
-export async function generarNotificacionesInternas(): Promise<ResumenGenerador> {
+/**
+ * @param soloCliente Acota TODO el barrido a un tenant. Sirve para probar sobre
+ *   el negocio de prueba sin crear avisos en los portales de clientes reales,
+ *   que verían aparecer cosas fuera de su momento.
+ */
+export async function generarNotificacionesInternas(
+  soloCliente?: string,
+): Promise<ResumenGenerador> {
   const db  = createAdminClient()
   const hoy = toDateStr(new Date())
 
+  const qClientes = db
+    .from('clients')
+    .select('client_id, nombre_empresa, estado, fecha_expiracion, modulos_activos')
+  const qPrefs = db
+    .from('notificacion_config')
+    .select('client_id, tipo, activa, severidad_override')
+
   const [{ data: clientes }, { data: prefsRaw }] = await Promise.all([
-    db.from('clients').select('client_id, nombre_empresa, estado, fecha_expiracion, modulos_activos'),
-    db.from('notificacion_config').select('client_id, tipo, activa, severidad_override'),
+    soloCliente ? qClientes.eq('client_id', soloCliente) : qClientes,
+    soloCliente ? qPrefs.eq('client_id', soloCliente)    : qPrefs,
   ])
 
   const tenants = (clientes ?? []) as Tenant[]
@@ -92,18 +106,24 @@ export async function generarNotificacionesInternas(): Promise<ResumenGenerador>
   creadas += await escanearIa(con('asistente_ia'))
   creadas += await escanearDossier(db, con('dossier'))
 
-  const purgadas = await purgarAntiguas(db)
+  const purgadas = await purgarAntiguas(db, soloCliente)
   return { tenants: tenants.length, creadas, purgadas }
 }
 
-async function purgarAntiguas(db: ReturnType<typeof createAdminClient>): Promise<number> {
+async function purgarAntiguas(
+  db: ReturnType<typeof createAdminClient>,
+  soloCliente?: string,
+): Promise<number> {
   const corte = new Date(Date.now() - DIAS_RETENCION * 86_400_000).toISOString()
-  const { data, error } = await db
+  let q = db
     .from('notificaciones')
     .delete()
     .in('estado', ['leida', 'archivada'])
     .lt('created_at', corte)
-    .select('id')
+  // Acotado también: una prueba sobre un tenant no debe borrar nada de los demás.
+  if (soloCliente) q = q.eq('client_id', soloCliente)
+
+  const { data, error } = await q.select('id')
 
   if (error) {
     console.error('[notificaciones] purga fallida', error.message)

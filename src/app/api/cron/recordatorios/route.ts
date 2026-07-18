@@ -59,6 +59,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 401 })
   }
 
+  // Modo prueba: `?solo=<client_id>` genera SOLO las notificaciones internas de
+  // ese tenant y no envía un correo ni toca estados. Es la única forma de probar
+  // el barrido sin que a un cliente real le aparezcan avisos fuera de su momento
+  // (o le llegue un correo de vencimiento que no toca).
+  const solo = req.nextUrl.searchParams.get('solo')
+  if (solo) {
+    const notificaciones = await generarNotificacionesInternas(solo)
+    return NextResponse.json({ ok: true, modo: 'solo-notificaciones', solo, notificaciones })
+  }
+
   const db = createAdminClient()
   const hoy = toDateStr(new Date())
 
