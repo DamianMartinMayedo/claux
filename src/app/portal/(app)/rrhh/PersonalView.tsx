@@ -1,7 +1,7 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo } from 'react'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
   guardarEmpleado,
@@ -9,15 +9,22 @@ import {
   reactivarEmpleado,
   eliminarEmpleado,
   copiarEmpleadoAEmpresa,
+  darBajaEmpleadosEnLote,
+  reactivarEmpleadosEnLote,
+  eliminarEmpleadosEnLote,
   type Empleado,
   type EmpleadoConEstado,
   type TipoContrato,
   type Periodicidad,
   type RrhhPageData,
+  type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
 import { Copy, Eye, Info, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import BulkBar                         from '@/components/portal/BulkBar'
+import { useRowSelection }             from '@/components/portal/useRowSelection'
+import { ConfirmDialog }               from '@/components/portal/Dialog'
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
 import { opcionesCon }                 from '@/components/portal/form-helpers'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -400,6 +407,39 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
 
   const { pageItems, ...pag } = usePagination(empleados)
 
+  // ── Selección múltiple (baja / reactivar / eliminar en lote) ──
+  const empleadoIds = useMemo(() => empleados.map(e => e.empleado_id), [empleados])
+  const sel = useRowSelection(empleadoIds)
+  const [bajaLote,     setBajaLote]     = useState(false)
+  const [confirmLoteDel, setConfirmLoteDel] = useState(false)
+  useEffect(() => { sel.clear() }, [search, filtroEstado, filtroEmpresa]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plural = (n: number) => n === 1 ? '' : 's'
+  const seleccionados = empleados.filter(e => sel.isSelected(e.empleado_id))
+  const hayActivos = seleccionados.some(e => e.estado === 'ACTIVO')
+  const hayBajas   = seleccionados.some(e => e.estado === 'BAJA')
+
+  function ejecutarLote(fn: () => Promise<ResultadoLote>) {
+    startTransition(async () => {
+      const r = await fn()
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} aplicado${plural(r.hechas)}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitido${plural(r.omitidas.length)}`)
+      if (r.errores.length)  partes.push(`${r.errores.length} con error`)
+      const msg = partes.join(' · ') || 'Nada que hacer'
+      if (r.hechas > 0 && r.errores.length === 0) toastSuccess(msg)
+      else if (r.hechas > 0)                      toastError(msg)
+      else                                        toastError(r.omitidas[0]?.motivo ? `Nada aplicado — ${r.omitidas[0].motivo}` : msg)
+      sel.clear()
+      router.refresh()
+    })
+  }
+  function doBajaLote(fecha: string, motivo: string) {
+    setBajaLote(false)
+    ejecutarLote(() => darBajaEmpleadosEnLote(sel.selectedIds, fecha, motivo))
+  }
+  function doEliminarLote() { setConfirmLoteDel(false); ejecutarLote(() => eliminarEmpleadosEnLote(sel.selectedIds)) }
+
   const activos = data.empleados.filter(e => e.estado === 'ACTIVO').length
 
   function openNuevo() { setEditEmpleado(null); setModalEmpleado(true) }
@@ -481,6 +521,9 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
             <table className="table">
               <thead>
                 <tr>
+                  <th className="col-check">
+                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                  </th>
                   <th>Empleado</th>
                   {multiempresa && <th>Empresa</th>}
                   <th>Cargo</th>
@@ -496,6 +539,12 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                     className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(e.empresa_id)) : undefined}
                     onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}>
+                    <td className="col-check" onClick={ev => ev.stopPropagation()}>
+                      <input type="checkbox" className="row-check"
+                        checked={sel.isSelected(e.empleado_id)}
+                        onChange={() => sel.toggle(e.empleado_id)}
+                        aria-label={`Seleccionar ${nombreCompleto(e)}`} />
+                    </td>
                     <td data-label="Empleado">
                       <strong>{nombreCompleto(e)}</strong>
                       <div className="tes-mov-sub">
@@ -579,6 +628,87 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
           onCopiado={() => { setCopiarEmpleado(null); router.refresh() }}
         />
       )}
+
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        {hayActivos && (
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setBajaLote(true)}>
+            <UserMinus size={14} strokeWidth={2} /> Dar de baja
+          </button>
+        )}
+        {hayBajas && (
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => ejecutarLote(() => reactivarEmpleadosEnLote(sel.selectedIds))}>
+            <RotateCcw size={14} strokeWidth={2} /> Reactivar
+          </button>
+        )}
+        <button className="btn btn-danger-text btn-sm" disabled={isPending}
+          onClick={() => setConfirmLoteDel(true)}>
+          <Trash2 size={14} strokeWidth={2} /> Eliminar
+        </button>
+      </BulkBar>
+
+      {bajaLote && (
+        <BajaLoteModal count={sel.count} onClose={() => setBajaLote(false)} onConfirm={doBajaLote} />
+      )}
+      {confirmLoteDel && (
+        <ConfirmDialog
+          title={`¿Eliminar ${sel.count} empleado${plural(sel.count)}?`}
+          body="Se eliminarán los seleccionados. Los que aparezcan en nóminas registradas se omitirán (da de baja en su lugar para conservar el historial)."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmLoteDel(false)}
+          onConfirm={doEliminarLote}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Modal: dar de baja en lote (fecha + motivo comunes) ───────────────────────────
+
+function BajaLoteModal({ count, onClose, onConfirm }: {
+  count: number; onClose: () => void; onConfirm: (fecha: string, motivo: string) => void
+}) {
+  const [fecha, setFecha]   = useState(new Date().toISOString().slice(0, 10))
+  const [motivo, setMotivo] = useState('')
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-sm" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Dar de baja {count} empleado{count === 1 ? '' : 's'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="input-group">
+            <label htmlFor="baja-lote-fecha">Fecha de baja <span className="required">*</span></label>
+            <input id="baja-lote-fecha" className="input" type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+          </div>
+          <div className="input-group">
+            <label htmlFor="baja-lote-motivo">Motivo (opcional)</label>
+            <textarea id="baja-lote-motivo" className="input input-textarea" rows={2}
+              value={motivo} onChange={e => setMotivo(e.target.value)}
+              placeholder="Común a todos los seleccionados…" />
+          </div>
+          <p className="input-hint">La fecha y el motivo se aplican a todos los seleccionados. Los que ya estén de baja se omiten.</p>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={!fecha}
+            onClick={() => onConfirm(fecha, motivo)}>Dar de baja</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }

@@ -1,16 +1,19 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }               from 'next/navigation'
 import {
   crearNomina,
   confirmarNomina,
   eliminarNomina,
+  confirmarNominasEnLote,
+  eliminarNominasEnLote,
   type NominaConLineas,
   type RrhhPageData,
+  type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
-import { Eye, Plus, Trash2, Wallet, X } from 'lucide-react'
+import { Check, Eye, Plus, Trash2, Wallet, X } from 'lucide-react'
 import {
   NominaDetalleModal,
   ConfirmarNominaModal,
@@ -21,6 +24,9 @@ import {
 } from '../_shared/NominaDetalleModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import BulkBar                          from '@/components/portal/BulkBar'
+import { useRowSelection }             from '@/components/portal/useRowSelection'
+import { ConfirmDialog }               from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -233,6 +239,34 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
 
   const { pageItems, ...pag } = usePagination(nominasFiltradas)
 
+  // ── Selección múltiple (confirmar / eliminar en lote) ──
+  const nominaIds = useMemo(() => nominasFiltradas.map(n => n.nomina_id), [nominasFiltradas])
+  const sel = useRowSelection(nominaIds)
+  const [confirmLoteConf, setConfirmLoteConf] = useState(false)
+  const [confirmLoteDel,  setConfirmLoteDel]  = useState(false)
+  useEffect(() => { sel.clear() }, [filtroEmpresa, filtroAnio]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plural = (n: number) => n === 1 ? '' : 's'
+  const hayBorradores = nominasFiltradas.some(n => sel.isSelected(n.nomina_id) && n.estado === 'BORRADOR')
+
+  function ejecutarLote(fn: () => Promise<ResultadoLote>) {
+    startTransition(async () => {
+      const r = await fn()
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} aplicada${plural(r.hechas)}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitida${plural(r.omitidas.length)}`)
+      if (r.errores.length)  partes.push(`${r.errores.length} con error`)
+      const msg = partes.join(' · ') || 'Nada que hacer'
+      if (r.hechas > 0 && r.errores.length === 0) toastSuccess(msg)
+      else if (r.hechas > 0)                      toastError(msg)
+      else                                        toastError(r.omitidas[0]?.motivo ? `Nada aplicado — ${r.omitidas[0].motivo}` : msg)
+      sel.clear()
+      router.refresh()
+    })
+  }
+  function doConfirmarLote() { setConfirmLoteConf(false); ejecutarLote(() => confirmarNominasEnLote(sel.selectedIds)) }
+  function doEliminarLote()  { setConfirmLoteDel(false);  ejecutarLote(() => eliminarNominasEnLote(sel.selectedIds)) }
+
   useEffect(() => {
     if (focusNominaId && data.nominas.some(n => n.nomina_id === focusNominaId)) {
       setDetalleNominaId(focusNominaId)
@@ -313,6 +347,9 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
             <table className="table">
               <thead>
                 <tr>
+                  <th className="col-check">
+                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                  </th>
                   <th>Período</th>
                   {multiempresa && <th>Empresa</th>}
                   <th>Empleados</th>
@@ -329,6 +366,12 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                     style={multiempresa ? empresaColorVar(colorOf(n.empresa_id)) : undefined}
                     onClick={() => setDetalleNominaId(n.nomina_id)}
                   >
+                    <td className="col-check" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="row-check"
+                        checked={sel.isSelected(n.nomina_id)}
+                        onChange={() => sel.toggle(n.nomina_id)}
+                        aria-label={`Seleccionar nómina ${formatPeriodo(n.periodo)}`} />
+                    </td>
                     <td data-label="Período"><strong>{formatPeriodo(n.periodo)}</strong></td>
                     {multiempresa && (
                       <td data-label="Empresa">
@@ -380,6 +423,50 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
         <PagarNominaModal nomina={pagar} cuentas={data.cuentas}
           onClose={() => setPagar(null)} onPaid={() => { setPagar(null); router.refresh() }} />
       )}
+
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        {hayBorradores && (
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setConfirmLoteConf(true)}>
+            <Check size={14} strokeWidth={2} /> Confirmar
+          </button>
+        )}
+        <button className="btn btn-danger-text btn-sm" disabled={isPending}
+          onClick={() => setConfirmLoteDel(true)}>
+          <Trash2 size={14} strokeWidth={2} /> Eliminar
+        </button>
+      </BulkBar>
+
+      {confirmLoteConf && (
+        <ConfirmDialog
+          title={`¿Confirmar ${sel.count} nómina${plural(sel.count)}?`}
+          body="Se confirmarán las que estén en borrador y se registrará su gasto de Salarios en tu contabilidad. Las ya confirmadas se omiten."
+          confirmLabel="Confirmar"
+          onCancel={() => setConfirmLoteConf(false)}
+          onConfirm={doConfirmarLote}
+        />
+      )}
+      {confirmLoteDel && (
+        <ConfirmDialog
+          title={`¿Eliminar ${sel.count} nómina${plural(sel.count)}?`}
+          body="Se eliminarán las seleccionadas (y el gasto de salarios de las confirmadas). Las que tengan pagos registrados en Tesorería se omitirán."
+          confirmLabel="Eliminar" danger
+          onCancel={() => setConfirmLoteDel(false)}
+          onConfirm={doEliminarLote}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }

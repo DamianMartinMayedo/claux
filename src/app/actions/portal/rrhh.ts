@@ -237,6 +237,18 @@ function estadoDe(fecha_baja: string | null): EstadoEmpleado {
   return fecha_baja ? 'BAJA' : 'ACTIVO'
 }
 
+// ── Acciones en lote — tipo compartido (nómina + personal) ──────────────────────
+// Reutilizan las acciones individuales (mismo gating y efectos en cadena). La capa
+// de lote decide la ELEGIBILIDAD por estado y reporta lo omitido con su etiqueta.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string
+}
+const loteVacio = (error?: string): ResultadoLote => ({ hechas: 0, omitidas: [], errores: [], error })
+
 // ── Obtener datos de RRHH ───────────────────────────────────────────────────────
 
 export async function obtenerRrhh(): Promise<RrhhPageData | null> {
@@ -527,6 +539,66 @@ export async function eliminarEmpleado(empleado_id: string): Promise<{ ok: boole
 
   revalidatePath('/portal/rrhh')
   return { ok: true }
+}
+
+// ── Personal en lote (Fase 2) ────────────────────────────────────────────────────
+// Candado `rrhh` inline (audit-gating). Baja/reactivar son UPDATE atómicos (no tienen
+// guarda de negocio, solo el gating); eliminar reutiliza la individual en bucle para
+// conservar su guarda (no borra a quien aparece en nóminas → omitido con su motivo).
+
+export async function darBajaEmpleadosEnLote(
+  ids: string[], fecha: string, motivo: string,
+): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const { data, error } = await createAdminClient().from('empleados')
+    .update({ fecha_baja: fecha || hoy(), motivo_baja: motivo?.trim() || null, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('empleado_id', ids).is('fecha_baja', null)
+    .select('empleado_id')
+  if (error) return loteVacio(error.message)
+  revalidatePath('/portal/rrhh')
+  return { ...loteVacio(), hechas: (data ?? []).length }
+}
+
+export async function reactivarEmpleadosEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const { data, error } = await createAdminClient().from('empleados')
+    .update({ fecha_baja: null, motivo_baja: null, updated_at: new Date().toISOString() })
+    .eq('client_id', session.client_id).in('empleado_id', ids).not('fecha_baja', 'is', null)
+    .select('empleado_id')
+  if (error) return loteVacio(error.message)
+  revalidatePath('/portal/rrhh')
+  return { ...loteVacio(), hechas: (data ?? []).length }
+}
+
+export async function eliminarEmpleadosEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const db = createAdminClient()
+  const { data: emps } = await db.from('empleados')
+    .select('empleado_id, nombre, apellidos').eq('client_id', session.client_id).in('empleado_id', ids)
+  const nombreDe = new Map((emps ?? []).map((e: { empleado_id: string; nombre: string; apellidos: string | null }) =>
+    [e.empleado_id, `${e.nombre}${e.apellidos ? ' ' + e.apellidos : ''}`]))
+
+  const res = loteVacio()
+  for (const id of ids) {
+    if (!nombreDe.has(id)) continue
+    const r = await eliminarEmpleado(id)   // conserva la guarda de nóminas
+    if (r.ok) res.hechas++
+    else res.omitidas.push({ etiqueta: nombreDe.get(id) ?? id, motivo: r.error ?? 'No se pudo eliminar' })
+  }
+  revalidatePath('/portal/rrhh')
+  return res
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -1143,6 +1215,55 @@ export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; 
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/cxp')
   return { ok: true }
+}
+
+// ── Nóminas en lote (Fase 2) ─────────────────────────────────────────────────────
+// Candado `rrhh` inline. Confirmar es SECUENCIAL (cada una postea su gasto de
+// Salarios). Reutilizan las individuales; la elegibilidad filtra por estado.
+
+export async function confirmarNominasEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const db = createAdminClient()
+  const { data: noms } = await db.from('nominas')
+    .select('nomina_id, periodo, estado').eq('client_id', session.client_id).in('nomina_id', ids)
+
+  const res = loteVacio()
+  for (const n of (noms ?? []) as { nomina_id: string; periodo: string; estado: string }[]) {
+    if (n.estado !== 'BORRADOR') { res.omitidas.push({ etiqueta: n.periodo, motivo: 'ya confirmada' }); continue }
+    const r = await confirmarNomina(n.nomina_id)   // secuencial: postea gasto de Salarios
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta: n.periodo, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/rrhh')
+  revalidarFinanzas()
+  return res
+}
+
+export async function eliminarNominasEnLote(ids: string[]): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const db = createAdminClient()
+  const { data: noms } = await db.from('nominas')
+    .select('nomina_id, periodo').eq('client_id', session.client_id).in('nomina_id', ids)
+  const periodoDe = new Map((noms ?? []).map((n: { nomina_id: string; periodo: string }) => [n.nomina_id, n.periodo]))
+
+  const res = loteVacio()
+  for (const id of ids) {
+    if (!periodoDe.has(id)) continue
+    const r = await eliminarNomina(id)   // conserva la guarda (pagos en tesorería)
+    if (r.ok) res.hechas++
+    else res.omitidas.push({ etiqueta: periodoDe.get(id) ?? id, motivo: r.error ?? 'No se pudo eliminar' })
+  }
+  revalidatePath('/portal/rrhh')
+  revalidarFinanzas()
+  return res
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
