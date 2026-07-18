@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '12mb',
     },
   },
+  // Chromium headless (PDF del deck en móvil): binarios nativos que NO deben
+  // pasar por el bundler; se cargan desde node_modules en runtime Node.
+  serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
   images: {
     // Logos de empresas servidos desde Supabase Storage (bucket público).
     remotePatterns: [

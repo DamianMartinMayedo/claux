@@ -215,6 +215,7 @@
   transition: background 0.25s;
 }
 .dp-print-btn:hover { background: rgba(20, 23, 25, 0.55); }
+.dp-print-btn:disabled { opacity: 0.6; cursor: progress; }
 .dp-print-btn svg { flex-shrink: 0; }
 
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */

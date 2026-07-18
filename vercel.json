@@ -4,5 +4,11 @@
       "path": "/api/cron/recordatorios",
       "schedule": "0 8 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/(public)/d/[token]/pdf/route.ts": {
+      "memory": 1769,
+      "maxDuration": 60
+    }
+  }
 }
