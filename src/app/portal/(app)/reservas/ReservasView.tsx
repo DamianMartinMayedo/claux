@@ -7,6 +7,8 @@ import {
   crearReserva,
   modificarReserva,
   cambiarEstadoReserva,
+  cambiarEstadoReservasEnLote,
+  type ResultadoLote,
   guardarFranja,
   eliminarFranja,
   guardarBotConfig,
@@ -24,6 +26,9 @@ import { type EstadoReserva } from '@/lib/reservas/estado'
 import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
+import BulkBar from '@/components/portal/BulkBar'
+import { useRowSelection } from '@/components/portal/useRowSelection'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
@@ -593,6 +598,30 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
 
   const { pageItems: reservaItems, ...reservaPag } = usePagination(reservas)
 
+  // ── Selección múltiple (cambiar estado en lote) ──
+  const reservaIds = useMemo(() => reservas.map(r => r.reserva_id), [reservas])
+  const sel = useRowSelection(reservaIds)
+  const [loteAccion, setLoteAccion] = useState<{ estado: EstadoReserva; label: string } | null>(null)
+  useEffect(() => { sel.clear() }, [activeTab, search, filtroDesde, filtroHasta, filtroFranja, filtroEstado]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plural = (n: number) => n === 1 ? '' : 's'
+
+  function ejecutarLote(estado: EstadoReserva) {
+    startTransition(async () => {
+      const r: ResultadoLote = await cambiarEstadoReservasEnLote(sel.selectedIds, estado)
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} cambiada${plural(r.hechas)}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitida${plural(r.omitidas.length)}`)
+      if (r.errores.length)  partes.push(`${r.errores.length} con error`)
+      const msg = partes.join(' · ') || 'Nada que hacer'
+      if (r.hechas > 0 && r.errores.length === 0) toastSuccess(msg)
+      else if (r.hechas > 0)                      toastError(msg)
+      else                                        toastError(r.omitidas[0]?.motivo ? `Nada aplicado — ${r.omitidas[0].motivo}` : msg)
+      sel.clear()
+      router.refresh()
+    })
+  }
+
   const pendientesHoy = data.reservas.filter(r => r.fecha === hoy && r.estado === 'PENDIENTE').length
   const confirmadasHoy = data.reservas.filter(r => r.fecha === hoy && r.estado === 'CONFIRMADA').length
   const totalHoy = data.reservas.filter(r => r.fecha === hoy).length
@@ -767,6 +796,9 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
             <table className="table">
               <thead>
                 <tr>
+                  <th className="col-check">
+                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                  </th>
                   <th>Fecha</th>
                   <th>Hora</th>
                   <th>Turno</th>
@@ -780,6 +812,12 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                 {reservaItems.map(r => (
                   <tr key={r.reserva_id} className="table-row-clickable"
                     onClick={() => setDetalleReserva(r)}>
+                    <td className="col-check" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="row-check"
+                        checked={sel.isSelected(r.reserva_id)}
+                        onChange={() => sel.toggle(r.reserva_id)}
+                        aria-label={`Seleccionar reserva de ${r.nombre_cliente}`} />
+                    </td>
                     <td data-label="Fecha"><strong>{formatFecha(r.fecha)}</strong></td>
                     <td data-label="Hora" className="tes-nowrap">
                       {r.hora ? `${r.hora.substring(0, 5)}${r.hora_fin ? ` – ${r.hora_fin.substring(0, 5)}` : ''}` : '—'}
@@ -1128,6 +1166,46 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           </div>
         </div>
       )}
+
+      {activeTab === 'reservas' && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'CONFIRMADA', label: 'Confirmar' })}>
+            <Check size={14} strokeWidth={2} /> Confirmar
+          </button>
+          <button className="btn btn-danger-text btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'RECHAZADA', label: 'Rechazar' })}>
+            <X size={14} strokeWidth={2} /> Rechazar
+          </button>
+          <button className="btn btn-danger-text btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'CANCELADA', label: 'Cancelar' })}>
+            <Trash2 size={14} strokeWidth={2} /> Cancelar
+          </button>
+        </BulkBar>
+      )}
+
+      {loteAccion && (
+        <ConfirmDialog
+          title={`¿${loteAccion.label} ${sel.count} reserva${plural(sel.count)}?`}
+          body="Solo se aplica a las que admitan el cambio; el resto se omite. Se notificará a los clientes por Telegram cuando proceda."
+          confirmLabel={loteAccion.label}
+          danger={loteAccion.estado !== 'CONFIRMADA'}
+          onCancel={() => setLoteAccion(null)}
+          onConfirm={() => { const e = loteAccion.estado; setLoteAccion(null); ejecutarLote(e) }}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
+
+function HeaderCheck({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  return (
+    <input type="checkbox" className="row-check" checked={checked}
+      ref={el => { if (el) el.indeterminate = indeterminate }}
+      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }

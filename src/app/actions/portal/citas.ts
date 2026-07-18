@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
-import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
+import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type EstadoReserva } from '@/lib/reservas/estado'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
@@ -466,6 +466,45 @@ export async function cambiarEstadoCita(reserva_id: string, nuevoEstado: EstadoR
 
   revalidatePath('/portal/citas')
   return { ok: true }
+}
+
+// ── Cambiar estado en lote (Fase 2) ───────────────────────────────────────────
+// Candado `agenda` inline. SECUENCIAL: reutiliza la individual (valida transición
+// y avisa al cliente por Telegram). Elegibilidad por CAMBIOS_VALIDOS.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string
+}
+const loteVacio = (error?: string): ResultadoLote => ({ hechas: 0, omitidas: [], errores: [], error })
+
+export async function cambiarEstadoCitasEnLote(
+  ids: string[], nuevoEstado: EstadoReserva,
+): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('agenda'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const db = createAdminClient()
+  const { data: rows } = await db.from('reservas')
+    .select('reserva_id, estado, nombre_cliente')
+    .eq('client_id', session.client_id).in('reserva_id', ids)
+
+  const res = loteVacio()
+  for (const row of (rows ?? []) as { reserva_id: string; estado: EstadoReserva; nombre_cliente: string }[]) {
+    const etiqueta = row.nombre_cliente || row.reserva_id
+    if (!CAMBIOS_VALIDOS[row.estado]?.includes(nuevoEstado)) {
+      res.omitidas.push({ etiqueta, motivo: `no se puede pasar de ${row.estado} a ${nuevoEstado}` }); continue
+    }
+    const r = await cambiarEstadoCita(row.reserva_id, nuevoEstado)   // secuencial: avisa por Telegram
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/citas')
+  return res
 }
 
 // ── Público: datos de la mini-web de citas ─────────────────────────────────────

@@ -3,7 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
-import { transicionarEstado, notificarReservaNueva, type EstadoReserva } from '@/lib/reservas/estado'
+import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type EstadoReserva } from '@/lib/reservas/estado'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { tieneModulo } from '@/lib/modulos'
 import { enviarMensaje } from '@/lib/telegram/enviar'
@@ -306,6 +306,46 @@ export async function cambiarEstadoReserva(
 
   revalidatePath('/portal/reservas')
   return { ok: true }
+}
+
+// ── Cambiar estado en lote (Fase 2) ───────────────────────────────────────────
+// Candado `reservas_citas` inline. SECUENCIAL: cada reserva reutiliza la acción
+// individual, que valida la transición y AVISA al cliente por Telegram si procede.
+// Elegibilidad por la máquina de estados (CAMBIOS_VALIDOS); lo inválido se omite.
+
+export interface ResultadoLote {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string
+}
+const loteVacio = (error?: string): ResultadoLote => ({ hechas: 0, omitidas: [], errores: [], error })
+
+export async function cambiarEstadoReservasEnLote(
+  ids: string[], nuevoEstado: EstadoReserva,
+): Promise<ResultadoLote> {
+  const session = await getPortalSession()
+  if (!session)             return loteVacio('Sesión inválida.')
+  if (!(await puedeEditarModulo('reservas_citas'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!ids.length) return loteVacio()
+
+  const db = createAdminClient()
+  const { data: rows } = await db.from('reservas')
+    .select('reserva_id, estado, nombre_cliente')
+    .eq('client_id', session.client_id).in('reserva_id', ids)
+
+  const res = loteVacio()
+  for (const row of (rows ?? []) as { reserva_id: string; estado: EstadoReserva; nombre_cliente: string }[]) {
+    const etiqueta = row.nombre_cliente || row.reserva_id
+    if (!CAMBIOS_VALIDOS[row.estado]?.includes(nuevoEstado)) {
+      res.omitidas.push({ etiqueta, motivo: `no se puede pasar de ${row.estado} a ${nuevoEstado}` }); continue
+    }
+    const r = await cambiarEstadoReserva(row.reserva_id, nuevoEstado)   // secuencial: avisa por Telegram
+    if (r.ok) res.hechas++
+    else res.errores.push({ etiqueta, error: r.error ?? 'Error' })
+  }
+  revalidatePath('/portal/reservas')
+  return res
 }
 
 // ── Guardar franja (crear / editar) ───────────────────────────────────────────
