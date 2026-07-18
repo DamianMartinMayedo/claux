@@ -12,8 +12,8 @@ import {
   type NotificacionFila, type PreferenciaFila, type FiltroBandeja,
 } from '@/app/actions/portal/notificaciones'
 import {
-  ETIQUETA_CATEGORIA, ETIQUETA_SEVERIDAD,
-  type Severidad, type TipoClave,
+  CATALOGO, tiposImplementados, ETIQUETA_CATEGORIA, ETIQUETA_SEVERIDAD,
+  type Categoria, type Severidad, type TipoClave,
 } from '@/lib/notificaciones/catalogo'
 
 type Pestana = 'bandeja' | 'preferencias'
@@ -59,12 +59,13 @@ export default function NotificacionesView({
 
 // ── Bandeja ───────────────────────────────────────────────────────────────────
 
+// Las categorías salen del catálogo, no de una lista a mano: al implementar un
+// generador nuevo su filtro aparece solo, sin que nadie se acuerde de tocar esto.
 const FILTROS: { id: FiltroBandeja; label: string }[] = [
-  { id: 'todas',       label: 'Todas' },
-  { id: 'no_leidas',   label: 'Sin leer' },
-  { id: 'suscripcion', label: ETIQUETA_CATEGORIA.suscripcion },
-  { id: 'reservas',    label: ETIQUETA_CATEGORIA.reservas },
-  { id: 'terceros',    label: ETIQUETA_CATEGORIA.terceros },
+  { id: 'todas',     label: 'Todas' },
+  { id: 'no_leidas', label: 'Sin leer' },
+  ...[...new Set(tiposImplementados().map(t => CATALOGO[t].categoria))]
+    .map(c => ({ id: c as FiltroBandeja, label: ETIQUETA_CATEGORIA[c] })),
 ]
 
 function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
@@ -182,41 +183,66 @@ function Preferencias({ inicial }: { inicial: PreferenciaFila[] }) {
         <strong> Aviso flotante</strong> aparece un momento en pantalla; <strong>Urgente</strong> se queda hasta que lo atiendas.
       </p>
 
-      <ul className="ntf-prefs">
-        {filas.map(f => (
-          <li key={f.tipo} className="ntf-pref">
-            <div className="ntf-pref-texto">
-              <span className="ntf-pref-etiqueta">{f.etiqueta}</span>
-              <span className="ntf-pref-desc">{f.descripcion}</span>
-            </div>
-
-            <div className="ntf-pref-controles">
-              <select
-                className="input ntf-pref-select"
-                value={f.severidad}
-                disabled={!f.activa || isPending}
-                aria-label={`Nivel de aviso para: ${f.etiqueta}`}
-                onChange={e => guardar(f.tipo, f.activa, e.target.value as Severidad)}
-              >
-                {SEVERIDADES.map(s => (
-                  <option key={s} value={s}>{ETIQUETA_SEVERIDAD[s]}</option>
-                ))}
-              </select>
-
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={f.activa}
-                  disabled={isPending}
-                  aria-label={`Activar: ${f.etiqueta}`}
-                  onChange={e => guardar(f.tipo, e.target.checked, f.severidad)}
-                />
-                <span className="switch-track" aria-hidden="true" />
-              </label>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {agrupar(filas).map(([categoria, delGrupo]) => (
+        <section key={categoria} className="ntf-prefs-grupo">
+          <h2 className="ntf-prefs-titulo">{ETIQUETA_CATEGORIA[categoria]}</h2>
+          <ul className="ntf-prefs">
+            {delGrupo.map(f => (
+              <PrefFila key={f.tipo} f={f} isPending={isPending} onGuardar={guardar} />
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
+  )
+}
+
+/** Agrupa las preferencias por categoría, en el orden en que salen del catálogo. */
+function agrupar(filas: PreferenciaFila[]): [Categoria, PreferenciaFila[]][] {
+  const mapa = new Map<Categoria, PreferenciaFila[]>()
+  for (const f of filas) {
+    if (!mapa.has(f.categoria)) mapa.set(f.categoria, [])
+    mapa.get(f.categoria)!.push(f)
+  }
+  return [...mapa.entries()]
+}
+
+function PrefFila({ f, isPending, onGuardar }: {
+  f: PreferenciaFila
+  isPending: boolean
+  onGuardar: (tipo: TipoClave, activa: boolean, severidad: Severidad) => void
+}) {
+  return (
+    <li className="ntf-pref">
+      <div className="ntf-pref-texto">
+        <span className="ntf-pref-etiqueta">{f.etiqueta}</span>
+        <span className="ntf-pref-desc">{f.descripcion}</span>
+      </div>
+
+      <div className="ntf-pref-controles">
+        <select
+          className="input ntf-pref-select"
+          value={f.severidad}
+          disabled={!f.activa || isPending}
+          aria-label={`Nivel de aviso para: ${f.etiqueta}`}
+          onChange={e => onGuardar(f.tipo, f.activa, e.target.value as Severidad)}
+        >
+          {SEVERIDADES.map(s => (
+            <option key={s} value={s}>{ETIQUETA_SEVERIDAD[s]}</option>
+          ))}
+        </select>
+
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={f.activa}
+            disabled={isPending}
+            aria-label={`Activar: ${f.etiqueta}`}
+            onChange={e => onGuardar(f.tipo, e.target.checked, f.severidad)}
+          />
+          <span className="switch-track" aria-hidden="true" />
+        </label>
+      </div>
+    </li>
   )
 }

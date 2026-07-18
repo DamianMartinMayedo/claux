@@ -11,6 +11,7 @@ import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
+import { notificarPagoConfirmado } from '@/lib/notificaciones/eventos'
 
 function fmtFechaEs(iso: string): string {
   return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -192,6 +193,14 @@ export async function registrarPago(formData: FormData) {
       notas_gracia:     null,
     })
     .eq('client_id', client_id)
+
+  // Aviso en la campana del portal del cliente. Fuera del `if (email_admin)`:
+  // un negocio sin correo puesto debe enterarse igual al entrar al portal.
+  after(async () => {
+    await notificarPagoConfirmado({
+      clientId: client_id, montoUsd: monto_usd, fechaExpiracion: fecha_fin_periodo,
+    })
+  })
 
   // after(): envío garantizado tras la respuesta (un `void` suelto se pierde en
   // Vercel). Un fallo de Resend no debe romper el registro del pago.

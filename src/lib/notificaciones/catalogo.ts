@@ -25,8 +25,12 @@ export interface TipoNotificacion {
   descripcion: string
   /** Severidad por defecto cuando el tipo NO escala por tiempo. */
   severidad:   Severidad
-  /** Módulo/funcionalidad que hay que tener contratada. `null` = plataforma. */
-  modulo:      string | null
+  /**
+   * Módulo/funcionalidad que hay que tener contratada. `null` = plataforma.
+   * Una lista significa "basta con tener UNO" (p. ej. el resumen del día sirve
+   * igual al que tiene Reservas que al que tiene Citas).
+   */
+  modulo:      string | string[] | null
   /** Escalones que genera, de más lejano a vencido. Solo tipos temporales. */
   umbrales?:   Umbral[]
   /** Severidad efectiva por escalón. Lo no listado cae en `severidad`. */
@@ -61,12 +65,12 @@ export const CATALOGO = {
     umbrales: ['vencido'],
   },
   pago_confirmado: {
-    categoria: 'suscripcion', modulo: null, severidad: 'info', implementado: false,
+    categoria: 'suscripcion', modulo: null, severidad: 'info', implementado: true,
     etiqueta: 'Pago confirmado',
     descripcion: 'Confirmamos la recepción de tu pago.',
   },
   ia_cupo_cerca: {
-    categoria: 'suscripcion', modulo: 'asistente_ia', severidad: 'aviso', implementado: false,
+    categoria: 'suscripcion', modulo: 'asistente_ia', severidad: 'aviso', implementado: true,
     etiqueta: 'Cupo de IA cerca del tope',
     descripcion: 'Tu consumo mensual del asistente se acerca al límite.',
   },
@@ -83,83 +87,95 @@ export const CATALOGO = {
     descripcion: 'Alguien pidió cita desde la web o el bot de Telegram.',
   },
   reserva_cancelada_cliente: {
-    categoria: 'reservas', modulo: 'reservas_citas', severidad: 'aviso', implementado: false,
-    etiqueta: 'Reserva cancelada por el cliente',
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
+    etiqueta: 'Cancelada por el cliente',
     descripcion: 'El cliente canceló usando su enlace.',
   },
+  // NO implementado a propósito: al `NO_SHOW` lo marca el propio negocio desde el
+  // panel. Avisar al dueño de lo que acaba de hacer él es ruido, igual que con la
+  // cita creada a mano. Si algún día lo marca el personal y el dueño quiere
+  // enterarse, se activa aquí y se engancha en cambiarEstado*.
   reserva_no_show: {
     categoria: 'reservas', modulo: 'reservas_citas', severidad: 'info', implementado: false,
     etiqueta: 'No-show',
     descripcion: 'Una reserva se marcó como no presentada.',
   },
   reservas_hoy: {
-    categoria: 'reservas', modulo: 'reservas_citas', severidad: 'info', implementado: false,
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'info', implementado: true,
     etiqueta: 'Resumen de hoy',
     descripcion: 'Cuántas reservas y citas tienes para hoy.',
   },
   reserva_pendiente_confirmar: {
-    categoria: 'reservas', modulo: 'reservas_citas', severidad: 'aviso', implementado: false,
-    etiqueta: 'Reservas sin confirmar',
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
+    etiqueta: 'Sin confirmar',
     descripcion: 'Llevan horas pendientes de que las confirmes.',
   },
 
   // ── Finanzas (base contable) ───────────────────────────────────────────────
+  // OJO: no existe un tipo `factura_vencida`. Una factura EMITIDA con saldo es,
+  // por definición, una cuenta por cobrar: `cobranza.ts` construye CxC juntando
+  // facturas y registros de tipo COBRO. Tener los dos tipos avisaría DOS VECES
+  // de la misma deuda. `cxc_vencida` cubre ambos y su `enlace` lleva a la
+  // factura cuando el documento es una factura.
   cxp_por_vencer: {
-    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: false,
-    etiqueta: 'Pago a proveedor por vencer',
+    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: true,
+    etiqueta: 'Pago por vencer',
     descripcion: 'Una cuenta por pagar se acerca a su fecha de vencimiento.',
     ...ESCALA_VENCIMIENTO,
   },
+  cxp_vencida: {
+    categoria: 'finanzas', modulo: 'base', severidad: 'urgente', implementado: true,
+    etiqueta: 'Pago vencido',
+    descripcion: 'Le debes dinero a un proveedor y ya pasó la fecha.',
+    umbrales: ['vencido'],
+  },
+  // Solo "vencida", sin aviso previo: antes del vencimiento no hay nada que
+  // hacer con un cobro ajeno. Lo accionable es reclamarlo cuando ya se pasó.
   cxc_vencida: {
-    categoria: 'finanzas', modulo: 'base', severidad: 'urgente', implementado: false,
+    categoria: 'finanzas', modulo: 'base', severidad: 'urgente', implementado: true,
     etiqueta: 'Cobro vencido',
     descripcion: 'Un cliente te debe dinero y ya pasó la fecha.',
     umbrales: ['vencido'],
   },
-  factura_vencida: {
-    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: false,
-    etiqueta: 'Factura vencida',
-    descripcion: 'Una factura emitida pasó su fecha de vencimiento sin cobrarse.',
-    ...ESCALA_VENCIMIENTO,
-  },
   oferta_por_caducar: {
-    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: false,
+    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: true,
     etiqueta: 'Oferta por caducar',
     descripcion: 'Un presupuesto se acerca al fin de su validez.',
+    umbrales: ['5d', '1d'],
   },
   caja_abierta_sin_cerrar: {
-    categoria: 'finanzas', modulo: 'caja', severidad: 'aviso', implementado: false,
+    categoria: 'finanzas', modulo: 'caja', severidad: 'aviso', implementado: true,
     etiqueta: 'Caja abierta sin cerrar',
     descripcion: 'Una sesión de caja lleva demasiado tiempo abierta.',
   },
 
   // ── Inventario ─────────────────────────────────────────────────────────────
   stock_bajo: {
-    categoria: 'inventario', modulo: 'inventario', severidad: 'aviso', implementado: false,
+    categoria: 'inventario', modulo: 'inventario', severidad: 'aviso', implementado: true,
     etiqueta: 'Stock bajo',
     descripcion: 'Un producto llegó a su mínimo.',
   },
   stock_agotado: {
-    categoria: 'inventario', modulo: 'inventario', severidad: 'urgente', implementado: false,
+    categoria: 'inventario', modulo: 'inventario', severidad: 'urgente', implementado: true,
     etiqueta: 'Producto agotado',
     descripcion: 'Un producto se quedó sin existencias.',
   },
 
   // ── RRHH ───────────────────────────────────────────────────────────────────
   contrato_empleado_vence: {
-    categoria: 'rrhh', modulo: 'rrhh', severidad: 'aviso', implementado: false,
+    categoria: 'rrhh', modulo: 'rrhh', severidad: 'aviso', implementado: true,
     etiqueta: 'Contrato de empleado por vencer',
     descripcion: 'Un contrato temporal se acerca a su fecha de fin.',
     ...ESCALA_VENCIMIENTO,
   },
   contrato_empleado_vencido: {
-    categoria: 'rrhh', modulo: 'rrhh', severidad: 'urgente', implementado: false,
+    categoria: 'rrhh', modulo: 'rrhh', severidad: 'urgente', implementado: true,
     etiqueta: 'Contrato de empleado vencido',
     descripcion: 'Un contrato temporal ya pasó su fecha de fin.',
     umbrales: ['vencido'],
   },
   nomina_pendiente: {
-    categoria: 'rrhh', modulo: 'rrhh', severidad: 'aviso', implementado: false,
+    categoria: 'rrhh', modulo: 'rrhh', severidad: 'aviso', implementado: true,
     etiqueta: 'Nómina del mes pendiente',
     descripcion: 'Se acerca fin de mes y no has generado la nómina.',
   },
@@ -178,14 +194,14 @@ export const CATALOGO = {
     umbrales: ['vencido'],
   },
   limite_credito_cerca: {
-    categoria: 'terceros', modulo: 'base', severidad: 'aviso', implementado: false,
+    categoria: 'terceros', modulo: 'base', severidad: 'aviso', implementado: true,
     etiqueta: 'Límite de crédito al tope',
     descripcion: 'Un cliente se acerca o supera el crédito que le diste.',
   },
 
   // ── Dossier ────────────────────────────────────────────────────────────────
   dossier_snapshot_desactualizado: {
-    categoria: 'dossier', modulo: 'dossier', severidad: 'info', implementado: false,
+    categoria: 'dossier', modulo: 'dossier', severidad: 'info', implementado: true,
     etiqueta: 'Dossier desactualizado',
     descripcion: 'Tu dossier publicado muestra números viejos.',
   },

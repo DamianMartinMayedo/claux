@@ -4,7 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type EstadoReserva } from '@/lib/reservas/estado'
-import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
+import { notificarReservaEntrante, notificarCancelacionCliente } from '@/lib/notificaciones/eventos'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { tieneModulo } from '@/lib/modulos'
 import { enviarMensaje } from '@/lib/telegram/enviar'
@@ -980,6 +980,14 @@ export async function cancelarReservaPublica(token: string): Promise<{ ok: boole
     ].join('\n')
     await enviarMensaje(botCfg.token, botCfg.notificar_owner_chat_id, texto)
   }
+
+  // Bandeja interna del portal (el aviso de Telegram exige bot configurado).
+  await notificarCancelacionCliente({
+    clientId: r.client_id as string, reservaId: r.reserva_id as string,
+    modo: esCita ? 'cita' : 'reserva',
+    nombreCliente: r.nombre_cliente as string,
+    fecha: r.fecha as string, hora: r.hora as string | null,
+  })
 
   return { ok: true }
 }

@@ -84,7 +84,9 @@ export async function crearNotificacion(
       : await cargarContextoTenant(db, input.clientId)
 
     // 1. Candado comercial: sin el módulo contratado, el aviso no existe.
-    if (def.modulo && !contexto.modulos.includes(def.modulo)) return false
+    //    Una lista en el catálogo significa "basta con tener UNO".
+    const exigidos = def.modulo == null ? [] : [def.modulo].flat()
+    if (exigidos.length > 0 && !exigidos.some(m => contexto.modulos.includes(m))) return false
 
     // 2. Preferencia del tenant (fila ausente = default del catálogo).
     const pref = contexto.prefs.get(input.tipo)
