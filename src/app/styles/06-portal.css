@@ -2496,6 +2496,16 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 .dos-enlace-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .dos-enlace-input { flex: 1; min-width: 220px; font-family: var(--font-body); font-size: var(--text-sm); }
+/* El PDF de la presentación se genera con el print del navegador (`?print=1`), que
+   en móvil y tablet sale roto (ignora @page, mete cabecera/pie). Hasta reactivar el
+   PDF de servidor solo se ofrece en escritorio; en táctil se comparte el enlace
+   (Copiar/Ver). El filtro es el PUNTERO y no el ancho: `pointer: fine` + `hover` es
+   ratón o trackpad, así que un escritorio con la ventana estrecha conserva el botón
+   y un iPad en horizontal —1024px, por encima de cualquier breakpoint razonable— no
+   lo ve. Oculto de base y revelado: un navegador sin soporte se queda sin botón, no
+   con un PDF roto. Mismo criterio que `.dp-print-btn` en la presentación pública. */
+.dos-pdf-btn { display: none; }
+@media (hover: hover) and (pointer: fine) { .dos-pdf-btn { display: inline-flex; } }
 .dos-enlace-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-4); }
 .dos-revocar {
   margin-top: var(--space-4); padding: var(--space-4);

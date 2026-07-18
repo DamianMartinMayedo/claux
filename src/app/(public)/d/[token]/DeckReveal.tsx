@@ -137,7 +137,13 @@ export default function DeckReveal() {
     // de por vida (revalidate = false) y cada inversor pagaría un render.
     // Al `load` y no al montar: las fuentes de marca entran por <link> con
     // display=swap, e imprimir antes las congelaría en la del sistema.
-    if (!new URLSearchParams(window.location.search).has('print')) {
+    // Y solo en escritorio, con el MISMO criterio que el CSS que oculta el botón
+    // (`.dp-print-btn`): en táctil el print del navegador sale roto. El botón ya no
+    // existe ahí, pero la URL con `?print=1` sí —del historial, del autocompletado o
+    // copiada de la barra de direcciones y compartida— y sin esto abriría el diálogo
+    // roto en un móvil, justo lo que ocultar el botón evita.
+    const escritorio = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    if (!escritorio || !new URLSearchParams(window.location.search).has('print')) {
       return () => window.removeEventListener('beforeprint', fijarCifras)
     }
     const imprimir = () => window.print()

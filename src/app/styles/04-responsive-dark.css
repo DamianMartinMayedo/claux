@@ -91,14 +91,24 @@
     padding: var(--space-6) var(--space-4);
   }
 
+  /* Al girar el eje a columna, el `flex: 1 1 20rem` del bloque de texto (que en la
+     fila de escritorio es un ANCHO — 02-base-layout) pasa a ser un ALTO: la cabecera
+     se inflaba a 320px y dejaba un hueco vacío enorme entre el titular y el
+     contenido. La base de escritorio no se toca, que ahí sí resuelve el wrap de la
+     acción; aquí solo se devuelve el tamaño al contenido. */
   .page-header {
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
   }
+  .page-header > :first-child { flex: 0 1 auto; }
 
-  .page-title {
-    font-size: var(--text-2xl);
-  }
+  /* El titular NO encoge en móvil: es el ancla de la pantalla, y a --text-2xl (o a
+     --text-xl, como estaba bajo 480px) quedaba al mismo peso que su subtítulo y la
+     jerarquía se leía plana. Mantiene el tamaño de escritorio y es el SUBTÍTULO el
+     que baja, que a --text-lg competía con él. */
+  .page-title { font-size: var(--text-3xl); }
+  .page-subtitle { font-size: var(--text-sm); }
 
   .metrics-grid {
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -201,10 +211,6 @@
 @media (max-width: 480px) {
   .view-container {
     padding: var(--space-4) var(--space-3);
-  }
-
-  .page-title {
-    font-size: var(--text-xl);
   }
 
   .modal-header,

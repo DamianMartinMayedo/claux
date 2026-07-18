@@ -206,7 +206,7 @@
    de abajo, no este botón. */
 .dp-print-btn {
   position: fixed; right: clamp(0.5rem, 2vw, 1.25rem); bottom: clamp(0.75rem, 3vh, 1.5rem);
-  z-index: 20; display: inline-flex; align-items: center; gap: 0.45rem;
+  z-index: 20; display: none; align-items: center; gap: 0.45rem;
   padding: 0.6rem 0.9rem; border: 0; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: #fff;
@@ -216,6 +216,11 @@
 }
 .dp-print-btn:hover { background: rgba(20, 23, 25, 0.55); }
 .dp-print-btn svg { flex-shrink: 0; }
+/* Solo escritorio: en móvil y tablet el print del navegador sale roto, y un PDF que
+   decepciona es peor que no ofrecerlo. Se filtra por PUNTERO y no por ancho (ratón o
+   trackpad = escritorio) para no castigar a una ventana estrecha ni dejar pasar a un
+   iPad en horizontal. De base oculto, aquí se revela. Igual que `.dos-pdf-btn`. */
+@media (hover: hover) and (pointer: fine) { .dp-print-btn { display: inline-flex; } }
 
 /* ── Rail de navegación (pastilla translúcida; legible sobre blanco y color) ── */
 .dp-nav {

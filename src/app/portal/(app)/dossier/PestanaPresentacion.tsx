@@ -134,7 +134,7 @@ export default function PestanaPresentacion({
                   que salir en el deck, no aquí: `?print=1` lo abre y lo dispara solo.
                   Sí, abre una pestaña; pero no hay descarga por red que ahorrar —el
                   archivo se genera en el dispositivo— y es el mismo gesto que «Ver». */}
-              <a className="btn btn-secondary" href={`${url}?print=1`} target="_blank" rel="noreferrer">
+              <a className="btn btn-secondary dos-pdf-btn" href={`${url}?print=1`} target="_blank" rel="noreferrer">
                 <Download size={14} strokeWidth={2.5} /> PDF
               </a>
             </div>
