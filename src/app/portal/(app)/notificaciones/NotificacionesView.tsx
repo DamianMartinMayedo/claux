@@ -58,7 +58,10 @@ export default function NotificacionesView({
 
       <Tabs<Pestana>
         tabs={[
-          { id: 'bandeja', label: 'Bandeja', count: noLeidas || undefined, countTone: 'warning' },
+          // Sin `countTone`: el conteo se queda con el tono por defecto, que en la
+          // pestaña activa ya es primary. Mismo criterio que el badge de la
+          // campana — el número dice cuántas hay, no que sean una alarma.
+          { id: 'bandeja', label: 'Bandeja', count: noLeidas || undefined },
           { id: 'preferencias', label: 'Preferencias' },
         ]}
         active={pestana}
