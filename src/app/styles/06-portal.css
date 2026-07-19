@@ -2882,6 +2882,31 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ntf-panel-accion:hover { text-decoration: underline; }
 .ntf-panel-lista { max-height: 380px; overflow-y: auto; }
 
+/* En móvil el panel se ancla a la VENTANA, no a la campana.
+   `right: 0` funciona en escritorio porque sobra sitio a la izquierda, pero la
+   campana no es el último botón de la cabecera (tiene el tema y el avatar a su
+   derecha): a partir de ~440px de ancho, 340px de panel colgando de ahí se
+   salen por la izquierda y el contenido queda cortado. Fijándolo a la ventana
+   con márgenes iguales, no depende de dónde esté su disparador.
+   Va en este archivo y no en 04-responsive: 06 carga después y necesita ganar
+   la cascada sobre la regla base de arriba. */
+@media (max-width: 640px) {
+  .ntf-panel {
+    position: fixed;
+    top: calc(var(--header-h) + var(--space-2));
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto;
+    /* Que nunca se salga por abajo tampoco: la lista scrollea por dentro. */
+    max-height: calc(100dvh - var(--header-h) - var(--space-6));
+    display: flex;
+    flex-direction: column;
+  }
+  .ntf-panel-lista { max-height: none; flex: 1; min-height: 0; }
+  /* Cabecera y pie no encogen: solo la lista cede altura. */
+  .ntf-panel-header, .ntf-panel-pie { flex-shrink: 0; }
+}
+
 .ntf-item {
   display: flex;
   align-items: flex-start;
