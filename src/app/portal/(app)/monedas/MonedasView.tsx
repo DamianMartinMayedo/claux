@@ -3,8 +3,9 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info } from 'lucide-react'
+import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
+import { puntosVentaConMoneda } from '@/app/actions/portal/caja'
 import {
   guardarMoneda,
   guardarPar,
@@ -61,6 +62,18 @@ function MonedaModal({
   const [codigo,  setCodigo]  = useState(moneda?.codigo  ?? '')
 
   const esEdicion = !!moneda
+
+  // Puntos de venta que aceptan esta moneda: si se desactiva, dejan de poder cobrar en
+  // ella al sincronizar. Se consulta al abrir la edición (una query) para poder nombrar
+  // cuáles en el aviso, en vez de que se entere el cajero en el mostrador.
+  const [activa, setActiva]   = useState(moneda?.activa ?? true)
+  const [puntos, setPuntos]   = useState<string[]>([])
+  useEffect(() => {
+    if (!moneda) return
+    let vivo = true
+    puntosVentaConMoneda(moneda.codigo).then(p => { if (vivo) setPuntos(p) })
+    return () => { vivo = false }
+  }, [moneda])
 
   function handleCatalogoChange(val: string) {
     setCatalogo(val)
@@ -158,10 +171,22 @@ function MonedaModal({
               {esEdicion && !moneda.es_consolidacion && (
                 <div className="input-group mon-full">
                   <label>Estado</label>
-                  <select className="input" name="activa" defaultValue={moneda.activa ? 'true' : 'false'}>
+                  <select className="input" name="activa" value={activa ? 'true' : 'false'}
+                    onChange={e => setActiva(e.target.value === 'true')}>
                     <option value="true">Activa</option>
                     <option value="false">Inactiva</option>
                   </select>
+                  {!activa && puntos.length > 0 && (
+                    <div className="alert alert-warning mon-aviso-puntos">
+                      <AlertTriangle size={16} strokeWidth={2} />
+                      <span>
+                        {puntos.length === 1
+                          ? <>El punto de venta <strong>{puntos[0]}</strong> cobra en {moneda.codigo}.</>
+                          : <>Estos puntos de venta cobran en {moneda.codigo}: <strong>{puntos.join(', ')}</strong>.</>}
+                        {' '}Al sincronizar dejarán de ofrecerla, y si era la única no podrán cobrar.
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 

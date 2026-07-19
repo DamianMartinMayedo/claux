@@ -1,6 +1,7 @@
 'use client'
 
 import { empresaColorVar } from './EmpresaTag'
+import FilterPills from './FilterPills'
 
 interface EmpresaLite {
   empresa_id: string
@@ -15,39 +16,24 @@ interface Props {
   todasLabel?: string
 }
 
-// Pastillas de filtro por empresa con su color. Sustituye/acompaña al <select>
-// "Todas las empresas" (un <option> nativo no admite color). Se oculta sola
-// cuando hay una sola empresa: no hay nada que diferenciar.
+// Filtro por empresa: es `FilterPills` con el punto de color de cada una (un <option>
+// nativo no admite color, de ahí las pastillas). La mecánica —«Todas» + una por
+// elemento, ocultarse cuando solo hay una— vive en el genérico; aquí queda solo lo
+// que es propio de empresas.
 export default function EmpresaPills({
   empresas,
   value,
   onChange,
   todasLabel = 'Todas',
 }: Props) {
-  if (empresas.length <= 1) return null
-
   return (
-    <div className="empresa-pills" role="group" aria-label="Filtrar por empresa">
-      <button
-        type="button"
-        className={`empresa-pill empresa-pill-todas${value === '' ? ' active' : ''}`}
-        onClick={() => onChange('')}
-        aria-pressed={value === ''}
-      >
-        {todasLabel}
-      </button>
-      {empresas.map(e => (
-        <button
-          key={e.empresa_id}
-          type="button"
-          className={`empresa-pill${value === e.empresa_id ? ' active' : ''}`}
-          style={empresaColorVar(e.color)}
-          onClick={() => onChange(e.empresa_id)}
-          aria-pressed={value === e.empresa_id}
-        >
-          {e.nombre}
-        </button>
-      ))}
-    </div>
+    <FilterPills
+      items={empresas.map(e => ({ id: e.empresa_id, label: e.nombre, color: e.color }))}
+      value={value}
+      onChange={onChange}
+      todasLabel={todasLabel}
+      ariaLabel="Filtrar por empresa"
+      colorVar={empresaColorVar}
+    />
   )
 }

@@ -49,6 +49,18 @@ export interface InventarioResumen {
   bajoMinimo: { nombre: string; stock: number; minimo: number; unidad: string }[]
 }
 export interface RrhhResumen { activos: number; altasMes: number }
+
+export interface PuntoVentaResumen {
+  ventasHoy:      { moneda: string; total: number }[]
+  sinSincronizar: number
+  puntos: {
+    nombre:        string
+    ventasHoy:     { moneda: string; total: number }[]
+    ultimaSync:    string | null
+    syncHoy:       boolean
+    turnoAbiertoDesde: string | null   // fecha del turno abierto de un día anterior
+  }[]
+}
 export interface AgendaItem { hora: string | null; nombre: string; personas: number; estado: string }
 export interface AgendaResumen {
   hoyCount: number
@@ -79,6 +91,7 @@ export interface DashboardData {
   tieneIa: boolean
   contabilidad?: ContabilidadResumen
   inventario?: InventarioResumen
+  puntoVenta?: PuntoVentaResumen
   rrhh?: RrhhResumen
   reservas?: AgendaResumen
   citas?: AgendaResumen
@@ -258,6 +271,61 @@ async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen
   return { totalProductos: lista.length, bajoMinimoCount: bajo.length, bajoMinimo: bajo.slice(0, 5) }
 }
 
+// Resumen del Punto de venta. Sirve a los DOS tipos de cliente: al que tiene
+// Contabilidad (para quien esto son sus ventas de mostrador, que además ya entran en
+// el gráfico de Contabilidad vía los cierres) y al que solo tiene este módulo, para
+// quien es su ÚNICO resumen de ventas en todo Claux.
+//
+// Sin gráfico a propósito: los datos llegan a golpes —cuando el dispositivo
+// sincroniza, no cuando se vende—, así que una serie por días enseñaría huecos que
+// parecen días sin ventas y no lo son.
+async function resumenPuntoVenta(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<PuntoVentaResumen> {
+  const [cajasRes, tksRes, sesRes] = await Promise.all([
+    db.from('cajas').select('caja_id, nombre, last_sync_at')
+      .eq('client_id', cid).eq('activa', true).order('nombre'),
+    // Ventas de hoy: los ANULADO (rectificados) fuera, igual que en los cierres.
+    db.from('caja_tickets').select('caja_id, moneda, total, estado')
+      .eq('client_id', cid).in('empresa_id', empresaIds)
+      .gte('fecha', `${hoy}T00:00:00`).lte('fecha', `${hoy}T23:59:59`),
+    // Turnos abiertos: solo importan los de un día ANTERIOR. Uno abierto hoy es que
+    // están vendiendo ahora; uno de ayer es que se olvidaron de cerrar, y sin cierre
+    // no hay ingreso en Tesorería ni salida de stock — la contabilidad se queda quieta.
+    db.from('caja_sesiones').select('caja_id, abierta_at')
+      .eq('client_id', cid).eq('estado', 'ABIERTA').lt('abierta_at', `${hoy}T00:00:00`),
+  ])
+
+  const cajas = (cajasRes.data ?? []) as { caja_id: string; nombre: string; last_sync_at: string | null }[]
+  const tickets = ((tksRes.data ?? []) as { caja_id: string; moneda: string; total: number; estado?: string }[])
+    .filter(t => (t.estado ?? 'VIGENTE') !== 'ANULADO')
+  const abiertas = new Map<string, string>()
+  for (const s of ((sesRes.data ?? []) as { caja_id: string; abierta_at: string }[])) {
+    if (!abiertas.has(s.caja_id)) abiertas.set(s.caja_id, s.abierta_at)
+  }
+
+  const sumar = (items: { moneda: string; total: number }[]) => {
+    const acc = new Map<string, number>()
+    for (const t of items) acc.set(t.moneda, (acc.get(t.moneda) ?? 0) + Number(t.total || 0))
+    return [...acc].map(([moneda, total]) => ({ moneda, total })).sort((a, b) => b.total - a.total)
+  }
+
+  const puntos = cajas.map(c => {
+    const suyos = tickets.filter(t => t.caja_id === c.caja_id)
+    return {
+      nombre:     c.nombre,
+      ventasHoy:  sumar(suyos),
+      ultimaSync: c.last_sync_at,
+      syncHoy:    Boolean(c.last_sync_at && c.last_sync_at.slice(0, 10) === hoy),
+      turnoAbiertoDesde: abiertas.get(c.caja_id) ?? null,
+    }
+  })
+
+  return {
+    ventasHoy:      sumar(tickets),
+    sinSincronizar: puntos.filter(p => !p.syncHoy).length,
+    puntos,
+  }
+}
+
 async function resumenRrhh(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<RrhhResumen> {
   const inicioMes = `${hoy.slice(0, 7)}-01`
   const { data: empleados } = await db
@@ -384,9 +452,10 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, inventario, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, inventario, puntoVenta, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
+    puedeVer('caja')           ? resumenPuntoVenta(db, cid, hoy, idsFiltro)   : Promise.resolve(undefined),
     puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
     puedeVer('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
@@ -438,6 +507,6 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
     tieneIa: puedeVer('asistente_ia'),
-    contabilidad, inventario, rrhh, reservas, citas, accesos,
+    contabilidad, inventario, puntoVenta, rrhh, reservas, citas, accesos,
   }
 }

@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Copy, Check, RefreshCw } from 'lucide-react'
 import { guardarConfigCaja, regenerarToken, type CajaConfigData } from '@/app/actions/portal/caja'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import { slugPuntoVenta } from '@/lib/caja/slug'
 import Tabs from '@/components/Tabs'
 
 type TabId = 'caja' | 'config'
@@ -16,23 +18,80 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
   const [tab, setTab] = useState<TabId>('caja')
 
   const [nombre, setNombre]       = useState(data.caja.nombre)
+  const [empresaId, setEmpresaId] = useState(data.caja.empresa_id)
   const [almacenId, setAlmacenId] = useState(data.caja.almacen_id ?? '')
   const [monedas, setMonedas]     = useState<string[]>(data.caja.monedas_aceptadas ?? [])
   const [cuentas, setCuentas]     = useState<Record<string, string>>(data.caja.cuentas_moneda ?? {})
   const [token, setToken]         = useState(data.caja.sync_token)
   const [copied, setCopied]       = useState(false)
+  const [confirmarEmpresa, setConfirmarEmpresa] = useState(false)
+
+  // El selector de empresa solo aparece si hay más de una: con una sola no es una
+  // decisión, es ruido (y no hay a dónde mover el punto de venta).
+  const multiempresa  = data.empresas.length > 1
+  const cambiaEmpresa = empresaId !== data.caja.empresa_id
+  const nombreEmpresa = (id: string) => data.empresas.find(e => e.empresa_id === id)?.nombre ?? id
 
   // En cliente usa el origen real; en SSR cae a baseUrl y se resuelve al hidratar
   // (el input lleva suppressHydrationWarning por el value distinto server/cliente).
   const base = typeof window !== 'undefined' ? window.location.origin : data.baseUrl
-  const installUrl = `${base}/caja#t=${token}`
+  // Tres piezas, cada una con su papel:
+  //  · el slug del nombre → decorativo, para reconocer el enlace al compartirlo;
+  //  · `?c=<caja_id>`     → identifica el punto para que la app instalada se llame
+  //    como él (el manifest lo lee en servidor; no es una credencial);
+  //  · `#t=<token>`       → la credencial, en el FRAGMENTO, que no viaja al servidor
+  //    y por tanto no acaba en logs ni en cabeceras Referer.
+  // Usa el nombre GUARDADO, no el del formulario sin guardar.
+  const installUrl =
+    `${base}/punto-de-venta/${slugPuntoVenta(data.caja.nombre)}?c=${data.caja.caja_id}#t=${token}`
 
-  const empresaAlmacenes = data.almacenes.filter(a => a.empresa_id === data.caja.empresa_id)
+  // Filtran por la empresa SELECCIONADA, no por la guardada: al cambiar el selector
+  // las listas se recargan al vuelo y el usuario elige ya el almacén y las cuentas de
+  // la empresa nueva en el mismo guardado, sin pasar por un estado intermedio roto.
+  const empresaAlmacenes = data.almacenes.filter(a => a.empresa_id === empresaId)
   const cuentasDe = (moneda: string) =>
-    data.cuentas.filter(c => c.empresa_id === data.caja.empresa_id && c.moneda === moneda)
+    data.cuentas.filter(c => c.empresa_id === empresaId && c.moneda === moneda)
 
+  // Al aceptar una moneda se preselecciona su cuenta si NO hay ambigüedad (una sola
+  // caja en esa moneda). Con varias no se adivina: elegir por el usuario metería el
+  // dinero en una cuenta que él no ha decidido, que es otro error contable, solo que
+  // más difícil de ver. Al quitarla se suelta la cuenta para no guardar huérfanas.
   function toggleMoneda(m: string) {
-    setMonedas(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
+    const activando = !monedas.includes(m)
+    setMonedas(prev => activando ? [...prev, m] : prev.filter(x => x !== m))
+    if (!data.tieneBase) return
+    if (activando) {
+      const candidatas = cuentasDe(m)
+      if (candidatas.length === 1 && !cuentas[m]) {
+        setCuentas(prev => ({ ...prev, [m]: candidatas[0].cuenta_id }))
+      }
+    } else {
+      setCuentas(prev => { const next = { ...prev }; delete next[m]; return next })
+    }
+  }
+
+  // Monedas aceptadas a las que les falta cuenta. Con Contabilidad activa esto no es
+  // un detalle cosmético: el cierre que llegue con ventas en esa moneda NO crea su
+  // ingreso en Tesorería, y el punto de venta sigue cobrando como si nada.
+  const monedasSinCuenta = data.tieneBase
+    ? monedas.filter(m => !cuentas[m])
+    : []
+
+  // Al cambiar de empresa, el almacén y las cuentas elegidos son de la anterior. En vez
+  // de dejar todas las monedas huérfanas, se reasignan a la caja equivalente de la
+  // empresa nueva cuando no hay ambigüedad (una sola en esa moneda) — la misma regla
+  // que al marcar una moneda. Solo queda por elegir lo que de verdad es una decisión.
+  function cambiarEmpresa(nuevo: string) {
+    setEmpresaId(nuevo)
+    setAlmacenId('')
+    const remapeadas: Record<string, string> = {}
+    if (data.tieneBase) {
+      for (const m of monedas) {
+        const candidatas = data.cuentas.filter(c => c.empresa_id === nuevo && c.moneda === m)
+        if (candidatas.length === 1) remapeadas[m] = candidatas[0].cuenta_id
+      }
+    }
+    setCuentas(remapeadas)
   }
 
   function copiar() {
@@ -50,13 +109,30 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
     })
   }
 
+  // Mover un punto de venta de empresa cambia a dónde va el dinero y el stock, así
+  // que no se guarda de corrido: el submit abre la confirmación y es esta la que
+  // ejecuta. Sin cambio de empresa, guarda directo (no hay nada que advertir).
   function guardar(e: FormEvent) {
     e.preventDefault()
+    if (monedasSinCuenta.length > 0) {
+      toastError(
+        `Elige la caja de Tesorería para ${monedasSinCuenta.join(', ')}. ` +
+        'Sin ella, las ventas en esa moneda no llegan a tu contabilidad.',
+      )
+      return
+    }
+    if (cambiaEmpresa) { setConfirmarEmpresa(true); return }
+    persistir()
+  }
+
+  function persistir() {
+    setConfirmarEmpresa(false)
     const cuentasFiltradas: Record<string, string> = {}
     for (const m of monedas) if (cuentas[m]) cuentasFiltradas[m] = cuentas[m]
     startTransition(async () => {
       const r = await guardarConfigCaja(data.caja.caja_id, {
-        nombre, almacen_id: almacenId || null, monedas_aceptadas: monedas, cuentas_moneda: cuentasFiltradas,
+        nombre, empresa_id: empresaId, almacen_id: almacenId || null,
+        monedas_aceptadas: monedas, cuentas_moneda: cuentasFiltradas,
       })
       if (!r.ok) { toastError(r.error ?? 'No se pudo guardar.'); return }
       toastSuccess('Configuración guardada.')
@@ -67,7 +143,7 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
   return (
     <div className="view-container">
       <div className="breadcrumb">
-        <Link href="/portal/caja">Cajas</Link>
+        <Link href="/portal/caja">Puntos de venta</Link>
         <span>›</span>
         <span className="breadcrumb-current">{data.caja.nombre}</span>
       </div>
@@ -75,13 +151,16 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">{data.caja.nombre}</h1>
-          <p className="page-subtitle">Instalación y configuración de la caja.</p>
+          <p className="page-subtitle">
+            Instalación y configuración del punto de venta
+            {multiempresa ? ` · ${nombreEmpresa(data.caja.empresa_id)}` : ''}.
+          </p>
         </div>
       </div>
 
       <Tabs
-        tabs={[{ id: 'caja', label: 'La caja' }, { id: 'config', label: 'Configuración' }]}
-        active={tab} onChange={setTab} ariaLabel="Secciones de la caja"
+        tabs={[{ id: 'caja', label: 'El punto de venta' }, { id: 'config', label: 'Configuración' }]}
+        active={tab} onChange={setTab} ariaLabel="Secciones del punto de venta"
       />
 
       {/* ── La caja: enlace de instalación + cómo entregarla ── */}
@@ -127,6 +206,26 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
             <input id="cfg-nombre" className="input" value={nombre} onChange={e => setNombre(e.target.value)} />
           </div>
 
+          {multiempresa && (
+            <div className="input-group">
+              <label htmlFor="cfg-empresa">
+                Empresa <span className="label-hint">(a quién pertenece este punto de venta)</span>
+              </label>
+              <select id="cfg-empresa" className="input" value={empresaId}
+                onChange={e => cambiarEmpresa(e.target.value)}>
+                {data.empresas.map(emp => (
+                  <option key={emp.empresa_id} value={emp.empresa_id}>{emp.nombre}</option>
+                ))}
+              </select>
+              {cambiaEmpresa && (
+                <p className="caja-install-hint">
+                  Vuelve a elegir el almacén y las cuentas: los anteriores eran de{' '}
+                  <strong>{nombreEmpresa(data.caja.empresa_id)}</strong>.
+                </p>
+              )}
+            </div>
+          )}
+
           {data.tieneInventario ? (
             <div className="input-group">
               <label htmlFor="cfg-almacen">Almacén <span className="label-hint">(de dónde descuenta stock)</span></label>
@@ -158,14 +257,17 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
                       {checked && data.tieneBase && (
                         cuentasM.length > 0 ? (
                           <select className="input" value={cuentas[m] ?? ''}
+                            aria-label={`Caja de Tesorería para ${m}`}
                             onChange={e => setCuentas(prev => ({ ...prev, [m]: e.target.value }))}>
-                            <option value="">— Cuenta de caja ({m}) —</option>
+                            <option value="">— Elige la caja de {m} —</option>
                             {cuentasM.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
                           </select>
                         ) : (
                           <p className="caja-moneda-sin-cuenta">
-                            No tienes una caja en {m} para esta empresa.{' '}
-                            <Link href="/portal/tesoreria" className="link-primary">Añádela en Tesorería</Link>.
+                            No tienes una caja en {m} para esta empresa, así que sus ventas no llegarían
+                            a tu contabilidad.{' '}
+                            <Link href="/portal/tesoreria" className="link-primary">Añádela en Tesorería</Link>
+                            {' '}o deja de aceptar {m}.
                           </p>
                         )
                       )}
@@ -179,6 +281,10 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
                 Sin módulo Contabilidad: las ventas no se registran en Tesorería (quedan solo en el detalle de la caja).
               </p>
             )}
+            <p className="caja-install-hint">
+              ¿No ves tu moneda?{' '}
+              <Link href="/portal/monedas" className="link-primary">Añádela en Monedas y tasas</Link>.
+            </p>
           </div>
 
           <div className="caja-actions">
@@ -187,6 +293,40 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
             </button>
           </div>
         </form>
+      )}
+
+      {confirmarEmpresa && (
+        <ConfirmDialog
+          danger
+          title="Cambiar la empresa del punto de venta"
+          confirmLabel="Cambiar empresa"
+          onCancel={() => setConfirmarEmpresa(false)}
+          onConfirm={persistir}
+          body={
+            <>
+              <p>
+                Este punto de venta pasa de <strong>{nombreEmpresa(data.caja.empresa_id)}</strong>{' '}
+                a <strong>{nombreEmpresa(empresaId)}</strong>. A partir de ahora sus ventas
+                se registrarán en la contabilidad de {nombreEmpresa(empresaId)}.
+              </p>
+              {data.tieneHistorico && (
+                <p>
+                  <strong>Lo ya sincronizado no se mueve.</strong> Los cierres y los tickets
+                  que ya subiste siguen contabilizados en {nombreEmpresa(data.caja.empresa_id)}.
+                  El cambio solo afecta a lo que venga a partir de ahora.
+                </p>
+              )}
+              <p>
+                Tendrás que volver a elegir el almacén y las cuentas de Tesorería, porque los
+                actuales son de {nombreEmpresa(data.caja.empresa_id)}.
+              </p>
+              <p>
+                Y hay que <strong>sincronizar el dispositivo</strong> donde esté instalado:
+                hasta que lo haga, sigue cobrando con la configuración vieja.
+              </p>
+            </>
+          }
+        />
       )}
     </div>
   )

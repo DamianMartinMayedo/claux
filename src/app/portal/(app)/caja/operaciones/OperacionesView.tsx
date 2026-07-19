@@ -5,6 +5,7 @@ import { Search, ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import Tabs from '@/components/Tabs'
+import FilterPills from '@/components/portal/FilterPills'
 
 interface Props {
   data: { tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string> }
@@ -23,28 +24,35 @@ function estadoBadge(estado: string) {
 export default function OperacionesView({ data }: Props) {
   const [tab, setTab]       = useState<'ventas' | 'stock'>('ventas')
   const [search, setSearch] = useState('')
+  const [punto, setPunto]   = useState('')   // '' = todos
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
+
+  // Las pastillas solo salen con más de un punto de venta: con uno no hay nada que
+  // filtrar y sería una fila de cromo que no hace nada.
+  const puntos = Object.entries(data.cajaNombres).map(([id, nombre]) => ({ id, label: nombre }))
 
   const ventas = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.tickets.filter(t =>
-      !q || [cajaNombre(t.caja_id), t.moneda, t.medio_pago].filter(Boolean).join(' ').toLowerCase().includes(q))
+      (!punto || t.caja_id === punto) &&
+      (!q || [cajaNombre(t.caja_id), t.moneda, t.medio_pago].filter(Boolean).join(' ').toLowerCase().includes(q)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.tickets, search])
+  }, [data.tickets, search, punto])
 
   const stock = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.stock.filter(l =>
-      !q || [cajaNombre(l.caja_id), l.descripcion].filter(Boolean).join(' ').toLowerCase().includes(q))
+      (!punto || l.caja_id === punto) &&
+      (!q || [cajaNombre(l.caja_id), l.descripcion].filter(Boolean).join(' ').toLowerCase().includes(q)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.stock, search])
+  }, [data.stock, search, punto])
 
   return (
     <div className="view-container">
       <div className="page-header">
         <div>
           <h1 className="page-title">Operaciones</h1>
-          <p className="page-subtitle">Detalle de las ventas sincronizadas desde tus cajas, una a una.</p>
+          <p className="page-subtitle">Detalle de las ventas sincronizadas desde tus puntos de venta, una a una.</p>
         </div>
       </div>
 
@@ -58,10 +66,19 @@ export default function OperacionesView({ data }: Props) {
         ]}
       />
 
+      {/* Las pastillas van DENTRO de la toolbar, junto al buscador, como en el resto
+          del portal (Ventas, Gastos, Terceros…), no en una fila aparte. */}
       <div className="ter-toolbar">
+        <FilterPills
+          items={puntos}
+          value={punto}
+          onChange={setPunto}
+          todasLabel="Todos los puntos"
+          ariaLabel="Filtrar por punto de venta"
+        />
         <div className="ter-search-wrap">
           <Search size={16} strokeWidth={2} />
-          <input type="search" className="ter-search" placeholder="Buscar por caja, producto…"
+          <input type="search" className="ter-search" placeholder="Buscar por punto de venta, producto…"
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
@@ -87,7 +104,7 @@ function VentasTabla({ items, cajaNombre }: { items: Ticket[]; cajaNombre: (id: 
           <table className="table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Caja</th><th>Medio de pago</th>
+                <th>Fecha</th><th>Punto de venta</th><th>Medio de pago</th>
                 <th className="col-num">Total</th><th>Moneda</th><th>Estado</th>
               </tr>
             </thead>
@@ -95,7 +112,7 @@ function VentasTabla({ items, cajaNombre }: { items: Ticket[]; cajaNombre: (id: 
               {pageItems.map(t => (
                 <tr key={t.ticket_uuid}>
                   <td data-label="Fecha">{fecha(t.fecha)}</td>
-                  <td data-label="Caja">{cajaNombre(t.caja_id)}</td>
+                  <td data-label="Punto de venta">{cajaNombre(t.caja_id)}</td>
                   <td data-label="Medio de pago">{t.medio_pago ?? '—'}</td>
                   <td data-label="Total" className="col-num">{money(t.total)}</td>
                   <td data-label="Moneda">{t.moneda}</td>
@@ -125,7 +142,7 @@ function StockTabla({ items, cajaNombre }: { items: MovimientoStock[]; cajaNombr
           <table className="table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Caja</th><th>Producto</th>
+                <th>Fecha</th><th>Punto de venta</th><th>Producto</th>
                 <th className="col-num">Cantidad</th><th className="col-num">Precio</th>
               </tr>
             </thead>
@@ -133,7 +150,7 @@ function StockTabla({ items, cajaNombre }: { items: MovimientoStock[]; cajaNombr
               {pageItems.map((l, i) => (
                 <tr key={`${l.ticket_uuid}-${i}`}>
                   <td data-label="Fecha">{fecha(l.fecha)}</td>
-                  <td data-label="Caja">{cajaNombre(l.caja_id)}</td>
+                  <td data-label="Punto de venta">{cajaNombre(l.caja_id)}</td>
                   <td data-label="Producto" className="cell-truncate">{l.descripcion}</td>
                   <td data-label="Cantidad" className="col-num">{qty(l.cantidad)}</td>
                   <td data-label="Precio" className="col-num">{money(l.precio_unitario)}</td>

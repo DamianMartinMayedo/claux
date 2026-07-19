@@ -534,7 +534,15 @@ export async function contarUsoMoneda(codigo: string): Promise<UsoMoneda> {
     }),
   )
 
-  const detalle = counts.filter(c => c.n > 0)
+  // Los puntos de venta van aparte de REF_MONEDA: `monedas_aceptadas` es un text[],
+  // así que la comprobación es de contención y no de igualdad como el resto.
+  const { count: nCajas } = await db
+    .from('cajas')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_id', session.client_id)
+    .contains('monedas_aceptadas', [codigo])
+
+  const detalle = [...counts, { entidad: 'Puntos de venta', n: nCajas ?? 0 }].filter(c => c.n > 0)
   return { total: detalle.reduce((s, c) => s + c.n, 0), detalle }
 }
 

@@ -4,7 +4,10 @@ import { AlertTriangle } from 'lucide-react'
 
 interface ConfirmProps {
   title:         string
-  body?:         string
+  // ReactNode y no string: una confirmación con varias consecuencias (cambiar la
+  // empresa de un punto de venta) necesita más de un párrafo o una lista. Un string
+  // sigue valiendo, que es lo que pasan los 20 y pico usos existentes.
+  body?:         React.ReactNode
   confirmLabel?: string
   cancelLabel?:  string
   danger?:       boolean
@@ -33,7 +36,9 @@ export function ConfirmDialog({
         </div>
         {body && (
           <div className="modal-body">
-            <p className="dialog-text">{body}</p>
+            {/* <div> y no <p>: con un body de JSX, un <p> dentro de otro <p> es HTML
+                inválido y el navegador cierra el primero por su cuenta. */}
+            <div className="dialog-text">{body}</div>
           </div>
         )}
         <div className="modal-footer">

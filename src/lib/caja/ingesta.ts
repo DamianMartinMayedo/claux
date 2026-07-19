@@ -1,7 +1,7 @@
 // Núcleo server-only del módulo Caja. Construye la SEMILLA (productos/monedas/
 // tasas/config) que baja al dispositivo, e INGESTA el lote de tickets+cierres de
 // forma idempotente. Compartido por los endpoints públicos tokenizados
-// (/caja/api/seed y /caja/api/sync) y por la subida de archivo del portal
+// (/punto-de-venta/api/seed y /punto-de-venta/api/sync) y por la subida de archivo del portal
 // (ingestarLoteArchivo en actions/portal/caja.ts).
 //
 // Regla de independencia (CONTEXTO §2): la caja guarda SIEMPRE su propio detalle
@@ -54,7 +54,9 @@ export interface CierreIn {
   fondo_inicial?:    Record<string, number>
   efectivo_contado?: Record<string, number>
 }
-export interface LotePayload { tickets?: TicketIn[]; cierres?: CierreIn[] }
+// `caja` lo escribe el export de la PWA: identifica de qué punto de venta salió el
+// archivo. Es opcional porque un export viejo no lo trae, pero cuando viene manda.
+export interface LotePayload { caja?: string | null; tickets?: TicketIn[]; cierres?: CierreIn[] }
 
 export interface IngestaResultado {
   tickets_nuevos:    number
@@ -79,7 +81,18 @@ export function getCajaToken(req: Request): string | null {
 
 export async function construirSeed(db: Db, caja: CajaRow) {
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', caja.client_id).maybeSingle()
-  const tieneInv = tieneModulo(cli?.modulos_activos, 'inventario')
+  const tieneInv  = tieneModulo(cli?.modulos_activos, 'inventario')
+  const tieneBase = tieneModulo(cli?.modulos_activos, 'base')
+
+  // Al dispositivo solo bajan las monedas que además tienen su caja de Tesorería
+  // asignada, aunque en la configuración estén marcadas. Cobrar en una moneda sin
+  // cuenta produce una venta que el cierre NO puede contabilizar: mejor no ofrecerla
+  // que aceptar dinero que luego no aparece en ningún sitio. Sin el módulo de
+  // Contabilidad no hay cuentas que mapear, así que ahí no se filtra nada.
+  const aceptadas = caja.monedas_aceptadas ?? []
+  const monedasCaja = tieneBase
+    ? aceptadas.filter(m => Boolean(caja.cuentas_moneda?.[m]))
+    : aceptadas
 
   const [prodRes, monRes, tasaRes] = await Promise.all([
     // Solo productos FÍSICOS: la caja es para venta física. Los servicios se
@@ -110,7 +123,11 @@ export async function construirSeed(db: Db, caja: CajaRow) {
       caja_id:           caja.caja_id,
       empresa_id:        caja.empresa_id,
       almacen_id:        caja.almacen_id,
-      monedas_aceptadas: caja.monedas_aceptadas ?? [],
+      monedas_aceptadas: monedasCaja,
+      // El dispositivo no puede deducirlo: sin esto, quedarse sin monedas le pedía
+      // «asigna la caja de Tesorería» a un cliente que no tiene Contabilidad y por
+      // tanto no tiene ninguna cuenta que asignar.
+      tiene_base:        tieneBase,
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     productos: (prodRes.data ?? []).map((p: any) => ({
@@ -241,11 +258,27 @@ async function postearResumenCierre(
   for (const t of vigentes) porMoneda.set(t.moneda, (porMoneda.get(t.moneda) ?? 0) + Number(t.total))
 
   // ── Tesorería: un INGRESO resumen por moneda ──
-  if (tieneBase && ses.tesoreria_movs == null && porMoneda.size > 0) {
+  // Lo ya posteado se pregunta a los MOVIMIENTOS, no al flag `tesoreria_movs`. Antes
+  // el guardia era `tesoreria_movs == null` y el flag se escribía aunque una moneda se
+  // hubiese saltado por no tener cuenta: quedaba a `{}` (o a medias), dejaba de ser
+  // null y el cierre no se reintentaba NUNCA. Resultado: ventas que no llegaban a
+  // Tesorería, sin forma de recuperarlas ni resincronizando, y con el badge del portal
+  // en verde porque `{}` es truthy. Preguntando por los movimientos reales, arreglar la
+  // configuración y volver a sincronizar recupera lo que faltaba, y lo ya posteado no
+  // se duplica porque su moneda ya aparece.
+  if (tieneBase && porMoneda.size > 0) {
+    const { data: previos } = await db.from('movimientos_tesoreria')
+      .select('movimiento_id, moneda')
+      .eq('client_id', caja.client_id).eq('origen', 'CAJA').eq('referencia_id', sesionUuid)
     const movs: Record<string, string> = {}
+    for (const p of (previos ?? []) as { movimiento_id: string; moneda: string }[]) {
+      movs[p.moneda] = p.movimiento_id
+    }
+
     for (const [moneda, monto] of porMoneda) {
+      if (movs[moneda]) continue // ya tiene su ingreso: no se repite
       const cuentaId = caja.cuentas_moneda?.[moneda]
-      if (!cuentaId) continue // sin cuenta CAJA mapeada para esta moneda → config pendiente
+      if (!cuentaId) continue // sin cuenta mapeada → se deja PENDIENTE y se reintenta
       const movId = generarMovId()
       const { error } = await db.from('movimientos_tesoreria').insert({
         movimiento_id: movId,
@@ -263,9 +296,12 @@ async function postearResumenCierre(
       })
       if (error) throw new Error(`tesorería ${moneda}: ${error.message}`)
       movs[moneda] = movId
+      did = true
     }
-    await db.from('caja_sesiones').update({ tesoreria_movs: movs }).eq('sesion_uuid', sesionUuid).is('tesoreria_movs', null)
-    did = true
+    // Se guarda el mapa real, sin el `.is(null)`: ese guardia era lo que congelaba el
+    // cierre a medio postear. El mapa dice qué monedas están hechas, y la vista compara
+    // sus claves con las de `total_por_moneda` para saber si queda algo pendiente.
+    await db.from('caja_sesiones').update({ tesoreria_movs: movs }).eq('sesion_uuid', sesionUuid)
   }
 
   // ── Inventario: un SALIDA resumen por producto ──

@@ -5,25 +5,27 @@ import {
   type CajaConfig, type Producto, type LocalTicket, type LocalSesion, type LocalLinea,
   metaGet, metaSet, saveProductos, getProductos, putTicket, getTickets, putSesion, getSesiones,
   markTicketsSynced, markSesionesSynced,
-} from './caja-db'
+} from './punto-venta-db'
 
 type Vista = 'vender' | 'ventas' | 'turno' | 'sync'
 interface CartLine { key: string; producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number }
 type InstallPromptEvent = Event & { prompt: () => Promise<void> }
 
-// Moneda inicial de venta: preferimos CUP (la de curso legal); solo si la caja no
-// la acepta caemos a la primera aceptada/disponible.
+// Moneda inicial de venta: preferimos CUP (la de curso legal); si no, la primera
+// aceptada. Lista vacía significa «ninguna configurada», NO «todas»: antes se caía a
+// todas las monedas del cliente, y eso convertía una configuración incompleta en
+// permiso para cobrar en cualquier moneda —incluida alguna sin caja en Tesorería, que
+// es dinero que el cierre no puede contabilizar—.
 function monedaPorDefecto(cfg: CajaConfig | null): string {
-  const aceptadas   = cfg?.caja.monedas_aceptadas ?? []
-  const disponibles = aceptadas.length ? aceptadas : (cfg?.monedas?.map(m => m.codigo) ?? [])
-  return disponibles.includes('CUP') ? 'CUP' : (disponibles[0] ?? 'CUP')
+  const aceptadas = cfg?.caja.monedas_aceptadas ?? []
+  return aceptadas.includes('CUP') ? 'CUP' : (aceptadas[0] ?? 'CUP')
 }
 const uid    = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
 const money  = (n: number) => Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 async function fetchSeed(token: string): Promise<{ config: CajaConfig; productos: Producto[] }> {
-  const res = await fetch('/caja/api/seed', { headers: { 'x-caja-token': token }, cache: 'no-store' })
+  const res = await fetch('/punto-de-venta/api/seed', { headers: { 'x-caja-token': token }, cache: 'no-store' })
   const j = await res.json()
   if (!res.ok || !j.ok) throw new Error(j?.error || 'seed')
   return { config: { caja: j.seed.caja, monedas: j.seed.monedas, tasas: j.seed.tasas }, productos: j.seed.productos ?? [] }
@@ -31,7 +33,7 @@ async function fetchSeed(token: string): Promise<{ config: CajaConfig; productos
 const stripTicket = (t: LocalTicket) => ({ ticket_uuid: t.ticket_uuid, sesion_uuid: t.sesion_uuid, fecha: t.fecha, moneda: t.moneda, total: t.total, medio_pago: t.medio_pago, estado: t.estado ?? 'VIGENTE', rectifica_a: t.rectifica_a ?? null, lineas: t.lineas })
 const stripSesion = (s: LocalSesion) => ({ sesion_uuid: s.sesion_uuid, abierta_at: s.abierta_at, cerrada_at: s.cerrada_at, estado: s.estado, fondo_inicial: s.fondo_inicial, efectivo_contado: s.efectivo_contado })
 
-export default function CajaApp() {
+export default function PuntoVentaApp() {
   const [ready, setReady]     = useState(false)
   const [token, setToken]     = useState<string | null>(null)
   const [config, setConfig]   = useState<CajaConfig | null>(null)
@@ -57,7 +59,9 @@ export default function CajaApp() {
   const [msg, setMsg]         = useState<{ t: 'ok' | 'err' | 'warn'; x: string } | null>(null)
   const [busy, setBusy]       = useState(false)
 
-  const monedas = config?.caja.monedas_aceptadas?.length ? config.caja.monedas_aceptadas : (config?.monedas?.map(m => m.codigo) ?? [])
+  // Sin caída a «todas las monedas del cliente»: solo se cobra en las que Claux mandó,
+  // que ya vienen filtradas a las que tienen caja de Tesorería asignada.
+  const monedas = config?.caja.monedas_aceptadas ?? []
   const simbolo = (m: string) => config?.monedas.find(x => x.codigo === m)?.simbolo ?? m
   const precioDe = (p: Producto) => Number(p.precios?.[moneda] ?? 0)
   // El producto no tiene precio guardado en la moneda actual (no inventamos conversión).
@@ -215,7 +219,7 @@ export default function CajaApp() {
 
   // ── Sync / export / productos / instalar ──
   async function sincronizar() {
-    if (!token) { setMsg({ t: 'err', x: 'Caja no configurada.' }); return }
+    if (!token) { setMsg({ t: 'err', x: 'Punto de venta no configurado.' }); return }
     if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Sin conexión. Exporta el archivo y súbelo luego en Claux.' }); return }
     if (busy) return
     setBusy(true)
@@ -223,7 +227,7 @@ export default function CajaApp() {
       const tks  = tickets.filter(t => !t.synced)
       const sess = sesiones.filter(s => s.estado === 'CERRADA' && !s.synced)
       if (!tks.length && !sess.length) { setMsg({ t: 'ok', x: 'Todo sincronizado.' }); return }
-      const res = await fetch('/caja/api/sync', { method: 'POST', headers: { 'content-type': 'application/json', 'x-caja-token': token }, body: JSON.stringify({ tickets: tks.map(stripTicket), cierres: sess.map(stripSesion) }) })
+      const res = await fetch('/punto-de-venta/api/sync', { method: 'POST', headers: { 'content-type': 'application/json', 'x-caja-token': token }, body: JSON.stringify({ tickets: tks.map(stripTicket), cierres: sess.map(stripSesion) }) })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j?.error || 'sync')
       await markTicketsSynced(tks.map(t => t.ticket_uuid)); await markSesionesSynced(sess.map(s => s.sesion_uuid)); await reload()
@@ -238,13 +242,13 @@ export default function CajaApp() {
     const payload = { caja: config?.caja.caja_id ?? null, exportado_at: new Date().toISOString(), tickets: tks.map(stripTicket), cierres: sess.map(stripSesion) }
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
     const a = document.createElement('a'); a.href = url; a.download = `caja-${config?.caja.caja_id ?? 'export'}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(url)
-    setMsg({ t: 'ok', x: 'Archivo exportado. Súbelo en Claux → Caja → Sincronizar.' })
+    setMsg({ t: 'ok', x: 'Archivo exportado. Súbelo en Claux → Punto de venta → Sincronizar.' })
   }
   async function actualizarProductos() {
     if (!token) return
     if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Necesitas conexión para actualizar productos.' }); return }
     setBusy(true)
-    try { const s = await fetchSeed(token); await metaSet('config', s.config); await saveProductos(s.productos); setConfig(s.config); setProds(s.productos); if (!monedas.includes(moneda)) setMoneda(monedaPorDefecto(s.config)); setMsg({ t: 'ok', x: `Caja actualizada: ${s.productos.length} productos y sus monedas.` }) }
+    try { const s = await fetchSeed(token); await metaSet('config', s.config); await saveProductos(s.productos); setConfig(s.config); setProds(s.productos); if (!monedas.includes(moneda)) setMoneda(monedaPorDefecto(s.config)); setMsg({ t: 'ok', x: `Punto de venta actualizado: ${s.productos.length} productos y sus monedas.` }) }
     catch { setMsg({ t: 'err', x: 'No se pudo actualizar la caja.' }) }
     finally { setBusy(false) }
   }
@@ -272,8 +276,35 @@ export default function CajaApp() {
     return (
       <div className="ca-gate">
         <div className="ca-gate-card">
-          <div className="ca-gate-title">Caja sin configurar</div>
-          <p className="ca-gate-text">Abre esta caja desde el enlace de instalación que te dio Claux (Portal → Caja → Configurar → «Instalar en un dispositivo»). Una vez abierta con conexión, funcionará sin internet.</p>
+          <div className="ca-gate-title">Punto de venta sin configurar</div>
+          <p className="ca-gate-text">Abre este punto de venta desde el enlace de instalación que te dio Claux (Portal → Puntos de venta → Configurar → «Instalar en un dispositivo»). Una vez abierto con conexión, funcionará sin internet.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Configurado pero sin ninguna moneda cobrable. Se para aquí en vez de enseñar un
+  // selector vacío. Con trabajo pendiente NO se corta: primero hay que poder exportar
+  // lo ya vendido, o se perdería.
+  //
+  // El motivo —y por tanto la instrucción— depende del módulo contratado, así que el
+  // mensaje se bifurca: pedirle «asigna la caja de Tesorería» a un cliente que solo
+  // tiene Punto de venta es mandarlo a arreglar algo que en su plan no existe.
+  if (config && monedas.length === 0 && pend.tickets + pend.cierres === 0) {
+    return (
+      <div className="ca-gate">
+        <div className="ca-gate-card">
+          <div className="ca-gate-title">Sin monedas para cobrar</div>
+          <p className="ca-gate-text">
+            {config.caja.tiene_base
+              ? <>Ninguna moneda de este punto de venta tiene su caja de Tesorería asignada, así
+                  que las ventas no llegarían a tu contabilidad. Asígnala en Claux (Puntos de
+                  venta → Configurar).</>
+              : <>Este punto de venta no tiene ninguna moneda marcada. Márcala en Claux (Puntos
+                  de venta → Configurar); si no tienes ninguna creada, añádela antes en Monedas
+                  y tasas.</>}
+            {' '}Después vuelve a abrir esto con conexión para actualizarlo.
+          </p>
         </div>
       </div>
     )
@@ -474,7 +505,7 @@ export default function CajaApp() {
           )}
         </div>
       )}
-      <p className="ca-muted">Sin conexión: exporta el archivo y súbelo en Claux → Caja → Sincronizar. Se registra por fecha, sin duplicar.</p>
+      <p className="ca-muted">Sin conexión: exporta el archivo y súbelo en Claux → Punto de venta → Sincronizar. Se registra por fecha, sin duplicar.</p>
     </div>
   )
 
@@ -482,7 +513,7 @@ export default function CajaApp() {
     <div className="ca-gate">
       <div className="ca-gate-card">
         <div className="ca-gate-step">Bienvenido</div>
-        <div className="ca-gate-title">Caja {config?.caja.nombre ?? ''}</div>
+        <div className="ca-gate-title">{config?.caja.nombre ?? 'Punto de venta'}</div>
         <p className="ca-gate-text">Instálala en este dispositivo para tenerla como una app y usarla siempre, incluso sin internet.</p>
         {installEvt ? (
           <button className="ca-btn ca-btn-primary ca-btn-lg ca-btn-block" onClick={instalar}>Instalar la caja</button>
@@ -504,7 +535,7 @@ export default function CajaApp() {
     <>
       <header className="ca-header">
         <div>
-          <div className="ca-title">{config?.caja.nombre ?? 'Caja'}</div>
+          <div className="ca-title">{config?.caja.nombre ?? 'Punto de venta'}</div>
           <div className={`ca-turno-chip${sesion ? '' : ' closed'}`}>
             <span className="ca-dot" />{sesion ? `Turno abierto · ${ventasTurnoN} ventas` : 'Turno cerrado'}
           </div>

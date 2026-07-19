@@ -28,7 +28,7 @@ export default function CajaHubView({ cajas, empresas }: Props) {
   function toggleActiva(c: Caja) {
     startTransition(async () => {
       const r = await setActivaCaja(c.caja_id, !c.activa)
-      if (!r.ok) { toastError(r.error ?? 'No se pudo actualizar la caja.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se pudo actualizar el punto de venta.'); return }
       router.refresh()
     })
   }
@@ -37,17 +37,17 @@ export default function CajaHubView({ cajas, empresas }: Props) {
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Cajas</h1>
-          <p className="page-subtitle">Puntos de venta que funcionan sin conexión y sincronizan con Claux.</p>
+          <h1 className="page-title">Puntos de venta</h1>
+          <p className="page-subtitle">Cobran sin conexión y sincronizan con Claux cuando vuelve la señal.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={empresas.length === 0}>
-          <Plus size={14} strokeWidth={2.5} /> Nueva caja
+          <Plus size={14} strokeWidth={2.5} /> Nuevo punto de venta
         </button>
       </div>
 
       {empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear una caja (punto de venta) necesitas <strong>una empresa</strong>. El almacén es opcional: solo hace falta si quieres que las ventas descuenten stock.
+          Para crear un punto de venta necesitas <strong>una empresa</strong>. El almacén es opcional: solo hace falta si quieres que las ventas descuenten stock.
         </PrerequisitoAviso>
       )}
 
@@ -55,7 +55,7 @@ export default function CajaHubView({ cajas, empresas }: Props) {
         {cajas.length === 0 ? (
           <div className="mon-empty">
             <Store size={36} strokeWidth={1} opacity={0.25} />
-            <p>Aún no tienes cajas. Crea la primera y obtén su enlace de instalación.</p>
+            <p>Aún no tienes puntos de venta. Crea el primero y obtén su enlace de instalación.</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -102,11 +102,11 @@ export default function CajaHubView({ cajas, empresas }: Props) {
             </table>
           </div>
         )}
-        <TablePagination {...pag} label="caja" />
+        <TablePagination {...pag} label="punto de venta" />
       </div>
 
       {modalOpen && (
-        <NuevaCajaModal
+        <NuevoPuntoVentaModal
           empresas={empresas}
           onClose={() => setModalOpen(false)}
           onCreated={(id) => router.push(`/portal/caja/${id}`)}
@@ -116,9 +116,9 @@ export default function CajaHubView({ cajas, empresas }: Props) {
   )
 }
 
-// ── Modal: nueva caja ─────────────────────────────────────────────────────────
+// ── Modal: nuevo punto de venta ─────────────────────────────────────────────────────────
 
-function NuevaCajaModal({ empresas, onClose, onCreated }: {
+function NuevoPuntoVentaModal({ empresas, onClose, onCreated }: {
   empresas: { empresa_id: string; nombre: string }[]
   onClose:  () => void
   onCreated: (cajaId: string) => void
@@ -132,7 +132,7 @@ function NuevaCajaModal({ empresas, onClose, onCreated }: {
     e.preventDefault()
     startTransition(async () => {
       const r = await crearCaja(nombre, empresaId)
-      if (!r.ok || !r.caja_id) { toastError(r.error ?? 'No se pudo crear la caja.'); return }
+      if (!r.ok || !r.caja_id) { toastError(r.error ?? 'No se pudo crear el punto de venta.'); return }
       onCreated(r.caja_id)
     })
   }
@@ -141,14 +141,14 @@ function NuevaCajaModal({ empresas, onClose, onCreated }: {
     <div className="modal-backdrop open">
       <form className="modal modal-440" role="dialog" aria-modal onSubmit={submit}>
         <div className="modal-header">
-          <h2 className="modal-title">Nueva caja</h2>
+          <h2 className="modal-title">Nuevo punto de venta</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
           <div className="input-group">
             <label htmlFor="caja-nombre">Nombre <span className="required">*</span></label>
             <input id="caja-nombre" className="input" value={nombre} onChange={e => setNombre(e.target.value)}
-              placeholder="Ej: Caja mostrador" autoFocus />
+              placeholder="Ej: Mostrador" autoFocus />
           </div>
           {multi && (
             <div className="input-group">
@@ -162,7 +162,7 @@ function NuevaCajaModal({ empresas, onClose, onCreated }: {
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button type="submit" className="btn btn-primary" disabled={isPending || !nombre.trim()}>
-            {isPending ? <><span className="spinner spinner-sm" /> Creando…</> : 'Crear caja'}
+            {isPending ? <><span className="spinner spinner-sm" /> Creando…</> : 'Crear punto de venta'}
           </button>
         </div>
       </form>

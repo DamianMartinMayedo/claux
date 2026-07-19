@@ -130,6 +130,14 @@ textarea.input { resize: vertical; min-height: 80px; }
   width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--color-primary);
   vertical-align: middle;
 }
+/* Con el dedo, 16px incumple WCAG 2.2 (SC 2.5.8 pide 24×24) y se falla constantemente
+   — y fallar aquí no es inocuo: la fila entera es `table-row-clickable`, así que el
+   toque perdido navega al detalle y se lleva por delante la selección en curso.
+   Filtra por PUNTERO, no por ancho: una tablet a 800px sigue mostrando la tabla de
+   escritorio y también se toca con el dedo. */
+@media (pointer: coarse) {
+  .row-check { width: 1.5rem; height: 1.5rem; }
+}
 .table td.cell-truncate {
   max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -427,6 +435,40 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 }
 .bulk-bar-clear:hover { background: var(--color-surface-offset); color: var(--color-text); }
 .bulk-bar-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+/* ═══════════════════════════════════════════════════
+   FILTER PILLS — pastillas de filtro (reutilizable)
+   ═══════════════════════════════════════════════════
+   Nacieron como `.empresa-pill` en 06-portal.css, pero el patrón no tiene nada de
+   empresas: es «Todos + una pastilla por elemento». Al necesitarlas para filtrar por
+   punto de venta se generalizan aquí, con el nombre honesto y en el parcial de
+   componentes. El punto de color pasa a ser OPT-IN (`.filter-pill-dot`) en vez de
+   opt-out: un filtro sin color es el caso normal, no la excepción. */
+.filter-pills { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.filter-pill {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs); font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: var(--transition);
+}
+.filter-pill-dot::before {
+  content: '';
+  width: 8px; height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--empresa-color, var(--color-text-muted));
+  flex-shrink: 0;
+}
+.filter-pill:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.filter-pill.active {
+  border-color: var(--empresa-color, var(--color-primary));
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
 
 /* Toggle inline «Ver archivadas / mostrar X» junto a los filtros (reutilizable) */
 .filtro-toggle {

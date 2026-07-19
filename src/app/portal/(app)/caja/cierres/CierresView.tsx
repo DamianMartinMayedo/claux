@@ -20,7 +20,7 @@ export default function CierresView({ data }: { data: { cierres: Cierre[]; cajaN
       <div className="page-header">
         <div>
           <h1 className="page-title">Cierres</h1>
-          <p className="page-subtitle">Arqueos (Z) de tus cajas. Cada cierre genera el resumen a Tesorería e Inventario.</p>
+          <p className="page-subtitle">Arqueos (Z) de tus puntos de venta. Cada cierre genera el resumen a Tesorería e Inventario.</p>
         </div>
       </div>
 
@@ -35,21 +35,37 @@ export default function CierresView({ data }: { data: { cierres: Cierre[]; cajaN
             <table className="table">
               <thead>
                 <tr>
-                  <th>Caja</th><th>Abierta</th><th>Cerrada</th><th>Totales</th>
+                  <th>Punto de venta</th><th>Abierta</th><th>Cerrada</th><th>Totales</th>
                   <th>Contabilidad</th><th>Inventario</th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map(c => (
                   <tr key={c.sesion_uuid}>
-                    <td data-label="Caja">{cajaNombre(c.caja_id)}</td>
+                    <td data-label="Punto de venta">{cajaNombre(c.caja_id)}</td>
                     <td data-label="Abierta">{fecha(c.abierta_at)}</td>
                     <td data-label="Cerrada">{fecha(c.cerrada_at)}</td>
                     <td data-label="Totales">{totales(c.total_por_moneda)}</td>
                     <td data-label="Contabilidad">
-                      <span className={`badge ${c.tesoreria_movs ? 'badge-success' : ''}`}>
-                        {c.tesoreria_movs ? 'Registrado' : 'Pendiente'}
-                      </span>
+                      {(() => {
+                        // No basta con que `tesoreria_movs` exista: `{}` es truthy, así
+                        // que un cierre sin NADA posteado salía «Registrado» en verde.
+                        // Registrado = todas las monedas vendidas tienen su ingreso.
+                        const vendidas = Object.keys(c.total_por_moneda ?? {})
+                        const hechas   = Object.keys(c.tesoreria_movs ?? {})
+                        const faltan   = vendidas.filter(m => !hechas.includes(m))
+                        if (vendidas.length > 0 && faltan.length === 0) {
+                          return <span className="badge badge-success">Registrado</span>
+                        }
+                        if (hechas.length > 0) {
+                          return (
+                            <span className="badge badge-warning" title={`Falta: ${faltan.join(', ')}`}>
+                              Falta {faltan.join(', ')}
+                            </span>
+                          )
+                        }
+                        return <span className="badge">Pendiente</span>
+                      })()}
                     </td>
                     <td data-label="Inventario">
                       <span className={`badge ${c.stock_movs ? 'badge-success' : ''}`}>

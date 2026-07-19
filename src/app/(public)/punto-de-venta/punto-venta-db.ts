@@ -4,7 +4,7 @@
 // (tx aparte) y escribimos en una tx sin awaits intermedios.
 
 export interface CajaConfig {
-  caja:    { caja_id: string; nombre?: string; empresa_id: string; almacen_id: string | null; monedas_aceptadas: string[] }
+  caja:    { caja_id: string; nombre?: string; empresa_id: string; almacen_id: string | null; monedas_aceptadas: string[]; tiene_base?: boolean }
   monedas: { codigo: string; simbolo: string }[]
   tasas:   { origen: string; destino: string; tasa: number }[]
 }

@@ -109,6 +109,12 @@ export async function guardarEmpresa(
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre de la empresa es obligatorio.' }
+  // `empresas.moneda_funcional` es NOT NULL. Sin esta comprobación llegaba un null
+  // explícito (que NO toma el default de la columna) y el usuario veía el error crudo
+  // de Postgres en vez de saber qué campo le falta.
+  if (!((formData.get('moneda_funcional') as string) ?? '').trim()) {
+    return { ok: false, error: 'Elige la moneda funcional de la empresa.' }
+  }
 
   const empresa_id_form = ((formData.get('empresa_id') as string) ?? '').trim()
   const colorResult     = validarColor((formData.get('color') as string) ?? '')

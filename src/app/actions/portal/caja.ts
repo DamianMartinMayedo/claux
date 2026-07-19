@@ -72,6 +72,9 @@ export interface CajaConfigData {
   baseUrl:   string
   tieneBase:       boolean
   tieneInventario: boolean
+  // ¿Hay cierres ya sincronizados? Solo sirve para que el aviso de cambio de
+  // empresa no mienta: sin histórico no hay nada que se quede en la empresa vieja.
+  tieneHistorico:  boolean
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -143,6 +146,24 @@ export async function crearCaja(
   return { ok: true, caja_id }
 }
 
+// ── Puntos de venta que aceptan una moneda ──────────────────────────────────────
+
+// Lectura para avisar en «Monedas y tasas» antes de desactivar una moneda: si algún
+// punto de venta la acepta, dejará de poder cobrar en ella en cuanto sincronice, y sin
+// esto se enteraría el cajero en el mostrador. Devuelve NOMBRES porque el aviso los
+// enumera. `monedas_aceptadas` es text[], así que la consulta es de contención, no de
+// igualdad. Sin candado de escritura: no muta nada.
+export async function puntosVentaConMoneda(codigo: string): Promise<string[]> {
+  const session = await getPortalSession()
+  if (!session) return []
+  const { data } = await createAdminClient().from('cajas')
+    .select('nombre')
+    .eq('client_id', session.client_id).eq('activa', true)
+    .contains('monedas_aceptadas', [codigo])
+    .order('nombre')
+  return ((data ?? []) as { nombre: string }[]).map(c => c.nombre)
+}
+
 // ── Datos de configuración de una caja ──────────────────────────────────────────
 
 export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData | null> {
@@ -157,7 +178,7 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
   const empresas = await obtenerEmpresas()
   const ids      = empresas.map(e => e.empresa_id)
 
-  const [almRes, cuRes, monRes, cliRes] = await Promise.all([
+  const [almRes, cuRes, monRes, cliRes, sesRes] = await Promise.all([
     db.from('almacenes').select('almacen_id, nombre, empresa_id')
       .eq('client_id', session.client_id).in('empresa_id', ids.length ? ids : ['__none__']).order('nombre'),
     db.from('cuentas').select('cuenta_id, nombre, moneda, empresa_id')
@@ -165,6 +186,9 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
       .in('empresa_id', ids.length ? ids : ['__none__']).order('nombre'),
     db.from('monedas').select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo'),
     db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
+    // head+count: solo interesa si existe alguna, no traer las filas.
+    db.from('caja_sesiones').select('sesion_uuid', { count: 'exact', head: true })
+      .eq('caja_id', caja_id).eq('client_id', session.client_id),
   ])
 
   const modulos = cliRes.data?.modulos_activos
@@ -177,6 +201,7 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
     baseUrl:   (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, ''),
     tieneBase:       tieneModulo(modulos, 'base'),
     tieneInventario: tieneModulo(modulos, 'inventario'),
+    tieneHistorico:  (sesRes.count ?? 0) > 0,
   }
 }
 
@@ -184,7 +209,10 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
 
 export async function guardarConfigCaja(
   caja_id: string,
-  cfg: { nombre: string; almacen_id: string | null; monedas_aceptadas: string[]; cuentas_moneda: Record<string, string> },
+  cfg: {
+    nombre: string; empresa_id?: string; almacen_id: string | null
+    monedas_aceptadas: string[]; cuentas_moneda: Record<string, string>
+  },
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
@@ -192,11 +220,50 @@ export async function guardarConfigCaja(
   if (!cfg.nombre?.trim())  return { ok: false, error: 'El nombre es obligatorio.' }
 
   const db = createAdminClient()
+
+  // La empresa determina de qué almacén descuenta stock y a qué cuentas de Tesorería
+  // postea, así que un cambio arrastra las dos cosas: el almacén y las cuentas eran
+  // de la empresa vieja y ahí dejarían de existir. Se limpian EN SERVIDOR y no solo
+  // en el formulario, porque es una invariante del dato: un punto de venta no puede
+  // apuntar a un almacén ni a una cuenta de otra empresa, venga la petición de donde
+  // venga. Lo ya sincronizado no se toca: las sesiones y los tickets llevan su propio
+  // empresa_id y los resúmenes ya posteados viven en la contabilidad de la vieja.
+  const { data: actual } = await db.from('cajas').select('empresa_id')
+    .eq('caja_id', caja_id).eq('client_id', session.client_id).maybeSingle()
+  if (!actual) return { ok: false, error: 'Punto de venta no encontrado.' }
+
+  let empresaFinal = actual.empresa_id as string
+  if (cfg.empresa_id && cfg.empresa_id !== actual.empresa_id) {
+    const empresas = await obtenerEmpresas()
+    if (!empresas.some(e => e.empresa_id === cfg.empresa_id)) {
+      return { ok: false, error: 'Empresa no válida.' }
+    }
+    empresaFinal = cfg.empresa_id
+  }
+
+  // No se limpia a ciegas por «ha cambiado la empresa»: eso tiraría el almacén y las
+  // cuentas que el usuario acaba de elegir para la empresa NUEVA en el mismo guardado.
+  // Se comprueba la pertenencia real y se cae solo lo que no es de `empresaFinal`.
+  const [almOk, cuentasEmpresa] = await Promise.all([
+    cfg.almacen_id
+      ? db.from('almacenes').select('almacen_id').eq('almacen_id', cfg.almacen_id)
+          .eq('client_id', session.client_id).eq('empresa_id', empresaFinal).maybeSingle()
+      : Promise.resolve({ data: null }),
+    db.from('cuentas').select('cuenta_id')
+      .eq('client_id', session.client_id).eq('empresa_id', empresaFinal),
+  ])
+  const cuentasValidas = new Set((cuentasEmpresa.data ?? []).map((c: { cuenta_id: string }) => c.cuenta_id))
+  const cuentasFinal: Record<string, string> = {}
+  for (const [moneda, cuentaId] of Object.entries(cfg.cuentas_moneda ?? {})) {
+    if (cuentasValidas.has(cuentaId)) cuentasFinal[moneda] = cuentaId
+  }
+
   const { error } = await db.from('cajas').update({
     nombre:            cfg.nombre.trim(),
-    almacen_id:        cfg.almacen_id || null,
+    empresa_id:        empresaFinal,
+    almacen_id:        almOk.data ? cfg.almacen_id : null,
     monedas_aceptadas: cfg.monedas_aceptadas ?? [],
-    cuentas_moneda:    cfg.cuentas_moneda ?? {},
+    cuentas_moneda:    cuentasFinal,
     updated_at:        new Date().toISOString(),
   }).eq('caja_id', caja_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
@@ -310,11 +377,20 @@ export async function ingestarLoteArchivo(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
+  // El archivo dice de qué punto de venta salió. Manda ÉL, no lo que haya elegido la
+  // vista: ingerir las ventas de un punto en otro las mete en la empresa equivocada,
+  // descuenta del almacén equivocado y postea a la cuenta equivocada, y una vez dentro
+  // no hay deshacer. La comprobación va en servidor porque el cliente se puede saltar.
+  const destino = typeof payload?.caja === 'string' && payload.caja ? payload.caja : caja_id
+  if (destino !== caja_id) {
+    return { ok: false, error: 'El archivo es de otro punto de venta que el seleccionado.' }
+  }
+
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')
     .select('caja_id, client_id, empresa_id, almacen_id, cuentas_moneda, monedas_aceptadas, activa')
-    .eq('caja_id', caja_id).eq('client_id', session.client_id).maybeSingle()
-  if (!caja) return { ok: false, error: 'Caja no encontrada.' }
+    .eq('caja_id', destino).eq('client_id', session.client_id).maybeSingle()
+  if (!caja) return { ok: false, error: 'Punto de venta no encontrado.' }
 
   const resultado = await ingestarLote(db, caja as CajaRow, payload, 'ARCHIVO')
 

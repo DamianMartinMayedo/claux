@@ -178,10 +178,8 @@
     padding: var(--space-1) var(--space-4);
   }
   .table tbody tr:hover { background: var(--color-surface); }
-  /* El acento de empresa ya lo pinta el border-left de la tarjeta; anular el
-     box-shadow de la 1ª celda (que en escritorio hace el acento de fila) para no
-     tener una segunda barra despegada dentro de la tarjeta. */
-  .row-empresa-accent > td:first-child { box-shadow: none; }
+  /* El acento de empresa de la 1ª celda se anula en 06-portal.css, no aquí: la
+     regla que hay que ganar vive allí y este archivo carga ANTES (globals.css). */
   .table td {
     display: flex; justify-content: flex-end; align-items: center;
     gap: var(--space-3) var(--space-4); flex-wrap: wrap;
@@ -203,6 +201,16 @@
   .table td[data-label=""]::before { content: none; }
   .table td.col-actions { justify-content: flex-end; width: auto; }
   .table td.col-actions::before { content: none; }
+
+  /* El `width:1%` de la celda del checkbox significa «ocupa lo mínimo» en la tabla
+     de escritorio, pero en tarjeta la dejaba en 3px pegada al borde: parecía una
+     fila vacía con el check incrustado en el acento de empresa. Aquí no es un dato
+     (no lleva etiqueta ni divisoria, no es una línea «etiqueta: valor»), es el
+     control de selección de la tarjeta: ancho libre y anclado a la izquierda. */
+  .table td.col-check {
+    width: auto; justify-content: flex-start;
+    padding: var(--space-2) 0 0; border-bottom: none;
+  }
 
   /* Pie de paginación: que no se apriete en móvil */
   .pagination { flex-wrap: wrap; gap: var(--space-3); }

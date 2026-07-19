@@ -2,10 +2,11 @@ import { Calendar, CalendarDays } from 'lucide-react'
 import type { DashboardData } from '@/app/actions/portal/dashboard'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 // En pausa (no convence de momento): checklist de onboarding ('./OnboardingChecklist').
-import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import { EmpresaTag } from '@/components/portal/EmpresaTag'
 import { fechaLarga } from './format'
 import ContabilidadWidget from './ContabilidadWidget'
 import InventarioWidget from './InventarioWidget'
+import PuntoVentaWidget from './PuntoVentaWidget'
 import RrhhWidget from './RrhhWidget'
 import AgendaWidget from './AgendaWidget'
 import AccesosRapidos from './AccesosRapidos'
@@ -18,11 +19,8 @@ const ESTADO_BADGE: Record<string, string> = {
 }
 
 export default function DashboardView({ data }: { data: DashboardData }) {
-  const { contabilidad, inventario, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos } = data
-  const hayPaneles = Boolean(contabilidad || inventario || rrhh || reservas || citas)
-
-  // Una sola empresa → su color tiñe el acento del encabezado (identidad).
-  const empresaUnica = empresas.length === 1 ? empresas[0] : null
+  const { contabilidad, inventario, puntoVenta, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos } = data
+  const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || reservas || citas)
 
   const dias = suscripcion.diasRestantes
   const subSuscripcion = dias !== null && dias >= 0 ? ` · ${dias} d` : ''
@@ -30,16 +28,18 @@ export default function DashboardView({ data }: { data: DashboardData }) {
   return (
     <div className="view-container">
       <div className="page-header">
-        <div
-          className={empresaUnica ? 'dash-identidad' : undefined}
-          style={empresaUnica ? empresaColorVar(empresaUnica.color) : undefined}
-        >
+        <div>
           <div className="page-title-ia">
             <h1 className="page-title">Hola, {nombreEmpresa}</h1>
             <IaTouchpoint tipo="general" descripcion="un análisis general de tu negocio" />
           </div>
           <p className="page-subtitle">{fechaLarga(fecha)}</p>
-          {empresas.length > 1 && (
+          {/* La lista sale SIEMPRE, también con una sola empresa. Antes, con una, el
+              encabezado llevaba un borde de su color y nada más: una raya de color no
+              dice de qué empresa es, y el «Hola, X» del título es el nombre de la
+              CUENTA, no el de la empresa. Mismo bloque para todos, y al añadir la
+              segunda empresa no cambia la interfaz de sitio. */}
+          {empresas.length > 0 && (
             <div className="dash-empresas-legend">
               {empresas.map(e => (
                 <EmpresaTag key={e.empresa_id} color={e.color} nombre={e.nombre} />
@@ -81,6 +81,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
             icon={<CalendarDays size={18} />} tone="metric-icon-teal"
           />
         )}
+        {puntoVenta && <PuntoVentaWidget data={puntoVenta} />}
         {inventario && <InventarioWidget data={inventario} />}
         {rrhh && <RrhhWidget data={rrhh} />}
         {!hayPaneles && <AccesosRapidos accesos={accesos} />}

@@ -468,35 +468,14 @@
 .row-empresa-accent > td:first-child {
   box-shadow: inset 3px 0 0 0 var(--empresa-color, transparent);
 }
-
-/* Pastillas de filtro por empresa (sustituyen/acompañan al <select>) */
-.empresa-pills { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-.empresa-pill {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs); font-weight: 600;
-  cursor: pointer; white-space: nowrap;
-  transition: var(--transition);
+/* En tarjeta (bajo 640px) el acento ya lo pinta el `border-left` del <tr>, así que
+   este inset sobra: salían DOS barras teal, la del borde y la de la celda, y encima
+   la 1ª celda suele ser el checkbox, con lo que la segunda barra le caía justo al
+   lado. La anulación tiene que vivir AQUÍ y no junto al resto del modo tarjeta
+   (04-responsive-dark.css): misma especificidad, y 06 carga después → gana 06. */
+@media (max-width: 640px) {
+  .row-empresa-accent > td:first-child { box-shadow: none; }
 }
-.empresa-pill::before {
-  content: '';
-  width: 8px; height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--empresa-color, var(--color-text-muted));
-  flex-shrink: 0;
-}
-.empresa-pill:hover { background: var(--color-surface-offset); color: var(--color-text); }
-.empresa-pill.active {
-  border-color: var(--empresa-color, var(--color-primary));
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
-/* Pastilla "Todas las empresas": sin dot de color */
-.empresa-pill-todas::before { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MÓDULO MONEDAS
@@ -607,6 +586,9 @@
 }
 @media (max-width: 520px) { .mon-form-grid { grid-template-columns: 1fr; } }
 .mon-full { grid-column: 1 / -1; }
+/* Aviso dentro del `.input-group` de Estado: el grupo es flex column con gap, así que
+   solo hace falta despegarlo un punto más del selector al que se refiere. */
+.mon-aviso-puntos { margin-top: var(--space-1); }
 
 /* Radio list para consolidación */
 .mon-radio-list { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -1771,7 +1753,6 @@
   .top-loader { transition: opacity 0.3s ease; }
 }
 
-.dash-identidad { border-left: 3px solid var(--empresa-color, transparent); padding-left: var(--space-3); }
 .dash-empresas-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); }
 /* Switch de moneda dentro de la gráfica de contabilidad (consolidado + monedas) */
 .dash-moneda-switch {
@@ -2345,6 +2326,20 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .caja-moneda-row select { flex: 1; min-width: 0; }
 
 .caja-config-section { margin-bottom: var(--space-6); }
+/* El formulario se pintaba con `caja-config-form` en el JSX pero la clase no existía
+   en el CSS: como `.input-group` solo trae el gap interno (label↔campo) y el reset
+   deja los márgenes a cero, los bloques salían pegados unos a otros. El gap va aquí,
+   en el contenedor, y no como margen de cada hijo: así el título, los campos y el
+   aviso se separan igual sin depender de cuáles se estén pintando. */
+.caja-config-form { display: flex; flex-direction: column; gap: var(--space-5); }
+/* Respaldo plegado de Sincronizar: el archivo trae dentro su punto de venta, así que
+   elegirlo a mano es la excepción (archivos viejos) y no debe competir con el flujo. */
+.caja-sync-manual > summary {
+  cursor: pointer; font-size: var(--text-sm); color: var(--color-text-muted);
+  padding: var(--space-2) 0;
+}
+.caja-sync-manual > summary:hover { color: var(--color-text); }
+.caja-sync-manual[open] > summary { margin-bottom: var(--space-2); }
 .caja-actions { display: flex; justify-content: flex-end; margin-top: var(--space-5); }
 
 /* ── Banner de impersonación (equipo CLAUX dentro del portal del cliente) ── */

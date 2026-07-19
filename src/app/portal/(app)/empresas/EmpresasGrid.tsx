@@ -3,6 +3,7 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
@@ -223,15 +224,38 @@ function EmpresaModal({
                 <span className="input-hint">Número de Identificación Fiscal o Tributaria</span>
               </div>
 
+              {/* La moneda funcional es NOT NULL en base de datos, pero el formulario la
+                  ofrecía como «Sin especificar»: al guardar vacío llegaba un null explícito
+                  —que no toma el default de la columna— y saltaba un error de Postgres sin
+                  traducir. Se marca obligatoria, que es lo que siempre fue. */}
               <div className="input-group">
-                <label>Moneda funcional</label>
-                <select className="input" name="moneda_funcional" defaultValue={state.empresa?.moneda_funcional ?? ''}>
-                  <option value="">Sin especificar</option>
-                  {monedas.map(m => (
-                    <option key={m.codigo} value={m.codigo}>{m.codigo} — {m.nombre}</option>
-                  ))}
-                </select>
-                <span className="input-hint">Moneda principal de operación de esta empresa</span>
+                <label>Moneda funcional <span className="required">*</span></label>
+                {monedas.length === 0 ? (
+                  <div className="prd-almacen-req">
+                    <p className="input-hint">
+                      Toda empresa opera en una moneda, y todavía no tienes ninguna configurada.
+                    </p>
+                    <Link href="/portal/monedas" className="btn btn-primary btn-sm">
+                      <Plus size={14} strokeWidth={2.5} /> Añadir una moneda
+                    </Link>
+                  </div>
+                ) : (
+                  <>
+                    <select className="input" name="moneda_funcional" required
+                      defaultValue={state.empresa?.moneda_funcional ?? ''}>
+                      {/* value="" + disabled + required: el navegador para el envío aquí
+                          en vez de dejar pasar un vacío que revienta más adelante. */}
+                      <option value="" disabled>Elige una moneda</option>
+                      {monedas.map(m => (
+                        <option key={m.codigo} value={m.codigo}>{m.codigo} — {m.nombre}</option>
+                      ))}
+                    </select>
+                    <span className="input-hint">
+                      Moneda principal de operación de esta empresa. ¿No ves la tuya?{' '}
+                      <Link href="/portal/monedas" className="link-primary">Añádela en Monedas y tasas</Link>.
+                    </span>
+                  </>
+                )}
               </div>
 
               <div className="input-group">
