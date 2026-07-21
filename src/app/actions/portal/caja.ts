@@ -15,8 +15,10 @@ import { tieneModulo }      from '@/lib/modulos'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-/** Qué baja al dispositivo (mig. 120). Mismo vocabulario que `TipoImportacion` del catálogo QR. */
-export const TIPOS_CATALOGO = ['PRODUCTO', 'SERVICIO', 'AMBOS'] as const
+/** Qué baja al dispositivo (mig. 120). Mismo vocabulario que `TipoImportacion` del catálogo QR.
+ *  Sin `export`: un fichero `'use server'` solo puede exportar funciones async (un array
+ *  es un objeto en runtime y rompe el build). Solo se usa aquí abajo. */
+const TIPOS_CATALOGO = ['PRODUCTO', 'SERVICIO', 'AMBOS'] as const
 
 export interface Caja {
   caja_id:           string
