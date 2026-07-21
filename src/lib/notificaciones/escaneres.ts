@@ -12,6 +12,7 @@ import { fmtFechaEs } from '@/lib/date-utils'
 import { obtenerUsoMes } from '@/lib/ia/uso'
 import { umbralParaFecha, type Umbral } from './catalogo'
 import { crearNotificacion, resolverNotificaciones, type ContextoTenant } from './crear'
+import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -105,6 +106,258 @@ export async function escanearContratosTerceros(
       db, t.clientId,
       ['contrato_tercero_vence', 'contrato_tercero_vencido'],
       'tercero', vivas.de(t.clientId),
+    )
+  }
+  return creadas
+}
+
+// ── Servicios: suscripciones por vencer ───────────────────────────────────────
+// Solo suscripciones ACTIVAS con FIN FIJO y sin renovación automática: una que se
+// auto-renueva no vence. «Vencida» es el estado derivado (fecha_fin pasada). La
+// entidad es la suscripción, así que renovarla o cancelarla la resuelve sola.
+/**
+ * Los servicios de cada acuerdo, ya en texto («Soporte», «Soporte y Hosting», «Soporte,
+ * Hosting y 2 más»). Un acuerdo presta varios desde la mig. 124, y el aviso tiene que
+ * nombrarlos sin convertirse en un párrafo.
+ */
+async function serviciosDeAcuerdo(db: Db, suscripcionIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (!suscripcionIds.length) return out
+
+  const { data: lins } = await db.from('suscripcion_lineas')
+    .select('suscripcion_id, producto_id').in('suscripcion_id', suscripcionIds)
+  const lineas = (lins ?? []) as { suscripcion_id: string; producto_id: string }[]
+  if (!lineas.length) return out
+
+  const { data: prod } = await db.from('products').select('producto_id, nombre')
+    .in('producto_id', [...new Set(lineas.map(l => l.producto_id))])
+  const nom = new Map(((prod ?? []) as { producto_id: string; nombre: string }[]).map(p => [p.producto_id, p.nombre]))
+
+  const porSub = new Map<string, string[]>()
+  for (const l of lineas) {
+    porSub.set(l.suscripcion_id, [...(porSub.get(l.suscripcion_id) ?? []), nom.get(l.producto_id) ?? 'un servicio'])
+  }
+  for (const [sid, nombres] of porSub) {
+    const n = nombres.sort((a, b) => a.localeCompare(b))
+    out.set(sid,
+      n.length === 1 ? n[0]
+      : n.length === 2 ? `${n[0]} y ${n[1]}`
+      : `${n[0]}, ${n[1]} y ${n.length - 2} más`)
+  }
+  return out
+}
+
+export async function escanearServicios(
+  db: Db, tenants: ContextoTenant[], hoy: string,
+): Promise<number> {
+  const ids = tenants.map(t => t.clientId)
+  if (ids.length === 0) return 0
+
+  const { data, error } = await db
+    .from('suscripciones')
+    .select('suscripcion_id, client_id, empresa_id, cliente_id, fecha_fin, renovacion_automatica')
+    .in('client_id', ids)
+    .eq('estado', 'ACTIVA')
+    .eq('renovacion_automatica', false)
+    .not('fecha_fin', 'is', null)
+
+  if (error) {
+    console.error('[notificaciones] escáner de servicios falló', error.message)
+    return 0
+  }
+
+  const filas = data ?? []
+  const nomCli = new Map<string, string>()
+  let servicioDe = new Map<string, string>()
+  if (filas.length) {
+    const cliIds = [...new Set(filas.map(f => f.cliente_id as string))]
+    const [{ data: cli }, srvs] = await Promise.all([
+      db.from('third_parties').select('tercero_id, nombre').in('tercero_id', cliIds),
+      serviciosDeAcuerdo(db, filas.map(f => f.suscripcion_id as string)),
+    ])
+    for (const c of (cli ?? []) as { tercero_id: string; nombre: string }[]) nomCli.set(c.tercero_id, c.nombre)
+    servicioDe = srvs
+  }
+
+  const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
+  const vivas = new Vivas()
+  let creadas = 0
+
+  for (const s of filas) {
+    const dias    = diasHasta(s.fecha_fin as string, hoy)
+    const vencido = dias < 0
+    const tipo: 'servicio_suscripcion_vencida' | 'servicio_suscripcion_por_vencer' =
+      vencido ? 'servicio_suscripcion_vencida' : 'servicio_suscripcion_por_vencer'
+    const umbral: Umbral | null = vencido ? 'vencido' : umbralParaFecha(tipo, dias)
+    if (!umbral) continue
+
+    const cliente  = nomCli.get(s.cliente_id as string) ?? 'un cliente'
+    const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
+    vivas.add(s.client_id as string, s.suscripcion_id as string)
+    const ok = await crearNotificacion({
+      clientId:  s.client_id as string,
+      empresaId: s.empresa_id as string | null,
+      tipo,
+      titulo:    vencido
+        ? `Suscripción vencida — ${cliente}`
+        : `Suscripción por vencer — ${cliente}`,
+      cuerpo:    vencido
+        ? `La suscripción de ${cliente} a «${servicio}» venció el ${fmtFechaEs(s.fecha_fin as string)}.`
+        : `La suscripción de ${cliente} a «${servicio}» vence el ${fmtFechaEs(s.fecha_fin as string)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
+      enlace:      '/portal/suscripciones',
+      entidadTipo: 'servicio_suscripcion',
+      entidadId:   s.suscripcion_id as string,
+      umbral,
+      meta:        { fecha_fin: s.fecha_fin },
+      sustituyeA:  ['servicio_suscripcion_por_vencer', 'servicio_suscripcion_vencida'],
+    }, ctxDe.get(s.client_id as string))
+    if (ok) creadas++
+  }
+
+  // Renovada, cancelada o con auto-renovación reactivada → deja de avisar.
+  for (const t of tenants) {
+    await resolverNotificaciones(
+      db, t.clientId,
+      ['servicio_suscripcion_por_vencer', 'servicio_suscripcion_vencida'],
+      'servicio_suscripcion', vivas.de(t.clientId),
+    )
+  }
+  return creadas
+}
+
+// ── Servicios: toca cobrar (próximo cobro de una suscripción) ─────────────────
+//
+// Este aviso es RECURRENTE, y ahí está su diferencia con TODO lo demás de la bandeja.
+// La idempotencia va por (client_id, tipo, entidad_tipo, entidad_id, umbral), así que
+// con `entidad_id = suscripcion_id` el aviso saldría UNA sola vez en la vida: el cobro
+// del mes siguiente chocaría contra el índice y se tragaría en silencio. Por eso la
+// entidad es la suscripción MÁS SU CICLO (`SUS-XXXX@2026-08-01`): cada cobro es una
+// entidad distinta, y cuando la facturación del período avanza `fecha_proximo_cobro`,
+// el ciclo viejo deja de estar vivo y se archiva solo.
+//
+// Y va con `entidad_tipo` PROPIO: si compartiera `servicio_suscripcion` con los avisos
+// de vencimiento, el barrido de resolución de aquéllos —que archiva toda entidad que no
+// esté en su lista de vivas— se llevaría por delante estos en la misma pasada.
+//
+// Esto es lo que estaba esperando a la Fase D: antes, nadie avanzaba la fecha, así que
+// el recordatorio se quedaba clavado en un ciclo que no llegaba nunca.
+export async function escanearRenovaciones(
+  db: Db, tenants: ContextoTenant[], hoy: string,
+): Promise<number> {
+  const ids = tenants.map(t => t.clientId)
+  if (ids.length === 0) return 0
+
+  // El umbral más lejano de este tipo es 5d: no hace falta traerse toda la cartera.
+  const [y, m, d] = hoy.split('-').map(Number)
+  const limite = new Date(Date.UTC(y, m - 1, d + 5)).toISOString().split('T')[0]
+
+  const { data, error } = await db
+    .from('suscripciones')
+    .select('suscripcion_id, client_id, empresa_id, cliente_id, periodicidad, moneda, fecha_proximo_cobro, fecha_fin, renovacion_automatica, estado')
+    .in('client_id', ids)
+    .eq('estado', 'ACTIVA')
+    .lte('fecha_proximo_cobro', limite)
+
+  if (error) {
+    console.error('[notificaciones] escáner de renovaciones falló', error.message)
+    return 0
+  }
+
+  // Una vencida de fin fijo NO se va a cobrar: recordarlo sería pedir que se cobre algo
+  // que el propio negocio dio por terminado.
+  const filas = (data ?? []).filter(s => estadoEfectivo({
+    estado: s.estado as EstadoSub,
+    fecha_fin: s.fecha_fin as string | null,
+    renovacion_automatica: s.renovacion_automatica as boolean,
+  }, hoy) === 'ACTIVA')
+
+  const nomCli = new Map<string, string>()
+  let servicioDe = new Map<string, string>()
+  // Las líneas de cada acuerdo (mig. 124/125): el cobro suma el de cada servicio con su descuento.
+  const lineasPorSub = new Map<string, { precio_mensual: number; descuento_modo: DescuentoModo; descuento_valor: number }[]>()
+  if (filas.length) {
+    const sids   = filas.map(f => f.suscripcion_id as string)
+    const cliIds = [...new Set(filas.map(f => f.cliente_id as string))]
+    const [{ data: cli }, srvs, { data: lins }] = await Promise.all([
+      db.from('third_parties').select('tercero_id, nombre').in('tercero_id', cliIds),
+      serviciosDeAcuerdo(db, sids),
+      db.from('suscripcion_lineas').select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor').in('suscripcion_id', sids),
+    ])
+    for (const c of (cli ?? []) as { tercero_id: string; nombre: string }[]) nomCli.set(c.tercero_id, c.nombre)
+    servicioDe = srvs
+    for (const l of (lins ?? []) as { suscripcion_id: string; precio_mensual: number | string; descuento_modo: string; descuento_valor: number | string }[]) {
+      const arr = lineasPorSub.get(l.suscripcion_id) ?? []
+      arr.push({
+        precio_mensual:  Number(l.precio_mensual) || 0,
+        descuento_modo:  (l.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
+        descuento_valor: Number(l.descuento_valor) || 0,
+      })
+      lineasPorSub.set(l.suscripcion_id, arr)
+    }
+  }
+
+  // Qué suscripciones tienen ya su borrador hecho (por la facturación automática, que
+  // corre antes en el cron). Una sola query para todos los tenants.
+  const conBorrador = new Set<string>()
+  if (filas.length) {
+    const { data: lins } = await db.from('documento_lineas')
+      .select('suscripcion_id')
+      .in('suscripcion_id', filas.map(f => f.suscripcion_id as string))
+    for (const l of (lins ?? []) as { suscripcion_id: string }[]) conBorrador.add(l.suscripcion_id)
+  }
+
+  const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
+  const vivas = new Vivas()
+  let creadas = 0
+
+  for (const s of filas) {
+    const fecha = s.fecha_proximo_cobro as string
+    const dias  = diasHasta(fecha, hoy)
+    // Pasada la fecha sin cobrar, el recordatorio SE QUEDA (este tipo no tiene umbral
+    // «vencido»): sigue tocando cobrar, y archivarlo escondería trabajo pendiente.
+    const umbral: Umbral | null = dias < 0 ? '1d' : umbralParaFecha('servicio_renovacion_proxima', dias)
+    if (!umbral) continue
+
+    const cliente  = nomCli.get(s.cliente_id as string) ?? 'un cliente'
+    const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
+    // Si la facturación automática ya dejó el borrador (corre antes que este escáner),
+    // el aviso lo dice: pedirle que facture algo ya facturado es hacerle perder el viaje.
+    const yaFacturada = conBorrador.has(s.suscripcion_id as string)
+    // El importe del aviso es el del COBRO (ciclo y descuento incluidos), no la base
+    // mensual: si el aviso dice 10.000 y la factura sale por 27.000, el aviso miente.
+    const cobro = calcularCobroAcuerdo(
+      lineasPorSub.get(s.suscripcion_id as string) ?? [], s.periodicidad as PeriodicidadSub,
+    )
+    const importe = `${cobro.total.toFixed(2)} ${s.moneda}`
+    const entidadId = `${s.suscripcion_id}@${fecha}`
+
+    vivas.add(s.client_id as string, entidadId)
+    const ok = await crearNotificacion({
+      clientId:  s.client_id as string,
+      empresaId: s.empresa_id as string | null,
+      tipo:      'servicio_renovacion_proxima',
+      titulo:    yaFacturada ? `Borrador listo — ${cliente}` : `Toca cobrar — ${cliente}`,
+      cuerpo:    yaFacturada
+        ? `Ya tienes el borrador de ${cliente} por «${servicio}» (${importe}) del ${fmtFechaEs(fecha)}. Revísalo y emítelo cuando quieras.`
+        : dias < 0
+          ? `La suscripción de ${cliente} a «${servicio}» (${importe}) tocaba cobrarla el ${fmtFechaEs(fecha)} y sigue sin facturar.`
+          : `La suscripción de ${cliente} a «${servicio}» (${importe}) se cobra el ${fmtFechaEs(fecha)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
+      enlace:      yaFacturada ? '/portal/ventas' : '/portal/suscripciones',
+      entidadTipo: 'servicio_renovacion',
+      entidadId,
+      umbral,
+      meta:        { fecha_proximo_cobro: fecha, suscripcion_id: s.suscripcion_id },
+      // Dentro del MISMO ciclo, el aviso de 1 día deja obsoleto el de 5.
+      sustituyeA:  ['servicio_renovacion_proxima'],
+    }, ctxDe.get(s.client_id as string))
+    if (ok) creadas++
+  }
+
+  // Cobrada (la fecha avanzó → otro ciclo), pausada o cancelada → deja de avisar.
+  for (const t of tenants) {
+    await resolverNotificaciones(
+      db, t.clientId, ['servicio_renovacion_proxima'],
+      'servicio_renovacion', vivas.de(t.clientId),
     )
   }
   return creadas

@@ -20,8 +20,8 @@ export default async function EmpresasPage() {
   ])
 
   // Límite por módulo: con 'multiempresa' es ilimitado; sin él, máximo 1 empresa.
-  const tieneMultiempresa = Array.isArray(clienteData?.modulos_activos)
-    && clienteData.modulos_activos.includes('multiempresa')
+  const modulos = Array.isArray(clienteData?.modulos_activos) ? clienteData.modulos_activos as string[] : []
+  const tieneMultiempresa = modulos.includes('multiempresa')
   const maxEmpresas: number | null = tieneMultiempresa ? null : 1
 
   return (
@@ -30,6 +30,7 @@ export default async function EmpresasPage() {
       monedas={(monedas ?? []) as { codigo: string; nombre: string; simbolo: string }[]}
       maxEmpresas={maxEmpresas}
       esAdmin={session.rol === 'admin_empresa'}
+      tieneServicios={modulos.includes('servicios') && modulos.includes('base')}
     />
   )
 }

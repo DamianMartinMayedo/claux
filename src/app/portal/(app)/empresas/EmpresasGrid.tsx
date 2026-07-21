@@ -21,6 +21,8 @@ interface Props {
   monedas:     Moneda[]
   maxEmpresas: number | null
   esAdmin:     boolean
+  /** Servicios + Contabilidad: sin las dos, la facturación automática no aplica. */
+  tieneServicios: boolean
 }
 
 function letrasOcupadas(empresas: Empresa[], excludeId?: string): Set<string> {
@@ -123,11 +125,12 @@ interface ModalState {
 }
 
 function EmpresaModal({
-  state, monedas, empresas, onClose, onSaved,
+  state, monedas, empresas, tieneServicios, onClose, onSaved,
 }: {
   state:    ModalState
   monedas:  Moneda[]
   empresas: Empresa[]
+  tieneServicios: boolean
   onClose:  () => void
   onSaved:  () => void
 }) {
@@ -312,6 +315,22 @@ function EmpresaModal({
                 )}
               </div>
 
+              {/* Facturación automática de suscripciones: solo tiene sentido con letra
+                  (sin ella no se puede numerar) y con el módulo Servicios contratado. */}
+              {tieneServicios && letra && (
+                <div className="input-group emp-full">
+                  <label className="checkbox-group">
+                    <input type="checkbox" name="facturacion_auto" value="1"
+                      defaultChecked={state.empresa?.facturacion_auto ?? false} />
+                    <span className="checkbox-label">Facturar las suscripciones automáticamente</span>
+                  </label>
+                  <span className="input-hint">
+                    Cada día, las suscripciones que toca cobrar quedan como <strong>factura
+                    borrador</strong> en Ventas. No se emite ni se envía nada: tú las revisas y las emites.
+                  </span>
+                </div>
+              )}
+
               {/* Paleta de colores */}
               <div className="input-group emp-full">
                 <label>Color de identificación</label>
@@ -407,7 +426,7 @@ function EmpresaModal({
 
 // ── Grid principal ────────────────────────────────────────────────────────────
 
-export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin }: Props) {
+export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin, tieneServicios }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false, empresa: null })
   const limiteAlcanzado   = maxEmpresas !== null && init.length >= maxEmpresas
   // Toda operación cuelga de una empresa y necesita una moneda del cliente; sin
@@ -505,6 +524,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
         state={modal}
         monedas={monedas}
         empresas={init}
+        tieneServicios={tieneServicios}
         onClose={cerrar}
         onSaved={onSaved}
       />

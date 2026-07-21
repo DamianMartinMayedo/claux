@@ -59,6 +59,9 @@
 .ca-search { width: 100%; padding: 12px 14px; border-radius: var(--ca-radius); border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; }
 .ca-search:focus { outline: none; border-color: var(--ca-primary); }
 .ca-prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+/* Encabezado de grupo: solo aparece cuando la caja baja servicios Y productos. */
+.ca-prod-grupo { margin: 14px 0 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ca-muted); }
+.ca-prod-grupo:first-child { margin-top: 0; }
 .ca-prod { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 12px 14px; min-height: 74px; justify-content: space-between; border-radius: var(--ca-radius); border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; cursor: pointer; transition: border-color .12s, background .12s; }
 .ca-prod:active { background: var(--ca-primary-soft); border-color: var(--ca-primary); }
 .ca-prod-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

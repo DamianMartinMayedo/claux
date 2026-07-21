@@ -46,7 +46,7 @@ export default function PestanaEstado({
     if (descargando) return
     setDescargando(true)
     try {
-      // Import dinámico: jsPDF no entra en el bundle del portal (patrón _DocumentoPdf).
+      // Import dinámico: jsPDF no entra en el bundle del portal.
       const { descargarEstadoResultados } = await import('@/lib/pdf/dossier')
       const archivo = `estado_de_resultados_${slug(empresaNombre)}_${dossier.periodo_desde ?? ''}_${dossier.periodo_hasta ?? ''}.pdf`
       await descargarEstadoResultados({

@@ -3,6 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, accesoModulosSession, puedeEditarAlgunModulo }  from './auth'
+import { estadoEfectivo, calcularCobroAcuerdo, type TerceroSuscripcion, type DescuentoModo } from '@/lib/suscripciones'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerMonedasActivas, type MonedaOpcion } from './monedas'
 import { mapaTasas, monedaValida, construirConversor } from '@/lib/tasas'
@@ -168,7 +169,7 @@ export async function guardarTercero(
 ): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
   const session = await getPortalSession()
   if (!session)          return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre del tercero es obligatorio.' }
@@ -300,7 +301,7 @@ export async function copiarTerceroAEmpresa(
 ): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_destino)) {
@@ -362,7 +363,7 @@ export async function archivarTercero(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -383,7 +384,7 @@ export async function restaurarTercero(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -399,7 +400,7 @@ export async function restaurarTercero(
 
 // ── Acciones en lote (Fase 1 — archivar/restaurar, soft y reversible) ───────────
 //
-// Recurso compartido → candado `puedeEditarAlgunModulo(['base','inventario'])`
+// Recurso compartido → candado `puedeEditarAlgunModulo(['base','inventario','servicios'])`
 // inline (audit-gating). Un solo UPDATE atómico scoped por client_id + tercero_id.
 // No hay eliminar: los terceros se referencian en documentos; solo se archivan.
 
@@ -410,7 +411,7 @@ export async function archivarTercerosEnLote(
 ): Promise<ResultadoLoteTerceros> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0 }
 
   const db = createAdminClient()
@@ -441,7 +442,7 @@ export async function copiarTercerosAEmpresaEnLote(
 ): Promise<ResultadoLoteCopiaTerceros> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario']))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
   if (!empresa_destino) return { ok: false, hechas: 0, omitidas: [], error: 'Elige una empresa destino.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
@@ -537,8 +538,10 @@ export interface TerceroDetalleData {
    *  igual que el sidebar. base = Contabilidad; inventario = Inventario. */
   tieneBase:        boolean
   tieneInventario:  boolean
+  tieneServicios:   boolean
   productos:        TerceroProducto[]   // vacío si el cliente no tiene inventario
   productos_count:  number
+  suscripciones:    TerceroSuscripcion[]  // vacío si no tiene el módulo servicios
   cuentasPorPagar:  TerceroCxP | null   // null si el cliente no tiene base
   empresas:         EmpresaDestino[]
   monedas:          MonedaOpcion[]
@@ -747,6 +750,62 @@ async function cuentasPorPagarDeTercero(
   return { porMoneda, docs }
 }
 
+// Suscripciones (no canceladas) de un cliente, para su ficha. El estado que se
+// muestra es el EFECTIVO (vencida derivada), como en /portal/suscripciones.
+async function suscripcionesDeCliente(
+  db: DbAdmin, client_id: string, tercero_id: string,
+): Promise<TerceroSuscripcion[]> {
+  const { data } = await db.from('suscripciones')
+    .select('suscripcion_id, moneda, periodicidad, fecha_proximo_cobro, fecha_fin, renovacion_automatica, estado')
+    .eq('client_id', client_id).eq('cliente_id', tercero_id)
+    .neq('estado', 'CANCELADA')
+    .order('fecha_proximo_cobro')
+  const filas = (data ?? []) as Record<string, unknown>[]
+  if (!filas.length) return []
+
+  // Un acuerdo presta VARIOS servicios (mig. 124): sus líneas dan los nombres y la base
+  // mensual sobre la que se calcula el cobro.
+  const { data: lins } = await db.from('suscripcion_lineas')
+    .select('suscripcion_id, producto_id, precio_mensual, descuento_modo, descuento_valor')
+    .eq('client_id', client_id)
+    .in('suscripcion_id', filas.map(f => f.suscripcion_id as string))
+  const lineas = (lins ?? []) as { suscripcion_id: string; producto_id: string; precio_mensual: number | string; descuento_modo: string; descuento_valor: number | string }[]
+
+  const { data: prods } = await db.from('products').select('producto_id, nombre')
+    .in('producto_id', [...new Set(lineas.map(l => l.producto_id))])
+  const nombre = new Map(((prods ?? []) as { producto_id: string; nombre: string }[]).map(p => [p.producto_id, p.nombre]))
+
+  const porSub = new Map<string, typeof lineas>()
+  for (const l of lineas) porSub.set(l.suscripcion_id, [...(porSub.get(l.suscripcion_id) ?? []), l])
+
+  const hoy = new Date().toISOString().split('T')[0]
+  return filas.map(f => {
+    const suyas = porSub.get(f.suscripcion_id as string) ?? []
+    return {
+    suscripcion_id:      f.suscripcion_id as string,
+    servicios:           suyas.map(l => nombre.get(l.producto_id) ?? '—').sort((a, b) => a.localeCompare(b)),
+    // En la ficha del cliente interesa el IMPORTE DEL COBRO, que es lo que ve en su
+    // factura, no la base mensual.
+    importe_cobro:       calcularCobroAcuerdo(
+      suyas.map(l => ({
+        precio_mensual:  Number(l.precio_mensual) || 0,
+        descuento_modo:  (l.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
+        descuento_valor: Number(l.descuento_valor) || 0,
+      })),
+      f.periodicidad as TerceroSuscripcion['periodicidad'],
+    ).total,
+    moneda:              f.moneda as string,
+    periodicidad:        f.periodicidad as TerceroSuscripcion['periodicidad'],
+    fecha_proximo_cobro: f.fecha_proximo_cobro as string,
+    estado_efectivo:     estadoEfectivo({
+      estado:                f.estado as 'ACTIVA' | 'PAUSADA' | 'CANCELADA',
+      fecha_fin:             (f.fecha_fin as string) ?? null,
+      renovacion_automatica: Boolean(f.renovacion_automatica),
+    }, hoy),
+  }
+  })
+}
+
 export async function obtenerTerceroDetalle(
   tercero_id: string,
 ): Promise<TerceroDetalleData | null> {
@@ -760,12 +819,13 @@ export async function obtenerTerceroDetalle(
   const acceso = await accesoModulosSession(session)
   const tieneBase       = acceso.visibles.includes('base')
   const tieneInventario = acceso.visibles.includes('inventario')
+  const tieneServicios  = acceso.visibles.includes('servicios')
 
   const [empresas, monedas] = await Promise.all([obtenerEmpresas(), obtenerMonedasActivas()])
   const tasas       = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
   const empresa_ids = empresas.map(e => e.empresa_id)
 
-  const [terRes, productos, cuentasPorPagar, historial] = await Promise.all([
+  const [terRes, productos, cuentasPorPagar, historial, suscripciones] = await Promise.all([
     db.from('third_parties')
       .select('*')
       .eq('tercero_id', tercero_id)
@@ -781,6 +841,9 @@ export async function obtenerTerceroDetalle(
       ? cuentasPorPagarDeTercero(db, session.client_id, tercero_id, empresa_ids)
       : Promise.resolve(null),
     historialDeTercero(db, session.client_id, tercero_id, empresa_ids, { tieneBase, tieneInventario }),
+    tieneServicios
+      ? suscripcionesDeCliente(db, session.client_id, tercero_id)
+      : Promise.resolve([] as TerceroSuscripcion[]),
   ])
 
   if (!terRes.data) return null
@@ -794,8 +857,10 @@ export async function obtenerTerceroDetalle(
     empresa_nombre:  empresa_nombres[tercero.empresa_id] ?? tercero.empresa_id,
     tieneBase,
     tieneInventario,
+    tieneServicios,
     productos,
     productos_count: productos.length,
+    suscripciones,
     cuentasPorPagar,
     empresas:        empresas.map(e => ({
       empresa_id: e.empresa_id, nombre: e.nombre, moneda_funcional: e.moneda_funcional,

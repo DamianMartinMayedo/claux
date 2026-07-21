@@ -21,6 +21,7 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
   const [empresaId, setEmpresaId] = useState(data.caja.empresa_id)
   const [almacenId, setAlmacenId] = useState(data.caja.almacen_id ?? '')
   const [monedas, setMonedas]     = useState<string[]>(data.caja.monedas_aceptadas ?? [])
+  const [tiposCatalogo, setTiposCatalogo] = useState(data.caja.tipos_catalogo ?? 'PRODUCTO')
   const [cuentas, setCuentas]     = useState<Record<string, string>>(data.caja.cuentas_moneda ?? {})
   const [token, setToken]         = useState(data.caja.sync_token)
   const [copied, setCopied]       = useState(false)
@@ -133,6 +134,7 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
       const r = await guardarConfigCaja(data.caja.caja_id, {
         nombre, empresa_id: empresaId, almacen_id: almacenId || null,
         monedas_aceptadas: monedas, cuentas_moneda: cuentasFiltradas,
+        tipos_catalogo: tiposCatalogo,
       })
       if (!r.ok) { toastError(r.error ?? 'No se pudo guardar.'); return }
       toastSuccess('Configuración guardada.')
@@ -238,6 +240,27 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
             <p className="caja-install-hint">
               Sin módulo Inventario: la caja no descuenta stock (los productos se teclean a mano en el dispositivo).
             </p>
+          )}
+
+          {/* Solo con los DOS módulos hay algo que elegir: con uno solo, lo que baja ya
+              está determinado y un selector con una opción real es ruido. */}
+          {data.tieneInventario && data.tieneServicios && (
+            <div className="input-group">
+              <label htmlFor="cfg-tipos">
+                Qué se vende aquí <span className="label-hint">(qué baja al dispositivo)</span>
+              </label>
+              <select id="cfg-tipos" className="input" value={tiposCatalogo}
+                onChange={e => setTiposCatalogo(e.target.value)}>
+                <option value="PRODUCTO">Solo productos físicos</option>
+                <option value="SERVICIO">Solo servicios</option>
+                <option value="AMBOS">Servicios y productos</option>
+              </select>
+              {tiposCatalogo !== 'PRODUCTO' && (
+                <p className="caja-install-hint">
+                  Los servicios no descuentan stock: se cobran y ya.
+                </p>
+              )}
+            </div>
           )}
 
           <div className="input-group">

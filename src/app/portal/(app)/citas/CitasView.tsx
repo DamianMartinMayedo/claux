@@ -5,12 +5,12 @@ import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   guardarServicio, eliminarServicio,
-  guardarRecurso, eliminarRecurso, importarPersonalRRHH,
+  guardarRecurso, eliminarRecurso, importarPersonalRRHH, importarServiciosCatalogo,
   crearCitaManual, cambiarEstadoCita, cambiarEstadoCitasEnLote,
   guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas, toggleIaBotCitas, guardarConfirmacionCitas,
   obtenerSlotsCita, obtenerDiasDisponiblesCita,
   type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita, type DiaDisponible,
-  type ResultadoLote,
+  type ResultadoLote, type ServicioCatalogo,
 } from '@/app/actions/portal/citas'
 import { guardarSlug } from '@/app/actions/portal/reservas'
 import Tabs from '@/components/Tabs'
@@ -23,7 +23,8 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { type EstadoReserva } from '@/lib/reservas/estado'
-import { CalendarDays, Check, Copy, Download, Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import { opcionesCon } from '@/components/portal/form-helpers'
+import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -58,27 +59,71 @@ function formatFecha(f: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
 }
 function formatHora(h: string | null): string { return h ? h.substring(0, 5) : '—' }
-function formatPrecio(p: number | null): string { return p == null ? '—' : `$${p.toFixed(2)}` }
+// El precio se muestra con SU moneda, nunca con un «$» fijo: la moneda sale siempre de
+// las del cliente. Sin moneda (ficha vieja anterior a la mig. 119) se muestra el número
+// pelado antes que mentir con un símbolo.
+function formatPrecio(p: number | null, moneda: string | null): string {
+  if (p == null) return '—'
+  return `${p.toFixed(2)}${moneda ? ` ${moneda}` : ''}`
+}
 
 // ── Modal: servicio ─────────────────────────────────────────────────────────
 
-function ServicioModal({ servicio, etiqueta, onClose, onSaved }: {
+function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
   servicio: Servicio | null
   etiqueta: string
+  data: CitasPageData
   onClose: () => void
   onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!servicio
 
+  const [nombre,  setNombre]  = useState(servicio?.nombre ?? '')
+  const [precio,  setPrecio]  = useState(servicio?.precio?.toString() ?? '')
+  const [moneda,  setMoneda]  = useState(servicio?.moneda ?? data.monedas[0] ?? '')
+  const [productoId] = useState(servicio?.producto_id ?? '')
+  // Al crear se marca; al editar no, porque tocar un nombre no puede dar de alta una
+  // ficha comercial por su cuenta.
+  const [enCatalogo, setEnCatalogo] = useState(!servicio)
+
+  const monedaOrigen = servicio?.moneda ?? ''
+  const precioOrigen = servicio?.precio ?? 0
+  const cambiaMoneda = isEdit && !!moneda && !!monedaOrigen && moneda !== monedaOrigen
+  const factor       = cambiaMoneda ? data.tasas[`${monedaOrigen}__${moneda}`] : undefined
+
+  // La moneda que ya tiene la ficha se ofrece aunque esté desactivada: si no, desactivar
+  // una moneda dejaría sus servicios sin poder guardarse.
+  const opcionesMoneda = opcionesCon(data.monedas, servicio?.moneda)
+
+  // Cambiar de moneda VACÍA el precio, igual que el salario en RRHH: en otra moneda es
+  // otro precio y lo pone el dueño. La tasa se ofrece como atajo, nunca se impone —
+  // un importe convertido a ojo se guarda sin mirar, y un campo vacío se ve.
+  function handleMoneda(nueva: string) {
+    setMoneda(nueva)
+    if (!isEdit) return
+    setPrecio(nueva === monedaOrigen ? (servicio?.precio?.toString() ?? '') : '')
+  }
+  function aplicarTasa() {
+    if (factor) setPrecio((precioOrigen * factor).toFixed(2))
+  }
+
+  // Traer los que YA existen en el catálogo es trabajo del importador (botón propio de la
+  // pestaña), no de este modal: aquí se crea uno nuevo. Lo único que queda del catálogo
+  // es a dónde va lo que se cree — la casilla de abajo.
+  const yaVinculado = data.catalogo.find(c => c.producto_id === productoId)
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     if (servicio) fd.set('servicio_id', servicio.servicio_id)
+    fd.set('producto_id', productoId)
+    fd.set('crear_en_catalogo', enCatalogo && !productoId ? '1' : '')
     startTransition(async () => {
       const res = await guardarServicio(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      toastSuccess(isEdit ? `${etiqueta} actualizado.` : `${etiqueta} creado.`)
+      if (res.aviso) toastError(res.aviso)
+      else toastSuccess(isEdit ? `${etiqueta} actualizado.` : `${etiqueta} creado.`)
       onSaved()
     })
   }
@@ -94,27 +139,85 @@ function ServicioModal({ servicio, etiqueta, onClose, onSaved }: {
           <div className="modal-body">
             <div className="ter-form-grid">
               <div className="input-group ter-col-full">
-                <label>Nombre <span className="required">*</span></label>
-                <input className="input" name="nombre" required autoFocus={!isEdit}
-                  defaultValue={servicio?.nombre ?? ''} placeholder="Corte de pelo, Consulta…" />
+                <label htmlFor="srv-nombre">Nombre <span className="required">*</span></label>
+                <input className="input" id="srv-nombre" name="nombre" required autoFocus={!isEdit}
+                  value={nombre} onChange={e => setNombre(e.target.value)}
+                  placeholder="Corte de pelo, Consulta…" />
               </div>
-              <div className="input-group ter-col-span-3">
-                <label>Duración (min) <span className="required">*</span></label>
-                <input className="input" name="duracion_minutos" type="number" min="5" step="5" required
+              <div className="input-group ter-col-span-2">
+                <label htmlFor="srv-duracion">Duración (min) <span className="required">*</span></label>
+                <input className="input" id="srv-duracion" name="duracion_minutos" type="number" min="5" step="5" required
                   defaultValue={servicio?.duracion_minutos ?? 30} />
                 <span className="input-hint">Tiempo que ocupa cada cita.</span>
               </div>
-              <div className="input-group ter-col-span-3">
-                <label>Precio (USD)</label>
-                <input className="input" name="precio" type="number" min="0" step="0.01"
-                  defaultValue={servicio?.precio ?? ''} placeholder="Opcional" />
+              <div className="input-group ter-col-span-2">
+                <label htmlFor="srv-precio">Precio</label>
+                <input className="input" id="srv-precio" name="precio" type="number" min="0" step="0.01"
+                  value={precio} onChange={e => setPrecio(e.target.value)} placeholder="Opcional" />
               </div>
+              <div className="input-group ter-col-span-2">
+                <label htmlFor="srv-moneda">Moneda {precio !== '' && <span className="required">*</span>}</label>
+                {opcionesMoneda.length === 0 ? (
+                  <>
+                    <input className="input input-static" readOnly value="Sin monedas activas" />
+                    <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
+                  </>
+                ) : (
+                  <>
+                    <select className="input" id="srv-moneda" name="moneda" required={precio !== ''}
+                      value={moneda} onChange={e => handleMoneda(e.target.value)}>
+                      <option value="" disabled>Selecciona…</option>
+                      {opcionesMoneda.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <span className="input-hint">En la que cobras esta cita.</span>
+                  </>
+                )}
+              </div>
+
+              {cambiaMoneda && precioOrigen > 0 && (
+                <div className="moneda-cambio">
+                  <div className="moneda-cambio-nota">
+                    <Info size={14} strokeWidth={2} />
+                    <span>
+                      Antes costaba {precioOrigen.toFixed(2)} {monedaOrigen}. Escribe el precio en {moneda}
+                      {factor && <> o <button type="button" className="aplicar-tasa-btn" onClick={aplicarTasa}>
+                        usa la tasa ({(precioOrigen * factor).toFixed(2)} {moneda})</button></>}.
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="input-group ter-col-full">
                 <label className="cita-chk-item">
                   <input type="checkbox" name="activo" value="true" defaultChecked={servicio?.activo ?? true} />
                   Activo (visible para reservar)
                 </label>
               </div>
+
+              {/* Con catálogo contratado, lo que se crea aquí puede nacer también allí. No
+                  se prohíbe crear en Citas —es un módulo que funciona solo—, pero se evita
+                  acabar con dos listas que se separan. Sin el módulo, nada de esto existe. */}
+              {productoId ? (
+                <div className="moneda-cambio">
+                  <div className="moneda-cambio-nota">
+                    <Info size={14} strokeWidth={2} />
+                    <span>
+                      Vinculado a tu catálogo{yaVinculado ? <> como <strong>{yaVinculado.codigo} · {yaVinculado.nombre}</strong></> : ''}.
+                      El precio y el nombre de aquí son los de la agenda; facturar sigue usando el del catálogo.
+                    </span>
+                  </div>
+                </div>
+              ) : data.catalogo_activo && (
+                <div className="input-group ter-col-full">
+                  <label className="cita-chk-item">
+                    <input type="checkbox" checked={enCatalogo} onChange={e => setEnCatalogo(e.target.checked)} />
+                    Añadirlo también a mi catálogo de Servicios
+                  </label>
+                  <span className="input-hint">
+                    Lo crea de una vez como servicio facturable y los deja vinculados, para no
+                    llevar dos listas. Desmárcalo si este {etiqueta.toLowerCase()} solo se agenda y no se vende suelto.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <div className="modal-footer">
@@ -124,6 +227,128 @@ function ServicioModal({ servicio, etiqueta, onClose, onSaved }: {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: importar servicios del catálogo ────────────────────────────────────
+
+/**
+ * Importación SELECTIVA: el negocio ve su catálogo entero y marca lo que agenda. Antes
+ * esto era un desplegable dentro del alta y había que crear los servicios de uno en uno.
+ *
+ * La duración se pide aquí, fila a fila: `products` no la guarda, así que darles 30
+ * minutos a todos por defecto sería agendar mal en silencio.
+ */
+function ImportarServiciosModal({ catalogo, etiquetaPlural, onClose, onSaved }: {
+  catalogo:       ServicioCatalogo[]
+  etiquetaPlural: string
+  onClose:        () => void
+  onSaved:        () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const disponibles = catalogo.filter(c => !c.ya_importado)
+
+  const [marcados,  setMarcados]  = useState<Set<string>>(() => new Set(disponibles.map(c => c.producto_id)))
+  const [duraciones, setDuraciones] = useState<Record<string, string>>(
+    () => Object.fromEntries(disponibles.map(c => [c.producto_id, '30'])))
+
+  const todos = marcados.size === disponibles.length && disponibles.length > 0
+
+  function toggle(id: string) {
+    setMarcados(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+  function toggleTodos() {
+    setMarcados(todos ? new Set() : new Set(disponibles.map(c => c.producto_id)))
+  }
+
+  function importar() {
+    const items = [...marcados].map(producto_id => ({
+      producto_id,
+      duracion_minutos: parseInt(duraciones[producto_id] ?? '30', 10) || 30,
+    }))
+    startTransition(async () => {
+      const res = await importarServiciosCatalogo(items)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(`${res.importados ?? 0} ${etiquetaPlural.toLowerCase()} importado(s) del catálogo.`)
+      onSaved()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-lg" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Importar del catálogo</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="input-hint mb-3">
+            Marca los que se agendan y dales su duración. Se traen con su precio y quedan
+            vinculados a la ficha del catálogo.
+          </p>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th className="col-center">
+                    <input type="checkbox" checked={todos} onChange={toggleTodos}
+                      aria-label="Marcar todos" disabled={disponibles.length === 0} />
+                  </th>
+                  <th>Servicio</th>
+                  <th className="col-num">Precio</th>
+                  <th className="col-num">Duración</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catalogo.map(c => {
+                  const tarifa = Object.entries(c.precios ?? {}).find(([, v]) => v != null && Number(v) > 0)
+                  const marcado = marcados.has(c.producto_id)
+                  return (
+                    <tr key={c.producto_id} className={c.ya_importado ? 'row-inactive' : undefined}>
+                      <td data-label="Importar" className="col-center">
+                        <input type="checkbox" checked={marcado} disabled={c.ya_importado}
+                          onChange={() => toggle(c.producto_id)}
+                          aria-label={`Importar ${c.nombre}`} />
+                      </td>
+                      <td data-label="Servicio">
+                        <strong className="text-sm-bold">{c.nombre}</strong>
+                        <div className="table-cell-secondary">
+                          {c.codigo}{c.ya_importado && ' · ya importado'}
+                        </div>
+                      </td>
+                      <td data-label="Precio" className="col-num">
+                        {tarifa ? `${Number(tarifa[1]).toFixed(2)} ${tarifa[0]}` : '—'}
+                      </td>
+                      <td data-label="Duración" className="col-num">
+                        {c.ya_importado ? <span className="text-xs-muted">—</span> : (
+                          <input className="input cita-dur-input" type="number" min="5" step="5"
+                            value={duraciones[c.producto_id] ?? '30'} disabled={!marcado}
+                            aria-label={`Duración de ${c.nombre} en minutos`}
+                            onChange={e => setDuraciones(d => ({ ...d, [c.producto_id]: e.target.value }))} />
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={importar}
+            disabled={isPending || marcados.size === 0}>
+            {isPending
+              ? <><span className="spinner spinner-sm" /> Importando…</>
+              : `Importar ${marcados.size}`}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -530,6 +755,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
 
   const [showServicio, setShowServicio] = useState(false)
   const [editServicio, setEditServicio] = useState<Servicio | null>(null)
+  const [showImportar, setShowImportar] = useState(false)
   const [delServicio,  setDelServicio]  = useState<Servicio | null>(null)
 
   const [showRecurso, setShowRecurso] = useState(false)
@@ -553,11 +779,27 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   // deriva de NEXT_PUBLIC_SITE_URL. La copia del enlace usa el origin real.
   const host = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '')
 
-  useEffect(() => { setSlugForm(data.slug ?? '') }, [data.slug])
-  useEffect(() => {
+  // Estos dos formularios se resincronizan cuando el servidor manda datos nuevos (tras
+  // guardar + router.refresh()). Se ajusta DURANTE el render comparando con lo último
+  // visto — el patrón de React para estado derivado de props. Con `useEffect` + setState
+  // se pinta primero un fotograma con el valor viejo y luego se re-renderiza en cascada.
+  // Y la comparación va por VALOR, no por identidad del objeto: el `[data.bot_config]`
+  // de antes se disparaba en cada refresco del servidor y podía pisar lo que el dueño
+  // estuviera escribiendo en el campo del token.
+  const slugServidor = data.slug ?? ''
+  const [slugVisto, setSlugVisto] = useState(slugServidor)
+  if (slugVisto !== slugServidor) {
+    setSlugVisto(slugServidor)
+    setSlugForm(slugServidor)
+  }
+
+  const botKey = `${data.bot_config.token ?? ''}|${data.bot_config.nombre ?? ''}|${data.bot_config.confirmacion_automatica}`
+  const [botVisto, setBotVisto] = useState(botKey)
+  if (botVisto !== botKey) {
+    setBotVisto(botKey)
     setBotForm({ token: data.bot_config.token ?? '', nombre: data.bot_config.nombre ?? '' })
     setConfirmAuto(data.bot_config.confirmacion_automatica)
-  }, [data.bot_config])
+  }
 
   const hoy = hoyISO()
 
@@ -732,6 +974,13 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <Plus size={14} strokeWidth={2.5} /> Nuevo {et.recurso.toLowerCase()}
             </button>
           )}
+          {/* Importar es su propio botón, no un desplegable escondido dentro del alta:
+              con el catálogo delante se ve qué falta por traer y se marca de una vez. */}
+          {activeTab === 'servicios' && data.catalogo.some(c => !c.ya_importado) && (
+            <button className="btn btn-secondary" onClick={() => setShowImportar(true)} disabled={isPending}>
+              <Download size={14} strokeWidth={2.5} /> Importar del catálogo
+            </button>
+          )}
           {activeTab === 'servicios' && (
             <button className="btn btn-primary" onClick={() => { setEditServicio(null); setShowServicio(true) }}>
               <Plus size={14} strokeWidth={2.5} /> Nuevo {servicioNombre.toLowerCase()}
@@ -899,6 +1148,11 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           <div className="mon-empty">
             <CalendarDays size={36} strokeWidth={1} opacity={0.2} />
             <p>Aún no hay {servicioPlural.toLowerCase()}. Crea los que ofreces (con su duración) para poder agendar. Si solo das un tipo de cita, créalo igualmente como un único servicio (p.ej. «Consulta», 30 min).</p>
+            {data.catalogo.some(c => !c.ya_importado) && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowImportar(true)}>
+                <Download size={14} strokeWidth={2.5} /> Traerlos de mi catálogo
+              </button>
+            )}
           </div>
         ) : (
           <div className="table-wrapper">
@@ -911,7 +1165,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                   <tr key={s.servicio_id} className="table-row-clickable" onClick={() => { setEditServicio(s); setShowServicio(true) }}>
                     <td data-label="Nombre"><strong>{s.nombre}</strong></td>
                     <td data-label="Duración" className="col-num tes-monto-cell">{s.duracion_minutos} min</td>
-                    <td data-label="Precio" className="col-num tes-monto-cell cita-precio">{formatPrecio(s.precio)}</td>
+                    <td data-label="Precio" className="col-num tes-monto-cell cita-precio">{formatPrecio(s.precio, s.moneda)}</td>
                     <td data-label="Estado"><span className={`badge ${s.activo ? 'badge-success' : 'badge-neutral'}`}>{s.activo ? 'Activo' : 'Inactivo'}</span></td>
                     <td className="col-actions">
                       <RowActions>
@@ -1106,8 +1360,13 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         <CambiarEstadoModal cita={cambioEstado.cita} nuevoEstado={cambioEstado.a}
           onConfirm={doCambiarEstado} onClose={() => setCambioEstado(null)} isPending={isPending} />
       )}
+      {showImportar && (
+        <ImportarServiciosModal catalogo={data.catalogo} etiquetaPlural={servicioPlural}
+          onClose={() => setShowImportar(false)}
+          onSaved={() => { setShowImportar(false); router.refresh() }} />
+      )}
       {showServicio && (
-        <ServicioModal servicio={editServicio} etiqueta={servicioNombre}
+        <ServicioModal servicio={editServicio} etiqueta={servicioNombre} data={data}
           onClose={() => { setShowServicio(false); setEditServicio(null) }}
           onSaved={() => { setShowServicio(false); setEditServicio(null); router.refresh() }} />
       )}

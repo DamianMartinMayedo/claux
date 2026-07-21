@@ -8,6 +8,7 @@ import ContabilidadWidget from './ContabilidadWidget'
 import InventarioWidget from './InventarioWidget'
 import PuntoVentaWidget from './PuntoVentaWidget'
 import RrhhWidget from './RrhhWidget'
+import ServiciosWidget from './ServiciosWidget'
 import AgendaWidget from './AgendaWidget'
 import AccesosRapidos from './AccesosRapidos'
 import ContratarMasBanner from './ContratarMasBanner'
@@ -19,8 +20,8 @@ const ESTADO_BADGE: Record<string, string> = {
 }
 
 export default function DashboardView({ data }: { data: DashboardData }) {
-  const { contabilidad, inventario, puntoVenta, rrhh, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos } = data
-  const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || reservas || citas)
+  const { contabilidad, inventario, puntoVenta, rrhh, servicios, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos } = data
+  const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || servicios || reservas || citas)
 
   const dias = suscripcion.diasRestantes
   const subSuscripcion = dias !== null && dias >= 0 ? ` · ${dias} d` : ''
@@ -84,6 +85,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         {puntoVenta && <PuntoVentaWidget data={puntoVenta} />}
         {inventario && <InventarioWidget data={inventario} />}
         {rrhh && <RrhhWidget data={rrhh} />}
+        {servicios && <ServiciosWidget data={servicios} />}
         {!hayPaneles && <AccesosRapidos accesos={accesos} />}
         {!hayPaneles && <ContratarMasBanner />}
       </div>

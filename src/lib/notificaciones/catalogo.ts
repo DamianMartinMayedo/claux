@@ -12,7 +12,7 @@ export type Severidad = 'info' | 'aviso' | 'urgente'
 export type Categoria =
   | 'suscripcion' | 'reservas' | 'finanzas'
   | 'inventario'  | 'rrhh'     | 'terceros'
-  | 'dossier'     | 'sistema'
+  | 'servicios'   | 'dossier'  | 'sistema'
 
 /** Escalón temporal de un aviso de vencimiento. Parte de la clave de dedupe. */
 export type Umbral = '30d' | '15d' | '5d' | '1d' | 'vencido'
@@ -220,6 +220,33 @@ export const CATALOGO = {
     descripcion: 'Un cliente se acerca o supera el crédito que le diste.',
   },
 
+  // ── Servicios (suscripciones a clientes) ────────────────────────────────────
+  // «Por vencer / vencida» aplican a suscripciones con FIN FIJO y sin renovación
+  // automática: una que se auto-renueva no vence, sigue. El estado «vencida» se
+  // deriva (no se guarda), igual que en /portal/suscripciones.
+  servicio_suscripcion_por_vencer: {
+    categoria: 'servicios', modulo: 'servicios', severidad: 'aviso', implementado: true,
+    etiqueta: 'Suscripción por vencer',
+    descripcion: 'La suscripción de un cliente se acerca a su fecha de fin.',
+    ...ESCALA_VENCIMIENTO,
+  },
+  servicio_suscripcion_vencida: {
+    categoria: 'servicios', modulo: 'servicios', severidad: 'urgente', implementado: true,
+    etiqueta: 'Suscripción vencida',
+    descripcion: 'La suscripción de un cliente pasó su fecha de fin sin renovar.',
+    umbrales: ['vencido'],
+  },
+  // Recordatorio del próximo cobro. Es el ÚNICO aviso recurrente de la bandeja: su
+  // entidad es la suscripción más su ciclo (`SUS-XXXX@2026-08-01`), porque con la
+  // suscripción sola el índice de idempotencia lo dejaría salir una vez en la vida.
+  // Ver `escanearRenovaciones` en escaneres.ts.
+  servicio_renovacion_proxima: {
+    categoria: 'servicios', modulo: 'servicios', severidad: 'info', implementado: true,
+    etiqueta: 'Toca cobrar',
+    descripcion: 'Una suscripción llega a su próximo cobro.',
+    umbrales: ['5d', '1d'],
+  },
+
   // ── Dossier ────────────────────────────────────────────────────────────────
   dossier_snapshot_desactualizado: {
     categoria: 'dossier', modulo: 'dossier', severidad: 'info', implementado: true,
@@ -274,6 +301,7 @@ export const ETIQUETA_CATEGORIA: Record<Categoria, string> = {
   inventario:  'Inventario',
   rrhh:        'Personal',
   terceros:    'Clientes y proveedores',
+  servicios:   'Servicios',
   dossier:     'Dossier',
   sistema:     'Sistema',
 }

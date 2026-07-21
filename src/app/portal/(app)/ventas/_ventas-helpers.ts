@@ -91,6 +91,8 @@ export interface LineaInput {
   cantidad:        number
   precio_unitario: number
   descuento_pct:   number   // 0–100; descuento a nivel de línea
+  /** Suscripción de origen, si la línea la generó la facturación del período. */
+  suscripcion_id?: string | null
 }
 
 export interface AjusteInput {
@@ -152,6 +154,96 @@ export function calcularTotales(
 
 export function redondear(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
+}
+
+// ── Cambio de moneda del documento ───────────────────────────────────────────
+
+/**
+ * ¿Hay algún importe que reexpresar? Un documento vacío (o con todo a cero) puede
+ * cambiar de moneda sin preguntar nada: no hay nada que convertir.
+ */
+export function tieneImportes(lineas: LineaInput[], ajustes: AjusteInput[]): boolean {
+  return lineas.some(l => (Number(l.precio_unitario) || 0) !== 0)
+      || ajustes.some(a => a.modo === 'MONTO_FIJO' && (Number(a.valor) || 0) !== 0)
+}
+
+/** Lo que hace falta de un artículo para reexpresar una línea: su tarifa por moneda. */
+export interface PrecioCatalogo {
+  producto_id: string
+  precios:     Record<string, number>
+}
+
+export interface PlanCambioMoneda {
+  lineas:     LineaInput[]
+  ajustes:    AjusteInput[]
+  /** Líneas que toman su precio configurado en la moneda destino. */
+  nCatalogo:  number
+  /** Importes reexpresados con la tasa (los que no tienen precio configurado). */
+  nTasa:      number
+  /** Importes con valor que no se han podido reexpresar: ni tarifa ni tasa. */
+  nIntactos:  number
+}
+
+/**
+ * Prepara el cambio de moneda de un documento. Tres destinos por importe, en este
+ * orden de prioridad:
+ *
+ *  1. **Tarifa del catálogo.** Si la línea está enlazada a un artículo que YA tiene
+ *     precio configurado en la moneda destino, se usa ese. Es lo que el negocio
+ *     decidió cobrar en esa moneda, y casi nunca coincide con aplicar la tasa a la
+ *     tarifa de otra (los precios se redondean a cifras vendibles: 25 USD, no 24,87).
+ *  2. **Tasa vigente**, para lo que no tiene tarifa propia: líneas de texto libre,
+ *     artículos sin precio en esa moneda y los ajustes de MONTO_FIJO.
+ *  3. **Intacto**, si no hay ni tarifa ni tasa. No se inventa un factor: se deja el
+ *     número y se avisa, que un importe que no cuadra se ve y uno inventado no.
+ *
+ * Los ajustes en PORCENTAJE nunca se tocan: son relativos al subtotal y ya viajan
+ * convertidos por definición (un 10% sigue siendo un 10%). Multiplicarlos los
+ * aplicaría dos veces.
+ *
+ * Todo queda editable después: esto es un atajo, no la verdad. Mismo criterio que el
+ * salario en RRHH (`PersonalView`), donde la conversión se ofrece y no se impone.
+ */
+export function planificarCambioMoneda(
+  lineas:    LineaInput[],
+  ajustes:   AjusteInput[],
+  destino:   string,
+  factor:    number | undefined,
+  productos: PrecioCatalogo[],
+): PlanCambioMoneda {
+  const tarifas = new Map(productos.map(p => [p.producto_id, p.precios]))
+  let nCatalogo = 0, nTasa = 0, nIntactos = 0
+
+  const nuevasLineas = lineas.map(l => {
+    const actual  = Number(l.precio_unitario) || 0
+    const tarifa  = l.producto_id ? tarifas.get(l.producto_id)?.[destino] : undefined
+    // `!= null` y no truthy: un artículo con tarifa 0 en esa moneda (una muestra, un
+    // servicio incluido) tiene precio configurado y vale 0. Con `if (tarifa)` se
+    // habría colado en la rama de la tasa y salido convertido desde otra moneda.
+    if (tarifa != null && Number.isFinite(tarifa)) {
+      nCatalogo++
+      return { ...l, precio_unitario: redondear(Number(tarifa)) }
+    }
+    if (factor) {
+      if (actual !== 0) nTasa++
+      return { ...l, precio_unitario: redondear(actual * factor) }
+    }
+    if (actual !== 0) nIntactos++
+    return l
+  })
+
+  const nuevosAjustes = ajustes.map(a => {
+    if (a.modo !== 'MONTO_FIJO') return a
+    const actual = Number(a.valor) || 0
+    if (factor) {
+      if (actual !== 0) nTasa++
+      return { ...a, valor: redondear(actual * factor) }
+    }
+    if (actual !== 0) nIntactos++
+    return a
+  })
+
+  return { lineas: nuevasLineas, ajustes: nuevosAjustes, nCatalogo, nTasa, nIntactos }
 }
 
 export function formatearMoneda(monto: number, moneda: string): string {

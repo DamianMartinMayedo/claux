@@ -20,6 +20,7 @@ import {
   restaurarCategoria,
   type Producto,
   type Categoria,
+  type TipoCategoria,
   type TipoProducto,
   type ProductosPageData,
   type ResultadoLoteProductos,
@@ -29,13 +30,20 @@ import { StockAjusteModal } from './_StockAjusteModal'
 import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
 import Tabs from '@/components/Tabs'
 
+const TIPO_CATEGORIA_LABEL: Record<TipoCategoria, string> = {
+  PRODUCTO: 'Productos físicos', SERVICIO: 'Servicios', AMBAS: 'Ambos',
+}
+
 // ── CategoriaModal ────────────────────────────────────────────────────────────
 
-function CategoriaModal({ categoria, onClose, onSaved }: {
-  categoria: Categoria | null; onClose: () => void; onSaved: () => void
+function CategoriaModal({ categoria, modo, onClose, onSaved }: {
+  categoria: Categoria | null; modo: TipoProducto; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!categoria
+  // Al crear desde Servicios, la categoría nace de servicios; desde Inventario, de
+  // productos. Es lo que va a querer el 90 % de las veces, y se puede cambiar.
+  const [tipo, setTipo] = useState<TipoCategoria>(categoria?.tipo ?? modo)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -61,6 +69,16 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
               <label>Nombre <span className="required">*</span></label>
               <input className="input" name="nombre" required autoFocus
                 defaultValue={categoria?.nombre ?? ''} placeholder="Ej: Electrónicos, Servicios profesionales…" />
+            </div>
+            <div className="input-group">
+              <label htmlFor="cat-tipo">Se usa en <span className="required">*</span></label>
+              <select className="input" id="cat-tipo" name="tipo" value={tipo}
+                onChange={e => setTipo(e.target.value as TipoCategoria)}>
+                <option value="PRODUCTO">Solo productos físicos</option>
+                <option value="SERVICIO">Solo servicios</option>
+                <option value="AMBAS">Productos y servicios</option>
+              </select>
+              <span className="input-hint">Dónde aparece al crear un artículo.</span>
             </div>
             <div className="input-group">
               <label>Descripción</label>
@@ -126,7 +144,7 @@ function ConfirmEliminar({ nombre, onConfirm, onClose, isPending }: {
         <div className="modal-body">
           <p className="modal-body-text">
             ¿Eliminar <strong>{nombre}</strong> para siempre? Esta acción no se puede deshacer.
-            Solo es posible si el producto no tiene ventas, compras, movimientos ni está en tu catálogo.
+            Solo es posible si no tiene ventas, compras, movimientos ni está en tu catálogo.
           </p>
         </div>
         <div className="modal-footer">
@@ -158,6 +176,14 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
+  // Inventario y Servicios comparten esta vista pero cada uno cataloga UN tipo
+  // (data.modo) sobre su propia página. La etiqueta del servicio la pone el sector
+  // (Servicio / Tratamiento / Clase…), nunca el código.
+  const esProducto   = data.modo === 'PRODUCTO'
+  const basePath     = esProducto ? '/portal/productos' : '/portal/servicios'
+  const sustantivo   = esProducto ? 'producto' : data.etiquetaServicio.toLowerCase()
+  const tituloPagina = esProducto ? 'Productos' : `${data.etiquetaServicio}s`
+
   const [tab,           setTab]          = useState<'productos' | 'categorias'>('productos')
   const [productoModal, setProductoModal] = useState(false)
   const [editProducto,  setEditProducto]  = useState<Producto | null>(null)
@@ -165,7 +191,6 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const [confirmProd,   setConfirmProd]   = useState<Producto | null>(null)
   const [eliminarProd,  setEliminarProd]  = useState<Producto | null>(null)
   const [search,        setSearch]        = useState('')
-  const [filtroTipo,    setFiltroTipo]    = useState<'TODOS' | TipoProducto>('TODOS')
   const [filtroCat,     setFiltroCat]     = useState('')
   const [filtroProv,    setFiltroProv]    = useState('')
   const [verArchivados, setVerArchivados] = useState(false)
@@ -196,7 +221,6 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     const q = search.toLowerCase().trim()
     return data.productos.filter(p => {
       if ((p.estado === 'ACTIVO') === verArchivados)       return false
-      if (filtroTipo !== 'TODOS' && p.tipo !== filtroTipo) return false
       if (filtroCat === '__sin_categoria__') {
         if (p.categoria_id) return false
       } else if (filtroCat && p.categoria_id !== filtroCat) return false
@@ -210,14 +234,12 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       }
       return true
     })
-  }, [data.productos, search, filtroTipo, filtroCat, filtroProv, verArchivados, categoriaMap])
+  }, [data.productos, search, filtroCat, filtroProv, verArchivados, categoriaMap])
 
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
 
   // ── Selección múltiple (archivar/restaurar/eliminar en lote) ──
-  // Solo en la pestaña de productos. Lista activos XOR archivados: la acción es
-  // homogénea según `verArchivados`.
   const idsVisibles = useMemo(() => productosFiltrados.map(p => p.producto_id), [productosFiltrados])
   const sel = useRowSelection(idsVisibles)
   const [confirmLote, setConfirmLote] = useState<'archivar' | 'eliminar' | null>(null)
@@ -239,11 +261,11 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   }
   function doArchivarLote() {
     setConfirmLote(null)
-    ejecutarLote(() => archivarProductosEnLote(sel.selectedIds, true), n => `${n} producto${plural(n)} archivado${plural(n)}`)
+    ejecutarLote(() => archivarProductosEnLote(sel.selectedIds, true), n => `${n} ${sustantivo}${plural(n)} archivado${plural(n)}`)
   }
   function doEliminarLote() {
     setConfirmLote(null)
-    ejecutarLote(() => eliminarProductosEnLote(sel.selectedIds), n => `${n} producto${plural(n)} eliminado${plural(n)}`)
+    ejecutarLote(() => eliminarProductosEnLote(sel.selectedIds), n => `${n} ${sustantivo}${plural(n)} eliminado${plural(n)}`)
   }
 
   const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
@@ -271,7 +293,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     startTransition(async () => {
       const res = await eliminarProducto(eliminarProd.producto_id)
       if (!res.ok) { toastError(res.error ?? 'No se pudo eliminar.'); return }
-      toastSuccess('Producto eliminado.')
+      toastSuccess(`${sustantivo.charAt(0).toUpperCase()}${sustantivo.slice(1)} eliminado.`)
       setEliminarProd(null); router.refresh()
     })
   }
@@ -298,8 +320,12 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {/* ── Cabecera ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Productos y Servicios</h1>
-          <p className="page-subtitle">Catálogo de bienes y servicios del cliente.</p>
+          <h1 className="page-title">{tituloPagina}</h1>
+          <p className="page-subtitle">
+            {esProducto
+              ? 'Tus productos físicos, con su precio y existencias.'
+              : 'Tus servicios y su precio. Se cargan solos en ofertas y facturas.'}
+          </p>
         </div>
         {tab === 'productos'
           ? <button className="btn btn-primary" onClick={openCreate}><Plus size={14} strokeWidth={2.5} /> Nuevo</button>
@@ -309,12 +335,12 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
       {/* ── Tabs ── */}
       <Tabs
-        ariaLabel="Secciones de productos"
+        ariaLabel={`Secciones de ${tituloPagina.toLowerCase()}`}
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: 'productos',  label: 'Productos y servicios', count: activos },
-          { id: 'categorias', label: 'Categorías',            count: categoriasActivas.length },
+          { id: 'productos',  label: tituloPagina,   count: activos },
+          { id: 'categorias', label: 'Categorías',   count: categoriasActivas.length },
         ]}
       />
 
@@ -329,12 +355,6 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 placeholder="Buscar por nombre, código, categoría…"
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <select className="input ter-filter-select" value={filtroTipo}
-              onChange={e => setFiltroTipo(e.target.value as typeof filtroTipo)}>
-              <option value="TODOS">Todos los tipos</option>
-              <option value="PRODUCTO">Productos</option>
-              <option value="SERVICIO">Servicios</option>
-            </select>
             {(categoriasActivas.length > 0 || sinCategoriaCount > 0) && (
               <select className="input ter-filter-select" value={filtroCat}
                 onChange={e => setFiltroCat(e.target.value)}>
@@ -376,7 +396,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
               <div className="mon-empty">
                 <Package size={36} strokeWidth={1} opacity={0.25} />
                 <p>{data.productos.length === 0
-                  ? 'Aún no hay productos en el catálogo. Crea el primero.'
+                  ? `Aún no hay ${tituloPagina.toLowerCase()} en el catálogo. Crea el primero.`
                   : 'No hay resultados para los filtros seleccionados.'}</p>
               </div>
             ) : (
@@ -389,21 +409,20 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                       </th>
                       <th>Nombre</th>
                       <th>Código</th>
-                      <th>Tipo</th>
                       <th>Categoría</th>
                       <th>Precios de venta</th>
-                      <th>Stock</th>
+                      {esProducto && <th>Stock</th>}
                       <th className="col-actions"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {prodItems.map(p => {
-                      const stockBajo = p.tipo === 'PRODUCTO' && p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo
+                      const stockBajo = p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo
                       return (
                         <tr
                           key={p.producto_id}
                           className={`table-row-clickable${p.estado === 'INACTIVO' ? ' ter-row-archivada' : ''}`}
-                          onClick={() => router.push(`/portal/productos/${p.producto_id}`)}
+                          onClick={() => router.push(`${basePath}/${p.producto_id}`)}
                         >
                           {/* Selección */}
                           <td className="col-check" onClick={e => e.stopPropagation()}>
@@ -415,7 +434,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           {/* Nombre */}
                           <td data-label="Nombre">
                             <Link
-                              href={`/portal/productos/${p.producto_id}`}
+                              href={`${basePath}/${p.producto_id}`}
                               className="table-name-link"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -432,13 +451,6 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                             {p.codigo_proveedor && (
                               <div className="table-cell-secondary">{p.codigo_proveedor}</div>
                             )}
-                          </td>
-
-                          {/* Tipo */}
-                          <td data-label="Tipo">
-                            <span className={`badge ${p.tipo === 'PRODUCTO' ? 'badge-info' : 'badge-purple'}`}>
-                              {p.tipo === 'PRODUCTO' ? 'Producto' : 'Servicio'}
-                            </span>
                           </td>
 
                           {/* Categoría */}
@@ -460,9 +472,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                             </div>
                           </td>
 
-                          {/* Stock */}
-                          <td data-label="Stock">
-                            {p.tipo === 'PRODUCTO' ? (
+                          {/* Stock — solo en la página de productos físicos */}
+                          {esProducto && (
+                            <td data-label="Stock">
                               <div className="prd-stock-cell">
                                 <span className={`prd-stock-value${stockBajo ? ' prd-stock-low' : ''}`}>
                                   {p.stock_actual.toLocaleString('es-ES')}
@@ -473,18 +485,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                   </span>
                                 )}
                               </div>
-                            ) : (
-                              <span className="text-xs-muted">—</span>
-                            )}
-                          </td>
+                            </td>
+                          )}
 
                           {/* Acciones */}
                           <td className="col-actions">
                             <RowActions>
-                              <button className="row-actions-item" onClick={() => router.push(`/portal/productos/${p.producto_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                              <button className="row-actions-item" onClick={() => router.push(`${basePath}/${p.producto_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                               {p.estado === 'ACTIVO' ? (
                                 <>
-                                  {p.tipo === 'PRODUCTO' && (
+                                  {esProducto && (
                                     <button className="row-actions-item" onClick={() => setStockProducto(p)}>
                                       <Layers size={15} strokeWidth={2} /> Ajustar stock
                                     </button>
@@ -518,7 +528,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 </table>
               </div>
             )}
-            <TablePagination {...prodPag} label="producto" />
+            <TablePagination {...prodPag} label={sustantivo} />
           </div>
 
           {/* Barra de acciones en lote */}
@@ -528,7 +538,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 <button className="btn btn-secondary btn-sm" disabled={isPending}
                   onClick={() => ejecutarLote(
                     () => archivarProductosEnLote(sel.selectedIds, false),
-                    n => `${n} producto${plural(n)} restaurado${plural(n)}`)}>
+                    n => `${n} ${sustantivo}${plural(n)} restaurado${plural(n)}`)}>
                   <RotateCcw size={14} strokeWidth={2} /> Restaurar
                 </button>
                 <button className="btn btn-danger-text btn-sm" disabled={isPending}
@@ -565,8 +575,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 <thead>
                   <tr>
                     <th>Nombre</th>
+                    <th>Se usa en</th>
                     <th>Descripción</th>
-                    <th className="prd-cat-col-count col-center">Productos</th>
+                    <th className="prd-cat-col-count col-center">Artículos</th>
                     <th>Estado</th>
                     <th className="col-actions"></th>
                   </tr>
@@ -577,13 +588,14 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                     return (
                       <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : ''}>
                         <td data-label="Nombre"><strong className="text-sm-bold">{c.nombre}</strong></td>
+                        <td data-label="Se usa en" className="text-sm-muted">{TIPO_CATEGORIA_LABEL[c.tipo] ?? '—'}</td>
                         <td data-label="Descripción" className="text-sm-muted cell-truncate">{c.descripcion ?? '—'}</td>
-                        <td data-label="Productos" className="col-center">
+                        <td data-label="Artículos" className="col-center">
                           {count > 0 ? (
                             <button
                               className="prd-cat-count-btn"
                               onClick={() => { setTab('productos'); setFiltroCat(c.categoria_id) }}
-                              title="Ver productos de esta categoría"
+                              title="Ver artículos de esta categoría"
                             >
                               {count}
                             </button>
@@ -620,12 +632,12 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                       <td data-label="Nombre">
                         <span className="text-sm-muted text-italic">Sin categoría</span>
                       </td>
-                      <td data-label="Descripción" className="text-sm-muted">Productos sin categoría asignada</td>
-                      <td data-label="Productos" className="col-center">
+                      <td data-label="Descripción" className="text-sm-muted">Artículos sin categoría asignada</td>
+                      <td data-label="Artículos" className="col-center">
                         <button
                           className="prd-cat-count-btn prd-cat-count-warn"
                           onClick={() => { setTab('productos'); setFiltroCat('__sin_categoria__') }}
-                          title="Ver productos sin categoría"
+                          title="Ver artículos sin categoría"
                         >
                           {sinCategoriaCount}
                         </button>
@@ -647,6 +659,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
         <ProductoFormModal producto={editProducto} categorias={data.categorias}
           proveedores={data.proveedores} monedas={data.monedas}
           hayAlmacenes={data.almacenes.length > 0}
+          modo={data.modo} etiquetaServicio={data.etiquetaServicio}
           onClose={closeModal} onSaved={onSaved} />
       )}
       {stockProducto && (
@@ -668,7 +681,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           onClose={() => setEliminarProd(null)} isPending={isPending} />
       )}
       {catModal && (
-        <CategoriaModal categoria={editCat} onClose={closeCatModal} onSaved={onCatSaved} />
+        <CategoriaModal categoria={editCat} modo={data.modo} onClose={closeCatModal} onSaved={onCatSaved} />
       )}
       {confirmCat && (
         <ConfirmArchivar nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}
@@ -676,7 +689,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       )}
       {confirmLote === 'archivar' && (
         <ConfirmDialog
-          title={`¿Archivar ${sel.count} producto${plural(sel.count)}?`}
+          title={`¿Archivar ${sel.count} ${sustantivo}${plural(sel.count)}?`}
           body="No aparecerán en el catálogo activo, pero podrás restaurarlos cuando quieras."
           confirmLabel="Archivar" danger
           onCancel={() => setConfirmLote(null)}
@@ -685,7 +698,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       )}
       {confirmLote === 'eliminar' && (
         <ConfirmDialog
-          title={`¿Eliminar ${sel.count} producto${plural(sel.count)} para siempre?`}
+          title={`¿Eliminar ${sel.count} ${sustantivo}${plural(sel.count)} para siempre?`}
           body="Solo se eliminan los que no tengan ventas, compras, movimientos, catálogo ni tickets; el resto se omite. No se puede deshacer."
           confirmLabel="Eliminar" danger
           onCancel={() => setConfirmLote(null)}
@@ -695,4 +708,3 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     </div>
   )
 }
-

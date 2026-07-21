@@ -2,18 +2,24 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession, puedeEditarModulo }  from './auth'
+import { getPortalSession, puedeEditarModulo, puedeEditarAlgunModulo }  from './auth'
+import { MODULOS_CATALOGO, tieneModulo } from '@/lib/modulos'
+import { etiquetasDe }        from '@/lib/sector'
 import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type TipoProducto = 'PRODUCTO' | 'SERVICIO'
 
+/** Para qué sirve una categoría. `AMBAS` = vale para físicos y para servicios. */
+export type TipoCategoria = TipoProducto | 'AMBAS'
+
 export interface Categoria {
   categoria_id: string
   client_id:    string
   nombre:       string
   descripcion:  string | null
+  tipo:         TipoCategoria
   estado:       'ACTIVO' | 'INACTIVO'
   created_at:   string
   updated_at:   string
@@ -30,6 +36,8 @@ export interface Producto {
   categoria_id:     string | null
   proveedor_id:     string | null
   unidad:           string
+  es_suscribible:   boolean
+  periodicidad_defecto: string | null
   precios:          Record<string, number>  // { USD: 25.00, CUP: 9000 }
   costos:           Record<string, number>
   stock_actual:     number
@@ -41,13 +49,42 @@ export interface Producto {
 
 export interface ProductosPageData {
   productos:   Producto[]
+  /** Qué cataloga esta página: PRODUCTO (Inventario) o SERVICIO (módulo Servicios).
+   *  Inventario y Servicios comparten la tabla `products` pero NO la página. */
+  modo:        TipoProducto
   categorias:  Categoria[]
   proveedores: { tercero_id: string; nombre: string }[]
   monedas:     string[]   // códigos de monedas activas del cliente, ej: ['USD','CUP']
   almacenes:   { almacen_id: string; nombre: string }[]
+  /** Con `inventario`: existencias, almacenes y productos físicos. Sin él (pieza
+   *  `servicios` a secas) la página es solo la lista de servicios con su precio. */
+  tieneInventario: boolean
+  /** Etiqueta del sector para «servicio» (Servicio, Tratamiento, Clase…). */
+  etiquetaServicio: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * ¿Este cliente tiene el módulo `inventario` (y no solo la pieza `servicios`)?
+ * Decide dos cosas: si puede crear productos FÍSICOS y si la UI enseña existencias.
+ * Devuelve también la etiqueta de «servicio» del sector, que casi siempre se pide a
+ * la vez (una consulta menos).
+ */
+async function contextoCatalogo(
+  clientId: string,
+): Promise<{ tieneInventario: boolean; etiquetaServicio: string }> {
+  const db = createAdminClient()
+  const { data } = await db.from('clients')
+    .select('modulos_activos, sector').eq('client_id', clientId).single()
+  const { data: plantilla } = data?.sector
+    ? await db.from('plantillas_sector').select('etiquetas').eq('sector', data.sector).maybeSingle()
+    : { data: null }
+  return {
+    tieneInventario:  tieneModulo(data?.modulos_activos, 'inventario'),
+    etiquetaServicio: etiquetasDe(plantilla?.etiquetas).servicio,
+  }
+}
 
 function generarProductoId(tipo: TipoProducto): string {
   const pfx = tipo === 'SERVICIO' ? 'SRV' : 'PRD'
@@ -84,20 +121,24 @@ async function generarCodigo(
 
 // ── Obtener ───────────────────────────────────────────────────────────────────
 
-export async function obtenerProductos(): Promise<ProductosPageData | null> {
+export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise<ProductosPageData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db = createAdminClient()
 
-  const [prodRes, catRes, provRes, monRes, almRes] = await Promise.all([
+  const [prodRes, catRes, provRes, monRes, almRes, ctx] = await Promise.all([
     db.from('products')
       .select('*')
       .eq('client_id', session.client_id)
+      .eq('tipo', modo)          // Inventario ve físicos; Servicios ve servicios
       .order('nombre'),
+    // Y sus categorías: en Servicios no se ofrece «Limpieza», y en Inventario no se
+    // ofrece «Consultoría». Las marcadas AMBAS salen en las dos páginas (mig. 122).
     db.from('product_categories')
       .select('*')
       .eq('client_id', session.client_id)
+      .in('tipo', [modo, 'AMBAS'])
       .order('nombre'),
     db.from('third_parties')
       .select('tercero_id, nombre')
@@ -115,6 +156,10 @@ export async function obtenerProductos(): Promise<ProductosPageData | null> {
       .eq('client_id', session.client_id)
       .eq('activo', true)
       .order('nombre'),
+    // Sin `inventario` la página es solo la lista de servicios: ni existencias, ni
+    // almacenes, ni tipo. La etiqueta la pone el sector (Servicio / Tratamiento /
+    // Clase…), nunca se hornea en el código (MODELO-MODULOS §6).
+    contextoCatalogo(session.client_id),
   ])
 
   const productos = (prodRes.data ?? []).map((p: Record<string, unknown>) => ({
@@ -129,10 +174,12 @@ export async function obtenerProductos(): Promise<ProductosPageData | null> {
 
   return {
     productos,
+    modo,
     categorias:  (catRes.data  ?? []) as Categoria[],
     proveedores: (provRes.data ?? []) as { tercero_id: string; nombre: string }[],
     monedas:     monedas.length ? monedas : ['USD'],   // fallback si no hay monedas configuradas
     almacenes:   (almRes.data  ?? []) as { almacen_id: string; nombre: string }[],
+    ...ctx,
   }
 }
 
@@ -143,7 +190,6 @@ export async function guardarProducto(
 ): Promise<{ ok: boolean; error?: string; producto_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre es obligatorio.' }
@@ -152,8 +198,17 @@ export async function guardarProducto(
   if (!['PRODUCTO', 'SERVICIO'].includes(tipo))
     return { ok: false, error: 'Tipo inválido.' }
 
+  // Gate PRECISO por tipo: los físicos son del módulo Inventario; los servicios,
+  // del módulo Servicios. Desde la separación total cada página crea un solo tipo,
+  // pero el candado real está aquí (la UI oculta no es control de acceso): sin él,
+  // un POST a mano colaría un tipo del módulo que el cliente no paga.
+  const moduloDelTipo = tipo === 'SERVICIO' ? 'servicios' : 'inventario'
+  if (!(await puedeEditarModulo(moduloDelTipo)))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
   const unidad = ((formData.get('unidad') as string) ?? '').trim()
-  if (!unidad) return { ok: false, error: 'La unidad es obligatoria.' }
+  // La unidad solo es obligatoria para físicos; un servicio no siempre es medible.
+  if (tipo === 'PRODUCTO' && !unidad) return { ok: false, error: 'La unidad es obligatoria.' }
 
   const db = createAdminClient()
 
@@ -167,13 +222,19 @@ export async function guardarProducto(
   const campos = {
     nombre,
     tipo,
-    unidad,
+    // Servicio sin unidad → valor neutro, no se le pide al usuario (no siempre es medible).
+    unidad:           tipo === 'SERVICIO' ? (unidad || 'servicio') : unidad,
     codigo_proveedor: ((formData.get('codigo_proveedor') as string) ?? '').trim() || null,
     descripcion:      ((formData.get('descripcion')      as string) ?? '').trim() || null,
     categoria_id:     ((formData.get('categoria_id')     as string) ?? '').trim() || null,
     proveedor_id:     ((formData.get('proveedor_id')     as string) ?? '').trim() || null,
     precios,
     costos,
+    // Suscribible solo aplica a servicios; un físico nunca lo es.
+    es_suscribible:       tipo === 'SERVICIO' && (formData.get('es_suscribible') as string) === '1',
+    periodicidad_defecto: tipo === 'SERVICIO'
+      ? (((formData.get('periodicidad_defecto') as string) ?? '').trim() || null)
+      : null,
     stock_minimo:     tipo === 'SERVICIO'
       ? 0
       : (parseFloat((formData.get('stock_minimo') as string) ?? '0') || 0),
@@ -263,7 +324,7 @@ export async function archivarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -282,7 +343,7 @@ export async function restaurarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -306,7 +367,7 @@ export async function eliminarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -365,7 +426,7 @@ export async function archivarProductosEnLote(
 ): Promise<ResultadoLoteProductos> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()
@@ -381,7 +442,7 @@ export async function archivarProductosEnLote(
 export async function eliminarProductosEnLote(ids: string[]): Promise<ResultadoLoteProductos> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()
@@ -428,6 +489,10 @@ export async function ajustarStock(
 ): Promise<{ ok: boolean; error?: string; stock_nuevo?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  // `inventario` a secas, NO el gate compartido: mover existencias es justo lo que
+  // la pieza Servicios no incluye. Con el gate compartido, un cliente de Servicios
+  // podría ajustar stock desde la acción aunque la UI no le enseñe el botón — y la
+  // UI oculta no es control de acceso.
   if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   if (!almacen_id) return { ok: false, error: 'Selecciona un almacén.' }
@@ -482,13 +547,19 @@ export async function guardarCategoria(
 ): Promise<{ ok: boolean; error?: string; categoria_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
 
   const db = createAdminClient()
   const categoria_id_form = ((formData.get('categoria_id') as string) ?? '').trim()
+
+  // Guardia de servidor: la columna tiene CHECK y un valor inventado tumbaría el
+  // guardado entero en vez de ignorarse.
+  const tipoRaw = ((formData.get('tipo') as string) ?? '').trim()
+  const tipo: TipoCategoria =
+    tipoRaw === 'PRODUCTO' || tipoRaw === 'SERVICIO' || tipoRaw === 'AMBAS' ? tipoRaw : 'AMBAS'
 
   if (!categoria_id_form) {
     const categoria_id = generarCategoriaId()
@@ -497,12 +568,14 @@ export async function guardarCategoria(
       client_id:   session.client_id,
       nombre,
       descripcion: ((formData.get('descripcion') as string) ?? '').trim() || null,
+      tipo,
       estado:      'ACTIVO',
       created_at:  new Date().toISOString(),
       updated_at:  new Date().toISOString(),
     })
     if (error) return { ok: false, error: `Error al crear: ${error.message}` }
     revalidatePath('/portal/productos')
+    revalidatePath('/portal/servicios')
     return { ok: true, categoria_id }
   }
 
@@ -511,6 +584,7 @@ export async function guardarCategoria(
     .update({
       nombre,
       descripcion: ((formData.get('descripcion') as string) ?? '').trim() || null,
+      tipo,
       updated_at:  new Date().toISOString(),
     })
     .eq('categoria_id', categoria_id_form)
@@ -518,6 +592,7 @@ export async function guardarCategoria(
 
   if (error) return { ok: false, error: 'Error al actualizar.' }
   revalidatePath('/portal/productos')
+  revalidatePath('/portal/servicios')
   return { ok: true, categoria_id: categoria_id_form }
 }
 
@@ -528,7 +603,7 @@ export async function archivarCategoria(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -547,7 +622,7 @@ export async function restaurarCategoria(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -594,6 +669,10 @@ export interface ProductoDetalleData {
   movimientos:       MovimientoProducto[]
   almacen_nombres:   Record<string, string>
   historialPrecios:  HistorialPrecio[]
+  /** Sin `inventario` la ficha no enseña existencias ni movimientos (ver
+   *  `ProductosPageData.tieneInventario`). */
+  tieneInventario:   boolean
+  etiquetaServicio:  string
 }
 
 export async function obtenerProductoDetalle(
@@ -658,12 +737,17 @@ export async function obtenerProductoDetalle(
     stock_minimo: Number(raw.stock_minimo) || 0,
   } as Producto
 
-  const categorias  = (catRes.data  ?? []) as Categoria[]
+  // Las categorías del desplegable son las de SU tipo (mig. 122), pero la que ya tiene
+  // asignada se conserva aunque no encaje: si no, editar el precio de una ficha vieja
+  // le cambiaría la categoría de rebote sin que nadie lo pidiera.
+  const todasCat    = (catRes.data ?? []) as Categoria[]
+  const categorias  = todasCat.filter(c =>
+    c.tipo === 'AMBAS' || c.tipo === producto.tipo || c.categoria_id === producto.categoria_id)
   const proveedores = (provRes.data ?? []) as { tercero_id: string; nombre: string }[]
   const monedas     = (monRes.data  ?? []).map((m: { codigo: string }) => m.codigo)
 
   const categoria = producto.categoria_id
-    ? (categorias.find(c => c.categoria_id === producto.categoria_id) ?? null)
+    ? (todasCat.find(c => c.categoria_id === producto.categoria_id) ?? null)
     : null
 
   const proveedor = producto.proveedor_id
@@ -714,5 +798,6 @@ export async function obtenerProductoDetalle(
     movimientos,
     almacen_nombres,
     historialPrecios,
+    ...(await contextoCatalogo(session.client_id)),
   }
 }

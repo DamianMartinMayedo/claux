@@ -17,8 +17,9 @@ import {
   diasHasta,
   escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
   escanearStock, escanearRrhh, escanearCredito, escanearReservas,
-  escanearIa, escanearDossier,
+  escanearIa, escanearDossier, escanearServicios, escanearRenovaciones,
 } from './escaneres'
+import { facturarAutomatico } from '@/lib/facturacion-suscripciones'
 
 export interface ResumenGenerador {
   tenants: number
@@ -102,6 +103,19 @@ export async function generarNotificacionesInternas(
   creadas += await escanearCaja(db, con('caja'))
   creadas += await escanearStock(db, con('inventario'))
   creadas += await escanearRrhh(db, con('rrhh'), hoy)
+  creadas += await escanearServicios(db, con('servicios'), hoy)
+
+  // Facturación automática ANTES de avisar: si la empresa la tiene activada, el
+  // borrador ya está hecho cuando se genera el aviso, y así «Toca cobrar» no le pide
+  // al dueño algo que el sistema acaba de dejarle resuelto. Exige las DOS claves:
+  // servicios (las suscripciones) y base (facturar de verdad).
+  const conServiciosYBase = contextos.filter(c =>
+    c.modulos.includes('servicios') && c.modulos.includes('base'))
+  if (conServiciosYBase.length > 0) {
+    await facturarAutomatico(db, conServiciosYBase.map(c => c.clientId), hoy)
+  }
+
+  creadas += await escanearRenovaciones(db, con('servicios'), hoy)
   creadas += await escanearReservas(db, con('reservas_citas', 'agenda'), hoy)
   creadas += await escanearIa(con('asistente_ia'))
   creadas += await escanearDossier(db, con('dossier'))

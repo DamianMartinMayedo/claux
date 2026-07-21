@@ -18,6 +18,10 @@ export interface ResultadoMoneda {
   gastos_por_categoria: { categoria: string; monto: number }[]
   total_gastos:         number
   neto:                 number
+  // ── Coste directo y margen: INFORMATIVOS, fuera del neto (ver el bloque de cálculo) ──
+  costo_directo:        number   // Σ del coste congelado en las líneas vendidas
+  costo_sin_proveedor:  number   // parte del anterior que NO vuelve a contabilizar
+  margen_bruto:         number   // ventas − costo_directo
 }
 
 export interface FlujoMoneda {
@@ -67,7 +71,7 @@ export async function obtenerReportes(
   const ids         = empresaId ? [empresaId] : (empresa_ids.length ? empresa_ids : ['__none__'])
 
   const [facRes, gcRes, movRes, consolRes, tasasRes] = await Promise.all([
-    db.from('facturas').select('moneda, total, fecha_emision, estado')
+    db.from('facturas').select('factura_id, moneda, total, fecha_emision, estado')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desde).lte('fecha_emision', hasta),
@@ -88,13 +92,19 @@ export async function obtenerReportes(
   const resMap = new Map<string, ResultadoMoneda>()
   const getRes = (moneda: string) => {
     let r = resMap.get(moneda)
-    if (!r) { r = { moneda, ventas: 0, cobros_directos: 0, total_ingresos: 0, gastos_por_categoria: [], total_gastos: 0, neto: 0 }; resMap.set(moneda, r) }
+    if (!r) {
+      r = { moneda, ventas: 0, cobros_directos: 0, total_ingresos: 0, gastos_por_categoria: [], total_gastos: 0, neto: 0,
+            costo_directo: 0, costo_sin_proveedor: 0, margen_bruto: 0 }
+      resMap.set(moneda, r)
+    }
     return r
   }
   const gastosCat = new Map<string, Map<string, number>>()   // moneda → categoria → monto
 
-  for (const f of (facRes.data ?? []) as { moneda: string; total: number }[]) {
+  const monedaPorFactura = new Map<string, string>()
+  for (const f of (facRes.data ?? []) as { factura_id: string; moneda: string; total: number }[]) {
     getRes(f.moneda).ventas += Number(f.total)
+    monedaPorFactura.set(f.factura_id, f.moneda)
   }
   for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null }[]) {
     if (g.tipo === 'COBRO') {
@@ -112,9 +122,48 @@ export async function obtenerReportes(
       .map(([categoria, monto]) => ({ categoria, monto }))
       .sort((a, b) => b.monto - a.monto)
   }
+  // ── Coste directo y margen bruto ──
+  // INFORMATIVOS: no se restan del neto a propósito. El coste de un servicio CON
+  // proveedor ya está dentro de `total_gastos` como la CxP automática (mig. 118), y el
+  // de un servicio que presta la plantilla ya está en el gasto «Salarios» de la nómina
+  // confirmada. Restarlo aquí otra vez contaría lo mismo dos veces y descuadraría el
+  // resultado — es la trampa que el plan avisa (decisión 11). El coste sale de la FOTO
+  // congelada en la línea, no del catálogo: el margen de enero no lo reescribe una
+  // subida de tarifa en marzo.
+  if (monedaPorFactura.size) {
+    const { data: lins } = await db.from('documento_lineas')
+      .select('documento_id, producto_id, cantidad, costo_unitario')
+      .eq('documento_tipo', 'FACTURA')
+      .in('documento_id', [...monedaPorFactura.keys()])
+      .not('costo_unitario', 'is', null)
+
+    type LinCosto = { documento_id: string; producto_id: string | null; cantidad: number; costo_unitario: number }
+    const lineas = (lins ?? []) as LinCosto[]
+    const prodIds = [...new Set(lineas.map(l => l.producto_id).filter((id): id is string => !!id))]
+
+    const conProveedor = new Set<string>()
+    if (prodIds.length) {
+      const { data: prods } = await db.from('products')
+        .select('producto_id, proveedor_id')
+        .eq('client_id', session.client_id).in('producto_id', prodIds)
+        .not('proveedor_id', 'is', null)
+      for (const p of (prods ?? []) as { producto_id: string }[]) conProveedor.add(p.producto_id)
+    }
+
+    for (const l of lineas) {
+      const moneda = monedaPorFactura.get(l.documento_id)
+      if (!moneda) continue
+      const coste = Number(l.cantidad) * Number(l.costo_unitario)
+      const r = getRes(moneda)
+      r.costo_directo += coste
+      if (!l.producto_id || !conProveedor.has(l.producto_id)) r.costo_sin_proveedor += coste
+    }
+  }
+
   for (const r of resMap.values()) {
     r.total_ingresos = r.ventas + r.cobros_directos
     r.neto = r.total_ingresos - r.total_gastos
+    r.margen_bruto = r.ventas - r.costo_directo
   }
 
   // ── Flujo de caja (efectivo) ──

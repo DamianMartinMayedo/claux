@@ -47,9 +47,7 @@ export default function PresupuestoCalculadora({
   const [tarifa, setTarifa]                       = useState<TarifaTipo>(tarifaSugerida)
   const [formato, setFormato]                     = useState<FormatoDatos>('cero')
 
-  const [modulosSel, setModulosSel] = useState<string[]>(
-    prefill.modulos,
-  )
+  const [modulosSel, setModulosSel] = useState<string[]>(prefill.modulos)
   const [vol, setVol] = useState<Record<string, string>>({ empresas: '1', monedas: '1', cuentas_tesoreria: '1' })
 
   const [migDesea, setMigDesea]     = useState(false)
@@ -83,7 +81,9 @@ export default function PresupuestoCalculadora({
   const lineasFase2 = LINEAS_FASE2.filter(l => modulosSel.includes(l.modulo))
 
   function toggleModulo(clave: string) {
-    setModulosSel(prev => prev.includes(clave) ? prev.filter(c => c !== clave) : [...prev, clave])
+    setModulosSel(prev =>
+      prev.includes(clave) ? prev.filter(c => c !== clave) : [...prev, clave]
+    )
   }
 
   function setVolCampo(key: string, value: string) {

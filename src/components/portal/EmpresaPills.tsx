@@ -14,6 +14,8 @@ interface Props {
   value:       string                 // '' = todas las empresas
   onChange:    (id: string) => void
   todasLabel?: string
+  /** Sin «Todas»: hay que elegir una (emitir, no filtrar). */
+  sinTodas?:   boolean
 }
 
 // Filtro por empresa: es `FilterPills` con el punto de color de cada una (un <option>
@@ -25,6 +27,7 @@ export default function EmpresaPills({
   value,
   onChange,
   todasLabel = 'Todas',
+  sinTodas,
 }: Props) {
   return (
     <FilterPills
@@ -32,7 +35,8 @@ export default function EmpresaPills({
       value={value}
       onChange={onChange}
       todasLabel={todasLabel}
-      ariaLabel="Filtrar por empresa"
+      sinTodas={sinTodas}
+      ariaLabel={sinTodas ? 'Empresa' : 'Filtrar por empresa'}
       colorVar={empresaColorVar}
     />
   )

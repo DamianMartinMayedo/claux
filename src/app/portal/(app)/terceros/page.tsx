@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default async function TercerosPage() {
   // Clientes y proveedores lo necesitan Contabilidad (facturas, CxC/CxP) e
   // Inventario (compras, productos). Se abre con cualquiera de los dos.
-  await requireAlgunModulo(['base', 'inventario'])
+  await requireAlgunModulo(['base', 'inventario', 'servicios'])
   const data = await obtenerTerceros()
   if (!data) redirect('/portal/login')
   return <TercerosView data={data} />

@@ -25,6 +25,8 @@ export interface CajaRow {
   almacen_id:        string | null
   cuentas_moneda:    Record<string, string>
   monedas_aceptadas: string[]
+  /** Qué baja al dispositivo: PRODUCTO | SERVICIO | AMBOS (mig. 120). */
+  tipos_catalogo?:   string | null
   activa?:           boolean
 }
 
@@ -82,7 +84,17 @@ export function getCajaToken(req: Request): string | null {
 export async function construirSeed(db: Db, caja: CajaRow) {
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', caja.client_id).maybeSingle()
   const tieneInv  = tieneModulo(cli?.modulos_activos, 'inventario')
+  const tieneSrv  = tieneModulo(cli?.modulos_activos, 'servicios')
   const tieneBase = tieneModulo(cli?.modulos_activos, 'base')
+
+  // Qué baja al dispositivo (mig. 120). El ajuste del dueño se cruza con lo que tiene
+  // contratado: pedir servicios sin el módulo Servicios no los baja, igual que hoy no
+  // bajan físicos sin Inventario. La caja es un mostrador, pero una peluquería cobra
+  // ahí el corte, no solo el champú.
+  const tipos = caja.tipos_catalogo ?? 'PRODUCTO'
+  const tiposPermitidos: string[] = []
+  if (tieneInv && tipos !== 'SERVICIO') tiposPermitidos.push('PRODUCTO')
+  if (tieneSrv && tipos !== 'PRODUCTO') tiposPermitidos.push('SERVICIO')
 
   // Al dispositivo solo bajan las monedas que además tienen su caja de Tesorería
   // asignada, aunque en la configuración estén marcadas. Cobrar en una moneda sin
@@ -95,12 +107,11 @@ export async function construirSeed(db: Db, caja: CajaRow) {
     : aceptadas
 
   const [prodRes, monRes, tasaRes] = await Promise.all([
-    // Solo productos FÍSICOS: la caja es para venta física. Los servicios se
-    // deciden más adelante; de momento no bajan al dispositivo (tipo NOT NULL).
-    tieneInv
+    tiposPermitidos.length > 0
       ? db.from('products')
-          .select('producto_id, codigo, nombre, precios, unidad')
-          .eq('client_id', caja.client_id).eq('estado', 'ACTIVO').eq('tipo', 'PRODUCTO').order('nombre')
+          .select('producto_id, codigo, nombre, precios, unidad, tipo')
+          .eq('client_id', caja.client_id).eq('estado', 'ACTIVO')
+          .in('tipo', tiposPermitidos).order('nombre')
       : Promise.resolve({ data: [] }),
     db.from('monedas').select('codigo, simbolo').eq('client_id', caja.client_id).eq('activa', true).order('codigo'),
     db.from('tasas_cambio')
@@ -133,6 +144,9 @@ export async function construirSeed(db: Db, caja: CajaRow) {
     productos: (prodRes.data ?? []).map((p: any) => ({
       producto_id: p.producto_id, codigo: p.codigo, nombre: p.nombre,
       precios: p.precios ?? {}, unidad: p.unidad,
+      // El dispositivo necesita el tipo para separar mostrador y servicios: mezclados en
+      // la misma rejilla, el corte de pelo se pierde entre los champús.
+      tipo: p.tipo ?? 'PRODUCTO',
     })),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     monedas: (monRes.data ?? []).map((m: any) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo })),
@@ -308,8 +322,26 @@ async function postearResumenCierre(
   if (tieneInv && caja.almacen_id && ses.stock_movs == null && ticketUuids.length > 0) {
     const { data: lineas } = await db.from('caja_ticket_lineas')
       .select('producto_id, cantidad').in('ticket_uuid', ticketUuids).not('producto_id', 'is', null)
+
+    // Solo los FÍSICOS mueven existencias. Un servicio no tiene stock que sacar, y aquí
+    // se llama con `permitir_negativo: true`, así que la RPC no lo rechazaría: crearía
+    // stock negativo de un SRV- en silencio. Se filtra ANTES de llamar, sin confiar en
+    // que la base lo pare. Vale también para un dispositivo con semilla vieja.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const idsLinea = [...new Set((lineas ?? []).map((l: any) => l.producto_id as string))]
+    const fisicos = new Set<string>()
+    if (idsLinea.length > 0) {
+      const { data: prods } = await db.from('products')
+        .select('producto_id').eq('client_id', caja.client_id)
+        .in('producto_id', idsLinea).eq('tipo', 'PRODUCTO')
+      for (const p of (prods ?? [])) fisicos.add(p.producto_id as string)
+    }
+
     const porProd = new Map<string, number>()
-    for (const l of (lineas ?? [])) porProd.set(l.producto_id, (porProd.get(l.producto_id) ?? 0) + Number(l.cantidad))
+    for (const l of (lineas ?? [])) {
+      if (!fisicos.has(l.producto_id)) continue
+      porProd.set(l.producto_id, (porProd.get(l.producto_id) ?? 0) + Number(l.cantidad))
+    }
 
     const movs: Record<string, string> = {}
     for (const [producto_id, cantidad] of porProd) {

@@ -162,8 +162,11 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
     })
   }
 
-  // Orden: primero los más vencidos, luego por vencimiento ascendente
-  documentos.sort((a, b) => (b.dias_vencido ?? -1) - (a.dias_vencido ?? -1))
+  // Orden: la MÁS RECIENTE primero (por fecha del documento). El tramo de vencimiento
+  // sigue visible por fila y se puede filtrar; antes se ordenaba por «más vencido
+  // primero», lo que mandaba al final la factura recién emitida (aún no vencida).
+  documentos.sort((a, b) =>
+    b.fecha.localeCompare(a.fecha) || (b.dias_vencido ?? -1) - (a.dias_vencido ?? -1))
 
   const empresa_nombres: Record<string, string> = {}
   for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre

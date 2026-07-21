@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')
-    .select('caja_id, client_id, empresa_id, almacen_id, cuentas_moneda, monedas_aceptadas, activa')
+    .select('caja_id, client_id, empresa_id, almacen_id, cuentas_moneda, monedas_aceptadas, tipos_catalogo, activa')
     .eq('sync_token', token).maybeSingle()
   if (!caja || caja.activa === false) {
     return NextResponse.json({ ok: false, error: 'Caja no encontrada o desactivada' }, { status: 404 })

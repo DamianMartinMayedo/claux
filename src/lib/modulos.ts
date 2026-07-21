@@ -10,3 +10,20 @@ export function normalizarModulos(modulos: unknown): string[] {
 export function tieneModulo(modulos: unknown, modulo: string): boolean {
   return normalizarModulos(modulos).includes(modulo)
 }
+
+export function tieneAlgunModulo(modulos: unknown, claves: string[]): boolean {
+  const activos = normalizarModulos(modulos)
+  return claves.some(c => activos.includes(c))
+}
+
+/**
+ * Los dos módulos que ponen artículos vendibles en la tabla `products`:
+ * `inventario` (productos físicos, con existencias) y `servicios` (servicios, sin
+ * stock). Desde la separación total tienen PÁGINAS distintas (/portal/productos y
+ * /portal/servicios) y comparten solo la TABLA, filtrada por `tipo`. Esta lista se
+ * usa allí donde importa «¿el cliente tiene algo que vender del catálogo?», sin que
+ * importe cuál de los dos: el selector de productos de ofertas/facturas y el import
+ * del catálogo QR (ambos leen `products` de cualquier tipo). El gate de cada PÁGINA,
+ * en cambio, es su módulo a secas (`requireModulo`), no esta lista.
+ */
+export const MODULOS_CATALOGO: string[] = ['inventario', 'servicios']

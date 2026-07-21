@@ -1495,6 +1495,8 @@
 .rep-line.rep-sub { font-size: var(--text-sm); color: var(--color-text-muted); }
 .rep-in strong  { color: var(--color-success); }
 .rep-out strong { color: var(--color-error); }
+/* Nota al pie de un bloque informativo (margen bruto): explica por qué NO entra en el neto. */
+.rep-info-nota { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2); line-height: 1.5; }
 
 /* ── Consolidado (conversión a la moneda de consolidación) ── */
 .rep-consol {
@@ -1696,6 +1698,11 @@
 
 /* ── Citas · Precio del servicio en celda ── */
 .cita-precio { font-variant-numeric: tabular-nums; }
+
+/* Minutos dentro de la tabla del importador: el campo se ciñe al dato (3 dígitos), no
+   ocupa la columna entera. */
+.cita-dur-input { width: 6rem; margin-left: auto; text-align: right; }
+@media (max-width: 640px) { .cita-dur-input { margin-left: 0; } }
 
 /* ── Citas · Rejilla de próximos días disponibles (modal "Nueva cita") ──
    Celdas como las horas (no pastillas), en una rejilla de 4 columnas. */
@@ -2765,16 +2772,16 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   .dos-grid-neto::before { content: attr(data-label); font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 600; }
 }
 
-/* ── Cambio de moneda de una ficha (avisos en los modales de RRHH/terceros) ── */
-.rrhh-moneda-cambio {
+/* ── Cambio de moneda de una ficha (aviso compartido: RRHH, terceros, Citas) ── */
+.moneda-cambio {
   grid-column: 1 / -1;
   display: flex; flex-direction: column; gap: var(--space-2);
   padding: var(--space-3); border: 1px solid var(--color-border);
   border-radius: var(--radius-md); background: var(--color-surface-2);
 }
-.rrhh-moneda-nota   { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
-.rrhh-moneda-nota svg { flex-shrink: 0; margin-top: 1px; }
-.rrhh-moneda-nota-warn { color: var(--color-warning); }
+.moneda-cambio-nota   { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
+.moneda-cambio-nota svg { flex-shrink: 0; margin-top: 1px; }
+.moneda-cambio-nota-warn { color: var(--color-warning); }
 /* Atajo para rellenar un importe con la tasa: se ofrece, no se impone. */
 .aplicar-tasa-btn {
   background: none; border: none; padding: 0; cursor: pointer;
@@ -3106,3 +3113,107 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   flex-shrink: 0;
 }
 .ntf-pref-select { width: auto; min-width: 11rem; }
+
+/* ── Suscripciones (módulo Servicios) ── */
+
+/* Importe + unidad del descuento en la misma fila: el número no se entiende sin saber
+   si es un % o una cantidad. */
+.sus-dto-row { display: flex; gap: var(--space-2); }
+.sus-dto-row .input:first-child { flex: 1 1 auto; min-width: 0; }
+.sus-dto-row .input:last-child  { flex: 0 0 auto; width: auto; }
+
+/* Los servicios del acuerdo: una fila por servicio, con su precio y su papelera. */
+.sus-lineas-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.sus-linea-form {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); background: var(--color-surface-2);
+}
+.sus-linea-form-campos { display: flex; align-items: flex-end; gap: var(--space-3); }
+.sus-linea-form-campos .input-group { flex: 1 1 auto; min-width: 0; }
+.sus-linea-form-precio { flex: 0 0 8rem !important; }
+/* Descuento = número + selector (%/moneda): necesita más que el precio, o el valor
+   tecleado queda oculto detrás del spinner y el select. */
+.sus-linea-form-dto    { flex: 0 0 12rem !important; }
+.sus-linea-form-campos .prd-editor-del-btn { margin-bottom: 6px; }
+.sus-add-servicio { align-self: flex-start; }
+@media (max-width: 640px) {
+  .sus-linea-form-campos { flex-wrap: wrap; }
+  .sus-linea-form-precio { flex: 1 1 7rem !important; }
+  .sus-linea-form-dto    { flex: 1 1 10rem !important; }
+}
+
+/* Lo que se le va a cobrar, calculado y a la vista mientras se rellena el formulario. */
+.sus-cobro-resumen {
+  display: flex; flex-direction: column; gap: 2px; justify-content: center;
+  padding: var(--space-3); border-radius: var(--radius-md);
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+}
+.sus-cobro-label   { font-size: var(--text-xs); color: var(--color-text-muted); }
+.sus-cobro-total   { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+.sus-cobro-detalle { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+/* Facturación del período — servicios que entran en una factura, dentro de su celda. */
+.sus-lineas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.sus-lineas li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.sus-linea-nombre  { font-size: var(--text-sm); }
+.sus-linea-detalle { font-size: var(--text-xs); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+/* Fila desmarcada: se atenúa el texto, NO el contenedor (la opacidad en el
+   contenedor se hereda a los menús `fixed` y los deja transparentes). */
+.sus-fila-excluida td:not(.col-center) { color: var(--color-text-faint); }
+.sus-fila-excluida .sus-linea-nombre,
+.sus-fila-excluida .text-sm-bold { color: var(--color-text-faint); font-weight: 500; }
+
+/* ── Calendario de cobros ── */
+/* Un mes por tarjeta, en orden. La cabecera carga con todo lo del mes (nombre, estado,
+   totales y su única acción) para que la tabla de abajo sea solo el detalle. */
+.sus-mes + .sus-mes { margin-top: var(--space-4); }
+.sus-mes-header { flex-wrap: wrap; gap: var(--space-3); }
+.sus-mes-titulo {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  flex: 1 1 18rem; min-width: 0;
+}
+.sus-mes-nombre {
+  font-size: var(--text-lg); font-weight: 600; color: var(--color-text); margin: 0;
+}
+/* «julio de 2026» → «Julio de 2026». `capitalize` no vale: pondría «Julio De 2026». */
+.sus-mes-nombre::first-letter { text-transform: uppercase; }
+.sus-mes-totales { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.sus-mes-total   { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+.sus-mes-aviso {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-divider);
+}
+.sus-mes-aviso svg  { flex-shrink: 0; margin-top: 1px; }
+.sus-mes-nota { padding: var(--space-3) var(--space-5); margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Proyección: lista, no tabla. No hay nada que marcar ni ordenar — solo mirar. */
+.sus-proyeccion { list-style: none; margin: 0; padding: var(--space-2) 0; }
+.sus-proyeccion-item {
+  display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.sus-proyeccion-cliente { font-weight: 600; color: var(--color-text); }
+.sus-proyeccion-detalle { flex: 1 1 10rem; min-width: 0; font-size: var(--text-xs); }
+.sus-proyeccion-monto   { font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* Lo futuro va plegado: es estimación y no se hace nada con ella. */
+.sus-futuro { margin-top: var(--space-6); }
+.sus-futuro-toggle {
+  display: flex; align-items: center; gap: var(--space-2);
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--color-text);
+}
+.sus-futuro-chevron { transition: transform var(--transition); }
+.sus-futuro-chevron-open { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .sus-futuro-chevron { transition: none; }
+}
+.sus-futuro-nota {
+  display: block; margin: var(--space-1) 0 var(--space-4);
+  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5;
+}

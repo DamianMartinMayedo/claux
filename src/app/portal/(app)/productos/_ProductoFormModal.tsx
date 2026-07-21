@@ -3,7 +3,7 @@
 import { toastError } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Package, Plus, X, Zap } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import {
   guardarProducto,
   type Producto,
@@ -30,6 +30,12 @@ export const TODAS_UNIDADES = UNIDADES_GRUPOS.flatMap(g => g.opciones)
 
 export interface PrecioRow { moneda: string; valor: string }
 
+/**
+ * Un importe por moneda, y solo uno. La lista se guarda como objeto (`{USD: 12}`), así
+ * que dos filas en la misma moneda no son dos precios: la segunda pisa a la primera sin
+ * decir nada y el importe que se ve no es el que se guarda. Por eso cada selector solo
+ * ofrece las monedas libres, y cuando no queda ninguna no se puede añadir más.
+ */
 export function PreciosCostosEditor({
   label, rows, onChange, monedasDisponibles,
 }: {
@@ -38,10 +44,13 @@ export function PreciosCostosEditor({
   onChange:            (rows: PrecioRow[]) => void
   monedasDisponibles:  string[]
 }) {
+  const usadas = new Set(rows.map(r => r.moneda).filter(Boolean))
+  const libres = monedasDisponibles.filter(m => !usadas.has(m))
+  const completo = libres.length === 0
+
   function addRow() {
-    const used = rows.map(r => r.moneda)
-    const next = monedasDisponibles.find(m => !used.includes(m)) ?? monedasDisponibles[0] ?? ''
-    onChange([...rows, { moneda: next, valor: '' }])
+    if (completo) return
+    onChange([...rows, { moneda: libres[0], valor: '' }])
   }
   function removeRow(i: number) { onChange(rows.filter((_, idx) => idx !== i)) }
   function updateRow(i: number, field: keyof PrecioRow, val: string) {
@@ -52,7 +61,8 @@ export function PreciosCostosEditor({
     <div className="prd-editor-wrap">
       <div className={`prd-editor-header${rows.length ? ' prd-editor-header-sep' : ''}`}>
         <span className="prd-editor-label">{label}</span>
-        <button type="button" onClick={addRow} className="btn-ghost-xs">+ Añadir</button>
+        <button type="button" onClick={addRow} className="btn-ghost-xs" disabled={completo}
+          title={completo ? 'Ya hay un importe en cada moneda' : undefined}>+ Añadir</button>
       </div>
       {rows.length === 0 && (
         <p className="prd-editor-empty">Sin {label.toLowerCase()} configurados</p>
@@ -60,13 +70,18 @@ export function PreciosCostosEditor({
       {rows.map((row, i) => (
         <div key={i} className={`prd-editor-row${i < rows.length - 1 ? ' prd-editor-row-sep' : ''}`}>
           <select className="input prd-editor-select" value={row.moneda}
+            aria-label={`Moneda — ${label}`}
             onChange={e => updateRow(i, 'moneda', e.target.value)}>
             <option value="">—</option>
-            {monedasDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
+            {/* Solo las libres y la suya: la que ya tiene otra fila no vuelve a ofrecerse. */}
+            {monedasDisponibles.filter(m => m === row.moneda || !usadas.has(m))
+              .map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           <input className="input prd-editor-input" type="number" step="0.01" min="0" placeholder="0.00"
+            aria-label={`Importe en ${row.moneda || 'la moneda elegida'} — ${label}`}
             value={row.valor} onChange={e => updateRow(i, 'valor', e.target.value)} />
-          <button type="button" onClick={() => removeRow(i)} title="Quitar" className="prd-editor-del-btn">
+          <button type="button" onClick={() => removeRow(i)} title="Quitar" aria-label={`Quitar ${row.moneda || 'esta fila'}`}
+            className="prd-editor-del-btn">
             ×
           </button>
         </div>
@@ -123,27 +138,36 @@ export function UnidadSelect({ defaultValue }: { defaultValue?: string }) {
   )
 }
 
-// ── Iconos locales ────────────────────────────────────────────────────────────
-
 // ── ProductoFormModal ─────────────────────────────────────────────────────────
 
 export function ProductoFormModal({
-  producto, categorias, proveedores, monedas, hayAlmacenes, onClose, onSaved,
+  producto, categorias, proveedores, monedas, hayAlmacenes, modo,
+  etiquetaServicio, onClose, onSaved,
 }: {
   producto:     Producto | null
   categorias:   Categoria[]
   proveedores:  { tercero_id: string; nombre: string }[]
   monedas:      string[]
   hayAlmacenes: boolean
+  /** Qué se crea/edita en esta página: PRODUCTO (Inventario) o SERVICIO (Servicios).
+   *  El tipo lo fija la página, no hay selector — cada módulo cataloga uno. */
+  modo:             TipoProducto
+  etiquetaServicio: string
   onClose:      () => void
   onSaved:      () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [tipo,      setTipo]         = useState<TipoProducto>(producto?.tipo ?? 'PRODUCTO')
   const [precios,   setPrecios]      = useState<PrecioRow[]>(() => objToRows(producto?.precios ?? {}))
   const [costos,    setCostos]       = useState<PrecioRow[]>(() => objToRows(producto?.costos  ?? {}))
+  const [esSuscribible, setEsSuscribible] = useState(producto?.es_suscribible ?? false)
+  const [periodicidad,  setPeriodicidad]  = useState(producto?.periodicidad_defecto ?? 'MENSUAL')
 
   const isEdit             = !!producto
+  // El tipo no es una decisión del usuario: lo impone la página. Al editar se
+  // respeta el del producto (que nunca cambia), pero coincide con el modo.
+  const tipo               = producto?.tipo ?? modo
+  const esServicio         = tipo === 'SERVICIO'
+  const nombreTipo         = esServicio ? etiquetaServicio.toLowerCase() : 'producto'
   const categoriasActivas  = categorias.filter(c => c.estado === 'ACTIVO')
   const monedasDisponibles = monedas.length ? monedas : MONEDAS_FALLBACK
   // Un producto FÍSICO necesita un almacén donde vivir su stock; un servicio no.
@@ -156,6 +180,8 @@ export function ProductoFormModal({
     fd.set('tipo',    tipo)
     fd.set('precios', JSON.stringify(rowsToObj(precios)))
     fd.set('costos',  JSON.stringify(rowsToObj(costos)))
+    fd.set('es_suscribible',       esSuscribible ? '1' : '')
+    fd.set('periodicidad_defecto', esSuscribible ? periodicidad : '')
     startTransition(async () => {
       const res = await guardarProducto(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -168,7 +194,9 @@ export function ProductoFormModal({
       <div className="modal modal-lg" role="dialog" aria-modal>
 
         <div className="modal-header">
-          <h2 className="modal-title">{isEdit ? 'Editar producto' : 'Nuevo producto / servicio'}</h2>
+          <h2 className="modal-title">
+            {isEdit ? `Editar ${nombreTipo}` : `Nuevo ${nombreTipo}`}
+          </h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
 
@@ -177,46 +205,23 @@ export function ProductoFormModal({
 
           <div className="modal-body">
 
-            {/* ── Tipo ── */}
-            <div className="ter-form-section">
-              <span className="ter-form-section-title">Tipo</span>
-              <div className="prd-tipo-grid">
-                {(['PRODUCTO', 'SERVICIO'] as TipoProducto[]).map(t => (
-                  <button key={t} type="button"
-                    onClick={() => !isEdit && setTipo(t)}
-                    disabled={isEdit}
-                    className={`prd-tipo-btn${tipo === t ? ' active' : ''}`}>
-                    {t === 'PRODUCTO' ? <Package size={15} strokeWidth={2} /> : <Zap size={16} strokeWidth={2} />}
-                    <span className="prd-tipo-labels">
-                      <span className="prd-tipo-name">
-                        {t === 'PRODUCTO' ? 'Producto' : 'Servicio'}
-                      </span>
-                      <span className="prd-tipo-desc">
-                        {t === 'PRODUCTO' ? 'Bien físico con stock' : 'Sin inventario físico'}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {isEdit && (
-                <p className="prd-tipo-hint">El tipo no puede modificarse una vez creado.</p>
-              )}
-            </div>
-
             {/* ── Identificación ── */}
             <div className="ter-form-section">
               <span className="ter-form-section-title">Identificación</span>
               <div className="ter-form-grid">
-                <div className="input-group ter-col-span-4">
+                <div className={`input-group ${esServicio ? 'ter-col-full' : 'ter-col-span-4'}`}>
                   <label>Nombre <span className="required">*</span></label>
                   <input className="input" name="nombre" required autoFocus={!isEdit}
                     defaultValue={producto?.nombre ?? ''}
-                    placeholder="Ej: Laptop Dell XPS, Consultoría técnica…" />
+                    placeholder={esServicio ? 'Ej: Consultoría técnica, Corte de pelo…' : 'Ej: Laptop Dell XPS, Tornillo M6…'} />
                 </div>
-                <div className="input-group ter-col-span-2">
-                  <label>Unidad <span className="required">*</span></label>
-                  <UnidadSelect defaultValue={producto?.unidad} />
-                </div>
+                {/* Unidad solo para físicos: un servicio no siempre es medible. */}
+                {!esServicio && (
+                  <div className="input-group ter-col-span-2">
+                    <label>Unidad <span className="required">*</span></label>
+                    <UnidadSelect defaultValue={producto?.unidad} />
+                  </div>
+                )}
                 <div className="input-group ter-col-span-3">
                   <label>Categoría</label>
                   <select className="input" name="categoria_id" defaultValue={producto?.categoria_id ?? ''}>
@@ -239,7 +244,7 @@ export function ProductoFormModal({
                   <label>Descripción</label>
                   <textarea className="input input-textarea" name="descripcion" rows={2}
                     defaultValue={producto?.descripcion ?? ''}
-                    placeholder="Descripción detallada del producto o servicio…" />
+                    placeholder={`Descripción detallada del ${nombreTipo}…`} />
                 </div>
               </div>
             </div>
@@ -253,13 +258,40 @@ export function ProductoFormModal({
               </div>
             </div>
 
-            {/* ── Stock (solo PRODUCTO) ── */}
+            {/* ── Suscripción (solo SERVICIO) ── */}
+            {esServicio && (
+              <div className="ter-form-section">
+                <span className="ter-form-section-title">Suscripción</span>
+                <label className="checkbox-group">
+                  <input type="checkbox" checked={esSuscribible}
+                    onChange={e => setEsSuscribible(e.target.checked)} />
+                  <span className="checkbox-label">Se puede contratar de forma recurrente (suscripción)</span>
+                </label>
+                {esSuscribible && (
+                  <div className="ter-form-grid mt-3">
+                    <div className="input-group ter-col-span-3">
+                      <label>Periodicidad por defecto</label>
+                      <select className="input" value={periodicidad}
+                        onChange={e => setPeriodicidad(e.target.value)}>
+                        <option value="MENSUAL">Mensual</option>
+                        <option value="TRIMESTRAL">Trimestral</option>
+                        <option value="SEMESTRAL">Semestral</option>
+                        <option value="ANUAL">Anual</option>
+                      </select>
+                      <span className="input-hint">Se usará al crear una suscripción; se puede cambiar por cliente.</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Stock (solo PRODUCTO físico) ── */}
             {tipo === 'PRODUCTO' && (
               <div className="ter-form-section mb-0">
                 <span className="ter-form-section-title">Inventario</span>
                 {bloqueadoPorAlmacen ? (
                   <div className="prd-almacen-req">
-                    <p className="input-hint">Los productos físicos necesitan un <strong>almacén</strong> donde registrar su stock. Crea uno para poder guardar (los servicios no lo necesitan).</p>
+                    <p className="input-hint">Los productos físicos necesitan un <strong>almacén</strong> donde registrar su stock. Crea uno para poder guardar.</p>
                     <Link href="/portal/almacenes" className="btn btn-primary btn-sm"><Plus size={14} strokeWidth={2.5} /> Crear almacén</Link>
                   </div>
                 ) : (
@@ -290,7 +322,8 @@ export function ProductoFormModal({
             <button type="submit" className="btn btn-primary" disabled={isPending || bloqueadoPorAlmacen}>
               {isPending
                 ? <><span className="spinner spinner-sm" /> Guardando…</>
-                : isEdit ? 'Guardar cambios' : `Crear ${tipo === 'SERVICIO' ? 'servicio' : 'producto'}`}
+                : isEdit ? 'Guardar cambios'
+                : `Crear ${nombreTipo}`}
             </button>
           </div>
         </form>

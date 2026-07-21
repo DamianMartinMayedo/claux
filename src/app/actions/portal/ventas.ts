@@ -5,8 +5,14 @@ import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
-import { tieneModulo }       from '@/lib/modulos'
-import { monedaValida }      from '@/lib/tasas'
+import { tieneAlgunModulo, MODULOS_CATALOGO } from '@/lib/modulos'
+import { monedaValida, mapaTasas } from '@/lib/tasas'
+import { sumarPeriodo, restarPeriodo, type PeriodicidadSub } from '@/lib/suscripciones'
+// Núcleo sin sesión, compartido con el cron de facturación automática. Ver el porqué
+// de que viva fuera de este fichero en `lib/ventas/factura-core.ts`.
+import {
+  generarIdDocumento, siguienteCorrelativo, escribirLineasYAjustes, fotoDeCostes,
+} from '@/lib/ventas/factura-core'
 import {
   calcularTotales,
   formatoNumero,
@@ -77,6 +83,8 @@ export interface DocumentoLinea {
   descuento_pct:     number
   descuento_importe: number
   total:             number
+  /** Suscripción que generó la línea (facturación del período). Rastro de idempotencia. */
+  suscripcion_id:    string | null
 }
 
 export interface DocumentoAjuste {
@@ -100,6 +108,9 @@ export interface VentasResumenData {
   cliente_nombres:   Record<string, string>
   productos:         { producto_id: string; codigo: string; nombre: string; unidad: string; precios: Record<string, number> }[]
   monedas:           string[]
+  /** "ORIGEN__DESTINO" → factor. Para convertir los importes al cambiar la moneda
+   *  del documento sin ida y vuelta al servidor (ver `mapaTasas`). */
+  tasas:             Record<string, number>
 }
 
 export interface OfertaDetalleData {
@@ -122,54 +133,12 @@ export interface FacturaDetalleData {
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
-function generarId(prefijo: 'OFE' | 'FAC'): string {
-  return `${prefijo}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-
 function parseJSON<T>(s: FormDataEntryValue | null, fallback: T): T {
   if (!s || typeof s !== 'string') return fallback
   try { return JSON.parse(s) as T } catch { return fallback }
 }
 
-/**
- * Reserva y retorna el siguiente número correlativo para (empresa, tipo, año).
- * Atómico vía UPSERT con returning. El número devuelto se debe combinar con
- * la letra de empresa para formar el código visible.
- */
-async function siguienteCorrelativo(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:         any,
-  client_id:  string,
-  empresa_id: string,
-  tipo:       DocumentoTipo,
-  anio:       number,
-): Promise<number> {
-  // Intentar incremento atómico vía RPC sería ideal, pero hacemos read-modify-write
-  // con un upsert seguro: lee el actual, incrementa, escribe. La unicidad final del
-  // número está garantizada por el índice único en (client_id, numero) de cada tabla.
-  const { data: existente } = await db
-    .from('consecutivos_venta')
-    .select('ultimo_numero')
-    .eq('client_id',  client_id)
-    .eq('empresa_id', empresa_id)
-    .eq('tipo',       tipo)
-    .eq('anio',       anio)
-    .maybeSingle()
-
-  const nuevo = (existente?.ultimo_numero ?? 0) + 1
-
-  const { error } = await db
-    .from('consecutivos_venta')
-    .upsert({
-      client_id, empresa_id, tipo, anio,
-      ultimo_numero: nuevo,
-      updated_at:    new Date().toISOString(),
-    }, { onConflict: 'client_id,empresa_id,tipo,anio' })
-
-  if (error) throw new Error(`No se pudo reservar consecutivo: ${error.message}`)
-  return nuevo
-}
-
+/** La empresa es del cliente de la sesión y puede facturar (tiene letra). */
 async function validarEmpresaAccesible(
   empresa_id: string,
 ): Promise<{ ok: true; letra: string } | { ok: false; error: string }> {
@@ -196,19 +165,21 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
       ofertas: [], facturas: [],
       empresas: [], empresa_nombres: {},
       clientes: [], cliente_nombres: {},
-      productos: [], monedas: [],
+      productos: [], monedas: [], tasas: {},
     }
   }
 
-  // Gate por módulo Inventario: el selector de productos es una conveniencia de
-  // llenado rápido. Sin Inventario, las líneas se rellenan con texto libre (la base
-  // funciona sola); con Inventario, se ofrece el datalist de productos.
+  // Gate por la lista de artículos (Inventario O la pieza Servicios): el selector es
+  // una conveniencia de llenado rápido. Sin ninguna de las dos, las líneas se
+  // rellenan con texto libre (la base funciona sola); con cualquiera, se ofrece el
+  // datalist. Es EL punto de la pieza Servicios: que una consultora tenga sus
+  // servicios en las facturas sin pagar almacenes que no usa.
   const { data: clienteRow } = await db
     .from('clients')
     .select('modulos_activos')
     .eq('client_id', session.client_id)
     .single()
-  const tieneInventario = tieneModulo(clienteRow?.modulos_activos, 'inventario')
+  const tieneCatalogo = tieneAlgunModulo(clienteRow?.modulos_activos, MODULOS_CATALOGO)
 
   const [ofRes, faRes, cliRes, prodRes, monRes] = await Promise.all([
     db.from('ofertas').select('*')
@@ -226,7 +197,7 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
       .in('tipo', ['CLIENTE', 'AMBOS'])
       .eq('activo', true)
       .order('nombre'),
-    tieneInventario
+    tieneCatalogo
       ? db.from('products')
           .select('producto_id, codigo, nombre, unidad, precios')
           .eq('client_id', session.client_id)
@@ -245,6 +216,13 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
 
   const cliente_nombres: Record<string, string> = {}
   for (const c of (cliRes.data ?? [])) cliente_nombres[c.tercero_id] = c.nombre
+
+  // Tasas entre las monedas del cliente: viajan con la página para que cambiar la
+  // moneda del documento pueda reexpresar los importes en el acto. Son 2-4 monedas,
+  // un puñado de pares. Un par sin tasa NO aparece en el mapa: la UI lo interpreta
+  // como "no cotiza" y deja los importes intactos en vez de inventarse un factor.
+  const codigosMoneda = ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo)
+  const tasas = await mapaTasas(db, session.client_id, codigosMoneda)
 
   return {
     ofertas:          (ofRes.data  ?? []) as Oferta[],
@@ -269,7 +247,8 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
                       })),
     cliente_nombres,
     productos:        (prodRes.data ?? []) as VentasResumenData['productos'],
-    monedas:          ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
+    monedas:          codigosMoneda,
+    tasas,
   }
 }
 
@@ -429,7 +408,7 @@ export async function guardarOferta(
       return { ok: false, error: (err as Error).message }
     }
 
-    const oferta_id = generarId('OFE')
+    const oferta_id = generarIdDocumento('OFE')
     const numero    = formatoNumero('OFERTA', validacion.letra, anio, correlativo)
 
     const { error } = await db.from('ofertas').insert({
@@ -450,7 +429,7 @@ export async function guardarOferta(
     })
     if (error) return { ok: false, error: error.message }
 
-    await escribirLineasYAjustes(db, 'OFERTA', oferta_id, lineas, ajustes, totales)
+    await escribirLineasYAjustes(db, 'OFERTA', oferta_id, lineas, ajustes, totales, session.client_id, moneda)
     revalidatePath('/portal/ventas')
     return { ok: true, oferta_id }
   }
@@ -487,7 +466,7 @@ export async function guardarOferta(
     .delete().eq('documento_tipo', 'OFERTA').eq('documento_id', oferta_id_form)
   await db.from('documento_ajustes')
     .delete().eq('documento_tipo', 'OFERTA').eq('documento_id', oferta_id_form)
-  await escribirLineasYAjustes(db, 'OFERTA', oferta_id_form, lineas, ajustes, totales)
+  await escribirLineasYAjustes(db, 'OFERTA', oferta_id_form, lineas, ajustes, totales, session.client_id, moneda)
 
   revalidatePath('/portal/ventas')
   revalidatePath(`/portal/ventas/ofertas/${oferta_id_form}`)
@@ -541,7 +520,7 @@ export async function guardarFactura(
       return { ok: false, error: (err as Error).message }
     }
 
-    const factura_id = generarId('FAC')
+    const factura_id = generarIdDocumento('FAC')
     const numero     = formatoNumero('FACTURA', validacion.letra, anio, correlativo)
 
     const { error } = await db.from('facturas').insert({
@@ -562,7 +541,7 @@ export async function guardarFactura(
     })
     if (error) return { ok: false, error: error.message }
 
-    await escribirLineasYAjustes(db, 'FACTURA', factura_id, lineas, ajustes, totales)
+    await escribirLineasYAjustes(db, 'FACTURA', factura_id, lineas, ajustes, totales, session.client_id, moneda)
     revalidatePath('/portal/ventas')
     return { ok: true, factura_id }
   }
@@ -596,7 +575,7 @@ export async function guardarFactura(
     .delete().eq('documento_tipo', 'FACTURA').eq('documento_id', factura_id_form)
   await db.from('documento_ajustes')
     .delete().eq('documento_tipo', 'FACTURA').eq('documento_id', factura_id_form)
-  await escribirLineasYAjustes(db, 'FACTURA', factura_id_form, lineas, ajustes, totales)
+  await escribirLineasYAjustes(db, 'FACTURA', factura_id_form, lineas, ajustes, totales, session.client_id, moneda)
 
   revalidatePath('/portal/ventas')
   revalidatePath(`/portal/ventas/facturas/${factura_id_form}`)
@@ -605,47 +584,6 @@ export async function guardarFactura(
 }
 
 // ── Helper: escribir líneas y ajustes ──────────────────────────────────────────
-
-async function escribirLineasYAjustes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:             any,
-  documento_tipo: DocumentoTipo,
-  documento_id:   string,
-  lineas:         LineaInput[],
-  ajustes:        AjusteInput[],
-  totales:        ReturnType<typeof calcularTotales>,
-): Promise<void> {
-  if (lineas.length > 0) {
-    await db.from('documento_lineas').insert(
-      lineas.map((l, i) => ({
-        documento_tipo,
-        documento_id,
-        orden:             i,
-        producto_id:       l.producto_id,
-        descripcion:       l.descripcion,
-        cantidad:          l.cantidad,
-        precio_unitario:   l.precio_unitario,
-        descuento_pct:     l.descuento_pct ?? 0,
-        descuento_importe: totales.lineas_descuentos[i] ?? 0,
-        total:             totales.lineas_totales[i],
-      })),
-    )
-  }
-  if (ajustes.length > 0) {
-    await db.from('documento_ajustes').insert(
-      ajustes.map((a, i) => ({
-        documento_tipo,
-        documento_id,
-        orden:           i,
-        tipo:            a.tipo,
-        nombre:          a.nombre,
-        modo:            a.modo,
-        valor:           a.valor,
-        monto_calculado: totales.ajustes_calculados[i],
-      })),
-    )
-  }
-}
 
 // ── Cambiar estado de oferta ──────────────────────────────────────────────────
 
@@ -695,6 +633,15 @@ export async function cambiarEstadoOferta(
 
 // ── Cambiar estado de factura ─────────────────────────────────────────────────
 
+/** Traduce los RAISE EXCEPTION de `srv_cxp_*` (mig. 118) a lenguaje humano. */
+function traducirErrorCxP(msg: string): string {
+  if (msg.includes('CXP_PAGADA')) {
+    return 'No se puede anular: ya le pagaste al proveedor de estos servicios. Anula primero el pago en Cuentas por pagar / Tesorería.'
+  }
+  if (msg.includes('FACTURA_NO_ENCONTRADA')) return 'Factura no encontrada.'
+  return msg
+}
+
 export async function cambiarEstadoFactura(
   factura_id:   string,
   nuevoEstado:  EstadoFactura,
@@ -717,16 +664,73 @@ export async function cambiarEstadoFactura(
     return { ok: false, error: 'Usa "Registrar cobro" en lugar de cambiar el estado directamente. Así queda el ingreso en tesorería.' }
   }
 
+  // La CxP al proveedor se revierte ANTES de tocar el estado: si ya se le pagó, la
+  // guardia CXP_PAGADA aborta la anulación entera en vez de dejar la factura anulada
+  // con la deuda viva (mismo criterio que COMPRA_PAGADA al anular una compra).
+  if (nuevoEstado === 'ANULADA') {
+    const { error: cxpErr } = await db.rpc('srv_cxp_revertir', {
+      p_factura_id: factura_id, p_client_id: session.client_id,
+    })
+    if (cxpErr) return { ok: false, error: traducirErrorCxP(cxpErr.message) }
+  }
+
   const { error } = await db.from('facturas')
     .update({ estado: nuevoEstado, updated_at: new Date().toISOString() })
     .eq('factura_id', factura_id)
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 
+  // Emitir engendra la CxP a los proveedores de los servicios vendidos. Es idempotente,
+  // así que el vaivén emitir → anular → emitir no duplica la deuda.
+  if (nuevoEstado === 'EMITIDA') {
+    await db.rpc('srv_cxp_generar', { p_factura_id: factura_id, p_client_id: session.client_id })
+    revalidatePath('/portal/gastos')
+    revalidatePath('/portal/cxp')
+  }
+  if (nuevoEstado === 'ANULADA') {
+    revalidatePath('/portal/gastos')
+    revalidatePath('/portal/cxp')
+  }
+
+  // Anular es deshacer: si la factura salió de la facturación del período, sus
+  // suscripciones tienen el próximo cobro ya avanzado. Sin retroceder, ese período
+  // quedaría cobrado en los papeles y sin factura, imposible de regenerar.
+  // Resucitar una anulada (ANULADA → BORRADOR/EMITIDA) rehace el avance, para que el
+  // ir y venir no deje la fecha corrida un período.
+  if (nuevoEstado === 'ANULADA' || factura.estado === 'ANULADA') {
+    await moverCobroSuscripciones(db, session.client_id, factura_id, nuevoEstado === 'ANULADA' ? restarPeriodo : sumarPeriodo)
+    revalidatePath('/portal/suscripciones')
+  }
+
   revalidatePath('/portal/ventas')
   revalidatePath(`/portal/ventas/facturas/${factura_id}`)
   revalidarFinanzas()
   return { ok: true }
+}
+
+/** Mueve `fecha_proximo_cobro` de las suscripciones facturadas por `factura_id`. */
+async function moverCobroSuscripciones(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, factura_id: string,
+  mover: (fecha: string, per: PeriodicidadSub) => string,
+): Promise<void> {
+  const { data: lineas } = await db.from('documento_lineas')
+    .select('suscripcion_id')
+    .eq('documento_tipo', 'FACTURA').eq('documento_id', factura_id)
+    .not('suscripcion_id', 'is', null)
+  const ids = [...new Set(((lineas ?? []) as { suscripcion_id: string }[]).map(l => l.suscripcion_id))]
+  if (!ids.length) return
+
+  const { data: subs } = await db.from('suscripciones')
+    .select('suscripcion_id, fecha_proximo_cobro, periodicidad')
+    .eq('client_id', client_id).in('suscripcion_id', ids)
+
+  for (const s of (subs ?? []) as { suscripcion_id: string; fecha_proximo_cobro: string; periodicidad: PeriodicidadSub }[]) {
+    await db.from('suscripciones').update({
+      fecha_proximo_cobro: mover(s.fecha_proximo_cobro, s.periodicidad),
+      updated_at:          new Date().toISOString(),
+    }).eq('suscripcion_id', s.suscripcion_id).eq('client_id', client_id)
+  }
 }
 
 // ── Convertir oferta APROBADA en factura BORRADOR ─────────────────────────────
@@ -760,7 +764,7 @@ export async function convertirOfertaEnFactura(
     return { ok: false, error: (err as Error).message }
   }
 
-  const factura_id = generarId('FAC')
+  const factura_id = generarIdDocumento('FAC')
   const numero     = formatoNumero('FACTURA', validacion.letra, anio, correlativo)
 
   const { error: insErr } = await db.from('facturas').insert({
@@ -792,9 +796,16 @@ export async function convertirOfertaEnFactura(
   ])
 
   if (linRes.data && linRes.data.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lineasOferta = linRes.data as any[]
+    // La foto del coste se REFRESCA aquí: la factura es el hecho contable, y una oferta
+    // de enero convertida en julio no debe traerse el coste de enero. Si el catálogo ya
+    // no tiene coste en esa moneda, se conserva el de la oferta antes que perderlo.
+    const costos = await fotoDeCostes(db, session.client_id, oferta.moneda as string,
+      lineasOferta.map(l => ({ producto_id: l.producto_id })) as LineaInput[])
+
     await db.from('documento_lineas').insert(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (linRes.data as any[]).map(l => ({
+      lineasOferta.map(l => ({
         documento_tipo:    'FACTURA',
         documento_id:      factura_id,
         orden:             l.orden,
@@ -805,6 +816,7 @@ export async function convertirOfertaEnFactura(
         descuento_pct:     l.descuento_pct     ?? 0,
         descuento_importe: l.descuento_importe ?? 0,
         total:             l.total,
+        costo_unitario:    (l.producto_id ? costos.get(l.producto_id) : null) ?? l.costo_unitario ?? null,
       })),
     )
   }
@@ -871,7 +883,7 @@ export async function duplicarOferta(
     return { ok: false, error: (err as Error).message }
   }
 
-  const nueva_id = generarId('OFE')
+  const nueva_id = generarIdDocumento('OFE')
   const numero   = formatoNumero('OFERTA', validacion.letra, anio, correlativo)
 
   const { error } = await db.from('ofertas').insert({
@@ -966,7 +978,7 @@ export async function duplicarFactura(
     return { ok: false, error: (err as Error).message }
   }
 
-  const nueva_id = generarId('FAC')
+  const nueva_id = generarIdDocumento('FAC')
   const numero   = formatoNumero('FACTURA', validacion.letra, anio, correlativo)
 
   // Calcular vencimiento desde condicion_pago
@@ -1276,6 +1288,16 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
     // para no dejar la oferta apuntando a una factura inexistente.
     await db.from('ofertas').update({ factura_id: null })
       .eq('client_id', session.client_id).in('factura_id', borrables)
+
+    // Y puede venir de la facturación del período. Borrarla se lleva por delante el
+    // rastro `suscripcion_id` de sus líneas, que es LA defensa contra facturar dos
+    // veces; si además dejáramos el `fecha_proximo_cobro` avanzado, ese período
+    // quedaría cobrado en los papeles, sin factura y sin forma de regenerarlo. Se
+    // retrocede ANTES de borrar las líneas, que es de donde se leen.
+    for (const factura_id of borrables) {
+      await moverCobroSuscripciones(db, session.client_id, factura_id, restarPeriodo)
+    }
+
     await db.from('documento_lineas').delete().eq('documento_tipo', 'FACTURA').in('documento_id', borrables)
     await db.from('documento_ajustes').delete().eq('documento_tipo', 'FACTURA').in('documento_id', borrables)
     const { error } = await db.from('facturas').delete()
@@ -1284,6 +1306,7 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
     else res.hechas = borrables.length
   }
   revalidatePath('/portal/ventas')
+  revalidatePath('/portal/suscripciones')
   revalidarFinanzas()
   return res
 }

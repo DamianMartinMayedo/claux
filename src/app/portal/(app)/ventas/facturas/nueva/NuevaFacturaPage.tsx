@@ -1,30 +1,27 @@
 'use client'
 
 import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition } from 'react'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
 import { guardarFactura }                    from '@/app/actions/portal/ventas'
 import type { VentasResumenData }            from '@/app/actions/portal/ventas'
-import type { Empresa }                      from '@/app/actions/portal/empresas'
 import { DocumentoLineasEditor }             from '../../_DocumentoLineasEditor'
-import { DocumentoPdf }                      from '../../_DocumentoPdf'
+import { MonedaDocumento }                   from '../../_MonedaDocumento'
 import CrearTerceroInline                    from '@/components/portal/CrearTerceroInline'
-import { Eye, X } from 'lucide-react'
 import {
   CONDICION_PAGO_OPTIONS,
   calcularFechaVencimiento,
-  calcularTotales,
+  tieneImportes,
   type AjusteInput,
   type LineaInput,
 } from '../../_ventas-helpers'
 
 interface Props {
   resumen:      VentasResumenData
-  empresasFull: Empresa[]
 }
 
-export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
+export default function NuevaFacturaPage({ resumen }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -39,7 +36,6 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
   const [condicion_pago,    setCondicionPago]   = useState('CONTADO')
   const [notas,             setNotas]           = useState('')
   const [notas_internas,    setNotasInternas]   = useState('')
-  const [previewOpen,       setPreviewOpen]     = useState(false)
 
   const [lineas,  setLineas]  = useState<LineaInput[]>([])
   const [ajustes, setAjustes] = useState<AjusteInput[]>([])
@@ -49,7 +45,9 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
   function onClienteChange(id: string) {
     setClienteId(id)
     const c = resumen.clientes.find(c => c.tercero_id === id)
-    if (c?.moneda_defecto && resumen.monedas.includes(c.moneda_defecto)) {
+    // Solo sin importes escritos: ver la nota en NuevaOfertaPage.
+    if (c?.moneda_defecto && resumen.monedas.includes(c.moneda_defecto)
+        && !tieneImportes(lineas, ajustes)) {
       setMoneda(c.moneda_defecto)
     }
   }
@@ -64,66 +62,6 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
     setFechaVencimiento(calcularFechaVencimiento(condicion_pago, fecha))
   }
 
-  // ── Preview data ──────────────────────────────────────────────────────────
-
-  const empresaFull = useMemo(() => empresasFull.find(e => e.empresa_id === empresa_id) ?? null, [empresa_id, empresasFull])
-  const clienteFull = useMemo(() => resumen.clientes.find(c => c.tercero_id === cliente_id) ?? null, [cliente_id, resumen.clientes])
-  const totales     = useMemo(() => calcularTotales(lineas, ajustes), [lineas, ajustes])
-
-  const empresaInfo = empresaFull ? {
-    nombre:            empresaFull.nombre,
-    nombre_fiscal:     empresaFull.nombre_fiscal,
-    rif_nit:           empresaFull.rif_nit,
-    direccion:         empresaFull.direccion,
-    ciudad:            empresaFull.ciudad,
-    pais:              empresaFull.pais,
-    telefono:          empresaFull.telefono,
-    email:             empresaFull.email,
-    logo_url:          empresaFull.logo_url,
-    mostrar_logo:      empresaFull.mostrar_logo,
-    letra_facturacion: empresaFull.letra_facturacion,
-    color:             empresaFull.color,
-  } : null
-
-  const clienteInfo = clienteFull ? {
-    nombre:         clienteFull.nombre,
-    identificacion: clienteFull.identificacion,
-    direccion:      clienteFull.direccion,
-    ciudad:         clienteFull.ciudad,
-    pais:           clienteFull.pais,
-    email:          clienteFull.email,
-    telefono:       clienteFull.telefono,
-  } : null
-
-  const lineasPreview = useMemo(() =>
-    lineas.map((l, i) => ({
-      linea_id:          i,
-      documento_tipo:    'FACTURA' as const,
-      documento_id:      '',
-      orden:             i,
-      producto_id:       l.producto_id,
-      descripcion:       l.descripcion,
-      cantidad:          l.cantidad,
-      precio_unitario:   l.precio_unitario,
-      descuento_pct:     l.descuento_pct,
-      descuento_importe: totales.lineas_descuentos[i] ?? 0,
-      total:             totales.lineas_totales[i] ?? 0,
-    })), [lineas, totales])
-
-  const ajustesPreview = useMemo(() =>
-    ajustes.map((a, i) => ({
-      ajuste_id:       i,
-      documento_tipo:  'FACTURA' as const,
-      documento_id:    '',
-      orden:           i,
-      tipo:            a.tipo,
-      nombre:          a.nombre,
-      modo:            a.modo,
-      valor:           a.valor,
-      monto_calculado: totales.ajustes_calculados[i] ?? 0,
-    })), [ajustes, totales])
-
-  const canPreview = !!empresaInfo && !!clienteInfo && lineas.length > 0
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
@@ -165,11 +103,6 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
           <h1 className="ven-nueva-title mt-1">Nueva factura</h1>
         </div>
         <div className="ven-nueva-actions">
-          {canPreview && (
-            <button type="button" className="btn btn-secondary" onClick={() => setPreviewOpen(true)}>
-              <Eye size={13} strokeWidth={2} /> Vista previa
-            </button>
-          )}
           <Link href="/portal/ventas" className="btn btn-secondary">Cancelar</Link>
           <button type="submit" form="form-nueva-factura" className="btn btn-primary" disabled={isPending || sinLetra}>
             {isPending
@@ -226,12 +159,15 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
               )}
             </div>
 
-            <div className="input-group">
-              <label>Moneda <span className="required">*</span></label>
-              <select className="input" value={moneda} onChange={e => setMoneda(e.target.value)} required>
-                {resumen.monedas.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
+            <MonedaDocumento
+              moneda={moneda}
+              monedas={resumen.monedas}
+              tasas={resumen.tasas}
+              productos={resumen.productos}
+              lineas={lineas}
+              ajustes={ajustes}
+              onChange={(m, l, a) => { setMoneda(m); setLineas(l); setAjustes(a) }}
+            />
 
             <div className="input-group">
               <label>Fecha emisión <span className="required">*</span></label>
@@ -271,40 +207,6 @@ export default function NuevaFacturaPage({ resumen, empresasFull }: Props) {
         />
 
       </form>
-
-      {/* ── Modal: vista previa ── */}
-      {previewOpen && canPreview && (
-        <div className="modal-backdrop open">
-          <div className="ven-preview-modal" role="dialog" aria-modal>
-            <div className="ven-preview-modal-header">
-              <span className="ven-preview-modal-title"><Eye size={13} strokeWidth={2} /> Vista previa del PDF</span>
-              <button className="modal-close" onClick={() => setPreviewOpen(false)} aria-label="Cerrar">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="ven-preview-modal-body">
-              <div className="ven-preview-scale">
-                <DocumentoPdf
-                  titulo="FACTURA"
-                  numero="FX20260001"
-                  fechaEmision={fecha_emision}
-                  fechaSecundaria={fecha_vencimiento ? { label: 'Vencimiento', valor: fecha_vencimiento } : undefined}
-                  condicionPago={condicion_pago}
-                  empresa={empresaInfo!}
-                  cliente={clienteInfo!}
-                  moneda={moneda}
-                  lineas={lineasPreview}
-                  ajustes={ajustesPreview}
-                  subtotal={totales.subtotal}
-                  total={totales.total}
-                  notas={notas || null}
-                  autoPrint={false}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

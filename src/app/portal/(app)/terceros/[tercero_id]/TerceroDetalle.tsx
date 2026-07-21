@@ -19,7 +19,8 @@ import { TerceroFormModal, ViaBadge } from '../_TerceroFormModal'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs, { type TabItem } from '@/components/Tabs'
-import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw } from 'lucide-react'
+import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw, Repeat } from 'lucide-react'
+import type { TerceroSuscripcion } from '@/lib/suscripciones'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -485,9 +486,76 @@ function TabHistorial({ historial }: { historial: TerceroHistorial }) {
   )
 }
 
+// ── Tab: Suscripciones (cliente) ──────────────────────────────────────────────
+
+const PERIODICIDAD_SUB_LABEL: Record<string, string> = {
+  MENSUAL: 'Mensual', TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
+}
+const ESTADO_SUB_BADGE: Record<string, string> = {
+  ACTIVA: 'badge-success', PAUSADA: 'badge-info', VENCIDA: 'badge-warning', CANCELADA: 'badge-neutral',
+}
+const ESTADO_SUB_LABEL: Record<string, string> = {
+  ACTIVA: 'Activa', PAUSADA: 'Pausada', VENCIDA: 'Vencida', CANCELADA: 'Cancelada',
+}
+
+function TabSuscripciones({ suscripciones }: { suscripciones: TerceroSuscripcion[] }) {
+  if (suscripciones.length === 0) {
+    return (
+      <div className="det-tab-body">
+        <div className="det-empty">
+          <div className="det-empty-icon"><Repeat size={40} strokeWidth={1} opacity={0.2} /></div>
+          <div className="det-empty-title">Sin suscripciones</div>
+          <div className="det-empty-text mb-5">Este cliente no tiene servicios contratados.</div>
+          <Link href="/portal/suscripciones" className="btn btn-secondary">Ir a Suscripciones</Link>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="det-tab-body">
+      <div className="card card-table">
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Servicio</th>
+                <th className="col-num">Precio</th>
+                <th>Periodicidad</th>
+                <th>Próximo cobro</th>
+                <th>Estado</th>
+                <th className="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {suscripciones.map(s => (
+                <tr key={s.suscripcion_id}>
+                  {/* Un acuerdo presta varios servicios: se listan todos, que es lo que
+                      el cliente verá en su factura. */}
+                  <td data-label="Servicio"><span className="table-empresa">{s.servicios.join(', ') || '—'}</span></td>
+                  <td data-label="Precio" className="col-num">
+                    {s.importe_cobro.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {s.moneda}
+                  </td>
+                  <td data-label="Periodicidad" className="text-sm-muted">{PERIODICIDAD_SUB_LABEL[s.periodicidad] ?? s.periodicidad}</td>
+                  <td data-label="Próximo cobro" className="text-sm-muted">{fmtFecha(s.fecha_proximo_cobro)}</td>
+                  <td data-label="Estado">
+                    <span className={`badge ${ESTADO_SUB_BADGE[s.estado_efectivo] ?? 'badge-neutral'}`}>
+                      {ESTADO_SUB_LABEL[s.estado_efectivo] ?? s.estado_efectivo}
+                    </span>
+                  </td>
+                  <td className="col-actions"><Link href="/portal/suscripciones" className="link-primary">Ver</Link></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-type TabId = 'datos' | 'productos' | 'cp' | 'historial'
+type TabId = 'datos' | 'productos' | 'suscripciones' | 'cp' | 'historial'
 
 export default function TerceroDetalle({ data: initialData }: { data: TerceroDetalleData }) {
   const [data,      setData]      = useState(initialData)
@@ -525,10 +593,12 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   // Un proveedor en un cliente solo-Contabilidad no ve Historial (su deuda está en
   // CxP), y un cliente en solo-Inventario tampoco (no hay ventas sin base).
   const verHistorial = (esCliente && data.tieneBase) || (esProveedor && data.tieneInventario)
+  const verSuscripciones = esCliente && data.tieneServicios   // suscripciones son de clientes
 
   const tabs: TabItem<TabId>[] = [
     { id: 'datos', label: 'Datos' },
     ...(verProductos ? [{ id: 'productos' as const, label: 'Productos', count: data.productos_count }] : []),
+    ...(verSuscripciones ? [{ id: 'suscripciones' as const, label: 'Suscripciones', count: data.suscripciones.length }] : []),
     ...(verCxP ? [{ id: 'cp' as const, label: 'Cuentas por pagar' }] : []),
     ...(verHistorial ? [{ id: 'historial' as const, label: 'Historial' }] : []),
   ]
@@ -598,6 +668,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
       {/* Contenido */}
       {tab === 'datos'     && <TabDatos    data={data} />}
       {tab === 'productos' && verProductos && <TabProductos productos={data.productos} />}
+      {tab === 'suscripciones' && verSuscripciones && <TabSuscripciones suscripciones={data.suscripciones} />}
       {tab === 'cp'        && verCxP && data.cuentasPorPagar && <TabCuentasPorPagar cxp={data.cuentasPorPagar} />}
       {tab === 'historial' && verHistorial && <TabHistorial historial={data.historial} />}
 

@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default async function TerceroDetallePage({ params }: Props) {
-  await requireAlgunModulo(['base', 'inventario'])
+  await requireAlgunModulo(['base', 'inventario', 'servicios'])
   const { tercero_id } = await params
   const data = await obtenerTerceroDetalle(tercero_id)
   if (!data) notFound()

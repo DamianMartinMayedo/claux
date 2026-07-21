@@ -7,7 +7,8 @@ import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type Estado
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
-import { tieneModulo } from '@/lib/modulos'
+import { tieneModulo, tieneAlgunModulo, MODULOS_CATALOGO } from '@/lib/modulos'
+import { mapaTasas, monedaValida } from '@/lib/tasas'
 import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
 import { type Cierre, type ReglasReserva } from './reservas'
 import { getPortalSession, puedeEditarModulo }  from './auth'
@@ -19,7 +20,21 @@ export interface Servicio {
   nombre:           string
   duracion_minutos: number
   precio:           number | null
+  /** Moneda del precio. NULL en fichas viejas sin precio (mig. 119). Nunca de una lista fija. */
+  moneda:           string | null
+  /** Vínculo BLANDO al catálogo (`products`). NULL = servicio suelto de Citas. */
+  producto_id:      string | null
   activo:           boolean
+}
+
+/** Servicio del catálogo comercial, para el llenado rápido. Vacío si no hay módulo. */
+export interface ServicioCatalogo {
+  producto_id: string
+  codigo:      string
+  nombre:      string
+  precios:     Record<string, number>
+  /** Ya existe un servicio de Citas vinculado a él: no se vuelve a ofrecer para importar. */
+  ya_importado: boolean
 }
 
 export interface RecursoHorario {
@@ -80,6 +95,15 @@ export interface CitasPageData {
   cierres:     Cierre[]         // festivos/cierres del negocio (compartidos con Reservas)
   reglas:      ReglasReserva    // antelación/ventana (compartidas con Reservas)
   tieneIa:     boolean          // addon asistente_ia contratado → toggle de IA del bot
+  monedas:     string[]         // las del cliente (tabla `monedas`), nunca una lista fija
+  tasas:       Record<string, number>   // "ORIGEN__DESTINO" → factor, para el atajo al cambiar de moneda
+  catalogo:    ServicioCatalogo[]       // llenado rápido; vacío si no hay módulo de catálogo
+  /**
+   * ¿Tiene módulo de catálogo? NO es `catalogo.length > 0`: con Servicios contratado y
+   * el catálogo aún vacío hay que ofrecer igualmente «crearlo también allí» — ese es
+   * justo el primero. Sin módulo no se pinta nada y Citas sigue funcionando sola.
+   */
+  catalogo_activo: boolean
 }
 
 function reglasDe(c: Record<string, unknown> | null | undefined): ReglasReserva {
@@ -143,6 +167,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
 
   const servicios: Servicio[] = ((srvRes.data ?? []) as Servicio[]).map(s => ({
     ...s, duracion_minutos: Number(s.duracion_minutos), precio: s.precio == null ? null : Number(s.precio),
+    moneda: s.moneda ?? null, producto_id: s.producto_id ?? null,
   }))
   const srvPorId = new Map(servicios.map(s => [s.servicio_id, s]))
 
@@ -197,9 +222,33 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     }))
   }
 
-  const { data: cierresData } = await db.from('reserva_cierres')
-    .select('cierre_id, fecha_desde, fecha_hasta, motivo')
-    .eq('client_id', cid).gte('fecha_hasta', hoy()).order('fecha_desde')
+  // Catálogo comercial (llenado rápido, mismo patrón que RRHH arriba): si el cliente
+  // tiene Servicios o Inventario, ofrecemos sus servicios de `products` para crear el de
+  // Citas sin teclear el nombre y el precio dos veces. **Citas no depende de esto**: sin
+  // módulo la lista viene vacía y todo se sigue creando a mano.
+  const catalogo_activo = tieneAlgunModulo(cliRes.data?.modulos_activos, MODULOS_CATALOGO)
+  let catalogo: ServicioCatalogo[] = []
+  if (catalogo_activo) {
+    const { data: prods } = await db.from('products')
+      .select('producto_id, codigo, nombre, precios')
+      .eq('client_id', cid).eq('tipo', 'SERVICIO').eq('estado', 'ACTIVO').order('nombre')
+    // Lo ya traído se marca, no se esconde: el importador enseña la lista entera con
+    // los importados en gris, que es como se ve de un vistazo qué falta por traer.
+    const yaLinked = new Set(servicios.map(s => s.producto_id).filter(Boolean) as string[])
+    catalogo = ((prods ?? []) as ServicioCatalogo[]).map(p => ({
+      producto_id: p.producto_id, codigo: p.codigo, nombre: p.nombre,
+      precios: (p.precios ?? {}) as Record<string, number>,
+      ya_importado: yaLinked.has(p.producto_id),
+    }))
+  }
+
+  const [{ data: cierresData }, { data: monedasData }] = await Promise.all([
+    db.from('reserva_cierres')
+      .select('cierre_id, fecha_desde, fecha_hasta, motivo')
+      .eq('client_id', cid).gte('fecha_hasta', hoy()).order('fecha_desde'),
+    db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
+  ])
+  const monedas = ((monedasData ?? []) as { codigo: string }[]).map(m => m.codigo)
 
   return {
     client_id:   cid,
@@ -214,12 +263,18 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     cierres:     (cierresData ?? []) as Cierre[],
     reglas:      reglasDe(cliRes.data as Record<string, unknown> | null),
     tieneIa:     tieneModulo(cliRes.data?.modulos_activos, 'asistente_ia'),
+    monedas,
+    tasas:       await mapaTasas(db, cid, monedas),
+    catalogo,
+    catalogo_activo,
   }
 }
 
 // ── Servicios (CRUD) ─────────────────────────────────────────────────────────
 
-export async function guardarServicio(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+export async function guardarServicio(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; aviso?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
@@ -228,6 +283,8 @@ export async function guardarServicio(formData: FormData): Promise<{ ok: boolean
   const nombre      = (formData.get('nombre')      as string)?.trim()
   const duracionRaw = parseInt(formData.get('duracion_minutos') as string, 10)
   const precioRaw   = (formData.get('precio') as string)?.trim()
+  const monedaRaw   = (formData.get('moneda') as string)?.trim() || null
+  const productoRaw = (formData.get('producto_id') as string)?.trim() || null
   const activo      = formData.get('activo') === 'true'
 
   if (!nombre) return { ok: false, error: 'El nombre del servicio es obligatorio.' }
@@ -237,21 +294,102 @@ export async function guardarServicio(formData: FormData): Promise<{ ok: boolean
 
   const db = createAdminClient()
 
+  // Un precio sin moneda es justo lo que rompía esto: la UI lo pintaba «$» y el bot se lo
+  // anunciaba al cliente final como dólares. Con precio hay que decir en qué moneda, y
+  // tiene que ser una del cliente (guardia de servidor, no confianza en el desplegable).
+  const moneda = precio == null ? null : monedaRaw
+  if (precio != null) {
+    if (!moneda) return { ok: false, error: 'Elige la moneda del precio.' }
+    if (!(await monedaValida(db, session.client_id, moneda))) {
+      return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
+    }
+  }
+
+  // Vínculo blando con el catálogo: se acepta solo si ese servicio existe y es del
+  // cliente. Si no, se guarda suelto — Citas funciona sin catálogo.
+  let producto_id: string | null = null
+  if (productoRaw) {
+    const { data: prod } = await db.from('products')
+      .select('producto_id').eq('client_id', session.client_id)
+      .eq('producto_id', productoRaw).eq('tipo', 'SERVICIO').maybeSingle()
+    producto_id = prod ? productoRaw : null
+  }
+
+  // Crear también la ficha del catálogo, si lo pidió la casilla. Es la respuesta al
+  // problema de tener el módulo Servicios y acabar con dos listas que se separan: en vez
+  // de prohibir crear aquí (Citas no puede depender de otro módulo), se crea EN LOS DOS
+  // y queda vinculado. El candado es el de Servicios, no el de Citas: escribir en
+  // `products` es escribir en el módulo del vecino, y la casilla de la UI no es control
+  // de acceso. Si no se puede, se guarda igual el servicio de Citas y se avisa.
+  let avisoCatalogo: string | undefined
+  if (!producto_id && (formData.get('crear_en_catalogo') as string) === '1') {
+    if (!(await puedeEditarModulo('servicios'))) {
+      avisoCatalogo = 'No se pudo añadir al catálogo (sin permiso en Servicios).'
+    } else {
+      const { data: srvs } = await db.from('products')
+        .select('producto_id, codigo, nombre')
+        .eq('client_id', session.client_id).eq('tipo', 'SERVICIO')
+
+      const existentes = (srvs ?? []) as { producto_id: string; codigo: string; nombre: string }[]
+
+      // Si ya hay uno con ese nombre, se VINCULA en vez de crear otro: el objetivo de la
+      // casilla es no llevar dos listas, y crear un «jjj» al lado del «jjj» que ya existe
+      // sería exactamente el problema que viene a resolver. La comparación es sin
+      // may/min y sin acentos, que es como el dueño ve que son «el mismo».
+      const igual = (a: string, b: string) =>
+        a.localeCompare(b, 'es', { sensitivity: 'base' }) === 0
+      const yaExiste = existentes.find(p => igual(p.nombre.trim(), nombre))
+
+      if (yaExiste) {
+        producto_id = yaExiste.producto_id
+      } else {
+        const n = existentes.reduce((max, p) => {
+          const m = /^SRV-(\d+)$/.exec(p.codigo)
+          return m ? Math.max(max, parseInt(m[1], 10)) : max
+        }, 0) + 1
+        const nuevoId = `SRV-${corto()}`
+        const { error } = await db.from('products').insert({
+          producto_id:  nuevoId,
+          client_id:    session.client_id,
+          codigo:       `SRV-${String(n).padStart(4, '0')}`,
+          nombre,
+          tipo:         'SERVICIO',
+          unidad:       'servicio',
+          estado:       'ACTIVO',
+          // Un precio por moneda, como en el catálogo: aquí solo hay uno y es el suyo.
+          precios:      precio != null && moneda ? { [moneda]: precio } : {},
+          costos:       {},
+          stock_actual: 0,
+          stock_minimo: 0,
+          created_at:   new Date().toISOString(),
+          updated_at:   new Date().toISOString(),
+        })
+        if (error) {
+          console.error('[citas] alta en catálogo:', error)
+          avisoCatalogo = 'El servicio se guardó, pero no se pudo añadir al catálogo.'
+        } else {
+          producto_id = nuevoId
+        }
+      }
+    }
+  }
+
   if (!servicio_id) {
     const { error } = await db.from('servicios').insert({
       servicio_id: generarServicioId(), client_id: session.client_id,
-      nombre, duracion_minutos: duracion, precio, activo,
+      nombre, duracion_minutos: duracion, precio, moneda, producto_id, activo,
     })
     if (error) return { ok: false, error: error.message }
   } else {
     const { error } = await db.from('servicios')
-      .update({ nombre, duracion_minutos: duracion, precio, activo, updated_at: new Date().toISOString() })
+      .update({ nombre, duracion_minutos: duracion, precio, moneda, producto_id, activo, updated_at: new Date().toISOString() })
       .eq('servicio_id', servicio_id).eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
   }
 
   revalidatePath('/portal/citas')
-  return { ok: true }
+  if (producto_id) revalidatePath('/portal/servicios')
+  return { ok: true, aviso: avisoCatalogo }
 }
 
 export async function eliminarServicio(servicio_id: string): Promise<{ ok: boolean; error?: string }> {
@@ -399,6 +537,78 @@ export async function importarPersonalRRHH(): Promise<{ ok: boolean; error?: str
   return { ok: true, importados: nuevos.length }
 }
 
+// ── Importar servicios del catálogo (llenado rápido; módulo independiente) ──────
+
+/** Lo que se trae de cada servicio elegido. La duración la pone el dueño, no el sistema. */
+export interface ImportarServicioItem {
+  producto_id:      string
+  duracion_minutos: number
+}
+
+/**
+ * Trae al catálogo de Citas los servicios elegidos del catálogo comercial.
+ *
+ * Se importa **lo que se marca**, no todo: un negocio puede facturar veinte servicios y
+ * agendar solo tres. Y la **duración se pide** — `products` no la tiene, así que
+ * inventarle 30 minutos a todos era agendar mal en silencio (una sesión de 90 min
+ * ocupando media hora solapa al profesional).
+ */
+export async function importarServiciosCatalogo(
+  items: ImportarServicioItem[],
+): Promise<{ ok: boolean; error?: string; importados?: number }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!Array.isArray(items) || items.length === 0) return { ok: true, importados: 0 }
+
+  const db = createAdminClient()
+
+  // Gating: solo si el negocio tiene contratado algún módulo de catálogo.
+  const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
+  if (!tieneAlgunModulo(cli?.modulos_activos, MODULOS_CATALOGO))
+    return { ok: false, error: 'No tienes un catálogo de servicios contratado.' }
+
+  const pedidos = new Map(items.map(i => [i.producto_id, i.duracion_minutos]))
+
+  // Los servicios pedidos que de verdad son suyos, y los que ya están traídos.
+  const [{ data: prods }, { data: yaHay }] = await Promise.all([
+    db.from('products').select('producto_id, nombre, precios')
+      .eq('client_id', session.client_id).eq('tipo', 'SERVICIO').eq('estado', 'ACTIVO')
+      .in('producto_id', [...pedidos.keys()]),
+    db.from('servicios').select('producto_id')
+      .eq('client_id', session.client_id).not('producto_id', 'is', null),
+  ])
+  const yaLinked = new Set(((yaHay ?? []) as { producto_id: string }[]).map(s => s.producto_id))
+
+  // Moneda de las tarifas: se coge la del catálogo tal cual (la primera con importe).
+  // No se convierte nada — el precio del catálogo es un dato, una conversión sería un
+  // invento, y aquí el precio es opcional.
+  const nuevos = ((prods ?? []) as { producto_id: string; nombre: string; precios: Record<string, number> | null }[])
+    .filter(p => !yaLinked.has(p.producto_id))
+    .map(p => {
+      const tarifa = Object.entries(p.precios ?? {}).find(([, v]) => v != null && Number(v) > 0)
+      const dur    = Number(pedidos.get(p.producto_id))
+      return {
+        servicio_id:      generarServicioId(),
+        client_id:        session.client_id,
+        nombre:           p.nombre,
+        duracion_minutos: !isFinite(dur) || dur < 5 ? 30 : Math.round(dur),
+        precio:           tarifa ? Number(tarifa[1]) : null,
+        moneda:           tarifa ? tarifa[0] : null,
+        producto_id:      p.producto_id,
+        activo:           true,
+      }
+    })
+
+  if (nuevos.length === 0) return { ok: true, importados: 0 }
+
+  const { error } = await db.from('servicios').insert(nuevos)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/citas')
+  return { ok: true, importados: nuevos.length }
+}
+
 // ── Crear cita (manual, desde el panel) ────────────────────────────────────────
 
 export async function crearCitaManual(formData: FormData): Promise<{ ok: boolean; error?: string }> {
@@ -515,6 +725,7 @@ export interface ServicioPublico {
   nombre: string
   duracion_minutos: number
   precio: number | null
+  moneda: string | null   // sin ella, un precio en CUP se lee como dólares
 }
 export interface RecursoPublico {
   recurso_id: string
@@ -555,7 +766,7 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
   }
 
   const [srvRes, recRes, rsRes] = await Promise.all([
-    db.from('servicios').select('servicio_id, nombre, duracion_minutos, precio').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
+    db.from('servicios').select('servicio_id, nombre, duracion_minutos, precio, moneda').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
     db.from('recursos').select('recurso_id, nombre').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
     db.from('recurso_servicios').select('recurso_id, servicio_id'),
   ])

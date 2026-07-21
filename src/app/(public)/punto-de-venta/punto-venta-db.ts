@@ -10,6 +10,8 @@ export interface CajaConfig {
 }
 export interface Producto {
   producto_id: string; codigo: string; nombre: string; precios: Record<string, number>; unidad?: string
+  /** PRODUCTO | SERVICIO. Sin él (semilla vieja) se asume físico, que es lo que bajaba antes. */
+  tipo?: string
 }
 export interface LocalLinea {
   producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number

@@ -247,9 +247,9 @@ export function EmpleadoModal({
               </div>
 
               {cambiaMoneda && (
-                <div className="rrhh-moneda-cambio">
+                <div className="moneda-cambio">
                   {salarioOrigen > 0 && (
-                    <div className="rrhh-moneda-nota">
+                    <div className="moneda-cambio-nota">
                       <Info size={14} strokeWidth={2} />
                       <span>
                         Antes cobraba {formatMonto(salarioOrigen)} {monedaOrigen}. Escribe su salario en {moneda}
@@ -259,7 +259,7 @@ export function EmpleadoModal({
                     </div>
                   )}
                   {nominasEmpleado.length > 0 && (
-                    <div className="rrhh-moneda-nota">
+                    <div className="moneda-cambio-nota">
                       <Info size={14} strokeWidth={2} />
                       <span>
                         Aparece en {nominasEmpleado.length} nómina{nominasEmpleado.length !== 1 ? 's' : ''} en {monedaOrigen}:

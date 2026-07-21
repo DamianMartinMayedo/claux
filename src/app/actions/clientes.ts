@@ -123,7 +123,8 @@ export async function crearCliente(formData: FormData) {
   }
 
   // Módulos seleccionados (la contabilidad 'base' es opcional, como cualquier
-  // módulo) y precio mensual resultante.
+  // módulo) y precio mensual resultante. Se normalizan igual que en el toggle:
+  // el alta también compone un conjunto y lo convierte en la primera cuota.
   const modulos_activos = formData.getAll('modulos') as string[]
   const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
 
@@ -569,6 +570,11 @@ export async function setModulosCliente(formData: FormData) {
 
   // Los módulos activos vienen como checkboxes: múltiples values con name="modulos".
   // La contabilidad 'base' es opcional, como cualquier módulo (no se fuerza).
+  // Se quita lo que otra pieza ya incluye (Inventario absorbe a Servicios) antes de
+  // calcular el precio, o se cobraría dos veces la misma página. En silencio y no
+  // con un error: el admin marcó lo que quería y un error solo le obligaría a
+  // desmarcar a mano. El camino inverso (bajar de Inventario a Servicios) no borra
+  // NADA: los físicos, almacenes y movimientos se quedan y dejan de mostrarse.
   const modulos_activos = formData.getAll('modulos') as string[]
 
   // precio = Σ módulos activos según tarifa (siempre desde el catálogo)

@@ -9,7 +9,7 @@ import {
   marcarDisponible, marcarDisponibleEnLote, eliminarItemsEnLote,
   guardarSlug, guardarMonedaCatalogo, importarDesdeProductos,
   type CatalogoData, type CatalogoItem, type CatalogoCategoria,
-  type ResultadoLoteCatalogo,
+  type ResultadoLoteCatalogo, type TipoImportacion,
 } from '@/app/actions/portal/catalogo'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -528,6 +528,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
 function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () => void }) {
   const [isPending, startTransition] = useTransition()
   const [isImporting, startImport] = useTransition()
+  const [tipoImport, setTipoImport] = useState<TipoImportacion>('AMBOS')
   const [isSavingMoneda, startMoneda] = useTransition()
   const [slugInput, setSlugInput] = useState(data.slug ?? '')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
@@ -581,9 +582,9 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
 
   function importar() {
     startImport(async () => {
-      const r = await importarDesdeProductos()
+      const r = await importarDesdeProductos(tipoImport)
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
-      toastSuccess(r.creados ? `${r.creados} producto(s) importado(s).` : 'No hay productos nuevos que importar.')
+      toastSuccess(r.creados ? `${r.creados} ítem(s) importado(s).` : 'No hay nada nuevo que importar.')
       onSaved()
     })
   }
@@ -664,13 +665,29 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
         </div>
       )}
 
-      {data.tieneInventario && (
+      {data.puedeImportar && (
         <div className="card">
-          <div className="card-header"><h2 className="card-title">Importar desde Inventario</h2></div>
-          <p className="input-hint">Trae tus productos activos de Inventario como productos del catálogo (no duplica los ya vinculados).</p>
+          <div className="card-header"><h2 className="card-title">Importar de tu lista</h2></div>
+          <p className="input-hint">
+            Trae lo que ya tienes dado de alta como ítems del catálogo (no duplica lo ya vinculado).
+          </p>
+          {/* Elegir qué se trae: una peluquería querrá publicar sus tratamientos y no
+              los tintes que gasta por dentro; una tienda, justo lo contrario. Sin
+              Inventario no hay físicos que separar, así que el selector no aplica. */}
+          {data.tieneInventario && (
+            <div className="input-group">
+              <label htmlFor="cat-tipo-import">Qué importar</label>
+              <select className="input" id="cat-tipo-import" value={tipoImport}
+                onChange={e => setTipoImport(e.target.value as TipoImportacion)}>
+                <option value="AMBOS">Servicios y productos</option>
+                <option value="SERVICIO">Solo servicios</option>
+                <option value="PRODUCTO">Solo productos físicos</option>
+              </select>
+            </div>
+          )}
           <button type="button" className="btn btn-secondary" onClick={importar} disabled={isImporting}>
             {isImporting ? <Loader2 size={16} strokeWidth={2} className="img-upload-spin" /> : <Package size={16} strokeWidth={2} />}
-            Importar productos
+            Importar
           </button>
         </div>
       )}

@@ -67,6 +67,8 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
   const { producto, categoria, proveedor, stock_por_almacen } = data
   const esServicio = producto.tipo === 'SERVICIO'
   const stockBajo  = producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
+  // Sin Inventario no hay existencias que enseñar, ni tipo que distinguir.
+  const inv        = data.tieneInventario
 
   return (
     <div className="det-tab-body">
@@ -76,17 +78,17 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
         <div className="det-field-grid">
           <Campo label="Nombre"      value={producto.nombre} />
           <Campo label="Código"      value={<code className="text-mono">{producto.codigo}</code>} />
-          <Campo label="Tipo"        value={
+          {inv && <Campo label="Tipo" value={
             <span className={`badge ${esServicio ? 'badge-purple' : 'badge-info'}`}>
               {esServicio ? 'Servicio' : 'Producto'}
             </span>
-          } />
+          } />}
           <Campo label="Estado"      value={
             <span className={`badge ${producto.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
               {producto.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
             </span>
           } />
-          <Campo label="Unidad"      value={producto.unidad} />
+          {!esServicio && <Campo label="Unidad" value={producto.unidad} />}
           <Campo label="Categoría"   value={categoria?.nombre} />
           <Campo label="Proveedor"   value={proveedor ? (
             <Link href={`/portal/terceros/${proveedor.tercero_id}`} className="link-primary">
@@ -94,6 +96,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
             </Link>
           ) : null} />
           <Campo label="Cód. proveedor" value={producto.codigo_proveedor} />
+          {esServicio && <Campo label="Suscribible" value={producto.es_suscribible ? 'Sí' : 'No'} />}
         </div>
         {producto.descripcion && (
           <div className="mt-5">
@@ -103,8 +106,8 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
         )}
       </div>
 
-      {/* Stock (solo productos) */}
-      {!esServicio && (
+      {/* Stock (solo productos, y solo con Inventario) */}
+      {inv && !esServicio && (
         <div className="det-card">
           <div className="det-section-title">Inventario</div>
           <div className="det-field-grid-sm">
@@ -387,11 +390,16 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
   const { producto } = data
   const esServicio   = producto.tipo === 'SERVICIO'
+  const inv          = data.tieneInventario
+  const basePath     = esServicio ? '/portal/servicios' : '/portal/productos'
+  const tituloLista  = esServicio ? `${data.etiquetaServicio}s` : 'Productos'
 
   const tabs: TabItem<TabId>[] = [
     { id: 'info',    label: 'Información' },
     { id: 'precios', label: 'Precios y costos' },
-    ...(!esServicio ? [{ id: 'movimientos' as const, label: 'Movimientos' }] : []),
+    // Movimientos exige Inventario Y que sea un físico: sin el módulo no hay ledger
+    // que enseñar, y un servicio no mueve existencias ni teniéndolo.
+    ...(inv && !esServicio ? [{ id: 'movimientos' as const, label: 'Movimientos' }] : []),
     { id: 'historial', label: 'Historial de precios' },
   ]
 
@@ -421,7 +429,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
       {/* Breadcrumb */}
       <div className="breadcrumb">
-        <Link href="/portal/productos">Productos</Link>
+        <Link href={basePath}>{tituloLista}</Link>
         <span>›</span>
         <span className="breadcrumb-current">{producto.nombre}</span>
       </div>
@@ -431,9 +439,11 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
         <div>
           <div className="det-title-group">
             <h1 className="det-page-title">{producto.nombre}</h1>
-            <span className={`badge ${esServicio ? 'badge-purple' : 'badge-info'}`}>
-              {esServicio ? 'Servicio' : 'Producto'}
-            </span>
+            {inv && (
+              <span className={`badge ${esServicio ? 'badge-purple' : 'badge-info'}`}>
+                {esServicio ? 'Servicio' : 'Producto'}
+              </span>
+            )}
             <span className={`badge ${producto.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
               {producto.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
             </span>
@@ -448,7 +458,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
         {/* Acciones */}
         <div className="det-actions">
-          {!esServicio && producto.estado === 'ACTIVO' && (
+          {inv && !esServicio && producto.estado === 'ACTIVO' && (
             <button onClick={() => setShowStock(true)} className="btn btn-primary">
               <Layers size={14} strokeWidth={2} /> Ajustar stock
             </button>
@@ -503,6 +513,8 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
           proveedores={data.proveedores}
           monedas={data.monedas}
           hayAlmacenes={data.almacenes.length > 0}
+          modo={producto.tipo}
+          etiquetaServicio={data.etiquetaServicio}
           onClose={() => setShowEdit(false)}
           onSaved={() => {
             setShowEdit(false)

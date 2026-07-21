@@ -311,6 +311,16 @@ export default function PuntoVentaApp() {
   }
 
   const prodsFiltrados = productos.filter(p => { const q = search.toLowerCase().trim(); return !q || `${p.nombre} ${p.codigo}`.toLowerCase().includes(q) }).slice(0, 80)
+
+  // Mostrador y servicios se separan SOLO si hay de los dos: un corte de pelo perdido
+  // entre veinte champús no se encuentra. Si la caja baja de un solo tipo (lo normal),
+  // se pinta la rejilla de siempre, sin encabezados que no separan nada.
+  const esServicio = (p: Producto) => p.tipo === 'SERVICIO'
+  const servicios  = prodsFiltrados.filter(esServicio)
+  const fisicos    = prodsFiltrados.filter(p => !esServicio(p))
+  const gruposProd = servicios.length > 0 && fisicos.length > 0
+    ? [{ titulo: 'Servicios', items: servicios }, { titulo: 'Productos', items: fisicos }]
+    : [{ titulo: '', items: prodsFiltrados }]
   const totalPend = pend.tickets + pend.cierres
   const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
   const enApp = standalone || installDismissed
@@ -340,22 +350,27 @@ export default function PuntoVentaApp() {
   const pos = (
     <div className="ca-pos">
       <section className="ca-productos">
-        <input className="ca-search" placeholder="Buscar producto…" value={search} onChange={e => setSearch(e.target.value)} />
-        <div className="ca-prod-grid">
-          {prodsFiltrados.map(p => {
-            const miss = sinPrecioProd(p)
-            return (
-              <button key={p.producto_id} className="ca-prod" onClick={() => addProducto(p)} disabled={miss}>
-                <span className="ca-prod-info">
-                  <span className="ca-prod-name">{p.nombre}</span>
-                  {p.codigo ? <span className="ca-prod-code">{p.codigo}</span> : null}
-                </span>
-                <span className={`ca-prod-price${miss ? ' miss' : ''}`}>{miss ? `Sin precio en ${moneda}` : `${simbolo(moneda)} ${money(precioDe(p))}`}</span>
-              </button>
-            )
-          })}
-          {productos.length === 0 && <p className="ca-empty">Sin productos cargados. Usa «Artículo libre» para teclear la venta.</p>}
-        </div>
+        <input className="ca-search" placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)} />
+        {gruposProd.map(g => (
+          <div key={g.titulo || 'todo'}>
+            {g.titulo && <p className="ca-prod-grupo">{g.titulo}</p>}
+            <div className="ca-prod-grid">
+              {g.items.map(p => {
+                const miss = sinPrecioProd(p)
+                return (
+                  <button key={p.producto_id} className="ca-prod" onClick={() => addProducto(p)} disabled={miss}>
+                    <span className="ca-prod-info">
+                      <span className="ca-prod-name">{p.nombre}</span>
+                      {p.codigo ? <span className="ca-prod-code">{p.codigo}</span> : null}
+                    </span>
+                    <span className={`ca-prod-price${miss ? ' miss' : ''}`}>{miss ? `Sin precio en ${moneda}` : `${simbolo(moneda)} ${money(precioDe(p))}`}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+        {productos.length === 0 && <p className="ca-empty">Sin nada cargado. Usa «Artículo libre» para teclear la venta.</p>}
         {libreOpen ? (
           <div className="ca-field">
             <input className="ca-input" placeholder="Nombre del artículo" value={libreNom} onChange={e => setLibreNom(e.target.value)} />

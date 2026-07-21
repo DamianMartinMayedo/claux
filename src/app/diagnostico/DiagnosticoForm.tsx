@@ -54,6 +54,11 @@ function adaptarModulo(m: ModuloPublico, et: EtiquetasSector): { nombre: string;
         nombre: et.reservas,
         desc: `Agenda por ${et.recurso.toLowerCase()}: ${et.servicio.toLowerCase()} con duración, reserva pública y bot.`,
       }
+    case 'servicios':
+      return {
+        nombre: `${et.servicio}s`,
+        desc: `Tus ${et.servicio.toLowerCase()}s con su precio, listos para ponerlos en una oferta o factura sin reescribirlos cada vez.`,
+      }
     default:
       return { nombre: m.nombre, desc: m.descripcion }
   }

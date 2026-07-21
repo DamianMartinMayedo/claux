@@ -3,7 +3,6 @@ import {
   obtenerFacturaDetalle,
   obtenerVentasResumen,
 } from '@/app/actions/portal/ventas'
-import { obtenerEmpresas }      from '@/app/actions/portal/empresas'
 import { requireModulo }        from '@/app/actions/portal/auth'
 import EditarFacturaPage         from './EditarFacturaPage'
 
@@ -16,11 +15,10 @@ interface PageProps {
 export default async function Page({ params }: PageProps) {
   await requireModulo('base')
   const { factura_id } = await params
-  const [detalle, resumen, empresasFull] = await Promise.all([
+  const [detalle, resumen] = await Promise.all([
     obtenerFacturaDetalle(factura_id),
     obtenerVentasResumen(),
-    obtenerEmpresas(),
   ])
   if (!detalle || !resumen) notFound()
-  return <EditarFacturaPage data={detalle} resumen={resumen} empresasFull={empresasFull} />
+  return <EditarFacturaPage data={detalle} resumen={resumen} />
 }

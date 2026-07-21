@@ -117,7 +117,7 @@ export default function ModulosCard({
                   <label key={m.clave} className="mod-row">
                     <span className="mod-row-main">
                       <span className="mod-row-name">{m.nombre}</span>
-                      {m.descripcion && <span className="mod-row-desc">{m.descripcion}</span>}
+                      <span className="mod-row-desc">{m.descripcion}</span>
                     </span>
                     <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
                       {precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}

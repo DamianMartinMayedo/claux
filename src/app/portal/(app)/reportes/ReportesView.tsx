@@ -102,6 +102,10 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
         cur.fila('Gastos', formatMonto(r.total_gastos), { bold: true })
         for (const g of r.gastos_por_categoria) cur.fila(g.categoria, formatMonto(g.monto), { indent: true })
         cur.filaTotal('Resultado neto', formatMonto(r.neto))
+        if (r.costo_directo > 0) {
+          cur.fila('Coste de lo vendido (informativo, no resta del neto)', formatMonto(r.costo_directo), { color: GRAY })
+          cur.fila('Margen bruto (informativo)', formatMonto(r.margen_bruto), { color: GRAY })
+        }
       }
 
       // Flujo de caja
@@ -206,6 +210,10 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
       for (const g of r.gastos_por_categoria) rows.push(`${r.moneda};Gasto: ${g.categoria};${num(g.monto)}`)
       rows.push(`${r.moneda};Total gastos;${num(r.total_gastos)}`)
       rows.push(`${r.moneda};Resultado neto;${num(r.neto)}`)
+      if (r.costo_directo > 0) {
+        rows.push(`${r.moneda};Coste de lo vendido (informativo);${num(r.costo_directo)}`)
+        rows.push(`${r.moneda};Margen bruto (informativo);${num(r.margen_bruto)}`)
+      }
     }
     rows.push('')
     rows.push('FLUJO DE CAJA')
@@ -385,6 +393,19 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
                           ))
                         })()}
                   </div>
+
+                  {r.costo_directo > 0 && (
+                    <div className="rep-block">
+                      <div className="rep-line rep-line-head"><span>Margen bruto</span><strong>{formatMonto(r.margen_bruto)}</strong></div>
+                      <div className="rep-line rep-sub"><span>Ventas</span><span>{formatMonto(r.ventas)}</span></div>
+                      <div className="rep-line rep-sub"><span>Coste de lo vendido</span><span>−{formatMonto(r.costo_directo)}</span></div>
+                      <p className="rep-info-nota">
+                        Informativo: <strong>no se resta del resultado neto</strong>. Lo que compras a un
+                        proveedor ya está arriba en Gastos.
+                        {r.costo_sin_proveedor > 0 && ` De este coste, ${formatMonto(r.costo_sin_proveedor)} no tiene proveedor detrás y no ha generado ninguna deuda: si es trabajo de tu gente, su sueldo ya cuenta en Salarios.`}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -9,6 +9,7 @@ import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
+import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
 
 // Dashboard del portal — ADAPTABLE a los módulos contratados. Solo se calculan
@@ -49,6 +50,11 @@ export interface InventarioResumen {
   bajoMinimo: { nombre: string; stock: number; minimo: number; unidad: string }[]
 }
 export interface RrhhResumen { activos: number; altasMes: number }
+export interface ServiciosResumen {
+  activas: number
+  ingresoRecurrente: { moneda: string; total: number }[]   // Σ precio_pactado normalizado a mensual, por moneda
+  proximasRenovaciones: number                              // suscripciones cuyo próximo cobro cae en 30 días
+}
 
 export interface PuntoVentaResumen {
   ventasHoy:      { moneda: string; total: number }[]
@@ -93,6 +99,7 @@ export interface DashboardData {
   inventario?: InventarioResumen
   puntoVenta?: PuntoVentaResumen
   rrhh?: RrhhResumen
+  servicios?: ServiciosResumen
   reservas?: AgendaResumen
   citas?: AgendaResumen
   accesos: AccesoRapido[]
@@ -417,6 +424,60 @@ async function resumenOnboarding(
 }
 */
 
+async function resumenServicios(db: Db, cid: string, hoy: string): Promise<ServiciosResumen> {
+  const [{ data }, { data: lins }] = await Promise.all([
+    db.from('suscripciones')
+      .select('suscripcion_id, moneda, periodicidad, fecha_proximo_cobro, estado, fecha_fin, renovacion_automatica')
+      .eq('client_id', cid).eq('estado', 'ACTIVA'),
+    db.from('suscripcion_lineas').select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor').eq('client_id', cid),
+  ])
+
+  // Las líneas de cada acuerdo (mig. 124/125): el cobro suma el de cada servicio con su
+  // propio descuento.
+  const lineasPorSub = new Map<string, { precio_mensual: number; descuento_modo: DescuentoModo; descuento_valor: number }[]>()
+  for (const l of (lins ?? []) as { suscripcion_id: string; precio_mensual: number | string; descuento_modo: string; descuento_valor: number | string }[]) {
+    const arr = lineasPorSub.get(l.suscripcion_id) ?? []
+    arr.push({
+      precio_mensual:  Number(l.precio_mensual) || 0,
+      descuento_modo:  (l.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
+      descuento_valor: Number(l.descuento_valor) || 0,
+    })
+    lineasPorSub.set(l.suscripcion_id, arr)
+  }
+
+  // «Vencida» no se guarda, se DERIVA (decisión 12): una de fin fijo que ya pasó sigue
+  // en estado ACTIVA en la tabla. Sin derivar aquí, el listado la daba por vencida y el
+  // widget la seguía sumando al ingreso recurrente — el mismo negocio con dos cifras
+  // distintas, y la del dashboard inflada con dinero que ya no entra.
+  const filas = ((data ?? []) as {
+    suscripcion_id: string
+    moneda: string; periodicidad: string
+    fecha_proximo_cobro: string; estado: string; fecha_fin: string | null; renovacion_automatica: boolean
+  }[]).filter(f => estadoEfectivo(
+    { estado: f.estado as EstadoSub, fecha_fin: f.fecha_fin, renovacion_automatica: f.renovacion_automatica }, hoy,
+  ) === 'ACTIVA')
+
+  const [y, m, d] = hoy.split('-').map(Number)
+  const en30 = new Date(Date.UTC(y, m - 1, d + 30)).toISOString().split('T')[0]
+
+  const porMoneda = new Map<string, number>()
+  let proximas = 0
+  for (const f of filas) {
+    // Con el descuento aplicado: un anual rebajado un 15 % no aporta el precio de
+    // catálogo al ingreso recurrente, aporta lo que de verdad se cobra.
+    const { equivalenteMensual } = calcularCobroAcuerdo(
+      lineasPorSub.get(f.suscripcion_id) ?? [], f.periodicidad as PeriodicidadSub,
+    )
+    porMoneda.set(f.moneda, (porMoneda.get(f.moneda) ?? 0) + equivalenteMensual)
+    if (f.fecha_proximo_cobro && f.fecha_proximo_cobro <= en30) proximas++
+  }
+  return {
+    activas: filas.length,
+    ingresoRecurrente: [...porMoneda.entries()].map(([moneda, total]) => ({ moneda, total: Math.round(total * 100) / 100 })),
+    proximasRenovaciones: proximas,
+  }
+}
+
 // ── Loader principal ─────────────────────────────────────────────────────────────
 
 export async function obtenerDashboard(): Promise<DashboardData | null> {
@@ -452,13 +513,14 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, inventario, puntoVenta, rrhh, reservas, citas, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, inventario, puntoVenta, rrhh, reservas, citas, servicios, etiquetas, descuentoRaw] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
     puedeVer('caja')           ? resumenPuntoVenta(db, cid, hoy, idsFiltro)   : Promise.resolve(undefined),
     puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
     puedeVer('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
+    puedeVer('servicios')      ? resumenServicios(db, cid, hoy)               : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
   ])
@@ -507,6 +569,6 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
     tieneIa: puedeVer('asistente_ia'),
-    contabilidad, inventario, puntoVenta, rrhh, reservas, citas, accesos,
+    contabilidad, inventario, puntoVenta, rrhh, servicios, reservas, citas, accesos,
   }
 }

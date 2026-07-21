@@ -9,7 +9,7 @@ import {
   LayoutDashboard, ShoppingCart, TrendingDown, ArrowUpRight, ArrowDownLeft,
   Wallet, FileText, Users, DollarSign, Package, Warehouse, ShoppingBag,
   Boxes, UserCircle, Building2, User, UsersRound, CreditCard, HelpCircle,
-  QrCode, Calendar, Printer, Sparkles, Circle, ChevronDown, LogOut,
+  QrCode, Calendar, Printer, Sparkles, Handshake, Repeat, Circle, ChevronDown, LogOut,
   CalendarClock, Banknote, BarChart3, CalendarDays, UtensilsCrossed,
   Store, ReceiptText, Lock, RefreshCw, Presentation, Contact,
 } from 'lucide-react'
@@ -115,9 +115,11 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
   const navRutas: string[] = ['/portal/dashboard']
   for (const f of funcionalidades) if (modulosVisibles.includes(f.clave)) for (const p of ensurePages(f.paginas)) navRutas.push(p.ruta)
   for (const m of modulos)         if (modulosVisibles.includes(m.clave)) for (const p of ensurePages(m.paginas)) navRutas.push(p.ruta)
-  // Cliente solo-Inventario: «Clientes y proveedores» se inyecta en Inventario
+  // «Clientes y proveedores» se inyecta en el grupo anfitrión cuando no hay base
   // (abajo), así que su ruta debe entrar en navRutas para que se resalte activa.
-  if (modulosVisibles.includes('inventario') && !modulosVisibles.includes('base')) navRutas.push('/portal/terceros')
+  if (!modulosVisibles.includes('base') &&
+      (modulosVisibles.includes('inventario') || modulosVisibles.includes('servicios')))
+    navRutas.push('/portal/terceros')
   const activeRuta = navRutas
     .filter(r => pathname === r || pathname.startsWith(r + '/'))
     .reduce<string | null>((best, r) => (best === null || r.length > best.length ? r : best), null)
@@ -174,7 +176,7 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
           <span className="flex-1">Dashboard</span>
         </Link>
 
-        {/* Funcionalidades — standalone, solo visibles si contratadas */}
+        {/* Funcionalidades — standalone, solo visibles si contratadas. */}
         {funcionalidades
           .filter(f => modulosVisibles.includes(f.clave))
           .map(f => {
@@ -184,23 +186,28 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
 
         {/* Módulos (incluida Contabilidad) — grupos colapsables; solo los
             contratados, sin candados.
-            «Clientes y proveedores» vive en Contabilidad, pero Inventario también
-            la necesita (proveedores de compras/productos). Regla: una sola entrada,
-            prioridad Contabilidad › Inventario. Si el cliente NO tiene Contabilidad,
-            se inyecta en el grupo de Inventario; con Contabilidad ya sale ahí, así
-            que nunca se duplica. Un cliente CON base no entra en el `if`: cero cambio. */}
-        {modulos
-          .filter(m => modulosVisibles.includes(m.clave))
-          .map(m => {
-            const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
-            const tercerosCompartida = ensurePages(modulos.find(x => x.clave === 'base')?.paginas)
-              .find(p => p.ruta === '/portal/terceros')
-            const conCompartida =
-              m.clave === 'inventario' && tercerosCompartida && !modulosVisibles.includes('base')
-                ? [...pages, tercerosCompartida]
-                : pages
-            return renderCollapsibleGroup(m.clave, m.nombre, conCompartida)
-          })}
+            «Clientes y proveedores» (/portal/terceros) es una ruta COMPARTIDA por
+            base, Inventario y Servicios: se pinta UNA sola vez, en el grupo del primer
+            módulo contratado de su lista de prioridad. Vive en las paginas de base; si
+            base no está, se inyecta en el grupo anfitrión (Inventario › Servicios). */}
+        {(() => {
+          const tercerosCompartida = ensurePages(modulos.find(x => x.clave === 'base')?.paginas)
+            .find(p => p.ruta === '/portal/terceros')
+          const anfitrionTerceros = ['base', 'inventario', 'servicios']
+            .find(c => modulosVisibles.includes(c))
+          return modulos
+            .filter(m => modulosVisibles.includes(m.clave))
+            .map(m => {
+              const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
+              // base ya trae terceros en sus paginas; si el anfitrión es otro módulo,
+              // se la inyectamos solo a ese, para no duplicarla.
+              const conCompartida =
+                tercerosCompartida && anfitrionTerceros === m.clave && m.clave !== 'base'
+                  ? [...pages, tercerosCompartida]
+                  : pages
+              return renderCollapsibleGroup(m.clave, m.nombre, conCompartida)
+            })
+        })()}
       </nav>
 
       <div className="sidebar-footer-nav">
@@ -233,6 +240,8 @@ const ICON: Record<string, React.ReactNode> = {
   '/portal/almacenes':   <Warehouse size={18} strokeWidth={2} />,
   '/portal/compras':     <ShoppingBag size={18} strokeWidth={2} />,
   '/portal/inventario':  <Boxes size={18} strokeWidth={2} />,
+  '/portal/servicios':   <Handshake size={18} strokeWidth={2} />,
+  '/portal/suscripciones': <Repeat size={18} strokeWidth={2} />,
   '/portal/rrhh':          <UserCircle size={18} strokeWidth={2} />,
   '/portal/turnos':        <CalendarClock size={18} strokeWidth={2} />,
   '/portal/nomina':        <Banknote size={18} strokeWidth={2} />,

@@ -6,6 +6,7 @@ import { getPortalSession, puedeEditarModulo } from './auth'
 import { optimizarImagen } from '@/lib/imagen/optimizar'
 import { construirConversor } from '@/lib/tasas'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
+import { tieneAlgunModulo, MODULOS_CATALOGO } from '@/lib/modulos'
 
 // ── Funcionalidad "Catálogo digital QR" (clave `catalogo_qr`) ──
 // Modelo propio e independiente de Inventario. Todo scoped por `client_id`.
@@ -154,7 +155,10 @@ export interface CatalogoData {
   etiquetas:     EtiquetasSector
   monedaCatalogo: string
   monedasActivas: MonedaOpcion[]
+  /** Stock informativo de los ítems vinculados: exige el módulo `inventario`. */
   tieneInventario: boolean
+  /** Hay una lista de artículos que traerse: `inventario` O la pieza `servicios`. */
+  puedeImportar:   boolean
 }
 
 export async function obtenerCatalogo(): Promise<CatalogoData | null> {
@@ -172,7 +176,11 @@ export async function obtenerCatalogo(): Promise<CatalogoData | null> {
   ])
 
   const modulos: string[] = Array.isArray(cliente?.modulos_activos) ? cliente.modulos_activos : []
+  // Dos cosas distintas: el STOCK informativo exige Inventario (la pieza Servicios
+  // no lleva existencias), pero IMPORTAR vale con cualquiera de las dos — con
+  // Servicios el negocio también tiene una lista que publicar.
   const tieneInventario = modulos.includes('inventario')
+  const puedeImportar   = tieneAlgunModulo(modulos, MODULOS_CATALOGO)
   const monedaCatalogo = await resolverMonedaCatalogo(db, session.client_id, (cliente?.catalogo_moneda as string | null) ?? null)
   const conv = await construirConversor(db, session.client_id)
 
@@ -192,6 +200,7 @@ export async function obtenerCatalogo(): Promise<CatalogoData | null> {
     monedaCatalogo,
     monedasActivas: ((monedasRows ?? []) as { codigo: string; simbolo: string | null }[]).map(m => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo })),
     tieneInventario,
+    puedeImportar,
   }
 }
 
@@ -521,17 +530,25 @@ export async function guardarMonedaCatalogo(moneda: string): Promise<{ ok: boole
   return { ok: true }
 }
 
-// ── Importar desde Inventario (conveniencia; solo si el módulo está activo) ─────
+// ── Importar desde la lista de artículos (conveniencia; Inventario o Servicios) ──
 
-export async function importarDesdeProductos(): Promise<{ ok: boolean; error?: string; creados?: number }> {
+/** Qué traerse al catálogo público. Un restaurante querrá sus platos; una peluquería
+ *  con Inventario, quizá solo los tratamientos y no los tintes que gasta por dentro. */
+export type TipoImportacion = 'SERVICIO' | 'PRODUCTO' | 'AMBOS'
+
+export async function importarDesdeProductos(
+  tipo: TipoImportacion = 'AMBOS',
+): Promise<{ ok: boolean; error?: string; creados?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cliente } = await db.from('clients').select('modulos_activos, catalogo_moneda').eq('client_id', session.client_id).single()
-  const modulos: string[] = Array.isArray(cliente?.modulos_activos) ? cliente.modulos_activos : []
-  if (!modulos.includes('inventario')) return { ok: false, error: 'El módulo Inventario no está activo.' }
+  // Vale cualquiera de las dos piezas que dan la lista de artículos: con Servicios a
+  // secas el negocio también tiene qué importar (justo lo que vende).
+  if (!tieneAlgunModulo(cliente?.modulos_activos, MODULOS_CATALOGO))
+    return { ok: false, error: 'Necesitas Inventario o Servicios para importar.' }
 
   // Monedas válidas del cliente: cualquier precio en una moneda que no exista
   // en su modelo se normaliza a la moneda del catálogo (evita datos como "CUB"
@@ -540,9 +557,11 @@ export async function importarDesdeProductos(): Promise<{ ok: boolean; error?: s
   const { data: monedasRows } = await db.from('monedas').select('codigo').eq('client_id', session.client_id)
   const monedasValidas = new Set((monedasRows ?? []).map(m => m.codigo as string))
 
-  const { data: productos } = await db.from('products')
+  let q = db.from('products')
     .select('producto_id, nombre, descripcion, precios')
     .eq('client_id', session.client_id).eq('estado', 'ACTIVO')
+  if (tipo !== 'AMBOS') q = q.eq('tipo', tipo)
+  const { data: productos } = await q
 
   if (!productos?.length) return { ok: true, creados: 0 }
 

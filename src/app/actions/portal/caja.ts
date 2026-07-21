@@ -15,6 +15,9 @@ import { tieneModulo }      from '@/lib/modulos'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
+/** Qué baja al dispositivo (mig. 120). Mismo vocabulario que `TipoImportacion` del catálogo QR. */
+export const TIPOS_CATALOGO = ['PRODUCTO', 'SERVICIO', 'AMBOS'] as const
+
 export interface Caja {
   caja_id:           string
   client_id:         string
@@ -23,6 +26,7 @@ export interface Caja {
   almacen_id:        string | null
   cuentas_moneda:    Record<string, string>
   monedas_aceptadas: string[]
+  tipos_catalogo:    string
   sync_token:        string
   activa:            boolean
   last_sync_at:      string | null
@@ -72,6 +76,7 @@ export interface CajaConfigData {
   baseUrl:   string
   tieneBase:       boolean
   tieneInventario: boolean
+  tieneServicios:  boolean
   // ¿Hay cierres ya sincronizados? Solo sirve para que el aviso de cambio de
   // empresa no mienta: sin histórico no hay nada que se quede en la empresa vieja.
   tieneHistorico:  boolean
@@ -201,6 +206,7 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
     baseUrl:   (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, ''),
     tieneBase:       tieneModulo(modulos, 'base'),
     tieneInventario: tieneModulo(modulos, 'inventario'),
+    tieneServicios:  tieneModulo(modulos, 'servicios'),
     tieneHistorico:  (sesRes.count ?? 0) > 0,
   }
 }
@@ -212,6 +218,7 @@ export async function guardarConfigCaja(
   cfg: {
     nombre: string; empresa_id?: string; almacen_id: string | null
     monedas_aceptadas: string[]; cuentas_moneda: Record<string, string>
+    tipos_catalogo?: string
   },
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -264,6 +271,9 @@ export async function guardarConfigCaja(
     almacen_id:        almOk.data ? cfg.almacen_id : null,
     monedas_aceptadas: cfg.monedas_aceptadas ?? [],
     cuentas_moneda:    cuentasFinal,
+    // Guardia de servidor: la columna tiene CHECK, y un valor inventado reventaría el
+    // guardado entero en vez de ignorarse.
+    tipos_catalogo:    (TIPOS_CATALOGO as readonly string[]).includes(cfg.tipos_catalogo ?? '') ? cfg.tipos_catalogo : 'PRODUCTO',
     updated_at:        new Date().toISOString(),
   }).eq('caja_id', caja_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
@@ -388,7 +398,7 @@ export async function ingestarLoteArchivo(
 
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')
-    .select('caja_id, client_id, empresa_id, almacen_id, cuentas_moneda, monedas_aceptadas, activa')
+    .select('caja_id, client_id, empresa_id, almacen_id, cuentas_moneda, monedas_aceptadas, tipos_catalogo, activa')
     .eq('caja_id', destino).eq('client_id', session.client_id).maybeSingle()
   if (!caja) return { ok: false, error: 'Punto de venta no encontrado.' }
 

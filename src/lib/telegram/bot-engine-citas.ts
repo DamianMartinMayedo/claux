@@ -61,7 +61,7 @@ async function etiquetasCitas(clientId: string): Promise<EtiquetasSector> {
   return etiquetasDe(pl?.etiquetas)
 }
 
-interface ServicioRow { servicio_id: string; nombre: string; duracion_minutos: number; precio: number | null }
+interface ServicioRow { servicio_id: string; nombre: string; duracion_minutos: number; precio: number | null; moneda: string | null }
 interface RecursoRow  { recurso_id: string; nombre: string }
 interface SlotRow     { recurso_id: string; recurso_nombre: string; hora: string }
 
@@ -125,7 +125,7 @@ async function iniciarCita(ctx: BotContext, chatId: string): Promise<BotResponse
   const db = createAdminClient()
   const et = await etiquetasCitas(ctx.client_id)
   const { data: servicios } = await db.from('servicios')
-    .select('servicio_id, nombre, duracion_minutos, precio')
+    .select('servicio_id, nombre, duracion_minutos, precio, moneda')
     .eq('client_id', ctx.client_id).eq('activo', true).order('nombre')
 
   const lista = (servicios ?? []) as ServicioRow[]
@@ -135,7 +135,9 @@ async function iniciarCita(ctx: BotContext, chatId: string): Promise<BotResponse
   }
 
   const botones = lista.slice(0, 30).map(s => [{
-    text: `${s.nombre} (${s.duracion_minutos} min${s.precio != null ? ` · $${Number(s.precio).toFixed(2)}` : ''})`,
+    // La moneda es la del servicio, nunca un «$» fijo: al cliente final de un negocio
+    // cubano se le estaba anunciando en dólares un precio en CUP (mig. 119).
+    text: `${s.nombre} (${s.duracion_minutos} min${s.precio != null ? ` · ${Number(s.precio).toFixed(2)}${s.moneda ? ` ${s.moneda}` : ''}` : ''})`,
     callback_data: `csrv:${s.servicio_id}`,
   }])
   botones.push([{ text: 'Cancelar', callback_data: 'cancelar_cita' }])

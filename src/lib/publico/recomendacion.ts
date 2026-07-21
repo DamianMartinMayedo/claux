@@ -31,5 +31,9 @@ export function generarRecomendacion(
     if (necesidad) for (const clave of necesidad.modulos) claves.add(clave)
   }
 
+  // Antes se quitaba lo que otra pieza «absorbía» (inventario ⊃ servicios). Con la
+  // separación total son dos módulos distintos y un negocio puede querer los dos, así
+  // que se devuelven tal cual: un salón que marque servicios (por sector) e inventario
+  // verá ambos recomendados — correcto, ya no se paga dos veces la misma página.
   return Array.from(claves)
 }
