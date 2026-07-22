@@ -32,7 +32,8 @@ export function texto(value: string | null | undefined, estilo: CeldaEstilo = {}
 
 /** Celda numérica, con formato opcional (ej. '#,##0.00'). */
 export function numero(value: number | null | undefined, estilo: CeldaEstilo = {}): Cell {
-  return { type: Number, value: value ?? null, ...estilo }
+  // La celda vacía es `undefined` (la librería no admite `null` como valor).
+  return { type: Number, value: value ?? undefined, ...estilo }
 }
 
 export interface HojaExcel {
