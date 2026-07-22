@@ -37,9 +37,6 @@ import { ConfirmDialog }               from '@/components/portal/Dialog'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const TIPO_LABEL:  Record<TipoRegistro, string> = { GASTO: 'Gasto', COBRO: 'Cobro' }
-const TIPO_BADGE:  Record<TipoRegistro, string> = { GASTO: 'badge-error', COBRO: 'badge-success' }
-
 const ESTADO_LABEL: Record<EstadoRegistro, string> = {
   PENDIENTE: 'Pendiente', PARCIAL: 'Parcial', LIQUIDADO: 'Liquidado',
 }
@@ -83,21 +80,50 @@ function RegistroModal({
     [data.terceros, tipo],
   )
 
-  // Categorías activas para el select; incluye la del registro aunque esté
-  // archivada, para no perderla al editar.
-  const categoriasOpts = useMemo(() => {
-    const activas = data.categorias_gastos.filter(c => c.estado === 'ACTIVO')
-    if (registro?.categoria_id && !activas.some(c => c.categoria_id === registro.categoria_id)) {
-      const actual = data.categorias_gastos.find(c => c.categoria_id === registro.categoria_id)
-      if (actual) return [actual, ...activas]
+  // Clasificación en dos niveles: Categoría (raíz) → Subcategoría (hija).
+  // El registro puede apuntar a una raíz o a una subcategoría; se resuelve el
+  // par inicial y se conservan las archivadas para no perderlas al editar.
+  const raices = useMemo(
+    () => data.categorias_gastos.filter(c => c.estado === 'ACTIVO' && !c.parent_id),
+    [data.categorias_gastos],
+  )
+  const subsPorPadre = useMemo(() => {
+    const m = new Map<string, CategoriaGasto[]>()
+    for (const c of data.categorias_gastos) {
+      if (c.estado === 'ACTIVO' && c.parent_id) {
+        const arr = m.get(c.parent_id) ?? []; arr.push(c); m.set(c.parent_id, arr)
+      }
     }
-    return activas
-  }, [data.categorias_gastos, registro])
+    return m
+  }, [data.categorias_gastos])
+
+  const parInicial = useMemo(() => {
+    const id = registro?.categoria_id
+    if (!id) return { cat: '', sub: '' }
+    const nodo = data.categorias_gastos.find(c => c.categoria_id === id)
+    if (!nodo) return { cat: '', sub: '' }
+    return nodo.parent_id ? { cat: nodo.parent_id, sub: nodo.categoria_id } : { cat: nodo.categoria_id, sub: '' }
+  }, [registro, data.categorias_gastos])
+
+  const [catSel, setCatSel] = useState(parInicial.cat)
+  const [subSel, setSubSel] = useState(parInicial.sub)
+
+  // Opciones, conservando la categoría/subcategoría del registro aunque esté archivada
+  const conActual = (base: CategoriaGasto[], id: string) => {
+    if (id && !base.some(c => c.categoria_id === id)) {
+      const actual = data.categorias_gastos.find(c => c.categoria_id === id)
+      if (actual) return [actual, ...base]
+    }
+    return base
+  }
+  const catOpciones = conActual(raices, catSel)
+  const subOpciones = conActual(catSel ? (subsPorPadre.get(catSel) ?? []) : [], subSel)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
+    fd.set('categoria_id', subSel || catSel || '')  // la subcategoría manda; si no, la categoría
     startTransition(async () => {
       const res = await guardarGastoCobro(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -120,14 +146,16 @@ function RegistroModal({
           {registro && <input type="hidden" name="registro_id" value={registro.registro_id} />}
           <div className="modal-body">
             <div className="ter-form-grid">
-              <div className="input-group ter-col-full">
-                <label>Descripción <span className="required">*</span></label>
-                <input className="input" name="descripcion" required autoFocus={!isEdit}
-                  defaultValue={registro?.descripcion ?? ''}
-                  placeholder={tipo === 'GASTO' ? 'Ej: Compra de verduras, alquiler de local…' : 'Ej: Venta directa, anticipo de cliente…'} />
-              </div>
+              {tipo === 'COBRO' && (
+                <div className="input-group ter-col-full">
+                  <label>Concepto <span className="required">*</span></label>
+                  <input className="input" name="descripcion" required autoFocus={!isEdit}
+                    defaultValue={registro?.descripcion ?? ''}
+                    placeholder="Ej: Venta directa, anticipo de cliente…" />
+                </div>
+              )}
 
-              <div className={`input-group ${tipo === 'GASTO' ? 'ter-col-span-3' : 'ter-col-full'}`}>
+              <div className="input-group ter-col-full">
                 <label>{tipo === 'GASTO' ? 'Proveedor' : 'Cliente'}</label>
                 <select className="input" name="tercero_id" defaultValue={registro?.tercero_id ?? ''}>
                   <option value="">— Sin {tipo === 'GASTO' ? 'proveedor' : 'cliente'} —</option>
@@ -145,17 +173,28 @@ function RegistroModal({
                   </div>
                 )}
               </div>
-              {/* Categorías son solo de gastos (así se llaman y así se usan en
-                  reportes). En cobros no se pide categoría. */}
-              {tipo === 'GASTO' && (
+              {/* Clasificación (solo gastos): Categoría → Subcategoría. En cobros no se pide. */}
+              {tipo === 'GASTO' && (<>
                 <div className="input-group ter-col-span-3">
-                  <label>Categoría</label>
-                  <select className="input" name="categoria_id" defaultValue={registro?.categoria_id ?? ''}>
-                    <option value="">— Sin categoría —</option>
-                    {categoriasOpts.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                  <label>Categoría <span className="required">*</span></label>
+                  <select className="input" value={catSel} required
+                    onChange={e => { setCatSel(e.target.value); setSubSel('') }}>
+                    <option value="">— Elige categoría —</option>
+                    {catOpciones.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
                   </select>
                 </div>
-              )}
+                <div className="input-group ter-col-span-3">
+                  <label>Subcategoría</label>
+                  <select className="input" value={subSel}
+                    onChange={e => setSubSel(e.target.value)}
+                    disabled={!catSel || subOpciones.length === 0}>
+                    <option value="">
+                      {!catSel ? '— Elige categoría —' : subOpciones.length === 0 ? '— Sin subcategorías —' : '— Sin subcategoría —'}
+                    </option>
+                    {subOpciones.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                  </select>
+                </div>
+              </>)}
 
               <div className="input-group ter-col-span-2">
                 <label>Fecha <span className="required">*</span></label>
@@ -376,11 +415,15 @@ function ConfirmEliminar({
 
 // ── Modal: crear / editar categoría de gasto ─────────────────────────────────────
 
-function CategoriaModal({ categoria, onClose, onSaved }: {
-  categoria: CategoriaGasto | null; onClose: () => void; onSaved: () => void
+function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
+  categoria: CategoriaGasto | null; categorias: CategoriaGasto[]; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!categoria
+  // Una categoría con subcategorías no puede volverse subcategoría (solo 2 niveles)
+  const tieneHijos     = isEdit && categorias.some(c => c.parent_id === categoria!.categoria_id)
+  const padresPosibles = categorias.filter(c =>
+    c.estado === 'ACTIVO' && !c.parent_id && c.categoria_id !== categoria?.categoria_id)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -412,10 +455,22 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
               <input className="input" name="nombre" required autoFocus
                 defaultValue={categoria?.nombre ?? ''} placeholder="Ej: Alquiler, Insumos, Servicios…" />
             </div>
+            {tieneHijos ? (
+              <input type="hidden" name="parent_id" value="" />
+            ) : (
+              <div className="input-group">
+                <label>Categoría padre</label>
+                <select className="input" name="parent_id" defaultValue={categoria?.parent_id ?? ''}>
+                  <option value="">— Ninguna (categoría principal) —</option>
+                  {padresPosibles.map(p => <option key={p.categoria_id} value={p.categoria_id}>{p.nombre}</option>)}
+                </select>
+                <span className="input-hint">Elige una para convertir esta en subcategoría.</span>
+              </div>
+            )}
             <div className="input-group">
-              <label>Descripción</label>
+              <label>Concepto</label>
               <textarea className="input input-textarea" name="descripcion" rows={2}
-                defaultValue={categoria?.descripcion ?? ''} placeholder="Descripción opcional…" />
+                defaultValue={categoria?.descripcion ?? ''} placeholder="Detalle opcional…" />
             </div>
           </div>
           <div className="modal-footer">
@@ -490,23 +545,24 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   const [liquidar,      setLiquidar]       = useState<GastoCobroConSaldo | null>(null)
   const [confirmDel,    setConfirmDel]     = useState<GastoCobroConSaldo | null>(null)
 
-  const [tab,        setTab]        = useState<'gastos' | 'categorias'>('gastos')
+  const [tab,        setTab]        = useState<'gastos' | 'cobros' | 'categorias'>('gastos')
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<CategoriaGasto | null>(null)
   const [confirmCat, setConfirmCat] = useState<CategoriaGasto | null>(null)
 
-  const [filtroTipo,    setFiltroTipo]    = useState('')
   const [filtroEstado,  setFiltroEstado]  = useState('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
 
+  // La pestaña activa decide el tipo (Gastos vs Cobros)
+  const tipoActual: TipoRegistro = tab === 'cobros' ? 'COBRO' : 'GASTO'
   const registros = useMemo(() => {
     return data.registros.filter(r => {
-      if (filtroTipo    && r.tipo    !== filtroTipo)    return false
+      if (r.tipo !== tipoActual) return false
       if (filtroEstado  && r.estado  !== filtroEstado)  return false
       if (filtroEmpresa && r.empresa_id !== filtroEmpresa) return false
       return true
     })
-  }, [data.registros, filtroTipo, filtroEstado, filtroEmpresa])
+  }, [data.registros, tipoActual, filtroEstado, filtroEmpresa])
 
   // Totales pendientes por tipo y moneda
   const pendientes = useMemo(() => {
@@ -527,6 +583,25 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
     return m
   }, [data.terceros])
 
+  const catNombre = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const c of data.categorias_gastos) m[c.categoria_id] = c.nombre
+    return m
+  }, [data.categorias_gastos])
+
+  const catById = useMemo(() => {
+    const m = new Map<string, CategoriaGasto>()
+    for (const c of data.categorias_gastos) m.set(c.categoria_id, c)
+    return m
+  }, [data.categorias_gastos])
+  const catSubDe = (categoriaId: string | null): { cat: string; sub: string | null } => {
+    if (!categoriaId) return { cat: '—', sub: null }
+    const nodo = catById.get(categoriaId)
+    if (!nodo) return { cat: '—', sub: null }
+    if (nodo.parent_id) return { cat: catById.get(nodo.parent_id)?.nombre ?? '—', sub: nodo.nombre }
+    return { cat: nodo.nombre, sub: null }
+  }
+
   const { pageItems: regItems, ...regPag } = usePagination(registros)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias_gastos)
 
@@ -534,7 +609,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   const ids = useMemo(() => registros.map(r => r.registro_id), [registros])
   const sel = useRowSelection(ids)
   const [confirmLote, setConfirmLote] = useState(false)
-  useEffect(() => { sel.clear() }, [tab, filtroTipo, filtroEstado, filtroEmpresa]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { sel.clear() }, [tab, filtroEstado, filtroEmpresa]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function ejecutar(fn: () => Promise<ResultadoLote>) {
     startTransition(async () => {
@@ -605,14 +680,15 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           </div>
           <p className="page-subtitle">Ingresos y egresos directos (no facturados). Los pagos se reflejan en Tesorería.</p>
         </div>
-        {puedeEditar && (tab === 'gastos' ? (
-          <div className="tes-header-actions">
-            <button className="btn btn-secondary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
-            <button className="btn btn-primary"   onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
-          </div>
-        ) : (
-          <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
-        ))}
+        {puedeEditar && (
+          tab === 'gastos' ? (
+            <button className="btn btn-primary" onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
+          ) : tab === 'cobros' ? (
+            <button className="btn btn-primary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
+          ) : (
+            <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
+          )
+        )}
       </div>
 
       {/* Tabs */}
@@ -621,12 +697,13 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: 'gastos',     label: 'Gastos y cobros', count: data.registros.length },
-          { id: 'categorias', label: 'Categorías',      count: categoriasActivas.length },
+          { id: 'gastos',     label: 'Gastos',     count: data.registros.filter(r => r.tipo === 'GASTO').length },
+          { id: 'cobros',     label: 'Cobros',     count: data.registros.filter(r => r.tipo === 'COBRO').length },
+          { id: 'categorias', label: 'Categorías', count: categoriasActivas.length },
         ]}
       />
 
-      {tab === 'gastos' && (<>
+      {(tab === 'gastos' || tab === 'cobros') && (<>
 
       {(data.empresas.length === 0 || data.monedas.length === 0) && (
         <PrerequisitoAviso acciones={data.empresas.length === 0
@@ -638,45 +715,23 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         </PrerequisitoAviso>
       )}
 
-      {/* Pendientes */}
-      {(pendientes.porPagar.length > 0 || pendientes.porCobrar.length > 0) && (
+      {/* Pendiente del tipo activo */}
+      {(tab === 'gastos' ? pendientes.porPagar : pendientes.porCobrar).length > 0 && (
         <div className="gc-stats">
-          <div className="gc-stat-card gc-stat-pagar">
-            <span className="gc-stat-ico"><TrendingDown size={16} strokeWidth={2.2} /></span>
-            <span className="gc-stat-label">Por pagar</span>
-            {pendientes.porPagar.length === 0
-              ? <span className="gc-stat-empty">Sin pendientes</span>
-              : (
-                <span className="gc-stat-amounts">
-                  {pendientes.porPagar.map(p => (
-                    <span key={p.moneda} className="gc-stat-amount"><strong>{formatMonto(p.monto)}</strong><em>{p.moneda}</em></span>
-                  ))}
-                </span>
-              )}
-          </div>
-          <div className="gc-stat-card gc-stat-cobrar">
-            <span className="gc-stat-ico"><TrendingUp size={16} strokeWidth={2.2} /></span>
-            <span className="gc-stat-label">Por cobrar</span>
-            {pendientes.porCobrar.length === 0
-              ? <span className="gc-stat-empty">Sin pendientes</span>
-              : (
-                <span className="gc-stat-amounts">
-                  {pendientes.porCobrar.map(p => (
-                    <span key={p.moneda} className="gc-stat-amount"><strong>{formatMonto(p.monto)}</strong><em>{p.moneda}</em></span>
-                  ))}
-                </span>
-              )}
+          <div className={`gc-stat-card ${tab === 'gastos' ? 'gc-stat-pagar' : 'gc-stat-cobrar'}`}>
+            <span className="gc-stat-ico">{tab === 'gastos' ? <TrendingDown size={16} strokeWidth={2.2} /> : <TrendingUp size={16} strokeWidth={2.2} />}</span>
+            <span className="gc-stat-label">{tab === 'gastos' ? 'Por pagar' : 'Por cobrar'}</span>
+            <span className="gc-stat-amounts">
+              {(tab === 'gastos' ? pendientes.porPagar : pendientes.porCobrar).map(p => (
+                <span key={p.moneda} className="gc-stat-amount"><strong>{formatMonto(p.monto)}</strong><em>{p.moneda}</em></span>
+              ))}
+            </span>
           </div>
         </div>
       )}
 
       {/* Toolbar */}
       <div className="ter-toolbar">
-        <select className="input ter-filter-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
-          <option value="">Gastos y cobros</option>
-          <option value="GASTO">Solo gastos</option>
-          <option value="COBRO">Solo cobros</option>
-        </select>
         <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="PENDIENTE">Pendientes</option>
@@ -711,9 +766,8 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                     </th>
                   )}
                   <th>Fecha</th>
-                  <th>Descripción</th>
+                  {tab === 'gastos' ? <><th>Categoría</th><th>Subcategoría</th></> : <th>Concepto</th>}
                   {multiempresa && <th>Empresa</th>}
-                  <th>Tipo</th>
                   <th className="col-num">Monto</th>
                   <th className="col-num">Pendiente</th>
                   <th>Estado</th>
@@ -721,7 +775,9 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                 </tr>
               </thead>
               <tbody>
-                {regItems.map(r => (
+                {regItems.map(r => {
+                  const cs = tab === 'gastos' ? catSubDe(r.categoria_id) : null
+                  return (
                   <tr key={r.registro_id}
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
@@ -734,19 +790,23 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                       </td>
                     )}
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(r.fecha)}</td>
-                    <td data-label="Descripción">
-                      <strong>{r.descripcion}</strong>
-                      <div className="tes-mov-sub">
-                        {r.tercero_id && <span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span>}
-                        {r.categoria && <span className="badge badge-neutral tes-origen-badge">{r.categoria}</span>}
-                      </div>
-                    </td>
+                    {tab === 'gastos' ? (<>
+                      <td data-label="Categoría">
+                        <strong>{cs!.cat}</strong>
+                        {r.tercero_id && <div className="tes-mov-sub"><span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span></div>}
+                      </td>
+                      <td data-label="Subcategoría" className="text-sm-muted">{cs!.sub ?? '—'}</td>
+                    </>) : (
+                      <td data-label="Concepto">
+                        <strong>{r.descripcion}</strong>
+                        {r.tercero_id && <div className="tes-mov-sub"><span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span></div>}
+                      </td>
+                    )}
                     {multiempresa && (
                       <td data-label="Empresa">
                         <EmpresaTag color={colorOf(r.empresa_id)} nombre={data.empresa_nombres[r.empresa_id] ?? '—'} />
                       </td>
                     )}
-                    <td data-label="Tipo"><span className={`badge ${TIPO_BADGE[r.tipo]}`}>{TIPO_LABEL[r.tipo]}</span></td>
                     <td data-label="Monto" className="col-num tes-monto-cell">{formatMonto(r.monto)} {r.moneda}</td>
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
@@ -766,7 +826,8 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                       )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -794,7 +855,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                 <thead>
                   <tr>
                     <th>Nombre</th>
-                    <th>Descripción</th>
+                    <th>Categoría padre</th>
                     <th className="col-center">Usos</th>
                     <th>Estado</th>
                     <th className="col-actions"></th>
@@ -807,7 +868,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                         <strong className="text-sm-bold">{c.nombre}</strong>
                         {c.es_sistema && <span className="badge badge-neutral gc-cat-sistema">Sistema</span>}
                       </td>
-                      <td data-label="Descripción" className="text-sm-muted cell-truncate">{c.descripcion ?? '—'}</td>
+                      <td data-label="Categoría padre" className="text-sm-muted cell-truncate">{c.parent_id ? (catNombre[c.parent_id] ?? '—') : '—'}</td>
                       <td data-label="Usos" className="col-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
                       <td data-label="Estado">
                         <span className={`badge ${c.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
@@ -854,7 +915,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           onClose={() => setConfirmDel(null)} isPending={isPending} />
       )}
       {catModal && (
-        <CategoriaModal categoria={editCat}
+        <CategoriaModal categoria={editCat} categorias={data.categorias_gastos}
           onClose={() => { setCatModal(false); setEditCat(null) }} onSaved={onCatSaved} />
       )}
       {confirmCat && (
@@ -863,7 +924,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       )}
 
       {/* Barra de acciones en lote (solo pestaña de gastos y con permiso de edición) */}
-      {tab === 'gastos' && puedeEditar && (
+      {(tab === 'gastos' || tab === 'cobros') && puedeEditar && (
         <BulkBar count={sel.count} onClear={sel.clear}>
           <button className="btn btn-danger-text btn-sm" disabled={isPending}
             onClick={() => setConfirmLote(true)}>

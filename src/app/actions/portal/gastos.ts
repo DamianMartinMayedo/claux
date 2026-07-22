@@ -18,6 +18,7 @@ export interface CategoriaGasto {
   client_id:     string
   nombre:        string
   descripcion:   string | null
+  parent_id:     string | null  // null = categoría raíz; fijo = subcategoría
   estado:        EstadoCategoria
   es_sistema:    boolean
   uso_count?:    number  // Calculado: cuántos gastos usan esta categoría
@@ -220,14 +221,13 @@ export async function guardarGastoCobro(
   const fecha       = (formData.get('fecha')       as string)?.trim() || hoy()
   const vencimiento = (formData.get('vencimiento') as string)?.trim() || null
   const tercero_id  = (formData.get('tercero_id')  as string)?.trim() || null
-  const categoria_id = (formData.get('categoria_id') as string)?.trim() || null
-  const descripcion = (formData.get('descripcion') as string)?.trim()
+  const categoria_id_in = (formData.get('categoria_id') as string)?.trim() || null
+  const conceptoForm = (formData.get('descripcion') as string)?.trim()  // texto libre (solo cobros)
   const moneda      = (formData.get('moneda')      as string)?.trim()
   const montoRaw    = parseFloat(formData.get('monto') as string)
   const notas       = (formData.get('notas')       as string)?.trim() || null
 
   if (tipo !== 'GASTO' && tipo !== 'COBRO') return { ok: false, error: 'Tipo no válido.' }
-  if (!descripcion)                         return { ok: false, error: 'La descripción es obligatoria.' }
   if (!empresa_id)                          return { ok: false, error: 'Debes seleccionar una empresa.' }
   if (isNaN(montoRaw) || montoRaw <= 0)     return { ok: false, error: 'El monto debe ser un número positivo.' }
 
@@ -236,19 +236,33 @@ export async function guardarGastoCobro(
     return { ok: false, error: 'Empresa no válida.' }
   }
 
-  // Validar categoria_id y capturar su nombre (desnormalizado para reportes/listados)
+  // Etiqueta (columna `descripcion`) y clasificación según el tipo:
+  //  · GASTO → se identifica por su categoría (obligatoria); la etiqueta es
+  //    «Categoría» o «Categoría · Subcategoría». El texto libre va en notas.
+  //  · COBRO → lleva concepto de texto libre; sin categoría.
+  let descripcion: string
+  let categoria_id: string | null = null
   let categoriaNombre: string | null = null
-  if (categoria_id) {
-    const { data: cat } = await db.from('categorias_gastos')
-      .select('nombre')
-      .eq('categoria_id', categoria_id)
+
+  if (tipo === 'GASTO') {
+    if (!categoria_id_in) return { ok: false, error: 'Debes elegir una categoría para el gasto.' }
+    const { data: nodo } = await db.from('categorias_gastos')
+      .select('nombre, parent_id, estado')
+      .eq('categoria_id', categoria_id_in)
       .eq('client_id', session.client_id)
-      .eq('estado', 'ACTIVO')
       .maybeSingle()
-    if (!cat) {
-      return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
+    if (!nodo || nodo.estado !== 'ACTIVO') return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
+    categoria_id    = categoria_id_in
+    categoriaNombre = nodo.nombre
+    descripcion     = nodo.nombre
+    if (nodo.parent_id) {
+      const { data: padre } = await db.from('categorias_gastos')
+        .select('nombre').eq('categoria_id', nodo.parent_id).eq('client_id', session.client_id).maybeSingle()
+      if (padre) descripcion = `${padre.nombre} · ${nodo.nombre}`
     }
-    categoriaNombre = cat.nombre
+  } else {
+    if (!conceptoForm) return { ok: false, error: 'El concepto es obligatorio.' }
+    descripcion = conceptoForm
   }
 
   if (!registro_id) {
@@ -502,8 +516,33 @@ export async function guardarCategoriaGasto(
   const categoria_id_form = (formData.get('categoria_id') as string)?.trim()
   const nombre            = (formData.get('nombre') as string)?.trim()
   const descripcion       = (formData.get('descripcion') as string)?.trim() || null
+  const parent_id         = (formData.get('parent_id') as string)?.trim() || null
 
   if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
+
+  // Jerarquía: solo 2 niveles (categoría → subcategoría)
+  if (parent_id) {
+    if (parent_id === categoria_id_form) {
+      return { ok: false, error: 'Una categoría no puede ser su propia categoría padre.' }
+    }
+    const { data: padre } = await db.from('categorias_gastos')
+      .select('parent_id')
+      .eq('categoria_id', parent_id)
+      .eq('client_id', session.client_id)
+      .maybeSingle()
+    if (!padre)          return { ok: false, error: 'La categoría padre no existe.' }
+    if (padre.parent_id) return { ok: false, error: 'Solo se permiten dos niveles: la categoría padre no puede ser a su vez una subcategoría.' }
+    // Una categoría que ya tiene subcategorías no puede volverse subcategoría
+    if (categoria_id_form) {
+      const { count } = await db.from('categorias_gastos')
+        .select('categoria_id', { count: 'exact', head: true })
+        .eq('client_id', session.client_id)
+        .eq('parent_id', categoria_id_form)
+      if ((count ?? 0) > 0) {
+        return { ok: false, error: 'Esta categoría tiene subcategorías; no puede convertirse en subcategoría de otra.' }
+      }
+    }
+  }
 
   if (!categoria_id_form) {
     // Crear nueva categoría
@@ -513,6 +552,7 @@ export async function guardarCategoriaGasto(
       client_id:   session.client_id,
       nombre,
       descripcion,
+      parent_id,
       estado:      'ACTIVO',
       es_sistema:  false,
       updated_at:  new Date().toISOString(),
@@ -536,7 +576,7 @@ export async function guardarCategoriaGasto(
     if (!cat) return { ok: false, error: 'Categoría no encontrada.' }
 
     const { error } = await db.from('categorias_gastos')
-      .update({ nombre, descripcion, updated_at: new Date().toISOString() })
+      .update({ nombre, descripcion, parent_id, updated_at: new Date().toISOString() })
       .eq('categoria_id', categoria_id_form)
       .eq('client_id', session.client_id)
     
