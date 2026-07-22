@@ -27,6 +27,24 @@ export const ESTADO_FACTURA_LABEL: Record<EstadoFactura, string> = {
   ANULADA:  'Anulada',
 }
 
+// Etiqueta de la ACCIÓN que lleva a cada estado (verbo directo), NO el nombre del
+// estado. Fuente única: la usan tanto el menú del detalle como la barra en lote, para
+// que la misma acción no se llame «Emitir» en un sitio y «Cambiar a Emitida» en otro.
+export const ACCION_OFERTA_LABEL: Record<EstadoOferta, string> = {
+  BORRADOR:  'Reabrir',
+  ENVIADA:   'Enviar',
+  APROBADA:  'Aprobar',
+  RECHAZADA: 'Rechazar',
+  CADUCADA:  'Caducar',
+}
+
+export const ACCION_FACTURA_LABEL: Record<EstadoFactura, string> = {
+  BORRADOR: 'Reabrir',
+  EMITIDA:  'Emitir',
+  COBRADA:  'Cobrar',   // el cobro va por «Registrar cobro»; no aparece en el menú
+  ANULADA:  'Anular',
+}
+
 export const ESTADO_OFERTA_BADGE: Record<EstadoOferta, string> = {
   BORRADOR:  'badge-neutral',
   ENVIADA:   'badge-info',
@@ -264,6 +282,32 @@ export function formatoNumero(
 ): string {
   const prefijo = tipo === 'OFERTA' ? 'OF' : 'F'
   return `${prefijo}${letra}${anio}${String(numero).padStart(4, '0')}`
+}
+
+// ── Número fiscal vs identificador provisional ────────────────────────────────
+//
+// Una factura recibe su correlativo al EMITIRSE, no al crearse. Mientras es borrador
+// lleva un identificador de trabajo: así descartarla no deja un salto en la serie
+// fiscal (que es lo primero que pregunta una inspección). Ver `factura-core.ts`.
+
+const PREFIJO_PROVISIONAL = 'BORRADOR-'
+
+/** Identificador de trabajo de un borrador: único porque sale del `factura_id`. */
+export function numeroProvisional(documento_id: string): string {
+  return `${PREFIJO_PROVISIONAL}${documento_id.split('-')[1] ?? documento_id}`
+}
+
+/** ¿Este documento sigue sin número fiscal? */
+export function esNumeroProvisional(numero: string | null | undefined): boolean {
+  return (numero ?? '').startsWith(PREFIJO_PROVISIONAL)
+}
+
+/**
+ * Cómo se enseña. Del provisional se dice lo que ES —que aún no tiene número— en vez
+ * de gritar «BORRADOR-» al lado de una insignia que ya dice «Borrador».
+ */
+export function etiquetaNumero(numero: string): string {
+  return esNumeroProvisional(numero) ? `Sin número · ${numero.slice(PREFIJO_PROVISIONAL.length)}` : numero
 }
 
 // ── Cálculo de fecha de vencimiento desde condición de pago ───────────────────

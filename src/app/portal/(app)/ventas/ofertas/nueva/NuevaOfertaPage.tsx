@@ -89,13 +89,13 @@ export default function NuevaOfertaPage({ resumen }: Props) {
       {/* ── Header ── */}
       <div className="ven-nueva-header">
         <div>
-          <Link href="/portal/ventas" className="ven-breadcrumb-link">
+          <Link href="/portal/ventas?t=ofertas" className="ven-breadcrumb-link">
             ← Volver a Ventas
           </Link>
           <h1 className="ven-nueva-title mt-1">Nueva oferta comercial</h1>
         </div>
         <div className="ven-nueva-actions">
-          <Link href="/portal/ventas" className="btn btn-secondary">Cancelar</Link>
+          <Link href="/portal/ventas?t=ofertas" className="btn btn-secondary">Cancelar</Link>
           <button type="submit" form="form-nueva-oferta" className="btn btn-primary" disabled={isPending || sinLetra}>
             {isPending
               ? <><span className="spinner spinner-sm" /> Guardando…</>

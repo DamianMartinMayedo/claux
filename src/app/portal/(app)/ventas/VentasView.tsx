@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter }            from 'next/navigation'
 import Link                   from 'next/link'
@@ -14,6 +14,7 @@ import {
   ESTADO_FACTURA_LABEL,
   ESTADO_FACTURA_BADGE,
   formatearMoneda,
+  etiquetaNumero,
   type EstadoOferta,
   type EstadoFactura,
 } from './_ventas-helpers'
@@ -42,7 +43,7 @@ import { useRowSelection }             from '@/components/portal/useRowSelection
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
 
-interface Props { data: VentasResumenData }
+interface Props { data: VentasResumenData; initialTab?: Tab }
 
 type Tab = 'ofertas' | 'facturas'
 
@@ -59,9 +60,16 @@ const FACTURA_ELIMINABLE: EstadoFactura[] = ['BORRADOR']
 
 type Confirm = { title: string; body?: string; confirmLabel: string; danger: boolean; run: () => void }
 
-export default function VentasView({ data }: Props) {
+export default function VentasView({ data, initialTab }: Props) {
   const router = useRouter()
-  const [tab,          setTab]          = useState<Tab>('ofertas')
+  const [tab,          setTab]          = useState<Tab>(initialTab ?? 'ofertas')
+
+  // La pestaña activa se refleja en la URL (`?t=`): así volver desde el detalle
+  // de una factura o refrescar conserva la pestaña en vez de saltar a Ofertas.
+  function cambiarTab(t: Tab) {
+    setTab(t)
+    router.replace(`/portal/ventas?t=${t}`, { scroll: false })
+  }
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [filtroCliente, setFiltroCliente] = useState('')
   const [filtroEstado,  setFiltroEstado]  = useState('')
@@ -98,8 +106,10 @@ export default function VentasView({ data }: Props) {
 
   // ── Orquestación de acciones en lote ──
   function ejecutar(fn: () => Promise<ResultadoLote>, sel: { clear: () => void }) {
+    const ld = toastLoading('Procesando…')   // fuera de startTransition, si no no se pinta
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} aplicada${r.hechas === 1 ? '' : 's'}`)
@@ -179,7 +189,7 @@ export default function VentasView({ data }: Props) {
       <Tabs
         ariaLabel="Ofertas y facturas"
         active={tab}
-        onChange={setTab}
+        onChange={cambiarTab}
         tabs={[
           { id: 'ofertas',  label: 'Ofertas',  count: conteoOfertas },
           { id: 'facturas', label: 'Facturas', count: conteoFacturas },
@@ -582,11 +592,11 @@ function TablaFacturas({
                 <input type="checkbox" className="row-check"
                   checked={sel.isSelected(f.factura_id)}
                   onChange={() => sel.toggle(f.factura_id)}
-                  aria-label={`Seleccionar ${f.numero}`} />
+                  aria-label={`Seleccionar ${etiquetaNumero(f.numero)}`} />
               </td>
               <td data-label="Número">
                 <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
-                  {f.numero}
+                  {etiquetaNumero(f.numero)}
                 </Link>
               </td>
               <td data-label="Fecha" className="text-sm-muted">

@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect, useRef }   from 'react'
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
@@ -16,16 +16,19 @@ import {
   type CobrosFacturaData,
 } from '@/app/actions/portal/cobranza'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
-import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
-import { Copy, MoreHorizontal, Pencil, Download, Trash2, X } from 'lucide-react'
+import { Copy, MoreHorizontal, Pencil, Download, Trash2, X, FileCheck, Ban, RotateCcw } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
   CONDICION_PAGO_LABEL,
   ESTADO_FACTURA_LABEL,
+  ACCION_FACTURA_LABEL,
   ESTADO_FACTURA_BADGE,
   TRANSICIONES_FACTURA,
   formatearMoneda,
+  etiquetaNumero,
+  esNumeroProvisional,
   type EstadoFactura,
 } from '../../_ventas-helpers'
 
@@ -38,13 +41,11 @@ interface Props {
 export default function FacturaDetalle({ data, cobros }: Props) {
   const router = useRouter()
   const [isPending,   startTransition] = useTransition()
-  const [statusMsg,   setStatusMsg] = useState('')
   const [duplicating, setDuplicating] = useState(false)
   const [dialog, setDialog] = useState<{
     title: string; body?: string; danger?: boolean; confirmLabel?: string;
     onConfirm: () => void
   } | null>(null)
-  const [alertMsg, setAlertMsg] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [descargandoPdf, setDescargandoPdf] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -93,20 +94,27 @@ export default function FacturaDetalle({ data, cobros }: Props) {
       confirmLabel: 'Duplicar',
       onConfirm: async () => {
         setDuplicating(true)
+        const ld = toastLoading('Duplicando…')
         const res = await duplicarFactura(factura.factura_id)
+        await ld.dismiss()
         setDuplicating(false)
-        if (!res.ok) { setAlertMsg(res.error ?? 'Error al duplicar.'); return }
+        if (!res.ok) { toastError(res.error ?? 'Error al duplicar.'); return }
         router.push(`/portal/ventas/facturas/${res.factura_id}`)
       },
     })
   }
 
   function ejecutarCambioEstado(nuevo: EstadoFactura) {
+    // El toast de carga se crea FUERA de startTransition: dentro sería una actualización
+    // de baja prioridad y React no pinta ese estado intermedio antes de que la acción
+    // (rápida en local) termine. Fuera es normal → se ve al instante.
+    const cargando = { BORRADOR: 'Reabriendo…', EMITIDA: 'Emitiendo…', COBRADA: 'Guardando…', ANULADA: 'Anulando…' }[nuevo] ?? 'Guardando…'
+    const ld = toastLoading(cargando)
     startTransition(async () => {
       const res = await cambiarEstadoFactura(factura.factura_id, nuevo)
-      if (!res.ok) { setAlertMsg(res.error ?? 'Error al cambiar estado.'); return }
-      setStatusMsg('Estado actualizado.')
-      setTimeout(() => setStatusMsg(''), 2500)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error al cambiar estado.'); return }
+      toastSuccess(`Factura ${ESTADO_FACTURA_LABEL[nuevo].toLowerCase()}.`)
       router.refresh()
     })
   }
@@ -131,7 +139,9 @@ export default function FacturaDetalle({ data, cobros }: Props) {
     } else if (nuevo === 'EMITIDA') {
       setDialog({
         title: '¿Emitir esta factura?',
-        body: 'Una vez emitida no podrás editarla. El documento queda como referencia fiscal.',
+        body: esNumeroProvisional(factura.numero)
+          ? 'Al emitirla se le asignará su número fiscal definitivo (siguiente de la serie) y ya no podrás editarla. El documento queda como referencia fiscal.'
+          : 'Una vez emitida no podrás editarla. El documento queda como referencia fiscal.',
         confirmLabel: 'Sí, emitir',
         onConfirm: () => ejecutarCambioEstado(nuevo),
       })
@@ -144,7 +154,7 @@ export default function FacturaDetalle({ data, cobros }: Props) {
     <div className="view-container">
 
       <div className="ven-breadcrumb">
-        <Link href="/portal/ventas" className="ven-breadcrumb-link">
+        <Link href="/portal/ventas?t=facturas" className="ven-breadcrumb-link">
           ← Volver a Ventas
         </Link>
       </div>
@@ -152,7 +162,7 @@ export default function FacturaDetalle({ data, cobros }: Props) {
       <div className="page-header page-header-top">
         <div>
           <h1 className="page-title page-title-row">
-            {factura.numero}
+            {etiquetaNumero(factura.numero)}
             <BadgeFactura estado={factura.estado} />
           </h1>
           <p className="page-subtitle">
@@ -162,6 +172,9 @@ export default function FacturaDetalle({ data, cobros }: Props) {
               <> · {CONDICION_PAGO_LABEL[factura.condicion_pago] ?? factura.condicion_pago}</>
             )}
           </p>
+          {esNumeroProvisional(factura.numero) && (
+            <p className="input-hint">Recibirá su número fiscal al emitirla.</p>
+          )}
         </div>
         <div className="ven-btn-group ven-btn-group-relative">
           {puedeEditar && (
@@ -184,17 +197,19 @@ export default function FacturaDetalle({ data, cobros }: Props) {
                 {transiciones.length > 0 && (
                   <>
                     <div className="ven-dropdown-sep" />
-                    {transiciones.map(t => (
-                      <button
-                        key={t}
-                        className={`ven-dropdown-item${t === 'ANULADA' ? ' ven-dropdown-item-danger' : ''}`}
-                        onClick={() => cambiarEstado(t)}
-                        disabled={isPending}
-                      >
-                        {t === 'ANULADA' ? <Trash2 size={14} strokeWidth={2} /> : null}
-                        Cambiar a {ESTADO_FACTURA_LABEL[t]}
-                      </button>
-                    ))}
+                    {transiciones.map(t => {
+                      const Icon = t === 'EMITIDA' ? FileCheck : t === 'ANULADA' ? Ban : RotateCcw
+                      return (
+                        <button
+                          key={t}
+                          className={`ven-dropdown-item${t === 'ANULADA' ? ' ven-dropdown-item-danger' : ''}`}
+                          onClick={() => cambiarEstado(t)}
+                          disabled={isPending}
+                        >
+                          <Icon size={14} strokeWidth={2} /> {ACCION_FACTURA_LABEL[t]}
+                        </button>
+                      )
+                    })}
                   </>
                 )}
               </div>
@@ -202,10 +217,6 @@ export default function FacturaDetalle({ data, cobros }: Props) {
           </div>
         </div>
       </div>
-
-      {statusMsg && (
-        <div className="alert alert-success mb-4">{statusMsg}</div>
-      )}
 
       {oferta && (
         <div className="alert alert-info mb-4 alert-between">
@@ -341,7 +352,6 @@ export default function FacturaDetalle({ data, cobros }: Props) {
           onConfirm={() => { const fn = dialog.onConfirm; setDialog(null); fn() }}
         />
       )}
-      {alertMsg && <AlertDialog title="Error" body={alertMsg} onClose={() => setAlertMsg(null)} />}
     </div>
   )
 }
@@ -373,17 +383,23 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
     fd.set('cuenta_id', liq.cuentaId)
     fd.set('monto', liq.monto)
     fd.set('tasa_cambio', String(liq.tasa))
+    const ld = toastLoading('Registrando cobro…')
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Cobro registrado.')
       setModalOpen(false); router.refresh()
     })
   }
 
   function handleAnular(movimiento_id: string) {
+    const ld = toastLoading('Anulando cobro…')
     startTransition(async () => {
       const res = await anularPagoDoc(movimiento_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Cobro anulado.')
       router.refresh()
     })
   }

@@ -16,6 +16,8 @@ import {
 import {
   calcularTotales,
   formatoNumero,
+  numeroProvisional,
+  esNumeroProvisional,
   ESTADO_OFERTA_LABEL,
   ESTADO_FACTURA_LABEL,
   type AjusteInput,
@@ -512,16 +514,9 @@ export async function guardarFactura(
     if (!await monedaValida(db, session.client_id, moneda)) {
       return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
     }
-    const anio    = new Date(fecha_emision).getFullYear()
-    let correlativo: number
-    try {
-      correlativo = await siguienteCorrelativo(db, session.client_id, empresa_id, 'FACTURA', anio)
-    } catch (err) {
-      return { ok: false, error: (err as Error).message }
-    }
-
+    // Sin número fiscal hasta que se emita (§`numeroProvisional`).
     const factura_id = generarIdDocumento('FAC')
-    const numero     = formatoNumero('FACTURA', validacion.letra, anio, correlativo)
+    const numero     = numeroProvisional(factura_id)
 
     const { error } = await db.from('facturas').insert({
       factura_id,
@@ -652,12 +647,32 @@ export async function cambiarEstadoFactura(
 
   const db = createAdminClient()
   const { data: factura } = await db
-    .from('facturas').select('estado')
+    .from('facturas').select('estado, numero, empresa_id, fecha_emision')
     .eq('factura_id', factura_id)
     .eq('client_id', session.client_id)
     .maybeSingle()
   if (!factura) return { ok: false, error: 'Factura no encontrada.' }
   if (factura.estado === nuevoEstado) return { ok: true }
+
+  // ── Numeración fiscal: se reserva AQUÍ, al emitir, no al crear el borrador ──
+  // Así un borrador descartado no deja un salto en la serie. Una que ya tuvo número
+  // (se anuló y se resucita) conserva el suyo: el número gastado no se reutiliza.
+  let numeroFiscal: string | null = null
+  if (nuevoEstado === 'EMITIDA' && esNumeroProvisional(factura.numero as string)) {
+    const { data: emp } = await db.from('empresas')
+      .select('letra_facturacion').eq('empresa_id', factura.empresa_id as string)
+      .eq('client_id', session.client_id).maybeSingle()
+    const letra = emp?.letra_facturacion as string | undefined
+    if (!letra) return { ok: false, error: 'Asigna una letra de facturación a la empresa antes de emitir.' }
+
+    const anio = new Date(factura.fecha_emision as string).getFullYear()
+    try {
+      const correlativo = await siguienteCorrelativo(db, session.client_id, factura.empresa_id as string, 'FACTURA', anio)
+      numeroFiscal = formatoNumero('FACTURA', letra, anio, correlativo)
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  }
 
   // Bloquear transición EMITIDA → COBRADA: solo se cobra vía registrarPagoDoc
   if (factura.estado === 'EMITIDA' && nuevoEstado === 'COBRADA') {
@@ -674,10 +689,28 @@ export async function cambiarEstadoFactura(
     if (cxpErr) return { ok: false, error: traducirErrorCxP(cxpErr.message) }
   }
 
-  const { error } = await db.from('facturas')
-    .update({ estado: nuevoEstado, updated_at: new Date().toISOString() })
+  // El número y el estado viajan juntos: emitida sin número no puede existir.
+  const patchEstado = { estado: nuevoEstado, updated_at: new Date().toISOString() }
+  let { error } = await db.from('facturas')
+    .update(numeroFiscal ? { ...patchEstado, numero: numeroFiscal } : patchEstado)
     .eq('factura_id', factura_id)
     .eq('client_id', session.client_id)
+
+  // `siguienteCorrelativo` es read-modify-write no atómica: dos emisiones a la vez
+  // pueden pedir el mismo número y el índice único para a la segunda. Se reintenta una
+  // sola vez con el siguiente libre, que es lo que antes hacía la creación en bucle.
+  if (error && numeroFiscal && error.message.includes('duplicate key')) {
+    const anio = new Date(factura.fecha_emision as string).getFullYear()
+    const { data: emp } = await db.from('empresas')
+      .select('letra_facturacion').eq('empresa_id', factura.empresa_id as string)
+      .eq('client_id', session.client_id).maybeSingle()
+    const correlativo = await siguienteCorrelativo(db, session.client_id, factura.empresa_id as string, 'FACTURA', anio)
+    numeroFiscal = formatoNumero('FACTURA', emp!.letra_facturacion as string, anio, correlativo)
+    ;({ error } = await db.from('facturas')
+      .update({ ...patchEstado, numero: numeroFiscal })
+      .eq('factura_id', factura_id)
+      .eq('client_id', session.client_id))
+  }
   if (error) return { ok: false, error: error.message }
 
   // Emitir engendra la CxP a los proveedores de los servicios vendidos. Es idempotente,
@@ -756,16 +789,9 @@ export async function convertirOfertaEnFactura(
   const validacion = await validarEmpresaAccesible(oferta.empresa_id)
   if (!validacion.ok) return validacion
 
-  const anio = new Date(oferta.fecha_emision).getFullYear()
-  let correlativo: number
-  try {
-    correlativo = await siguienteCorrelativo(db, session.client_id, oferta.empresa_id, 'FACTURA', anio)
-  } catch (err) {
-    return { ok: false, error: (err as Error).message }
-  }
-
+  // La factura nace BORRADOR y sin número fiscal: lo recibirá al emitirse.
   const factura_id = generarIdDocumento('FAC')
-  const numero     = formatoNumero('FACTURA', validacion.letra, anio, correlativo)
+  const numero     = numeroProvisional(factura_id)
 
   const { error: insErr } = await db.from('facturas').insert({
     factura_id,
@@ -969,17 +995,11 @@ export async function duplicarFactura(
   const validacion = await validarEmpresaAccesible(factura.empresa_id)
   if (!validacion.ok) return validacion
 
-  const hoy  = new Date().toISOString().substring(0, 10)
-  const anio = new Date().getFullYear()
-  let correlativo: number
-  try {
-    correlativo = await siguienteCorrelativo(db, session.client_id, factura.empresa_id, 'FACTURA', anio)
-  } catch (err) {
-    return { ok: false, error: (err as Error).message }
-  }
+  const hoy = new Date().toISOString().substring(0, 10)
 
+  // La copia nace BORRADOR y sin número fiscal: duplicar para probar ya no gasta serie.
   const nueva_id = generarIdDocumento('FAC')
-  const numero   = formatoNumero('FACTURA', validacion.letra, anio, correlativo)
+  const numero   = numeroProvisional(nueva_id)
 
   // Calcular vencimiento desde condicion_pago
   const condicion = factura.condicion_pago ?? 'CONTADO'

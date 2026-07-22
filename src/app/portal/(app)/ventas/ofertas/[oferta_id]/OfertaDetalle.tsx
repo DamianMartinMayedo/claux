@@ -1,5 +1,6 @@
 'use client'
 
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect, useRef }   from 'react'
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
@@ -9,13 +10,14 @@ import {
   type OfertaDetalleData,
   type VentasResumenData,
 } from '@/app/actions/portal/ventas'
-import { ConfirmDialog, AlertDialog } from '@/components/portal/Dialog'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
-import { Copy, MoreHorizontal, Pencil, Download } from 'lucide-react'
+import { Copy, MoreHorizontal, Pencil, Download, Send, Check, Ban, Clock, RotateCcw } from 'lucide-react'
 import {
   AJUSTE_TIPO_LABEL,
   CONDICION_PAGO_LABEL,
   ESTADO_OFERTA_LABEL,
+  ACCION_OFERTA_LABEL,
   ESTADO_OFERTA_BADGE,
   TRANSICIONES_OFERTA,
   formatearMoneda,
@@ -30,13 +32,11 @@ interface Props {
 export default function OfertaDetalle({ data }: Props) {
   const router = useRouter()
   const [isPending,    startTransition] = useTransition()
-  const [statusMsg,    setStatusMsg] = useState('')
   const [duplicating,  setDuplicating] = useState(false)
   const [dialog, setDialog] = useState<{
     title: string; body?: string; danger?: boolean; confirmLabel?: string;
     onConfirm: () => void
   } | null>(null)
-  const [alertMsg, setAlertMsg] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [descargandoPdf, setDescargandoPdf] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -85,24 +85,29 @@ export default function OfertaDetalle({ data }: Props) {
       confirmLabel: 'Duplicar',
       onConfirm: async () => {
         setDuplicating(true)
+        const ld = toastLoading('Duplicando…')
         const res = await duplicarOferta(oferta.oferta_id)
+        await ld.dismiss()
         setDuplicating(false)
-        if (!res.ok) { setAlertMsg(res.error ?? 'Error al duplicar.'); return }
+        if (!res.ok) { toastError(res.error ?? 'Error al duplicar.'); return }
         router.push(`/portal/ventas/ofertas/${res.oferta_id}`)
       },
     })
   }
 
   function ejecutarCambioEstado(nuevo: EstadoOferta) {
+    // toastLoading fuera de startTransition (si no, no se pinta el estado de carga).
+    const cargando = { BORRADOR: 'Reabriendo…', ENVIADA: 'Enviando…', APROBADA: 'Aprobando…', RECHAZADA: 'Rechazando…', CADUCADA: 'Caducando…' }[nuevo] ?? 'Guardando…'
+    const ld = toastLoading(cargando)
     startTransition(async () => {
       const res = await cambiarEstadoOferta(oferta.oferta_id, nuevo)
-      if (!res.ok) { setAlertMsg(res.error ?? 'Error al cambiar estado.'); return }
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error al cambiar estado.'); return }
       if (res.factura_id) {
-        setStatusMsg('Oferta aprobada. Factura generada.')
-        setTimeout(() => router.push(`/portal/ventas/facturas/${res.factura_id}`), 1200)
+        toastSuccess('Oferta aprobada. Factura generada.')
+        router.push(`/portal/ventas/facturas/${res.factura_id}`)
       } else {
-        setStatusMsg('Estado actualizado.')
-        setTimeout(() => setStatusMsg(''), 2500)
+        toastSuccess('Estado actualizado.')
         router.refresh()
       }
     })
@@ -126,7 +131,7 @@ export default function OfertaDetalle({ data }: Props) {
 
       {/* ── Breadcrumb ── */}
       <div className="ven-breadcrumb">
-        <Link href="/portal/ventas" className="ven-breadcrumb-link">
+        <Link href="/portal/ventas?t=ofertas" className="ven-breadcrumb-link">
           ← Volver a Ventas
         </Link>
       </div>
@@ -167,16 +172,19 @@ export default function OfertaDetalle({ data }: Props) {
                 {transiciones.length > 0 && (
                   <>
                     <div className="ven-dropdown-sep" />
-                    {transiciones.map(t => (
-                      <button
-                        key={t}
-                        className="ven-dropdown-item"
-                        onClick={() => cambiarEstado(t)}
-                        disabled={isPending}
-                      >
-                        Cambiar a {ESTADO_OFERTA_LABEL[t]}
-                      </button>
-                    ))}
+                    {transiciones.map(t => {
+                      const Icon = { ENVIADA: Send, APROBADA: Check, RECHAZADA: Ban, CADUCADA: Clock, BORRADOR: RotateCcw }[t]
+                      return (
+                        <button
+                          key={t}
+                          className="ven-dropdown-item"
+                          onClick={() => cambiarEstado(t)}
+                          disabled={isPending}
+                        >
+                          <Icon size={14} strokeWidth={2} /> {ACCION_OFERTA_LABEL[t]}
+                        </button>
+                      )
+                    })}
                   </>
                 )}
               </div>
@@ -184,10 +192,6 @@ export default function OfertaDetalle({ data }: Props) {
           </div>
         </div>
       </div>
-
-      {statusMsg && (
-        <div className="alert alert-success mb-4">{statusMsg}</div>
-      )}
 
       {factura && (
         <div className="alert alert-success mb-4 alert-between">
@@ -318,7 +322,6 @@ export default function OfertaDetalle({ data }: Props) {
           onConfirm={() => { const fn = dialog.onConfirm; setDialog(null); fn() }}
         />
       )}
-      {alertMsg && <AlertDialog title="Error" body={alertMsg} onClose={() => setAlertMsg(null)} />}
     </div>
   )
 }

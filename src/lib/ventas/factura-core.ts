@@ -8,7 +8,7 @@
 // quisiera. Aquí no es invocable desde el navegador: solo desde código de servidor que
 // ya ha decidido de qué cliente habla.
 
-import { calcularTotales, formatoNumero, type AjusteInput, type DocumentoTipo, type LineaInput } from '@/app/portal/(app)/ventas/_ventas-helpers'
+import { calcularTotales, numeroProvisional, type AjusteInput, type DocumentoTipo, type LineaInput } from '@/app/portal/(app)/ventas/_ventas-helpers'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
@@ -17,12 +17,27 @@ export function generarIdDocumento(prefijo: 'OFE' | 'FAC'): string {
   return `${prefijo}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 
+// ── Numeración fiscal ─────────────────────────────────────────────────────────
+//
+// El correlativo se reserva al EMITIR, nunca al crear el borrador. Un borrador es un
+// papel de trabajo: se corrige, se descarta, lo genera el cron cada mañana. Si cada uno
+// se llevara un número fiscal, borrarlo dejaría un salto permanente en la serie —y un
+// salto en la numeración de facturas es justo lo primero que pregunta una inspección.
+// Antes pasaba: `eliminarFacturasEnLote` borra la factura pero nunca devolvió el
+// consecutivo, y en producción faltaban ya la 9 y la 15 de 2026.
+//
+// Mientras es borrador lleva un identificador PROVISIONAL, único y que no se puede
+// confundir con un número fiscal ni en un PDF ni en un correo.
+
+// `numeroProvisional` / `esNumeroProvisional` viven en `_ventas-helpers` (junto a
+// `formatoNumero`) porque también los necesita la UI para pintarlos.
+
 /**
  * Reserva y devuelve el siguiente correlativo para (empresa, tipo, año).
  *
  * Es read-modify-write NO atómica: la unicidad real la da el índice único
- * `(client_id, numero)` de cada tabla. Generar N facturas en un bucle es lo que más lo
- * estresa, así que quien lo use debe tolerar el choque y reintentar en vez de asumir.
+ * `(client_id, numero)` de cada tabla. Quien lo use debe tolerar el choque y reintentar
+ * en vez de asumir.
  */
 export async function siguienteCorrelativo(
   db: Db, client_id: string, empresa_id: string, tipo: DocumentoTipo, anio: number,
@@ -119,8 +134,6 @@ export async function escribirLineasYAjustes(
 export interface FacturaBorradorInput {
   client_id:      string
   empresa_id:     string
-  /** Letra de facturación de la empresa: quien llama ya la ha validado. */
-  letra:          string
   cliente_id:     string
   moneda:         string
   fecha_emision:  string
@@ -131,7 +144,7 @@ export interface FacturaBorradorInput {
   ajustes?:        AjusteInput[]
 }
 
-/** Crea una factura en BORRADOR con su numeración y sus líneas. No emite nada. */
+/** Crea una factura en BORRADOR (sin número fiscal) con sus líneas. No emite nada. */
 export async function crearFacturaBorrador(
   db: Db, input: FacturaBorradorInput,
 ): Promise<{ ok: true; factura_id: string; numero: string } | { ok: false; error: string }> {
@@ -139,18 +152,9 @@ export async function crearFacturaBorrador(
   const ajustes = input.ajustes ?? []
   if (lineas.length === 0) return { ok: false, error: 'Añade al menos una línea.' }
 
-  const totales = calcularTotales(lineas, ajustes)
-  const anio    = new Date(input.fecha_emision).getFullYear()
-
-  let correlativo: number
-  try {
-    correlativo = await siguienteCorrelativo(db, input.client_id, input.empresa_id, 'FACTURA', anio)
-  } catch (err) {
-    return { ok: false, error: (err as Error).message }
-  }
-
+  const totales    = calcularTotales(lineas, ajustes)
   const factura_id = generarIdDocumento('FAC')
-  const numero     = formatoNumero('FACTURA', input.letra, anio, correlativo)
+  const numero     = numeroProvisional(factura_id)   // el fiscal se reserva al emitir
 
   const { error } = await db.from('facturas').insert({
     factura_id,
