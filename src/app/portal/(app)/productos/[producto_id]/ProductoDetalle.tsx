@@ -1,5 +1,6 @@
 'use client'
 
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Link                         from 'next/link'
@@ -381,7 +382,6 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
   const [tab,         setTab]         = useState<TabId>('info')
   const [showEdit,    setShowEdit]    = useState(false)
   const [showStock,   setShowStock]   = useState(false)
-  const [statusMsg,   setStatusMsg]   = useState('')
   const [pending,     startT]         = useTransition()
   const router = useRouter()
 
@@ -405,22 +405,22 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
   function handleSaved() {
     setShowStock(false)
-    setStatusMsg('Stock actualizado')
-    setTimeout(() => setStatusMsg(''), 3000)
+    toastSuccess('Stock actualizado')
     router.refresh()
   }
 
   function toggleEstado() {
+    const fn = producto.estado === 'ACTIVO' ? archivarProducto : restaurarProducto
+    const ld = toastLoading(producto.estado === 'ACTIVO' ? 'Archivando…' : 'Restaurando…')
     startT(async () => {
-      const fn = producto.estado === 'ACTIVO' ? archivarProducto : restaurarProducto
       const res = await fn(producto.producto_id)
-      if (!res.ok) { setStatusMsg(res.error ?? 'Error'); return }
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error'); return }
       setData(prev => ({
         ...prev,
         producto: { ...prev.producto, estado: prev.producto.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO' },
       }))
-      setStatusMsg(producto.estado === 'ACTIVO' ? 'Producto archivado' : 'Producto restaurado')
-      setTimeout(() => setStatusMsg(''), 3000)
+      toastSuccess(producto.estado === 'ACTIVO' ? 'Producto archivado' : 'Producto restaurado')
     })
   }
 
@@ -479,9 +479,6 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
       </div>
 
       {/* Status message */}
-      {statusMsg && (
-        <div className="alert alert-success mb-4">{statusMsg}</div>
-      )}
 
       {/* Tabs */}
       <Tabs ariaLabel="Secciones del producto" active={tab} onChange={setTab} tabs={tabs} />
@@ -518,8 +515,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
           onClose={() => setShowEdit(false)}
           onSaved={() => {
             setShowEdit(false)
-            setStatusMsg('Cambios guardados')
-            setTimeout(() => setStatusMsg(''), 3000)
+            toastSuccess('Cambios guardados')
             router.refresh()
           }}
         />

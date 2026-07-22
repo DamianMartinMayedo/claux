@@ -1,5 +1,6 @@
 'use client'
 
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import dynamic                      from 'next/dynamic'
 import Link                         from 'next/link'
@@ -562,23 +563,23 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
   const [tab,       setTab]       = useState<TabId>('datos')
   const [showEdit,  setShowEdit]  = useState(false)
   const [copiar,    setCopiar]    = useState(false)
-  const [statusMsg, setStatusMsg] = useState('')
   const [pending,   startT]       = useTransition()
   const router = useRouter()
 
   const { tercero, empresas } = data
 
   function toggleActivo() {
+    const fn = tercero.activo ? archivarTercero : restaurarTercero
+    const ld = toastLoading(tercero.activo ? 'Archivando…' : 'Restaurando…')
     startT(async () => {
-      const fn = tercero.activo ? archivarTercero : restaurarTercero
       const res = await fn(tercero.tercero_id)
-      if (!res.ok) { setStatusMsg(res.error ?? 'Error'); return }
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error'); return }
       setData(prev => ({
         ...prev,
         tercero: { ...prev.tercero, activo: !prev.tercero.activo },
       }))
-      setStatusMsg(tercero.activo ? 'Tercero archivado' : 'Tercero restaurado')
-      setTimeout(() => setStatusMsg(''), 3000)
+      toastSuccess(tercero.activo ? 'Tercero archivado' : 'Tercero restaurado')
     })
   }
 
@@ -658,10 +659,6 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
         </div>
       </div>
 
-      {statusMsg && (
-        <div className="alert alert-success mb-4">{statusMsg}</div>
-      )}
-
       {/* Tabs */}
       <Tabs ariaLabel="Secciones del contacto" active={tab} onChange={setTab} tabs={tabs} />
 
@@ -700,8 +697,7 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
           onClose={() => setShowEdit(false)}
           onSaved={() => {
             setShowEdit(false)
-            setStatusMsg('Cambios guardados')
-            setTimeout(() => setStatusMsg(''), 3000)
+            toastSuccess('Cambios guardados')
             router.refresh()
           }}
         />

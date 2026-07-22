@@ -30,11 +30,23 @@ const ToastContext = createContext<ToastContextType | null>(null)
 
 // ── Funciones standalone (no requieren hook) ──
 let _addToast: ((type: ToastType, message: string, autoHide?: boolean) => number) | null = null
+let _removeToast: ((id: number) => Promise<void>) | null = null
 
 export function toastSuccess(message: string) { _addToast?.('success', message) }
 export function toastError(message: string)   { _addToast?.('error', message) }
 export function toastWarning(message: string) { _addToast?.('warning', message) }
 export function toastInfo(message: string)    { _addToast?.('info', message) }
+
+/**
+ * Toast de carga standalone: se muestra HASTA que llames a `dismiss()`. Mismo contrato
+ * que `useToast().loading`, para usarlo sin hook. Patrón: mostrar antes de la acción,
+ * `await dismiss()` al terminar y luego el success/error. El estado «cargando» es
+ * innegociable en conexiones lentas (Cuba): la acción nunca debe parecer que no responde.
+ */
+export function toastLoading(message: string): { dismiss: () => Promise<void> } {
+  const id = _addToast?.('loading', message, false)
+  return { dismiss: () => (id != null && _removeToast) ? _removeToast(id) : Promise.resolve() }
+}
 
 let nextId = 0
 
@@ -68,6 +80,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   // Sincronizar con el singleton para llamadas standalone
   _addToast = addToast
+  _removeToast = removeToast
 
   const toast: ToastContextType = {
     success: (msg: string) => addToast('success', msg),
