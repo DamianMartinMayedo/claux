@@ -7,11 +7,18 @@ import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
 import type { MonedaOpcion } from './monedas'
+import {
+  TIPOS_CONTRATO, PERIODICIDADES, generarEmpleadoId, construirCamposEmpleado,
+  type TipoContrato as _TipoContrato, type Periodicidad as _Periodicidad,
+} from '@/lib/rrhh-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-export type TipoContrato  = 'INDEFINIDO' | 'TEMPORAL' | 'POR_OBRA' | 'PRACTICAS'
-export type Periodicidad  = 'MENSUAL' | 'QUINCENAL' | 'SEMANAL' | 'POR_HORA'
+// Los tipos y helpers de Personal viven en `@/lib/rrhh-core` (una sola fuente,
+// compartida con el importador). Se re-declaran directamente porque el re-export
+// agregado `export type { … } from …` rompe el loader de 'use server'.
+export type TipoContrato   = _TipoContrato
+export type Periodicidad   = _Periodicidad
 export type EstadoEmpleado = 'ACTIVO' | 'BAJA'
 
 export interface Empleado {
@@ -146,15 +153,11 @@ export interface RrhhPageData {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TIPOS_CONTRATO: TipoContrato[]  = ['INDEFINIDO', 'TEMPORAL', 'POR_OBRA', 'PRACTICAS']
-const PERIODICIDADES:  Periodicidad[] = ['MENSUAL', 'QUINCENAL', 'SEMANAL', 'POR_HORA']
-
 const EPS = 0.005
 
 function corto(): string {
   return crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()
 }
-function generarEmpleadoId():   string { return `PER-${corto()}` }
 function generarContratoId():   string { return `CON-${corto()}` }
 function generarNominaId():     string { return `NOM-${corto()}` }
 function generarLineaId():      string { return `NLN-${corto()}` }
@@ -329,6 +332,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
       .eq('activa', true)
+      .eq('es_apertura', false)   // técnica de la migración (mig. 130): no se paga desde ella
       .order('nombre'),
   ])
 
@@ -436,42 +440,36 @@ export async function guardarEmpleado(
   const empleado_id  = (formData.get('empleado_id')  as string)?.trim()
   const empresa_id   = (formData.get('empresa_id')   as string)?.trim()
   const nombre       = (formData.get('nombre')       as string)?.trim()
-  const apellidos    = (formData.get('apellidos')    as string)?.trim() || null
-  const documento    = (formData.get('documento')    as string)?.trim() || null
-  const doc_vence    = (formData.get('documento_vencimiento') as string)?.trim() || null
-  const fecha_nac    = (formData.get('fecha_nacimiento')      as string)?.trim() || null
-  const telefono     = (formData.get('telefono')     as string)?.trim() || null
-  const email        = (formData.get('email')        as string)?.trim() || null
-  const direccion    = (formData.get('direccion')    as string)?.trim() || null
-  const cargo        = (formData.get('cargo')        as string)?.trim() || null
-  const departamento = (formData.get('departamento') as string)?.trim() || null
-  const turno        = (formData.get('turno')        as string)?.trim() || null
-  const tipo_raw     = (formData.get('tipo_contrato') as string)?.trim() as TipoContrato
-  const fecha_alta   = (formData.get('fecha_alta')   as string)?.trim() || hoy()
-  const periodi_raw  = (formData.get('periodicidad') as string)?.trim() as Periodicidad
-  const salarioRaw   = parseFloat(formData.get('salario_base') as string)
   const moneda       = (formData.get('moneda')       as string)?.trim()
-  const notas        = (formData.get('notas')        as string)?.trim() || null
 
   if (!nombre)      return { ok: false, error: 'El nombre es obligatorio.' }
   if (!empresa_id)  return { ok: false, error: 'Debes seleccionar una empresa.' }
-
-  const tipo_contrato = TIPOS_CONTRATO.includes(tipo_raw)   ? tipo_raw    : 'INDEFINIDO'
-  const periodicidad  = PERIODICIDADES.includes(periodi_raw) ? periodi_raw : 'MENSUAL'
-  const salario_base  = isNaN(salarioRaw) || salarioRaw < 0 ? 0 : salarioRaw
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_id)) {
     return { ok: false, error: 'Empresa no válida.' }
   }
 
-  const campos = {
-    nombre, apellidos, documento, telefono, email, direccion,
-    documento_vencimiento: doc_vence, fecha_nacimiento: fecha_nac,
-    cargo, departamento, turno, tipo_contrato, fecha_alta,
-    salario_base, periodicidad, notas,
-    updated_at: new Date().toISOString(),
-  }
+  // La normalización (contrato, periodicidad, salario, fecha de alta) la hace el
+  // núcleo compartido con el importador (`@/lib/rrhh-core`).
+  const campos = construirCamposEmpleado({
+    nombre,
+    apellidos:             (formData.get('apellidos')             as string) ?? null,
+    documento:             (formData.get('documento')             as string) ?? null,
+    documento_vencimiento: (formData.get('documento_vencimiento') as string) ?? null,
+    fecha_nacimiento:      (formData.get('fecha_nacimiento')      as string) ?? null,
+    telefono:              (formData.get('telefono')              as string) ?? null,
+    email:                 (formData.get('email')                 as string) ?? null,
+    direccion:             (formData.get('direccion')             as string) ?? null,
+    cargo:                 (formData.get('cargo')                 as string) ?? null,
+    departamento:          (formData.get('departamento')          as string) ?? null,
+    turno:                 (formData.get('turno')                 as string) ?? null,
+    tipo_contrato:         (formData.get('tipo_contrato')         as string) ?? null,
+    fecha_alta:            (formData.get('fecha_alta')            as string) ?? null,
+    salario_base:          parseFloat(formData.get('salario_base') as string),
+    periodicidad:          (formData.get('periodicidad')          as string) ?? null,
+    notas:                 (formData.get('notas')                 as string) ?? null,
+  })
 
   if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
 

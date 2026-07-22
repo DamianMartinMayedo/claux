@@ -9,40 +9,19 @@ import { obtenerMonedasActivas, type MonedaOpcion } from './monedas'
 import { mapaTasas, monedaValida, construirConversor } from '@/lib/tasas'
 import { ESTADOS_FACTURA_INGRESO, ESTADOS_COMPRA_GASTO } from '@/lib/contabilidad'
 import { mesesEntre, hoyEnTz } from '@/lib/fecha-tz'
+import {
+  generarTerceroId, parseVia, construirCamposTercero,
+  type TipoTercero as _TipoTercero, type CondicionPago as _CondicionPago, type ViaPago as _ViaPago,
+} from '@/lib/terceros-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-export type TipoTercero   = 'CLIENTE' | 'PROVEEDOR' | 'AMBOS'
-export type CondicionPago = 'CONTADO' | '15' | '30' | '60' | '90'
-
-/**
- * Cómo se le paga a un tercero. Dato documental (se muestra en su ficha; no lo
- * consumen Tesorería ni las facturas). Se guarda como jsonb, así que los campos
- * son todos opcionales: cada `tipo` usa los suyos. El catálogo de tipos y qué
- * campos pide cada uno viven en `(app)/terceros/_vias-pago.ts`.
- */
-export interface ViaPago {
-  tipo:         string
-  /** Moneda de la vía, de las que el cliente tiene configuradas. */
-  moneda?:      string
-  // Transferencia bancaria · Transfermóvil · EnZona · internacional
-  titular?:     string
-  cuenta?:      string        // cuenta o tarjeta
-  banco?:       string
-  telefono?:    string
-  tipo_cuenta?: string        // Checking | Savings (solo internacional)
-  // Transferencia internacional (extras)
-  swift?:       string
-  routing?:     string
-  id_titular?:  string
-  direccion?:   string
-  // Zelle · TropiPay
-  nombre?:      string
-  contacto?:    string        // teléfono o email
-  email_link?:  string
-  // Efectivo
-  referencia?:  string
-}
+// Tipos base y helpers de terceros viven en `@/lib/terceros-core` (una sola
+// fuente, compartida con el importador). Se re-declaran directamente porque el
+// re-export agregado `export type { … } from …` rompe el loader de 'use server'.
+export type TipoTercero   = _TipoTercero
+export type CondicionPago = _CondicionPago
+export type ViaPago       = _ViaPago
 
 export interface Tercero {
   tercero_id:             string
@@ -91,27 +70,7 @@ export interface EmpresaDestino {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function generarTerceroId(): string {
-  return `TER-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-
-function validarTipo(v: string): TipoTercero {
-  return (['CLIENTE', 'PROVEEDOR', 'AMBOS'] as TipoTercero[]).includes(v as TipoTercero)
-    ? (v as TipoTercero)
-    : 'CLIENTE'
-}
-
-function validarCondicion(v: string): CondicionPago {
-  return (['CONTADO', '15', '30', '60', '90'] as CondicionPago[]).includes(v as CondicionPago)
-    ? (v as CondicionPago)
-    : 'CONTADO'
-}
-
-function parseVia(str: string): ViaPago | null {
-  if (!str) return null
-  try { return JSON.parse(str) as ViaPago }
-  catch { return null }
-}
+// generarTerceroId / validarTipo / validarCondicion / parseVia → `@/lib/terceros-core`.
 
 // Acepta un código de moneda de un formulario. Se exige que esté configurada y
 // activa SALVO que sea la que la ficha ya tenía: una moneda vieja no debe
@@ -234,31 +193,30 @@ export async function guardarTercero(
     contrato_url = publicUrl
   }
 
-  // ── Campos comunes ────────────────────────────────────────────────────────
-  const campos = {
+  // ── Campos comunes (núcleo compartido con el importador) ──────────────────
+  const campos = construirCamposTercero({
     empresa_id,
-    tipo:                   validarTipo((formData.get('tipo') as string) ?? ''),
+    tipo:                  (formData.get('tipo')           as string) ?? '',
     nombre,
-    identificacion:         ((formData.get('identificacion')  as string) ?? '').trim() || null,
-    representante:          ((formData.get('representante')   as string) ?? '').trim() || null,
-    cargo:                  ((formData.get('cargo')           as string) ?? '').trim() || null,
-    telefono:               ((formData.get('telefono')        as string) ?? '').trim() || null,
-    email:                  ((formData.get('email')           as string) ?? '').trim() || null,
-    direccion:              ((formData.get('direccion')       as string) ?? '').trim() || null,
-    ciudad:                 ((formData.get('ciudad')          as string) ?? '').trim() || null,
-    pais:                   ((formData.get('pais')            as string) ?? '').trim() || null,
-    condicion_pago:         validarCondicion((formData.get('condicion_pago') as string) ?? ''),
-    limite_credito:         (limite_credito !== null && !isNaN(limite_credito)) ? limite_credito : null,
+    identificacion:        (formData.get('identificacion') as string) ?? '',
+    representante:         (formData.get('representante')   as string) ?? '',
+    cargo:                 (formData.get('cargo')           as string) ?? '',
+    telefono:              (formData.get('telefono')        as string) ?? '',
+    email:                 (formData.get('email')           as string) ?? '',
+    direccion:             (formData.get('direccion')       as string) ?? '',
+    ciudad:                (formData.get('ciudad')          as string) ?? '',
+    pais:                  (formData.get('pais')            as string) ?? '',
+    condicion_pago:        (formData.get('condicion_pago')  as string) ?? '',
+    limite_credito,
     moneda_defecto,
-    via_primaria:           via_primaria  as object | null,
-    via_secundaria:         via_secundaria as object | null,
+    via_primaria,
+    via_secundaria,
     contrato_url,
-    num_contrato:           ((formData.get('num_contrato')           as string) ?? '').trim() || null,
-    fecha_inicio_contrato:  ((formData.get('fecha_inicio_contrato')  as string) ?? '').trim() || null,
-    fecha_fin_contrato:     ((formData.get('fecha_fin_contrato')     as string) ?? '').trim() || null,
-    notas:                  ((formData.get('notas')           as string) ?? '').trim() || null,
-    updated_at:             new Date().toISOString(),
-  }
+    num_contrato:          (formData.get('num_contrato')          as string) ?? '',
+    fecha_inicio_contrato: (formData.get('fecha_inicio_contrato') as string) ?? '',
+    fecha_fin_contrato:    (formData.get('fecha_fin_contrato')    as string) ?? '',
+    notas:                 (formData.get('notas')           as string) ?? '',
+  })
 
   if (!tercero_id_form) {
     const { error } = await db.from('third_parties').insert({

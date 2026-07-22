@@ -6,10 +6,17 @@ import { getPortalSession, puedeEditarModulo, puedeEditarAlgunModulo }  from './
 import { MODULOS_CATALOGO, tieneModulo } from '@/lib/modulos'
 import { etiquetasDe }        from '@/lib/sector'
 import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
+import {
+  generarProductoId, siguienteCodigoProducto, construirCamposProducto,
+  type TipoProducto as _TipoProducto,
+} from '@/lib/productos-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-export type TipoProducto = 'PRODUCTO' | 'SERVICIO'
+// El tipo y los helpers del catálogo viven en `@/lib/productos-core` (una sola
+// fuente, compartida con el importador). Se re-declara directamente porque el
+// re-export agregado `export type { … } from …` rompe el loader de 'use server'.
+export type TipoProducto = _TipoProducto
 
 /** Para qué sirve una categoría. `AMBAS` = vale para físicos y para servicios. */
 export type TipoCategoria = TipoProducto | 'AMBAS'
@@ -86,37 +93,8 @@ async function contextoCatalogo(
   }
 }
 
-function generarProductoId(tipo: TipoProducto): string {
-  const pfx = tipo === 'SERVICIO' ? 'SRV' : 'PRD'
-  return `${pfx}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-
 function generarCategoriaId(): string {
   return `CAT-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-
-async function generarCodigo(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:        any,
-  client_id: string,
-  tipo:      TipoProducto,
-): Promise<string> {
-  const pfx = tipo === 'SERVICIO' ? 'SRV' : 'PRD'
-  const { data } = await db
-    .from('products')
-    .select('codigo')
-    .eq('client_id', client_id)
-    .like('codigo', `${pfx}-%`)
-    .order('codigo', { ascending: false })
-    .limit(1)
-
-  let num = 1
-  if (data && data.length > 0) {
-    const last  = (data[0].codigo as string).split('-')
-    const n     = parseInt(last[last.length - 1]) || 0
-    num         = n + 1
-  }
-  return `${pfx}-${String(num).padStart(4, '0')}`
 }
 
 // ── Obtener ───────────────────────────────────────────────────────────────────
@@ -219,27 +197,22 @@ export async function guardarProducto(
 
   const producto_id_form = ((formData.get('producto_id') as string) ?? '').trim()
 
-  const campos = {
+  // Las reglas por tipo (unidad de servicio, suscribible, stock mínimo) las
+  // aplica el núcleo compartido con el importador (`@/lib/productos-core`).
+  const campos = construirCamposProducto({
     nombre,
     tipo,
-    // Servicio sin unidad → valor neutro, no se le pide al usuario (no siempre es medible).
-    unidad:           tipo === 'SERVICIO' ? (unidad || 'servicio') : unidad,
-    codigo_proveedor: ((formData.get('codigo_proveedor') as string) ?? '').trim() || null,
-    descripcion:      ((formData.get('descripcion')      as string) ?? '').trim() || null,
-    categoria_id:     ((formData.get('categoria_id')     as string) ?? '').trim() || null,
-    proveedor_id:     ((formData.get('proveedor_id')     as string) ?? '').trim() || null,
+    unidad,
+    codigo_proveedor:     (formData.get('codigo_proveedor')     as string) ?? null,
+    descripcion:          (formData.get('descripcion')          as string) ?? null,
+    categoria_id:         (formData.get('categoria_id')         as string) ?? null,
+    proveedor_id:         (formData.get('proveedor_id')         as string) ?? null,
     precios,
     costos,
-    // Suscribible solo aplica a servicios; un físico nunca lo es.
-    es_suscribible:       tipo === 'SERVICIO' && (formData.get('es_suscribible') as string) === '1',
-    periodicidad_defecto: tipo === 'SERVICIO'
-      ? (((formData.get('periodicidad_defecto') as string) ?? '').trim() || null)
-      : null,
-    stock_minimo:     tipo === 'SERVICIO'
-      ? 0
-      : (parseFloat((formData.get('stock_minimo') as string) ?? '0') || 0),
-    updated_at:       new Date().toISOString(),
-  }
+    es_suscribible:       (formData.get('es_suscribible')       as string) === '1',
+    periodicidad_defecto: (formData.get('periodicidad_defecto') as string) ?? null,
+    stock_minimo:         parseFloat((formData.get('stock_minimo') as string) ?? '0') || 0,
+  })
 
   if (!producto_id_form) {
     // Un producto FÍSICO necesita un almacén donde registrar su stock (un servicio
@@ -252,7 +225,7 @@ export async function guardarProducto(
       if (!count) return { ok: false, error: 'Crea un almacén antes de registrar productos físicos.' }
     }
     const producto_id = generarProductoId(tipo)
-    const codigo      = await generarCodigo(db, session.client_id, tipo)
+    const codigo      = await siguienteCodigoProducto(db, session.client_id, tipo)
 
     const { error } = await db.from('products').insert({
       producto_id,
