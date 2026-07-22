@@ -7,6 +7,8 @@ import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { type CategoriaGasto } from './gastos'
 import { monedaValida }      from '@/lib/tasas'
+import { generarCuentaId, generarMovimientoId } from '@/lib/tesoreria-core'
+import { generarRegistroId } from '@/lib/gastos-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -67,16 +69,9 @@ export interface TesoreriaPageData {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function generarCuentaId(): string {
-  return `CTA-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-function generarMovimientoId(): string {
-  return `MOV-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-function generarRegistroId(tipo: 'GASTO' | 'COBRO'): string {
-  const pre = tipo === 'GASTO' ? 'GAS' : 'COB'
-  return `${pre}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
+// Los generadores viven en los núcleos compartidos con el importador
+// (`@/lib/tesoreria-core`, `@/lib/gastos-core`): un código de negocio no puede
+// tener tres copias del mismo generador repartidas por el portal.
 
 const TIPOS_CUENTA:     TipoCuenta[]     = ['CAJA', 'BANCO', 'PASARELA', 'OTRO']
 const TIPOS_MOVIMIENTO: TipoMovimiento[] = ['INGRESO', 'EGRESO']
@@ -111,8 +106,13 @@ export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
       .order('nombre'),
   ])
 
-  const cuentas     = (cuRes.data  ?? []) as Cuenta[]
-  const movimientos = (movRes.data ?? []) as Movimiento[]
+  // Las cuentas de «Apertura» (mig. 130) NO son dinero real: son el contrapeso
+  // técnico contra el que el importador salda el histórico ya pagado. Ni ellas ni
+  // sus movimientos entran en Tesorería — enseñarlas sería inventar caja.
+  const todasCuentas = (cuRes.data ?? []) as (Cuenta & { es_apertura?: boolean })[]
+  const idsApertura  = new Set(todasCuentas.filter(c => c.es_apertura).map(c => c.cuenta_id))
+  const cuentas      = todasCuentas.filter(c => !c.es_apertura) as Cuenta[]
+  const movimientos  = ((movRes.data ?? []) as Movimiento[]).filter(m => !idsApertura.has(m.cuenta_id))
 
   // Saldos por cuenta
   const agregados = new Map<string, { ingresos: number; egresos: number; num: number }>()

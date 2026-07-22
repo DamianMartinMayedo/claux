@@ -157,7 +157,7 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     db.from('gastos_cobros').select('fecha, monto, moneda')
       .eq('client_id', cid).in('empresa_id', empresaIds).eq('tipo', 'GASTO').gte('fecha', desde6),
     db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
-    db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true),
+    db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true).eq('es_apertura', false),
     db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, moneda, estado')
       .eq('client_id', cid).in('empresa_id', empresaIds).order('fecha_emision', { ascending: false }).limit(5),
     db.from('monedas').select('codigo').eq('client_id', cid).eq('es_consolidacion', true).limit(1).maybeSingle(),
@@ -227,7 +227,9 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
   }
 
   // Caja por moneda (igual que Tesorería: saldo_inicial de cuentas activas + Σ INGRESO − Σ EGRESO;
-  // cuentas archivadas quedan fuera, junto con sus movimientos)
+  // cuentas archivadas quedan fuera, junto con sus movimientos — y también las de
+  // «Apertura» de la migración, que no son caja: el `continue` de abajo las descarta
+  // porque no están en `cuentaMoneda`)
   const cuentaMoneda = new Map<string, string>()
   const cajaMap = new Map<string, number>()
   for (const c of (cuentasCaja.data ?? [])) {

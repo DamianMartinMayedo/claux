@@ -89,7 +89,9 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
       .not('referencia_id', 'is', null),
     db.from('third_parties').select('tercero_id, nombre')
       .eq('client_id', session.client_id),
-    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa')
+    // Todas (la de «Apertura» incluida) porque resuelven el nombre de cada
+    // liquidación; el selector de cuenta las filtra abajo.
+    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa, es_apertura')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
       .order('nombre'),
@@ -175,7 +177,7 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
     modo,
     documentos,
     cuentas:         (cuRes.data ?? [])
-                       .filter((c: Record<string, unknown>) => c.activa)
+                       .filter((c: Record<string, unknown>) => c.activa && !c.es_apertura)
                        .map((c: Record<string, unknown>) => ({
                          cuenta_id: c.cuenta_id as string, nombre: c.nombre as string,
                          empresa_id: c.empresa_id as string, moneda: c.moneda as string,
@@ -221,6 +223,7 @@ export async function obtenerCobrosFactura(factura_id: string): Promise<CobrosFa
     db.from('cuentas').select('cuenta_id, nombre, moneda')
       .eq('client_id', session.client_id)
       .eq('activa', true)
+      .eq('es_apertura', false)
       .order('nombre'),
   ])
 
@@ -294,10 +297,12 @@ export async function registrarPagoDoc(
 
   // Cuenta destino/origen
   const { data: cuenta } = await db.from('cuentas')
-    .select('empresa_id, moneda, activa')
+    .select('empresa_id, moneda, activa, es_apertura')
     .eq('cuenta_id', cuenta_id).eq('client_id', session.client_id).single()
-  if (!cuenta)        return { ok: false, error: 'Cuenta no encontrada.' }
-  if (!cuenta.activa) return { ok: false, error: 'La cuenta está archivada.' }
+  if (!cuenta)            return { ok: false, error: 'Cuenta no encontrada.' }
+  if (!cuenta.activa)     return { ok: false, error: 'La cuenta está archivada.' }
+  // Técnica de la migración (mig. 130): no se cobra ni se paga desde ella.
+  if (cuenta.es_apertura) return { ok: false, error: 'Esa cuenta es técnica (apertura de la migración): no se puede pagar ni cobrar desde ella.' }
 
   // Moneda distinta a la del documento → se aplica tasa (misma lógica que las transferencias).
   // `montoRaw` es siempre el importe en la moneda del documento (lo que reduce su saldo);

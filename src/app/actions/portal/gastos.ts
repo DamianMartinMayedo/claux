@@ -6,10 +6,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
+import { etiquetaDeCategoria, generarRegistroId, type TipoRegistro as _TipoRegistro } from '@/lib/gastos-core'
+import { generarMovimientoId } from '@/lib/tesoreria-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-export type TipoRegistro   = 'GASTO' | 'COBRO'
+// El tipo y los helpers viven en `@/lib/gastos-core` (una sola fuente, compartida
+// con el importador). Se re-declara directamente porque el re-export agregado
+// `export type { … } from …` rompe el loader de 'use server'.
+export type TipoRegistro   = _TipoRegistro
 export type EstadoRegistro = 'PENDIENTE' | 'PARCIAL' | 'LIQUIDADO'
 export type EstadoCategoria = 'ACTIVO' | 'INACTIVO'
 
@@ -74,15 +79,8 @@ export interface GastosCobrosPageData {
 
 const EPS = 0.005
 
-function generarRegistroId(tipo: TipoRegistro): string {
-  const pre = tipo === 'GASTO' ? 'GAS' : 'COB'
-  return `${pre}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
 function generarCategoriaGastoId(): string {
   return `CATGAS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
-function generarMovimientoId(): string {
-  return `MOV-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
@@ -115,7 +113,9 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
       .eq('client_id', session.client_id)
       .in('origen', ['PAGO', 'COBRO'])
       .not('referencia_id', 'is', null),
-    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa')
+    // Se traen TODAS (incluida la de «Apertura») porque también resuelven el
+    // nombre de cada liquidación; el selector de cuenta sí las filtra abajo.
+    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa, es_apertura')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
       .order('nombre'),
@@ -136,7 +136,7 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
 
   const registros = (regRes.data ?? []) as GastoCobro[]
   const movs      = (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string; referencia_id: string }[]
-  const cuentas   = (cuRes.data  ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean }[]
+  const cuentas   = (cuRes.data  ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean; es_apertura: boolean }[]
 
   const cuentaNombre: Record<string, string> = {}
   for (const c of cuentas) cuentaNombre[c.cuenta_id] = c.nombre
@@ -195,7 +195,7 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
   return {
     registros:         registrosConSaldo,
     terceros:          (terRes.data ?? []) as GastosCobrosPageData['terceros'],
-    cuentas:           cuentas.filter(c => c.activa).map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda })),
+    cuentas:           cuentas.filter(c => c.activa && !c.es_apertura).map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda })),
     monedas:           ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
     categorias_gastos,
     empresa_nombres,
@@ -246,20 +246,12 @@ export async function guardarGastoCobro(
 
   if (tipo === 'GASTO') {
     if (!categoria_id_in) return { ok: false, error: 'Debes elegir una categoría para el gasto.' }
-    const { data: nodo } = await db.from('categorias_gastos')
-      .select('nombre, parent_id, estado')
-      .eq('categoria_id', categoria_id_in)
-      .eq('client_id', session.client_id)
-      .maybeSingle()
-    if (!nodo || nodo.estado !== 'ACTIVO') return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
-    categoria_id    = categoria_id_in
-    categoriaNombre = nodo.nombre
-    descripcion     = nodo.nombre
-    if (nodo.parent_id) {
-      const { data: padre } = await db.from('categorias_gastos')
-        .select('nombre').eq('categoria_id', nodo.parent_id).eq('client_id', session.client_id).maybeSingle()
-      if (padre) descripcion = `${padre.nombre} · ${nodo.nombre}`
-    }
+    // La derivación de la etiqueta vive en el núcleo compartido con el importador.
+    const etq = await etiquetaDeCategoria(db, session.client_id, categoria_id_in)
+    if (!etq) return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
+    categoria_id    = etq.categoria_id
+    categoriaNombre = etq.nombre
+    descripcion     = etq.descripcion
   } else {
     if (!conceptoForm) return { ok: false, error: 'El concepto es obligatorio.' }
     descripcion = conceptoForm
@@ -408,12 +400,15 @@ export async function registrarLiquidacion(
   }
 
   const { data: cuenta } = await db.from('cuentas')
-    .select('empresa_id, moneda, activa')
+    .select('empresa_id, moneda, activa, es_apertura')
     .eq('cuenta_id', cuenta_id)
     .eq('client_id', session.client_id)
     .single()
-  if (!cuenta)        return { ok: false, error: 'Cuenta no encontrada.' }
-  if (!cuenta.activa) return { ok: false, error: 'La cuenta está archivada.' }
+  if (!cuenta)            return { ok: false, error: 'Cuenta no encontrada.' }
+  if (!cuenta.activa)     return { ok: false, error: 'La cuenta está archivada.' }
+  // La cuenta de «Apertura» solo la usa el importador para saldar el histórico
+  // (mig. 130): pagar desde ella a mano sería mover dinero que no existe.
+  if (cuenta.es_apertura) return { ok: false, error: 'Esa cuenta es técnica (apertura de la migración): no se puede pagar ni cobrar desde ella.' }
 
   // Moneda distinta a la del registro → se aplica tasa (misma lógica que las transferencias).
   // `montoRaw` es el importe en la moneda del registro (reduce su saldo); en la caja

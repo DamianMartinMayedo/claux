@@ -190,6 +190,7 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
       .eq('client_id', session.client_id).in('empresa_id', ids.length ? ids : ['__none__']).order('nombre'),
     db.from('cuentas').select('cuenta_id, nombre, moneda, empresa_id')
       .eq('client_id', session.client_id).eq('activa', true)
+      .eq('es_apertura', false)   // técnica de la migración (mig. 130): no es caja
       .in('empresa_id', ids.length ? ids : ['__none__']).order('nombre'),
     db.from('monedas').select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo'),
     db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
@@ -259,7 +260,8 @@ export async function guardarConfigCaja(
           .eq('client_id', session.client_id).eq('empresa_id', empresaFinal).maybeSingle()
       : Promise.resolve({ data: null }),
     db.from('cuentas').select('cuenta_id')
-      .eq('client_id', session.client_id).eq('empresa_id', empresaFinal),
+      .eq('client_id', session.client_id).eq('empresa_id', empresaFinal)
+      .eq('es_apertura', false),   // una caja no puede depositar en la cuenta técnica
   ])
   const cuentasValidas = new Set((cuentasEmpresa.data ?? []).map((c: { cuenta_id: string }) => c.cuenta_id))
   const cuentasFinal: Record<string, string> = {}

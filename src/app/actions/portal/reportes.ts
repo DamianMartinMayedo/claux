@@ -70,7 +70,7 @@ export async function obtenerReportes(
   const empresa_ids = empresas.map(e => e.empresa_id)
   const ids         = empresaId ? [empresaId] : (empresa_ids.length ? empresa_ids : ['__none__'])
 
-  const [facRes, gcRes, movRes, consolRes, tasasRes] = await Promise.all([
+  const [facRes, gcRes, movRes, consolRes, tasasRes, aperRes] = await Promise.all([
     db.from('facturas').select('factura_id, moneda, total, fecha_emision, estado')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
@@ -78,7 +78,7 @@ export async function obtenerReportes(
     db.from('gastos_cobros').select('tipo, moneda, monto, categoria, fecha')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .gte('fecha', desde).lte('fecha', hasta),
-    db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha')
+    db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha, cuenta_id')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .neq('origen', 'TRANSFERENCIA')
       .gte('fecha', desde).lte('fecha', hasta),
@@ -86,6 +86,8 @@ export async function obtenerReportes(
       .eq('es_consolidacion', true).limit(1).maybeSingle(),
     db.from('tasas_cambio').select('moneda_origen, moneda_destino, tasa, fecha')
       .eq('client_id', session.client_id).order('fecha', { ascending: false }),
+    db.from('cuentas').select('cuenta_id')
+      .eq('client_id', session.client_id).eq('es_apertura', true),
   ])
 
   // ── Estado de resultados (devengado) ──
@@ -176,7 +178,15 @@ export async function obtenerReportes(
     return f
   }
 
-  for (const m of (movRes.data ?? []) as { tipo: string; moneda: string; monto: number; origen: string }[]) {
+  // Las cuentas de «Apertura» (mig. 130) quedan FUERA del flujo: son el contrapeso
+  // técnico con el que la migración salda el histórico ya pagado, no efectivo que
+  // haya entrado o salido de verdad. En el estado de resultados, en cambio, esos
+  // gastos SÍ cuentan (están en `gastos_cobros`, por su fecha) — que es justo lo
+  // que se busca: resultado devengado completo, caja intacta.
+  const cuentasApertura = new Set(((aperRes.data ?? []) as { cuenta_id: string }[]).map(c => c.cuenta_id))
+
+  for (const m of (movRes.data ?? []) as { tipo: string; moneda: string; monto: number; origen: string; cuenta_id: string }[]) {
+    if (cuentasApertura.has(m.cuenta_id)) continue
     const f = getFlujo(m.moneda)
     const monto = Number(m.monto)
     if (m.tipo === 'INGRESO') {
