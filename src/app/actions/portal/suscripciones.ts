@@ -112,9 +112,44 @@ export async function obtenerSuscripciones(): Promise<SuscripcionesPageData | nu
 
 // ── Guardar (crear / editar) ────────────────────────────────────────────────────
 
+/**
+ * Deja hecho el borrador del PRIMER cobro cuando el acuerdo nace ya vencido, en vez
+ * de esperar al cron de mañana: si al dueño se le dice que la factura se genera sola,
+ * ver un botón de «Generar» al terminar el alta es exactamente lo contrario.
+ *
+ * Acotado al cliente de ESTA suscripción (se excluye al resto del período): dar de alta
+ * un acuerdo no puede facturarle de golpe a los demás clientes que tuvieran algo
+ * pendiente ese mes. Y es silencioso: sin Contabilidad o sin letra de facturación no
+ * hay factura posible, pero la suscripción se guarda igual y el cobro sigue su curso.
+ */
+async function borradorDelPrimerCobro(
+  db: ReturnType<typeof createAdminClient>,
+  clientId: string, empresa_id: string, cliente_id: string, moneda: string,
+  fecha_proximo_cobro: string,
+): Promise<string | null> {
+  if (fecha_proximo_cobro > hoyStr()) return null      // aún no toca: ya lo hará el cron
+  if (!(await puedeEditarModulo('base'))) return null   // facturar de verdad exige Contabilidad
+
+  const { data: emp } = await db.from('empresas')
+    .select('letra_facturacion').eq('empresa_id', empresa_id).eq('client_id', clientId).maybeSingle()
+  const letra = emp?.letra_facturacion as string | undefined
+  if (!letra) return null                               // sin letra no hay con qué numerar
+
+  const periodo = fecha_proximo_cobro.slice(0, 7)
+  const prev = await construirPreview(db, clientId, empresa_id, periodo)
+  if (!prev.ok || !prev.preview) return null
+
+  const mio = `${cliente_id}#${moneda}`
+  const excluir = prev.preview.grupos.map(g => `${g.cliente_id}#${g.moneda}`).filter(k => k !== mio)
+  if (excluir.length === prev.preview.grupos.length) return null   // no hay grupo mío que facturar
+
+  const r = await generarFacturasPeriodo(db, clientId, empresa_id, letra, periodo, excluir)
+  return r.numeros?.[0] ?? null
+}
+
 export async function guardarSuscripcion(
   formData: FormData,
-): Promise<{ ok: boolean; error?: string; suscripcion_id?: string }> {
+): Promise<{ ok: boolean; error?: string; suscripcion_id?: string; factura?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
@@ -229,8 +264,20 @@ export async function guardarSuscripcion(
       console.error('[suscripciones] insert lineas:', errLin)
       return { ok: false, error: 'Error al guardar los servicios del acuerdo.' }
     }
+
+    // El acuerdo ya existe y está bien: lo que venga de aquí no puede tumbarlo.
+    let factura: string | null = null
+    try {
+      factura = await borradorDelPrimerCobro(
+        db, session.client_id, empresa_id, cliente_id, moneda, fecha_proximo_cobro,
+      )
+    } catch (e) {
+      console.error('[suscripciones] borrador del primer cobro:', e)
+    }
+
     revalidatePath('/portal/suscripciones')
-    return { ok: true, suscripcion_id }
+    if (factura) revalidatePath('/portal/ventas')
+    return { ok: true, suscripcion_id, factura: factura ?? undefined }
   }
 
   const { error } = await db.from('suscripciones')

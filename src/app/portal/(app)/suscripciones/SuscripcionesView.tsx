@@ -202,7 +202,12 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     startTransition(async () => {
       const res = await guardarSuscripcion(fd)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      toastSuccess(isEdit ? 'Suscripción actualizada.' : 'Suscripción creada.')
+      toastSuccess(
+        isEdit          ? 'Suscripción actualizada.'
+        // Sin número: el borrador no lo tiene hasta que se emite.
+        : res.factura   ? 'Suscripción creada. Su factura borrador ya está en Ventas.'
+        :                 'Suscripción creada.',
+      )
       onSaved()
     })
   }
@@ -386,6 +391,18 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                         ? 'Se renueva sola; el fin es solo la fecha del acuerdo.'
                         : 'Sin renovar: ese día deja de cobrarse y la suscripción pasa a «Vencida».'}
                     </span>
+                  </div>
+                )}
+                {/* Se avisa ANTES de guardar: la factura aparece sola y nadie debería
+                    descubrir un documento que no recuerda haber creado. */}
+                {!isEdit && proximoCobro && proximoCobro <= hoy && (
+                  <div className="ter-col-full">
+                    <div className="alert alert-info">
+                      <span>
+                        Como ya toca cobrar, al guardar se creará la <strong>factura borrador</strong> en
+                        Ventas. No se emite ni se envía: la revisas y la emites tú.
+                      </span>
+                    </div>
                   </div>
                 )}
                 <div className="input-group ter-col-full">

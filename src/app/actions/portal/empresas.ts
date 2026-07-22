@@ -27,8 +27,6 @@ export interface Empresa {
   email:             string | null
   moneda_funcional:  string | null
   letra_facturacion: string | null
-  /** Deja los borradores de suscripciones hechos solos (mig. 123). */
-  facturacion_auto:  boolean
   logo_url:          string | null
   mostrar_logo:      boolean
   color:             string
@@ -158,9 +156,6 @@ export async function guardarEmpresa(
     email:            ((formData.get('email')           as string) ?? '').trim() || null,
     moneda_funcional: ((formData.get('moneda_funcional') as string) ?? '').trim() || null,
     letra_facturacion,
-    // Solo tiene sentido con letra: sin ella no se puede numerar ninguna factura, así
-    // que dejarlo activado prometería algo que el cron no podría cumplir.
-    facturacion_auto: !!letra_facturacion && formData.get('facturacion_auto') === '1',
     mostrar_logo,
     color,
     updated_at: new Date().toISOString(),

@@ -107,7 +107,7 @@ export async function construirPreview(
   // Las dos consultas de partida van juntas: lo que TOCA cobrar y lo que YA se cobró en
   // el período. La segunda ya no se puede saltar cuando no queda nada pendiente — es
   // justo el caso «ya está todo facturado», el que hay que poder enseñar.
-  const [{ data }, { data: facs }] = await Promise.all([
+  const [{ data, error: errSubs }, { data: facs, error: errFacs }] = await Promise.all([
     // Un período contiene SOLO sus cobros (`gte inicio`), no todo lo vencido hasta su
     // fin. Sin ese suelo, una suscripción atrasada desde mayo se colaba en la factura de
     // julio como si fuera de julio: se cobraba un ciclo, la fecha avanzaba uno, y los
@@ -122,6 +122,10 @@ export async function construirPreview(
       .neq('estado', 'ANULADA')
       .gte('fecha_emision', inicio).lte('fecha_emision', fin),
   ])
+  // Una consulta rota aquí NO puede pasar por «no hay nada que facturar»: esta es
+  // la lista de lo que se va a cobrar, y quedarse callada es perder el cobro.
+  if (errSubs) return { ok: false, error: `No se pudieron leer las suscripciones: ${errSubs.message}` }
+  if (errFacs) return { ok: false, error: `No se pudieron leer las facturas del período: ${errFacs.message}` }
 
   // Solo ACTIVAS efectivas: una vencida de fin fijo no se cobra.
   let subs = ((data ?? []) as SubFila[]).filter(s =>
@@ -231,9 +235,14 @@ export async function construirCalendario(
   const mesActual = hoy.slice(0, 7)
   const mesHasta  = sumarMeses(mesActual, mesesFuturo)
 
-  const { data: subsRaw } = await db.from('suscripciones')
-    .select('suscripcion_id, cliente_id, descuento_modo, descuento_valor, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro')
+  // Sin `descuento_*`: el descuento es de cada LÍNEA desde la mig. 125, que borró
+  // esas columnas de `suscripciones`. Pedirlas aquí hacía fallar la consulta
+  // entera y, como el error se tragaba, el calendario decía «no hay cobros» con
+  // el negocio lleno de suscripciones activas. De ahí que el `error` se mire.
+  const { data: subsRaw, error: errSubs } = await db.from('suscripciones')
+    .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro')
     .eq('client_id', clientId).eq('empresa_id', empresa_id).eq('estado', 'ACTIVA')
+  if (errSubs) return { ok: false, error: `No se pudieron leer las suscripciones: ${errSubs.message}` }
 
   // Solo ACTIVAS efectivas: una vencida de fin fijo no se proyecta.
   const subs = ((subsRaw ?? []) as SubFila[]).filter(s =>
@@ -383,6 +392,8 @@ export async function construirCalendario(
 
 export interface ResultadoFacturacion {
   ok: boolean; error?: string; generadas?: number; fallidas?: number
+  /** Números de lo creado, para poder nombrarlo al usuario («Borrador FA20260013»). */
+  numeros?: string[]
 }
 
 /**
@@ -394,6 +405,10 @@ export async function generarFacturasPeriodo(
   db: Db, clientId: string, empresa_id: string, letra: string, periodo: string,
   excluir: string[] = [],
 ): Promise<ResultadoFacturacion> {
+  // La letra ya no se usa para numerar (eso pasó a la emisión), pero se sigue exigiendo:
+  // generar borradores para una empresa que nunca podrá emitirlos es trabajo muerto.
+  if (!letra) return { ok: false, error: 'La empresa no tiene letra de facturación.' }
+
   const res = await construirPreview(db, clientId, empresa_id, periodo)
   if (!res.ok || !res.preview) return { ok: false, error: res.error ?? 'No se pudo preparar la facturación.' }
 
@@ -410,6 +425,7 @@ export async function generarFacturasPeriodo(
 
   let generadas = 0, fallidas = 0
   let primerError: string | undefined
+  const numeros: string[] = []
 
   for (const g of grupos) {
     // La descripción explica el importe: una línea de 27.000 sin decir que son tres
@@ -430,20 +446,20 @@ export async function generarFacturasPeriodo(
     })
 
     const datos = {
-      client_id: clientId, empresa_id, letra,
+      client_id: clientId, empresa_id,
       cliente_id: g.cliente_id, moneda: g.moneda, fecha_emision,
       condicion_pago: 'CONTADO',
       notas_internas: `Facturación de suscripciones — ${periodo}`,
       lineas,
     }
 
-    // `siguienteCorrelativo` es read-modify-write NO atómica y la unicidad la salva el
-    // índice (client_id, numero): generar N facturas seguidas es justo lo que más lo
-    // estresa. Se tolera el choque y se reintenta una vez — al fallar, la factura no
-    // llegó a escribirse (el error sale antes de las líneas), así que no duplica.
+    // El borrador ya no reserva correlativo (el número llega al emitir), así que el
+    // choque de numeración que este bucle provocaba desapareció. El reintento se queda
+    // por lo que sí puede fallar de forma transitoria: la escritura misma.
     let r = await crearFacturaBorrador(db, datos)
     if (!r.ok) r = await crearFacturaBorrador(db, datos)
     if (!r.ok) { fallidas++; primerError ??= r.error; continue }
+    numeros.push(r.numero)
 
     // Avanzar el próximo cobro de cada suscripción facturada (defensa de idempotencia).
     for (const l of g.lineas) {
@@ -459,12 +475,17 @@ export async function generarFacturasPeriodo(
     generadas++
   }
 
-  return { ok: true, generadas, fallidas, error: fallidas ? primerError : undefined }
+  return { ok: true, generadas, fallidas, numeros, error: fallidas ? primerError : undefined }
 }
 
 /**
- * Facturación AUTOMÁTICA del cron: por cada empresa con el interruptor puesto, deja
- * hechos los borradores de lo que toca cobrar hasta hoy.
+ * Facturación AUTOMÁTICA del cron: deja hechos los borradores de lo que toca cobrar
+ * hasta hoy, en TODA empresa que pueda numerar facturas.
+ *
+ * No hay interruptor y no debe haberlo: un cobro pactado que vence no es una decisión,
+ * y el borrador no compromete a nada —no se emite ni se envía, se revisa y se emite—.
+ * El único requisito es la letra de facturación, porque sin ella no hay con qué numerar.
+ * Quien quiera adelantarse tiene el botón de Suscripciones → «Facturación del período».
  *
  * El período que se factura es el del PRÓXIMO COBRO, no el mes en curso: una anual que
  * vence hoy pertenece a este mes, pero una mensual atrasada desde mayo hay que cerrarla
@@ -478,7 +499,6 @@ export async function facturarAutomatico(
   const { data: empresas } = await db.from('empresas')
     .select('empresa_id, client_id, letra_facturacion')
     .in('client_id', clientIds)
-    .eq('facturacion_auto', true)
     .not('letra_facturacion', 'is', null)
 
   let generadas = 0
