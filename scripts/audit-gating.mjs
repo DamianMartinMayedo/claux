@@ -38,6 +38,13 @@ const ALLOWLIST = {
   'perfil.ts':   ['actualizarMiPerfil'],
   // Cualquier usuario con sesión puede contactar a soporte.
   'soporte.ts':  ['enviarMensajeSoporte'],
+  // Plantillas de MAPEO del importador: no son datos del cliente, son notas del
+  // equipo sobre cómo se lee el export de un software de origen (tabla global,
+  // sin client_id). El candado real es más estricto que un módulo: `resolverCtx()`
+  // exige `session.imp`, o sea modo configuración (admin impersonando). Las
+  // acciones que SÍ escriben datos del cliente (crear/validar/aplicar/deshacer
+  // lote) llevan además `puedeEditarAlgunModulo` de la entidad destino.
+  'importar.ts': ['guardarPlantillaImport', 'eliminarPlantillaImport'],
 }
 
 const WRITE = /\.(insert|update|delete|upsert)\s*\(|\.rpc\s*\(/

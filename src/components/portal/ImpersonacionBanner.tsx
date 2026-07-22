@@ -1,6 +1,7 @@
 'use client'
 
-import { LogOut, ShieldAlert } from 'lucide-react'
+import Link from 'next/link'
+import { LogOut, ShieldAlert, Upload } from 'lucide-react'
 import { useTransition } from 'react'
 import { salirDeImpersonacion } from '@/app/actions/admin/impersonar'
 
@@ -18,6 +19,9 @@ export default function ImpersonacionBanner({ adminEmail }: { adminEmail: string
         Estás dentro como <strong>configuración de CLAUX</strong>
         <span className="imp-banner-email"> · {adminEmail}</span>
       </p>
+      <Link href="/portal/importar" className="btn btn-aviso btn-sm imp-banner-btn">
+        <Upload size={15} /> Importar datos
+      </Link>
       <button
         type="button"
         className="btn btn-aviso btn-sm imp-banner-btn"
