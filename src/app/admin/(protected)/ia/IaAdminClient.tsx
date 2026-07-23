@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Activity, Loader2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
-import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
+import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa, probarModeloIa, type PruebaModeloUI } from '@/app/actions/ia-admin'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import DocumentoIaModal from './DocumentoIaModal'
@@ -45,6 +45,20 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [fb, setFb]       = useState(fallbackGratis)
   const [cupo, setCupo]   = useState(String(cupoGlobal))
   const [confirmarBorrado, setConfirmarBorrado] = useState<ModeloIa | null>(null)
+  const [pruebas, setPruebas] = useState<Record<string, PruebaModeloUI | 'cargando'>>({})
+
+  // Health-check de un modelo: llamada mínima real al proveedor. Independiente por
+  // fila (no usa la transición compartida) para poder probar varios a la vez.
+  async function probar(id: string) {
+    setPruebas(p => ({ ...p, [id]: 'cargando' }))
+    const r = await probarModeloIa(id)
+    if (!r.ok) {
+      toastError(r.error)
+      setPruebas(p => { const n = { ...p }; delete n[id]; return n })
+      return
+    }
+    setPruebas(p => ({ ...p, [id]: r.prueba }))
+  }
 
   const activos = modelos.filter(m => m.activo)
   const activosGratis = activos.filter(m => m.gratis)
@@ -173,10 +187,10 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         <div className="table-wrapper table-wrapper-flush">
           <table className="table">
             <thead>
-              <tr><th>Modelo</th><th>ID</th><th>Tipo</th><th className="col-center">Activo</th><th className="col-actions" /></tr>
+              <tr><th>Modelo</th><th>ID</th><th>Tipo</th><th className="col-center">Activo</th><th>Estado</th><th className="col-actions" /></tr>
             </thead>
             <tbody>
-              {modelos.map(m => (
+              {modelos.map(m => { const pr = pruebas[m.id]; return (
                 <tr key={m.id}>
                   <td data-label="Modelo"><span className="ia-cell-badges">{m.nombre}{m.id === principal && <span className="badge badge-info">principal</span>}</span></td>
                   <td data-label="ID" className="table-muted">{m.id}</td>
@@ -188,6 +202,23 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                       <span className="switch-track" aria-hidden="true" />
                     </span>
                   </td>
+                  <td data-label="Estado">
+                    <span className="ia-cell-badges">
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => probar(m.id)} disabled={pr === 'cargando'}>
+                        {pr === 'cargando'
+                          ? <Loader2 size={13} strokeWidth={2} className="img-upload-spin" />
+                          : <Activity size={13} strokeWidth={2} />}
+                        Probar
+                      </button>
+                      {pr && pr !== 'cargando' && (
+                        <span
+                          className={`badge ${pr.estado === 'vivo' ? 'badge-success' : pr.estado === 'mudo' ? 'badge-warning' : 'badge-error'}`}
+                          title={pr.detalle ?? (pr.estado === 'mudo' ? 'Respondió 200 pero sin texto' : undefined)}>
+                          {pr.estado === 'vivo' ? `✓ ${pr.ms} ms` : pr.estado === 'mudo' ? 'Vivo, sin texto' : '✗ Caído'}
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="col-actions">
                     {m.id !== principal && m.id !== fallbackGratis && (
                       <button type="button" className="ia-icon-btn" onClick={() => setConfirmarBorrado(m)}
@@ -197,7 +228,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                     )}
                   </td>
                 </tr>
-              ))}
+              ) })}
             </tbody>
           </table>
         </div>

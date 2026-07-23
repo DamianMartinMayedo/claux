@@ -155,7 +155,7 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
               </div>
               <div className="input-group ter-col-span-2">
                 <label htmlFor="srv-precio">Precio</label>
-                <input className="input" id="srv-precio" name="precio" type="number" min="0" step="0.01"
+                <input className="input" id="srv-precio" name="precio" type="number" min="0" step="any"
                   value={precio} onChange={e => setPrecio(e.target.value)} placeholder="Opcional" />
               </div>
               <div className="input-group ter-col-span-2">

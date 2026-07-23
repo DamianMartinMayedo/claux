@@ -59,9 +59,9 @@ function LineaEditableRow({
         <strong>{linea.empleado_nombre}</strong>
         {linea.cargo && <div className="text-sm-muted">{linea.cargo}</div>}
       </td>
-      <td data-label="Devengado" className="col-num"><input className="input nom-input" type="number" min="0" step="0.01" value={dev}
+      <td data-label="Devengado" className="col-num"><input className="input nom-input" type="number" min="0" step="any" value={dev}
         onChange={e => setDev(e.target.value)} aria-label={`Devengado de ${linea.empleado_nombre}`} /></td>
-      <td data-label="Deducciones" className="col-num"><input className="input nom-input" type="number" min="0" step="0.01" value={ded}
+      <td data-label="Deducciones" className="col-num"><input className="input nom-input" type="number" min="0" step="any" value={ded}
         onChange={e => setDed(e.target.value)} aria-label={`Deducciones de ${linea.empleado_nombre}`} /></td>
       <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(netoLive)} {moneda}</td>
       <td className="col-actions">
@@ -107,7 +107,7 @@ function AplicarATodas({
         <option value="FIJO">Fijo ({moneda})</option>
         <option value="PORCENTAJE">% del devengado</option>
       </select>
-      <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="0.01" placeholder="0.00" required aria-label="Valor" />
+      <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="any" placeholder="0.00" required aria-label="Valor" />
       <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
         {isPending ? <span className="spinner spinner-sm" /> : 'Aplicar'}
       </button>

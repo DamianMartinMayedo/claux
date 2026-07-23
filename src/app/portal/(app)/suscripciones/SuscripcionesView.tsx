@@ -273,14 +273,14 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                         </div>
                         <div className="input-group sus-linea-form-precio">
                           <label htmlFor={`sus-precio-${i}`}>Precio al mes <span className="required">*</span></label>
-                          <input className="input" id={`sus-precio-${i}`} type="number" step="0.01" min="0"
+                          <input className="input" id={`sus-precio-${i}`} type="number" step="any" min="0"
                             value={l.precio} onChange={e => setLinea(i, { precio: e.target.value })}
                             placeholder="0.00" required />
                         </div>
                         <div className="input-group sus-linea-form-dto">
                           <label htmlFor={`sus-dto-${i}`}>Descuento</label>
                           <div className="sus-dto-row">
-                            <input className="input" id={`sus-dto-${i}`} type="number" step="0.01" min="0"
+                            <input className="input" id={`sus-dto-${i}`} type="number" step="any" min="0"
                               value={l.dtoValor} onChange={e => setLinea(i, { dtoValor: e.target.value })} placeholder="0" />
                             <select className="input" value={l.dtoModo} aria-label="Tipo de descuento"
                               onChange={e => setLinea(i, { dtoModo: e.target.value as DescuentoModo })}>

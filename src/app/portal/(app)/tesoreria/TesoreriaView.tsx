@@ -174,7 +174,7 @@ function CuentaModal({
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Saldo inicial</label>
-                  <input className="input" name="saldo_inicial" type="number" step="0.01"
+                  <input className="input" name="saldo_inicial" type="number" step="any"
                     defaultValue={cuenta?.saldo_inicial ?? 0} placeholder="0.00" />
                   <span className="input-hint">Saldo del que parte la cuenta hoy.</span>
                 </div>
@@ -392,7 +392,7 @@ function MovimientoModal({
               {pendienteSel ? (
                 <div className="input-group ter-col-span-3">
                   <label>Importe ({pendienteSel.moneda}) <span className="required">*</span></label>
-                  <input className="input" type="number" min="0" step="0.01" required autoFocus
+                  <input className="input" type="number" min="0" step="any" required autoFocus
                     value={impDoc} onChange={e => setImpDoc(e.target.value)} placeholder="0.00" />
                   <span className="input-hint">Saldo pendiente {formatMonto(pendienteSel.saldo)} {pendienteSel.moneda}. Puedes cobrar/pagar menos.</span>
                   {impDocNum > pendienteSel.saldo + 0.005 && (
@@ -402,7 +402,7 @@ function MovimientoModal({
               ) : (
                 <div className="input-group ter-col-span-3">
                   <label>Monto {cuentaSel ? `(${cuentaSel.moneda})` : ''} <span className="required">*</span></label>
-                  <input className="input" name="monto" type="number" min="0" step="0.01" required
+                  <input className="input" name="monto" type="number" min="0" step="any" required
                     autoFocus placeholder="0.00" />
                 </div>
               )}
@@ -416,7 +416,7 @@ function MovimientoModal({
                 <>
                   <div className="input-group ter-col-span-3">
                     <label>Tasa ({cuentaSel.moneda}/{pendienteSel.moneda}) <span className="required">*</span></label>
-                    <input className="input" type="number" min="0" step="0.0001"
+                    <input className="input" type="number" min="0" step="any"
                       value={tasaInput} onChange={e => handleTasaChange(e.target.value)}
                       placeholder={cargandoTasa ? 'Cargando…' : '0.0000'} />
                     {tasaCompleta <= 0 && !cargandoTasa && (
@@ -425,7 +425,7 @@ function MovimientoModal({
                   </div>
                   <div className="input-group ter-col-span-3">
                     <label>Se moverá en la caja ({cuentaSel.moneda})</label>
-                    <input className="input" type="number" min="0" step="0.01"
+                    <input className="input" type="number" min="0" step="any"
                       value={impCaja} onChange={e => handleImpCajaChange(e.target.value)} placeholder="0.00" />
                     <span className="input-hint">
                       {impDocNum > 0 && tasaCompleta > 0
@@ -648,7 +648,7 @@ function TransferenciaModal({
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Monto {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''} <span className="required">*</span></label>
-                <input className="input" name="monto" type="number" min="0" step="0.01" required
+                <input className="input" name="monto" type="number" min="0" step="any" required
                   autoFocus placeholder="0.00" value={monto} onChange={e => handleMontoChange(e.target.value)} />
               </div>
               <div className="input-group ter-col-span-3">
@@ -660,7 +660,7 @@ function TransferenciaModal({
                 <>
                   <div className="input-group ter-col-span-3">
                     <label>Tasa {cuentaOrigen?.moneda} → {cuentaDestino?.moneda} <span className="required">*</span></label>
-                    <input className="input" name="tasa_cambio" type="number" min="0" step="0.0001" required
+                    <input className="input" name="tasa_cambio" type="number" min="0" step="any" required
                       placeholder="0.0000" value={tasaInput} onChange={e => handleTasaChange(e.target.value)} />
                     <span className="input-hint">
                       {cargandoTasa ? 'Buscando tasa…'
@@ -673,7 +673,7 @@ function TransferenciaModal({
                   </div>
                   <div className="input-group ter-col-span-3">
                     <label>Monto recibido ({cuentaDestino?.moneda})</label>
-                    <input className="input" type="number" min="0" step="0.01"
+                    <input className="input" type="number" min="0" step="any"
                       placeholder="0.00"
                       value={montoRecibido} onChange={e => handleMontoRecibidoChange(e.target.value)} />
                     <span className="input-hint">Editable si la tasa real difiere</span>
@@ -683,13 +683,13 @@ function TransferenciaModal({
 
               <div className="input-group ter-col-span-3">
                 <label>Fee de envío {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''}</label>
-                <input className="input" name="fee_envio" type="number" min="0" step="0.01"
+                <input className="input" name="fee_envio" type="number" min="0" step="any"
                   placeholder="0.00" value={feeEnvio} onChange={e => setFeeEnvio(e.target.value)} />
                 <span className="input-hint">Comisión por enviar (opcional)</span>
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Fee de recepción {cuentaDestino ? `(${cuentaDestino.moneda})` : ''}</label>
-                <input className="input" name="fee_recibo" type="number" min="0" step="0.01"
+                <input className="input" name="fee_recibo" type="number" min="0" step="any"
                   placeholder="0.00" value={feeRecibo} onChange={e => setFeeRecibo(e.target.value)} />
                 <span className="input-hint">Comisión por recibir (opcional)</span>
               </div>

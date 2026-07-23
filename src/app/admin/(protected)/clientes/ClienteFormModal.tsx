@@ -330,7 +330,7 @@ export default function ClienteFormModal({
                     name="pago_setup_usd"
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="any"
                     className="input"
                     defaultValue={initial?.pago_setup_usd ?? setupDefault}
                   />

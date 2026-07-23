@@ -150,7 +150,7 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
 
                 <div className="input-group">
                   <label htmlFor="stk-cant">{labelCantidad} <span className="required">*</span></label>
-                  <input id="stk-cant" className="input" type="number" step="0.001" min="0"
+                  <input id="stk-cant" className="input" type="number" step="any" min="0"
                     value={cantidad} onChange={e => setCantidad(e.target.value)} autoFocus />
                   {numOk && delta !== 0 && !negativo && (
                     <span className="input-hint prd-stock-preview">

@@ -367,7 +367,7 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
                 <div className="input-group ter-col-span-2">
                   <label>Límite de crédito</label>
                   <input className="input" type="number" name="limite_credito"
-                    defaultValue={tercero?.limite_credito ?? ''} placeholder="0.00" min="0" step="0.01" />
+                    defaultValue={tercero?.limite_credito ?? ''} placeholder="0.00" min="0" step="any" />
                   <span className="input-hint">Deuda máx. permitida, en su moneda predeterminada.</span>
                 </div>
               </div>

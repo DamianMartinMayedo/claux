@@ -141,7 +141,7 @@ export function DocumentoLineasEditor({
                 <div className="ven-col-num" data-label="Cant.">
                   <input
                     className="input input-sm ven-input-num"
-                    type="number" min="0" step="0.001"
+                    type="number" min="0" step="any"
                     value={l.cantidad}
                     onChange={e => updateLinea(i, { cantidad: parseFloat(e.target.value) || 0 })}
                     onFocus={e => e.target.select()}
@@ -151,7 +151,7 @@ export function DocumentoLineasEditor({
                 <div className="ven-col-num" data-label="Precio">
                   <input
                     className="input input-sm ven-input-num"
-                    type="number" min="0" step="0.01"
+                    type="number" min="0" step="any"
                     value={l.precio_unitario}
                     onChange={e => updateLinea(i, { precio_unitario: parseFloat(e.target.value) || 0 })}
                     onFocus={e => e.target.select()}
@@ -246,7 +246,7 @@ export function DocumentoLineasEditor({
                 </select>
                 <input
                   className="input input-sm ven-input-num ven-aj-valor"
-                  type="number" min="0" step="0.01"
+                  type="number" min="0" step="any"
                   value={a.valor}
                   onChange={e => updateAjuste(i, { valor: parseFloat(e.target.value) || 0 })}
                   onFocus={e => e.target.select()}

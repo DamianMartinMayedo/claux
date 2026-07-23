@@ -65,11 +65,11 @@ export default function NuevoModuloModal() {
             <div className="grid-cols-2">
               <div className="input-group">
                 <label>Precio fundador (USD)</label>
-                <input name="precio_fundador_usd" className="input" type="number" min="0" step="0.01" required defaultValue="0" />
+                <input name="precio_fundador_usd" className="input" type="number" min="0" step="any" required defaultValue="0" />
               </div>
               <div className="input-group">
                 <label>Precio estándar (USD)</label>
-                <input name="precio_estandar_usd" className="input" type="number" min="0" step="0.01" required defaultValue="0" />
+                <input name="precio_estandar_usd" className="input" type="number" min="0" step="any" required defaultValue="0" />
               </div>
             </div>
             <div className="info-banner" style={{ marginTop: 'var(--space-4)', marginBottom: 0 }}>

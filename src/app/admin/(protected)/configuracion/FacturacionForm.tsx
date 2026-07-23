@@ -31,7 +31,7 @@ export default function FacturacionForm({ setupDefault, descuentoAnual, diasTria
     <form onSubmit={handleSubmit} className="config-form">
       <div className="input-group">
         <label>Pago de configuración por defecto (USD)</label>
-        <input type="number" min="0" step="0.01" className="input"
+        <input type="number" min="0" step="any" className="input"
           value={setup} onChange={e => setSetup(e.target.value)} />
         <span className="input-hint">Importe prerellenado al crear un cliente (editable por cliente).</span>
       </div>

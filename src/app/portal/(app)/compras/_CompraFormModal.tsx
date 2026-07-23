@@ -181,13 +181,13 @@ export function CompraFormModal({
                         </datalist>
                       </div>
                       <div className="ven-col-num" data-label="Cant.">
-                        <input className="input input-sm ven-input-num" type="number" min="0" step="0.001"
+                        <input className="input input-sm ven-input-num" type="number" min="0" step="any"
                           value={l.cantidad}
                           onChange={e => updateLinea(i, { cantidad: parseFloat(e.target.value) || 0 })}
                           onFocus={e => e.target.select()} />
                       </div>
                       <div className="ven-col-num" data-label="Costo">
-                        <input className="input input-sm ven-input-num" type="number" min="0" step="0.01"
+                        <input className="input input-sm ven-input-num" type="number" min="0" step="any"
                           value={l.costo_unitario}
                           onChange={e => updateLinea(i, { costo_unitario: parseFloat(e.target.value) || 0 })}
                           onFocus={e => e.target.select()} />

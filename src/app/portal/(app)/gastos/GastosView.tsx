@@ -225,7 +225,7 @@ function RegistroModal({
 
               <div className="input-group ter-col-span-3">
                 <label>Monto <span className="required">*</span></label>
-                <input className="input" name="monto" type="number" min="0" step="0.01" required
+                <input className="input" name="monto" type="number" min="0" step="any" required
                   defaultValue={registro?.monto ?? ''} placeholder="0.00" />
               </div>
               <div className="input-group ter-col-span-3">

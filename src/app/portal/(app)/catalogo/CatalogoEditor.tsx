@@ -514,7 +514,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
             </div>
             <div className="input-group">
               <label htmlFor="cat-descuento">Descuento de la categoría (%)</label>
-              <input id="cat-descuento" name="descuento_pct" type="number" min="0" max="100" step="0.01"
+              <input id="cat-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
                 className="input" defaultValue={categoria?.descuento_pct ? categoria.descuento_pct : ''} placeholder="0" />
               <p className="input-hint">Se aplica a todos los productos del grupo que no tengan su propio descuento.</p>
             </div>

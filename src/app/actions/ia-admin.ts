@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
 import { esDocumentoIa, defaultDocumentoIa } from '@/lib/ia/documentos'
+import { probarModelo } from '@/lib/ia/modelo'
 
 // Acciones del panel de control de IA del admin (catálogo de modelos, límites
 // globales y override de cupo por cliente). Server-only; el acceso ya está
@@ -62,6 +63,21 @@ export async function restaurarDocumentoIa(key: string): Promise<Resp> {
 }
 
 // ── Catálogo de modelos ──
+
+// Prueba de vida de un modelo (health-check): llamada mínima real al proveedor.
+// vivo = responde con texto · mudo = 200 pero sin texto (razonamiento) · caído = error.
+export interface PruebaModeloUI { estado: 'vivo' | 'mudo' | 'caido'; ms: number; detalle?: string }
+export type PruebaModeloResp = { ok: true; prueba: PruebaModeloUI } | { ok: false; error: string }
+
+export async function probarModeloIa(id: string): Promise<PruebaModeloResp> {
+  await requirePermiso('ia')
+  const clean = (id || '').trim()
+  if (!clean) return { ok: false, error: 'Id de modelo vacío.' }
+  const r = await probarModelo(clean)
+  const estado: PruebaModeloUI['estado'] = r.ok ? (r.respondio ? 'vivo' : 'mudo') : 'caido'
+  return { ok: true, prueba: { estado, ms: r.ms, detalle: r.error } }
+}
+
 export async function toggleModeloIa(id: string, activo: boolean): Promise<Resp> {
   await requirePermiso('ia')
   const db = createAdminClient()

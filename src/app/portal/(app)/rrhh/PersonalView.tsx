@@ -221,7 +221,7 @@ export function EmpleadoModal({
               </div>
               <div className="input-group ter-col-span-2">
                 <label htmlFor="emp-salario">Salario base</label>
-                <input className="input" id="emp-salario" name="salario_base" type="number" min="0" step="0.01"
+                <input className="input" id="emp-salario" name="salario_base" type="number" min="0" step="any"
                   value={salario} onChange={e => setSalario(e.target.value)}
                   placeholder="0.00" />
               </div>

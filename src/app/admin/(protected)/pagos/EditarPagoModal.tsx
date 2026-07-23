@@ -133,7 +133,7 @@ export default function EditarPagoModal({
               <input
                 name="monto_usd"
                 type="number"
-                step="0.01"
+                step="any"
                 min="0.01"
                 className="input"
                 required

@@ -131,7 +131,7 @@ export default function LiquidarCuentaFields({
 
       <div className="input-group ter-col-span-3">
         <label>Importe ({docMoneda}) <span className="required">*</span></label>
-        <input className="input" type="number" min="0" step="0.01" required
+        <input className="input" type="number" min="0" step="any" required
           value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
         <span className="input-hint">Saldo pendiente: {formatMonto(saldo)} {docMoneda}</span>
         {excedeSaldo && (
@@ -143,7 +143,7 @@ export default function LiquidarCuentaFields({
         <>
           <div className="input-group ter-col-span-3">
             <label>Tasa ({cajaMoneda}/{docMoneda}) <span className="required">*</span></label>
-            <input className="input" type="number" min="0" step="0.0001"
+            <input className="input" type="number" min="0" step="any"
               value={tasaInput} onChange={e => handleTasa(e.target.value)}
               placeholder={cargandoTasa ? 'Cargando…' : '0.0000'} />
             {tasaCompleta <= 0 && !cargandoTasa && (
@@ -152,7 +152,7 @@ export default function LiquidarCuentaFields({
           </div>
           <div className="input-group ter-col-span-3">
             <label>Se moverá en la caja ({cajaMoneda})</label>
-            <input className="input" type="number" min="0" step="0.01"
+            <input className="input" type="number" min="0" step="any"
               value={impCaja} onChange={e => handleImpCaja(e.target.value)} placeholder="0.00" />
             <span className="input-hint">
               {montoNum > 0 && tasaCompleta > 0

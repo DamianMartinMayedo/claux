@@ -225,7 +225,7 @@ function ConceptosSection({
           <option value="FIJO">Fijo ({moneda})</option>
           <option value="PORCENTAJE">% del salario</option>
         </select>
-        <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="0.01" placeholder="0.00" required aria-label="Valor" />
+        <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="any" placeholder="0.00" required aria-label="Valor" />
         <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
           {isPending ? <span className="spinner spinner-sm" /> : <><Plus size={14} strokeWidth={2.5} /> Añadir</>}
         </button>

@@ -108,6 +108,56 @@ export async function resolverFallbackGratis(): Promise<ModeloResuelto> {
   return { model: row.id, base, apiKey: keyDe(row.api_key_env), esFallback: true }
 }
 
+// Prueba de vida de UN modelo concreto (health-check del admin). Hace la llamada
+// mínima real contra el proveedor con la base+key de ese modelo. Sirve para
+// detectar a tiempo que el proveedor dejó de servir un id ANTES de que un cliente
+// se quede sin IA. Sin auto-fallback: aquí queremos saber la verdad de ESTE id.
+export interface PruebaModelo {
+  ok:        boolean   // HTTP 200 → el proveedor sirve el id
+  status:    number    // código HTTP (0 = error de red)
+  ms:        number    // latencia
+  respondio: boolean   // llegó `content` no vacío (los de razonamiento a veces no)
+  error?:    string
+}
+
+export async function probarModelo(id: string): Promise<PruebaModelo> {
+  const db = createAdminClient()
+  const [{ data: setRow }, row] = await Promise.all([
+    db.from('settings').select('value').eq('key', 'ia_api_base').maybeSingle(),
+    leerModelo(db, id),
+  ])
+  const base   = ((row?.api_base || setRow?.value || DEFAULT_BASE) as string).replace(/\/$/, '')
+  const apiKey = keyDe(row?.api_key_env)
+  if (!apiKey) return { ok: false, status: 0, ms: 0, respondio: false, error: 'Falta la API key del proveedor.' }
+
+  // max_tokens holgado: un modelo de razonamiento con poco margen devuelve 200 con
+  // `content` vacío, y eso NO significa que esté caído.
+  const body = {
+    model: id,
+    messages: [{ role: 'user', content: 'Responde solo con: ok' }],
+    temperature: 0,
+    max_tokens: 256,
+  }
+  const t0 = Date.now()
+  try {
+    const res = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    })
+    const ms = Date.now() - t0
+    if (!res.ok) {
+      const detalle = await res.text().catch(() => '')
+      return { ok: false, status: res.status, ms, respondio: false, error: `HTTP ${res.status}: ${detalle.slice(0, 160)}` }
+    }
+    const data = await res.json().catch(() => null)
+    const texto = (data?.choices?.[0]?.message?.content ?? '').trim()
+    return { ok: true, status: 200, ms, respondio: !!texto }
+  } catch (e) {
+    return { ok: false, status: 0, ms: Date.now() - t0, respondio: false, error: `red: ${(e as Error).message}` }
+  }
+}
+
 async function leerModelo(db: ReturnType<typeof createAdminClient>, id: string): Promise<ModeloRow | null> {
   const { data } = await db.from('ia_modelos').select('id, activo, gratis, api_base, api_key_env').eq('id', id).maybeSingle()
   return (data as ModeloRow | null) ?? null

@@ -79,7 +79,7 @@ export function PreciosCostosEditor({
             {monedasDisponibles.filter(m => m === row.moneda || !usadas.has(m))
               .map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <input className="input prd-editor-input" type="number" step="0.01" min="0" placeholder="0.00"
+          <input className="input prd-editor-input" type="number" step="any" min="0" placeholder="0.00"
             aria-label={`Importe en ${row.moneda || 'la moneda elegida'} — ${label}`}
             value={row.valor} onChange={e => updateRow(i, 'valor', e.target.value)} />
           <button type="button" onClick={() => removeRow(i)} title="Quitar" aria-label={`Quitar ${row.moneda || 'esta fila'}`}
@@ -331,7 +331,7 @@ export function ProductoFormModal({
                     <div className="input-group ter-col-span-3">
                       <label>Stock mínimo</label>
                       <input className="input" type="number" name="stock_minimo"
-                        step="0.001" min="0" defaultValue={producto?.stock_minimo ?? 0} placeholder="0" />
+                        step="any" min="0" defaultValue={producto?.stock_minimo ?? 0} placeholder="0" />
                       <span className="input-hint">Aviso cuando el stock baje de este nivel.</span>
                     </div>
                   </div>

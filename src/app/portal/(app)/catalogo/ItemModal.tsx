@@ -111,7 +111,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
             <div className="cat-form-row">
               <div className="input-group">
                 <label htmlFor="item-precio">Precio</label>
-                <input id="item-precio" name="precio" type="number" step="0.01" min="0" className="input" defaultValue={item?.precio ?? ''} />
+                <input id="item-precio" name="precio" type="number" step="any" min="0" className="input" defaultValue={item?.precio ?? ''} />
               </div>
               <div className="input-group">
                 <label htmlFor="item-moneda">Moneda</label>
@@ -125,7 +125,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
             <div className="cat-form-row">
               <div className="input-group">
                 <label htmlFor="item-descuento">Descuento (%)</label>
-                <input id="item-descuento" name="descuento_pct" type="number" min="0" max="100" step="0.01"
+                <input id="item-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
                   className="input" defaultValue={item?.descuento_pct ? item.descuento_pct : ''} placeholder="0" />
               </div>
               <div className="input-group">

@@ -189,11 +189,11 @@ export default function EditarModuloModal({
             <div className="grid-cols-2">
               <div className="input-group">
                 <label>Precio fundador (USD)</label>
-                <input name="precio_fundador_usd" className="input" type="number" min="0" step="0.01" required defaultValue={modulo.precio_fundador_usd} />
+                <input name="precio_fundador_usd" className="input" type="number" min="0" step="any" required defaultValue={modulo.precio_fundador_usd} />
               </div>
               <div className="input-group">
                 <label>Precio estándar (USD)</label>
-                <input name="precio_estandar_usd" className="input" type="number" min="0" step="0.01" required defaultValue={modulo.precio_estandar_usd} />
+                <input name="precio_estandar_usd" className="input" type="number" min="0" step="any" required defaultValue={modulo.precio_estandar_usd} />
               </div>
             </div>
             <label className="module-check">
