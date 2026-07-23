@@ -3,6 +3,7 @@
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter }                    from 'next/navigation'
+import IaTouchpoint                     from '@/components/portal/ia/IaTouchpoint'
 import { Eye, Plus, ShoppingCart, Ban, Trash2 } from 'lucide-react'
 import {
   eliminarComprasEnLote,
@@ -86,7 +87,10 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Compras</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Compras</h1>
+            <IaTouchpoint tipo="compras" descripcion="una sugerencia de qué reponer" />
+          </div>
           <p className="page-subtitle">Compras a tus proveedores para reponer existencias.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>

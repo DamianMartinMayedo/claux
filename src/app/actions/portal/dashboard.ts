@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
 import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
@@ -43,6 +44,7 @@ export interface ContabilidadResumen {
   monedaConsolidacion: string               // código de la moneda de consolidación (es_consolidacion)
   caja: { moneda: string; saldo: number }[]
   ultimasFacturas: FacturaResumen[]
+  gastosPorCategoria: { categoria: string; moneda: string; total: number }[]   // mes actual, top por importe
 }
 export interface InventarioResumen {
   totalProductos: number
@@ -50,6 +52,12 @@ export interface InventarioResumen {
   bajoMinimo: { nombre: string; stock: number; minimo: number; unidad: string }[]
 }
 export interface RrhhResumen { activos: number; altasMes: number }
+// Deudas pendientes (aging compacto para el insight). Un lado = cobrar o pagar.
+export interface DeudasLado {
+  por_moneda: { moneda: string; total: number; vencido: number }[]
+  top:        { nombre: string; moneda: string; saldo: number; dias_vencido_max: number }[]
+}
+export interface DeudasResumen { cobrar: DeudasLado; pagar: DeudasLado }
 export interface ServiciosResumen {
   activas: number
   ingresoRecurrente: { moneda: string; total: number }[]   // Σ precio_pactado normalizado a mensual, por moneda
@@ -96,6 +104,7 @@ export interface DashboardData {
   suscripcion: { estado: string; diasRestantes: number | null; label: string }
   tieneIa: boolean
   contabilidad?: ContabilidadResumen
+  deudas?: DeudasResumen
   inventario?: InventarioResumen
   puntoVenta?: PuntoVentaResumen
   rrhh?: RrhhResumen
@@ -151,10 +160,10 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
   const desde6 = `${meses[0].mes}-01`
   const mesActual = hoy.slice(0, 7)
 
-  const [facturas6, gastos6, movimientos, cuentasCaja, ultimas, consolRow, tasas] = await Promise.all([
+  const [facturas6, gastos6, movimientos, cuentasCaja, ultimas, consolRow, tasas, categoriasGasto] = await Promise.all([
     db.from('facturas').select('fecha_emision, total, moneda')
       .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ESTADOS_FACTURA_INGRESO).gte('fecha_emision', desde6),
-    db.from('gastos_cobros').select('fecha, monto, moneda')
+    db.from('gastos_cobros').select('fecha, monto, moneda, categoria_id')
       .eq('client_id', cid).in('empresa_id', empresaIds).eq('tipo', 'GASTO').gte('fecha', desde6),
     db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
     db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true).eq('es_apertura', false),
@@ -163,6 +172,7 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     db.from('monedas').select('codigo').eq('client_id', cid).eq('es_consolidacion', true).limit(1).maybeSingle(),
     db.from('tasas_cambio').select('moneda_origen, moneda_destino, tasa, fecha')
       .eq('client_id', cid).order('fecha', { ascending: false }),
+    db.from('categorias_gastos').select('categoria_id, nombre').eq('client_id', cid),
   ])
 
   // Serie mensual y totales del mes SEPARADOS POR MONEDA (no se suman entre sí).
@@ -244,6 +254,25 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
   }
   const caja = [...cajaMap.entries()].filter(([, s]) => Math.abs(s) > 0.005).map(([moneda, saldo]) => ({ moneda, saldo }))
 
+  // Desglose de gastos del MES ACTUAL por categoría y moneda (alimenta el insight
+  // de Gastos: sin esto solo hay totales y no puede decir «dónde ahorrar»). Top 8.
+  const nombreCat = new Map<string, string>(
+    (categoriasGasto.data ?? []).map((c: { categoria_id: string; nombre: string }) => [c.categoria_id, c.nombre]),
+  )
+  const catAgg = new Map<string, { categoria: string; moneda: string; total: number }>()
+  for (const g of (gastos6.data ?? [])) {
+    if (String(g.fecha).slice(0, 7) !== mesActual) continue
+    const categoria = g.categoria_id ? (nombreCat.get(g.categoria_id) ?? 'Sin categoría') : 'Sin categoría'
+    const k = `${g.categoria_id ?? 'none'}__${g.moneda}`
+    const cur = catAgg.get(k) ?? { categoria, moneda: g.moneda, total: 0 }
+    cur.total += Number(g.monto) || 0
+    catAgg.set(k, cur)
+  }
+  const gastosPorCategoria = [...catAgg.values()]
+    .map(x => ({ ...x, total: r2(x.total) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8)
+
   // Nombres de terceros para últimas facturas
   const ids = [...new Set((ultimas.data ?? []).map((f: { cliente_id: string }) => f.cliente_id).filter(Boolean))]
   const { data: terceros } = ids.length
@@ -262,7 +291,38 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
       moneda: f.moneda as string,
       estado: f.estado as string,
     })),
+    gastosPorCategoria,
   }
+}
+
+// Aging compacto de un lado (CxC o CxP): total y vencido por moneda + top 5
+// terceros por saldo. Reutiliza el cálculo real de cobranza (no lo reimplementa).
+function agregarDeuda(data: CuentasPageData | null): DeudasLado {
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  const porMonedaMap = new Map<string, { total: number; vencido: number }>()
+  const topMap = new Map<string, { nombre: string; moneda: string; saldo: number; dias_vencido_max: number }>()
+  for (const d of (data?.documentos ?? [])) {
+    const pm = porMonedaMap.get(d.moneda) ?? { total: 0, vencido: 0 }
+    pm.total += d.saldo
+    if ((d.dias_vencido ?? 0) > 0) pm.vencido += d.saldo
+    porMonedaMap.set(d.moneda, pm)
+
+    const nombre = d.tercero_nombre ?? '—'
+    const k = `${nombre}__${d.moneda}`
+    const t = topMap.get(k) ?? { nombre, moneda: d.moneda, saldo: 0, dias_vencido_max: 0 }
+    t.saldo += d.saldo
+    t.dias_vencido_max = Math.max(t.dias_vencido_max, d.dias_vencido ?? 0)
+    topMap.set(k, t)
+  }
+  return {
+    por_moneda: [...porMonedaMap.entries()].map(([moneda, v]) => ({ moneda, total: r2(v.total), vencido: r2(v.vencido) })),
+    top: [...topMap.values()].map(x => ({ ...x, saldo: r2(x.saldo) })).sort((a, b) => b.saldo - a.saldo).slice(0, 5),
+  }
+}
+
+async function resumenDeudas(): Promise<DeudasResumen> {
+  const [cobrar, pagar] = await Promise.all([obtenerCuentasPorCobrar(), obtenerCuentasPorPagar()])
+  return { cobrar: agregarDeuda(cobrar), pagar: agregarDeuda(pagar) }
 }
 
 async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen> {
@@ -515,8 +575,9 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, inventario, puntoVenta, rrhh, reservas, citas, servicios, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, deudas, inventario, puntoVenta, rrhh, reservas, citas, servicios, etiquetas, descuentoRaw] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
+    puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
     puedeVer('caja')           ? resumenPuntoVenta(db, cid, hoy, idsFiltro)   : Promise.resolve(undefined),
     puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
@@ -571,6 +632,6 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
     tieneIa: puedeVer('asistente_ia'),
-    contabilidad, inventario, puntoVenta, rrhh, servicios, reservas, citas, accesos,
+    contabilidad, deudas, inventario, puntoVenta, rrhh, servicios, reservas, citas, accesos,
   }
 }

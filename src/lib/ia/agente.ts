@@ -28,6 +28,7 @@ const FOCO: Record<TipoInsight, FocoContexto> = {
   ventas: 'ventas', gastos: 'gastos', proyeccion: 'ventas', general: 'general',
   inventario: 'inventario', rrhh: 'rrhh', tesoreria: 'tesoreria', catalogo: 'catalogo',
   caja: 'caja', reservas: 'reservas', citas: 'citas', suscripciones: 'suscripciones',
+  deudas: 'deudas', compras: 'inventario',
 }
 
 // Prompt de tarea de la sección: editable desde el admin (settings), con fallback

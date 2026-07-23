@@ -96,7 +96,7 @@ async function resumenCatalogo(db: ReturnType<typeof createAdminClient>, clientI
 // SU porción (clave para modelos con ventana de contexto reducida); `general` y el
 // chat libre incluyen un resumen de todo lo disponible.
 export type FocoContexto =
-  | 'general' | 'ventas' | 'gastos' | 'tesoreria' | 'catalogo'
+  | 'general' | 'ventas' | 'gastos' | 'tesoreria' | 'catalogo' | 'deudas'
   | 'inventario' | 'rrhh' | 'reservas' | 'citas' | 'caja' | 'suscripciones'
 
 // Snapshot compacto en JSON para el prompt. `foco` recorta a la sección relevante
@@ -129,7 +129,14 @@ export function contextoComoTexto(ctx: ContextoNegocio, foco?: FocoContexto): st
         serie_6m: cont.consolidado.serie.map(s => ({ mes: s.etiqueta, ventas: s.ventas, gastos: s.gastos })),
       } : null,
       caja: cont.caja,
+      // Desglose por categoría del mes: solo en el foco de gastos (y general), donde aporta.
+      gastos_mes_por_categoria: (general || foco === 'gastos') ? cont.gastosPorCategoria : undefined,
     }
+  }
+
+  // Deudas: cuentas por cobrar y por pagar (total y vencido por moneda + top).
+  if ((general || foco === 'deudas') && d.deudas) {
+    snap.deudas = { por_cobrar: d.deudas.cobrar, por_pagar: d.deudas.pagar }
   }
 
   // Punto de venta (TPV): ventas de hoy por terminal y estado de sincronización.

@@ -6,6 +6,7 @@ import { tieneModulo }       from '@/lib/modulos'
 import { configAgente }      from '@/lib/ia/contexto'
 import { generarInsight, responderChat, type TipoInsight, type TurnoChat } from '@/lib/ia/agente'
 import { sugerirDatosItem, type SugerenciaItem } from '@/lib/ia/catalogo'
+import { sugerirDescripcionProducto } from '@/lib/ia/producto'
 import { sugerirSeccionDossier } from '@/lib/ia/dossier'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { estadoDeResultados } from '@/lib/dossier/estado'
@@ -105,6 +106,28 @@ export async function autocompletarItemCatalogo(nombre: string): Promise<IaSuger
     return { ok: true, sugerencia }
   } catch (e) {
     console.error('[ia] autocompletarItemCatalogo', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+// ── Sugerir descripción de un producto/servicio (IA de cara al dueño) ──
+export type IaSugerenciaTexto = { ok: true; texto: string } | { ok: false; error: string }
+
+export async function autocompletarDescripcionProducto(nombre: string, esServicio: boolean): Promise<IaSugerenciaTexto> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+  const nombre0 = (nombre ?? '').trim()
+  if (!nombre0) return { ok: false, error: 'Escribe primero el nombre.' }
+
+  const db = createAdminClient()
+  const { data: cli } = await db.from('clients').select('sector').eq('client_id', guard.clientId).single()
+
+  try {
+    const texto = await sugerirDescripcionProducto(guard.clientId, nombre0, esServicio, (cli?.sector as string | null) ?? null)
+    if (!texto) return { ok: false, error: 'No pude sugerir una descripción ahora mismo. Inténtalo de nuevo.' }
+    return { ok: true, texto }
+  } catch (e) {
+    console.error('[ia] autocompletarDescripcionProducto', e)
     return { ok: false, error: mensajeError(e) }
   }
 }

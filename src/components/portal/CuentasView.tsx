@@ -1,5 +1,6 @@
 'use client'
 
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
@@ -215,7 +216,10 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">{titulo}</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">{titulo}</h1>
+            <IaTouchpoint tipo="deudas" descripcion={esCobro ? 'un análisis de lo que te deben' : 'un análisis de lo que debes'} />
+          </div>
           <p className="page-subtitle">{subtitulo}</p>
         </div>
       </div>

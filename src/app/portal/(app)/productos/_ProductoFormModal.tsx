@@ -1,15 +1,17 @@
 'use client'
 
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import Link from 'next/link'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Sparkles, Loader2 } from 'lucide-react'
 import {
   guardarProducto,
   type Producto,
   type Categoria,
   type TipoProducto,
 } from '@/app/actions/portal/productos'
+import { autocompletarDescripcionProducto } from '@/app/actions/portal/ia'
+import { useIa } from '@/components/portal/ia/IaContext'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -161,6 +163,20 @@ export function ProductoFormModal({
   const [costos,    setCostos]       = useState<PrecioRow[]>(() => objToRows(producto?.costos  ?? {}))
   const [esSuscribible, setEsSuscribible] = useState(producto?.es_suscribible ?? false)
   const [periodicidad,  setPeriodicidad]  = useState(producto?.periodicidad_defecto ?? 'MENSUAL')
+  const [descripcion,   setDescripcion]   = useState(producto?.descripcion ?? '')
+  const [sugiriendo,    setSugiriendo]    = useState(false)
+  const nombreRef = useRef<HTMLInputElement>(null)
+  const { tieneIa } = useIa()
+
+  async function sugerirDescripcion() {
+    const nombre = nombreRef.current?.value.trim() ?? ''
+    if (!nombre) { toastError('Escribe primero el nombre.'); return }
+    setSugiriendo(true)
+    const r = await autocompletarDescripcionProducto(nombre, (producto?.tipo ?? modo) === 'SERVICIO')
+    setSugiriendo(false)
+    if (!r.ok) { toastError(r.error); return }
+    setDescripcion(r.texto)
+  }
 
   const isEdit             = !!producto
   // El tipo no es una decisión del usuario: lo impone la página. Al editar se
@@ -213,7 +229,7 @@ export function ProductoFormModal({
               <div className="ter-form-grid">
                 <div className={`input-group ${esServicio ? 'ter-col-full' : 'ter-col-span-4'}`}>
                   <label>Nombre <span className="required">*</span></label>
-                  <input className="input" name="nombre" required autoFocus={!isEdit}
+                  <input className="input" name="nombre" required autoFocus={!isEdit} ref={nombreRef}
                     defaultValue={producto?.nombre ?? ''}
                     placeholder={esServicio ? 'Ej: Consultoría técnica, Corte de pelo…' : 'Ej: Laptop Dell XPS, Tornillo M6…'} />
                 </div>
@@ -244,8 +260,14 @@ export function ProductoFormModal({
                 </div>
                 <div className="input-group ter-col-full">
                   <label>Descripción</label>
+                  {tieneIa && (
+                    <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={sugerirDescripcion} disabled={sugiriendo}>
+                      {sugiriendo ? <Loader2 size={14} strokeWidth={2} className="img-upload-spin" /> : <Sparkles size={14} strokeWidth={2} />}
+                      {sugiriendo ? 'Pensando…' : 'Sugerir con IA'}
+                    </button>
+                  )}
                   <textarea className="input input-textarea" name="descripcion" rows={2}
-                    defaultValue={producto?.descripcion ?? ''}
+                    value={descripcion} onChange={e => setDescripcion(e.target.value)}
                     placeholder={`Descripción detallada del ${nombreTipo}…`} />
                 </div>
               </div>
