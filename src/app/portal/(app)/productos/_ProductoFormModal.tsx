@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Plus, X } from 'lucide-react'
@@ -182,8 +182,10 @@ export function ProductoFormModal({
     fd.set('costos',  JSON.stringify(rowsToObj(costos)))
     fd.set('es_suscribible',       esSuscribible ? '1' : '')
     fd.set('periodicidad_defecto', esSuscribible ? periodicidad : '')
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarProducto(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })

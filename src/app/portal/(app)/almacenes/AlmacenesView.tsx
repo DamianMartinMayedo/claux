@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                         from 'next/navigation'
 import { Archive, Pencil, Plus, RotateCcw, Warehouse, X } from 'lucide-react'
@@ -62,8 +62,10 @@ function AlmacenModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarAlmacen(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { guardarCierre, eliminarCierre, type Cierre } from '@/app/actions/portal/reservas'
 import { Plus, Trash2 } from 'lucide-react'
@@ -22,8 +22,10 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarCierre(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Cierre guardado.'); setMostrarForm(false); router.refresh()
     })
@@ -32,8 +34,10 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
   // borrado que no se puede deshacer: reabre las reservas de esas fechas.
   function doEliminar(c: Cierre) {
     setConfirmarBorrado(null)
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarCierre(c.cierre_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Cierre eliminado.'); router.refresh()
     })

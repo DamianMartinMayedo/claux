@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Loader2, Save, Check } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { guardarCostoVentas, type CategoriaCosto } from '@/app/actions/portal/dossier'
 
 // Paso "Coste de ventas" (solo con `base`): clasifica cada categoría de gasto
@@ -24,10 +24,12 @@ export default function PasoCostoVentas({
   }
 
   function guardar() {
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('clasificacion', JSON.stringify(categorias.map(c => ({ categoria: c.categoria, es_costo_ventas: !!estado[c.categoria] }))))
       const res = await guardarCostoVentas(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Clasificación guardada'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })

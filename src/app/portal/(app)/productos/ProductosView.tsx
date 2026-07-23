@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
@@ -48,8 +48,10 @@ function CategoriaModal({ categoria, modo, onClose, onSaved }: {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarCategoria(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -246,9 +248,11 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   useEffect(() => { sel.clear() }, [verArchivados, tab]) // eslint-disable-line react-hooks/exhaustive-deps
   const plural = (n: number) => n === 1 ? '' : 's'
 
-  function ejecutarLote(fn: () => Promise<ResultadoLoteProductos>, exito: (n: number) => string) {
+  function ejecutarLote(fn: () => Promise<ResultadoLoteProductos>, exito: (n: number) => string, cargando: string) {
+    const ld = toastLoading(cargando)
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(exito(r.hechas))
@@ -261,11 +265,11 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   }
   function doArchivarLote() {
     setConfirmLote(null)
-    ejecutarLote(() => archivarProductosEnLote(sel.selectedIds, true), n => `${n} ${sustantivo}${plural(n)} archivado${plural(n)}`)
+    ejecutarLote(() => archivarProductosEnLote(sel.selectedIds, true), n => `${n} ${sustantivo}${plural(n)} archivado${plural(n)}`, 'Archivando…')
   }
   function doEliminarLote() {
     setConfirmLote(null)
-    ejecutarLote(() => eliminarProductosEnLote(sel.selectedIds), n => `${n} ${sustantivo}${plural(n)} eliminado${plural(n)}`)
+    ejecutarLote(() => eliminarProductosEnLote(sel.selectedIds), n => `${n} ${sustantivo}${plural(n)} eliminado${plural(n)}`, 'Eliminando…')
   }
 
   const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
@@ -290,8 +294,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   }
   function confirmarEliminar() {
     if (!eliminarProd) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarProducto(eliminarProd.producto_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'No se pudo eliminar.'); return }
       toastSuccess(`${sustantivo.charAt(0).toUpperCase()}${sustantivo.slice(1)} eliminado.`)
       setEliminarProd(null); router.refresh()
@@ -538,7 +544,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 <button className="btn btn-secondary btn-sm" disabled={isPending}
                   onClick={() => ejecutarLote(
                     () => archivarProductosEnLote(sel.selectedIds, false),
-                    n => `${n} ${sustantivo}${plural(n)} restaurado${plural(n)}`)}>
+                    n => `${n} ${sustantivo}${plural(n)} restaurado${plural(n)}`, 'Restaurando…')}>
                   <RotateCcw size={14} strokeWidth={2} /> Restaurar
                 </button>
                 <button className="btn btn-danger-text btn-sm" disabled={isPending}

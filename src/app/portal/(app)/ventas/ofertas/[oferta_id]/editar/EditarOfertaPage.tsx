@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
@@ -91,8 +91,10 @@ export default function EditarOfertaPage({ data, resumen }: Props) {
     fd.set('lineas',  JSON.stringify(lineas))
     fd.set('ajustes', JSON.stringify(ajustes))
 
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarOferta(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.push(`/portal/ventas/ofertas/${oferta.oferta_id}`)
     })

@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -121,8 +121,10 @@ export function EmpleadoModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarEmpleado(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -310,8 +312,10 @@ export function BajaModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('empleado_id', empleado.empleado_id)
+    const ld = toastLoading('Dando de baja…')
     startTransition(async () => {
       const res = await darBajaEmpleado(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -433,8 +437,10 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
   const hayBajas   = seleccionados.some(e => e.estado === 'BAJA')
 
   function ejecutarLote(fn: () => Promise<ResultadoLote>) {
+    const ld = toastLoading('Procesando…')
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} aplicado${plural(r.hechas)}`)
@@ -466,8 +472,10 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
   function onSaved() { setModalEmpleado(false); setEditEmpleado(null); setBaja(null); router.refresh() }
 
   function reactivar(empleado_id: string) {
+    const ld = toastLoading('Reactivando…')
     startTransition(async () => {
       const res = await reactivarEmpleado(empleado_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.refresh()
     })
@@ -475,8 +483,10 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
 
   function confirmarEliminar() {
     if (!confirmDel) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarEmpleado(confirmDel.empleado_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setConfirmDel(null); return }
       setConfirmDel(null); router.refresh()
     })

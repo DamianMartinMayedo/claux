@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import {
@@ -102,8 +102,10 @@ function UsuarioModal({
       }
     }
 
+    const ld = toastLoading(esEdicion ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const result = esEdicion ? await editarUsuario(fd) : await crearUsuario(fd)
+      await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       onSaved('passwordTemporal' in result ? (result.passwordTemporal as string | undefined) : undefined)
     })

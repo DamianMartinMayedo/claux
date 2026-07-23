@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { useState, useTransition, useMemo } from 'react'
@@ -56,8 +56,10 @@ function TurnoModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('empresa_id', empresaId)
+    const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarTurno(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -125,8 +127,10 @@ function CeldaTurno({
     fd.set('empleado_id', empleadoId)
     fd.set('dia_semana', String(dia))
     fd.set('turno_id', turno_id)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await asignarTurno(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
@@ -177,8 +181,10 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
 
   function confirmarEliminarTurno() {
     if (!delTurno) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarTurno(delTurno.turno_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelTurno(null); return }
       setDelTurno(null); router.refresh()
     })

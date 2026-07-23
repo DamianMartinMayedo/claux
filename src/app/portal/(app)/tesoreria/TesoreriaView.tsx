@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
@@ -92,8 +92,10 @@ function CuentaModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarCuenta(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -302,15 +304,17 @@ function MovimientoModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('cuenta_id', cuentaId)
+    const ld = toastLoading('Registrando…')
     startTransition(async () => {
       // Liquidar un pendiente existente → no se crea un registro nuevo (evita duplicados)
       if (pendienteSel) {
-        if (pagoInvalido) return
+        if (pagoInvalido) { await ld.dismiss(); return }
         fd.set('doc_tipo', pendienteSel.doc_tipo)
         fd.set('doc_id', pendienteSel.doc_id)
         fd.set('monto', impDoc)                              // importe en la moneda del documento
         fd.set('tasa_cambio', String(cambiaMoneda ? tasaCompleta : 1))
         const res = await registrarPagoDoc(fd)
+        await ld.dismiss()
         if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
         onSaved()
         return
@@ -319,6 +323,7 @@ function MovimientoModal({
       fd.set('tipo', tipo)
       fd.set('registrar_gasto', String(registrarGasto))
       const res = await registrarMovimiento(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -606,8 +611,10 @@ function TransferenciaModal({
     fd.set('cuenta_origen', origen)
     fd.set('cuenta_destino', destino)
     fd.set('tasa_cambio', String(tasaCompleta))
+    const ld = toastLoading('Transfiriendo…')
     startTransition(async () => {
       const res = await registrarTransferencia(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -814,8 +821,10 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
   const plural = (n: number) => n === 1 ? '' : 's'
 
   function ejecutarLoteCuentas(fn: () => Promise<ResultadoLoteCuentas>, mensaje: (n: number) => string) {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess(mensaje(r.hechas))
       selCuentas.clear()
@@ -854,8 +863,10 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
 
   function doEliminarLoteMov() {
     setConfirmLoteMov(false)
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const r = await eliminarMovimientosEnLote(selMov.selectedIds)
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} eliminado${plural(r.hechas)}`)

@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
 import Link                                 from 'next/link'
@@ -70,16 +70,20 @@ function PagoModal({
     fd.set('cuenta_id', liq.cuentaId)
     fd.set('monto', liq.monto)
     fd.set('tasa_cambio', String(liq.tasa))
+    const ld = toastLoading('Registrando…')
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
   }
 
   function handleAnular(movimiento_id: string) {
+    const ld = toastLoading('Anulando…')
     startTransition(async () => {
       const res = await anularPagoDoc(movimiento_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })

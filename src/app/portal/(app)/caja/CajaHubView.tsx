@@ -8,7 +8,7 @@ import { crearCaja, setActivaCaja, type Caja } from '@/app/actions/portal/caja'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 
 interface Props { cajas: Caja[]; empresas: { empresa_id: string; nombre: string }[] }
 
@@ -26,8 +26,10 @@ export default function CajaHubView({ cajas, empresas }: Props) {
   const empresaNombre = (id: string) => empresas.find(e => e.empresa_id === id)?.nombre ?? id
 
   function toggleActiva(c: Caja) {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const r = await setActivaCaja(c.caja_id, !c.activa)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo actualizar el punto de venta.'); return }
       router.refresh()
     })
@@ -130,8 +132,10 @@ function NuevoPuntoVentaModal({ empresas, onClose, onCreated }: {
 
   function submit(e: FormEvent) {
     e.preventDefault()
+    const ld = toastLoading('Creando…')
     startTransition(async () => {
       const r = await crearCaja(nombre, empresaId)
+      await ld.dismiss()
       if (!r.ok || !r.caja_id) { toastError(r.error ?? 'No se pudo crear el punto de venta.'); return }
       onCreated(r.caja_id)
     })

@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { guardarOferta }            from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }    from './_DocumentoLineasEditor'
@@ -124,8 +124,10 @@ export function OfertaFormModal({
     fd.set('lineas',  JSON.stringify(lineas))
     fd.set('ajustes', JSON.stringify(ajustes))
 
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarOferta(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved(res.oferta_id!)
     })

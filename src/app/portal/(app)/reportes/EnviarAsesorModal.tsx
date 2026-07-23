@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { X, Plus, Send } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import type { ReportesData } from '@/app/actions/portal/reportes'
 import { enviarReportesAsesor } from '@/app/actions/portal/reportes'
 import type { Asesor } from '@/app/actions/portal/asesores'
@@ -66,8 +66,10 @@ export default function EnviarAsesorModal({
     const email  = addEmail.trim()
     if (!nombre) { toastError('El nombre es obligatorio.'); return }
     if (!EMAIL_RE.test(email)) { toastError('El correo no parece válido.'); return }
+    const ld = toastLoading('Guardando…')
     startAdd(async () => {
       const r = await guardarAsesor({ nombre, email, empresa_id: addEmpresa || null })
+      await ld.dismiss()
       if (!r.ok || !r.asesor) { toastError(r.error ?? 'No se pudo guardar.'); return }
       setLista(prev => [...prev, r.asesor!])
       setAsesorId(r.asesor.asesor_id)
@@ -79,11 +81,12 @@ export default function EnviarAsesorModal({
   function enviar() {
     if (!asesorId) { toastError('Elige un asesor.'); return }
     if (!incluirPDF && !incluirCSV) { toastError('Elige al menos un archivo.'); return }
+    const ld = toastLoading('Enviando…')
     startTransition(async () => {
       let pdfBase64: string | undefined
       if (incluirPDF) {
         try { pdfBase64 = await construirPdfBase64(incluirConsolidado) }
-        catch { toastError('No se pudo generar el PDF.'); return }
+        catch { await ld.dismiss(); toastError('No se pudo generar el PDF.'); return }
       }
       const r = await enviarReportesAsesor({
         asesor_id: asesorId, desde, hasta, empresa_id: empresaId,
@@ -91,6 +94,7 @@ export default function EnviarAsesorModal({
         nota: nota.trim() || undefined,
         pdfBase64, pdfNombre: `${nombreArchivo}.pdf`, csvNombre: `${nombreArchivo}.csv`,
       })
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
       toastSuccess(`Enviado a ${r.email}`)
       onEnviado()

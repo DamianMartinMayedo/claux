@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, type ChangeEvent } from 'react'
 import { CheckCircle2, FileJson } from 'lucide-react'
 import { ingestarLoteArchivo } from '@/app/actions/portal/caja'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 
 interface Props { cajas: { caja_id: string; nombre: string }[] }
 type Resultado = { tickets_nuevos: number; cierres_posteados: number; duplicados: number; errores: string[] }
@@ -47,8 +47,10 @@ export default function SincronizarView({ cajas }: Props) {
       if (!destino) { toastError('No hay ningún punto de venta al que asignar el archivo.'); limpiarInput(); return }
       setDetectada(delArchivo)
 
+      const ld = toastLoading('Sincronizando…')
       startTransition(async () => {
         const r = await ingestarLoteArchivo(destino, payload)
+        await ld.dismiss()
         if (!r.ok || !r.resultado) { toastError(r.error ?? 'No se pudo procesar el archivo.'); limpiarInput(); return }
         setResultado(r.resultado)
         toastSuccess(`Archivo sincronizado en ${nombreDe(destino)}.`)

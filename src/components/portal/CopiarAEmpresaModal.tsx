@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { X } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import type { MonedaOpcion } from '@/app/actions/portal/monedas'
 import { textoTasa }        from './form-helpers'
 
@@ -117,8 +117,10 @@ export default function CopiarAEmpresaModal({
       const n = valor.trim() === '' ? 0 : parseFloat(valor)
       importeFinal = isNaN(n) ? null : n
     }
+    const ld = toastLoading('Copiando…')
     startTransition(async () => {
       const r = await onCopiar(empresaId, moneda || null, importeFinal)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo copiar.'); return }
       toastSuccess('Copiado a la otra empresa.')
       onCopiado()

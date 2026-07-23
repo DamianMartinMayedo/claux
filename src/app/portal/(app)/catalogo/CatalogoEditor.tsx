@@ -3,7 +3,7 @@
 import { useState, useTransition, useMemo, useEffect, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   guardarCategoria, eliminarCategoria, eliminarItem,
   marcarDisponible, marcarDisponibleEnLote, eliminarItemsEnLote,
@@ -46,8 +46,10 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   // clicable ni usar el confirm() del navegador.
   function doEliminarItem(it: CatalogoItem) {
     setConfirmarItem(null)
+    const ld = toastLoading('Eliminando…')
     startDelete(async () => {
       const r = await eliminarItem(it.item_id)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess('Producto eliminado.')
       onSaved()
@@ -55,8 +57,10 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   }
   function doEliminarCategoria(c: CatalogoCategoria) {
     setConfirmarCat(null)
+    const ld = toastLoading('Eliminando…')
     startDelete(async () => {
       const r = await eliminarCategoria(c.categoria_id)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess('Categoría eliminada.')
       onSaved()
@@ -105,9 +109,11 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   const hayDisponibles = itemsSel.some(i => i.disponible)
   const hayAgotados    = itemsSel.some(i => !i.disponible)
 
-  function ejecutarLote(fn: () => Promise<ResultadoLoteCatalogo>, mensaje: (n: number) => string) {
+  function ejecutarLote(fn: () => Promise<ResultadoLoteCatalogo>, mensaje: (n: number) => string, cargando: string) {
+    const ld = toastLoading(cargando)
     startBulk(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess(mensaje(r.hechas))
       sel.clear()
@@ -117,7 +123,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   const plural = (n: number) => n === 1 ? '' : 's'
   function doEliminarLote() {
     setConfirmarLote(false)
-    ejecutarLote(() => eliminarItemsEnLote(sel.selectedIds), n => `${n} producto${plural(n)} eliminado${plural(n)}.`)
+    ejecutarLote(() => eliminarItemsEnLote(sel.selectedIds), n => `${n} producto${plural(n)} eliminado${plural(n)}.`, 'Eliminando…')
   }
 
   return (
@@ -243,7 +249,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
             <button className="btn btn-secondary btn-sm" disabled={isBulk}
               onClick={() => ejecutarLote(
                 () => marcarDisponibleEnLote(sel.selectedIds, true),
-                n => `${n} producto${plural(n)} marcado${plural(n)} como disponible${plural(n)}.`)}>
+                n => `${n} producto${plural(n)} marcado${plural(n)} como disponible${plural(n)}.`, 'Actualizando…')}>
               <Eye size={14} strokeWidth={2} /> Marcar disponible
             </button>
           )}
@@ -251,7 +257,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
             <button className="btn btn-secondary btn-sm" disabled={isBulk}
               onClick={() => ejecutarLote(
                 () => marcarDisponibleEnLote(sel.selectedIds, false),
-                n => `${n} producto${plural(n)} marcado${plural(n)} como agotado${plural(n)}.`)}>
+                n => `${n} producto${plural(n)} marcado${plural(n)} como agotado${plural(n)}.`, 'Actualizando…')}>
               <EyeOff size={14} strokeWidth={2} /> Marcar agotado
             </button>
           )}
@@ -354,8 +360,10 @@ function ItemRow({ item, tieneInventario, selected, onToggle, onEdit, onDelete, 
   const [isPending, startTransition] = useTransition()
 
   function toggleDisponible() {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const r = await marcarDisponible(item.item_id, !item.disponible)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -545,8 +553,10 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
   function guardar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarSlug(fd)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess('Enlace guardado.')
       onSaved()
@@ -581,8 +591,10 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
   }
 
   function importar() {
+    const ld = toastLoading('Importando…')
     startImport(async () => {
       const r = await importarDesdeProductos(tipoImport)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess(r.creados ? `${r.creados} ítem(s) importado(s).` : 'No hay nada nuevo que importar.')
       onSaved()
@@ -592,8 +604,10 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
   function cambiarMoneda(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value
     // Transición propia: no debe activar el spinner del botón "Guardar" del enlace.
+    const ld = toastLoading('Actualizando…')
     startMoneda(async () => {
       const r = await guardarMonedaCatalogo(val)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess(`Moneda del ${data.etiquetas.catalogo.toLowerCase()} actualizada.`)
       onSaved()

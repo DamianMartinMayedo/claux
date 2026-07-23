@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Loader2, Plus, Save } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { crearDossier, guardarBasicos, type DossierData, type DossierBasico } from '@/app/actions/portal/dossier'
 
@@ -89,6 +89,7 @@ export default function PasoBasicos({
   }
 
   function enviar() {
+    const ld = toastLoading(creando ? 'Creando…' : 'Guardando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('titulo', titulo)
@@ -100,6 +101,7 @@ export default function PasoBasicos({
 
       if (creando) {
         const res = await crearDossier(fd)
+        await ld.dismiss()
         if (res.ok) onListo?.(res.dossier_id)
         else toastError(res.error || 'No se pudo crear el dossier')
         return
@@ -107,6 +109,7 @@ export default function PasoBasicos({
 
       fd.set('dossier_id', dossier.dossier_id)
       const res = await guardarBasicos(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Guardado'); onListo?.() }
       else toastError(res.error || 'No se pudo guardar')
     })

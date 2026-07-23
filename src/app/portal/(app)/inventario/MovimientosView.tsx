@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
@@ -70,8 +70,10 @@ function MovimientoModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
+    const ld = toastLoading('Registrando…')
     startTransition(async () => {
       const res = await registrarMovimiento(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Movimiento registrado')
       onSaved()
@@ -211,8 +213,10 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
   const [recalcPending, startRecalc]  = useTransition()
 
   function doRecalcular() {
+    const ld = toastLoading('Recalculando…')
     startRecalc(async () => {
       const res = await reconciliarStock()
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       toastSuccess(`Stock recalculado (${res.productos ?? 0} productos)`)
       setShowRecalc(false)

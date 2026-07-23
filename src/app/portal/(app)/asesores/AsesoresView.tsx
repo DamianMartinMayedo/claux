@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Plus, Pencil, Trash2, Users } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import type { Asesor } from '@/app/actions/portal/asesores'
@@ -43,10 +43,12 @@ export default function AsesoresView({
     if (!n) { toastError('El nombre es obligatorio.'); return }
     if (!EMAIL_RE.test(e)) { toastError('El correo no parece válido.'); return }
     const editando = form !== 'new' && form !== null ? form : null
+    const ld = toastLoading(editando ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const r = await guardarAsesor({
         asesor_id: editando?.asesor_id, nombre: n, email: e, empresa_id: empresa || null,
       })
+      await ld.dismiss()
       if (!r.ok || !r.asesor) { toastError(r.error ?? 'No se pudo guardar.'); return }
       setLista(prev => editando
         ? prev.map(x => x.asesor_id === r.asesor!.asesor_id ? r.asesor! : x)
@@ -60,8 +62,10 @@ export default function AsesoresView({
   // en el padre para no anidar el modal dentro del menú de acciones de la fila.
   function doBorrar(a: Asesor) {
     setConfirmarBorrado(null)
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const r = await eliminarAsesor(a.asesor_id)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo eliminar.'); return }
       setLista(prev => prev.filter(x => x.asesor_id !== a.asesor_id))
       toastSuccess('Asesor eliminado.')

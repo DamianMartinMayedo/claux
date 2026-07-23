@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition }  from 'react'
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
@@ -74,24 +74,30 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
   const esConfirmada = compra.estado === 'CONFIRMADA'
 
   function doConfirmar() {
+    const ld = toastLoading('Confirmando…')
     startTransition(async () => {
       const res = await confirmarCompra(compra.compra_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       toastSuccess('Compra confirmada: stock actualizado y gasto creado')
       setShowConfirm(false); router.refresh()
     })
   }
   function doAnular() {
+    const ld = toastLoading('Anulando…')
     startTransition(async () => {
       const res = await anularCompra(compra.compra_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       toastSuccess('Compra anulada: stock revertido y gasto eliminado')
       setShowAnular(false); router.refresh()
     })
   }
   function doEliminar() {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarCompra(compra.compra_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       toastSuccess('Borrador eliminado')
       router.push('/portal/compras')

@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarReglas, type ReglasReserva } from '@/app/actions/portal/reservas'
 
 export default function ReglasReservaSection({
@@ -18,8 +18,10 @@ export default function ReglasReservaSection({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarReglas(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Reglas guardadas.'); router.refresh()
     })

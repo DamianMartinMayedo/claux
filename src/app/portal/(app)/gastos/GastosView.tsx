@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -124,8 +124,10 @@ function RegistroModal({
     const fd = new FormData(e.currentTarget)
     fd.set('tipo', tipo)
     fd.set('categoria_id', subSel || catSel || '')  // la subcategoría manda; si no, la categoría
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarGastoCobro(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -292,16 +294,20 @@ function LiquidarModal({
     fd.set('cuenta_id', liq.cuentaId)
     fd.set('monto', liq.monto)
     fd.set('tasa_cambio', String(liq.tasa))
+    const ld = toastLoading('Registrando…')
     startTransition(async () => {
       const res = await registrarLiquidacion(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
   }
 
   function handleAnular(movimiento_id: string) {
+    const ld = toastLoading('Anulando…')
     startTransition(async () => {
       const res = await anularLiquidacion(movimiento_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onChanged()
     })
@@ -428,8 +434,10 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarCategoriaGasto(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -612,8 +620,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   useEffect(() => { sel.clear() }, [tab, filtroEstado, filtroEmpresa]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function ejecutar(fn: () => Promise<ResultadoLote>) {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} eliminada${r.hechas === 1 ? '' : 's'}`)
@@ -639,8 +649,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
 
   function confirmarEliminar() {
     if (!confirmDel) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarGastoCobro(confirmDel.registro_id)
+      await ld.dismiss()
       setConfirmDel(null)
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.refresh()
@@ -656,8 +668,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   }
   function confirmarArchivarCat() {
     if (!confirmCat) return
+    const ld = toastLoading('Archivando…')
     startTransition(async () => {
       const res = await archivarCategoriaGasto(confirmCat.categoria_id)
+      await ld.dismiss()
       if (!res.ok) toastError(res.error ?? 'Error inesperado.')
       setConfirmCat(null); router.refresh()
     })

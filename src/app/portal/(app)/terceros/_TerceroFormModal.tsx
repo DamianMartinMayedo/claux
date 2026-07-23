@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useId, useState, useTransition } from 'react'
 import { ArrowRightLeft, FileText, X } from 'lucide-react'
 import {
@@ -234,8 +234,10 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
     const fd = new FormData(e.currentTarget)
     if (viaP) fd.set('via_primaria',   JSON.stringify(viaP))
     if (viaS) fd.set('via_secundaria', JSON.stringify(viaS))
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarTercero(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved(res.tercero_id)
     })

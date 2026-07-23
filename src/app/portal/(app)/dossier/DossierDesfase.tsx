@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import { useTransition } from 'react'
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { resincronizarSnapshot } from '@/app/actions/portal/dossier'
 
 // Banner de "snapshot desfasado" compartido por «Mi dossier», «Presentación» y
@@ -23,8 +23,10 @@ export default function DossierDesfase({
   const [pending, startTransition] = useTransition()
 
   function actualizar() {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const res = await resincronizarSnapshot(dossierId)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Datos actualizados'); onActualizado?.() }
       else toastError(res.error || 'No se pudo actualizar')
     })

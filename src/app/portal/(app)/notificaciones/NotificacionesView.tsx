@@ -7,7 +7,7 @@ import Tabs from '@/components/Tabs'
 import BulkBar from '@/components/portal/BulkBar'
 import { avisarNavegacion } from '@/components/portal/TopLoader'
 import { useRowSelection } from '@/components/portal/useRowSelection'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { IconoSeveridad, TiempoRelativo } from '@/components/portal/notificaciones/presentacion'
 import { useNotificaciones } from '@/components/portal/notificaciones/NotificacionesContext'
 import {
@@ -117,8 +117,10 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
     } else {
       setLista(l => l.filter(n => !ids.includes(n.id)))
     }
+    const ld = toastLoading(accion === 'leer' ? 'Marcando…' : 'Archivando…')
     startTransition(async () => {
       const r = accion === 'leer' ? await marcarLeidasLote(ids) : await archivarLote(ids)
+      await ld.dismiss()
       if (!r.ok) {
         toastError('No se pudo completar la acción.')
         // Deshacer el optimismo: la lista se recarga del servidor, que es quien
@@ -252,8 +254,10 @@ function Preferencias({ inicial }: { inicial: PreferenciaFila[] }) {
   function guardar(tipo: TipoClave, activa: boolean, severidad: Severidad) {
     const previas = filas
     setFilas(fs => fs.map(f => (f.tipo === tipo ? { ...f, activa, severidad } : f)))
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarPreferencia(tipo, activa, severidad)
+      await ld.dismiss()
       if (!r.ok) {
         setFilas(previas)
         toastError('No se pudo guardar la preferencia.')
@@ -267,8 +271,10 @@ function Preferencias({ inicial }: { inicial: PreferenciaFila[] }) {
     const tipos = filas.filter(f => f.categoria === categoria).map(f => f.tipo)
     const previas = filas
     setFilas(fs => fs.map(f => (f.categoria === categoria ? { ...f, activa } : f)))
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarPreferenciasLote(tipos, activa)
+      await ld.dismiss()
       if (!r.ok) {
         setFilas(previas)
         toastError('No se pudo guardar el grupo.')

@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
@@ -60,8 +60,10 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
       return
     }
 
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const result = await actualizarMiPerfil(fd)
+      await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       setShowPwd(false)
       router.refresh()

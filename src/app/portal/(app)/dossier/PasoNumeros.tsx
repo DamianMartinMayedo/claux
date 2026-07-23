@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { Loader2, Save, Download, X, AlertTriangle, Sparkles } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   guardarSerie, previsualizarActualizacion, aplicarActualizacion,
   type DossierBasico, type PreviewActualizacion,
@@ -77,6 +77,7 @@ export default function PasoNumeros({
   }, [filas, meses])
 
   function guardar() {
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
@@ -85,14 +86,17 @@ export default function PasoNumeros({
         gastos_operativos: num(filas[m].gastos_operativos), origen: filas[m].origen,
       }))))
       const res = await guardarSerie(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Números guardados'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })
   }
 
   function abrirPreview() {
+    const ld = toastLoading('Calculando…')
     startPreview(async () => {
       const res = await previsualizarActualizacion(dossier.dossier_id)
+      await ld.dismiss()
       if ('error' in res) { toastError(res.error); return }
       setAceptados(new Set())
       setPreview(res)
@@ -100,11 +104,13 @@ export default function PasoNumeros({
   }
 
   function confirmarActualizacion() {
+    const ld = toastLoading('Aplicando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('conflictos_aceptados', JSON.stringify([...aceptados]))
       const res = await aplicarActualizacion(fd)
+      await ld.dismiss()
       // Refresca la rejilla con lo traído y se queda: es el momento de revisarlo,
       // no de darlo por bueno. Avanza cuando el dueño pulse Guardar.
       if (res.ok) { toastSuccess('Números traídos: revísalos y guarda'); setPreview(null); onCambio?.() }

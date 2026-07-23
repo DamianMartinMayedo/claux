@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import Link                        from 'next/link'
 import { useRouter }               from 'next/navigation'
@@ -70,6 +70,7 @@ function ContratoModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       let res
       if (esEdicion) {
@@ -79,6 +80,7 @@ function ContratoModal({
         fd.set('empleado_id', empleadoId)
         res = await guardarContrato(fd)
       }
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -188,8 +190,10 @@ function ConceptosSection({
     const form = e.currentTarget
     const fd = new FormData(form)
     fd.set('empleado_id', empleadoId)
+    const ld = toastLoading('Añadiendo…')
     startTransition(async () => {
       const res = await guardarConceptoEmpleado(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       form.reset()
       onChanged()
@@ -197,8 +201,10 @@ function ConceptosSection({
   }
 
   function handleDel(id: string) {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarConceptoEmpleado(id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelId(null); return }
       setDelId(null); onChanged()
     })
@@ -297,24 +303,30 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
   function doConfirmarNomina() {
     if (!confirmarNom) return
+    const ld = toastLoading('Confirmando…')
     startTransition(async () => {
       const res = await confirmarNomina(confirmarNom.nomina_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       setConfirmarNom(null); router.refresh()
     })
   }
 
   function reactivar() {
+    const ld = toastLoading('Reactivando…')
     startTransition(async () => {
       const res = await reactivarEmpleado(empleado.empleado_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.refresh()
     })
   }
 
   function confirmarEliminar() {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarEmpleado(empleado.empleado_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setShowDelete(false); return }
       router.push('/portal/rrhh')
     })
@@ -322,8 +334,10 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
   function confirmarDelContrato() {
     if (!delContrato) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarContrato(delContrato.contrato_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelContrato(null); return }
       setDelContrato(null); router.refresh()
     })

@@ -3,7 +3,7 @@
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                         from 'next/navigation'
 import Link                                  from 'next/link'
-import { toastError, toastSuccess }          from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   archivarTercero,
   copiarTerceroAEmpresa,
@@ -149,9 +149,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   useEffect(() => { sel.clear() }, [verArchivados]) // eslint-disable-line react-hooks/exhaustive-deps
   const plural = (n: number) => n === 1 ? '' : 's'
 
-  function ejecutarLote(fn: () => Promise<ResultadoLoteTerceros>, mensaje: (n: number) => string) {
+  function ejecutarLote(fn: () => Promise<ResultadoLoteTerceros>, mensaje: (n: number) => string, cargando: string) {
+    const ld = toastLoading(cargando)
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       toastSuccess(mensaje(r.hechas))
       sel.clear()
@@ -160,7 +162,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   }
   function doArchivarLote() {
     setConfirmLote(false)
-    ejecutarLote(() => archivarTercerosEnLote(sel.selectedIds, true), n => `${n} registro${plural(n)} archivado${plural(n)}.`)
+    ejecutarLote(() => archivarTercerosEnLote(sel.selectedIds, true), n => `${n} registro${plural(n)} archivado${plural(n)}.`, 'Archivando…')
   }
 
   // Copiar a otra empresa en lote (un solo destino; la acción deduplica por nombre
@@ -168,8 +170,10 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   const [copiarLote, setCopiarLote] = useState(false)
   function doCopiarLote(empresaDestino: string) {
     setCopiarLote(false)
+    const ld = toastLoading('Copiando…')
     startTransition(async () => {
       const r = await copiarTercerosAEmpresaEnLote(sel.selectedIds, empresaDestino)
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} copiado${plural(r.hechas)}`)
@@ -426,7 +430,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <button className="btn btn-secondary btn-sm" disabled={isPending}
             onClick={() => ejecutarLote(
               () => archivarTercerosEnLote(sel.selectedIds, false),
-              n => `${n} registro${plural(n)} restaurado${plural(n)}.`)}>
+              n => `${n} registro${plural(n)} restaurado${plural(n)}.`, 'Restaurando…')}>
             <RotateCcw size={14} strokeWidth={2} /> Restaurar
           </button>
         ) : (

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2, Save } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { guardarBasicos, type DossierBasico } from '@/app/actions/portal/dossier'
 import { proyectar, type FilaSerie } from '@/lib/dossier/snapshot'
 import { geometriaGrafico } from '@/lib/dossier/grafico'
@@ -40,11 +40,13 @@ export default function PasoCrecimiento({
   const fronteraX = historico.length > 0 && futuro.length > 0 ? g.puntos[historico.length - 1]?.x ?? null : null
 
   function guardar() {
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('crecimiento_mensual_pct', String(valor))
       const res = await guardarBasicos(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Crecimiento guardado'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })

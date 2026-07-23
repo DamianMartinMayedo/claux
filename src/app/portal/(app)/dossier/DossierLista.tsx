@@ -8,7 +8,7 @@ import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   duplicarDossier, eliminarDossier,
   eliminarDossiersEnLote, despublicarDossiersEnLote, duplicarDossiersEnLote,
@@ -56,8 +56,10 @@ export default function DossierLista({
   const [confirmLote, setConfirmLote] = useState(false)
 
   function ejecutar(fn: () => Promise<ResultadoLote>) {
+    const ld = toastLoading('Aplicando…')
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} aplicado${r.hechas === 1 ? '' : 's'}`)
@@ -77,10 +79,12 @@ export default function DossierLista({
     id ? (empresas.find(e => e.empresa_id === id)?.nombre ?? 'Mi empresa') : 'Todas las empresas'
 
   function duplicar(d: ResumenDossier) {
+    const ld = toastLoading('Duplicando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', d.dossier_id)
       const res = await duplicarDossier(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error || 'No se pudo duplicar'); return }
       toastSuccess('Copia creada: tiene sus propios números y su propio enlace')
       router.push(`/portal/dossier/${res.dossier_id}`)
@@ -89,10 +93,12 @@ export default function DossierLista({
 
   function borrar() {
     if (!porBorrar) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', porBorrar.dossier_id)
       const res = await eliminarDossier(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Dossier eliminado'); setPorBorrar(null); router.refresh() }
       else toastError(res.error || 'No se pudo eliminar')
     })

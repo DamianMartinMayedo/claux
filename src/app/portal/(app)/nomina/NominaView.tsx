@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }               from 'next/navigation'
 import {
@@ -93,8 +93,10 @@ function NuevaNominaModal({
     const fd = new FormData(e.currentTarget)
     fd.set('empresa_id', empresaId)
     fd.set('moneda', moneda)
+    const ld = toastLoading('Creando…')
     startTransition(async () => {
       const res = await crearNomina(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -249,8 +251,10 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
   const hayBorradores = nominasFiltradas.some(n => sel.isSelected(n.nomina_id) && n.estado === 'BORRADOR')
 
   function ejecutarLote(fn: () => Promise<ResultadoLote>) {
+    const ld = toastLoading('Procesando…')
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} aplicada${plural(r.hechas)}`)
@@ -282,8 +286,10 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
 
   function doConfirmarNomina() {
     if (!confirmarNom) return
+    const ld = toastLoading('Confirmando…')
     startTransition(async () => {
       const res = await confirmarNomina(confirmarNom.nomina_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       setConfirmarNom(null); router.refresh()
     })
@@ -291,8 +297,10 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
 
   function doEliminarNomina() {
     if (!delNomina) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarNomina(delNomina.nomina_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelNomina(null); return }
       setDelNomina(null); setDetalleNominaId(null); router.refresh()
     })

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Loader2, Save, Users, Sparkles, Plus, Trash2 } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useIa } from '@/components/portal/ia/IaContext'
 import { redactarSeccionDossier } from '@/app/actions/portal/ia'
 import {
@@ -84,6 +84,7 @@ export default function PasoRelato({
     setEquipoRows(prev => (prev.length > 1 ? prev.filter((_, j) => j !== i) : [{ nombre: '', puesto: '' }]))
 
   function guardar() {
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
@@ -91,6 +92,7 @@ export default function PasoRelato({
         clave: s.clave, cuerpo: cuerpoDe(s.clave), generado_ia: deIa.has(s.clave),
       }))))
       const res = await guardarSecciones(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Relato guardado'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })
@@ -101,8 +103,10 @@ export default function PasoRelato({
   async function redactar(clave: string) {
     if (redactando) return
     setRedactando(clave)
+    const ld = toastLoading('Generando…')
     try {
       const res = await redactarSeccionDossier(clave)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error); return }
       setTexto(prev => ({ ...prev, [clave]: prev[clave]?.trim() ? `${prev[clave].trim()}\n\n${res.cuerpo}` : res.cuerpo }))
       setDeIa(prev => new Set(prev).add(clave))
@@ -113,8 +117,10 @@ export default function PasoRelato({
   }
 
   function precargarEquipo() {
+    const ld = toastLoading('Trayendo…')
     startEquipo(async () => {
       const sug = await sugerirEquipoDesdeRrhh()
+      await ld.dismiss()
       if (!sug) { toastError('No hay personal dado de alta en RRHH'); return }
       // Añade la plantilla a las filas ya escritas (aditivo), sin duplicar vacías.
       const nuevas = parseEquipoFilas(sug)

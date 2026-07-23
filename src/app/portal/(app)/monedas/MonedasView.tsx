@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
@@ -88,8 +88,10 @@ function MonedaModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading(esEdicion ? 'Guardando…' : 'Añadiendo…')
     startTransition(async () => {
       const result = await guardarMoneda(fd)
+      await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       onSaved()
     })
@@ -244,8 +246,10 @@ function ParModal({
     fd.set('fuente', fuente)
     if (fuente === 'MANUAL') fd.set('tasa', tasa)
 
+    const ld = toastLoading(fuente !== 'MANUAL' ? 'Obteniendo…' : 'Guardando…')
     startTransition(async () => {
       const result = await guardarPar(fd)
+      await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       onSaved(result.tasa, result.fecha)
     })
@@ -343,8 +347,10 @@ function ConsolidacionModal({
 
   function handleConfirm() {
     if (sel === actual) { onClose(); return }
+    const ld = toastLoading('Cambiando…')
     startTransition(async () => {
       const result = await cambiarMonedaConsolidacion(sel)
+      await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error.'); return }
       onSaved()
     })
@@ -412,14 +418,17 @@ function EliminarMonedaModal({
   }, [moneda.codigo])
 
   function eliminarLimpio() {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const r = await eliminarMoneda(moneda.codigo)
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
       onDone()
     })
   }
 
   function aplicarConDatos() {
+    const ld = toastLoading(accion === 'desactivar' ? 'Desactivando…' : 'Fusionando…')
     startTransition(async () => {
       if (accion === 'desactivar') {
         const fd = new FormData()
@@ -428,11 +437,13 @@ function EliminarMonedaModal({
         fd.set('simbolo', moneda.simbolo)
         fd.set('activa',  'false')
         const r = await guardarMoneda(fd)
+        await ld.dismiss()
         if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
         onDone()
       } else {
-        if (!destino) { toastError('Elige una moneda destino.'); return }
+        if (!destino) { await ld.dismiss(); toastError('Elige una moneda destino.'); return }
         const r = await eliminarMoneda(moneda.codigo, destino)
+        await ld.dismiss()
         if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
         onDone()
       }

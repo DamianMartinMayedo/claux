@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
@@ -199,8 +199,10 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     fd.set('fecha_fin', fechaFin)
     fd.set('renovacion_automatica', renovacion ? '1' : '')
     fd.set('notas', notas)
+    const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarSuscripcion(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(
         isEdit          ? 'Suscripción actualizada.'
@@ -664,8 +666,10 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
     const excluirDelMes = [...excluidos]
       .filter(k => k.startsWith(pref))
       .map(k => k.slice(pref.length))
+    const ld = toastLoading('Generando…')
     startTransition(async () => {
       const res = await facturarPeriodo(empresaId, periodo, excluirDelMes)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       if (res.fallidas) toastError(`${res.fallidas} sin crear${res.error ? `: ${res.error}` : '.'}`)
       toastSuccess(`${res.generadas ?? 0} factura(s) borrador creada(s).`)
@@ -778,15 +782,19 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
   function onSaved()                { setModal(false); setEditSub(null); router.refresh() }
 
   function accionEstado(id: string, estado: 'ACTIVA' | 'PAUSADA' | 'CANCELADA', msg: string) {
+    const ld = toastLoading(estado === 'PAUSADA' ? 'Pausando…' : estado === 'ACTIVA' ? 'Reanudando…' : 'Cancelando…')
     startTransition(async () => {
       const res = await cambiarEstadoSuscripcion(id, estado)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       toastSuccess(msg); setCancelSub(null); router.refresh()
     })
   }
   function accionRenovar(id: string) {
+    const ld = toastLoading('Renovando…')
     startTransition(async () => {
       const res = await renovarSuscripcion(id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
       toastSuccess('Suscripción renovada.'); router.refresh()
     })

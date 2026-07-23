@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   guardarItem, subirFotoItem, quitarFotoItem,
   type CatalogoItem, type CatalogoCategoria, type MonedaOpcion,
@@ -41,9 +41,10 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarItem(fd)
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { await ld.dismiss(); toastError(r.error ?? 'Error inesperado.'); return }
 
       const itemId = r.item_id!
       if (nuevaFoto) {
@@ -56,6 +57,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
         await quitarFotoItem(itemId)
       }
 
+      await ld.dismiss()
       toastSuccess('Producto guardado.')
       onSaved()
     })

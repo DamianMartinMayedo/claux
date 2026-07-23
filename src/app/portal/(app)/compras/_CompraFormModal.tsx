@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useTransition } from 'react'
 import { Plus, X, Trash2 }                  from 'lucide-react'
 import {
@@ -100,8 +100,10 @@ export function CompraFormModal({
       costo_unitario: l.costo_unitario,
     }))))
 
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarCompra(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(isEdit ? 'Compra actualizada' : 'Compra creada en borrador')
       onSaved(res.compra_id!)

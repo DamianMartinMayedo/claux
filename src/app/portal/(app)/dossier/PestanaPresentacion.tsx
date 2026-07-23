@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { ExternalLink, Copy, Check, Loader2, Globe, EyeOff, RefreshCw, AlertTriangle, Download } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   publicarDossier, despublicarDossier, revocarEnlace,
   type DossierBasico,
@@ -36,30 +36,36 @@ export default function PestanaPresentacion({
     : ''
 
   function publicar() {
+    const ld = toastLoading('Publicando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await publicarDossier(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Dossier publicado'); onCambio?.() }
       else toastError(res.error || 'No se pudo publicar')
     })
   }
 
   function despublicar() {
+    const ld = toastLoading('Despublicando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await despublicarDossier(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Dossier despublicado'); onCambio?.() }
       else toastError(res.error || 'No se pudo despublicar')
     })
   }
 
   function revocar() {
+    const ld = toastLoading('Generando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await revocarEnlace(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Enlace nuevo generado; el anterior ya no funciona'); setConfirmarRevocar(false); onCambio?.() }
       else toastError(res.error || 'No se pudo revocar')
     })

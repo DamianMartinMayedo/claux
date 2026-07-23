@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Copy, Check, RefreshCw } from 'lucide-react'
 import { guardarConfigCaja, regenerarToken, type CajaConfigData } from '@/app/actions/portal/caja'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { slugPuntoVenta } from '@/lib/caja/slug'
 import Tabs from '@/components/Tabs'
@@ -102,8 +102,10 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
   }
 
   function regenerar() {
+    const ld = toastLoading('Regenerando…')
     startTransition(async () => {
       const r = await regenerarToken(data.caja.caja_id)
+      await ld.dismiss()
       if (!r.ok || !r.token) { toastError(r.error ?? 'No se pudo regenerar el enlace.'); return }
       setToken(r.token)
       toastSuccess('Enlace regenerado. Reinstala la caja con el nuevo enlace.')
@@ -130,12 +132,14 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
     setConfirmarEmpresa(false)
     const cuentasFiltradas: Record<string, string> = {}
     for (const m of monedas) if (cuentas[m]) cuentasFiltradas[m] = cuentas[m]
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarConfigCaja(data.caja.caja_id, {
         nombre, empresa_id: empresaId, almacen_id: almacenId || null,
         monedas_aceptadas: monedas, cuentas_moneda: cuentasFiltradas,
         tipos_catalogo: tiposCatalogo,
       })
+      await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo guardar.'); return }
       toastSuccess('Configuración guardada.')
       router.refresh()

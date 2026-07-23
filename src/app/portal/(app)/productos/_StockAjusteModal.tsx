@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useEffect, useTransition } from 'react'
 import { ajustarStock, obtenerStockPorAlmacen } from '@/app/actions/portal/productos'
 import { AlertTriangle, Plus, Minus, Equal, X } from 'lucide-react'
@@ -89,8 +89,10 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
     if (delta === 0)      return toastError(modo === 'fijar' ? 'El stock no ha cambiado.' : 'La cantidad debe ser mayor que cero.')
     if (negativo)         return toastError(`No puedes quitar más de lo disponible (${stockActual.toLocaleString('es-ES')} ${unidad}).`)
     if (!motivo.trim())   return toastError('El motivo del ajuste es obligatorio.')
+    const ld = toastLoading('Aplicando…')
     startTransition(async () => {
       const res = await ajustarStock(producto_id, almacenId, delta, motivo.trim())
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onSaved()
     })

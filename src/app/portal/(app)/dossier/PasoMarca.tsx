@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2, Save, Copy, Check } from 'lucide-react'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import ImageUpload from '@/components/ImageUpload'
 import {
   guardarMarca, subirLogoDossier, quitarLogoDossier, usarLogoEmpresa,
@@ -51,12 +51,14 @@ export default function PasoMarca({
   const ratio = contraste(paleta.principal, paleta.principalTexto)
 
   function guardar() {
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('color_principal', normalizado)
       fd.set('nombre_portada', nombrePortada.trim())
       const res = await guardarMarca(fd)
+      await ld.dismiss()
       if (res.ok) { toastSuccess('Marca guardada'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
     })
@@ -64,31 +66,37 @@ export default function PasoMarca({
 
   function subirLogo(file: File | null) {
     if (!file) return
+    const ld = toastLoading('Subiendo…')
     startSubida(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('logo', file)
       const res = await subirLogoDossier(fd)
+      await ld.dismiss()
       if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo subido'); onCambio?.() }
       else toastError(res.error || 'No se pudo subir el logo')
     })
   }
 
   function quitarLogo() {
+    const ld = toastLoading('Quitando…')
     startSubida(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await quitarLogoDossier(fd)
+      await ld.dismiss()
       if (res.ok) { setLogoUrl(null); onCambio?.() }
       else toastError(res.error || 'No se pudo quitar el logo')
     })
   }
 
   function copiarDeEmpresa() {
+    const ld = toastLoading('Copiando…')
     startSubida(async () => {
       const fd = new FormData()
       fd.set('dossier_id', dossier.dossier_id)
       const res = await usarLogoEmpresa(fd)
+      await ld.dismiss()
       if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo copiado de tu empresa'); onCambio?.() }
       else toastError(res.error || 'No se pudo copiar el logo')
     })

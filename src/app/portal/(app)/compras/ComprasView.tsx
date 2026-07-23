@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess }     from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter }                    from 'next/navigation'
 import { Eye, Plus, ShoppingCart, Ban, Trash2 } from 'lucide-react'
@@ -63,9 +63,11 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
   const nBorradores    = seleccionadas.filter(c => c.estado === 'BORRADOR').length
 
   // ── Orquestación de acciones en lote (toast de resumen) ──
-  function ejecutar(fn: () => Promise<ResultadoLote>) {
+  function ejecutar(fn: () => Promise<ResultadoLote>, msg: string) {
+    const ld = toastLoading(msg)
     startTransition(async () => {
       const r = await fn()
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} aplicada${r.hechas === 1 ? '' : 's'}`)
@@ -177,7 +179,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
               title: `¿Anular ${nConfirmadas} compra${nConfirmadas === 1 ? '' : 's'}?`,
               body: `Se anularán ${nConfirmadas} compra${nConfirmadas === 1 ? '' : 's'}: se revierte el stock y se elimina su gasto (junto con los pagos vinculados). El resto de la selección se omite.`,
               confirmLabel: 'Sí, anular', danger: false,
-              run: () => ejecutar(() => anularComprasEnLote(sel.selectedIds)),
+              run: () => ejecutar(() => anularComprasEnLote(sel.selectedIds), 'Anulando…'),
             })}>
             <Ban size={14} strokeWidth={2} /> Anular
           </button>
@@ -188,7 +190,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
               title: `¿Eliminar ${nBorradores} borrador${nBorradores === 1 ? '' : 'es'}?`,
               body: 'Solo se eliminan las compras en borrador. Las confirmadas o anuladas se omiten (anúlalas para revertir su stock y su gasto).',
               confirmLabel: 'Eliminar', danger: true,
-              run: () => ejecutar(() => eliminarComprasEnLote(sel.selectedIds)),
+              run: () => ejecutar(() => eliminarComprasEnLote(sel.selectedIds), 'Eliminando…'),
             })}>
             <Trash2 size={14} strokeWidth={2} /> Eliminar
           </button>

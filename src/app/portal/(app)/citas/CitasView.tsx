@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -119,8 +119,10 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
     if (servicio) fd.set('servicio_id', servicio.servicio_id)
     fd.set('producto_id', productoId)
     fd.set('crear_en_catalogo', enCatalogo && !productoId ? '1' : '')
+    const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarServicio(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       if (res.aviso) toastError(res.aviso)
       else toastSuccess(isEdit ? `${etiqueta} actualizado.` : `${etiqueta} creado.`)
@@ -272,8 +274,10 @@ function ImportarServiciosModal({ catalogo, etiquetaPlural, onClose, onSaved }: 
       producto_id,
       duracion_minutos: parseInt(duraciones[producto_id] ?? '30', 10) || 30,
     }))
+    const ld = toastLoading('Importando…')
     startTransition(async () => {
       const res = await importarServiciosCatalogo(items)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(`${res.importados ?? 0} ${etiquetaPlural.toLowerCase()} importado(s) del catálogo.`)
       onSaved()
@@ -373,8 +377,10 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     if (recurso) fd.set('recurso_id', recurso.recurso_id)
+    const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarRecurso(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(isEdit ? `${etiquetaRec} actualizado.` : `${etiquetaRec} creado.`)
       onSaved()
@@ -521,8 +527,10 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
     e.preventDefault()
     if (!hora) { toastError('Selecciona una hora disponible.'); return }
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Creando…')
     startTransition(async () => {
       const res = await crearCitaManual(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Cita creada.')
       onSaved()
@@ -828,8 +836,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   const plural = (n: number) => n === 1 ? '' : 's'
 
   function ejecutarLote(estado: EstadoReserva) {
+    const ld = toastLoading('Procesando…')
     startTransition(async () => {
       const r: ResultadoLote = await cambiarEstadoCitasEnLote(sel.selectedIds, estado)
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} cambiada${plural(r.hechas)}`)
@@ -850,8 +860,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
 
   function doCambiarEstado() {
     if (!cambioEstado) return
+    const ld = toastLoading('Procesando…')
     startTransition(async () => {
       const res = await cambiarEstadoCita(cambioEstado.cita.reserva_id, cambioEstado.a)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setCambioEstado(null); return }
       toastSuccess(`Cita ${ESTADO_LABEL[cambioEstado.a].toLowerCase()}.`)
       setCambioEstado(null); router.refresh()
@@ -859,23 +871,29 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   }
   function doEliminarServicio() {
     if (!delServicio) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarServicio(delServicio.servicio_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelServicio(null); return }
       toastSuccess('Servicio eliminado.'); setDelServicio(null); router.refresh()
     })
   }
   function doEliminarRecurso() {
     if (!delRecurso) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarRecurso(delRecurso.recurso_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelRecurso(null); return }
       toastSuccess(`${et.recurso} eliminado.`); setDelRecurso(null); router.refresh()
     })
   }
   function doImportarRRHH() {
+    const ld = toastLoading('Importando…')
     startTransition(async () => {
       const res = await importarPersonalRRHH()
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(res.importados ? `${res.importados} importado${res.importados !== 1 ? 's' : ''} de RRHH.` : 'No hay personal nuevo que importar.')
       router.refresh()
@@ -884,8 +902,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   function handleSlugSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarSlug(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Enlace guardado.'); setEditandoSlug(false); router.refresh()
     })
@@ -899,8 +919,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   // bot): aplica también a las citas web. Optimista, con reversión si falla.
   function handleConfirmAuto(v: boolean) {
     setConfirmAuto(v)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarConfirmacionCitas(v)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'No se pudo guardar.'); setConfirmAuto(!v); return }
       toastSuccess(v ? 'Las citas se confirmarán automáticamente.' : 'Confirmarás cada cita manualmente.')
       router.refresh()
@@ -914,30 +936,38 @@ export default function CitasView({ data }: { data: CitasPageData }) {
     }
     const fd = new FormData(e.currentTarget)
     fd.set('confirmacion_automatica', String(confirmAuto))
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarBotConfigCitas(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Configuración guardada.'); router.refresh()
     })
   }
   function eliminarBot() {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarBotConfigCitas()
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Bot eliminado.'); router.refresh()
     })
   }
   function toggleBot(activo: boolean) {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const res = await toggleActivoBotCitas(activo)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(activo ? 'Bot activado.' : 'Bot desactivado.'); router.refresh()
     })
   }
 
   function toggleIaBot(activa: boolean) {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const res = await toggleIaBotCitas(activa)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(activa ? 'La IA gestionará el bot.' : 'La IA ya no gestiona el bot.'); router.refresh()
     })

@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
 import {
@@ -103,8 +103,10 @@ function NuevaReservaModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Creando…')
     startTransition(async () => {
       const res = await crearReserva(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Reserva creada.')
       onSaved()
@@ -339,8 +341,10 @@ function EditarReservaModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await modificarReserva(reserva.reserva_id, fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Reserva actualizada.')
       onSaved()
@@ -428,8 +432,10 @@ function FranjaModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     if (franja) fd.set('franja_id', franja.franja_id)
+    const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarFranja(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(franja ? 'Turno actualizado.' : 'Turno creado.')
       onSaved()
@@ -606,8 +612,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   const plural = (n: number) => n === 1 ? '' : 's'
 
   function ejecutarLote(estado: EstadoReserva) {
+    const ld = toastLoading('Procesando…')
     startTransition(async () => {
       const r: ResultadoLote = await cambiarEstadoReservasEnLote(sel.selectedIds, estado)
+      await ld.dismiss()
       if (r.error) { toastError(r.error); return }
       const partes: string[] = []
       if (r.hechas)          partes.push(`${r.hechas} cambiada${plural(r.hechas)}`)
@@ -630,8 +638,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
 
   function doCambiarEstado() {
     if (!cambioEstado) return
+    const ld = toastLoading('Procesando…')
     startTransition(async () => {
       const res = await cambiarEstadoReserva(cambioEstado.reserva.reserva_id, cambioEstado.a)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setCambioEstado(null); return }
       toastSuccess(`Reserva ${ESTADO_LABEL[cambioEstado.a].toLowerCase()}.`)
       setCambioEstado(null); router.refresh()
@@ -644,8 +654,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
 
   function doEliminarFranja() {
     if (!delFranja) return
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarFranja(delFranja.franja_id)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelFranja(null); return }
       toastSuccess('Turno eliminado.')
       setDelFranja(null); router.refresh()
@@ -655,8 +667,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   function handleSlugSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarSlug(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Enlace guardado.')
       setEditandoSlug(false)
@@ -668,8 +682,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   // bot): aplica también a las reservas web. Optimista, con reversión si falla.
   function handleConfirmAuto(v: boolean) {
     setConfirmAuto(v)
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarConfirmacionReservas(v)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'No se pudo guardar.'); setConfirmAuto(!v); return }
       toastSuccess(v ? 'Las reservas se confirmarán automáticamente.' : 'Confirmarás cada reserva manualmente.')
       router.refresh()
@@ -683,8 +699,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
     }
     const fd = new FormData(e.currentTarget)
     fd.set('confirmacion_automatica', String(confirmAuto))
+    const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarBotConfig(fd)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Configuración guardada.')
       router.refresh()
@@ -697,8 +715,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   }
 
   function eliminarBot() {
+    const ld = toastLoading('Eliminando…')
     startTransition(async () => {
       const res = await eliminarBotConfig()
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess('Bot eliminado.')
       router.refresh()
@@ -706,8 +726,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   }
 
   function toggleBot(activo: boolean) {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const res = await toggleActivoBot(activo)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(activo ? 'Bot activado.' : 'Bot desactivado.')
       router.refresh()
@@ -715,8 +737,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   }
 
   function toggleIaBot(activa: boolean) {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
       const res = await toggleIaBotReservas(activa)
+      await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       toastSuccess(activa ? 'La IA gestionará el bot.' : 'La IA ya no gestiona el bot.')
       router.refresh()

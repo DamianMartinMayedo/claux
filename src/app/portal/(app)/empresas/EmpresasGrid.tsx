@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -170,9 +170,10 @@ function EmpresaModal({
     fd.set('letra_facturacion', letra)
     fd.set('mostrar_logo', String(mostrarLogo))
 
+    const ld = toastLoading(esEdicion ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const result = await guardarEmpresa(fd)
-      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { await ld.dismiss(); toastError(result.error ?? 'Error inesperado.'); return }
 
       if (logoFile && result.empresa_id) {
         const logoFd = new FormData()
@@ -180,12 +181,14 @@ function EmpresaModal({
         logoFd.set('logo', logoFile)
         const logoResult = await subirLogoEmpresa(logoFd)
         if (!logoResult.ok) {
+          await ld.dismiss()
           toastError(`Empresa guardada, pero el logo no se pudo subir: ${logoResult.error}`)
           onSaved()
           return
         }
       }
 
+      await ld.dismiss()
       onSaved()
     })
   }
