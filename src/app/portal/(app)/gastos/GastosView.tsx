@@ -692,7 +692,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
             <h1 className="page-title">Gastos y cobros</h1>
             <IaTouchpoint tipo="gastos" descripcion="un análisis de tus gastos" />
           </div>
-          <p className="page-subtitle">Ingresos y egresos directos (no facturados). Los pagos se reflejan en Tesorería.</p>
+          <p className="page-subtitle">Ingresos y egresos sin factura de por medio.</p>
         </div>
         {puedeEditar && (
           tab === 'gastos' ? (

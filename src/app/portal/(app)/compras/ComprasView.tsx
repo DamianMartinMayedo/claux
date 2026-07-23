@@ -87,7 +87,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Compras</h1>
-          <p className="page-subtitle">Compras a proveedores. Al confirmar suben el stock y generan un gasto en Cuentas por pagar.</p>
+          <p className="page-subtitle">Compras a tus proveedores para reponer existencias.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
           <Plus size={14} strokeWidth={2.5} /> Nueva compra

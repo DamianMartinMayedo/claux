@@ -336,7 +336,7 @@ export default function ImportarWizard() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Importar datos</h1>
-          <p className="page-subtitle">Carga masiva desde CSV o Excel. Herramienta de configuración (llave en mano).</p>
+          <p className="page-subtitle">Carga masiva de tus datos desde un archivo CSV o Excel.</p>
         </div>
       </div>
 

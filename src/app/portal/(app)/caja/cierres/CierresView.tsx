@@ -20,7 +20,7 @@ export default function CierresView({ data }: { data: { cierres: Cierre[]; cajaN
       <div className="page-header">
         <div>
           <h1 className="page-title">Cierres</h1>
-          <p className="page-subtitle">Arqueos (Z) de tus puntos de venta. Cada cierre genera el resumen a Tesorería e Inventario.</p>
+          <p className="page-subtitle">Cierres de caja de tus puntos de venta, con el resumen de cada día.</p>
         </div>
       </div>
 

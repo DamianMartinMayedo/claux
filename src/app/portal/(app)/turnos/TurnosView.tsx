@@ -195,7 +195,7 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Turnos</h1>
-          <p className="page-subtitle">Catálogo de turnos por empresa y planificación semanal del personal.</p>
+          <p className="page-subtitle">Define los turnos de cada empresa y organiza la semana del personal.</p>
         </div>
         <div className="tes-header-actions">
           <button className="btn btn-primary" onClick={() => setModalNuevo(true)} disabled={!empresaId}>

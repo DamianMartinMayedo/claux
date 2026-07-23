@@ -408,7 +408,7 @@ export async function registrarLiquidacion(
   if (!cuenta.activa)     return { ok: false, error: 'La cuenta está archivada.' }
   // La cuenta de «Apertura» solo la usa el importador para saldar el histórico
   // (mig. 130): pagar desde ella a mano sería mover dinero que no existe.
-  if (cuenta.es_apertura) return { ok: false, error: 'Esa cuenta es técnica (apertura de la migración): no se puede pagar ni cobrar desde ella.' }
+  if (cuenta.es_apertura) return { ok: false, error: 'Esta cuenta es de saldo inicial: no se cobra ni se paga desde ella.' }
 
   // Moneda distinta a la del registro → se aplica tasa (misma lógica que las transferencias).
   // `montoRaw` es el importe en la moneda del registro (reduce su saldo); en la caja

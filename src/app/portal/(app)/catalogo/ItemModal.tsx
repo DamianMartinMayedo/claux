@@ -134,7 +134,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
                   value={calorias} onChange={e => setCalorias(e.target.value)} />
               </div>
             </div>
-            <p className="input-hint">Si la categoría tiene un descuento, el del producto manda cuando es mayor que 0.</p>
+            <p className="input-hint">Si le pones un descuento al producto, ese manda sobre el de la categoría.</p>
 
             {tieneIa && (
               <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={autocompletar} disabled={sugiriendo}>

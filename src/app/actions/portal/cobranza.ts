@@ -302,7 +302,7 @@ export async function registrarPagoDoc(
   if (!cuenta)            return { ok: false, error: 'Cuenta no encontrada.' }
   if (!cuenta.activa)     return { ok: false, error: 'La cuenta está archivada.' }
   // Técnica de la migración (mig. 130): no se cobra ni se paga desde ella.
-  if (cuenta.es_apertura) return { ok: false, error: 'Esa cuenta es técnica (apertura de la migración): no se puede pagar ni cobrar desde ella.' }
+  if (cuenta.es_apertura) return { ok: false, error: 'Esta cuenta es de saldo inicial: no se cobra ni se paga desde ella.' }
 
   // Moneda distinta a la del documento → se aplica tasa (misma lógica que las transferencias).
   // `montoRaw` es siempre el importe en la moneda del documento (lo que reduce su saldo);

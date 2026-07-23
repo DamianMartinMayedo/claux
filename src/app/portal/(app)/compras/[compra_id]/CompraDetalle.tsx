@@ -79,7 +79,7 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
       const res = await confirmarCompra(compra.compra_id)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
-      toastSuccess('Compra confirmada: stock actualizado y gasto creado')
+      toastSuccess('Compra confirmada. Existencias actualizadas.')
       setShowConfirm(false); router.refresh()
     })
   }
@@ -89,7 +89,7 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
       const res = await anularCompra(compra.compra_id)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
-      toastSuccess('Compra anulada: stock revertido y gasto eliminado')
+      toastSuccess('Compra anulada.')
       setShowAnular(false); router.refresh()
     })
   }
@@ -162,7 +162,7 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
       )}
       {compra.estado === 'ANULADA' && (
         <div className="alert alert-warning mb-4">
-          Compra anulada: el stock fue revertido y el gasto asociado eliminado.
+          Compra anulada. Se deshicieron las existencias y el gasto de esta compra.
         </div>
       )}
 

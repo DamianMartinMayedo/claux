@@ -97,7 +97,7 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
             </Link>
           ) : null} />
           <Campo label="Cód. proveedor" value={producto.codigo_proveedor} />
-          {esServicio && <Campo label="Suscribible" value={producto.es_suscribible ? 'Sí' : 'No'} />}
+          {esServicio && <Campo label="Se puede suscribir" value={producto.es_suscribible ? 'Sí' : 'No'} />}
         </div>
         {producto.descripcion && (
           <div className="mt-5">
@@ -303,7 +303,7 @@ function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
       <div className="det-empty">
         <div className="det-empty-icon"><TrendingUp size={40} strokeWidth={1} opacity={0.2} /></div>
         <div className="det-empty-title">Historial de precios</div>
-        <div className="det-empty-text">Aún no hay cambios registrados. El historial se genera al modificar precios o costos.</div>
+        <div className="det-empty-text">Aquí verás los cambios de precio y costo cuando los edites.</div>
       </div>
     )
   }

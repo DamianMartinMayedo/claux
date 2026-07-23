@@ -257,7 +257,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Almacenes</h1>
-          <p className="page-subtitle">Ubicaciones físicas y virtuales donde se gestiona el inventario.</p>
+          <p className="page-subtitle">Lugares donde guardas y controlas tus existencias.</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
           <Plus size={14} strokeWidth={2.5} /> Nuevo almacén

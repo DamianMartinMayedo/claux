@@ -121,7 +121,7 @@ function NuevaNominaModal({
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="modal-body">
-              <p className="modal-body-text">Se creará un borrador con una línea por cada empleado activo de la empresa y moneda elegidas. Solo se muestran las que tienen personal.</p>
+              <p className="modal-body-text">Se creará un borrador con todos los empleados activos de la empresa y moneda elegidas, listo para revisar.</p>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-3">
                   <label>Período <span className="required">*</span></label>
@@ -191,7 +191,7 @@ function ConfirmEliminarNomina({
         <div className="modal-body">
           <p className="modal-body-text">
             ¿Eliminar la nómina de <strong>{formatPeriodo(nomina.periodo)}</strong> ({formatMonto(nomina.total)} {nomina.moneda})?
-            {nomina.estado === 'CONFIRMADA' && ' También se eliminará el gasto de salarios asociado.'}
+            {nomina.estado === 'CONFIRMADA' && ' También se eliminará el gasto de salarios de esta nómina.'}
           </p>
         </div>
         <div className="modal-footer">
@@ -312,7 +312,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
       <div className="page-header">
         <div>
           <h1 className="page-title">Nómina</h1>
-          <p className="page-subtitle">Nómina simple del personal. Al confirmar se registra como gasto de salarios en tu contabilidad.</p>
+          <p className="page-subtitle">Paga a tu personal y lleva el control de los salarios.</p>
         </div>
         <div className="tes-header-actions">
           <button className="btn btn-primary" onClick={() => setModalNuevaNomina(true)} disabled={data.empresas.length === 0}>
@@ -347,7 +347,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
           <div className="mon-empty">
             <Wallet size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.nominas.length === 0
-              ? 'Aún no hay nóminas. Crea la primera para pagar a tus personal activo; al confirmarla se registra como gasto de salarios en tu contabilidad.'
+              ? 'Aún no hay nóminas. Crea la primera para pagar a tu personal.'
               : 'No hay nóminas para los filtros seleccionados.'}</p>
           </div>
         ) : (

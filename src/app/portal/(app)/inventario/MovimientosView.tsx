@@ -256,7 +256,7 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
         </div>
         <div className="det-actions">
           <button className="btn btn-secondary" onClick={() => setShowRecalc(true)} disabled={recalcPending}
-            title="Reconstruye el stock a partir del historial de movimientos">
+            title="Recalcula las existencias desde su historial de entradas y salidas">
             <RefreshCw size={14} strokeWidth={2} /> Recalcular stock
           </button>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}
@@ -366,8 +366,8 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
             </div>
             <div className="modal-body">
               <div className="modal-body-text">
-                Reconstruye el stock de todos los productos a partir del historial de movimientos
-                (la fuente de verdad). Úsalo si sospechas un descuadre. No crea ni borra movimientos.
+                Vuelve a calcular las existencias de todos los productos sumando su historial de
+                entradas y salidas. Úsalo si crees que alguna cantidad no cuadra.
               </div>
             </div>
             <div className="modal-footer">
