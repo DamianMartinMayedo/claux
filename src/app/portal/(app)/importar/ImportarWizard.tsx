@@ -2,14 +2,20 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
-import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Undo2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
 import {
   obtenerCamposEntidad, crearLoteImport, validarLoteImport, aplicarLoteImport,
   deshacerLoteImport, listarPlantillasImport, guardarPlantillaImport, cargarPlantillaImport,
+  plantillaImport,
 } from '@/app/actions/portal/importar'
+
+// MIME del .xlsx. Se escribe aquí y no se importa de `@/lib/exportar/excel` a
+// propósito: ese módulo arrastra el escritor de Excel (server-only) y no debe
+// entrar en el bundle del cliente.
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 type Campo    = { campo: string; etiqueta: string; obligatorio: boolean; ayuda?: string; alias?: string[]; ejemplo?: string }
 type Default  = { campo: string; etiqueta: string; obligatorio: boolean; ayuda?: string; valor?: string; tipo?: 'texto' | 'fecha'; opciones?: { valor: string; etiqueta: string }[] }
@@ -62,6 +68,16 @@ function descargarCsv(nombre: string, contenido: string) {
   URL.revokeObjectURL(url)
 }
 
+/** Descarga un binario recibido en base64 (el Excel viene así de la server action). */
+function descargarBase64(nombre: string, base64: string, mime: string) {
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+  const blob  = new Blob([bytes], { type: mime })
+  const url   = URL.createObjectURL(blob)
+  const a     = document.createElement('a')
+  a.href = url; a.download = nombre; a.click()
+  URL.revokeObjectURL(url)
+}
+
 /** Excel viaja en base64 por la server action (es binario, no texto). */
 function aBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf)
@@ -89,6 +105,7 @@ export default function ImportarWizard() {
   const [total, setTotal]         = useState(0)
   const [avisos, setAvisos]       = useState<string[]>([])
   const [arrastrando, setArrastrando] = useState(false)
+  const [bajandoPlantilla, setBajandoPlantilla] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [columnas, setColumnas]   = useState<Record<string, string>>({})
@@ -120,7 +137,9 @@ export default function ImportarWizard() {
 
   async function elegirEntidad(en: typeof ENTIDADES[number]) {
     setCargando(true)
+    const ld = toastLoading('Cargando…')
     const res = await obtenerCamposEntidad(en.id)
+    await ld.dismiss()
     setCargando(false)
     if (!res.ok || !res.campos) { toastError(res.error ?? 'Error inesperado.'); return }
     // El archivo pertenece a la entidad con la que se subió: al elegir entidad se
@@ -140,7 +159,9 @@ export default function ImportarWizard() {
 
   async function usarPlantilla(id: string) {
     if (!id) return
+    const ld = toastLoading('Cargando…')
     const res = await cargarPlantillaImport(id)
+    await ld.dismiss()
     if (!res.ok || !res.columnas) { toastError(res.error ?? 'No se pudo cargar la plantilla.'); return }
     // Solo se recupera el MAPEO de columnas; los valores globales (empresa,
     // moneda…) se eligen cada vez: son de este cliente, no del origen del archivo.
@@ -149,7 +170,9 @@ export default function ImportarWizard() {
   }
 
   async function guardarPlantilla() {
+    const ld = toastLoading('Guardando…')
     const res = await guardarPlantillaImport(nombrePlantilla, entidad, columnas, politica)
+    await ld.dismiss()
     if (!res.ok) { toastError(res.error ?? 'No se pudo guardar.'); return }
     toastSuccess(`Plantilla «${nombrePlantilla.trim()}» guardada.`)
     setPlantillas(await listarPlantillasImport(entidad))
@@ -159,7 +182,9 @@ export default function ImportarWizard() {
   async function deshacer() {
     setConfirmarDeshacer(false)
     setCargando(true)
+    const ld = toastLoading('Deshaciendo…')
     const res = await deshacerLoteImport(loteId)
+    await ld.dismiss()
     setCargando(false)
     if (!res.ok || !res.resumen) { toastError(res.error ?? 'No se pudo deshacer.'); return }
     setDeshecho(res.resumen)
@@ -167,11 +192,27 @@ export default function ImportarWizard() {
   }
 
   /**
-   * Plantilla modelo: nuestras columnas + una fila de ejemplo que el motor sabe
-   * rechazar. Lo obligatorio se marca con «*» en la cabecera —el mismo símbolo
-   * que en los formularios del portal—, y `normaliza()` lo ignora al volver.
+   * Plantilla modelo en EXCEL (recomendada): se genera en servidor con la marca
+   * CLAUX, cabeceras con estilo y una hoja de instrucciones. Evita el problema del
+   * CSV en Excel español (columnas pegadas, acentos rotos).
    */
-  function descargarPlantilla() {
+  async function descargarPlantillaExcel() {
+    if (bajandoPlantilla) return
+    setBajandoPlantilla(true)
+    const ld = toastLoading('Generando…')
+    const res = await plantillaImport(entidad)
+    await ld.dismiss()
+    setBajandoPlantilla(false)
+    if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo generar la plantilla.'); return }
+    descargarBase64(res.nombre ?? `plantilla-${entidad}.xlsx`, res.base64, XLSX_MIME)
+  }
+
+  /**
+   * Alternativa en CSV para quien use Google Sheets u otra herramienta. Las
+   * cabeceras marcan lo obligatorio con «*» (`normaliza()` lo ignora al volver) y
+   * lleva la fila de ejemplo que el motor sabe rechazar.
+   */
+  function descargarPlantillaCsv() {
     const filas = [campos.map(c => celdaCsv(c.etiqueta + (c.obligatorio ? ' *' : ''))).join(',')]
     if (campos.some(c => c.ejemplo)) filas.push(campos.map(c => celdaCsv(c.ejemplo ?? '')).join(','))
     descargarCsv(`plantilla-${entidad}.csv`, filas.join('\n') + '\n')
@@ -189,7 +230,9 @@ export default function ImportarWizard() {
       const contenido = esExcel
         ? aBase64(reader.result as ArrayBuffer)
         : (reader.result as string) ?? ''
+      const ld = toastLoading('Leyendo…')
       const res = await crearLoteImport(entidad, contenido, esExcel ? 'xlsx' : 'csv')
+      await ld.dismiss()
       setCargando(false)
       if (!res.ok) { toastError(res.error ?? 'No se pudo leer el archivo.'); return }
       setLoteId(res.lote_id!); setCabeceras(res.cabeceras ?? []); setTotal(res.total ?? 0)
@@ -231,6 +274,7 @@ export default function ImportarWizard() {
       politica,
     }
     setCargando(true)
+    const ld = toastLoading('Validando…')
     // El archivo se valida en tandas (una consulta por fila): se llama en bucle
     // hasta que el servidor dice que no queda nada, enseñando el avance.
     const acc = { total, ok: 0, errores: 0, filas: [] as FilaMala[], resumen: [] as Total[] }
@@ -238,7 +282,7 @@ export default function ImportarWizard() {
     let claves: string[] = []
     while (desde !== null) {
       const res = await validarLoteImport(loteId, mapeo, desde, claves)
-      if (!res.ok || !res.trozo) { setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al validar.'); return }
+      if (!res.ok || !res.trozo) { await ld.dismiss(); setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al validar.'); return }
       const t = res.trozo
       acc.total = t.total; acc.ok += t.ok; acc.errores += t.errores
       acc.filas.push(...t.filas.filter(f => !f.ok))   // las buenas no se pintan: solo cuentan
@@ -247,18 +291,20 @@ export default function ImportarWizard() {
       desde  = t.siguiente
       setProgreso(desde === null ? null : { hechas: desde, total: t.total })
     }
+    await ld.dismiss()
     setCargando(false)
     setResultado(acc); setPaso('validar')
   }
 
   async function aplicar() {
     setCargando(true)
+    const ld = toastLoading('Importando…')
     const acc = { insertadas: 0, actualizadas: 0, saltadas: 0, errores: 0 }
     let desde: number | null = 0
     let claves: string[] = []
     while (desde !== null) {
       const res = await aplicarLoteImport(loteId, desde, claves)
-      if (!res.ok || !res.trozo) { setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al importar.'); return }
+      if (!res.ok || !res.trozo) { await ld.dismiss(); setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al importar.'); return }
       const t = res.trozo
       acc.insertadas += t.insertadas; acc.actualizadas += t.actualizadas
       acc.saltadas   += t.saltadas;   acc.errores      += t.errores
@@ -266,6 +312,7 @@ export default function ImportarWizard() {
       desde  = t.siguiente
       setProgreso(desde === null ? null : { hechas: desde, total: resultado?.total ?? total })
     }
+    await ld.dismiss()
     setCargando(false)
     setResumen(acc); setPaso('hecho')
   }
@@ -335,10 +382,15 @@ export default function ImportarWizard() {
           <div className="ter-form-grid">
             <div className="input-group ter-col-span-3">
               <label>Plantilla modelo</label>
-              <button type="button" className="btn btn-secondary" onClick={descargarPlantilla}>
-                <Download size={15} strokeWidth={2} /> Descargar plantilla CSV
-              </button>
-              <span className="input-hint">Las columnas con <span className="required">*</span> son obligatorias. Lleva una fila de ejemplo; se puede dejar, no se importa.</span>
+              <div className="imprt-plantilla-botones">
+                <button type="button" className="btn btn-secondary" onClick={descargarPlantillaExcel} disabled={bajandoPlantilla}>
+                  <Download size={15} strokeWidth={2} /> {bajandoPlantilla ? 'Generando…' : 'Descargar plantilla Excel'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={descargarPlantillaCsv} disabled={bajandoPlantilla}>
+                  o en CSV
+                </button>
+              </div>
+              <span className="input-hint">Excel (recomendado): columnas y acentos siempre correctos, con instrucciones. Las columnas con <span className="required">*</span> son obligatorias; la fila de ejemplo se puede dejar, no se importa.</span>
             </div>
             <div className="input-group ter-col-span-3">
               <label htmlFor="imprt-enc">Codificación (solo CSV)</label>

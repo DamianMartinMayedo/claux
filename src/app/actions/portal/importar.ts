@@ -14,6 +14,7 @@ import { obtenerEmpresas } from './empresas'
 import { ADAPTADORES } from '@/lib/importador/adaptadores'
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
+import { construirXlsxBase64, texto, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
 import type {
   CtxImport, DefaultResuelto, MapeoImport, TrozoValidacion, TrozoAplicacion,
 } from '@/lib/importador/tipos'
@@ -76,6 +77,65 @@ export async function obtenerCamposEntidad(
     campos: adaptador.campos.map(c => ({ campo: c.campo, etiqueta: c.etiqueta, obligatorio: c.obligatorio, ayuda: c.ayuda, alias: c.alias ?? [] })),
     defaults,
   }
+}
+
+/**
+ * Plantilla modelo en Excel (.xlsx): hoja «Datos» con las cabeceras (obligatorias
+ * con «*») y una fila de ejemplo que el motor sabe rechazar, más una hoja «Cómo
+ * rellenar» con la marca CLAUX, los pasos y qué va en cada columna. El Excel evita
+ * de raíz el problema del CSV (columnas pegadas, acentos rotos): las columnas ya
+ * son columnas. Se devuelve en base64 y el asistente lo descarga como Blob.
+ */
+export async function plantillaImport(
+  entidad: string,
+): Promise<{ ok: boolean; error?: string; base64?: string; nombre?: string }> {
+  const r = await resolverCtx()
+  if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
+  const adaptador = ADAPTADORES[entidad]
+  if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
+  if (!(await puedeEditarAlgunModulo(adaptador.modulos))) return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+
+  const campos = adaptador.campos
+
+  const cabecera: CeldaEstilo = { fontWeight: 'bold', color: MARCA.blanco, backgroundColor: MARCA.teal, align: 'left', wrap: true }
+  const ejemplo:  CeldaEstilo = { fontStyle: 'italic', color: MARCA.ejemploTx, backgroundColor: MARCA.ejemploBg }
+
+  const hojaDatos: HojaExcel = {
+    nombre: 'Datos',
+    filas: [
+      campos.map(c => texto(c.etiqueta + (c.obligatorio ? ' *' : ''), cabecera)),
+      campos.map(c => texto(c.ejemplo ?? '', ejemplo)),
+    ],
+    columnas: campos.map(c => ({ width: anchoPara(c.etiqueta + ' *', c.ejemplo) })),
+  }
+
+  // Hoja de ayuda: marca CLAUX + pasos + qué va en cada columna (de la propia
+  // definición de campos, sin texto por entidad hardcodeado).
+  const titulo: CeldaEstilo = { fontWeight: 'bold', color: MARCA.tealTexto, fontSize: 16 }
+  const sub:    CeldaEstilo = { fontWeight: 'bold', color: MARCA.tealTexto }
+  const clave:  CeldaEstilo = { fontWeight: 'bold' }
+
+  const hojaAyuda: HojaExcel = {
+    nombre: 'Cómo rellenar',
+    filas: [
+      [texto('CLAUX · Plantilla de importación', titulo)],
+      [texto(adaptador.etiqueta, { color: MARCA.ejemploTx, fontWeight: 'bold' })],
+      [texto('')],
+      [texto('Cómo rellenarla', sub)],
+      [texto('1. Escribe tus datos en la hoja «Datos», debajo de la fila de cabeceras.', { wrap: true })],
+      [texto('2. No cambies ni borres la primera fila (las cabeceras).', { wrap: true })],
+      [texto('3. Las columnas con * son obligatorias; el resto puedes dejarlas en blanco.', { wrap: true })],
+      [texto('4. La fila de ejemplo (en gris) puedes dejarla o borrarla: no se importa.', { wrap: true })],
+      [texto('5. Guarda y súbelo en CLAUX → Importar datos. También se acepta CSV.', { wrap: true })],
+      [texto('')],
+      [texto('Qué va en cada columna', sub)],
+      ...campos.filter(c => c.ayuda).map(c => [texto(c.etiqueta, clave), texto(c.ayuda ?? '', { wrap: true })]),
+    ],
+    columnas: [{ width: 26 }, { width: 62 }],
+  }
+
+  const base64 = await construirXlsxBase64([hojaDatos, hojaAyuda])
+  return { ok: true, base64, nombre: `plantilla-${entidad}.xlsx` }
 }
 
 /**

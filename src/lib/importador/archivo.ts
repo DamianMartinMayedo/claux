@@ -10,6 +10,7 @@
 
 import Papa from 'papaparse'
 import readXlsxFile from 'read-excel-file/node'
+import { norm } from './util'
 
 export type FormatoArchivo = 'csv' | 'xlsx'
 
@@ -103,8 +104,13 @@ async function leerXlsx(base64: string): Promise<ArchivoLeido> {
     throw new ArchivoIlegible(`No se pudo leer el Excel: ${(e as Error).message}`)
   }
 
-  const conDatos = hojas.filter(h => (h.data ?? []).length > 1)
-  const hoja = conDatos[0] ?? hojas[0]
+  // La plantilla modelo lleva una hoja de ayuda («Cómo rellenar», con la marca y
+  // los pasos): se ignora al re-subir, no es datos. Así nunca se elige por error ni
+  // dispara el aviso de «varias hojas con datos».
+  const HOJAS_AYUDA = new Set(['como rellenar', 'instrucciones', 'claux'])
+  const relevantes  = hojas.filter(h => !HOJAS_AYUDA.has(norm(h.sheet)))
+  const conDatos = relevantes.filter(h => (h.data ?? []).length > 1)
+  const hoja = conDatos[0] ?? relevantes[0] ?? hojas[0]
   if (!hoja || !(hoja.data ?? []).length) throw new ArchivoIlegible('El Excel no tiene ninguna hoja con datos.')
 
   const avisos: string[] = []
