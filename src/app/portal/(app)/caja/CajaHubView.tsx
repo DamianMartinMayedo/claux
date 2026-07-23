@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, type FormEvent } from 'react'
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Settings, Power, PowerOff, Store, X } from 'lucide-react'
@@ -39,7 +40,10 @@ export default function CajaHubView({ cajas, empresas }: Props) {
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Puntos de venta</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Puntos de venta</h1>
+            <IaTouchpoint tipo="caja" descripcion="un análisis de tus puntos de venta" />
+          </div>
           <p className="page-subtitle">Cobran sin conexión y sincronizan con Claux cuando vuelve la señal.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={empresas.length === 0}>

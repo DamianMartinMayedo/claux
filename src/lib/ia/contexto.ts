@@ -92,23 +92,28 @@ async function resumenCatalogo(db: ReturnType<typeof createAdminClient>, clientI
   }
 }
 
+// Foco = sección a la que se recorta el contexto. Cada insight puntual pide solo
+// SU porción (clave para modelos con ventana de contexto reducida); `general` y el
+// chat libre incluyen un resumen de todo lo disponible.
+export type FocoContexto =
+  | 'general' | 'ventas' | 'gastos' | 'tesoreria' | 'catalogo'
+  | 'inventario' | 'rrhh' | 'reservas' | 'citas' | 'caja' | 'suscripciones'
+
 // Snapshot compacto en JSON para el prompt. `foco` recorta a la sección relevante
 // (ahorra tokens en insights puntuales); sin foco, incluye todo lo disponible.
-export function contextoComoTexto(
-  ctx: ContextoNegocio,
-  foco?: 'ventas' | 'gastos' | 'general' | 'catalogo',
-): string {
+export function contextoComoTexto(ctx: ContextoNegocio, foco?: FocoContexto): string {
   // Foco catálogo: solo el resumen del catálogo (ahorra tokens en su insight).
   if (foco === 'catalogo') {
     return JSON.stringify({ fecha: ctx.data?.fecha ?? null, catalogo: ctx.catalogo ?? null })
   }
   const d = ctx.data
   if (!d) return ctx.catalogo ? JSON.stringify({ catalogo: ctx.catalogo }) : '{}'
+  const general = foco === undefined || foco === 'general'
   const cont = d.contabilidad
   const snap: Record<string, unknown> = { fecha: d.fecha, moneda_consolidacion: cont?.monedaConsolidacion || null }
 
-  const incluyeContab = (foco === undefined || foco === 'general' || foco === 'ventas' || foco === 'gastos')
-  if (incluyeContab && cont) {
+  // Contabilidad: en general y en los focos que la usan (ventas, gastos, liquidez).
+  if ((general || foco === 'ventas' || foco === 'gastos' || foco === 'tesoreria') && cont) {
     snap.contabilidad = {
       por_moneda: cont.porMoneda.map(m => ({
         moneda: m.moneda,
@@ -126,12 +131,49 @@ export function contextoComoTexto(
       caja: cont.caja,
     }
   }
-  if (foco === undefined || foco === 'general') {
-    if (d.inventario) snap.inventario = { total_productos: d.inventario.totalProductos, bajo_minimo: d.inventario.bajoMinimo }
-    if (d.rrhh)       snap.rrhh = d.rrhh
-    if (d.reservas)   snap.reservas = { hoy: d.reservas.hoyCount, proxima: d.reservas.proxima, carga_7d: d.reservas.serie7 }
-    if (d.citas)      snap.citas = { hoy: d.citas.hoyCount, proxima: d.citas.proxima, carga_7d: d.citas.serie7 }
-    if (ctx.catalogo) snap.catalogo = ctx.catalogo
+
+  // Punto de venta (TPV): ventas de hoy por terminal y estado de sincronización.
+  if ((general || foco === 'caja') && d.puntoVenta) {
+    snap.punto_de_venta = {
+      ventas_hoy: d.puntoVenta.ventasHoy,
+      sin_sincronizar: d.puntoVenta.sinSincronizar,
+      puntos: d.puntoVenta.puntos.map(p => ({
+        nombre: p.nombre,
+        ventas_hoy: p.ventasHoy,
+        sincronizado_hoy: p.syncHoy,
+        turno_abierto_desde: p.turnoAbiertoDesde,
+      })),
+    }
   }
+
+  // Suscripciones: ingreso recurrente y próximas renovaciones.
+  if ((general || foco === 'suscripciones') && d.servicios) {
+    snap.suscripciones = {
+      activas: d.servicios.activas,
+      ingreso_recurrente_mensual: d.servicios.ingresoRecurrente,
+      renovaciones_30d: d.servicios.proximasRenovaciones,
+    }
+  }
+
+  // Inventario: en su foco propio con la lista bajo mínimo; en general, solo conteos.
+  if ((general || foco === 'inventario') && d.inventario) {
+    snap.inventario = foco === 'inventario'
+      ? { total_productos: d.inventario.totalProductos, bajo_minimo_count: d.inventario.bajoMinimoCount, bajo_minimo: d.inventario.bajoMinimo }
+      : { total_productos: d.inventario.totalProductos, bajo_minimo_count: d.inventario.bajoMinimoCount }
+  }
+
+  // Personal.
+  if ((general || foco === 'rrhh') && d.rrhh) snap.rrhh = d.rrhh
+
+  // Reservas / Citas.
+  if ((general || foco === 'reservas') && d.reservas) {
+    snap.reservas = { hoy: d.reservas.hoyCount, personas_hoy: d.reservas.personasHoy, proxima: d.reservas.proxima, carga_7d: d.reservas.serie7 }
+  }
+  if ((general || foco === 'citas') && d.citas) {
+    snap.citas = { hoy: d.citas.hoyCount, proxima: d.citas.proxima, carga_7d: d.citas.serie7 }
+  }
+
+  if (general && ctx.catalogo) snap.catalogo = ctx.catalogo
+
   return JSON.stringify(snap)
 }

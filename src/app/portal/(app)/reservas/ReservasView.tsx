@@ -1,5 +1,6 @@
 'use client'
 
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                        from 'next/navigation'
@@ -752,7 +753,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">Reservas</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Reservas</h1>
+            <IaTouchpoint tipo="reservas" descripcion="un análisis de tus reservas" />
+          </div>
           <p className="page-subtitle">
             {activeTab === 'reservas' && totalHoy > 0
               ? `Hoy: ${pendientesHoy} pendientes · ${confirmadasHoy} confirmadas · Total ${totalHoy}`

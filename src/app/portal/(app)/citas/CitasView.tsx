@@ -1,5 +1,6 @@
 'use client'
 
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -981,7 +982,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">Citas</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Citas</h1>
+            <IaTouchpoint tipo="citas" descripcion="un análisis de tu agenda" />
+          </div>
           <p className="page-subtitle">
             {activeTab === 'agenda' && totalHoy > 0
               ? `Hoy: ${pendientesHoy} pendientes · ${confirmadasHoy} confirmadas · Total ${totalHoy} citas`

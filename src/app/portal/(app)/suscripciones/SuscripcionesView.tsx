@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useTransition } from 'react'
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
@@ -804,7 +805,10 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Suscripciones</h1>
+          <div className="page-title-ia">
+            <h1 className="page-title">Suscripciones</h1>
+            <IaTouchpoint tipo="suscripciones" descripcion="un análisis de tus suscripciones" />
+          </div>
           <p className="page-subtitle">Los servicios que tus clientes tienen contratados, con su precio y renovación.</p>
         </div>
         {vista === 'acuerdos' && (

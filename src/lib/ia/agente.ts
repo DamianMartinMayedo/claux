@@ -7,7 +7,7 @@
 import { chat, type IaMensaje } from './provider'
 import { registrarUso } from './uso'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { construirContexto, contextoComoTexto, type ContextoNegocio } from './contexto'
+import { construirContexto, contextoComoTexto, type ContextoNegocio, type FocoContexto } from './contexto'
 import { PROMPTS_INSIGHT_DEFAULT, claveSeccion, type TipoInsight } from './documentos'
 
 export type { TipoInsight }
@@ -24,9 +24,10 @@ function systemPrompt(ctx: ContextoNegocio): string {
     .replaceAll('{{tono}}',    ctx.tono)
 }
 
-const FOCO: Record<TipoInsight, 'ventas' | 'gastos' | 'general' | 'catalogo'> = {
+const FOCO: Record<TipoInsight, FocoContexto> = {
   ventas: 'ventas', gastos: 'gastos', proyeccion: 'ventas', general: 'general',
-  inventario: 'general', rrhh: 'general', tesoreria: 'general', catalogo: 'catalogo',
+  inventario: 'inventario', rrhh: 'rrhh', tesoreria: 'tesoreria', catalogo: 'catalogo',
+  caja: 'caja', reservas: 'reservas', citas: 'citas', suscripciones: 'suscripciones',
 }
 
 // Prompt de tarea de la sección: editable desde el admin (settings), con fallback
