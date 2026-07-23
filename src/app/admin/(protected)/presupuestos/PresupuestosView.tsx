@@ -247,7 +247,7 @@ export default function PresupuestosView({
       )}
 
       {(detalle || cargando) && (
-        <div className="modal-backdrop" onClick={() => !guardando && !aprobando && setDetalle(null)}>
+        <div className="modal-backdrop">
           <div className="modal modal-560" onClick={e => e.stopPropagation()}>
             {cargando || !detalle ? (
               <div className="modal-body"><p className="text-sm-muted"><span className="spinner" /> Cargando…</p></div>

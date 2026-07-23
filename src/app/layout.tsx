@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
+import NumberWheelGuard from '@/components/NumberWheelGuard'
 
 // NOTA: globals.css (el design system del portal) ya NO se importa aquí. Se carga
 // en el layout de cada superficie interna (admin/, portal/, landing/, diagnostico/)
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             (admin/portal/landing/diagnóstico). Las rutas públicas usan system-ui. */}
       </head>
       <body>
+        <NumberWheelGuard />
         {children}
         <Analytics />
       </body>

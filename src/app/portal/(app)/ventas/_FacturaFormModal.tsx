@@ -135,7 +135,7 @@ export function FacturaFormModal({
   }
 
   return (
-    <div className="modal-backdrop open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-backdrop open">
       <div className="modal modal-1000" role="dialog" aria-modal>
 
         <div className="modal-header">

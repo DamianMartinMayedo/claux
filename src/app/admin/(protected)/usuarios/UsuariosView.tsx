@@ -153,7 +153,7 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
       )}
 
       {aEliminar && (
-        <div className="modal-backdrop" onClick={() => setAEliminar(null)}>
+        <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Eliminar usuario</h2>
@@ -178,7 +178,7 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
       )}
 
       {aResetear && (
-        <div className="modal-backdrop" onClick={() => !reseteando && setAResetear(null)}>
+        <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Regenerar contraseña</h2>

@@ -143,7 +143,7 @@ export default function SolicitudesView({
       )}
 
       {detalle && (
-        <div className="modal-backdrop" onClick={() => setDetalle(null)}>
+        <div className="modal-backdrop">
           <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{detalle.nombre}</h2>
