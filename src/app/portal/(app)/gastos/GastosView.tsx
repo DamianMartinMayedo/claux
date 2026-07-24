@@ -22,7 +22,7 @@ import {
 } from '@/app/actions/portal/gastos'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { Archive, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
+import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -591,12 +591,6 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
     return m
   }, [data.terceros])
 
-  const catNombre = useMemo(() => {
-    const m: Record<string, string> = {}
-    for (const c of data.categorias_gastos) m[c.categoria_id] = c.nombre
-    return m
-  }, [data.categorias_gastos])
-
   const catById = useMemo(() => {
     const m = new Map<string, CategoriaGasto>()
     for (const c of data.categorias_gastos) m.set(c.categoria_id, c)
@@ -610,8 +604,47 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
     return { cat: nodo.nombre, sub: null }
   }
 
+  // Árbol de categorías: orden jerárquico (cada raíz seguida de sus
+  // subcategorías) + nº de hijas por padre para pintar el desplegable.
+  const [colapsadas, setColapsadas] = useState<Set<string>>(new Set())
+  const { categoriasOrdenadas, hijasPorPadre } = useMemo(() => {
+    const todas = data.categorias_gastos
+    const hijasDe = new Map<string, CategoriaGasto[]>()
+    for (const c of todas) {
+      if (!c.parent_id) continue
+      const arr = hijasDe.get(c.parent_id) ?? []
+      arr.push(c)
+      hijasDe.set(c.parent_id, arr)
+    }
+    const orden: CategoriaGasto[] = []
+    for (const c of todas) {
+      if (c.parent_id) continue
+      orden.push(c)
+      for (const hija of hijasDe.get(c.categoria_id) ?? []) orden.push(hija)
+    }
+    // Huérfanas (padre inexistente o inactivo fuera de lista): al final.
+    const incluidas = new Set(orden.map(c => c.categoria_id))
+    for (const c of todas) if (!incluidas.has(c.categoria_id)) orden.push(c)
+    const conteo = new Map<string, number>()
+    for (const [padre, hijas] of hijasDe) conteo.set(padre, hijas.length)
+    return { categoriasOrdenadas: orden, hijasPorPadre: conteo }
+  }, [data.categorias_gastos])
+
+  // Oculta las subcategorías cuyo padre está colapsado.
+  const categoriasVisibles = useMemo(
+    () => categoriasOrdenadas.filter(c => !(c.parent_id && colapsadas.has(c.parent_id))),
+    [categoriasOrdenadas, colapsadas],
+  )
+  const toggleColapso = (id: string) =>
+    setColapsadas(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+
   const { pageItems: regItems, ...regPag } = usePagination(registros)
-  const { pageItems: catItems, ...catPag } = usePagination(data.categorias_gastos)
+  const { pageItems: catItems, ...catPag } = usePagination(categoriasVisibles)
 
   // ── Selección múltiple (solo pestaña gastos) ──
   const ids = useMemo(() => registros.map(r => r.registro_id), [registros])
@@ -869,20 +902,39 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                 <thead>
                   <tr>
                     <th>Nombre</th>
-                    <th>Categoría padre</th>
                     <th className="col-center">Usos</th>
                     <th>Estado</th>
                     <th className="col-actions"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {catItems.map(c => (
+                  {catItems.map(c => {
+                    const nHijas = hijasPorPadre.get(c.categoria_id) ?? 0
+                    const colapsada = colapsadas.has(c.categoria_id)
+                    return (
                     <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : undefined}>
                       <td data-label="Nombre">
-                        <strong className="text-sm-bold">{c.nombre}</strong>
-                        {c.es_sistema && <span className="badge badge-neutral gc-cat-sistema">Sistema</span>}
+                        <div className="gc-cat-fila">
+                          {c.parent_id ? (
+                            <span className="gc-cat-hija-hueco" aria-hidden="true" />
+                          ) : nHijas > 0 ? (
+                            <button type="button"
+                              className={`gc-cat-toggle${colapsada ? '' : ' gc-cat-toggle-abierto'}`}
+                              aria-expanded={!colapsada}
+                              aria-label={`${colapsada ? 'Mostrar' : 'Ocultar'} subcategorías de ${c.nombre}`}
+                              onClick={() => toggleColapso(c.categoria_id)}>
+                              <ChevronRight size={16} strokeWidth={2.5} />
+                            </button>
+                          ) : (
+                            <span className="gc-cat-toggle-placeholder" aria-hidden="true" />
+                          )}
+                          {c.parent_id
+                            ? <span className="gc-cat-hija-nombre">{c.nombre}</span>
+                            : <strong className="text-sm-bold">{c.nombre}</strong>}
+                          {nHijas > 0 && <span className="gc-cat-count">{nHijas}</span>}
+                          {c.es_sistema && <span className="badge badge-neutral gc-cat-sistema">Sistema</span>}
+                        </div>
                       </td>
-                      <td data-label="Categoría padre" className="text-sm-muted cell-truncate">{c.parent_id ? (catNombre[c.parent_id] ?? '—') : '—'}</td>
                       <td data-label="Usos" className="col-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
                       <td data-label="Estado">
                         <span className={`badge ${c.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
@@ -906,7 +958,8 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                         )}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

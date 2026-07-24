@@ -1425,6 +1425,50 @@
 /* Badge "Sistema" junto al nombre de una categoría de gasto */
 .gc-cat-sistema { margin-left: var(--space-2); }
 
+/* ── Árbol de categorías (pestaña "Categorías") ──
+   La raíz lleva un chevron para colapsar/expandir sus subcategorías; la hija
+   va indentada y con color atenuado para distinguirla. */
+.gc-cat-fila { display: flex; align-items: center; gap: var(--space-2); }
+
+.gc-cat-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.gc-cat-toggle:hover { background: var(--color-surface-2); color: var(--color-text); }
+.gc-cat-toggle svg { transition: transform var(--transition); }
+.gc-cat-toggle-abierto svg { transform: rotate(90deg); }
+
+/* Hueco del ancho del chevron para alinear raíces sin subcategorías */
+.gc-cat-toggle-placeholder { flex-shrink: 0; width: 1.5rem; }
+
+/* Indentación de la subcategoría, alineada bajo el chevron del padre */
+.gc-cat-hija-hueco { flex-shrink: 0; width: 2rem; }
+.gc-cat-hija-nombre { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Contador de subcategorías junto a la raíz */
+.gc-cat-count {
+  flex-shrink: 0;
+  min-width: 1.25rem;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-align: center;
+}
+
 .gc-stats { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
 .gc-stat-card {
   flex: 1 1 240px;
