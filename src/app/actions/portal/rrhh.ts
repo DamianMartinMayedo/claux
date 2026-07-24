@@ -1241,7 +1241,11 @@ export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; 
       .eq('client_id', session.client_id)
       .eq('referencia_id', nomina.gasto_id)
     if ((count ?? 0) > 0) {
-      return { ok: false, error: 'El gasto de esta nómina tiene pagos registrados. Anúlalos en Tesorería antes de eliminar.' }
+      // Configurador (modo configuración): se lleva también los pagos del gasto de
+      // salarios. El usuario normal debe anularlos en Tesorería antes.
+      if (!session.imp) return { ok: false, error: 'El gasto de esta nómina tiene pagos registrados. Anúlalos en Tesorería antes de eliminar.' }
+      await db.from('movimientos_tesoreria').delete()
+        .eq('client_id', session.client_id).eq('referencia_id', nomina.gasto_id)
     }
     await db.from('gastos_cobros').delete().eq('registro_id', nomina.gasto_id).eq('client_id', session.client_id)
   }

@@ -428,7 +428,19 @@ export async function eliminarCompra(compra_id: string): Promise<{ ok: boolean; 
   const { data: compra } = await db.from('compras')
     .select('estado').eq('compra_id', compra_id).eq('client_id', session.client_id).single()
   if (!compra)                      return { ok: false, error: 'Compra no encontrada.' }
-  if (compra.estado !== 'BORRADOR') return { ok: false, error: 'Solo se pueden eliminar borradores. Anula las compras confirmadas.' }
+  if (compra.estado !== 'BORRADOR') {
+    // Configurador (modo configuración): puede forzar el borrado. Si está CONFIRMADA,
+    // primero ANULA (RPC atómica: revierte stock + elimina gasto y sus pagos) para no
+    // dejar el ecosistema descuadrado; luego se borra el registro. El usuario normal
+    // mantiene la regla de siempre (solo borradores; las confirmadas se anulan).
+    if (!session.imp) return { ok: false, error: 'Solo se pueden eliminar borradores. Anula las compras confirmadas.' }
+    if (compra.estado === 'CONFIRMADA') {
+      const { error: anulErr } = await db.rpc('inv_anular_compra', {
+        p_compra_id: compra_id, p_client_id: session.client_id,
+      })
+      if (anulErr) return { ok: false, error: traducirErrorInventario(anulErr.message) }
+    }
+  }
 
   await db.from('compra_lineas').delete().eq('compra_id', compra_id).eq('client_id', session.client_id)
   const { error } = await db.from('compras').delete()
@@ -436,6 +448,10 @@ export async function eliminarCompra(compra_id: string): Promise<{ ok: boolean; 
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/portal/compras')
+  revalidatePath('/portal/gastos')
+  revalidatePath('/portal/cxp')
+  revalidatePath('/portal/inventario')
+  revalidarFinanzas()
   return { ok: true }
 }
 

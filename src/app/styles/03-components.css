@@ -351,6 +351,10 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .alert-success { background: var(--color-success-bg); color: var(--color-success); }
 .alert-warning { background: var(--color-warning-bg); color: var(--color-warning); }
 .alert-info    { background: var(--color-info-bg);    color: var(--color-info); }
+/* Aviso que INTRODUCE el contenido de debajo (una explicación al principio de una
+   tarjeta o un paso): la base no lleva margen para poder colocarse en cualquier
+   sitio, así que la separación del bloque siguiente va en esta variante. */
+.alert-intro   { margin-bottom: var(--space-4); }
 
 /* Aviso CON acción propia (contratar un módulo, revisar algo): el texto manda y el
    botón no encoge. Lleva su separación abajo porque es un cartel suelto sobre el

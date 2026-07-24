@@ -375,7 +375,7 @@ export default function ImportarWizard() {
       {/* ── Paso 2: subir ── */}
       {paso === 'subir' && (
         <div className="card">
-          <div className="alert alert-info">
+          <div className="alert alert-info alert-intro">
             Descarga la plantilla, rellénala y súbela — o sube el archivo del cliente y mapeas las columnas en el siguiente paso.
             En Excel (.xlsx) los acentos y los decimales llegan siempre bien; en CSV dependen de la codificación.
           </div>

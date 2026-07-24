@@ -303,12 +303,27 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
 
   const db = createAdminClient()
 
+  // Candado de ecosistema (para TODOS, también el configurador): un gasto generado
+  // por una compra o una nómina es un byproduct. Borrarlo suelto dejaría el documento
+  // de origen apuntando a un gasto inexistente y, en compras, el stock sin revertir.
+  // Se elimina borrando/anulando su documento de origen (que sí revierte todo).
+  const [{ count: enCompra }, { count: enNomina }] = await Promise.all([
+    db.from('compras').select('compra_id', { count: 'exact', head: true }).eq('client_id', session.client_id).eq('gasto_id', registro_id),
+    db.from('nominas').select('nomina_id', { count: 'exact', head: true }).eq('client_id', session.client_id).eq('gasto_id', registro_id),
+  ])
+  if ((enCompra ?? 0) > 0) return { ok: false, error: 'Este gasto lo generó una compra. Elimínala desde Compras.' }
+  if ((enNomina ?? 0) > 0) return { ok: false, error: 'Este gasto lo generó una nómina. Elimínala desde Nóminas.' }
+
   const { count } = await db.from('movimientos_tesoreria')
     .select('movimiento_id', { count: 'exact', head: true })
     .eq('client_id', session.client_id)
     .eq('referencia_id', registro_id)
   if ((count ?? 0) > 0) {
-    return { ok: false, error: 'Tiene pagos/cobros registrados. Anúlalos antes de eliminar.' }
+    // Configurador (modo configuración): se lleva también las liquidaciones de
+    // Tesorería para no dejarlas huérfanas. El usuario normal debe anularlas antes.
+    if (!session.imp) return { ok: false, error: 'Tiene pagos/cobros registrados. Anúlalos antes de eliminar.' }
+    await db.from('movimientos_tesoreria').delete()
+      .eq('client_id', session.client_id).eq('referencia_id', registro_id)
   }
 
   const { error } = await db.from('gastos_cobros').delete()

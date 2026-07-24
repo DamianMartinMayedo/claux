@@ -5,6 +5,7 @@ import { useState, useTransition }  from 'react'
 import Link                         from 'next/link'
 import { useRouter }                from 'next/navigation'
 import { CheckCircle2, Pencil, Trash2, Ban, X } from 'lucide-react'
+import { useConfigurador } from '@/components/portal/ConfiguradorContext'
 import {
   confirmarCompra, anularCompra, eliminarCompra,
   type CompraDetalleData,
@@ -72,6 +73,10 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
 
   const esBorrador  = compra.estado === 'BORRADOR'
   const esConfirmada = compra.estado === 'CONFIRMADA'
+  // Configurador (modo configuración): puede forzar el borrado de una compra en
+  // cualquier estado (al forzar una CONFIRMADA, la acción la anula antes: revierte
+  // stock + gasto + pagos). Vía de limpieza de datos de prueba.
+  const esConfigurador = useConfigurador()
 
   function doConfirmar() {
     const ld = toastLoading('Confirmando…')
@@ -144,6 +149,18 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
             <RowActions>
               <button className="row-actions-item row-actions-item-danger" onClick={() => setShowAnular(true)} disabled={isPending}>
                 <Ban size={15} strokeWidth={2} /> Anular
+              </button>
+              {esConfigurador && (
+                <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
+                  <Trash2 size={15} strokeWidth={2} /> Eliminar
+                </button>
+              )}
+            </RowActions>
+          )}
+          {esConfigurador && compra.estado === 'ANULADA' && (
+            <RowActions>
+              <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
+                <Trash2 size={15} strokeWidth={2} /> Eliminar
               </button>
             </RowActions>
           )}
@@ -249,9 +266,11 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
         </ConfirmModal>
       )}
       {showDelete && (
-        <ConfirmModal titulo="Eliminar borrador" confirmLabel="Eliminar" danger
+        <ConfirmModal titulo={esBorrador ? 'Eliminar borrador' : 'Eliminar compra'} confirmLabel="Eliminar" danger
           isPending={isPending} onConfirm={doEliminar} onClose={() => setShowDelete(false)}>
-          Se eliminará el borrador <strong>{compra.numero}</strong> de forma permanente. ¿Continuar?
+          {esBorrador
+            ? <>Se eliminará el borrador <strong>{compra.numero}</strong> de forma permanente. ¿Continuar?</>
+            : <>Modo configuración: se eliminará la compra <strong>{compra.numero}</strong>. Si está confirmada, primero se revierte el stock y se elimina su gasto y sus pagos. No se puede deshacer.</>}
         </ConfirmModal>
       )}
     </div>
