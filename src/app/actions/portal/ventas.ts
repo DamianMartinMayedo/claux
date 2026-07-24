@@ -1258,6 +1258,10 @@ export async function eliminarOfertasEnLote(ids: string[]): Promise<ResultadoLot
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
   if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  // Configurador (modo configuración): puede FORZAR el borrado de cualquier oferta,
+  // aunque no esté en un estado eliminable o tenga factura asociada. Vía de limpieza
+  // de datos de prueba; el usuario normal mantiene las reglas de siempre.
+  const config = !!session.imp
 
   const db = createAdminClient()
   const { data: docs } = await db.from('ofertas')
@@ -1267,8 +1271,8 @@ export async function eliminarOfertasEnLote(ids: string[]): Promise<ResultadoLot
   const res = loteVacio()
   const borrables: string[] = []
   for (const d of (docs ?? []) as { oferta_id: string; numero: string; estado: EstadoOferta; factura_id: string | null }[]) {
-    if (d.factura_id) { res.omitidas.push({ numero: d.numero, motivo: 'tiene factura asociada' }); continue }
-    if (!OFERTA_ELIMINABLE.includes(d.estado)) {
+    if (!config && d.factura_id) { res.omitidas.push({ numero: d.numero, motivo: 'tiene factura asociada' }); continue }
+    if (!config && !OFERTA_ELIMINABLE.includes(d.estado)) {
       res.omitidas.push({ numero: d.numero, motivo: `no se elimina en estado ${ESTADO_OFERTA_LABEL[d.estado]}` }); continue
     }
     borrables.push(d.oferta_id)
@@ -1289,6 +1293,10 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
   if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  // Configurador (modo configuración, `session.imp`): puede FORZAR el borrado de
+  // cualquier factura, no solo BORRADOR. Es la vía para limpiar datos de prueba de
+  // un cliente. Un usuario normal sigue con la regla de siempre (solo BORRADOR).
+  const config = !!session.imp
 
   const db = createAdminClient()
   const { data: docs } = await db.from('facturas')
@@ -1298,7 +1306,7 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
   const res = loteVacio()
   const borrables: string[] = []
   for (const d of (docs ?? []) as { factura_id: string; numero: string; estado: EstadoFactura }[]) {
-    if (!FACTURA_ELIMINABLE.includes(d.estado)) {
+    if (!config && !FACTURA_ELIMINABLE.includes(d.estado)) {
       res.omitidas.push({ numero: d.numero, motivo: `no se elimina en estado ${ESTADO_FACTURA_LABEL[d.estado]} (anúlala)` }); continue
     }
     borrables.push(d.factura_id)
@@ -1316,6 +1324,16 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
     // retrocede ANTES de borrar las líneas, que es de donde se leen.
     for (const factura_id of borrables) {
       await moverCobroSuscripciones(db, session.client_id, factura_id, restarPeriodo)
+    }
+
+    // Configurador forzando el borrado de facturas no-BORRADOR: llevarse también sus
+    // cobros/pagos de Tesorería, si no quedarían movimientos huérfanos apuntando a
+    // una factura inexistente (y descuadrando saldos y reportes).
+    if (config) {
+      await db.from('movimientos_tesoreria').delete()
+        .eq('client_id', session.client_id)
+        .in('origen', ['COBRO', 'PAGO'])
+        .in('referencia_id', borrables)
     }
 
     await db.from('documento_lineas').delete().eq('documento_tipo', 'FACTURA').in('documento_id', borrables)

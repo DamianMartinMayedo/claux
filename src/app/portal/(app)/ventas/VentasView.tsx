@@ -39,6 +39,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import BulkBar                         from '@/components/portal/BulkBar'
+import { useConfigurador }             from '@/components/portal/ConfiguradorContext'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
@@ -317,6 +318,9 @@ function AccionesOfertas({
   const hayArchivadas    = items.some(o => o.archivado)
   const hayNoArchivadas  = items.some(o => !o.archivado)
   const hayEliminables   = items.some(o => OFERTA_ELIMINABLE.includes(o.estado) && !o.factura_id)
+  // Configurador (modo configuración): puede forzar el borrado de cualquier oferta.
+  const esConfigurador   = useConfigurador()
+  const forzarBorrado    = esConfigurador && items.some(o => !OFERTA_ELIMINABLE.includes(o.estado) || o.factura_id)
 
   return (
     <>
@@ -369,11 +373,13 @@ function AccionesOfertas({
           <ArchiveRestore size={14} strokeWidth={2} /> Desarchivar
         </button>
       )}
-      {hayEliminables && (
+      {(hayEliminables || esConfigurador) && (
         <button className="btn btn-danger-text btn-sm" disabled={disabled}
           onClick={() => pedirConfirmacion({
             title: `¿Eliminar ${n} oferta${n === 1 ? '' : 's'}?`,
-            body: 'Solo se eliminan borradores y ofertas rechazadas o caducadas. Esta acción no se puede deshacer.',
+            body: forzarBorrado
+              ? 'Modo configuración: se eliminarán TODAS las seleccionadas, incluidas las que tienen factura asociada. No se puede deshacer.'
+              : 'Solo se eliminan borradores y ofertas rechazadas o caducadas. Esta acción no se puede deshacer.',
             confirmLabel: 'Eliminar', danger: true,
             run: () => ejecutar(() => eliminarOfertasEnLote(ids)),
           })}>
@@ -398,6 +404,9 @@ function AccionesFacturas({
   const hayArchivadas   = items.some(f => f.archivado)
   const hayNoArchivadas = items.some(f => !f.archivado)
   const hayEliminables  = items.some(f => FACTURA_ELIMINABLE.includes(f.estado))
+  // Configurador (modo configuración): puede forzar el borrado de cualquier factura.
+  const esConfigurador  = useConfigurador()
+  const forzarBorrado   = esConfigurador && items.some(f => !FACTURA_ELIMINABLE.includes(f.estado))
 
   return (
     <>
@@ -439,11 +448,13 @@ function AccionesFacturas({
           <ArchiveRestore size={14} strokeWidth={2} /> Desarchivar
         </button>
       )}
-      {hayEliminables && (
+      {(hayEliminables || esConfigurador) && (
         <button className="btn btn-danger-text btn-sm" disabled={disabled}
           onClick={() => pedirConfirmacion({
             title: `¿Eliminar ${n} factura${n === 1 ? '' : 's'}?`,
-            body: 'Solo se eliminan facturas en borrador. Las emitidas se anulan, no se borran. No se puede deshacer.',
+            body: forzarBorrado
+              ? 'Modo configuración: se eliminarán TODAS las seleccionadas, incluidas emitidas o anuladas, junto con sus cobros en Tesorería. No se puede deshacer.'
+              : 'Solo se eliminan facturas en borrador. Las emitidas se anulan, no se borran. No se puede deshacer.',
             confirmLabel: 'Eliminar', danger: true,
             run: () => ejecutar(() => eliminarFacturasEnLote(ids)),
           })}>

@@ -15,6 +15,7 @@ import { EmpresaColorProvider } from '@/components/portal/EmpresaColorContext'
 import IaChatWidget          from '@/components/portal/ia/IaChatWidget'
 import { IaProvider }        from '@/components/portal/ia/IaContext'
 import ImpersonacionBanner   from '@/components/portal/ImpersonacionBanner'
+import { ConfiguradorProvider } from '@/components/portal/ConfiguradorContext'
 import { NotificacionesProvider } from '@/components/portal/notificaciones/NotificacionesContext'
 import NotificacionesPopups  from '@/components/portal/notificaciones/NotificacionesPopups'
 import { contarNoLeidas, listarNotificaciones, popupsPendientes } from '@/app/actions/portal/notificaciones'
@@ -136,7 +137,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         {bloqueado
           ? <BloqueadoScreen estado={cliente.estado} />
           : <EmpresaColorProvider empresas={empresas}>
-              <IaProvider value={{ tieneIa, nombreAgente }}>{children}</IaProvider>
+              <ConfiguradorProvider value={!!session.imp}>
+                <IaProvider value={{ tieneIa, nombreAgente }}>{children}</IaProvider>
+              </ConfiguradorProvider>
             </EmpresaColorProvider>}
         </PortalToastWrapper>
         {!bloqueado && tieneIa && <IaChatWidget nombreAgente={nombreAgente} sugerencias={sugerenciasIa.slice(0, 4)} />}

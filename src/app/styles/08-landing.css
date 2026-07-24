@@ -236,10 +236,10 @@
    override en dark. Los usan módulos, sectores, valor y pasos: son la fuente del
    color «vivo» de la página, y evitan que todo icono acabe siendo teal.
 
-   El «con override en dark» es el requisito duro, no un detalle: el layout pone
-   data-theme desde el SO, así que la landing se ve en oscuro sin que el visitante
-   pida nada. Un par cuyo fondo no cambie con el tema deja un recuadro crema en
-   medio de una página negra — comprueba eso antes de meter aquí un token nuevo.
+   Nota: la landing se fuerza a claro en `.ld-page` (`color-scheme: light`), así
+   que estos acentos se ven en su valor claro aunque el SO esté en oscuro. Aun así
+   usa siempre pares fondo/color con override en dark: son tokens compartidos con
+   el portal (que sí cambia de tema) y así no dependemos de dónde se rendericen.
 
    `-amber` tira de la rampa ámbar (no de --color-warning*, que es lo que usaba
    cuando la rampa aún no existía en oscuro): así el acento ámbar de la landing
@@ -1080,6 +1080,14 @@ input.dg-option-input {
    entonces no hay sobrante que repartir. Vale para cualquier alto de pantalla,
    sin medir nada en JS. */
 .ld-page {
+  /* La landing es marketing y está diseñada SIEMPRE en claro (bandas de color,
+     tarjetas blancas, degradado de marca). Fijar `color-scheme: light` aquí —el
+     mismo mecanismo que `[data-theme="light"]` en 01-tokens.css— hace que todos
+     los `light-dark()` del subárbol resuelvan a su valor claro aunque el SO o el
+     usuario tengan el tema oscuro, y de paso pinta en claro los controles nativos
+     (scrollbars, autofill). Va en `.ld-page` a propósito: la cabecera pública se
+     comparte con /diagnostico, que NO usa `.ld-page` y sigue el tema elegido. */
+  color-scheme: light;
   position: relative;
   z-index: 1;
   display: flex;
