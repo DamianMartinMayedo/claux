@@ -27,6 +27,45 @@ export const ETIQUETAS_DEFAULT: EtiquetasSector = {
   catalogoIcono: 'producto',  // sin sector → icono genérico de producto (no comida)
 }
 
+// ── Conceptos del estado de resultados por sector (mig. 135) ─────────────────
+//
+// Lo que un negocio de ese tipo suele tener en su P&L, con el mismo vocabulario
+// que `dossier_lineas`. Sirve para PRECARGAR LAS FILAS del desglose, nunca los
+// importes: un importe sugerido es un número inventado en un documento que el
+// dueño le enseña a un inversor.
+
+export type GrupoPL = 'INGRESO' | 'COSTO_VENTAS' | 'GASTO_OPERATIVO'
+
+export const GRUPOS_PL: GrupoPL[] = ['INGRESO', 'COSTO_VENTAS', 'GASTO_OPERATIVO']
+
+export const LABEL_GRUPO_PL: Record<GrupoPL, string> = {
+  INGRESO:         'Ingresos',
+  COSTO_VENTAS:    'Coste de ventas',
+  GASTO_OPERATIVO: 'Gastos operativos',
+}
+
+export type ConceptosSector = Record<GrupoPL, string[]>
+
+/** Sin sector asignado: genérico y corto, que es mejor que una pantalla vacía. */
+export const CONCEPTOS_DEFAULT: ConceptosSector = {
+  INGRESO:         ['Ventas', 'Servicios', 'Otros ingresos'],
+  COSTO_VENTAS:    ['Mercancía', 'Materiales'],
+  GASTO_OPERATIVO: ['Salarios', 'Alquiler', 'Electricidad', 'Transporte', 'Publicidad'],
+}
+
+/** Normaliza el jsonb `conceptos_pl`; cae al genérico si el sector no trae el suyo. */
+export function conceptosDe(raw: unknown): ConceptosSector {
+  if (!raw || typeof raw !== 'object') return { ...CONCEPTOS_DEFAULT }
+  const r = raw as Record<string, unknown>
+  const lista = (k: GrupoPL): string[] => {
+    const v = r[k]
+    if (!Array.isArray(v)) return CONCEPTOS_DEFAULT[k]
+    const limpios = v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map(x => x.trim())
+    return limpios.length ? limpios : CONCEPTOS_DEFAULT[k]
+  }
+  return { INGRESO: lista('INGRESO'), COSTO_VENTAS: lista('COSTO_VENTAS'), GASTO_OPERATIVO: lista('GASTO_OPERATIVO') }
+}
+
 /** Normaliza el jsonb `etiquetas` de plantillas_sector contra los valores por defecto. */
 export function etiquetasDe(raw: unknown): EtiquetasSector {
   if (!raw || typeof raw !== 'object') return { ...ETIQUETAS_DEFAULT }
