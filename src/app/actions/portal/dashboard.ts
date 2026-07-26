@@ -9,7 +9,7 @@ import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
-import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
+import { hoyEnTz, ahoraEnTz, sumarDias, TZ_NEGOCIO } from '@/lib/fecha-tz'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
 
@@ -51,17 +51,46 @@ export interface InventarioResumen {
   bajoMinimoCount: number
   bajoMinimo: { nombre: string; stock: number; minimo: number; unidad: string }[]
 }
-export interface RrhhResumen { activos: number; altasMes: number }
+/**
+ * Equipo. «Empleados activos» y «altas del mes» son censo, no gestión: no piden
+ * ninguna acción. Lo accionable es la nómina que sigue en borrador y los contratos
+ * que se acaban — eso sí hay que atenderlo antes de que pase la fecha.
+ */
+export interface RrhhResumen {
+  activos:  number
+  altasMes: number
+  /** Nóminas en BORRADOR (sin confirmar): el gasto aún no está contabilizado. */
+  nominasBorrador: number
+  /** Contratos que terminan en los próximos 30 días. */
+  contratosPorVencer: number
+}
 // Deudas pendientes (aging compacto para el insight). Un lado = cobrar o pagar.
 export interface DeudasLado {
   por_moneda: { moneda: string; total: number; vencido: number }[]
   top:        { nombre: string; moneda: string; saldo: number; dias_vencido_max: number }[]
 }
 export interface DeudasResumen { cobrar: DeudasLado; pagar: DeudasLado }
+export type FuenteTasa = 'EL_TOQUE' | 'FRANKFURTER' | 'MANUAL'
+export interface TasaFila {
+  origen:  string
+  destino: string
+  /** «1 origen = tasa destino». `null` = par configurado pero aún sin tasa. */
+  tasa:    number | null
+  fuente:  FuenteTasa
+  fecha:   string | null
+  /** Días desde que se actualizó. `null` si la tasa no lleva fecha. */
+  dias:    number | null
+}
+export interface TasasResumen {
+  /** Los pares de cambio configurados en Monedas, con su tasa vigente. */
+  filas: TasaFila[]
+}
 export interface ServiciosResumen {
   activas: number
   ingresoRecurrente: { moneda: string; total: number }[]   // Σ precio_pactado normalizado a mensual, por moneda
   proximasRenovaciones: number                              // suscripciones cuyo próximo cobro cae en 30 días
+  /** Las próximas, CON NOMBRE: «2 renuevan» no dice a quién hay que cobrar. */
+  proximas: { nombre: string; fecha: string; moneda: string; importe: number }[]
 }
 
 export interface PuntoVentaResumen {
@@ -94,6 +123,19 @@ export interface DossierResumen {
   vacio:       boolean
 }
 
+/**
+ * Catálogo/menú público en el dashboard. Lo que importa no es cuántos platos hay,
+ * sino si lo que ve el cliente final está PRESENTABLE: un plato sin foto o sin
+ * precio en una carta publicada es una venta que no ocurre.
+ */
+export interface CatalogoResumen {
+  items:       number
+  agotados:    number   // `disponible = false`
+  sinFoto:     number
+  sinPrecio:   number
+  vacio:       boolean  // sin ningún ítem: el widget invita a crearlo
+}
+
 export interface AgendaItem { hora: string | null; nombre: string; personas: number; estado: string }
 export interface AgendaResumen {
   hoyCount: number
@@ -103,6 +145,36 @@ export interface AgendaResumen {
   serie7: { fecha: string; etiqueta: string; total: number }[]
 }
 export interface AccesoRapido { clave: string; label: string; ruta: string }
+
+/** Una línea de «Pendiente»: algo que el dueño debería atender HOY. */
+export interface Pendiente {
+  clave: string
+  texto: string
+  ruta:  string
+  /** `alerta` = ya duele (vencido, bajo mínimo); `aviso` = conviene mirarlo. */
+  tono:  'alerta' | 'aviso'
+}
+
+/** Un módulo que el cliente NO tiene, para ofrecérselo. */
+export interface ModuloOferta {
+  clave:  string
+  label:  string
+  gancho: string
+  /** Día en que este cliente ya pidió activarlo («26 jul»), si lo pidió. */
+  pedidoEl?: string
+}
+
+export interface Captacion {
+  /** Módulos con panel que SÍ tiene. Decide si el banner va destacado o al pie. */
+  conPanel: number
+  faltan:   ModuloOferta[]
+  /**
+   * Buzón comercial al que escribe el dueño para activar algo. Setting
+   * `email_contratacion` (por defecto `contacto@claux.es`): si mañana hay un
+   * alias propio de contratación se cambia ahí, no en el código.
+   */
+  email:    string
+}
 
 export interface EmpresaLite { empresa_id: string; nombre: string; color?: string | null }
 
@@ -122,13 +194,18 @@ export interface DashboardData {
   etiquetas: EtiquetasSector
   suscripcion: { estado: string; diasRestantes: number | null; label: string }
   tieneIa: boolean
+  /** Lo accionable de TODOS los módulos, en una franja arriba. */
+  pendiente: Pendiente[]
+  captacion: Captacion
   contabilidad?: ContabilidadResumen
   deudas?: DeudasResumen
+  tasas?: TasasResumen
   inventario?: InventarioResumen
   puntoVenta?: PuntoVentaResumen
   rrhh?: RrhhResumen
   servicios?: ServiciosResumen
   dossier?: DossierResumen
+  catalogo?: CatalogoResumen
   reservas?: AgendaResumen
   citas?: AgendaResumen
   accesos: AccesoRapido[]
@@ -147,9 +224,104 @@ const ACCESOS: Record<string, { label: string; ruta: string }> = {
   dossier:            { label: 'Dossier',      ruta: '/portal/dossier' },
 }
 
+// Módulos que aportan panel propio al dashboard. Es lo que se cuenta para decidir
+// si el banner de captación va destacado: un cliente puede tener tres cosas
+// contratadas (IA, imprenta, multiempresa) y el dashboard seguir casi vacío, así
+// que contar «lo contratado» a secas daría la respuesta equivocada.
+const MODULOS_CON_PANEL = ['base', 'inventario', 'caja', 'rrhh', 'reservas_citas', 'agenda', 'servicios', 'dossier', 'catalogo_qr']
+
+// Catálogo de lo que se puede ofrecer, con el gancho de por qué le importa al
+// dueño (el nombre solo no vende: «Inventario» no dice qué problema resuelve).
+// Fuera: `documentos_imprenta`, que sale solo (su fila del catálogo está inactiva:
+// la página es EnConstruccion y no se vende lo que no existe).
+//
+// Los ADDONS sí se ofrecen, pero los que amplían otro módulo llevan `requiere`:
+// ofrecer «Multidossier» a quien no tiene Dossier es vender un accesorio de algo
+// que no tiene. `multiempresa` no lleva requisito porque no amplía un módulo: es
+// de la cuenta, y llevar dos negocios es justo el caso de quien aún tiene uno.
+// Los nombres son los del CATÁLOGO comercial (`modulos_catalogo`): es lo que el
+// cliente verá al contratar y en su factura, así que llamarlo de otra forma aquí
+// sería venderle algo con un nombre que luego no encuentra. Si un nombre no gusta,
+// se cambia en el catálogo —una sola fuente—, no aquí.
+//
+// ORDEN: el de este array NO decide nada. Lo que se enseña primero sale de
+// `modulos_catalogo` (tipo + orden) — ver `ordenarOferta`.
+const OFERTA: { clave: string; label: string; gancho: string; requiere?: string }[] = [
+  { clave: 'base',           label: 'Contabilidad',   gancho: 'Factura, controla gastos y sabe si de verdad ganas dinero.' },
+  { clave: 'inventario',     label: 'Inventario',     gancho: 'Sabe qué te queda y qué hay que reponer antes de quedarte sin.' },
+  { clave: 'caja',           label: 'Punto de venta', gancho: 'Cobra en el mostrador y cuadra la caja al cerrar.' },
+  { clave: 'rrhh',           label: 'RRHH',           gancho: 'Personal, contratos, turnos y nóminas de tu equipo.' },
+  { clave: 'reservas_citas', label: 'Reservas',       gancho: 'Tus clientes reservan solos, sin llamadas ni libreta.' },
+  { clave: 'agenda',         label: 'Citas',          gancho: 'Agenda por profesional, sin solapes ni huecos muertos.' },
+  { clave: 'servicios',      label: 'Servicios',      gancho: 'Cobros que se repiten cada mes, controlados solos.' },
+  { clave: 'catalogo_qr',    label: 'Catálogo',       gancho: 'Tu carta con un QR, siempre al día y sin reimprimir.' },
+  { clave: 'dossier',        label: 'Dossier',        gancho: 'Presenta tus números a un banco o a un socio.' },
+  { clave: 'asistente_ia',   label: 'Asistente IA',   gancho: 'Pregúntale a tus datos en lenguaje normal.' },
+  { clave: 'multiempresa',   label: 'Multiempresa',   gancho: 'Lleva varios negocios desde la misma cuenta, cada uno con sus números.' },
+  { clave: 'multidossier',   label: 'Multidossier',   gancho: 'Un dossier distinto para cada interlocutor: banco, socio, proveedor.', requiere: 'dossier' },
+]
+
+// Se ofrece primero lo que MÁS resuelve: primero los módulos (capacidad ERP
+// completa), después las funcionalidades por su importancia comercial, y al final
+// los addons. Ese reparto ya está decidido en `modulos_catalogo` (`tipo` +
+// `orden`), que es lo que ve el admin al contratar: repetirlo en un array aquí
+// sería una segunda fuente de verdad que se desincroniza al primer módulo nuevo.
+// Lo ya pedido baja al final: sigue visible como acuse, pero no ocupa portada.
+const RANGO_TIPO: Record<string, number> = { modulo: 0, funcionalidad: 1, addon: 2 }
+
+interface FilaCatalogo { clave: string; tipo: string; orden: number }
+
+function ordenarOferta(oferta: ModuloOferta[], catalogo: FilaCatalogo[]): ModuloOferta[] {
+  const peso = new Map(catalogo.map(c => [c.clave, (RANGO_TIPO[c.tipo] ?? 9) * 1000 + (c.orden ?? 0)]))
+  return oferta
+    // Sin fila activa en el catálogo no se ofrece: bajar un módulo del catálogo
+    // tiene que dejar de venderlo sin tocar código.
+    .filter(o => peso.has(o.clave))
+    .sort((a, b) => {
+      if (!!a.pedidoEl !== !!b.pedidoEl) return a.pedidoEl ? 1 : -1
+      return peso.get(a.clave)! - peso.get(b.clave)!
+    })
+}
+
+// Importe para las frases de «Pendiente». El código de moneda lo pone quien llama:
+// aquí solo se formatea el número (nunca se asume una moneda).
+const fmtImporte = (n: number) =>
+  n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/**
+ * «1.130,00 USD y 725,00 EUR» — los vencidos de un lado (cobrar o pagar) en una
+ * sola frase. Se respeta el ORDEN en que vienen las monedas del cliente: ordenar
+ * por importe compararía 7.000 CUP con 320 USD, que no es comparar nada.
+ * Más de tres no se leen, así que el resto se resume — el desglose exacto está a
+ * un clic, en la tarjeta de Cobros y pagos.
+ */
+function importesVencidos(ms: { moneda: string; vencido: number }[]): string {
+  const partes = ms.slice(0, 3).map(m => `${fmtImporte(m.vencido)} ${m.moneda}`)
+  const resto = ms.length - partes.length
+  if (resto > 0) partes.push(`${resto} moneda${resto === 1 ? '' : 's'} más`)
+  if (partes.length === 1) return partes[0]
+  return `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`
+}
+
 // ── Helpers de fecha ────────────────────────────────────────────────────────────
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/** «26 jul» a partir de un timestamp, en la hora del negocio (no la del server). */
+function fechaCortaDeISO(iso: string | undefined): string | undefined {
+  if (!iso) return undefined
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return undefined
+  // formatToParts, no `format().split()`: el orden de día y mes depende del
+  // locale y partirlo a mano es justo cómo se cuela un «7 de 26».
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ_NEGOCIO, day: 'numeric', month: 'numeric',
+  }).formatToParts(d)
+  const dia = Number(partes.find(p => p.type === 'day')?.value)
+  const mes = Number(partes.find(p => p.type === 'month')?.value)
+  if (!dia || !mes) return undefined
+  return `${dia} ${MESES_CORTOS[mes - 1]}`
+}
 const DIAS_CORTOS  = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 
 function clavesMes(hoy: string, n: number): { mes: string; etiqueta: string }[] {
@@ -176,6 +348,55 @@ function etiquetaDia(fechaISO: string): string {
 // `empresaIds` acota los datos a las empresas accesibles del usuario, igual que
 // Ventas/Gastos/Tesorería/Reportes (`.in('empresa_id', …)`). Así el resumen del
 // dashboard cuadra con lo que el usuario ve al abrir cada página.
+/**
+ * Los pares de cambio configurados en Monedas, con su tasa vigente — los MISMOS
+ * que el dueño ve y edita ahí (EUR→CUP, USD→CUP…), no una derivación contra una
+ * base. No es adorno: TODO lo que el dashboard consolida (ventas, gastos, deudas)
+ * se convierte con estas tasas, así que una tasa vieja no da error, da un número
+ * creíble y equivocado. Sin pares configurados no hay nada que enseñar.
+ */
+async function resumenTasas(db: Db, cid: string, hoy: string): Promise<TasasResumen | undefined> {
+  const [{ data: paresData }, { data: tasasData }] = await Promise.all([
+    db.from('pares_tasa')
+      .select('origen, destino, fuente')
+      .eq('client_id', cid).eq('activo', true)
+      .order('origen').order('destino'),
+    db.from('tasas_cambio')
+      .select('moneda_origen, moneda_destino, tasa, fecha')
+      .eq('client_id', cid)
+      .order('fecha', { ascending: false }).order('tasa_id', { ascending: false }),
+  ])
+  const pares = (paresData ?? []) as { origen: string; destino: string; fuente: FuenteTasa }[]
+  if (pares.length === 0) return undefined
+
+  // Tasa más reciente por par (la primera al venir ordenado por fecha desc).
+  const rateMap = new Map<string, { tasa: number; fecha: string | null }>()
+  for (const t of (tasasData ?? []) as { moneda_origen: string; moneda_destino: string; tasa: number; fecha: string | null }[]) {
+    const k = `${t.moneda_origen}__${t.moneda_destino}`
+    if (!rateMap.has(k)) rateMap.set(k, { tasa: Number(t.tasa), fecha: t.fecha })
+  }
+
+  const filas: TasaFila[] = pares.map(p => {
+    const r = rateMap.get(`${p.origen}__${p.destino}`)
+    return {
+      origen: p.origen, destino: p.destino, fuente: p.fuente,
+      tasa:  r ? r.tasa : null,
+      fecha: r?.fecha ?? null,
+      dias:  diasDesde(r?.fecha ?? null, hoy),
+    }
+  })
+  return { filas }
+}
+
+/** Días entre una fecha 'YYYY-MM-DD' y hoy. UTC en las dos, así no hay saltos por huso. */
+function diasDesde(fecha: string | null, hoy: string): number | null {
+  if (!fecha) return null
+  const a = Date.parse(`${fecha.slice(0, 10)}T00:00:00Z`)
+  const b = Date.parse(`${hoy}T00:00:00Z`)
+  if (Number.isNaN(a) || Number.isNaN(b)) return null
+  return Math.max(0, Math.round((b - a) / 86_400_000))
+}
+
 async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<ContabilidadResumen> {
   const meses = clavesMes(hoy, 6)
   const desde6 = `${meses[0].mes}-01`
@@ -346,6 +567,26 @@ async function resumenDeudas(): Promise<DeudasResumen> {
   return { cobrar: agregarDeuda(cobrar), pagar: agregarDeuda(pagar) }
 }
 
+/**
+ * Catálogo/menú público. Cuenta lo que ESTROPEA la carta de cara al cliente
+ * final (agotados, sin foto, sin precio), no lo que hay: el número de platos no
+ * pide ninguna acción, un plato sin precio sí.
+ */
+async function resumenCatalogo(db: Db, cid: string): Promise<CatalogoResumen> {
+  const { data } = await db.from('catalogo_items')
+    .select('precio, foto_url, disponible')
+    .eq('client_id', cid).eq('activo', true)
+
+  const items = (data ?? []) as { precio: number | null; foto_url: string | null; disponible: boolean }[]
+  return {
+    items:     items.length,
+    agotados:  items.filter(i => !i.disponible).length,
+    sinFoto:   items.filter(i => !i.foto_url).length,
+    sinPrecio: items.filter(i => i.precio == null).length,
+    vacio:     items.length === 0,
+  }
+}
+
 async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen> {
   const { data: productos } = await db
     .from('products')
@@ -418,13 +659,27 @@ async function resumenPuntoVenta(db: Db, cid: string, hoy: string, empresaIds: s
 
 async function resumenRrhh(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<RrhhResumen> {
   const inicioMes = `${hoy.slice(0, 7)}-01`
-  const { data: empleados } = await db
-    .from('empleados').select('fecha_alta, fecha_baja').eq('client_id', cid).in('empresa_id', empresaIds)
+  const en30 = sumarDias(hoy, 30)
 
-  const lista = (empleados ?? []) as { fecha_alta: string | null; fecha_baja: string | null }[]
+  const [empRes, nomRes, conRes] = await Promise.all([
+    db.from('empleados').select('fecha_alta, fecha_baja').eq('client_id', cid).in('empresa_id', empresaIds),
+    // La nómina en borrador es dinero que el negocio ya debe pero que todavía no
+    // está en los gastos: hasta confirmarla, el resultado del mes miente.
+    db.from('nominas').select('*', { count: 'exact', head: true })
+      .eq('client_id', cid).in('empresa_id', empresaIds).eq('estado', 'BORRADOR'),
+    // `fecha_fin` NULL = indefinido, y esos no vencen: la query los deja fuera sola.
+    db.from('contratos').select('*', { count: 'exact', head: true })
+      .eq('client_id', cid).gte('fecha_fin', hoy).lte('fecha_fin', en30),
+  ])
+
+  const lista = (empRes.data ?? []) as { fecha_alta: string | null; fecha_baja: string | null }[]
   const activos = lista.filter(e => !e.fecha_baja).length
   const altasMes = lista.filter(e => !e.fecha_baja && e.fecha_alta && String(e.fecha_alta) >= inicioMes).length
-  return { activos, altasMes }
+  return {
+    activos, altasMes,
+    nominasBorrador:    nomRes.count ?? 0,
+    contratosPorVencer: conRes.count ?? 0,
+  }
 }
 
 async function resumenAgenda(db: Db, cid: string, hoy: string, tipo: 'reserva' | 'cita'): Promise<AgendaResumen> {
@@ -552,12 +807,16 @@ async function resumenDossier(db: Db, cid: string): Promise<DossierResumen> {
 }
 
 async function resumenServicios(db: Db, cid: string, hoy: string): Promise<ServiciosResumen> {
-  const [{ data }, { data: lins }] = await Promise.all([
+  const [{ data }, { data: lins }, { data: terc }] = await Promise.all([
     db.from('suscripciones')
-      .select('suscripcion_id, moneda, periodicidad, fecha_proximo_cobro, estado, fecha_fin, renovacion_automatica')
+      .select('suscripcion_id, tercero_id, moneda, periodicidad, fecha_proximo_cobro, estado, fecha_fin, renovacion_automatica')
       .eq('client_id', cid).eq('estado', 'ACTIVA'),
     db.from('suscripcion_lineas').select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor').eq('client_id', cid),
+    db.from('third_parties').select('tercero_id, nombre').eq('client_id', cid),
   ])
+  const nombreTercero = new Map(
+    ((terc ?? []) as { tercero_id: string; nombre: string }[]).map(t => [t.tercero_id, t.nombre]),
+  )
 
   // Las líneas de cada acuerdo (mig. 124/125): el cobro suma el de cada servicio con su
   // propio descuento.
@@ -577,7 +836,7 @@ async function resumenServicios(db: Db, cid: string, hoy: string): Promise<Servi
   // widget la seguía sumando al ingreso recurrente — el mismo negocio con dos cifras
   // distintas, y la del dashboard inflada con dinero que ya no entra.
   const filas = ((data ?? []) as {
-    suscripcion_id: string
+    suscripcion_id: string; tercero_id: string | null
     moneda: string; periodicidad: string
     fecha_proximo_cobro: string; estado: string; fecha_fin: string | null; renovacion_automatica: boolean
   }[]).filter(f => estadoEfectivo(
@@ -588,20 +847,32 @@ async function resumenServicios(db: Db, cid: string, hoy: string): Promise<Servi
   const en30 = new Date(Date.UTC(y, m - 1, d + 30)).toISOString().split('T')[0]
 
   const porMoneda = new Map<string, number>()
-  let proximas = 0
+  const proximasLista: { nombre: string; fecha: string; moneda: string; importe: number }[] = []
   for (const f of filas) {
     // Con el descuento aplicado: un anual rebajado un 15 % no aporta el precio de
     // catálogo al ingreso recurrente, aporta lo que de verdad se cobra.
-    const { equivalenteMensual } = calcularCobroAcuerdo(
+    // `total` es lo que se cobra en SU ciclo (un anual cobra 12 meses de golpe);
+    // `equivalenteMensual` es ese total repartido, que es lo comparable mes a mes.
+    const { equivalenteMensual, total } = calcularCobroAcuerdo(
       lineasPorSub.get(f.suscripcion_id) ?? [], f.periodicidad as PeriodicidadSub,
     )
     porMoneda.set(f.moneda, (porMoneda.get(f.moneda) ?? 0) + equivalenteMensual)
-    if (f.fecha_proximo_cobro && f.fecha_proximo_cobro <= en30) proximas++
+    if (f.fecha_proximo_cobro && f.fecha_proximo_cobro <= en30) {
+      proximasLista.push({
+        nombre:  (f.tercero_id && nombreTercero.get(f.tercero_id)) || 'Sin cliente',
+        fecha:   f.fecha_proximo_cobro,
+        moneda:  f.moneda,
+        importe: Math.round(total * 100) / 100,
+      })
+    }
   }
+  proximasLista.sort((a, b) => a.fecha.localeCompare(b.fecha))
+
   return {
     activas: filas.length,
     ingresoRecurrente: [...porMoneda.entries()].map(([moneda, total]) => ({ moneda, total: Math.round(total * 100) / 100 })),
-    proximasRenovaciones: proximas,
+    proximasRenovaciones: proximasLista.length,
+    proximas: proximasLista.slice(0, 3),
   }
 }
 
@@ -640,7 +911,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, deudas, inventario, puntoVenta, rrhh, reservas, citas, servicios, dossier, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, deudas, inventario, puntoVenta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
@@ -650,8 +921,22 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     puedeVer('servicios')      ? resumenServicios(db, cid, hoy)               : Promise.resolve(undefined),
     puedeVer('dossier')        ? resumenDossier(db, cid)                      : Promise.resolve(undefined),
+    puedeVer('catalogo_qr')    ? resumenCatalogo(db, cid)                     : Promise.resolve(undefined),
+    // Las tasas acompañan a la contabilidad: es lo que convierte sus totales.
+    puedeVer('base')           ? resumenTasas(db, cid, hoy)                   : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
+    leerSetting('email_contratacion', 'contacto@claux.es'),
+    // Qué ofrecer y en qué orden lo decide el catálogo comercial, no el código.
+    db.from('modulos_catalogo').select('clave, tipo, orden').eq('activo', true),
+    // Lo que este cliente ya pidió activar. Sin esto, «Te contactamos» vivía solo
+    // en el estado del componente y se perdía al recargar: el dueño volvía a ver
+    // «Me interesa» y no sabía si su clic había servido de algo.
+    db.from('soporte_mensajes')
+      .select('modulo_clave, created_at')
+      .eq('client_id', cid)
+      .not('modulo_clave', 'is', null)
+      .order('created_at', { ascending: false }),
   ])
   // Aviso de setup: datos base que solo el admin puede crear. Empresa siempre;
   // moneda solo si hay módulos que la usan (base/rrhh/catálogo/dossier). La query
@@ -686,6 +971,109 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     .filter(c => ACCESOS[c])
     .map(c => ({ clave: c, label: labelAcceso(c), ruta: ACCESOS[c].ruta }))
 
+  // ── «Pendiente»: lo accionable de TODOS los módulos, en una franja ──────────
+  // Se agrega aquí en vez de que cada widget grite lo suyo: el dueño abre el
+  // dashboard para saber si tiene que hacer algo hoy, y esa respuesta estaba
+  // repartida entre ocho tarjetas. Un módulo nuevo añade una LÍNEA aquí, no otra
+  // tarjeta — que es lo que mantiene el dashboard acotado.
+  const pendiente: Pendiente[] = []
+  const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios)
+
+  if (deudas) {
+    // UNA línea por lado, no una por moneda. Un cliente con tres monedas generaba
+    // hasta seis avisos que decían lo mismo dos veces («te deben» y «debes»), y la
+    // franja se convertía en un muro donde ya no se distinguía lo importante.
+    const vencCobrar = deudas.cobrar.por_moneda.filter(m => m.vencido > 0.005)
+    if (vencCobrar.length > 0) {
+      pendiente.push({
+        clave: 'cobrar', tono: 'alerta', ruta: '/portal/cxc',
+        texto: `Te deben ${importesVencidos(vencCobrar)} ${plural(vencCobrar.length, 'vencido', 'vencidos')}`,
+      })
+    }
+    const vencPagar = deudas.pagar.por_moneda.filter(m => m.vencido > 0.005)
+    if (vencPagar.length > 0) {
+      pendiente.push({
+        clave: 'pagar', tono: 'alerta', ruta: '/portal/cxp',
+        texto: `Debes ${importesVencidos(vencPagar)} ${plural(vencPagar.length, 'vencido', 'vencidos')}`,
+      })
+    }
+  }
+  if (inventario && inventario.bajoMinimoCount > 0) {
+    pendiente.push({
+      clave: 'stock', tono: 'alerta', ruta: '/portal/inventario',
+      texto: `${inventario.bajoMinimoCount} ${plural(inventario.bajoMinimoCount, 'producto', 'productos')} bajo mínimo`,
+    })
+  }
+  if (puntoVenta && puntoVenta.sinSincronizar > 0) {
+    pendiente.push({
+      clave: 'sync', tono: 'aviso', ruta: '/portal/caja/operaciones',
+      texto: `${puntoVenta.sinSincronizar} ${plural(puntoVenta.sinSincronizar, 'punto de venta sin sincronizar', 'puntos de venta sin sincronizar')}`,
+    })
+  }
+  if (dossier && dossier.desfasados > 0) {
+    pendiente.push({
+      clave: 'dossier', tono: 'aviso', ruta: '/portal/dossier',
+      texto: `${dossier.desfasados} ${plural(dossier.desfasados, 'dossier publicado con números viejos', 'dossiers publicados con números viejos')}`,
+    })
+  }
+  if (rrhh && rrhh.nominasBorrador > 0) {
+    pendiente.push({
+      clave: 'nomina', tono: 'alerta', ruta: '/portal/nomina',
+      texto: `${rrhh.nominasBorrador} ${plural(rrhh.nominasBorrador, 'nómina sin confirmar', 'nóminas sin confirmar')}`,
+    })
+  }
+  if (rrhh && rrhh.contratosPorVencer > 0) {
+    pendiente.push({
+      clave: 'contratos', tono: 'aviso', ruta: '/portal/rrhh',
+      texto: `${rrhh.contratosPorVencer} ${plural(rrhh.contratosPorVencer, 'contrato termina', 'contratos terminan')} en 30 días`,
+    })
+  }
+  if (catalogo && !catalogo.vacio) {
+    // Lo que estropea la carta de cara al cliente final. Los agotados no entran:
+    // marcar algo agotado es una decisión del dueño, no un descuido.
+    const flojos = catalogo.sinFoto + catalogo.sinPrecio
+    if (flojos > 0) {
+      const partes: string[] = []
+      if (catalogo.sinFoto > 0)   partes.push(`${catalogo.sinFoto} sin foto`)
+      if (catalogo.sinPrecio > 0) partes.push(`${catalogo.sinPrecio} sin precio`)
+      pendiente.push({
+        clave: 'catalogo', tono: 'aviso', ruta: '/portal/catalogo',
+        texto: `En tu ${etiquetas.catalogo.toLowerCase()}: ${partes.join(' y ')}`,
+      })
+    }
+  }
+  if (servicios && servicios.proximasRenovaciones > 0) {
+    pendiente.push({
+      clave: 'renovaciones', tono: 'aviso', ruta: '/portal/suscripciones',
+      texto: `${servicios.proximasRenovaciones} ${plural(servicios.proximasRenovaciones, 'suscripción renueva', 'suscripciones renuevan')} en 30 días`,
+    })
+  }
+  // Lo que duele primero.
+  pendiente.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === 'alerta' ? -1 : 1))
+
+  // ── Captación ───────────────────────────────────────────────────────────────
+  const conPanel = MODULOS_CON_PANEL.filter(m => visibles.includes(m)).length
+  // Primer pedido de cada módulo por fecha descendente ⇒ el primero que aparece
+  // es el más reciente, que es la fecha que se le enseña al dueño.
+  const pedidoPorModulo = new Map<string, string>()
+  for (const fila of interesesPrevios.data ?? []) {
+    const clave = fila.modulo_clave as string
+    if (!pedidoPorModulo.has(clave)) pedidoPorModulo.set(clave, fila.created_at as string)
+  }
+  const faltan: ModuloOferta[] = ordenarOferta(
+    OFERTA
+      .filter(o => !visibles.includes(o.clave) && (!o.requiere || visibles.includes(o.requiere)))
+      .map(o => ({
+        ...o,
+        // Respeta el vocabulario del sector: «Menú»/«Carta» en vez de «Catálogo».
+        label: o.clave === 'catalogo_qr' ? etiquetas.catalogo
+             : o.clave === 'reservas_citas' ? etiquetas.reservas
+             : o.label,
+        pedidoEl: fechaCortaDeISO(pedidoPorModulo.get(o.clave)),
+      })),
+    (catalogoModulos.data ?? []) as FilaCatalogo[],
+  )
+
   return {
     nombreEmpresa: cliente.nombre_empresa,
     empresas: empresasVista.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
@@ -698,6 +1086,8 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
     tieneIa: puedeVer('asistente_ia'),
-    contabilidad, deudas, inventario, puntoVenta, rrhh, servicios, dossier, reservas, citas, accesos,
+    pendiente,
+    captacion: { conPanel, faltan, email: emailContratacion },
+    contabilidad, deudas, tasas, inventario, puntoVenta, rrhh, servicios, dossier, catalogo, reservas, citas, accesos,
   }
 }

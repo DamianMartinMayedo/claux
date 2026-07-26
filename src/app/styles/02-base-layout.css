@@ -17,9 +17,19 @@ body {
 h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; line-height: 1.2; color: var(--color-text); }
 /* Enlaces de texto. Excluye los <a> que son botones (.btn): esos toman su color
    de las clases .btn-* y no deben heredar el color de enlace (rompía el hover:
-   el texto teal coincidía con el fondo teal del botón). */
-a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
-a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):hover { color: var(--color-primary-hover); }
+   el texto teal coincidía con el fondo teal del botón).
+   ⚠️ La cadena de `:not()` no es cosmética: sube la especificidad a (0,5,1), o sea
+   POR ENCIMA de cualquier `.mi-enlace { color: … }` de un parcial posterior. Un
+   enlace que tenga que ir de otro color —los que van sobre banda de marca, donde
+   el teal no se lee— NO se arregla poniéndole color a su clase: se añade aquí.
+   Si esta lista sigue creciendo, el arreglo es envolver el selector en `:where()`
+   y bajar la base a especificidad 0, no seguir alargándola. */
+a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):not(.enlace-sobre-banda) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
+a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):not(.enlace-sobre-banda):hover { color: var(--color-primary-hover); }
+/* Enlace dentro de una banda de marca (degradado/color fuerte con texto blanco):
+   blanco subrayado, que es la única tinta con contraste comprobado encima. */
+.enlace-sobre-banda { color: #fff; text-decoration: underline; text-underline-offset: 2px; transition: opacity var(--transition); }
+.enlace-sobre-banda:hover { opacity: 0.8; }
 a.btn { text-decoration: none; }
 img, svg { display: block; }
 ul, ol { list-style: none; }

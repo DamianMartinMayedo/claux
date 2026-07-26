@@ -13,6 +13,11 @@ import DossierWidget   from './DossierWidget'
 import AgendaWidget from './AgendaWidget'
 import AccesosRapidos from './AccesosRapidos'
 import ContratarMasBanner from './ContratarMasBanner'
+import PendienteFranja from './PendienteFranja'
+import DeudasWidget from './DeudasWidget'
+import TasasWidget  from './TasasWidget'
+import CatalogoWidget from './CatalogoWidget'
+import Zona, { type TarjetaZona } from './Zona'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -21,8 +26,49 @@ const ESTADO_BADGE: Record<string, string> = {
 }
 
 export default function DashboardView({ data }: { data: DashboardData }) {
-  const { contabilidad, inventario, puntoVenta, rrhh, servicios, dossier, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos } = data
-  const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || servicios || dossier || reservas || citas)
+  const { contabilidad, deudas, tasas, inventario, puntoVenta, rrhh, servicios, dossier, catalogo, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos, pendiente, captacion } = data
+  const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || servicios || dossier || catalogo || reservas || citas)
+
+  // ── Zonas ──────────────────────────────────────────────────────────────────
+  // Cada widget declara dónde vive y cuánto pesa; el ancho lo reparte la zona
+  // (ver Zona.tsx). Añadir un módulo es añadir una línea a la zona que le toca,
+  // no otra tarjeta al final de una lista de ocho.
+  // Fila 1: contabilidad a todo lo ancho. Fila 2: las deudas (lo que hay que
+  // cobrar y pagar) con las tasas al lado, que son las que convierten sus cifras.
+  const zonaDinero: TarjetaZona[] = []
+  if (contabilidad) zonaDinero.push({ clave: 'contabilidad', peso: 'principal', ancho: 'full', nodo: <ContabilidadWidget data={contabilidad} /> })
+  if (deudas)       zonaDinero.push({ clave: 'deudas',       peso: 'operativo', nodo: <DeudasWidget data={deudas} /> })
+  if (tasas)        zonaDinero.push({ clave: 'tasas',        peso: 'estado',    nodo: <TasasWidget data={tasas} /> })
+
+  const zonaDia: TarjetaZona[] = []
+  if (reservas) zonaDia.push({
+    clave: 'reservas', peso: 'operativo',
+    nodo: (
+      <AgendaWidget
+        data={reservas} titulo={etiquetas.reservas} ruta="/portal/reservas"
+        unidad="reserva" mostrarPersonas
+        icon={<Calendar size={18} />} tone="metric-icon-primary"
+      />
+    ),
+  })
+  if (citas) zonaDia.push({
+    clave: 'citas', peso: 'operativo',
+    nodo: (
+      <AgendaWidget
+        data={citas} titulo="Citas" ruta="/portal/citas"
+        unidad="cita" mostrarPersonas={false}
+        icon={<CalendarDays size={18} />} tone="metric-icon-teal"
+      />
+    ),
+  })
+  if (puntoVenta) zonaDia.push({ clave: 'punto-venta', peso: 'operativo', nodo: <PuntoVentaWidget data={puntoVenta} /> })
+
+  const zonaNegocio: TarjetaZona[] = []
+  if (inventario) zonaNegocio.push({ clave: 'inventario', peso: 'estado', nodo: <InventarioWidget data={inventario} /> })
+  if (rrhh)       zonaNegocio.push({ clave: 'rrhh',       peso: 'estado', nodo: <RrhhWidget data={rrhh} /> })
+  if (servicios)  zonaNegocio.push({ clave: 'servicios',  peso: 'estado', nodo: <ServiciosWidget data={servicios} /> })
+  if (dossier)    zonaNegocio.push({ clave: 'dossier',    peso: 'estado', nodo: <DossierWidget data={dossier} /> })
+  if (catalogo)   zonaNegocio.push({ clave: 'catalogo',   peso: 'estado', nodo: <CatalogoWidget data={catalogo} etiqueta={etiquetas.catalogo} /> })
 
   const dias = suscripcion.diasRestantes
   const subSuscripcion = dias !== null && dias >= 0 ? ` · ${dias} d` : ''
@@ -67,29 +113,20 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         </PrerequisitoAviso>
       )}
 
-      <div className="dash-grid">
-        {contabilidad && <ContabilidadWidget data={contabilidad} />}
-        {reservas && (
-          <AgendaWidget
-            data={reservas} titulo={etiquetas.reservas} ruta="/portal/reservas"
-            unidad="reserva" mostrarPersonas
-            icon={<Calendar size={18} />} tone="metric-icon-primary"
-          />
-        )}
-        {citas && (
-          <AgendaWidget
-            data={citas} titulo="Citas" ruta="/portal/citas"
-            unidad="cita" mostrarPersonas={false}
-            icon={<CalendarDays size={18} />} tone="metric-icon-teal"
-          />
-        )}
-        {puntoVenta && <PuntoVentaWidget data={puntoVenta} />}
-        {inventario && <InventarioWidget data={inventario} />}
-        {rrhh && <RrhhWidget data={rrhh} />}
-        {servicios && <ServiciosWidget data={servicios} />}
-        {dossier && <DossierWidget data={dossier} />}
+      <div className="dash-zonas">
+        <PendienteFranja items={pendiente} />
+        <Zona titulo="Tu dinero"  tarjetas={zonaDinero} />
+        <Zona titulo="Tu día"     tarjetas={zonaDia} />
+        <Zona titulo="Tu negocio" tarjetas={zonaNegocio} />
+        {/* Los accesos rápidos solo tienen sentido cuando NO hay ningún panel:
+            con widgets delante, repetir el enlace del menú lateral es ruido. */}
         {!hayPaneles && <AccesosRapidos accesos={accesos} />}
-        {!hayPaneles && <ContratarMasBanner />}
+        {/* Destacado con ≤2 módulos CON PANEL; con más, una línea al pie. */}
+        <ContratarMasBanner
+          faltan={captacion.faltan}
+          destacado={captacion.conPanel <= 2}
+          email={captacion.email}
+        />
       </div>
     </div>
   )

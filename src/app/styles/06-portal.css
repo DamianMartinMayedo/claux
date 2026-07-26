@@ -2047,23 +2047,55 @@
   color: var(--color-text);
   box-shadow: var(--shadow-sm);
 }
-.dash-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-5);
-  align-items: stretch;
+/* ── Zonas del dashboard ──────────────────────────────────────────────────────
+   El dashboard se agrupa por lo que RESUELVE (dinero · día · negocio) y el ancho
+   lo reparte cada zona según cuántas tarjetas tenga (ver Zona.tsx). Antes era una
+   única rejilla de dos columnas con el orden escrito a mano: cada módulo nuevo
+   añadía otra tarjeta a una lista que ya iba por ocho. */
+.dash-zonas {
+  display: flex; flex-direction: column; gap: var(--space-6);
   /* Alturas por tamaño de card (según el contenido del módulo) */
   --dash-h-sm: 13rem;
   --dash-h-md: 25rem;
 }
-@media (min-width: 900px) {
-  .dash-grid { grid-template-columns: 1fr 1fr; }
-  .dash-col-full { grid-column: 1 / -1; }
+.dash-zona-titulo {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--color-text-muted);
+  margin: 0 0 var(--space-3);
+}
+.dash-zona-grid {
+  display: grid; grid-template-columns: 1fr;
+  gap: var(--space-5); align-items: stretch;
 }
 /* Las cards reparten su contenido en columna y se igualan en alto por tamaño */
-.dash-grid > .card { display: flex; flex-direction: column; }
+.dash-zona-grid > .card { display: flex; flex-direction: column; }
 .dash-card-sm { min-height: var(--dash-h-sm); }
 .dash-card-md { min-height: var(--dash-h-md); }
+/* Tarjeta sola en su zona: ocupa el ancho y SUELTA el alto mínimo — estirada a
+   13rem con dos cifras dentro se ve más vacía que pequeña. */
+.dash-zona-solo > .card { min-height: 0; }
+
+@media (min-width: 900px) {
+  .dash-zona-duo          { grid-template-columns: 1fr 1fr; }
+  /* Una pesa más que la otra (contabilidad junto a un widget de estado). */
+  .dash-zona-duo-desigual { grid-template-columns: 2fr 1fr; }
+  .dash-zona-tiles        { grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+  .dash-col-full { grid-column: 1 / -1; }
+
+  /* La cabecera de tarjeta se diseñó para media pantalla: título a --text-2xl
+     (fuente display) junto a un botón con texto, en una fila que no se parte. A
+     un cuarto de ancho el título no tiene dónde encoger y se comía el botón
+     («Inventario» pisando «Ver inventario»). En tiles baja de cuerpo, puede
+     partirse en dos líneas y la acción cae a su propia fila si no cabe. */
+  .dash-zona-tiles > .card > .card-header {
+    flex-wrap: wrap; gap: var(--space-2) var(--space-3);
+    align-items: flex-start;
+  }
+  .dash-zona-tiles > .card .card-title {
+    font-size: var(--text-lg); line-height: 1.25; min-width: 0;
+  }
+  .dash-zona-tiles > .card .dash-card-head { flex: 1 1 auto; }
+}
 
 /* Cabecera de card: icono de color + título */
 .dash-card-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
@@ -2187,12 +2219,265 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .dash-alerta svg { flex-shrink: 0; margin-top: 2px; }
 
-/* ── Dashboard: banner de captación (contratar más módulos) ── */
-/* La grid fuerza `.card` a columna con alta especificidad; forzamos fila aquí. */
-.dash-grid > .dash-cta { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
-.dash-cta-body { flex: 1 1 20rem; }
-.dash-cta-body .dash-muted { padding-top: var(--space-1); max-width: 52ch; }
-.dash-cta-action { flex-shrink: 0; }
+/* ── Dashboard: franja «Pendiente» ────────────────────────────────────────────
+   Lo accionable de todos los módulos, junto y arriba. Cada línea es un enlace al
+   sitio donde se resuelve: si no se puede actuar desde aquí, no es «pendiente»,
+   es decoración. */
+.dash-pendiente {
+  /* Sin margen propio: la separación con la primera zona la pone el `gap` de
+     `.dash-zonas`, y sumar las dos cosas descuadraba el ritmo vertical. */
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.dash-pendiente-cab { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.dash-pendiente-titulo {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--color-text-muted); margin: 0;
+}
+/* El total, para saber de un vistazo si hoy hay dos cosas o nueve. */
+.dash-pendiente-cuenta {
+  font-size: var(--text-xs); font-weight: 700; line-height: 1;
+  padding: 3px var(--space-2); border-radius: var(--radius-full);
+  background: var(--color-surface-2); color: var(--color-text-muted);
+}
+.dash-pendiente-grupo + .dash-pendiente-grupo {
+  margin-top: var(--space-3); padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+.dash-pendiente-grupo-label {
+  margin: 0 0 var(--space-1); font-size: var(--text-xs); font-weight: 700;
+}
+.dash-pendiente-grupo-label.is-alerta { color: var(--color-error); }
+.dash-pendiente-grupo-label.is-aviso  { color: var(--color-warning); }
+/* Dos columnas en pantalla ancha: nueve líneas en una sola columna son una
+   pared. En móvil, una. */
+.dash-pendiente-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; }
+@media (min-width: 900px) {
+  .dash-pendiente-lista { grid-template-columns: 1fr 1fr; column-gap: var(--space-5); }
+}
+.dash-pendiente-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2); margin: 0 calc(var(--space-2) * -1);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm); text-decoration: none;
+  transition: background var(--transition);
+}
+.dash-pendiente-item:hover { background: var(--color-surface-2); }
+/* El color se pone en los HIJOS, no en el enlace: la regla base de los `<a>`
+   (02-base-layout.css) tiene especificidad (0,5,1) por su cadena de `:not()` y
+   se lleva por delante cualquier `color` puesto en la clase del enlace. */
+.dash-pendiente-icono { display: inline-flex; flex-shrink: 0; }
+.dash-pendiente-item.is-alerta .dash-pendiente-icono { color: var(--color-error); }
+.dash-pendiente-item.is-aviso  .dash-pendiente-icono { color: var(--color-warning); }
+.dash-pendiente-texto { flex: 1 1 auto; min-width: 0; color: var(--color-text); font-weight: 500; }
+.dash-pendiente-item.is-alerta .dash-pendiente-texto { font-weight: 600; }
+.dash-pendiente-chevron { flex-shrink: 0; color: var(--color-text-faint); opacity: 0; transition: opacity var(--transition); }
+.dash-pendiente-item:hover .dash-pendiente-chevron { opacity: 1; }
+
+/* ── Dashboard: cobros y pagos ───────────────────────────────────────────────
+   La barra mide lo VENCIDO sobre el total: un saldo que aún no ha llegado a su
+   fecha no es un problema, es el negocio funcionando. */
+.dash-deudas { display: flex; flex-direction: column; gap: var(--space-4); }
+.dash-deuda-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-2); margin-bottom: var(--space-1);
+}
+.dash-deuda-titulo { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); }
+.dash-deuda-link { font-size: var(--text-xs); font-weight: 600; color: var(--color-primary-text); text-decoration: none; }
+.dash-deuda-link:hover { text-decoration: underline; }
+.dash-deuda-moneda { margin-bottom: var(--space-2); }
+.dash-deuda-cifras { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.dash-deuda-total { font-weight: 700; font-variant-numeric: tabular-nums; }
+.dash-deuda-vencido { font-size: var(--text-xs); font-weight: 600; color: var(--color-error); font-variant-numeric: tabular-nums; }
+.dash-deuda-barra {
+  position: relative; height: 6px; margin-top: var(--space-1);
+  border-radius: var(--radius-full); background: var(--color-surface-offset);
+  overflow: hidden;
+}
+.dash-deuda-barra::after {
+  content: ''; position: absolute; inset: 0 auto 0 0;
+  width: var(--vencido, 0%); border-radius: var(--radius-full);
+  background: var(--color-error);
+}
+/* Las dos pistas en gris: el relleno de la barra es lo VENCIDO (rojo), y una
+   pista verde detrás lo leía como barra de salud —cuanto más roja, más «llena»—,
+   justo lo contrario del mensaje. El color lo pone solo el tramo vencido. */
+.dash-deuda-barra.is-cobrar,
+.dash-deuda-barra.is-pagar { background: var(--color-surface-offset); }
+.dash-deuda-top { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dash-deuda-fila { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); }
+.dash-deuda-nombre { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-deuda-saldo { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.dash-deuda-dias {
+  margin-left: var(--space-2); font-style: normal; font-size: var(--text-xs); font-weight: 700;
+  color: var(--color-error); background: var(--color-error-bg);
+  padding: 1px var(--space-1); border-radius: var(--radius-sm);
+}
+
+/* ── Dashboard: tasas de cambio ───────────────────────────────────────────────
+   Acompaña a Cobros y pagos. Lo que se lee de un vistazo no es la cotización en
+   sí, sino su EDAD: una tasa vieja no da error, da un total equivocado. */
+/* Título más contenido: «Tasas de cambio» a --text-2xl en una tarjeta de un
+   tercio de ancho se comía la fila junto al botón. Baja de cuerpo pero mantiene
+   la fuente display, como los títulos de la zona de tiles. */
+.dash-card-title-sm { font-size: var(--text-lg); line-height: 1.25; }
+
+.dash-tasas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* Rejilla de tres: par · valor (a la derecha, cifras) · fuente y fecha debajo.
+   El par manda el ancho de su columna; el valor se alinea a la derecha para que
+   las cifras cuadren aunque tengan distinto largo. */
+.dash-tasa {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline;
+  gap: 0 var(--space-3); padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+.dash-tasa + .dash-tasa { border-top: 1px solid var(--color-divider); }
+.dash-tasa-par { display: inline-flex; align-items: center; gap: var(--space-1); font-weight: 600; }
+.dash-tasa-cod { color: var(--color-text); }
+.dash-tasa-flecha { color: var(--color-text-faint); }
+.dash-tasa-valor { text-align: right; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.dash-tasa-sin { font-weight: 600; color: var(--color-warning); }
+/* Fuente + fecha, en la segunda fila bajo el par (columna 1, no bajo la cifra). */
+.dash-tasa-meta { grid-column: 1 / -1; font-size: var(--text-xs); color: var(--color-text-faint); }
+.dash-tasa-meta .is-vieja { color: var(--color-warning); font-weight: 600; }
+.dash-tasas-aviso {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  margin: var(--space-3) 0 0; padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg); color: var(--color-warning);
+  font-size: var(--text-xs); line-height: 1.45;
+}
+.dash-tasas-aviso svg { flex-shrink: 0; margin-top: 1px; }
+
+/* ── Dashboard: banner de captación (contratar más módulos) ─────────────────────
+   BANDA de marca, no una tarjeta gris más: es lo único de la pantalla que no son
+   datos del negocio, y si se viste igual que los widgets se lee como uno más y se
+   ignora. Los tonos son los `-active`, los ESTABLES (sin par claro/oscuro)
+   pensados para llevar blanco encima: el teal vivo como tinta no se lee. */
+.dash-cta {
+  /* El MISMO degradado de las bandas fuertes de la landing: es la imagen de marca
+     ya resuelta (tonos estables, contraste comprobado con blanco encima). */
+  background: var(--gradient-band);
+  /* Blanco ESTABLE, no --color-text-inv: la banda tira de tonos `-active`, que no
+     giran con el tema, pero text-inv sí — en oscuro dejaba TODO el texto de la
+     banda (titular, sub y el correo del pie) en carbón sobre teal profundo, o
+     sea invisible. Mismo criterio que las bandas de la landing. */
+  color: #fff;
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-md);
+}
+.dash-cta-head { max-width: 46ch; margin-bottom: var(--space-5); }
+.dash-cta-badge {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: var(--space-1) var(--space-3); border-radius: var(--radius-full);
+  background: rgb(255 255 255 / 0.16);
+  margin-bottom: var(--space-3);
+}
+/* El color va EXPLÍCITO: la base fija `h1..h6 { color: var(--color-text) }`, que
+   pisa el blanco heredado de la banda y dejaba el titular en carbón sobre teal. */
+.dash-cta-titulo {
+  font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 700;
+  line-height: 1.15; margin: 0; color: #fff;
+}
+.dash-cta-sub { margin: var(--space-2) 0 0; color: rgb(255 255 255 / 0.88); line-height: 1.5; }
+
+/* Lo que le falta, como opciones que se pueden pulsar. Listarlo en prosa —y
+   encima incluyendo lo que ya tiene contratado— no dejaba ver qué hay ni por
+   dónde pedirlo. Las tarjetas van en superficie normal sobre la banda: el
+   contraste es lo que las hace mirar. */
+.dash-cta-oferta {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-3);
+}
+.dash-oferta-item {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-4);
+  border: none; border-radius: var(--radius-md);
+  background: var(--color-surface); text-align: left; font: inherit; cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.dash-oferta-item:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+/* Ya pedido: se queda visible como confirmación, no se puede volver a pulsar. */
+.dash-oferta-item:disabled { cursor: default; opacity: 0.9; }
+.dash-oferta-icono {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: var(--radius-md);
+  background: var(--color-primary-subtle); color: var(--color-primary-text);
+  margin-bottom: var(--space-1);
+}
+.dash-oferta-nombre { font-weight: 700; color: var(--color-text); }
+.dash-oferta-gancho { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; flex: 1 1 auto; }
+.dash-oferta-accion {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-2); font-size: var(--text-sm); font-weight: 700;
+  color: var(--color-primary-text);
+}
+.dash-oferta-item:hover:not(:disabled) .dash-oferta-accion { gap: var(--space-2); }
+/* «Pedido el 26 jul · te contactamos» no cabe en una línea en la tarjeta estrecha:
+   se parte, no se desborda. */
+.dash-oferta-accion.is-hecho { color: var(--color-success); flex-wrap: wrap; }
+
+/* Las tarjetas de más, plegadas. El pliegue va con `grid-template-rows: 0fr→1fr`,
+   que sí es animable, en vez de `display:none` (salta en seco) o de un
+   `max-height` inventado (si el contenido cambia, la animación se descuadra o se
+   corta). Sigue montado: una animación de CIERRE necesita el nodo presente
+   mientras se pliega. `prefers-reduced-motion` ya lo colapsa a 0.01ms en el
+   bloque global de 05-admin-paginas.css. */
+.dash-cta-mas {
+  display: grid; grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 280ms var(--ease), opacity 200ms var(--ease);
+}
+.dash-cta-mas.is-abierto { grid-template-rows: 1fr; opacity: 1; }
+/* El recorte del pliegue. El hueco con la fila de arriba lo pone el padding de
+   DENTRO, no un margen del contenedor: un margen que solo existe al abrir salta
+   de golpe, mientras que el padding entra en la altura que se está animando (y
+   de paso da holgura al `translateY(-2px)` y a la sombra del hover). Vertical
+   solo: un padding lateral estrecharía estas tarjetas y dejarían de alinearse
+   con las cuatro de arriba. */
+.dash-cta-mas-caja { overflow: hidden; min-height: 0; }
+.dash-cta-mas-caja > .dash-cta-oferta { padding: var(--space-3) 0 var(--space-2); }
+
+/* «Ver todo lo que puedes activar»: acción de TEXTO, sin caja. Es secundaria —lo
+   que se pulsa son las tarjetas— y un botón con borde encima de la banda competía
+   con ellas. Tampoco puede ser un `.btn` del sistema: todos están calculados para
+   fondo claro y el teal sobre el degradado no se lee. */
+.dash-cta-vertodo {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-4); padding: 0;
+  border: none; background: none; color: #fff;
+  font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
+  opacity: 0.85; transition: opacity var(--transition);
+}
+.dash-cta-vertodo:hover { opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
+
+/* La frase se atenúa con el COLOR, no con `opacity`: la opacidad del párrafo se
+   hereda al enlace y apagaba también el correo, que es justo lo que hay que ver. */
+.dash-cta-nota { margin: var(--space-5) 0 0; font-size: var(--text-sm); color: rgb(255 255 255 / 0.88); }
+/* El correo va en BLANCO, y el color lo pone `.enlace-sobre-banda`
+   (02-base-layout.css) — NO esta clase: la regla base de los `<a>` tiene
+   especificidad (0,5,1) por su cadena de `:not()` y pisaba cualquier `color`
+   puesto aquí, dejando el correo en teal sobre la banda (invisible). Aquí solo
+   queda lo que no es color. */
+.dash-cta-nota-link { font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-oferta-item:hover { transform: none; }
+}
+
+/* Versión discreta (≥3 módulos con panel): sigue estando, pero al pie y sin
+   competir con los datos del negocio. */
+.dash-cta-pie {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3); padding-top: var(--space-2);
+  font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.dash-cta-pie-link { font-weight: 600; color: var(--color-primary-text); text-decoration: none; }
+.dash-cta-pie-link:hover { text-decoration: underline; }
 
 /* ── Dashboard: checklist de puesta en marcha ──────────────────────────────────
    Pasos base (empresa, moneda, almacén…) según módulos contratados. Fila horizontal
@@ -3187,8 +3472,17 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    NOTIFICACIONES — campana, panel y centro (.ntf-*)
    ═══════════════════════════════════════════════════
    La severidad, el badge y los popups son genéricos y viven en
-   03-components.css. Aquí solo lo que pertenece al shell del portal.
-   Solo lo ve el rol admin_empresa (la bandeja es del negocio). */
+   03-components.css.
+
+   COMPARTIDO con el panel interno: la campana del admin (AvisosCampana) usa
+   estas mismas clases y `.theme-toggle-btn` de arriba, porque un aviso debe
+   leerse igual en los dos paneles. Nada de aquí depende de un selector del
+   portal —solo de tokens y de `--header-h`—, así que funciona en ambos shells.
+   Por dominio le tocaría 03-components.css; se queda aquí para no mover 100
+   líneas de CSS que el portal ya tiene probadas. Si crece, ese es el sitio.
+
+   En el portal solo la ve el rol admin_empresa (la bandeja es del negocio); en
+   el admin, quien tenga permiso de la sección del aviso. */
 
 .ntf-campana { position: relative; }
 /* Extiende .theme-toggle-btn (mismo tamaño y trato que el resto de la cabecera);
