@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import MobileNavToggle from '@/components/MobileNavToggle'
+import AvisosCampana from '@/components/admin/notificaciones/AvisosCampana'
 import type { RolAdmin } from '@/lib/roles'
 
 function getInitials(name: string): string {
@@ -24,6 +25,7 @@ export default function Header({ displayName, rol }: { displayName: string; rol:
         </Link>
       </div>
       <div className="header-right">
+        <AvisosCampana />
         <Link href="/admin/configuracion" className="header-user-card">
           <div className="header-user-avatar">{getInitials(displayName)}</div>
           <div className="header-user-info">

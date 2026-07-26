@@ -1,25 +1,46 @@
 'use client'
 
 import { AlertTriangle, Bell, Mail } from 'lucide-react'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type ReactNode } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
 import { TIPOS_EMAIL, type TipoEmail } from '@/lib/email/variables'
 import type { PlantillaEmailAdmin } from '@/app/actions/email-plantillas'
+import { useAvisos } from '@/components/admin/notificaciones/AvisosContext'
 import PlantillasEditor from './PlantillasEditor'
 import Tabs from '@/components/Tabs'
+
+type Tab = 'bandeja' | 'preferencias' | 'correos' | 'plantillas'
 
 type Props = {
   diasAviso:            number
   emailAvisosInternos:  string
+  emailContratacion:    string
   togglesIniciales:     Record<TipoEmail, boolean>
   plantillas:           PlantillaEmailAdmin[]
+  /** Paneles ya resueltos en el servidor (patrón del design system §3.1). */
+  bandeja:              ReactNode
+  preferencias:         ReactNode
+  /** Las preferencias son del equipo entero: solo super_admin las cambia. */
+  esSuperAdmin:         boolean
+  /** Permiso `notificaciones`: sin él se entra solo a la bandeja (ver page.tsx). */
+  puedeCorreos:         boolean
 }
 
-export default function NotificacionesForm({ diasAviso, emailAvisosInternos, togglesIniciales, plantillas }: Props) {
-  const [tab, setTab] = useState<'alertas' | 'plantillas'>('alertas')
+// Hub de notificaciones del panel. Junta en una sola pantalla las dos mitades:
+// lo que el EQUIPO recibe (bandeja de avisos + de qué avisar) y lo que sale hacia
+// los CLIENTES (correos automáticos y sus plantillas). Antes solo existía la
+// segunda mitad, y la bandeja iba a vivir en otra ruta: tener «notificaciones» en
+// dos sitios distintos era garantía de no encontrar ninguna.
+export default function NotificacionesForm({
+  diasAviso, emailAvisosInternos, emailContratacion, togglesIniciales, plantillas,
+  bandeja, preferencias, esSuperAdmin, puedeCorreos,
+}: Props) {
+  const [tab, setTab] = useState<Tab>('bandeja')
+  const { noLeidas } = useAvisos()
 
   const [dias, setDias]         = useState(String(diasAviso))
   const [emailAvisos, setEmailAvisos] = useState(emailAvisosInternos)
+  const [emailContrat, setEmailContrat] = useState(emailContratacion)
   const [loading, setLoading]   = useState(false)
   const [msg, setMsg]           = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -35,20 +56,26 @@ export default function NotificacionesForm({ diasAviso, emailAvisosInternos, tog
       return
     }
     const email = emailAvisos.trim()
+    const contrat = emailContrat.trim()
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!EMAIL_RE.test(email)) {
       setMsg({ ok: false, text: 'El correo de avisos internos no es válido.' })
       return
     }
+    if (!EMAIL_RE.test(contrat)) {
+      setMsg({ ok: false, text: 'El correo de contratación no es válido.' })
+      return
+    }
     setLoading(true); setMsg(null)
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       guardarSetting('dias_aviso', String(val)),
       guardarSetting('email_avisos_internos', email),
+      guardarSetting('email_contratacion', contrat),
     ])
     setLoading(false)
-    setMsg(r1.ok && r2.ok
+    setMsg(r1.ok && r2.ok && r3.ok
       ? { ok: true,  text: 'Configuración guardada correctamente.' }
-      : { ok: false, text: r1.error ?? r2.error ?? 'Error al guardar.' })
+      : { ok: false, text: r1.error ?? r2.error ?? r3.error ?? 'Error al guardar.' })
   }
 
   function handleToggle(tipo: TipoEmail, activo: boolean) {
@@ -62,17 +89,26 @@ export default function NotificacionesForm({ diasAviso, emailAvisosInternos, tog
 
   return (
     <>
-      <Tabs
+      <Tabs<Tab>
         ariaLabel="Secciones de notificaciones"
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: 'alertas', label: 'Alertas' },
-          { id: 'plantillas', label: 'Plantillas de correo' },
+          // Sin `countTone`: el número dice cuántos hay, no que sean una alarma
+          // (mismo criterio que el badge de la campana).
+          { id: 'bandeja', label: 'Bandeja', count: noLeidas || undefined },
+          ...(esSuperAdmin ? [{ id: 'preferencias' as const, label: 'Preferencias' }] : []),
+          ...(puedeCorreos ? [
+            { id: 'correos'    as const, label: 'Correos a clientes' },
+            { id: 'plantillas' as const, label: 'Plantillas de correo' },
+          ] : []),
         ]}
       />
 
-      {tab === 'alertas' && (
+      {tab === 'bandeja'      && bandeja}
+      {tab === 'preferencias' && preferencias}
+
+      {tab === 'correos' && (
         <div className="notif-alertas">
           <form onSubmit={handleSubmit}>
 
@@ -135,6 +171,31 @@ export default function NotificacionesForm({ diasAviso, emailAvisosInternos, tog
                     className="input"
                     value={emailAvisos}
                     onChange={e => { setEmailAvisos(e.target.value); setMsg(null) }}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* ── Contratación ── */}
+              <div className="notif-section">
+                <div className="notif-section-header">
+                  <div className="notif-section-icon notif-icon-active">
+                    <Mail size={18} />
+                  </div>
+                  <div>
+                    <p className="notif-section-title">Contratación</p>
+                    <p className="notif-section-sub">Buzón al que escribe el cliente desde el dashboard cuando quiere activar un módulo</p>
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label htmlFor="email-contratacion">Correo de contratación</label>
+                  <input
+                    id="email-contratacion"
+                    type="email"
+                    className="input"
+                    value={emailContrat}
+                    onChange={e => { setEmailContrat(e.target.value); setMsg(null) }}
                     required
                   />
                 </div>

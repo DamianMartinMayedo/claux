@@ -12,6 +12,7 @@ import { diasCiclo, importeCiclo } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { notificarPagoConfirmado } from '@/lib/notificaciones/eventos'
+import { avisarPagoRegistrado } from '@/lib/notificaciones/admin/eventos'
 
 function fmtFechaEs(iso: string): string {
   return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -199,6 +200,18 @@ export async function registrarPago(formData: FormData) {
   after(async () => {
     await notificarPagoConfirmado({
       clientId: client_id, montoUsd: monto_usd, fechaExpiracion: fecha_fin_periodo,
+    })
+  })
+
+  // Y en la bandeja del equipo. Esto además CALLA los avisos de vencimiento de
+  // este cliente: acaba de pagar, no puede seguir apareciendo como pendiente.
+  after(async () => {
+    await avisarPagoRegistrado({
+      pagoId:     pago_id,
+      clientId:   client_id,
+      empresa:    cliente.nombre_empresa,
+      montoUsd:   monto_usd,
+      cubreHasta: fecha_fin_periodo,
     })
   })
 

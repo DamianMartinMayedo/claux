@@ -11,6 +11,7 @@ import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
+import { avisarClienteNuevo } from '@/lib/notificaciones/admin/eventos'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
 
@@ -269,6 +270,15 @@ export async function crearCliente(formData: FormData) {
       clientId: client_id,
     })
   })
+
+  // Bandeja del equipo (info, sin popup): quien no dio el alta se entera igual, y
+  // el aviso enlaza a la ficha del cliente recién creado.
+  after(() => avisarClienteNuevo({
+    clientId: client_id,
+    empresa:  nombre_empresa,
+    tarifa,
+    ciclo,
+  }))
 
   after(() => enviarAvisoInterno({
     tipo: 'aviso_cliente',

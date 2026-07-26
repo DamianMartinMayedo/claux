@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
+import { avisarLeadNuevo, avisarLeadPideContacto } from '@/lib/notificaciones/admin/eventos'
 
 const LINK_AGENDA = 'https://calendar.app.google/nqrnpDat4JoYtd1Y8'
 
@@ -91,7 +92,19 @@ export async function guardarDiagnostico(
     return { ok: false, error: error.message }
   }
 
-  return { ok: true, id: data.id as number }
+  // Constancia en la bandeja del equipo. Va en `after()` y no antes del return
+  // porque esto corre en la página pública desde Cuba: el informe no espera a que
+  // se escriba un aviso interno. Severidad `info` a propósito: mirar el informe no
+  // es pedir nada, y no debe saltarle un popup a nadie (ver catálogo del admin).
+  const leadId = data.id as number
+  after(() => avisarLeadNuevo({
+    id:     leadId,
+    nombre: nombre.trim(),
+    sector,
+    modo:   modoActual,
+  }))
+
+  return { ok: true, id: leadId }
 }
 
 // El botón «Quiero que me contacten gratis» del informe. Manda el correo al lead
@@ -163,6 +176,14 @@ export async function solicitarContactoDiagnostico(
   }
 
   const lista = (v: unknown) => (v as string[] | null)?.join(', ') || '—'
+
+  // La bandeja del panel, además del correo: el correo es para enterarse con el
+  // panel cerrado, la bandeja es donde queda pendiente hasta que alguien lo mueva.
+  after(() => avisarLeadPideContacto({
+    id,
+    nombre,
+    telefono: lead.telefono as string,
+  }))
 
   after(() => enviarAvisoInterno({
     tipo: 'aviso_lead',

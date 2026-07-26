@@ -5,6 +5,7 @@ import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { barrerVencidos } from '@/lib/clientes/vencimientos'
 import { generarNotificacionesInternas } from '@/lib/notificaciones/generador'
+import { generarAvisosAdmin } from '@/lib/notificaciones/admin/generador'
 import { toDateStr, addDays, fmtFechaEs } from '@/lib/date-utils'
 // Los 3 tipos que dispara el cron (subconjunto de TipoEmail).
 type TipoCron = 'recordatorio_pago' | 'fin_prueba' | 'suspension'
@@ -67,6 +68,14 @@ export async function GET(req: NextRequest) {
   if (solo) {
     const notificaciones = await generarNotificacionesInternas(solo)
     return NextResponse.json({ ok: true, modo: 'solo-notificaciones', solo, notificaciones })
+  }
+
+  // Modo prueba del panel interno: genera SOLO los avisos del equipo. Es seguro
+  // de correr a mano (no envía correo ni toca estados de clientes) y es la forma
+  // de comprobar la bandeja del admin sin esperar al cron de mañana.
+  if (req.nextUrl.searchParams.get('avisos') === '1') {
+    const avisosAdmin = await generarAvisosAdmin()
+    return NextResponse.json({ ok: true, modo: 'solo-avisos-admin', avisosAdmin })
   }
 
   const db = createAdminClient()
@@ -152,5 +161,10 @@ export async function GET(req: NextRequest) {
   //    independientes del correo y no deben impedir que este se envíe.
   const notificaciones = await generarNotificacionesInternas()
 
-  return NextResponse.json({ ok: true, ...resumen, notificaciones })
+  // 5. Avisos del panel interno (campana del equipo de CLAUX). Después de todo lo
+  //    anterior a propósito: mira los estados YA barridos (un cliente que expiró
+  //    hoy sale como vencido) y los correos que acaban de fallar.
+  const avisosAdmin = await generarAvisosAdmin()
+
+  return NextResponse.json({ ok: true, ...resumen, notificaciones, avisosAdmin })
 }
