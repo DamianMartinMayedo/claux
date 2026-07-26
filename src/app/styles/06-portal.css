@@ -1424,6 +1424,8 @@
 /* Tarjetas de pendientes (por pagar / por cobrar) */
 /* Badge "Sistema" junto al nombre de una categoría de gasto */
 .gc-cat-sistema { margin-left: var(--space-2); }
+/* Papel en el P&L de una subcategoría: es el de su madre, no uno propio. */
+.gc-cat-rol-heredado { color: var(--color-text-faint); }
 
 /* ── Árbol de categorías (pestaña "Categorías") ──
    La raíz lleva un chevron para colapsar/expandir sus subcategorías; la hija

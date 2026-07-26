@@ -8,6 +8,7 @@ import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
 import { etiquetaDeCategoria, generarRegistroId, type TipoRegistro as _TipoRegistro } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
+import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ import { generarMovimientoId } from '@/lib/tesoreria-core'
 export type TipoRegistro   = _TipoRegistro
 export type EstadoRegistro = 'PENDIENTE' | 'PARCIAL' | 'LIQUIDADO'
 export type EstadoCategoria = 'ACTIVO' | 'INACTIVO'
+export type RolPL           = _RolPL
 
 export interface CategoriaGasto {
   categoria_id:  string
@@ -26,6 +28,11 @@ export interface CategoriaGasto {
   parent_id:     string | null  // null = categoría raíz; fijo = subcategoría
   estado:        EstadoCategoria
   es_sistema:    boolean
+  /** Clave estable de las que escribe el sistema (mig. 133); null en las del dueño. */
+  clave_sistema: string | null
+  /** Papel en el estado de resultados (mig. 134). En una subcategoría NO se lee:
+   *  el informe usa el de su categoría madre. */
+  rol_pl:        RolPL
   uso_count?:    number  // Calculado: cuántos gastos usan esta categoría
   created_at:    string
   updated_at:    string
@@ -527,6 +534,11 @@ export async function guardarCategoriaGasto(
   const nombre            = (formData.get('nombre') as string)?.trim()
   const descripcion       = (formData.get('descripcion') as string)?.trim() || null
   const parent_id         = (formData.get('parent_id') as string)?.trim() || null
+  const rolForm           = (formData.get('rol_pl') as string)?.trim()
+  // Una subcategoría hereda el papel de su madre: guardar uno propio crearía la
+  // posibilidad de que «Suministros · Electricidad» fuera coste de ventas con
+  // «Suministros» operativo, y el rollup del informe dejaría de cuadrar.
+  const rol_pl: RolPL = parent_id ? 'OPERATIVO' : (esRolPL(rolForm) ? rolForm : 'OPERATIVO')
 
   if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
 
@@ -563,6 +575,7 @@ export async function guardarCategoriaGasto(
       nombre,
       descripcion,
       parent_id,
+      rol_pl,
       estado:      'ACTIVO',
       es_sistema:  false,
       updated_at:  new Date().toISOString(),
@@ -586,7 +599,7 @@ export async function guardarCategoriaGasto(
     if (!cat) return { ok: false, error: 'Categoría no encontrada.' }
 
     const { error } = await db.from('categorias_gastos')
-      .update({ nombre, descripcion, parent_id, updated_at: new Date().toISOString() })
+      .update({ nombre, descripcion, parent_id, rol_pl, updated_at: new Date().toISOString() })
       .eq('categoria_id', categoria_id_form)
       .eq('client_id', session.client_id)
     

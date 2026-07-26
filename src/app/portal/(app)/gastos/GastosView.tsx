@@ -19,7 +19,9 @@ import {
   type EstadoRegistro,
   type GastosCobrosPageData,
   type ResultadoLote,
+  type RolPL,
 } from '@/app/actions/portal/gastos'
+import { ROLES_PL, ROL_PL_LABEL, ROL_PL_AYUDA } from '@/lib/pl/estado'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
 import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
@@ -431,6 +433,11 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
   const padresPosibles = categorias.filter(c =>
     c.estado === 'ACTIVO' && !c.parent_id && c.categoria_id !== categoria?.categoria_id)
 
+  // El papel en el P&L solo se pregunta a las categorías principales, así que el
+  // formulario reacciona al selector de padre en vivo (no al guardar).
+  const [esHija, setEsHija]         = useState(!!categoria?.parent_id && !tieneHijos)
+  const [rolElegido, setRolElegido] = useState<RolPL>(categoria?.rol_pl ?? 'OPERATIVO')
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -467,12 +474,32 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
               <input type="hidden" name="parent_id" value="" />
             ) : (
               <div className="input-group">
-                <label>Categoría padre</label>
-                <select className="input" name="parent_id" defaultValue={categoria?.parent_id ?? ''}>
+                <label htmlFor="cat-parent">Categoría padre</label>
+                <select id="cat-parent" className="input" name="parent_id"
+                  defaultValue={categoria?.parent_id ?? ''}
+                  onChange={e => setEsHija(!!e.target.value)}>
                   <option value="">— Ninguna (categoría principal) —</option>
                   {padresPosibles.map(p => <option key={p.categoria_id} value={p.categoria_id}>{p.nombre}</option>)}
                 </select>
                 <span className="input-hint">Elige una para convertir esta en subcategoría.</span>
+              </div>
+            )}
+            {/* Papel en el estado de resultados. Solo se pregunta en categorías
+                principales: una subcategoría hereda el de su madre, y preguntarlo
+                dos veces es la vía directa a que no cuadren entre ellas. */}
+            {esHija ? (
+              <div className="alert alert-info mb-3">
+                Las subcategorías cuentan en el informe dentro de su categoría principal,
+                con el papel que ella tenga.
+              </div>
+            ) : (
+              <div className="input-group">
+                <label htmlFor="cat-rol">En el estado de resultados</label>
+                <select id="cat-rol" className="input" name="rol_pl" value={rolElegido}
+                  onChange={e => setRolElegido(e.target.value as RolPL)}>
+                  {ROLES_PL.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
+                </select>
+                <span className="input-hint">{ROL_PL_AYUDA[rolElegido]}</span>
               </div>
             )}
             <div className="input-group">
@@ -635,6 +662,12 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
     () => categoriasOrdenadas.filter(c => !(c.parent_id && colapsadas.has(c.parent_id))),
     [categoriasOrdenadas, colapsadas],
   )
+  // Papel efectivo de una subcategoría: el de su madre (el informe hace lo mismo).
+  const rolPadre = (c: CategoriaGasto): RolPL => {
+    if (!c.parent_id) return c.rol_pl
+    return data.categorias_gastos.find(p => p.categoria_id === c.parent_id)?.rol_pl ?? c.rol_pl
+  }
+
   const toggleColapso = (id: string) =>
     setColapsadas(prev => {
       const n = new Set(prev)
@@ -902,6 +935,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                 <thead>
                   <tr>
                     <th>Nombre</th>
+                    <th>En el informe</th>
                     <th className="col-center">Usos</th>
                     <th>Estado</th>
                     <th className="col-actions"></th>
@@ -934,6 +968,13 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                           {nHijas > 0 && <span className="gc-cat-count">{nHijas}</span>}
                           {c.es_sistema && <span className="badge badge-neutral gc-cat-sistema">Sistema</span>}
                         </div>
+                      </td>
+                      {/* Una subcategoría no tiene papel propio: enseña el de su
+                          madre, que es el que de verdad aplica en el informe. */}
+                      <td data-label="En el informe" className="text-sm-muted">
+                        {c.parent_id
+                          ? <span className="gc-cat-rol-heredado">{ROL_PL_LABEL[rolPadre(c)]} (heredado)</span>
+                          : ROL_PL_LABEL[c.rol_pl]}
                       </td>
                       <td data-label="Usos" className="col-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
                       <td data-label="Estado">

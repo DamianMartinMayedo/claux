@@ -46,3 +46,51 @@ export async function etiquetaDeCategoria(
   }
   return { categoria_id, nombre: nodo.nombre as string, descripcion }
 }
+
+// ── Categorías que escribe el SISTEMA ────────────────────────────────────────
+//
+// Las cuatro categorías que no nacen de un formulario sino de un módulo. Su
+// identidad es la CLAVE (`categorias_gastos.clave_sistema`, mig. 133), nunca el
+// nombre: el dueño puede renombrarlas y buscarlas por nombre crearía un duplicado
+// a su espalda en la siguiente escritura — el bug de datos de la mig. 122.
+
+export type ClaveCategoriaSistema =
+  | 'compras'               // entrada de mercancía (inv_confirmar_compra)
+  | 'servicios_terceros'    // CxP al proveedor de un servicio (srv_cxp_generar)
+  | 'salarios'              // nómina confirmada
+  | 'comisiones_bancarias'  // fees de transferencia
+
+const NOMBRE_DEFECTO: Record<ClaveCategoriaSistema, string> = {
+  compras:              'Compras',
+  servicios_terceros:   'Servicios de terceros',
+  salarios:             'Salarios',
+  comisiones_bancarias: 'Comisiones bancarias',
+}
+
+/**
+ * Resuelve —creándola si hace falta— la categoría de sistema de este cliente.
+ *
+ * Delega en la RPC `cat_gasto_sistema` (mig. 133) para que Postgres y TypeScript
+ * compartan UNA sola implementación: la misma que usan por dentro
+ * `inv_confirmar_compra` y `srv_cxp_generar`. Antes cada llamador hacía su propio
+ * `select ... eq('nombre', 'Salarios')`, y como las categorías del sistema solo se
+ * sembraron para los clientes que existían en la mig. 074, un cliente dado de alta
+ * después escribía el gasto sin `categoria_id` — invisible para el P&L estructurado.
+ *
+ * Devuelve null solo si la RPC falla; el llamador debe seguir escribiendo el gasto
+ * (un gasto sin clasificar es mejor que una nómina que no se confirma).
+ */
+export async function resolverCategoriaSistema(
+  db: Db, client_id: string, clave: ClaveCategoriaSistema,
+): Promise<{ categoria_id: string; nombre: string } | null> {
+  const nombreDefecto = NOMBRE_DEFECTO[clave]
+  const { data: categoria_id, error } = await db.rpc('cat_gasto_sistema', {
+    p_client_id: client_id, p_clave: clave, p_nombre: nombreDefecto,
+  })
+  if (error || !categoria_id) return null
+
+  // El nombre puede estar renombrado por el dueño: es el que se desnormaliza.
+  const { data: cat } = await db.from('categorias_gastos')
+    .select('nombre').eq('categoria_id', categoria_id).eq('client_id', client_id).maybeSingle()
+  return { categoria_id: categoria_id as string, nombre: (cat?.nombre as string) ?? nombreDefecto }
+}
