@@ -76,7 +76,7 @@ export default function DeudasWidget({ data }: { data: DeudasResumen }) {
     <section className="card dash-card-sm">
       <div className="card-header">
         <div className="dash-card-head">
-          <span className="dash-card-icon metric-icon-primary"><ArrowLeftRight size={18} /></span>
+          <span className="dash-card-icon metric-icon-rose"><ArrowLeftRight size={18} /></span>
           <h2 className="card-title">Cobros y pagos</h2>
         </div>
       </div>

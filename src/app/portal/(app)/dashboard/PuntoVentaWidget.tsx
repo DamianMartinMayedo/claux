@@ -15,7 +15,7 @@ export default function PuntoVentaWidget({ data }: { data: PuntoVentaResumen }) 
     <section className="card dash-card-sm">
       <div className="card-header">
         <div className="dash-card-head">
-          <span className="dash-card-icon metric-icon-teal"><Store size={18} /></span>
+          <span className="dash-card-icon metric-icon-success"><Store size={18} /></span>
           <h2 className="card-title">Punto de venta</h2>
         </div>
         <Link href="/portal/caja/operaciones" className="btn btn-secondary btn-sm">Ver operaciones</Link>

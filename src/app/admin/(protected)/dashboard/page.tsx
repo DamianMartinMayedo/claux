@@ -121,7 +121,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon metric-icon-amber">
+          <div className="metric-icon metric-icon-indigo">
             <Star size={20} />
           </div>
           <p className="metric-label">Módulos activos</p>
@@ -133,7 +133,7 @@ export default async function DashboardPage() {
       {/* ── Fila 2: Próximos a vencer · Trial · Ingresos mes · Ingresos estimados ── */}
       <div className="metrics-grid metrics-grid-4">
         <div className="metric-card">
-          <div className="metric-icon metric-icon-amber-warm">
+          <div className="metric-icon metric-icon-amber">
             <AlertTriangle size={20} />
           </div>
           <p className="metric-label">Próximos a vencer</p>
@@ -142,7 +142,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon metric-icon-warning">
+          <div className="metric-icon metric-icon-purple">
             <Clock size={20} />
           </div>
           <p className="metric-label">En periodo trial</p>
@@ -151,7 +151,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon metric-icon-teal">
+          <div className="metric-icon metric-icon-primary">
             <CreditCard size={20} />
           </div>
           <p className="metric-label">Ingresos este mes</p>
@@ -160,7 +160,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon metric-icon-teal">
+          <div className="metric-icon metric-icon-primary">
             <TrendingUp size={20} />
           </div>
           <p className="metric-label">Ingresos estimados</p>

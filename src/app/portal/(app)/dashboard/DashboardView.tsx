@@ -33,6 +33,18 @@ export default function DashboardView({ data }: { data: DashboardData }) {
   // Cada widget declara dónde vive y cuánto pesa; el ancho lo reparte la zona
   // (ver Zona.tsx). Añadir un módulo es añadir una línea a la zona que le toca,
   // no otra tarjeta al final de una lista de ocho.
+  //
+  // COLOR DEL ICONO: seis familias (`metric-icon-*` en 03-components.css) y la
+  // regla es no repetir DENTRO de una zona, que es lo que se ve de un vistazo.
+  // Antes siete de las once tarjetas eran el mismo teal —cuatro de ellas en dos
+  // pálidos casi iguales— y el color dejaba de decir nada. El reparto:
+  //   Tu dinero  → Contabilidad teal · Cobros y pagos rosa · Tasas ámbar
+  //   Tu día     → Reservas indigo · Citas violeta · Punto de venta verde
+  //   Tu negocio → Inventario ámbar · Personal verde · Servicios teal ·
+  //                Dossier violeta · Catálogo indigo
+  // El teal se reserva para el dinero y lo que lo genera (contabilidad y los
+  // acuerdos de servicios), y el ámbar —que es el único, y es el de aviso— para
+  // lo que se mueve solo y hay que vigilar (existencias y tasas de cambio).
   // Fila 1: contabilidad a todo lo ancho. Fila 2: las deudas (lo que hay que
   // cobrar y pagar) con las tasas al lado, que son las que convierten sus cifras.
   const zonaDinero: TarjetaZona[] = []
@@ -47,7 +59,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
       <AgendaWidget
         data={reservas} titulo={etiquetas.reservas} ruta="/portal/reservas"
         unidad="reserva" mostrarPersonas
-        icon={<Calendar size={18} />} tone="metric-icon-primary"
+        icon={<Calendar size={18} />} tone="metric-icon-indigo"
       />
     ),
   })
@@ -57,7 +69,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
       <AgendaWidget
         data={citas} titulo="Citas" ruta="/portal/citas"
         unidad="cita" mostrarPersonas={false}
-        icon={<CalendarDays size={18} />} tone="metric-icon-teal"
+        icon={<CalendarDays size={18} />} tone="metric-icon-purple"
       />
     ),
   })

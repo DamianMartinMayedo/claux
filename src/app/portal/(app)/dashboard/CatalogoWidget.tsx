@@ -17,7 +17,7 @@ export default function CatalogoWidget({ data, etiqueta }: { data: CatalogoResum
     <section className="card dash-card-sm">
       <div className="card-header">
         <div className="dash-card-head">
-          <span className="dash-card-icon metric-icon-teal"><QrCode size={18} /></span>
+          <span className="dash-card-icon metric-icon-indigo"><QrCode size={18} /></span>
           <h2 className="card-title">{etiqueta}</h2>
         </div>
         <Link href="/portal/catalogo" className="btn btn-secondary btn-sm">Ver {etiqueta.toLowerCase()}</Link>

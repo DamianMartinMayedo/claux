@@ -37,7 +37,7 @@ export default async function MetricasPage() {
           <p className="metric-sub">Con actividad en 30 días ({m.tenantsActivos7} en 7)</p>
         </div>
         <div className="metric-card">
-          <div className="metric-icon metric-icon-teal"><UserCheck size={20} /></div>
+          <div className="metric-icon metric-icon-indigo"><UserCheck size={20} /></div>
           <p className="metric-label">Usuarios activos</p>
           <p className="metric-value">{m.usuariosActivos30}</p>
           <p className="metric-sub">En 30 días ({m.usuariosActivos7} en 7)</p>

@@ -20,7 +20,7 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
     <section className="card dash-col-full">
       <div className="card-header">
         <div className="dash-card-head">
-          <span className="dash-card-icon metric-icon-teal"><Wallet size={18} /></span>
+          <span className="dash-card-icon metric-icon-primary"><Wallet size={18} /></span>
           <h2 className="card-title">Contabilidad</h2>
         </div>
         <Link href="/portal/ventas" className="btn btn-secondary btn-sm">Ver ventas</Link>

@@ -8,7 +8,7 @@ export default function ServiciosWidget({ data }: { data: ServiciosResumen }) {
     <section className="card dash-card-sm">
       <div className="card-header">
         <div className="dash-card-head">
-          <span className="dash-card-icon metric-icon-success"><Handshake size={18} /></span>
+          <span className="dash-card-icon metric-icon-primary"><Handshake size={18} /></span>
           <h2 className="card-title">Servicios</h2>
         </div>
         <Link href="/portal/suscripciones" className="btn btn-secondary btn-sm">Ver suscripciones</Link>

@@ -47,7 +47,7 @@ export default function TasasWidget({ data }: { data: TasasResumen }) {
     <section className="card dash-card-sm">
       <div className="card-header">
         <div className="dash-card-head">
-          <span className="dash-card-icon metric-icon-teal"><Coins size={18} /></span>
+          <span className="dash-card-icon metric-icon-amber"><Coins size={18} /></span>
           <h2 className="card-title dash-card-title-sm">Tasas de cambio</h2>
         </div>
         <TasasActualizar />
