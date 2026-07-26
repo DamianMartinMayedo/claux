@@ -15,9 +15,9 @@ function fmt(n: number): string {
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 // Modal "Enviar al asesor". Se preconfigura con lo que hay en pantalla (empresa,
-// período, y el consolidado si está visible) y deja modificarlo TODO antes de
-// enviar: a qué asesor, qué archivos (PDF/CSV), si incluye el consolidado, y una
-// nota. Muestra un resumen de lo que se envía — el usuario siempre sabe qué manda.
+// período y la moneda de la vista) y deja modificarlo TODO antes de enviar: a qué
+// asesor, qué archivos (PDF/Excel) y una nota. Lo que ve el dueño es lo que se
+// manda (misma moneda). Muestra un resumen — el usuario siempre sabe qué envía.
 export default function EnviarAsesorModal({
   data, desde, hasta, empresaId, empresaNombre, nombreArchivo,
   asesores, empresas, construirPdfBase64, onClose, onEnviado,
@@ -30,7 +30,8 @@ export default function EnviarAsesorModal({
   nombreArchivo:   string
   asesores:        Asesor[]
   empresas:        { empresa_id: string; nombre: string }[]
-  // Genera EL MISMO PDF que se descarga, con/sin consolidado, y lo devuelve en base64.
+  // Genera EL MISMO PDF que se descarga (misma moneda de vista), con o sin el
+  // consolidado, y lo devuelve en base64.
   construirPdfBase64: (incluirConsolidado: boolean) => Promise<string>
   onClose:         () => void
   onEnviado:       () => void
@@ -45,12 +46,15 @@ export default function EnviarAsesorModal({
   const [asesorId, setAsesorId] = useState(asesoresFiltrados[0]?.asesor_id ?? '')
 
   const hayConsolidado = !!data.consolidado
-  // Consolidado DESMARCADO por defecto (pesa y no siempre interesa).
+  // Consolidado DESMARCADO por defecto (pesa y no siempre interesa mandarlo).
   const [incluirConsolidado, setIncluirConsolidado] = useState(false)
-  // Un solo selector de formato en vez de dos checks: CSV · PDF · Ambas.
-  const [formato, setFormato] = useState<'ambas' | 'pdf' | 'csv'>('ambas')
-  const incluirPDF = formato !== 'csv'
-  const incluirCSV = formato !== 'pdf'
+  // Un solo selector de formato en vez de dos checks: Excel · PDF · Ambas.
+  // El CSV se retiró: decía lo mismo que el .xlsx pero con los importes como
+  // TEXTO (el asesor no podía sumarlos sin reescribir la columna) y arrastrando
+  // los acentos rotos y el «1.500» leído como 1,50 que ya documentó el importador.
+  const [formato, setFormato] = useState<'ambas' | 'pdf' | 'xlsx'>('ambas')
+  const incluirPDF  = formato !== 'xlsx'
+  const incluirXLSX = formato !== 'pdf'
   const [nota, setNota] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -80,7 +84,7 @@ export default function EnviarAsesorModal({
 
   function enviar() {
     if (!asesorId) { toastError('Elige un asesor.'); return }
-    if (!incluirPDF && !incluirCSV) { toastError('Elige al menos un archivo.'); return }
+    if (!incluirPDF && !incluirXLSX) { toastError('Elige al menos un archivo.'); return }
     const ld = toastLoading('Enviando…')
     startTransition(async () => {
       let pdfBase64: string | undefined
@@ -90,9 +94,13 @@ export default function EnviarAsesorModal({
       }
       const r = await enviarReportesAsesor({
         asesor_id: asesorId, desde, hasta, empresa_id: empresaId,
-        incluirConsolidado, incluirPDF, incluirCSV,
+        incluirConsolidado, incluirPDF, incluirXLSX,
+        // El Excel se regenera en servidor: sin esto saldría con la comparativa y
+        // la moneda por defecto, no con las que el dueño está mirando en pantalla.
+        comparar: data.comparar,
+        ver: data.ver,
         nota: nota.trim() || undefined,
-        pdfBase64, pdfNombre: `${nombreArchivo}.pdf`, csvNombre: `${nombreArchivo}.csv`,
+        pdfBase64, pdfNombre: `${nombreArchivo}.pdf`, xlsxNombre: `${nombreArchivo}.xlsx`,
       })
       await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
@@ -101,7 +109,7 @@ export default function EnviarAsesorModal({
     })
   }
 
-  const adjuntos = [incluirPDF && 'PDF', incluirCSV && 'CSV (Excel)'].filter(Boolean).join(' · ') || 'ninguno'
+  const adjuntos = [incluirPDF && 'PDF', incluirXLSX && 'Excel (.xlsx)'].filter(Boolean).join(' · ') || 'ninguno'
 
   return (
     <div className="modal-backdrop open">
@@ -163,11 +171,11 @@ export default function EnviarAsesorModal({
             </div>
           )}
 
-          {/* Qué se envía: formato (selector único) + consolidado aparte */}
+          {/* Qué se envía: formato (selector único) */}
           <div className="input-group">
             <span className="modal-section-label">Formato</span>
             <div className="env-formato" role="group" aria-label="Formato de los archivos">
-              {([['pdf', 'PDF'], ['csv', 'CSV'], ['ambas', 'Ambas']] as const).map(([val, txt]) => (
+              {([['pdf', 'PDF'], ['xlsx', 'Excel'], ['ambas', 'Ambos']] as const).map(([val, txt]) => (
                 <button
                   key={val} type="button"
                   className={`env-formato-opt${formato === val ? ' is-activo' : ''}`}
@@ -199,6 +207,7 @@ export default function EnviarAsesorModal({
             <div className="env-asesor-resumen-head">Lo que vas a enviar</div>
             <div className="rep-line"><span>Alcance</span><span>{empresaNombre}</span></div>
             <div className="rep-line"><span>Período</span><span>{desde} — {hasta}</span></div>
+            <div className="rep-line"><span>Moneda</span><span>{data.ver ? `Todo en ${data.ver}` : 'Cada moneda'}</span></div>
             {data.resultado.map(r => (
               <div key={`r-${r.moneda}`} className="rep-line"><span>Resultado neto ({r.moneda})</span><strong>{fmt(r.neto)}</strong></div>
             ))}
@@ -214,7 +223,7 @@ export default function EnviarAsesorModal({
 
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isPending}>Cancelar</button>
-          <button type="button" className="btn btn-primary" onClick={enviar} disabled={isPending || !asesorId || (!incluirPDF && !incluirCSV)}>
+          <button type="button" className="btn btn-primary" onClick={enviar} disabled={isPending || !asesorId || (!incluirPDF && !incluirXLSX)}>
             {isPending ? <><span className="spinner spinner-sm" /> Enviando…</> : <><Send size={14} strokeWidth={2.5} /> Enviar</>}
           </button>
         </div>

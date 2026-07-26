@@ -74,6 +74,28 @@ export async function crearDoc(): Promise<JsPdfDoc> {
 }
 
 // ── Atajos de color con tupla RGB ──────────────────────────────────────────────
+/**
+ * Sanea un texto para las fuentes ESTÁNDAR de jsPDF (helvetica), que codifican en
+ * WinAnsi: un carácter fuera de esa tabla no se omite, se pinta como OTRO glifo.
+ *
+ * El caso que nos mordió: el signo menos tipográfico `−` (U+2212) —el que usa la
+ * UI, y con razón, porque el guion ASCII es más corto y no alinea— salía en el PDF
+ * como una comilla doble: «Coste de ventas "150.000,00». Un importe negativo que
+ * parece llevar comillas es exactamente la clase de detalle que hace desconfiar de
+ * todo el documento.
+ *
+ * Se aplica en el CURSOR (`lib/pdf/reporte.ts`), no en cada llamada: es una
+ * propiedad de la fuente, no de quien escribe. Si algún día se incrusta una fuente
+ * TTF con Unicode completo, esto se borra de un sitio.
+ */
+export function textoPdfSeguro(s: string): string {
+  return s
+    .replace(/[−‒–]/g, '-')   // menos, figure dash, en dash
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/…/g, '...')
+}
+
 export const texto   = (d: JsPdfDoc, c: RGB) => d.setTextColor(c[0], c[1], c[2])
 export const trazo   = (d: JsPdfDoc, c: RGB) => d.setDrawColor(c[0], c[1], c[2])
 export const relleno = (d: JsPdfDoc, c: RGB) => d.setFillColor(c[0], c[1], c[2])

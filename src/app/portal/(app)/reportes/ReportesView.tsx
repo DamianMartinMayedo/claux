@@ -2,14 +2,24 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
-import { Download, ChevronDown, BarChart3, Search, Send } from 'lucide-react'
-import type { ReportesData }       from '@/app/actions/portal/reportes'
+import { Download, ChevronDown, BarChart3, Send } from 'lucide-react'
+import { generarXlsxReportes, type ReportesData } from '@/app/actions/portal/reportes'
 import type { Asesor }             from '@/app/actions/portal/asesores'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
+import Tabs                        from '@/components/Tabs'
 import EnviarAsesorModal           from './EnviarAsesorModal'
-import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
+import EstadoResultadosCard        from './EstadoResultadosCard'
+import { formatMonto, formatPct, formatDelta, formatFechaCorta } from './_formato'
+import { construirFilasPL } from '@/lib/pl/comparar'
+import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
+import { toastError, toastLoading } from '@/app/contexts/ToastContext'
+import {
+  LABEL_COMPARACION, etiquetaMes, etiquetaAnterior, etiquetaInteranual,
+  clasificarRango, type ModoComparacion,
+} from '@/lib/pl/periodo'
+import { crearDoc, cabeceraReporte, sellarPie, MARCA } from '@/lib/pdf/documento'
 import { crearCursor } from '@/lib/pdf/reporte'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -18,17 +28,13 @@ const ORIGEN_LABEL: Record<string, string> = {
   MANUAL: 'Manual', COBRO: 'Cobros', PAGO: 'Pagos', TRANSFERENCIA: 'Transferencias',
 }
 
+// Presets de rango por duración (el período en curso).
+type RangoPreset = 'mes' | 'trimestre' | 'semestre' | 'anio'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function formatFechaCorta(f: string): string {
-  const [y, m, d] = f.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 // Normaliza un nombre para usarlo en el nombre de archivo (sin acentos ni símbolos).
 function slug(s: string): string {
@@ -46,39 +52,64 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
   const [desde,   setDesde]   = useState(data.desde)
   const [hasta,   setHasta]   = useState(data.hasta)
   const [empresa, setEmpresa] = useState(data.empresa_id)
-  const [query,   setQuery]   = useState('')
+  // Pestañas, no scroll: cuatro secciones apiladas convertían la pantalla en un
+  // reguero donde ninguna se leía entera. El control "Ver en" se queda FUERA de
+  // las pestañas porque afecta a las dos.
+  const [tab, setTab] = useState<'estado' | 'flujo'>('estado')
+  // El consolidado es una REFERENCIA (siempre en la moneda de configuración), no
+  // el informe: va al pie y se puede ocultar. Lo que se ve es lo que se descarga.
+  const [verConsolidado, setVerConsolidado] = useState(true)
 
   const { colorOf } = useEmpresas()
   const empresasFiltro = data.empresas.map(e => ({
     empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
   }))
 
-  const q = query.trim().toLowerCase()
-  const filtrarCategorias = (cats: { categoria: string; monto: number }[]) =>
-    q ? cats.filter(c => c.categoria.toLowerCase().includes(q)) : cats
+  const antPorMoneda = new Map(data.anterior.map(a => [a.moneda, a]))
+  const comparando   = data.comparar !== 'no' && data.anterior.length > 0
+
+  // Las dos comparaciones se etiquetan según el rango: la duración NUNCA cambia
+  // (un mes se compara con un mes), solo cambia cuál — el tramo justo anterior o
+  // el mismo tramo de hace un año. «Año pasado» a secas sonaba a «todo el año
+  // pasado» viendo un mes, que es de donde venía la confusión.
+  const rangoTipo       = clasificarRango(data.desde, data.hasta)
+  const labelAnterior   = etiquetaAnterior(data.desde, data.hasta)
+  const labelInteranual = etiquetaInteranual(data.desde, data.hasta)
+  const labelComparar = (m: ModoComparacion) =>
+    m === 'anterior' ? labelAnterior : m === 'interanual' ? labelInteranual : LABEL_COMPARACION[m]
+  // En un año entero, «año anterior» e «interanual» son el mismo tramo → sobra uno.
+  const opcionesComparar: ModoComparacion[] = rangoTipo === 'anio' ? ['no', 'anterior'] : ['no', 'anterior', 'interanual']
+
+  // Comparación a nivel de PANTALLA, no de card: si alguna moneda tiene con qué
+  // comparar, TODAS las cards muestran las columnas (las que no, con «—»). Antes
+  // una card crecía dos columnas y su vecina no, y quedaban descuadradas.
+  const hayComparado = data.comparar !== 'no' && data.anterior.length > 0
+  // Se pidió comparar pero el período de enfrente está vacío: hay que DECIRLO, no
+  // callar — clicar el chip y que no cambie nada parece que la app ignoró el clic.
+  const comparadoVacio = data.comparar !== 'no' && data.anterior.length === 0
 
   // ── Descarga ──────────────────────────────────────────────────────────────
   const [menuOpen,    setMenuOpen]    = useState(false)
   const [descargando, setDescargando] = useState(false)
 
+  // «Todas las empresas» solo cuando de verdad son VARIAS: con una sola, el filtro
+  // «todas» ES esa empresa, y llamarlo de otro modo en la cabecera del informe y en
+  // el nombre del archivo confunde a quien lo recibe.
+  const unicaEmpresa = data.empresas.length === 1 ? data.empresas[0] : null
   const empresaNombre = data.empresa_id
     ? (data.empresas.find(e => e.empresa_id === data.empresa_id)?.nombre ?? '')
-    : 'Todas las empresas'
+    : (unicaEmpresa?.nombre ?? 'Todas las empresas')
   // Nombre de archivo: reportes_<empresa|todas>_<desde>_<hasta>
-  const empresaSlug = data.empresa_id ? slug(empresaNombre) : 'todas'
+  const empresaSlug = (data.empresa_id || unicaEmpresa) ? slug(empresaNombre) : 'todas'
   const nombreArchivo = `reportes_${empresaSlug}_${data.desde}_${data.hasta}`
 
   // PDF real (jsPDF). Se construye aquí para reutilizarlo en la descarga y en el
-  // envío al asesor; `incluirConsolidado` controla si se pinta ese bloque (que
-  // pesa y no siempre interesa mandarlo).
-  async function construirDoc(incluirConsolidado: boolean) {
-      const doc   = await crearDoc()
-      const pageW = doc.internal.pageSize.getWidth()
-      const pageH = doc.internal.pageSize.getHeight()
-      const M     = 16
-      const right = pageW - M
-
-      const DARK = MARCA.dark
+  // envío al asesor. Refleja EXACTAMENTE lo que hay en pantalla (misma moneda de
+  // vista, mismo consolidado): lo que ves es lo que descargas. El asesor puede
+  // decidir aparte si quiere el consolidado (su propio check).
+  async function construirDoc(incluirConsolidado = verConsolidado) {
+      const doc  = await crearDoc()
+      const M    = 16
       const GRAY = MARCA.muted
 
       // Cursor compartido (lib/pdf/reporte.ts): estos ayudantes vivían aquí
@@ -91,20 +122,75 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
         derecha:   `${formatFechaCorta(data.desde)} — ${formatFechaCorta(data.hasta)}`,
       })
 
-      // Estado de resultados
+      // Moneda de la vista y nota de conversión (lo que ve el dueño).
+      if (data.ver) {
+        cur.nota(`Todo en ${data.ver}.`
+          + (data.convertido?.convertidas.length ? ` Convertido a la tasa vigente.` : '')
+          + (data.convertido?.excluidas.length ? ` Sin tasa hacia ${data.ver}, no incluidas: ${data.convertido.excluidas.join(', ')}.` : ''))
+        cur.salto(2)
+      }
+
+      // Estado de resultados — las MISMAS filas que la pantalla, del mismo
+      // `construirFilasPL`. Un PDF que reordena o reagrupa los renglones obliga
+      // al asesor a recomponer el informe a mano.
       cur.titulo('Estado de resultados')
       if (data.resultado.length === 0) cur.fila('Sin ingresos ni gastos en el período.', '', { color: GRAY })
       for (const r of data.resultado) {
-        cur.cabeceraTabla(r.moneda, 'Importe')
-        cur.fila('Ingresos', formatMonto(r.total_ingresos), { bold: true })
-        cur.fila('Ventas (facturas)', formatMonto(r.ventas), { indent: true })
-        cur.fila('Cobros directos', formatMonto(r.cobros_directos), { indent: true })
-        cur.fila('Gastos', formatMonto(r.total_gastos), { bold: true })
-        for (const g of r.gastos_por_categoria) cur.fila(g.categoria, formatMonto(g.monto), { indent: true })
-        cur.filaTotal('Resultado neto', formatMonto(r.neto))
+        const ant = comparando ? (antPorMoneda.get(r.moneda) ?? null) : null
+        cur.cabeceraTabla(
+          r.moneda,
+          ant ? 'Período' : 'Importe',
+          ant ? (data.comparar === 'anterior' ? labelAnterior : LABEL_COMPARACION[data.comparar]) : undefined,
+          ant ? 'Δ' : undefined,
+        )
+        for (const f of construirFilasPL(r, ant)) {
+          const destacada = f.nivel === 'grupo' || f.nivel === 'subtotal'
+          if (f.nivel === 'final') {
+            cur.filaTotal(`${f.concepto}  (${formatPct(r.margen_neto_pct)})`, formatMonto(f.monto))
+            continue
+          }
+          cur.fila(f.concepto, formatMonto(f.monto), {
+            bold:   destacada,
+            indent: f.nivel === 'cat' || f.nivel === 'hija',
+            color:  f.nivel === 'hija' ? GRAY : undefined,
+            size:   f.nivel === 'hija' ? 9 : undefined,
+            col2:   f.anterior != null ? formatMonto(f.anterior) : undefined,
+            col3:   f.variacion != null ? formatDelta(f.variacion) : undefined,
+          })
+          for (const h of f.hijos ?? []) {
+            cur.fila(`   ${h.concepto}`, formatMonto(h.monto), {
+              indent: true, color: GRAY, size: 9,
+              col2: h.anterior != null ? formatMonto(h.anterior) : undefined,
+              col3: h.variacion != null ? formatDelta(h.variacion) : undefined,
+            })
+          }
+        }
+        if (data.periodo_comparado) {
+          cur.nota(`Comparado con ${formatFechaCorta(data.periodo_comparado.desde)} — ${formatFechaCorta(data.periodo_comparado.hasta)}.`)
+          cur.salto(2)
+        }
+        if (r.evolucion.length > 1) {
+          cur.nota('Por mes: ' + r.evolucion.map(m => `${etiquetaMes(m.mes)} ${formatMonto(m.neto)}`).join(' · '))
+          cur.salto(2)
+        }
         if (r.costo_directo > 0) {
           cur.fila('Coste de lo vendido (informativo, no resta del neto)', formatMonto(r.costo_directo), { color: GRAY })
-          cur.fila('Margen bruto (informativo)', formatMonto(r.margen_bruto), { color: GRAY })
+          cur.fila('Margen por lo vendido (informativo)', formatMonto(r.margen_unitario), { color: GRAY })
+        }
+      }
+
+      // Puente devengado ↔ caja
+      if (data.puente.length) {
+        cur.salto(2)
+        cur.titulo('Del resultado a la caja')
+        for (const p of data.puente) {
+          cur.cabeceraTabla(p.moneda, 'Importe')
+          cur.fila('Resultado devengado', formatMonto(p.resultado), { bold: true })
+          cur.fila('Cobrado en caja', formatMonto(p.cobrado), { indent: true })
+          cur.fila('Pagado desde caja', `−${formatMonto(p.pagado)}`, { indent: true })
+          cur.fila('Pendiente de cobro', formatMonto(p.pendiente_cobro), { indent: true })
+          cur.fila('Pendiente de pago', formatMonto(p.pendiente_pago), { indent: true })
+          cur.filaTotal('Flujo neto de caja', formatMonto(p.flujo))
         }
       }
 
@@ -121,54 +207,29 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
         cur.filaTotal('Flujo neto', formatMonto(f.neto))
       }
 
-      // ── Consolidado (recuadro gris claro) ──
+      // ── Consolidado de referencia ──
+      // Entra solo si está visible en pantalla: lo que ves es lo que descargas.
       const c = data.consolidado
       if (c && incluirConsolidado) {
-        const lineas: { label: string; val: string; bold?: boolean; muted?: boolean; gap?: number }[] = []
+        cur.salto(2)
+        cur.titulo(`Consolidado en ${c.moneda}`)
+        cur.nota('Convertido a la tasa vigente.')
+        cur.salto(2)
         if (c.resultado) {
-          lineas.push({ label: 'Estado de resultados', val: '', bold: true, muted: true })
-          lineas.push({ label: 'Ingresos', val: formatMonto(c.resultado.total_ingresos) })
-          lineas.push({ label: 'Gastos', val: formatMonto(c.resultado.total_gastos) })
-          lineas.push({ label: 'Resultado neto', val: formatMonto(c.resultado.neto), bold: true })
+          cur.cabeceraTabla('Estado de resultados', 'Importe')
+          cur.fila('Ingresos', formatMonto(c.resultado.total_ingresos))
+          cur.fila('Gastos',   formatMonto(c.resultado.total_gastos))
+          cur.filaTotal('Resultado neto', formatMonto(c.resultado.neto))
         }
         if (c.flujo) {
-          lineas.push({ label: 'Flujo de caja', val: '', bold: true, muted: true, gap: 7 })
-          lineas.push({ label: 'Entradas', val: formatMonto(c.flujo.entradas) })
-          lineas.push({ label: 'Salidas', val: formatMonto(c.flujo.salidas) })
-          lineas.push({ label: 'Flujo neto', val: formatMonto(c.flujo.neto), bold: true })
-        }
-        const bodyH = lineas.reduce((s, l) => s + (l.gap ?? 5.5), 0)
-        const boxH  = 14 + bodyH + (c.monedasExcluidas.length ? 6 : 0) + 4
-        // El recuadro es un dibujo a medida (no una fila): salta de página entero
-        // o no salta, así que usa su propio control en vez de cur.ensure().
-        cur.salto(6)
-        if (cur.y + boxH > pageH - RESERVA_PIE - 2) { doc.addPage(); cur.y = M }
-        doc.setFillColor(MARCA.surface[0], MARCA.surface[1], MARCA.surface[2])
-        doc.setDrawColor(MARCA.divider[0], MARCA.divider[1], MARCA.divider[2]); doc.setLineWidth(0.2)
-        doc.roundedRect(M, cur.y, right - M, boxH, 2, 2, 'FD')
-        const padX = M + 5
-        let yy = cur.y + 8
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
-        doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text(`Consolidado en ${c.moneda}`, padX, yy)
-        yy += 5
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
-        doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
-        doc.text('Convertido a la tasa vigente', padX, yy)
-        yy += 6
-        for (const l of lineas) {
-          doc.setFont('helvetica', l.bold ? 'bold' : 'normal'); doc.setFontSize(l.muted ? 8.5 : 9.5)
-          const col = l.muted ? GRAY : DARK
-          doc.setTextColor(col[0], col[1], col[2])
-          doc.text(l.label, l.muted ? padX : padX + 3, yy)
-          if (l.val) doc.text(l.val, right - 5, yy, { align: 'right' })
-          yy += l.gap ?? 5.5
+          cur.cabeceraTabla('Flujo de caja', 'Importe')
+          cur.fila('Entradas', formatMonto(c.flujo.entradas))
+          cur.fila('Salidas',  formatMonto(c.flujo.salidas))
+          cur.filaTotal('Flujo neto', formatMonto(c.flujo.neto))
         }
         if (c.monedasExcluidas.length) {
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
-          doc.setTextColor(GRAY[0], GRAY[1], GRAY[2])
-          doc.text(`Sin tasa hacia ${c.moneda}: ${c.monedasExcluidas.join(', ')}`, padX, yy)
+          cur.nota(`Sin tasa hacia ${c.moneda}, no incluidas: ${c.monedasExcluidas.join(', ')}.`)
         }
-        cur.salto(boxH)
       }
 
       sellarPie(doc)
@@ -180,7 +241,7 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
     if (descargando) return
     setDescargando(true)
     try {
-      const doc = await construirDoc(true)
+      const doc = await construirDoc()
       doc.save(`${nombreArchivo}.pdf`)
     } finally {
       setDescargando(false)
@@ -193,86 +254,72 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
     return doc.output('datauristring').split('base64,')[1] ?? ''
   }
 
-  function descargarCSV() {
+  /**
+   * Excel (.xlsx), no CSV. El asesor abre esto en Excel y lo cruza con su
+   * contabilidad: en CSV los importes le llegaban como TEXTO (no se pueden sumar
+   * sin reescribir la columna) y arrastraba los dos destrozos clásicos —acentos
+   * rotos y «1.500» leído como 1,50—. Se genera en servidor (el escritor de xlsx
+   * es server-only) y baja como Blob, sin abrir página.
+   */
+  async function descargarXLSX() {
     setMenuOpen(false)
-    const num = (n: number) => n.toFixed(2).replace('.', ',')
-    const rows: string[] = []
-    rows.push('Reportes financieros')
-    rows.push(`Período;${data.desde};${data.hasta}`)
-    rows.push(`Empresa;${empresaNombre}`)
-    rows.push('')
-    rows.push('ESTADO DE RESULTADOS')
-    rows.push('Moneda;Concepto;Importe')
-    for (const r of data.resultado) {
-      rows.push(`${r.moneda};Ventas (facturas);${num(r.ventas)}`)
-      rows.push(`${r.moneda};Cobros directos;${num(r.cobros_directos)}`)
-      rows.push(`${r.moneda};Total ingresos;${num(r.total_ingresos)}`)
-      for (const g of r.gastos_por_categoria) rows.push(`${r.moneda};Gasto: ${g.categoria};${num(g.monto)}`)
-      rows.push(`${r.moneda};Total gastos;${num(r.total_gastos)}`)
-      rows.push(`${r.moneda};Resultado neto;${num(r.neto)}`)
-      if (r.costo_directo > 0) {
-        rows.push(`${r.moneda};Coste de lo vendido (informativo);${num(r.costo_directo)}`)
-        rows.push(`${r.moneda};Margen bruto (informativo);${num(r.margen_bruto)}`)
-      }
+    if (descargando) return
+    setDescargando(true)
+    const ld = toastLoading('Generando Excel…')
+    try {
+      const res = await generarXlsxReportes(data.desde, data.hasta, data.empresa_id, data.comparar, data.ver, verConsolidado)
+      await ld.dismiss()
+      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo generar el Excel.'); return }
+      descargarBase64(`${nombreArchivo}.xlsx`, res.base64, XLSX_MIME)
+    } catch {
+      await ld.dismiss()
+      toastError('No se pudo generar el Excel.')
+    } finally {
+      setDescargando(false)
     }
-    rows.push('')
-    rows.push('FLUJO DE CAJA')
-    rows.push('Moneda;Movimiento;Origen;Importe')
-    for (const f of data.flujo) {
-      for (const e of f.detalle_entradas) rows.push(`${f.moneda};Entrada;${ORIGEN_LABEL[e.origen] ?? e.origen};${num(e.monto)}`)
-      rows.push(`${f.moneda};Total entradas;;${num(f.entradas)}`)
-      for (const s of f.detalle_salidas) rows.push(`${f.moneda};Salida;${ORIGEN_LABEL[s.origen] ?? s.origen};${num(s.monto)}`)
-      rows.push(`${f.moneda};Total salidas;;${num(f.salidas)}`)
-      rows.push(`${f.moneda};Flujo neto;;${num(f.neto)}`)
-    }
-    if (data.consolidado) {
-      const c = data.consolidado
-      rows.push('')
-      rows.push(`CONSOLIDADO EN ${c.moneda} (tasa vigente)`)
-      rows.push('Sección;Concepto;Importe')
-      if (c.resultado) {
-        rows.push(`Estado de resultados;Ingresos;${num(c.resultado.total_ingresos)}`)
-        rows.push(`Estado de resultados;Gastos;${num(c.resultado.total_gastos)}`)
-        rows.push(`Estado de resultados;Resultado neto;${num(c.resultado.neto)}`)
-      }
-      if (c.flujo) {
-        rows.push(`Flujo de caja;Entradas;${num(c.flujo.entradas)}`)
-        rows.push(`Flujo de caja;Salidas;${num(c.flujo.salidas)}`)
-        rows.push(`Flujo de caja;Flujo neto;${num(c.flujo.neto)}`)
-      }
-      if (c.monedasExcluidas.length) rows.push(`Sin tasa hacia ${c.moneda};${c.monedasExcluidas.join(' ')};`)
-    }
-    // BOM para que Excel (ES) respete acentos; separador ; para locale español
-    const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = `${nombreArchivo}.csv`
-    document.body.appendChild(a); a.click(); a.remove()
-    URL.revokeObjectURL(url)
   }
 
-  function navegar(d: string, h: string, e: string) {
+  function navegar(
+    d: string, h: string, e: string,
+    cmp: ModoComparacion = data.comparar,
+    verSel: string = data.ver || 'nativo',
+  ) {
     const params = new URLSearchParams({ desde: d, hasta: h })
     if (e) params.set('empresa', e)
+    if (cmp !== 'no') params.set('comparar', cmp)
+    params.set('ver', verSel)   // WYSIWYG: la moneda vista viaja en la URL
     startTransition(() => router.push(`/portal/reportes?${params.toString()}`))
   }
 
-  function rangoPreset(tipo: 'mes' | 'mes_pasado' | 'anio'): { d: string; h: string } {
+  // Cambiar la moneda de la vista ("Ver en"). Se recuerda en cookie (la última
+  // elegida) para que la próxima visita arranque igual, y viaja en la URL.
+  function cambiarVer(v: string) {
+    document.cookie = `rep_ver=${v}; path=/; max-age=31536000`
+    navegar(desde, hasta, empresa, data.comparar, v)
+  }
+
+  // Presets por DURACIÓN, apuntando al último período COMPLETO (mes/trimestre/
+  // semestre ya cerrados), no al que está en curso: un trimestre recién empezado
+  // está casi vacío y el informe abría en un tramo sin datos. El año sí es el
+  // corriente (el ejercicio en marcha es lo que se mira).
+  function rangoPreset(tipo: RangoPreset): { d: string; h: string } {
     const now = new Date()
+    const y = now.getFullYear(), m = now.getMonth()
     let d: Date, h: Date
-    if (tipo === 'mes')             { d = new Date(now.getFullYear(), now.getMonth(), 1);     h = new Date(now.getFullYear(), now.getMonth() + 1, 0) }
-    else if (tipo === 'mes_pasado') { d = new Date(now.getFullYear(), now.getMonth() - 1, 1); h = new Date(now.getFullYear(), now.getMonth(), 0) }
-    else                            { d = new Date(now.getFullYear(), 0, 1);                  h = new Date(now.getFullYear(), 11, 31) }
+    if (tipo === 'mes')            { d = new Date(y, m - 1, 1);       h = new Date(y, m, 0) }
+    else if (tipo === 'trimestre') { const q = Math.floor(m / 3) * 3 - 3; d = new Date(y, q, 1); h = new Date(y, q + 3, 0) }
+    else if (tipo === 'semestre')  { const s = (m < 6 ? 0 : 6) - 6;   d = new Date(y, s, 1); h = new Date(y, s + 6, 0) }
+    else                           { d = new Date(y, 0, 1);           h = new Date(y, 11, 31) }
     return { d: fmt(d), h: fmt(h) }
   }
 
-  function preset(tipo: 'mes' | 'mes_pasado' | 'anio') {
+  function preset(tipo: RangoPreset) {
     const { d, h } = rangoPreset(tipo)
     setDesde(d); setHasta(h); navegar(d, h, empresa)
   }
 
   // ¿Qué preset coincide con el período aplicado? (para resaltar el botón activo)
-  const presetActivo = (tipo: 'mes' | 'mes_pasado' | 'anio') => {
+  const presetActivo = (tipo: RangoPreset) => {
     const { d, h } = rangoPreset(tipo)
     return data.desde === d && data.hasta === h
   }
@@ -304,8 +351,17 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
                 <>
                   <div className="rep-dl-overlay" onClick={() => setMenuOpen(false)} />
                   <div className="rep-dl-menu">
+                    {/* Qué se va a descargar, ANTES de clicar: el error caro aquí es
+                        bajar el informe en otra moneda o sin el consolidado y no
+                        enterarse hasta que ya está enviado. */}
+                    <div className="rep-dl-ctx">
+                      {formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}
+                      {' · '}{empresaNombre}
+                      {' · '}{data.ver ? `en ${data.ver}` : 'cada moneda'}
+                      {data.consolidado && ` · ${verConsolidado ? 'con' : 'sin'} consolidado`}
+                    </div>
                     <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
-                    <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
+                    <button className="dropdown-item" onClick={descargarXLSX}>Descargar Excel (.xlsx)</button>
                   </div>
                 </>
               )}
@@ -314,40 +370,41 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
         )}
       </div>
 
-      {/* Fila de filtros: buscador + accesos rápidos de período */}
-      <div className="ter-toolbar">
-        <div className="ter-search-wrap">
-          <Search size={15} />
-          <input
-            type="search"
-            className="ter-search"
-            placeholder="Buscar categoría de gasto…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+      {/* ── Barra de control: PERÍODO (agrupado) a la izquierda, empresa a la
+          derecha ───────────────────────────────────────────────────────────
+          El período es una sola decisión —presets que rellenan el rango, o el
+          rango a mano—, así que van juntos en un grupo; antes flotaban como tres
+          islas sueltas. El buscador y la comparación bajan a la sección sobre la
+          que actúan; la moneda de la vista, a su propia fila. */}
+      <div className="rep-barra">
+        <div className="rep-periodo">
+          <div className="rep-barra-presets">
+            <button className={`cxx-chip${presetActivo('mes') ? ' active' : ''}`} onClick={() => preset('mes')} disabled={isPending}>Último mes</button>
+            <button className={`cxx-chip${presetActivo('trimestre') ? ' active' : ''}`} onClick={() => preset('trimestre')} disabled={isPending}>Último trimestre</button>
+            <button className={`cxx-chip${presetActivo('semestre') ? ' active' : ''}`} onClick={() => preset('semestre')} disabled={isPending}>Último semestre</button>
+            <button className={`cxx-chip${presetActivo('anio') ? ' active' : ''}`} onClick={() => preset('anio')} disabled={isPending}>Este año</button>
+          </div>
+          <div className="rep-barra-fechas">
+            <input
+              className="input ter-filter-select" type="date" value={desde} aria-label="Desde"
+              onChange={e => { const v = e.target.value; setDesde(v); if (v && hasta) navegar(v, hasta, empresa) }}
+            />
+            <span className="rep-rango-sep">–</span>
+            <input
+              className="input ter-filter-select" type="date" value={hasta} aria-label="Hasta"
+              onChange={e => { const v = e.target.value; setHasta(v); if (desde && v) navegar(desde, v, empresa) }}
+            />
+          </div>
         </div>
-        <button className={`cxx-chip${presetActivo('mes') ? ' active' : ''}`} onClick={() => preset('mes')} disabled={isPending}>Este mes</button>
-        <button className={`cxx-chip${presetActivo('mes_pasado') ? ' active' : ''}`} onClick={() => preset('mes_pasado')} disabled={isPending}>Mes pasado</button>
-        <button className={`cxx-chip${presetActivo('anio') ? ' active' : ''}`} onClick={() => preset('anio')} disabled={isPending}>Este año</button>
-      </div>
-
-      {/* Fila de rango de fechas + empresa — se aplica solo al cambiar (sin botón) */}
-      <div className="ter-toolbar rep-rango-row">
-        <input
-          className="input ter-filter-select" type="date" value={desde}
-          onChange={e => { const v = e.target.value; setDesde(v); if (v && hasta) navegar(v, hasta, empresa) }}
-        />
-        <span className="rep-rango-sep">–</span>
-        <input
-          className="input ter-filter-select" type="date" value={hasta}
-          onChange={e => { const v = e.target.value; setHasta(v); if (desde && v) navegar(desde, v, empresa) }}
-        />
-        <EmpresaPills
-          empresas={empresasFiltro}
-          value={empresa}
-          onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
-          todasLabel="Todas las empresas"
-        />
+        <div className="rep-barra-fin">
+          <EmpresaPills
+            empresas={empresasFiltro}
+            value={empresa}
+            onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
+            todasLabel="Todas las empresas"
+          />
+          {isPending && <span className="spinner spinner-sm" aria-label="Actualizando" />}
+        </div>
       </div>
 
       {sinDatos ? (
@@ -357,117 +414,234 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
         </div>
       ) : (
         <>
-          {/* ── Estado de resultados ── */}
-          <h2 className="tes-section-title rep-titulo">Estado de resultados</h2>
-          <p className="rep-nota">
-            {isPending && <span className="spinner spinner-sm" />}
-            {formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}
-          </p>
-          {data.resultado.length === 0 ? (
-            <div className="card mon-empty"><p>Sin ingresos ni gastos devengados en el período.</p></div>
-          ) : (
-            <div className="rep-grid">
-              {data.resultado.map(r => (
-                <div key={r.moneda} className="rep-card">
-                  <div className="rep-card-head">
-                    <span className="rep-moneda">{r.moneda}</span>
-                    <span className={`rep-neto ${r.neto >= 0 ? 'rep-pos' : 'rep-neg'}`}>{formatMonto(r.neto)}</span>
-                  </div>
-                  <div className="rep-card-label">Resultado neto</div>
+          {/* ── "Ver en [moneda]" ──────────────────────────────────────────────
+              Reemplaza a la banda fija "Consolidado en…". "Cada moneda" muestra
+              el informe nativo, sin convertir (la verdad contable); elegir una
+              moneda lo colapsa a ella, convirtiendo solo lo que no está ya en esa
+              moneda y marcándolo. Solo aparece si hay más de una moneda posible. */}
+          {data.verOpciones.length >= 2 && (
+            <div className="rep-ver">
+              <span className="rep-ver-label">Ver en</span>
+              <div className="rep-ver-chips" role="group" aria-label="Moneda de la vista">
+                <button
+                  className={`cxx-chip${data.ver === '' ? ' active' : ''}`}
+                  onClick={() => cambiarVer('nativo')} disabled={isPending}
+                >Cada moneda</button>
+                {data.verOpciones.map(m => (
+                  <button
+                    key={m} className={`cxx-chip${data.ver === m ? ' active' : ''}`}
+                    onClick={() => cambiarVer(m)} disabled={isPending}
+                  >{m}</button>
+                ))}
+              </div>
+              {data.convertido && (data.convertido.convertidas.length > 0 || data.convertido.excluidas.length > 0) && (
+                <span className="rep-ver-nota">
+                  {data.convertido.convertidas.length > 0 && `Convertido a ${data.ver} a la tasa vigente.`}
+                  {data.convertido.excluidas.length > 0 && ` Sin tasa hacia ${data.ver}: ${data.convertido.excluidas.join(', ')} (no incluidas).`}
+                </span>
+              )}
+            </div>
+          )}
 
-                  <div className="rep-block">
-                    <div className="rep-line rep-line-head"><span>Ingresos</span><strong>{formatMonto(r.total_ingresos)}</strong></div>
-                    <div className="rep-line rep-sub"><span>Ventas (facturas)</span><span>{formatMonto(r.ventas)}</span></div>
-                    <div className="rep-line rep-sub"><span>Cobros directos</span><span>{formatMonto(r.cobros_directos)}</span></div>
-                  </div>
+          {/* Dos informes, dos pestañas. Apilados eran una página de cuatro
+              bloques que competían entre sí y ninguno se leía entero. */}
+          <Tabs
+            tabs={[
+              { id: 'estado' as const, label: 'Estado de resultados' },
+              { id: 'flujo'  as const, label: 'Flujo de caja' },
+            ]}
+            active={tab}
+            onChange={setTab}
+            ariaLabel="Informe a ver"
+          />
 
-                  <div className="rep-block">
-                    <div className="rep-line rep-line-head"><span>Gastos</span><strong>{formatMonto(r.total_gastos)}</strong></div>
-                    {r.gastos_por_categoria.length === 0
-                      ? <div className="rep-line rep-sub"><span>Sin gastos</span><span>—</span></div>
-                      : (() => {
-                          const cats = filtrarCategorias(r.gastos_por_categoria)
-                          if (cats.length === 0) return <div className="rep-line rep-sub"><span>Sin coincidencias</span><span>—</span></div>
-                          return cats.map(g => (
-                            <div key={g.categoria} className="rep-line rep-sub"><span>{g.categoria}</span><span>{formatMonto(g.monto)}</span></div>
-                          ))
-                        })()}
-                  </div>
+          {tab === 'estado' && (<>
+          <div className="rep-seccion">
+            <div className="rep-seccion-head">
+              <div>
+                <p className="rep-nota rep-seccion-sub">
+                  {formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)} · devengado
+                </p>
+              </div>
+              {/* La comparación cambia estos Δ y vive en SU pestaña. Chips: "Sin
+                  comparar" por defecto; la etiqueta del "anterior" se adapta al
+                  rango (Mes → «Mes anterior»…) y el interanual se oculta en un año
+                  entero porque coincidiría con el período anterior. */}
+              <div className="rep-seccion-tools">
+                <div className="rep-comparar" role="group" aria-label="Comparar con">
+                  {opcionesComparar.map(m => (
+                    <button
+                      key={m} type="button"
+                      className={`cxx-chip${data.comparar === m ? ' active' : ''}`}
+                      onClick={() => navegar(desde, hasta, empresa, m)} disabled={isPending}
+                    >
+                      {labelComparar(m)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-                  {r.costo_directo > 0 && (
-                    <div className="rep-block">
-                      <div className="rep-line rep-line-head"><span>Margen bruto</span><strong>{formatMonto(r.margen_bruto)}</strong></div>
-                      <div className="rep-line rep-sub"><span>Ventas</span><span>{formatMonto(r.ventas)}</span></div>
-                      <div className="rep-line rep-sub"><span>Coste de lo vendido</span><span>−{formatMonto(r.costo_directo)}</span></div>
-                      <p className="rep-info-nota">
-                        Informativo: <strong>no se resta del resultado neto</strong>. Lo que compras a un
-                        proveedor ya está arriba en Gastos.
-                        {r.costo_sin_proveedor > 0 && ` De este coste, ${formatMonto(r.costo_sin_proveedor)} no tiene proveedor detrás y no ha generado ninguna deuda: si es trabajo de tu gente, su sueldo ya cuenta en Salarios.`}
-                      </p>
+            {/* Qué se está comparando, con las DOS fechas enfrentadas. Iba en gris
+                pequeño junto al período y no se leía: al comparar, esto es el
+                contexto que da sentido a las columnas Δ. */}
+            {data.periodo_comparado && (
+              <div className={`rep-comp-franja${comparadoVacio ? ' is-vacia' : ''}`}>
+                <span className="rep-comp-txt">
+                  Comparando <strong>{formatFechaCorta(data.desde)} – {formatFechaCorta(data.hasta)}</strong>
+                  {' '}con <strong>{formatFechaCorta(data.periodo_comparado.desde)} – {formatFechaCorta(data.periodo_comparado.hasta)}</strong>
+                </span>
+                {comparadoVacio && (
+                  <span className="rep-comp-aviso">No hay movimientos en ese período: no hay con qué comparar.</span>
+                )}
+              </div>
+            )}
+
+            {data.resultado.length === 0 ? (
+              <div className="card mon-empty"><p>Sin ingresos ni gastos devengados en el período.</p></div>
+            ) : (
+              <div className="rep-grid">
+                {data.resultado.map(r => (
+                  <EstadoResultadosCard
+                    key={r.moneda}
+                    r={r}
+                    anterior={antPorMoneda.get(r.moneda) ?? null}
+                    comparando={hayComparado}
+                    labelAnterior={labelComparar(data.comparar)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Del resultado a la caja ──
+              Solo aparece cuando devengado y caja NO coinciden: si el mes se cobró
+              y se pagó entero, este bloque no dice nada que no esté ya arriba.
+              Va PEGADO al estado de resultados, no como sección hermana: es la
+              explicación de una cifra de arriba, no un informe aparte. */}
+          {data.puente.length > 0 && (
+            <div className="rep-puente">
+              <div className="rep-puente-head">
+                <span className="rep-consol-title">Del resultado a la caja</span>
+                <span className="rep-consol-note">Lo que ganaste no es lo que cobraste</span>
+              </div>
+              <div className="rep-puente-grid">
+                {data.puente.map(p => (
+                  <div key={p.moneda} className="rep-puente-bloque">
+                    <p className="rep-puente-frase">
+                      <span className="rep-moneda">{p.moneda}</span>{' '}
+                      Ganaste <span className="rep-puente-cifra">{formatMonto(p.resultado)}</span>,
+                      {' '}cobraste <span className="rep-puente-cifra">{formatMonto(p.cobrado)}</span>
+                      {p.pendiente_cobro > 0.005 && <> y te deben <span className="rep-puente-cifra">{formatMonto(p.pendiente_cobro)}</span></>}.
+                    </p>
+                    <div className="rep-line rep-sub"><span>Cobrado en caja</span><span>{formatMonto(p.cobrado)}</span></div>
+                    <div className="rep-line rep-sub"><span>Pagado desde caja</span><span>−{formatMonto(p.pagado)}</span></div>
+                    <div className="rep-line rep-sub"><span>Pendiente de cobro</span><span>{formatMonto(p.pendiente_cobro)}</span></div>
+                    <div className="rep-line rep-sub"><span>Pendiente de pago</span><span>{formatMonto(p.pendiente_pago)}</span></div>
+                    <div className="rep-line rep-consol-neto"><span>Flujo neto de caja</span><strong>{formatMonto(p.flujo)}</strong></div>
+                  </div>
+                ))}
+              </div>
+              <p className="rep-consol-excl">
+                El resultado cuenta lo que facturaste y gastaste por su fecha; la caja, solo el
+                dinero que se movió de verdad. Los pendientes son el saldo vivo de este período.
+              </p>
+            </div>
+          )}
+
+          </>)}
+
+          {tab === 'flujo' && (
+          <div className="rep-seccion">
+            <div className="rep-seccion-head">
+              <div>
+                <p className="rep-nota rep-seccion-sub">
+                  Movimientos reales de efectivo · excluye transferencias internas
+                </p>
+              </div>
+            </div>
+            {data.flujo.length === 0 ? (
+              <div className="card mon-empty"><p>Sin movimientos de efectivo en el período.</p></div>
+            ) : (
+              <div className="rep-grid">
+                {data.flujo.map(f => (
+                  <div key={f.moneda} className="rep-card">
+                    <div className="rep-card-head">
+                      <span className="rep-moneda">{f.moneda}</span>
+                      <span className={`rep-neto ${f.neto >= 0 ? 'rep-pos' : 'rep-neg'}`}>{formatMonto(f.neto)}</span>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    <div className="rep-card-label">Flujo neto</div>
+
+                    <div className="rep-block">
+                      <div className="rep-line rep-line-head rep-in"><span>Entradas</span><strong>{formatMonto(f.entradas)}</strong></div>
+                      {f.detalle_entradas.map(e => (
+                        <div key={e.origen} className="rep-line rep-sub"><span>{ORIGEN_LABEL[e.origen] ?? e.origen}</span><span>{formatMonto(e.monto)}</span></div>
+                      ))}
+                    </div>
+
+                    <div className="rep-block">
+                      <div className="rep-line rep-line-head rep-out"><span>Salidas</span><strong>{formatMonto(f.salidas)}</strong></div>
+                      {f.detalle_salidas.map(s => (
+                        <div key={s.origen} className="rep-line rep-sub"><span>{ORIGEN_LABEL[s.origen] ?? s.origen}</span><span>{formatMonto(s.monto)}</span></div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           )}
 
-          {/* ── Flujo de caja ── */}
-          <h2 className="tes-section-title rep-titulo rep-titulo-mt">Flujo de caja</h2>
-          <p className="rep-nota">Movimientos reales de efectivo (excluye transferencias internas).</p>
-          {data.flujo.length === 0 ? (
-            <div className="card mon-empty"><p>Sin movimientos de efectivo en el período.</p></div>
-          ) : (
-            <div className="rep-grid">
-              {data.flujo.map(f => (
-                <div key={f.moneda} className="rep-card">
-                  <div className="rep-card-head">
-                    <span className="rep-moneda">{f.moneda}</span>
-                    <span className={`rep-neto ${f.neto >= 0 ? 'rep-pos' : 'rep-neg'}`}>{formatMonto(f.neto)}</span>
-                  </div>
-                  <div className="rep-card-label">Flujo neto</div>
-
-                  <div className="rep-block">
-                    <div className="rep-line rep-line-head rep-in"><span>Entradas</span><strong>{formatMonto(f.entradas)}</strong></div>
-                    {f.detalle_entradas.map(e => (
-                      <div key={e.origen} className="rep-line rep-sub"><span>{ORIGEN_LABEL[e.origen] ?? e.origen}</span><span>{formatMonto(e.monto)}</span></div>
-                    ))}
-                  </div>
-
-                  <div className="rep-block">
-                    <div className="rep-line rep-line-head rep-out"><span>Salidas</span><strong>{formatMonto(f.salidas)}</strong></div>
-                    {f.detalle_salidas.map(s => (
-                      <div key={s.origen} className="rep-line rep-sub"><span>{ORIGEN_LABEL[s.origen] ?? s.origen}</span><span>{formatMonto(s.monto)}</span></div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Consolidado (conversión a la moneda de consolidación) ── */}
+          {/* ── Consolidado: banner de REFERENCIA al pie ───────────────────────
+              Siempre en la moneda de configuración (`es_consolidacion`), mires el
+              informe en la moneda que lo mires: responde «¿y esto cuánto es en
+              total?» sin tocar las cifras de arriba. En pantalla se ve SIEMPRE; su
+              check decide únicamente si entra en el PDF/Excel. */}
           {data.consolidado && (
             <div className="rep-consol">
               <div className="rep-consol-head">
-                <span className="rep-consol-title">Consolidado en {data.consolidado.moneda}</span>
-                <span className="rep-consol-note">Convertido a la tasa vigente</span>
+                <div>
+                  <span className="rep-consol-title">Consolidado en {data.consolidado.moneda}</span>
+                  <span className="rep-consol-note"> · convertido a la tasa vigente</span>
+                </div>
+                <label className="rep-consol-toggle">
+                  <input
+                    type="checkbox" checked={verConsolidado}
+                    onChange={e => setVerConsolidado(e.target.checked)}
+                  />
+                  <span>Incluir al descargar</span>
+                </label>
               </div>
+              {/* En PANTALLA se ve siempre: es la referencia «cuánto es esto en
+                  total» y ocultarla al desmarcar no tenía sentido. El check decide
+                  solo si el consolidado entra en el PDF/Excel. */}
               <div className="rep-consol-grid">
-                {data.consolidado.resultado && (
-                  <div className="rep-consol-block">
-                    <div className="rep-consol-block-title">Estado de resultados</div>
-                    <div className="rep-line"><span>Ingresos</span><span>{formatMonto(data.consolidado.resultado.total_ingresos)}</span></div>
-                    <div className="rep-line"><span>Gastos</span><span>{formatMonto(data.consolidado.resultado.total_gastos)}</span></div>
-                    <div className="rep-line rep-consol-neto"><span>Resultado neto</span><strong>{formatMonto(data.consolidado.resultado.neto)}</strong></div>
-                  </div>
-                )}
-                {data.consolidado.flujo && (
-                  <div className="rep-consol-block">
-                    <div className="rep-consol-block-title">Flujo de caja</div>
-                    <div className="rep-line"><span>Entradas</span><span>{formatMonto(data.consolidado.flujo.entradas)}</span></div>
-                    <div className="rep-line"><span>Salidas</span><span>{formatMonto(data.consolidado.flujo.salidas)}</span></div>
-                    <div className="rep-line rep-consol-neto"><span>Flujo neto</span><strong>{formatMonto(data.consolidado.flujo.neto)}</strong></div>
-                  </div>
-                )}
+                  {data.consolidado.resultado && (
+                    <div className="rep-consol-bloque">
+                      <div className="rep-consol-sub">Estado de resultados</div>
+                      <div className="rep-line rep-sub"><span>Ingresos</span><span>{formatMonto(data.consolidado.resultado.total_ingresos)}</span></div>
+                      <div className="rep-line rep-sub"><span>Gastos</span><span>{formatMonto(data.consolidado.resultado.total_gastos)}</span></div>
+                      <div className="rep-line rep-consol-neto">
+                        <span>Resultado neto</span>
+                        <strong className={data.consolidado.resultado.neto >= 0 ? 'rep-pos' : 'rep-neg'}>
+                          {formatMonto(data.consolidado.resultado.neto)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+                  {data.consolidado.flujo && (
+                    <div className="rep-consol-bloque">
+                      <div className="rep-consol-sub">Flujo de caja</div>
+                      <div className="rep-line rep-sub"><span>Entradas</span><span>{formatMonto(data.consolidado.flujo.entradas)}</span></div>
+                      <div className="rep-line rep-sub"><span>Salidas</span><span>{formatMonto(data.consolidado.flujo.salidas)}</span></div>
+                      <div className="rep-line rep-consol-neto">
+                        <span>Flujo neto</span>
+                        <strong className={data.consolidado.flujo.neto >= 0 ? 'rep-pos' : 'rep-neg'}>
+                          {formatMonto(data.consolidado.flujo.neto)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
               </div>
               {data.consolidado.monedasExcluidas.length > 0 && (
                 <p className="rep-consol-excl">
