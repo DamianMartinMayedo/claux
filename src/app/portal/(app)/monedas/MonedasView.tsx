@@ -1,6 +1,7 @@
 'use client'
 
-import { toastError, toastLoading } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastTono } from '@/app/contexts/ToastContext'
+import { mensajeTasas } from '@/lib/tasas-mensaje'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
@@ -585,8 +586,10 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
   const [localPares, setLocalPares] = useState<Par[]>(initPares)
   useEffect(() => { setLocalPares(initPares) }, [initPares])
 
-  const [autoMsg,     setAutoMsg]    = useState('')
-  const [autoPending, startAutoTrans] = useTransition()
+  // Estado propio, no useTransition: el toast del resultado se crearía DENTRO de
+  // la transición y no se pintaría hasta que acabase el router.refresh() — en esta
+  // conexión, segundos de silencio tras pulsar.
+  const [autoCargando, setAutoCargando] = useState(false)
 
   const monedaConsolidacion = initMonedas.find(m => m.es_consolidacion)
 
@@ -608,16 +611,22 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
     router.refresh()
   }
 
-  function handleActualizarAuto() {
-    setAutoMsg('')
-    startAutoTrans(async () => {
-      const result = await actualizarTasasAuto()
-      const msg = result.actualizadas > 0
-        ? `${result.actualizadas} tasa${result.actualizadas !== 1 ? 's' : ''} actualizadas.`
-        : 'Sin nuevas tasas.'
-      setAutoMsg(result.errores.length > 0 ? `${msg} · ${result.errores.join(' · ')}` : msg)
+  // El resultado va por TOAST, no por cartel: el aviso anterior se quedaba fijo
+  // en la página hasta recargar. Tampoco toast de «cargando»: el botón ya se pone
+  // en «Actualizando…» con su spinner.
+  async function handleActualizarAuto() {
+    if (autoCargando) return
+    setAutoCargando(true)
+    try {
+      const r = await actualizarTasasAuto()
+      const { tono, texto } = mensajeTasas(r)
+      toastTono(tono, texto)
       router.refresh()
-    })
+    } catch {
+      toastError('No se pudieron actualizar las tasas.')
+    } finally {
+      setAutoCargando(false)
+    }
   }
 
   return (
@@ -630,8 +639,8 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
           <p className="page-subtitle">Configura las monedas y los tipos de cambio entre ellas.</p>
         </div>
         <div className="btn-group-wrap">
-          <button className="btn btn-secondary" onClick={handleActualizarAuto} disabled={autoPending}>
-            {autoPending ? <><span className="spinner spinner-sm" /> Actualizando…</> : <><RefreshCw size={15} strokeWidth={2} /> Actualizar automáticas</>}
+          <button className="btn btn-secondary" onClick={handleActualizarAuto} disabled={autoCargando}>
+            {autoCargando ? <><span className="spinner spinner-sm" /> Actualizando…</> : <><RefreshCw size={15} strokeWidth={2} /> Actualizar</>}
           </button>
           {esAdmin && (
             <button className="btn btn-primary" onClick={() => { setMonedaEdit(null); setModalKind('moneda') }}>
@@ -640,10 +649,6 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
           )}
         </div>
       </div>
-
-      {autoMsg && (
-        <div className="alert alert-warning mb-5">{autoMsg}</div>
-      )}
 
       <div className="mon-layout">
 

@@ -3,6 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
+import { actualizarTasasCliente } from '@/lib/tasas-auto'
+// El contrato del resultado lo fija quien redacta el mensaje, para que la acción
+// no pueda devolver algo que el toast no sepa contar.
+import type { ResultadoTasas as ResultadoTasasAccion } from '@/lib/tasas-mensaje'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -376,117 +380,19 @@ export async function cambiarMonedaConsolidacion(
 
 // ── Actualizar todas las tasas automáticas ────────────────────────────────────
 
-export async function actualizarTasasAuto(): Promise<{
-  ok: boolean
-  actualizadas: number
-  errores: string[]
-}> {
+export async function actualizarTasasAuto(): Promise<ResultadoTasasAccion> {
   const session = await getPortalSession()
-  if (!session) return { ok: false, actualizadas: 0, errores: ['Sin sesión.'] }
+  if (!session) return { ok: false, actualizadas: 0, sinCambios: 0, errores: ['Sin sesión.'] }
 
+  // El núcleo vive en lib/tasas-auto (lo comparte el cron diario). Actualizar
+  // tasas es la ÚNICA escritura que un usuario de solo-lectura sí puede hacer, así
+  // que aquí basta con tener sesión — no se comprueba `solo_lectura`.
   const db = createAdminClient()
-  const { data: pares } = await db
-    .from('pares_tasa')
-    .select('par_id, origen, destino, fuente')
-    .eq('client_id', session.client_id)
-    .eq('activo', true)
-    .neq('fuente', 'MANUAL')
-
-  if (!pares?.length) return { ok: true, actualizadas: 0, errores: ['No hay pares con fuente automática.'] }
-
-  const hoy      = new Date().toISOString().split('T')[0]
-  const errores: string[] = []
-  let   actualizadas = 0
-
-  // ── El Toque: una sola llamada para todos los pares EL_TOQUE ──────────────
-  const paresElToque = pares.filter(p => p.fuente === 'EL_TOQUE')
-  if (paresElToque.length > 0) {
-    const apiKey = process.env.ELTOQUE_API_KEY
-    if (!apiKey) {
-      errores.push('El Toque: configura ELTOQUE_API_KEY en .env.local')
-    } else {
-      try {
-        const res  = await fetch('https://tasas.eltoque.com/v1/trmi', {
-          headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
-          cache:   'no-store',
-        })
-        if (!res.ok) {
-          errores.push(`El Toque HTTP ${res.status}`)
-        } else {
-          const json = await res.json() as { tasas?: Record<string, number> }
-          if (!json.tasas) {
-            errores.push('El Toque: respuesta sin campo "tasas"')
-          } else {
-            const inserts: Record<string, unknown>[] = []
-            for (const par of paresElToque) {
-              const esCupOrigen = par.origen === 'CUP'
-              const monedaExt   = esCupOrigen ? par.destino : par.origen
-              const elToqueCod  = codElToque(monedaExt)
-              const tasaExt     = json.tasas[elToqueCod]
-              if (!tasaExt) {
-                errores.push(`El Toque: sin tasa para ${monedaExt} (código ${elToqueCod})`)
-                continue
-              }
-              inserts.push({
-                client_id:      session.client_id,
-                moneda_origen:  par.origen,
-                moneda_destino: par.destino,
-                tasa:           esCupOrigen ? 1 / tasaExt : tasaExt,
-                fuente:         'EL_TOQUE',
-                fecha:          hoy,
-              })
-            }
-            if (inserts.length > 0) {
-              const { error } = await db.from('tasas_cambio').insert(inserts)
-              if (error) errores.push(`El Toque DB: ${error.message}`)
-              else actualizadas += inserts.length
-            }
-          }
-        }
-      } catch (e) {
-        const cause = (e instanceof Error && (e as NodeJS.ErrnoException).cause)
-          ? ` — ${String((e as NodeJS.ErrnoException).cause)}`
-          : ''
-        errores.push(`El Toque: ${e instanceof Error ? e.message : 'error'}${cause}`)
-      }
-    }
-  }
-
-  // ── Frankfurter: agrupado por moneda base para minimizar llamadas ─────────
-  const paresFrank = pares.filter(p => p.fuente === 'FRANKFURTER')
-  if (paresFrank.length > 0) {
-    const byOrigen = new Map<string, typeof paresFrank>()
-    for (const p of paresFrank) {
-      if (!byOrigen.has(p.origen)) byOrigen.set(p.origen, [])
-      byOrigen.get(p.origen)!.push(p)
-    }
-    for (const [base, grupo] of byOrigen) {
-      const symbols = grupo.map(p => p.destino).join(',')
-      try {
-        const url  = `https://api.frankfurter.app/latest?base=${base}&symbols=${symbols}`
-        const res  = await fetch(url, { cache: 'no-store' })
-        if (!res.ok) { errores.push(`Frankfurter HTTP ${res.status} (base ${base})`); continue }
-        const json = await res.json() as { rates?: Record<string, number> }
-        if (!json.rates) { errores.push(`Frankfurter: respuesta inesperada (base ${base})`); continue }
-        const inserts = Object.entries(json.rates).map(([cod, valor]) => ({
-          client_id:      session.client_id,
-          moneda_origen:  base,
-          moneda_destino: cod,
-          tasa:           valor,
-          fuente:         'FRANKFURTER',
-          fecha:          hoy,
-        }))
-        const { error } = await db.from('tasas_cambio').insert(inserts)
-        if (error) errores.push(`Frankfurter DB (${base}): ${error.message}`)
-        else actualizadas += inserts.length
-      } catch (e) {
-        errores.push(`Frankfurter (${base}): ${e instanceof Error ? e.message : 'error'}`)
-      }
-    }
-  }
+  const { actualizadas, sinCambios, errores } = await actualizarTasasCliente(db, session.client_id)
 
   revalidatePath('/portal/monedas')
-  return { ok: true, actualizadas, errores }
+  revalidatePath('/portal/dashboard')
+  return { ok: true, actualizadas, sinCambios, errores }
 }
 
 // ── Uso / eliminación de monedas ──────────────────────────────────────────────

@@ -37,6 +37,10 @@ export function toastError(message: string)   { _addToast?.('error', message) }
 export function toastWarning(message: string) { _addToast?.('warning', message) }
 export function toastInfo(message: string)    { _addToast?.('info', message) }
 
+/** Tono decidido en tiempo de ejecución (p. ej. un resultado que puede ser
+ *  éxito, aviso o error según lo que devuelva el servidor). */
+export function toastTono(tono: Exclude<ToastType, 'loading'>, message: string) { _addToast?.(tono, message) }
+
 /**
  * Toast de carga standalone: se muestra HASTA que llames a `dismiss()`. Mismo contrato
  * que `useToast().loading`, para usarlo sin hook. Patrón: mostrar antes de la acción,
