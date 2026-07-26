@@ -75,6 +75,25 @@ export interface PuntoVentaResumen {
     turnoAbiertoDesde: string | null   // fecha del turno abierto de un día anterior
   }[]
 }
+/**
+ * Dossier del negocio en el dashboard. Lo que importa de un vistazo NO son sus
+ * cifras —esas ya están en Reportes— sino si el documento que el dueño reparte
+ * está LISTO y AL DÍA: un enlace publicado con números viejos es peor que no
+ * tenerlo, porque alguien lo está mirando ahora mismo.
+ */
+export interface DossierResumen {
+  total:       number
+  publicados:  number
+  /** Publicados con el snapshot desfasado o rancio: la única cifra accionable. */
+  desfasados:  number
+  /** `snapshot_at` más reciente, para decir cuándo se actualizó por última vez. */
+  ultimoSnapshot: string | null
+  /** Título del primero, para nombrarlo cuando solo hay uno. */
+  titulo:      string | null
+  /** Sin dossier creado todavía: el widget invita a crearlo en vez de dar ceros. */
+  vacio:       boolean
+}
+
 export interface AgendaItem { hora: string | null; nombre: string; personas: number; estado: string }
 export interface AgendaResumen {
   hoyCount: number
@@ -109,6 +128,7 @@ export interface DashboardData {
   puntoVenta?: PuntoVentaResumen
   rrhh?: RrhhResumen
   servicios?: ServiciosResumen
+  dossier?: DossierResumen
   reservas?: AgendaResumen
   citas?: AgendaResumen
   accesos: AccesoRapido[]
@@ -124,6 +144,7 @@ const ACCESOS: Record<string, { label: string; ruta: string }> = {
   agenda:             { label: 'Citas',        ruta: '/portal/citas' },
   catalogo_qr:        { label: 'Catálogo',     ruta: '/portal/catalogo' },
   documentos_imprenta:{ label: 'Documentos',   ruta: '/portal/imprenta' },
+  dossier:            { label: 'Dossier',      ruta: '/portal/dossier' },
 }
 
 // ── Helpers de fecha ────────────────────────────────────────────────────────────
@@ -486,6 +507,50 @@ async function resumenOnboarding(
 }
 */
 
+/** Un dossier publicado con el snapshot más viejo que esto enseña números rancios. */
+const DIAS_DOSSIER_RANCIO = 45
+
+/**
+ * Estado del dossier. Una sola query a la cabecera: el widget no pinta cifras
+ * del negocio (para eso está Reportes), solo si el documento está listo y al día.
+ *
+ * `desfasados` usa el MISMO criterio que el aviso `dossier_snapshot_desactualizado`
+ * del cron (`lib/notificaciones/escaneres.ts`): `snapshot_stale` o más de 45 días.
+ * Si el dashboard y la campana usaran umbrales distintos, el dueño vería un aviso
+ * rojo con el widget en verde y dejaría de creerse a los dos.
+ */
+async function resumenDossier(db: Db, cid: string): Promise<DossierResumen> {
+  const { data } = await db.from('dossiers')
+    .select('titulo, estado, snapshot_at, snapshot_stale')
+    .eq('client_id', cid)
+    .order('created_at', { ascending: true })
+
+  const filas = (data ?? []) as { titulo: string | null; estado: string; snapshot_at: string | null; snapshot_stale: boolean }[]
+
+  let publicados = 0, desfasados = 0
+  let ultimoSnapshot: string | null = null
+
+  for (const d of filas) {
+    if (d.snapshot_at && (!ultimoSnapshot || d.snapshot_at > ultimoSnapshot)) ultimoSnapshot = d.snapshot_at
+    if (d.estado !== 'PUBLICADO') continue
+    publicados++
+    const dias = d.snapshot_at
+      ? Math.round((Date.now() - new Date(d.snapshot_at).getTime()) / 86_400_000)
+      : null
+    // Solo cuenta lo PUBLICADO: un borrador con números viejos no lo ve nadie.
+    if (d.snapshot_stale === true || (dias !== null && dias > DIAS_DOSSIER_RANCIO)) desfasados++
+  }
+
+  return {
+    total: filas.length,
+    publicados,
+    desfasados,
+    ultimoSnapshot,
+    titulo: filas.length === 1 ? (filas[0].titulo ?? null) : null,
+    vacio: filas.length === 0,
+  }
+}
+
 async function resumenServicios(db: Db, cid: string, hoy: string): Promise<ServiciosResumen> {
   const [{ data }, { data: lins }] = await Promise.all([
     db.from('suscripciones')
@@ -575,7 +640,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, deudas, inventario, puntoVenta, rrhh, reservas, citas, servicios, etiquetas, descuentoRaw] = await Promise.all([
+  const [contabilidad, deudas, inventario, puntoVenta, rrhh, reservas, citas, servicios, dossier, etiquetas, descuentoRaw] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
@@ -584,6 +649,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     puedeVer('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
     puedeVer('servicios')      ? resumenServicios(db, cid, hoy)               : Promise.resolve(undefined),
+    puedeVer('dossier')        ? resumenDossier(db, cid)                      : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
   ])
@@ -632,6 +698,6 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
     },
     tieneIa: puedeVer('asistente_ia'),
-    contabilidad, deudas, inventario, puntoVenta, rrhh, servicios, reservas, citas, accesos,
+    contabilidad, deudas, inventario, puntoVenta, rrhh, servicios, dossier, reservas, citas, accesos,
   }
 }

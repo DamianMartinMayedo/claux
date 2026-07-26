@@ -2177,6 +2177,15 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dash-list-amount.is-neg { color: var(--color-error); }
 
 .dash-muted { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-2) 0; }
+/* Línea accionable dentro de un widget: algo que el dueño debería atender hoy.
+   Es texto con icono, no un `.alert`: dentro de una tarjeta pequeña un aviso con
+   caja propia pesa más que el widget que lo contiene. */
+.dash-alerta {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: 1.5;
+  color: var(--color-warning);
+}
+.dash-alerta svg { flex-shrink: 0; margin-top: 2px; }
 
 /* ── Dashboard: banner de captación (contratar más módulos) ── */
 /* La grid fuerza `.card` a columna con alta especificidad; forzamos fila aquí. */
