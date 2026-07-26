@@ -218,6 +218,10 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    el resto va en color de texto por defecto, como "Editar". */
 .row-actions-item-danger        { color: var(--color-error); }
 .row-actions-item-danger svg    { color: var(--color-error); }
+/* …y la que CIERRA algo en positivo (marcar activado, aprobar): mismo criterio,
+   color solo cuando la acción cambia el estado de la fila de forma definitiva. */
+.row-actions-item-success       { color: var(--color-success); }
+.row-actions-item-success svg   { color: var(--color-success); }
 .btn-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; border-radius: var(--radius-md);

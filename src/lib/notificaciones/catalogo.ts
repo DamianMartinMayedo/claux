@@ -69,6 +69,15 @@ export const CATALOGO = {
     etiqueta: 'Pago confirmado',
     descripcion: 'Confirmamos la recepción de tu pago.',
   },
+  // Acuse de recibo de «Me interesa» (banner de captación del dashboard). Va en
+  // la campana y NO como popup: el dueño acaba de pulsarlo, saltarle un aviso
+  // encima es contarle lo que ya sabe. Lo que aporta es que quede constancia de
+  // que se pidió, y cuándo, fuera del propio widget.
+  contratacion_solicitada: {
+    categoria: 'suscripcion', modulo: null, severidad: 'info', implementado: true,
+    etiqueta: 'Pediste activar algo nuevo',
+    descripcion: 'Confirmación de que recibimos tu solicitud de activar un módulo.',
+  },
   ia_cupo_cerca: {
     categoria: 'suscripcion', modulo: 'asistente_ia', severidad: 'aviso', implementado: true,
     etiqueta: 'Cupo de IA cerca del tope',

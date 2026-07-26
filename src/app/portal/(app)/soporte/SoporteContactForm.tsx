@@ -4,7 +4,11 @@ import { useState, useTransition } from 'react'
 import { enviarMensajeSoporte } from '@/app/actions/portal/soporte'
 import { Check, Send } from 'lucide-react'
 
-export default function SoporteContactForm() {
+// `asuntoInicial` llega del dashboard: al pulsar «activar Inventario» el formulario
+// sale con el asunto escrito, en vez de una página en blanco donde el dueño tiene
+// que redactar él qué quiere. Es `defaultValue`, no valor controlado: sigue siendo
+// suyo y puede reescribirlo.
+export default function SoporteContactForm({ asuntoInicial = '' }: { asuntoInicial?: string }) {
   const [isPending, startTransition] = useTransition()
   const [error,   setError]   = useState('')
   const [enviado, setEnviado] = useState(false)
@@ -30,6 +34,7 @@ export default function SoporteContactForm() {
         <input
           className="input"
           name="asunto"
+          defaultValue={asuntoInicial}
           maxLength={160}
           placeholder="Ej: Duda al registrar un gasto"
           required

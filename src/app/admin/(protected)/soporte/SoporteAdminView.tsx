@@ -310,7 +310,14 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                           <div className="text-sm-bold">{m.nombre_empresa}</div>
                           <div className="text-xs-muted">{m.email ?? m.client_id}</div>
                         </td>
-                        <td data-label="Asunto" className="cell-truncate">{m.asunto}</td>
+                        {/* La contratación se ve de un golpe: es venta, no una
+                            incidencia, y no puede quedar sepultada entre dudas. */}
+                        <td data-label="Asunto">
+                          <div className="sop-asunto">
+                            {m.modulo_clave && <span className="badge badge-success">Contratación</span>}
+                            <span className="sop-asunto-texto">{m.asunto}</span>
+                          </div>
+                        </td>
                         <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[m.estado]}`}>{ESTADO_LABEL[m.estado]}</span></td>
                         <td data-label="Fecha" className="table-muted">{fmtFecha(m.created_at)}</td>
                         <td className="col-actions">

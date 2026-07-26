@@ -12,9 +12,13 @@ function FaqRow({ f }: { f: Faq }) {
   )
 }
 
-export default async function SoportePage() {
+export default async function SoportePage({
+  searchParams,
+}: { searchParams: Promise<{ asunto?: string }> }) {
   const { generales, porModulo } = await obtenerFaqPortal()
   const sinFaq = generales.length === 0 && porModulo.length === 0
+  // El dashboard enlaza aquí con el asunto ya escrito (?asunto=Quiero activar X).
+  const { asunto } = await searchParams
 
   return (
     <div className="view-container">
@@ -55,7 +59,7 @@ export default async function SoportePage() {
           <p className="text-sm-muted mb-3">
             ¿No encuentras respuesta? Escríbenos y te ayudamos. Recibiremos tu mensaje en el panel de CLAUX.
           </p>
-          <SoporteContactForm />
+          <SoporteContactForm asuntoInicial={(asunto ?? '').slice(0, 160)} />
         </div>
       </div>
     </div>

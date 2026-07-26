@@ -37,7 +37,7 @@ const ALLOWLIST = {
   // Self-service: cada usuario edita su propio perfil.
   'perfil.ts':   ['actualizarMiPerfil'],
   // Cualquier usuario con sesión puede contactar a soporte.
-  'soporte.ts':  ['enviarMensajeSoporte'],
+  'soporte.ts':  ['enviarMensajeSoporte', 'registrarInteresModulo'],
   // Plantillas de MAPEO del importador: no son datos del cliente, son notas del
   // equipo sobre cómo se lee el export de un software de origen (tabla global,
   // sin client_id). El candado real es más estricto que un módulo: `resolverCtx()`

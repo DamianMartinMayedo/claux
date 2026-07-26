@@ -898,3 +898,11 @@ textarea:focus-visible {
 @media (min-width: 900px) {
   .pres-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 }
+
+/* ── Soporte: asunto con distintivo ──────────────────────────────────────────
+   Los mensajes nacidos del banner de captación llevan badge de «Contratación»:
+   son venta, se atienden distinto y no pueden perderse entre las dudas. El badge
+   no encoge; lo que se recorta con elipsis es el asunto. */
+.sop-asunto { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.sop-asunto > .badge { flex-shrink: 0; }
+.sop-asunto-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

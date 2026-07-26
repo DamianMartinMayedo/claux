@@ -6,6 +6,9 @@ import type { RolAdmin, SeccionKey } from '@/lib/roles'
 
 const TABS: { href: string; label: string; key: SeccionKey; match: string[] }[] = [
   { href: '/admin/solicitudes',     label: 'Solicitudes',  key: 'solicitudes',  match: ['/admin/solicitudes'] },
+  // Misma llave que Solicitudes: son solicitudes también, solo que de clientes
+  // que ya lo son. No se inventa un permiso nuevo para una lista más.
+  { href: '/admin/ventas/ampliaciones', label: 'Ampliaciones', key: 'solicitudes', match: ['/admin/ventas/ampliaciones'] },
   { href: '/admin/presupuestos',    label: 'Presupuestos', key: 'presupuestos', match: ['/admin/presupuestos'] },
   { href: '/admin/ventas/clientes', label: 'Clientes',     key: 'clientes_ro',  match: ['/admin/ventas/clientes'] },
 ]
