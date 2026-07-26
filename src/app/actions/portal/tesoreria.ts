@@ -8,7 +8,7 @@ import { obtenerEmpresas }   from './empresas'
 import { type CategoriaGasto } from './gastos'
 import { monedaValida }      from '@/lib/tasas'
 import { generarCuentaId, generarMovimientoId } from '@/lib/tesoreria-core'
-import { generarRegistroId } from '@/lib/gastos-core'
+import { generarRegistroId, resolverCategoriaSistema } from '@/lib/gastos-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -497,14 +497,9 @@ export async function registrarTransferencia(
     montoDestino = montoRaw * tasa
   }
 
-  // Buscar categoria_id de "Comisiones bancarias" (categoría del sistema)
-  const { data: catComisiones } = await db.from('categorias_gastos')
-    .select('categoria_id, nombre')
-    .eq('client_id', session.client_id)
-    .eq('nombre', 'Comisiones bancarias')
-    .eq('estado', 'ACTIVO')
-    .maybeSingle()
-  
+  // Categoría del sistema «Comisiones bancarias», resuelta-o-creada (mig. 133).
+  const catComisiones = await resolverCategoriaSistema(db, session.client_id, 'comisiones_bancarias')
+
   const comisionesCategoriaId = catComisiones?.categoria_id ?? null
   const comisionesNombre = catComisiones?.nombre ?? 'Comisiones bancarias'
 

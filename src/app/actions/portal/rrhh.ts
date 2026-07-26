@@ -11,6 +11,7 @@ import {
   TIPOS_CONTRATO, PERIODICIDADES, generarEmpleadoId, construirCamposEmpleado,
   type TipoContrato as _TipoContrato, type Periodicidad as _Periodicidad,
 } from '@/lib/rrhh-core'
+import { resolverCategoriaSistema } from '@/lib/gastos-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -1176,13 +1177,10 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   const total = (lineas ?? []).reduce((s, l) => s + Number(l.neto), 0)
   if (total <= EPS) return { ok: false, error: 'La nómina no tiene importe a pagar.' }
 
-  // Categoría del sistema "Salarios" (sembrada por migración) para el gasto de nómina.
-  const { data: catSalarios } = await db.from('categorias_gastos')
-    .select('categoria_id, nombre')
-    .eq('client_id', session.client_id)
-    .eq('nombre', 'Salarios')
-    .eq('estado', 'ACTIVO')
-    .maybeSingle()
+  // Categoría del sistema «Salarios» para el gasto de nómina. Se RESUELVE-O-CREA
+  // (mig. 133): buscarla por nombre dejaba sin `categoria_id` a todo cliente dado
+  // de alta después de la mig. 074, que nunca tuvo las categorías sembradas.
+  const catSalarios = await resolverCategoriaSistema(db, session.client_id, 'salarios')
 
   const gasto_id = generarGastoId()
   const { error: gErr } = await db.from('gastos_cobros').insert({
