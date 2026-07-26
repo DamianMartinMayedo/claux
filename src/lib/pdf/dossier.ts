@@ -13,7 +13,10 @@ import {
   MARCA, MARGEN, type JsPdfDoc,
 } from './documento'
 import { crearCursor } from './reporte'
-import { estadoDeResultados, notaConversion, congeladoA, type CategoriaMonto } from '@/lib/dossier/estado'
+import {
+  estadoDeResultados, notaConversion, congeladoA,
+  SUFIJO_MODO_ESTADO, type CategoriaMonto, type ModoEstado,
+} from '@/lib/dossier/estado'
 import { etiquetaMes, type FilaSerie } from '@/lib/dossier/snapshot'
 import type { LineaDesglose } from '@/lib/dossier/base'
 
@@ -28,6 +31,8 @@ export interface EstadoResultadosPdf {
   snapshotAt: string | null
   serie: FilaSerie[]
   lineas: LineaDesglose[]
+  /** RESUMEN imprime solo cifras y márgenes; DESGLOSADO añade el detalle. */
+  modo: ModoEstado
   tasas: Record<string, TasaPdf>
   faltantes: string[]
 }
@@ -51,8 +56,11 @@ export function construirEstadoResultados(doc: JsPdfDoc, d: EstadoResultadosPdf)
     ? `${fechaLarga(d.periodoDesde)} — ${fechaLarga(d.periodoHasta)}`
     : ''
 
+  // El título dice qué versión es. Un PDF que se manda por correo se abre fuera de
+  // contexto: quien lo recibe tiene que saber si le llegó el resumen o el detalle
+  // sin preguntar, y el que lo manda tiene que ver que envía lo que cree enviar.
   cur.y = cabeceraReporte(doc, {
-    titulo:    'Estado de resultados',
+    titulo:    `Estado de resultados · ${SUFIJO_MODO_ESTADO[d.modo]}`,
     izquierda: d.empresa,
     derecha:   periodo,
   })
@@ -60,9 +68,13 @@ export function construirEstadoResultados(doc: JsPdfDoc, d: EstadoResultadosPdf)
   cur.nota(`${congeladoA(d.snapshotAt)} · Importes en ${d.moneda}.`)
   cur.salto(4)
 
-  // Un grupo: cabecera en negrita + su desglose por categoría indentado.
-  const grupo = (label: string, total: number, cats: CategoriaMonto[]) => {
-    cur.fila(label, fmt(total), { bold: true })
+  // Un grupo: cabecera en negrita con su peso sobre los ingresos y, solo en modo
+  // DESGLOSADO, el detalle por concepto indentado. En RESUMEN no se imprime «Sin
+  // desglose por categoría»: no falta nada, es que el dueño eligió no enseñarlo.
+  const detallar = d.modo === 'DESGLOSADO'
+  const grupo = (label: string, total: number, pct: number | null, cats: CategoriaMonto[]) => {
+    cur.fila(pct == null ? label : `${label} (${fmtPct(pct)})`, fmt(total), { bold: true })
+    if (!detallar) return
     if (cats.length === 0) {
       cur.fila('Sin desglose por categoría', '', { indent: true, color: MARCA.faint, size: 9 })
       return
@@ -70,11 +82,11 @@ export function construirEstadoResultados(doc: JsPdfDoc, d: EstadoResultadosPdf)
     for (const c of cats) cur.fila(c.concepto, fmt(c.monto), { indent: true })
   }
 
-  grupo('Ingresos', er.ingresos, er.ingresosPorCategoria)
-  grupo('Coste de ventas', er.costoVentas, er.costoPorCategoria)
+  grupo('Ingresos', er.ingresos, null, er.ingresosPorCategoria)
+  grupo('Coste de ventas', er.costoVentas, er.costoVentasPct, er.costoPorCategoria)
   cur.filaTotal(`Margen bruto (${fmtPct(er.margenBrutoPct)})`, fmt(er.margenBruto))
 
-  grupo('Gastos operativos', er.gastosOperativos, er.gastosPorCategoria)
+  grupo('Gastos operativos', er.gastosOperativos, er.gastosOperativosPct, er.gastosPorCategoria)
   cur.filaTotal(`Resultado neto (${fmtPct(er.margenNetoPct)})`, fmt(er.resultadoNeto))
 
   // ── Evolución mensual ──

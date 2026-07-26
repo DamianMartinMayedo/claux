@@ -40,9 +40,14 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
   if (!dossier) return null   // inalcanzable: sin dossier el modo es 'wizard'
 
   const simbolo = data.monedas.find(m => m.codigo === dossier.moneda_presentacion)?.simbolo ?? dossier.moneda_presentacion
+  // «Todas las empresas» solo cuando de verdad son VARIAS: con una sola, el
+  // consolidado ES esa empresa, y rotularlo «todas» delante de un inversor (o en
+  // el nombre del PDF que le llega) suena a plantilla sin rellenar.
   const empresaNombre = dossier.empresa_id
     ? (data.empresas.find(e => e.empresa_id === dossier.empresa_id)?.nombre ?? 'Mi empresa')
-    : 'Todas las empresas'
+    : data.empresas.length === 1
+      ? data.empresas[0].nombre
+      : 'Todas las empresas'
 
   return (
     <div className="view-container">

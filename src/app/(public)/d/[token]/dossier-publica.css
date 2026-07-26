@@ -167,6 +167,32 @@
 }
 .dp-bar-pct { display: inline-block; margin-top: 0.35rem; font-size: 0.8rem; font-weight: 600; opacity: 0.6; font-variant-numeric: tabular-nums; }
 
+/* ── Detalle por concepto (solo en modo DESGLOSADO) ──
+   Tres columnas en escritorio, una en móvil. Va en columnas y no en una lista
+   larga porque un slide del deck es una pantalla: si el detalle no cabe, el
+   inversor hace scroll dentro de la diapositiva y se pierde el ritmo. */
+.dp-detalle {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.5rem 2.5rem; max-width: 62rem; margin-top: 1.25rem;
+}
+.dp-detalle-titulo {
+  margin: 0 0 0.6rem; font-size: 0.78rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6;
+}
+.dp-detalle-lista { list-style: none; margin: 0; padding: 0; }
+.dp-detalle-fila {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 1rem; padding: 0.3rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.dp-detalle-concepto { font-size: 0.95rem; min-width: 0; }
+.dp-detalle-monto {
+  font-size: 0.95rem; font-weight: 700; color: var(--acc);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.dp-detalle-pct { margin-left: 0.4rem; font-size: 0.78em; font-weight: 600; opacity: 0.6; }
+.dp-detalle-nota { margin: 1.25rem 0 0; font-size: 0.78rem; opacity: 0.55; }
+
 /* ── Gráfico (se dibuja) ── */
 .dp-grafico { margin: 1.75rem 0 0; }
 .dp-grafico-caja { display: flex; align-items: stretch; gap: 0.5rem; }

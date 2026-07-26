@@ -2690,6 +2690,75 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .dos-costo-tag.is-costo { background: var(--color-amber-highlight); color: var(--color-text); }
 
+/* Clasificador de papel en el P&L (categoría → COSTE_VENTAS/PERSONAL/…). Sustituye
+   a los chips de sí/no: con cuatro papeles un toggle ya no basta. */
+.dos-rol-lista { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.dos-rol-fila {
+  display: grid; grid-template-columns: 1fr minmax(12rem, 16rem);
+  align-items: center; gap: var(--space-3);
+}
+.dos-rol-nombre { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); min-width: 0; }
+.dos-rol-select { min-width: 0; }
+/* Selector de qué se publica del estado de resultados + encuadre de vista previa.
+   Va DENTRO de la tarjeta del estado, pegado a lo que decide: elegir cuánto
+   enseñas desde otra pantalla es elegir a ciegas. */
+.dos-modo {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.dos-modo-cabeza {
+  display: flex; align-items: center; gap: var(--space-2);
+  color: var(--color-text-muted); margin-bottom: var(--space-2);
+}
+.dos-modo-titulo { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.dos-modo-opciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.dos-modo-ayuda { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
+
+.dos-rol-leyenda {
+  list-style: none; margin: var(--space-4) 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.6;
+}
+
+/* ── Paso «El desglose» ───────────────────────────────────────────────────────
+   Lista por grupo (concepto + importe) con conciliación en vivo contra los
+   totales de la rejilla. Filas, no tabla: son 5-8 y en móvil una tabla obligaría
+   a scroll horizontal en la pantalla donde más se teclea. */
+.dos-desglose-card { margin-bottom: var(--space-6); }
+.dos-desg-grupo { margin-top: var(--space-5); }
+.dos-desg-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3); padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+}
+.dos-desg-titulo { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); margin: 0; }
+.dos-desg-total  { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.dos-desg-filas  { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+.dos-desg-fila {
+  display: grid; grid-template-columns: 1fr minmax(9rem, 12rem) auto;
+  align-items: center; gap: var(--space-2);
+}
+.dos-desg-concepto { min-width: 0; }
+.dos-desg-quitar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  background: none; border: none; border-radius: var(--radius-sm);
+  color: var(--color-text-faint); cursor: pointer; transition: var(--transition);
+}
+.dos-desg-quitar:hover { background: var(--color-error-bg); color: var(--color-error); }
+.dos-desg-pie {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-2);
+}
+.dos-desg-ok    { font-size: var(--text-xs); font-weight: 600; color: var(--color-success); }
+.dos-desg-resto {
+  display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  font-size: var(--text-xs); color: var(--color-text-muted);
+}
+
 /* Rejilla mensual */
 .dos-numeros-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .dos-grid { margin-top: var(--space-4); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); overflow: hidden; }
@@ -3029,6 +3098,20 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   .dos-input { max-width: 55%; }
   .dos-grid-neto { display: flex; justify-content: space-between; padding-top: var(--space-2); margin-top: var(--space-2); border-top: 1px solid var(--color-divider); font-weight: 700; }
   .dos-grid-neto::before { content: attr(data-label); font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 600; }
+
+  /* Desglose: concepto arriba, importe debajo. A tres columnas en 360px el
+     campo de concepto quedaba en ~9 caracteres y no se podía leer lo escrito. */
+  .dos-desg-fila {
+    grid-template-columns: 1fr auto;
+    border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+    padding: var(--space-3); background: var(--color-surface);
+  }
+  .dos-desg-concepto { grid-column: 1; }
+  .dos-desg-quitar   { grid-column: 2; grid-row: 1; }
+  .dos-desg-fila .dos-grid-cell { grid-column: 1 / -1; }
+
+  /* Clasificador de papel: nombre encima del selector, no al lado. */
+  .dos-rol-fila { grid-template-columns: 1fr; gap: var(--space-1); }
 }
 
 /* ── Cambio de moneda de una ficha (aviso compartido: RRHH, terceros, Citas) ── */

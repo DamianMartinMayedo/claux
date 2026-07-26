@@ -8,10 +8,13 @@ import { optimizarImagen } from '@/lib/imagen/optimizar'
 import { getPortalSession, puedeEditarModulo } from './auth'
 import { obtenerEmpresas } from './empresas'
 import { construirSnapshotDesdeBase, type LineaDesglose } from '@/lib/dossier/base'
+import { esRolPL, type CategoriaPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 import { construirConversor } from '@/lib/tasas'
 import { fusionarSerie, resolverFusion, type FilaSerie, type PlanFusion } from '@/lib/dossier/snapshot'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { normalizarHex } from '@/lib/dossier/paleta'
+import { esModoEstado, type ModoEstado as _ModoEstado } from '@/lib/dossier/estado'
+import { conceptosDe, CONCEPTOS_DEFAULT, type ConceptosSector } from '@/lib/sector'
 
 // ── Funcionalidad "Dossier del negocio" (clave `dossier`) ──
 // Independiente: funciona a mano sin la base. Con `base`, puede TRAER los números
@@ -41,6 +44,8 @@ export interface DossierBasico {
   // queda desfasada (importes en la moneda vieja, o de otra empresa) hasta reescribirla.
   snapshot_stale:          boolean
   token:                   string | null
+  /** Qué se publica del estado de resultados: RESUMEN | DESGLOSADO (mig. 136). */
+  estado_modo:             ModoEstado
   monedas_faltantes:       string[]
   tasas_usadas:            Record<string, TasaUsada>
 }
@@ -62,7 +67,18 @@ export interface ResumenDossier {
   updated_at:          string
 }
 
-export interface CategoriaCosto { categoria: string; es_costo_ventas: boolean }
+/**
+ * Una categoría de gasto del cliente con su papel en el P&L. Es la MISMA fuente
+ * que usa el informe del portal (`categorias_gastos.rol_pl`, mig. 134): el paso
+ * «Coste de ventas» del dossier dejó de guardar su propia clasificación en
+ * `dossier_costo_ventas`, que era una segunda verdad sobre el mismo dato y podía
+ * hacer que los dos estados de resultados del producto no dijeran lo mismo.
+ * Solo categorías RAÍZ: las subcategorías heredan.
+ */
+export type RolPL = _RolPL
+export type ModoEstado = _ModoEstado
+
+export interface CategoriaCosto { categoria_id: string; categoria: string; rol_pl: RolPL }
 
 export interface SeccionRelato { clave: string; cuerpo: string; generado_ia: boolean }
 
@@ -81,6 +97,7 @@ export interface DossierData {
   monedas:            { codigo: string; simbolo: string }[]
   monedaConsolidacion: string | null
   categoriasCosto:    CategoriaCosto[]        // vacío sin base
+  conceptosSector:    ConceptosSector          // filas sugeridas del desglose (mig. 135)
   empresaLogoUrl:     string | null           // habilita "usar el logo de mi empresa"
 }
 
@@ -156,12 +173,55 @@ async function logoDeEmpresa(empresaId: string | null): Promise<string | null> {
   return e?.logo_url ?? null
 }
 
-async function clasificacionCosto(db: Db, clientId: string): Promise<Map<string, boolean>> {
-  const { data } = await db.from('dossier_costo_ventas')
-    .select('categoria, es_costo_ventas').eq('client_id', clientId)
-  const m = new Map<string, boolean>()
-  for (const r of (data ?? []) as CategoriaCosto[]) m.set(r.categoria, r.es_costo_ventas)
-  return m
+/** Conceptos típicos del sector del cliente; genéricos si no tiene sector. */
+async function conceptosDelSector(db: Db, sector: string | null): Promise<ConceptosSector> {
+  if (!sector) return { ...CONCEPTOS_DEFAULT }
+  const { data } = await db.from('plantillas_sector')
+    .select('conceptos_pl').eq('sector', sector).maybeSingle()
+  return conceptosDe(data?.conceptos_pl)
+}
+
+/** Catálogo de categorías con su papel en el P&L (la misma lectura que Reportes). */
+async function categoriasPL(db: Db, clientId: string): Promise<CategoriaPL[]> {
+  const { data } = await db.from('categorias_gastos')
+    .select('categoria_id, nombre, parent_id, rol_pl').eq('client_id', clientId)
+  return (data ?? []).map((c: Record<string, unknown>) => ({
+    categoria_id: c.categoria_id as string,
+    nombre:       c.nombre as string,
+    parent_id:    (c.parent_id as string) ?? null,
+    rol_pl:       esRolPL(c.rol_pl) ? c.rol_pl : 'OPERATIVO',
+  }))
+}
+
+/**
+ * Desglose actual del dossier. La RPC `dossier_guardar_snapshot` hace
+ * delete + insert, así que cualquier escritura parcial tiene que releerlo y
+ * volver a pasarlo entero: omitirlo NO es «dejarlo como está», es borrarlo.
+ */
+async function leerSerie(db: Db, dossierId: string, clientId: string): Promise<FilaSerie[]> {
+  const { data } = await db.from('dossier_serie')
+    .select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+    .eq('dossier_id', dossierId).eq('client_id', clientId).order('mes')
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    mes: r.mes as string,
+    ingresos: Number(r.ingresos) || 0,
+    costo_ventas: Number(r.costo_ventas) || 0,
+    gastos_operativos: Number(r.gastos_operativos) || 0,
+    moneda: r.moneda as string,
+    origen: (r.origen === 'BASE' ? 'BASE' : 'MANUAL') as FilaSerie['origen'],
+  }))
+}
+
+async function leerLineas(db: Db, dossierId: string, clientId: string): Promise<LineaDesglose[]> {
+  const { data } = await db.from('dossier_lineas')
+    .select('grupo, concepto, monto, orden')
+    .eq('dossier_id', dossierId).eq('client_id', clientId).order('orden')
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    grupo: r.grupo as LineaDesglose['grupo'],
+    concepto: r.concepto as string,
+    monto: Number(r.monto) || 0,
+    orden: Number(r.orden) || 0,
+  }))
 }
 
 // Escribe el snapshot atómicamente vía la RPC (delete + insert + update).
@@ -239,9 +299,14 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     // dada de baja no es una opción de presentación.
     db.from('monedas').select('codigo, simbolo, es_consolidacion').eq('client_id', session.client_id).eq('activa', true),
     (id ? base.eq('dossier_id', id) : base.order('created_at', { ascending: true }).limit(1)).maybeSingle(),
-    db.from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle(),
+    db.from('clients').select('nombre_empresa, sector').eq('client_id', session.client_id).maybeSingle(),
   ])
   const nombreNegocio = (clienteRow?.nombre_empresa as string) || 'Mi negocio'
+
+  // Conceptos típicos del sector (mig. 135): precargan las FILAS del desglose,
+  // nunca los importes. Sin ellos, el paso «El desglose» sería una rejilla vacía
+  // frente a un dueño que no sabe qué escribir — que es el problema que resuelve.
+  const conceptosSector = await conceptosDelSector(db, (clienteRow?.sector as string) ?? null)
 
   const tieneBase    = tieneModulo(modulos, 'base')
   const tieneRrhh    = tieneModulo(modulos, 'rrhh')
@@ -268,7 +333,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
       tieneBase, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
-      monedas, monedaConsolidacion, categoriasCosto, empresaLogoUrl: null,
+      monedas, monedaConsolidacion, categoriasCosto, conceptosSector, empresaLogoUrl: null,
     }
   }
 
@@ -313,6 +378,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     // en ambos casos hay que re-sincronizar antes de enseñarla.
     snapshot_stale: !!dosRow.snapshot_stale || serie.some(f => f.moneda !== dosRow.moneda_presentacion),
     token: dosRow.token ?? null,
+    estado_modo: esModoEstado(dosRow.estado_modo) ? dosRow.estado_modo : 'DESGLOSADO',
     monedas_faltantes: Array.isArray(dosRow.monedas_faltantes) ? dosRow.monedas_faltantes : [],
     tasas_usadas: (dosRow.tasas_usadas && typeof dosRow.tasas_usadas === 'object') ? dosRow.tasas_usadas as Record<string, TasaUsada> : {},
   }
@@ -320,27 +386,25 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   return {
     dossier, serie, lineas, secciones,
     tieneBase, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
-    monedas, monedaConsolidacion, categoriasCosto,
+    monedas, monedaConsolidacion, categoriasCosto, conceptosSector,
     empresaLogoUrl: await logoDeEmpresa(dossier.empresa_id),
   }
 }
 
-// Categorías de gasto reales del cliente + su clasificación (coste de ventas o no).
+// Categorías RAÍZ del cliente con su papel en el P&L. Se listan las del catálogo,
+// no los textos sueltos de `gastos_cobros`: desde la mig. 133 toda categoría que
+// aparece en un gasto tiene su fila (incluidas «Compras» y «Servicios de
+// terceros», que antes eran fantasmas y por tanto no se podían clasificar — justo
+// las dos que por naturaleza son coste de ventas).
 export async function obtenerCategoriasGasto(): Promise<CategoriaCosto[]> {
   const session = await getPortalSession()
   if (!session) return []
 
-  const db = createAdminClient()
-  const [{ data: gastos }, clasif] = await Promise.all([
-    db.from('gastos_cobros').select('categoria').eq('client_id', session.client_id).eq('tipo', 'GASTO'),
-    clasificacionCosto(db, session.client_id),
-  ])
-
-  const categorias = new Set<string>()
-  for (const g of (gastos ?? []) as { categoria: string | null }[]) categorias.add(g.categoria || 'Sin categoría')
-
-  return [...categorias].sort((a, b) => a.localeCompare(b))
-    .map(categoria => ({ categoria, es_costo_ventas: clasif.get(categoria) ?? false }))
+  const todas = await categoriasPL(createAdminClient(), session.client_id)
+  return todas
+    .filter(c => !c.parent_id)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    .map(c => ({ categoria_id: c.categoria_id, categoria: c.nombre, rol_pl: c.rol_pl }))
 }
 
 // ── Mutación ──────────────────────────────────────────────────────────────────
@@ -432,6 +496,7 @@ export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean
     periodo_desde: origen.periodo_desde,
     periodo_hasta: origen.periodo_hasta,
     crecimiento_mensual_pct: origen.crecimiento_mensual_pct,
+    estado_modo: origen.estado_modo,
     snapshot_at: origen.snapshot_at,
     snapshot_stale: origen.snapshot_stale,
     tasas_usadas: origen.tasas_usadas,
@@ -443,7 +508,10 @@ export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean
   // tablas llevan además un `id` identity que no se ve en el modelo de dominio, y
   // un select('*') lo arrastraría al insert. En serie y secciones el unique lo
   // cazaría; en dossier_lineas, que no tiene unique, pasaría callando.
-  // dossier_costo_ventas NO se copia: es de nivel client_id, ya se hereda.
+  // La clasificación de categorías NO se copia: vive en `categorias_gastos.rol_pl`
+  // (nivel client_id, mig. 134), así que ya se hereda. La tabla `dossier_costo_ventas`
+  // quedó INERTE al absorberla — no se borra porque `eliminar_cliente()` (mig. 096)
+  // la limpia, y tocar la cascada de borrado por un ahorro cosmético no compensa.
   const [{ data: serie }, { data: lineas }, { data: secciones }] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
       .eq('dossier_id', origenId).eq('client_id', session.client_id),
@@ -584,12 +652,20 @@ export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; e
     }))
 
   // Edición manual: reescribe solo la serie. CONSERVA la procedencia del snapshot
-  // (tasas y monedas faltantes de un "traer" previo; sin base son {}). El desglose
-  // por categoría (líneas) SÍ se descarta: viene de la base y un retoque a mano lo
-  // dejaría descuadrado frente a los totales. Se regenera al "Actualizar".
+  // (tasas y monedas faltantes de un "traer" previo; sin base son {}) y CONSERVA
+  // el desglose.
+  //
+  // Antes se descartaba, con buen motivo: venía de la base y un retoque a mano lo
+  // dejaba descuadrado frente a los totales. Pero el precio era que retocar UNA
+  // celda borraba el desglose entero del que ya lo había traído. Con el paso «El
+  // desglose» (que concilia en vivo contra estos totales y ofrece «Otros» para lo
+  // que falte) el descuadre ya se ve y se corrige ahí, así que borrarlo aquí solo
+  // destruía trabajo. La RPC hace delete+insert, de modo que hay que releerlo y
+  // volver a pasarlo: no pasarlo es borrarlo.
   const tasas = (dos.tasas_usadas && typeof dos.tasas_usadas === 'object') ? dos.tasas_usadas as Record<string, unknown> : {}
   const faltantes = Array.isArray(dos.monedas_faltantes) ? dos.monedas_faltantes as string[] : []
-  const res = await escribirSnapshot(db, dossierId, session.client_id, serie, [], tasas, faltantes)
+  const lineas = await leerLineas(db, dossierId, session.client_id)
+  const res = await escribirSnapshot(db, dossierId, session.client_id, serie, lineas, tasas, faltantes)
   if (!res.ok) return res
 
   revalidatePath('/portal/dossier')
@@ -597,26 +673,120 @@ export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; e
   return { ok: true }
 }
 
-// Guarda la clasificación coste de ventas (nivel cliente; el 2º dossier la hereda).
-export async function guardarCostoVentas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Guarda el DESGLOSE por concepto del período (paso «El desglose»).
+ *
+ * Grano de PERÍODO, no de mes: `dossier_lineas` no tiene columna `mes` a propósito
+ * («grano distinto a la serie», DDL de la mig. 098). Son ~5-8 filas en total en vez
+ * de 12 meses × N conceptos — decisivo en móvil y 3G.
+ *
+ * No toca la serie: se relee y se vuelve a pasar porque la RPC borra e inserta.
+ */
+export async function guardarDesglose(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  let entrada: CategoriaCosto[]
+  const dossierId = (formData.get('dossier_id') as string)?.trim()
+  if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
+
+  const db = createAdminClient()
+  const { data: dos } = await db.from('dossiers')
+    .select('moneda_presentacion, tasas_usadas, monedas_faltantes')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
+
+  let entrada: Array<Partial<LineaDesglose>>
+  try { entrada = JSON.parse((formData.get('lineas') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
+
+  const GRUPOS = new Set<LineaDesglose['grupo']>(['INGRESO', 'COSTO_VENTAS', 'GASTO_OPERATIVO'])
+  const lineas: LineaDesglose[] = entrada
+    .filter(l => l && typeof l.concepto === 'string' && l.concepto.trim() && GRUPOS.has(l.grupo as LineaDesglose['grupo']))
+    // Una fila a cero es una fila que el dueño dejó en blanco: en el documento
+    // sería un concepto vacío frente al inversor, no un dato.
+    .filter(l => Math.abs(Number(l.monto) || 0) > 0.005)
+    .map((l, i) => ({
+      grupo:    l.grupo as LineaDesglose['grupo'],
+      concepto: (l.concepto as string).trim().slice(0, 120),
+      monto:    Math.round((Number(l.monto) || 0) * 100) / 100,
+      orden:    i,
+    }))
+
+  const serie = await leerSerie(db, dossierId, session.client_id)
+  const tasas = (dos.tasas_usadas && typeof dos.tasas_usadas === 'object') ? dos.tasas_usadas as Record<string, unknown> : {}
+  const faltantes = Array.isArray(dos.monedas_faltantes) ? dos.monedas_faltantes as string[] : []
+
+  const res = await escribirSnapshot(db, dossierId, session.client_id, serie, lineas, tasas, faltantes)
+  if (!res.ok) return res
+
+  revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
+  return { ok: true }
+}
+
+/**
+ * Cambia qué versión del estado de resultados se publica (mig. 136).
+ *
+ * NO toca el snapshot ni lo marca desfasado: los números son los mismos, cambia
+ * cuánto se enseña de ellos. Por eso tampoco pide confirmación aunque el dossier
+ * esté publicado — se revalida el deck y el enlace refleja la elección al momento,
+ * que es exactamente lo que el dueño acaba de pedir.
+ */
+export async function guardarModoEstado(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const dossierId = (formData.get('dossier_id') as string)?.trim()
+  const modo      = (formData.get('estado_modo') as string)?.trim()
+  if (!dossierId)          return { ok: false, error: 'Falta el dossier.' }
+  if (!esModoEstado(modo)) return { ok: false, error: 'Modo no válido.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('dossiers')
+    .update({ estado_modo: modo, updated_at: new Date().toISOString() })
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: 'No se pudo guardar.' }
+
+  revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
+  return { ok: true }
+}
+
+/**
+ * Guarda el papel en el P&L de las categorías del cliente (paso «Coste de ventas»).
+ *
+ * Escribe en `categorias_gastos.rol_pl`, la MISMA columna que lee el informe del
+ * portal: clasificar aquí reclasifica también allí, y ese es el punto. Es a nivel
+ * cliente, así que el 2º dossier lo hereda igual que antes.
+ *
+ * El candado es doble a propósito: `dossier` porque es la pantalla desde la que se
+ * entra, y `base` porque se está escribiendo en el catálogo de Contabilidad. Sin
+ * `base` este paso ni se pinta (no hay categorías reales que clasificar).
+ */
+export async function guardarCostoVentas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base')))    return { ok: false, error: 'Clasificar categorías necesita el módulo de Contabilidad.' }
+
+  let entrada: { categoria_id?: string; rol_pl?: string }[]
   try { entrada = JSON.parse((formData.get('clasificacion') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
 
   const db = createAdminClient()
-  const filas = entrada
-    .filter(c => c && typeof c.categoria === 'string')
-    .map(c => ({ client_id: session.client_id, categoria: c.categoria, es_costo_ventas: !!c.es_costo_ventas, updated_at: new Date().toISOString() }))
+  const validas = new Set((await categoriasPL(db, session.client_id)).filter(c => !c.parent_id).map(c => c.categoria_id))
 
-  if (filas.length) {
-    const { error } = await db.from('dossier_costo_ventas').upsert(filas, { onConflict: 'client_id,categoria' })
+  for (const c of entrada) {
+    if (!c?.categoria_id || !validas.has(c.categoria_id) || !esRolPL(c.rol_pl)) continue
+    const { error } = await db.from('categorias_gastos')
+      .update({ rol_pl: c.rol_pl, updated_at: new Date().toISOString() })
+      .eq('categoria_id', c.categoria_id).eq('client_id', session.client_id)
     if (error) return { ok: false, error: 'No se pudo guardar la clasificación.' }
   }
 
   revalidatePath('/portal/dossier')
+  revalidatePath('/portal/gastos')
+  revalidatePath('/portal/reportes')
   return { ok: true }
 }
 
@@ -1044,6 +1214,8 @@ export interface DeckPublico {
   periodoHasta: string | null
   snapshotAt: string | null
   crecimientoPct: number
+  /** RESUMEN oculta el detalle por concepto; el inversor ve lo que el dueño eligió. */
+  estadoModo: ModoEstado
   secciones: SeccionRelato[]
   serie: FilaSerie[]
   lineas: LineaDesglose[]
@@ -1104,6 +1276,7 @@ export async function obtenerDeckPublico(token: string): Promise<DeckPublico | n
     periodoHasta: dos.periodo_hasta ?? null,
     snapshotAt: dos.snapshot_at ?? null,
     crecimientoPct: Number(dos.crecimiento_mensual_pct) || 0,
+    estadoModo: esModoEstado(dos.estado_modo) ? dos.estado_modo : 'DESGLOSADO',
     secciones: (seccionRows ?? []).map((r: Record<string, unknown>) => ({
       clave: r.clave as string, cuerpo: (r.cuerpo as string) ?? '', generado_ia: !!r.generado_ia,
     })),
@@ -1135,11 +1308,11 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
   if (!dos) return { error: 'Dossier no encontrado.' }
 
   const fallback = periodo12()
-  const [{ data: serieRows }, empresaIds, costoMap] = await Promise.all([
+  const [{ data: serieRows }, empresaIds, cats] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
       .eq('dossier_id', dossierId).eq('client_id', session.client_id),
     empresaIdsDe(dos.empresa_id ?? null),
-    clasificacionCosto(db, session.client_id),
+    categoriasPL(db, session.client_id),
   ])
 
   const actual: FilaSerie[] = (serieRows ?? []).map((r: Record<string, unknown>) => ({
@@ -1151,7 +1324,7 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
   const snap = await construirSnapshotDesdeBase(
     db, session.client_id, empresaIds,
     dos.periodo_desde ?? fallback.desde, dos.periodo_hasta ?? fallback.hasta,
-    dos.moneda_presentacion, costoMap,
+    dos.moneda_presentacion, cats,
   )
 
   const plan = fusionarSerie(actual, snap.serie)
@@ -1181,11 +1354,11 @@ export async function aplicarActualizacion(formData: FormData): Promise<{ ok: bo
   try { aceptados = JSON.parse((formData.get('conflictos_aceptados') as string) || '[]') } catch { aceptados = [] }
 
   const fallback = periodo12()
-  const [{ data: serieRows }, empresaIds, costoMap] = await Promise.all([
+  const [{ data: serieRows }, empresaIds, cats] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
       .eq('dossier_id', dossierId).eq('client_id', session.client_id),
     empresaIdsDe(dos.empresa_id ?? null),
-    clasificacionCosto(db, session.client_id),
+    categoriasPL(db, session.client_id),
   ])
 
   const actual: FilaSerie[] = (serieRows ?? []).map((r: Record<string, unknown>) => ({
@@ -1197,7 +1370,7 @@ export async function aplicarActualizacion(formData: FormData): Promise<{ ok: bo
   const snap = await construirSnapshotDesdeBase(
     db, session.client_id, empresaIds,
     dos.periodo_desde ?? fallback.desde, dos.periodo_hasta ?? fallback.hasta,
-    dos.moneda_presentacion, costoMap,
+    dos.moneda_presentacion, cats,
   )
 
   const serieFinal = resolverFusion(actual, snap.serie, aceptados)
@@ -1232,10 +1405,10 @@ export async function resincronizarSnapshot(dossierId: string): Promise<{ ok: bo
 
   const moneda = dos.moneda_presentacion
   const fallback = periodo12()
-  const [conversor, empresaIds, costoMap, { data: serieRows }] = await Promise.all([
+  const [conversor, empresaIds, cats, { data: serieRows }] = await Promise.all([
     construirConversor(db, session.client_id),
     empresaIdsDe(dos.empresa_id ?? null),
-    clasificacionCosto(db, session.client_id),
+    categoriasPL(db, session.client_id),
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
       .eq('dossier_id', dossierId).eq('client_id', session.client_id),
   ])
@@ -1244,7 +1417,7 @@ export async function resincronizarSnapshot(dossierId: string): Promise<{ ok: bo
   const snap = await construirSnapshotDesdeBase(
     db, session.client_id, empresaIds,
     dos.periodo_desde ?? fallback.desde, dos.periodo_hasta ?? fallback.hasta,
-    moneda, costoMap,
+    moneda, cats,
   )
 
   const baseMeses = new Set(snap.serie.map(f => f.mes))

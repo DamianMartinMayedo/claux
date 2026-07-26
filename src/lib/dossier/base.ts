@@ -7,13 +7,22 @@
 //   · Ingreso devengado: facturas EMITIDA|COBRADA por fecha_emision.
 //   · Ingreso directo:   gastos_cobros COBRO por fecha.
 //   · Gasto:             gastos_cobros GASTO por fecha; se parte en coste de
-//                        ventas vs. operativo según dossier_costo_ventas.
+//                        ventas vs. operativo según el `rol_pl` de su categoría.
 // Todo se convierte a la moneda de presentación; lo que no tiene tasa se excluye
 // y se informa en monedasFaltantes (deck y PDF lo imprimen).
+//
+// CONVERGENCIA (F4): la clasificación es la MISMA que la del informe del portal —
+// `categorias_gastos.rol_pl`, resuelto por la categoría RAÍZ (mig. 134). Antes
+// vivía en `dossier_costo_ventas`, un booleano por NOMBRE de categoría: una
+// segunda fuente de verdad sobre el mismo dato, con la que los dos estados de
+// resultados del producto podían clasificar distinto el mismo gasto y decirle
+// cosas diferentes al dueño y a su inversor. El desglose además hace ROLLUP por
+// raíz, igual que el portal: una subcategoría no aparece como hermana de su madre.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { construirConversor, type DetalleTasa } from '@/lib/tasas'
+import { indexarCategorias, type CategoriaPL } from '@/lib/pl/estado'
 import type { FilaSerie } from './snapshot'
 
 export interface LineaDesglose {
@@ -49,9 +58,11 @@ export async function construirSnapshotDesdeBase(
   desde: string,
   hasta: string,
   monedaPresentacion: string,
-  costoVentas: Map<string, boolean>,
+  categorias: CategoriaPL[],
 ): Promise<SnapshotBase> {
   const ids = empresaIds.length ? empresaIds : ['__none__']
+  const idx = indexarCategorias(categorias)
+  const porNombreRaiz = new Map(categorias.filter(c => !c.parent_id).map(c => [c.nombre.trim().toLowerCase(), c]))
 
   const [conversor, facRes, gcRes] = await Promise.all([
     construirConversor(db, clientId),
@@ -59,7 +70,7 @@ export async function construirSnapshotDesdeBase(
       .eq('client_id', clientId).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desde).lte('fecha_emision', hasta),
-    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, fecha')
+    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha')
       .eq('client_id', clientId).in('empresa_id', ids)
       .gte('fecha', desde).lte('fecha', hasta),
   ])
@@ -95,16 +106,28 @@ export async function construirSnapshotDesdeBase(
   }
 
   // ── gastos_cobros: COBRO → ingreso; GASTO → coste de ventas u operativo ──
-  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; fecha: string }[]) {
+  // La categoría se resuelve por FK y, si falta, por nombre; después se SUBE a su
+  // raíz, que es la que tiene el `rol_pl` y la que da nombre a la línea del
+  // desglose. Sin subir, «Suministros · Electricidad» saldría suelta al lado de
+  // «Suministros» como si fueran dos gastos distintos del mismo nivel.
+  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string }[]) {
     const v = conv(g.monto, g.moneda)
     if (v == null || !g.fecha) continue
     const mes = getMes(g.fecha.slice(0, 7))
-    const cat = g.categoria || 'Sin categoría'
+
     if (g.tipo === 'COBRO') {
       mes.ingresos += v
-      const concepto = g.categoria ? cat : 'Otros ingresos'
+      const concepto = g.categoria?.trim() || 'Otros ingresos'
       ingresoCat.set(concepto, (ingresoCat.get(concepto) ?? 0) + v)
-    } else if (costoVentas.get(cat) === true) {
+      continue
+    }
+
+    const fila = (g.categoria_id ? idx.porId.get(g.categoria_id) : undefined)
+      ?? (g.categoria ? porNombreRaiz.get(g.categoria.trim().toLowerCase()) : undefined)
+    const raiz = fila ? (idx.raizDe.get(fila.categoria_id) ?? fila) : null
+    const cat  = raiz?.nombre ?? (g.categoria?.trim() || 'Sin categoría')
+
+    if (raiz?.rol_pl === 'COSTE_VENTAS') {
       mes.costo_ventas += v
       costoCat.set(cat, (costoCat.get(cat) ?? 0) + v)
     } else {

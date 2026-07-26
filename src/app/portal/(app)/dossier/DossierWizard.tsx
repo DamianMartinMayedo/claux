@@ -8,6 +8,7 @@ import { pasosEditables, LABEL_PASO, type PasoEditable } from '@/lib/dossier/pas
 import PasoBasicos from './PasoBasicos'
 import PasoCostoVentas from './PasoCostoVentas'
 import PasoNumeros from './PasoNumeros'
+import PasoDesglose from './PasoDesglose'
 import PasoCrecimiento from './PasoCrecimiento'
 import PasoRelato from './PasoRelato'
 import PasoMarca from './PasoMarca'
@@ -33,7 +34,7 @@ const ETIQUETA: Record<Paso, string> = { ...LABEL_PASO, listo: 'Listo' }
 
 // Los pasos que se pueden saltar sin escribir nada: el dossier sigue siendo válido
 // sin relato ni logo (quien solo quiere el PDF no debería recorrer siete pantallas).
-const OPCIONALES: Paso[] = ['costos', 'crecimiento', 'relato', 'marca']
+const OPCIONALES: Paso[] = ['costos', 'desglose', 'crecimiento', 'relato', 'marca']
 
 function pasosDe(tieneBase: boolean): Paso[] {
   return [...pasosEditables(tieneBase), 'listo']
@@ -152,6 +153,15 @@ export default function DossierWizard({
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
             simbolo={simbolo} onGuardado={avanzar} onCambio={onRefrescar}
+          />
+        )}
+
+        {paso === 'desglose' && dossier && (
+          <PasoDesglose
+            key={dossier.snapshot_at ?? 'nuevo'}
+            dossier={dossier} serie={data.serie} lineas={data.lineas}
+            conceptos={data.conceptosSector} tieneBase={data.tieneBase}
+            simbolo={simbolo} onGuardado={avanzar}
           />
         )}
 

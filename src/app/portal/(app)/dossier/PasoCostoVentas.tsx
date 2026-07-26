@@ -1,12 +1,21 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, Save, Check } from 'lucide-react'
+import { Loader2, Save } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
-import { guardarCostoVentas, type CategoriaCosto } from '@/app/actions/portal/dossier'
+import { guardarCostoVentas, type CategoriaCosto, type RolPL } from '@/app/actions/portal/dossier'
+import { ROLES_PL, ROL_PL_LABEL, ROL_PL_AYUDA } from '@/lib/pl/estado'
 
-// Paso "Coste de ventas" (solo con `base`): clasifica cada categoría de gasto
-// real del cliente como coste de ventas o no. Nivel cliente: el 2º dossier hereda.
+// Paso «Coste de ventas» (solo con `base`): clasifica cada categoría de gasto real
+// del cliente por su papel en el estado de resultados. Nivel cliente: el 2º dossier
+// hereda.
+//
+// CONVERGENCIA (F4): esto escribe en `categorias_gastos.rol_pl`, la misma columna
+// que lee el informe de Reportes. Antes era un booleano propio del dossier
+// (`dossier_costo_ventas`), así que el dueño podía tener «Alquiler» como coste de
+// ventas en el documento del inversor y como gasto operativo en su propio informe.
+// Clasificar aquí clasifica en los dos sitios, porque es un solo dato.
+
 export default function PasoCostoVentas({
   categorias,
   onGuardado,
@@ -14,20 +23,18 @@ export default function PasoCostoVentas({
   categorias: CategoriaCosto[]
   onGuardado?: () => void
 }) {
-  const [estado, setEstado] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(categorias.map(c => [c.categoria, c.es_costo_ventas])),
+  const [estado, setEstado] = useState<Record<string, RolPL>>(
+    () => Object.fromEntries(categorias.map(c => [c.categoria_id, c.rol_pl])),
   )
   const [pending, startTransition] = useTransition()
-
-  function toggle(cat: string) {
-    setEstado(prev => ({ ...prev, [cat]: !prev[cat] }))
-  }
 
   function guardar() {
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
-      fd.set('clasificacion', JSON.stringify(categorias.map(c => ({ categoria: c.categoria, es_costo_ventas: !!estado[c.categoria] }))))
+      fd.set('clasificacion', JSON.stringify(
+        categorias.map(c => ({ categoria_id: c.categoria_id, rol_pl: estado[c.categoria_id] ?? c.rol_pl })),
+      ))
       const res = await guardarCostoVentas(fd)
       await ld.dismiss()
       if (res.ok) { toastSuccess('Clasificación guardada'); onGuardado?.() }
@@ -35,40 +42,49 @@ export default function PasoCostoVentas({
     })
   }
 
-  const marcadas = categorias.filter(c => estado[c.categoria]).length
+  const cuenta = (rol: RolPL) => categorias.filter(c => (estado[c.categoria_id] ?? 'OPERATIVO') === rol).length
 
   return (
     <section className="card dos-costo-card">
       <div className="dos-body">
         <h2 className="dos-section-title">Coste de ventas</h2>
         <p className="dos-section-hint">
-          Marca lo que te cuesta <strong>producir o comprar</strong> lo que vendes
-          (ingredientes, mercancía). El alquiler, la administración o los servicios, no.
+          Di qué papel tiene cada gasto en tu estado de resultados. Con esto tu informe deja de ser
+          una lista y pasa a enseñar <strong>margen bruto</strong> y <strong>resultado operativo</strong>.
+          Lo que elijas aquí vale también para tus Reportes: es el mismo dato.
         </p>
 
         {categorias.length === 0 ? (
           <p className="dos-vacio">Aún no tienes categorías de gasto registradas.</p>
         ) : (
           <>
-            <div className="dos-cv-chips">
+            <ul className="dos-rol-lista">
               {categorias.map(c => {
-                const on = !!estado[c.categoria]
+                const rol = estado[c.categoria_id] ?? 'OPERATIVO'
                 return (
-                  <button
-                    key={c.categoria} type="button"
-                    className={`dos-cv-chip${on ? ' is-costo' : ''}`}
-                    onClick={() => toggle(c.categoria)}
-                    aria-pressed={on}
-                  >
-                    <span className="dos-cv-check" aria-hidden="true">{on && <Check size={13} strokeWidth={3} />}</span>
-                    {c.categoria}
-                  </button>
+                  <li key={c.categoria_id} className="dos-rol-fila">
+                    <label className="dos-rol-nombre" htmlFor={`rol-${c.categoria_id}`}>{c.categoria}</label>
+                    <select
+                      id={`rol-${c.categoria_id}`}
+                      className="input dos-rol-select"
+                      value={rol}
+                      onChange={e => setEstado(prev => ({ ...prev, [c.categoria_id]: e.target.value as RolPL }))}
+                    >
+                      {ROLES_PL.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
+                    </select>
+                  </li>
                 )
               })}
-            </div>
-            <p className="dos-cv-nota">
-              {marcadas} de {categorias.length} marcadas como coste de ventas · el resto cuenta como gasto operativo.
-            </p>
+            </ul>
+
+            <ul className="dos-rol-leyenda">
+              {ROLES_PL.map(r => (
+                <li key={r}>
+                  <strong>{ROL_PL_LABEL[r]}</strong> ({cuenta(r)}) — {ROL_PL_AYUDA[r]}
+                </li>
+              ))}
+            </ul>
+
             <div className="dos-acciones">
               <button className="btn btn-primary" onClick={guardar} disabled={pending}>
                 {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Save size={14} strokeWidth={2.5} />}

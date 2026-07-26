@@ -6,10 +6,41 @@
 // (la base contable no los calcula hoy).
 
 import { TZ_NEGOCIO } from '@/lib/fecha-tz'
+import { pctSobre } from '@/lib/pl/estado'
 import type { FilaSerie } from './snapshot'
 import type { LineaDesglose } from './base'
 
-export interface CategoriaMonto { concepto: string; monto: number }
+/**
+ * Modo de publicación del estado de resultados (mig. 136). Lo elige el dueño: no
+ * se deriva del dato, porque un dossier CON desglose puede querer enseñarse
+ * resumido de todas formas.
+ */
+export type ModoEstado = 'RESUMEN' | 'DESGLOSADO'
+
+export const MODOS_ESTADO: ModoEstado[] = ['RESUMEN', 'DESGLOSADO']
+
+export const LABEL_MODO_ESTADO: Record<ModoEstado, string> = {
+  RESUMEN:    'Resumen',
+  DESGLOSADO: 'Desglosado',
+}
+
+export const AYUDA_MODO_ESTADO: Record<ModoEstado, string> = {
+  RESUMEN:    'Las cifras y los márgenes, sin el detalle por concepto.',
+  DESGLOSADO: 'Además, en qué se va cada grupo, con su peso sobre los ingresos.',
+}
+
+/** Sufijo del título del PDF y del nombre del archivo: el documento dice qué es. */
+export const SUFIJO_MODO_ESTADO: Record<ModoEstado, string> = {
+  RESUMEN:    'Resumen',
+  DESGLOSADO: 'Desglosado',
+}
+
+export function esModoEstado(v: unknown): v is ModoEstado {
+  return v === 'RESUMEN' || v === 'DESGLOSADO'
+}
+
+/** Un concepto del desglose con su peso sobre los ingresos del período. */
+export interface CategoriaMonto { concepto: string; monto: number; pct: number }
 
 export interface FilaEvolucion {
   mes: string
@@ -22,9 +53,13 @@ export interface FilaEvolucion {
 export interface EstadoResultados {
   ingresos: number
   costoVentas: number
+  /** Peso del coste de ventas sobre los ingresos (% vertical). */
+  costoVentasPct: number
   margenBruto: number
   margenBrutoPct: number
   gastosOperativos: number
+  /** Peso de los gastos operativos sobre los ingresos (% vertical). */
+  gastosOperativosPct: number
   resultadoNeto: number
   margenNetoPct: number
   ingresosPorCategoria: CategoriaMonto[]
@@ -34,7 +69,10 @@ export interface EstadoResultados {
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-const pct = (parte: number, total: number) => (total > 0 ? round2((parte / total) * 100) : 0)
+// El porcentaje sale del motor común (`@/lib/pl/estado`): tenerlo dos veces es
+// como el informe del portal y el del dossier acaban redondeando distinto el mismo
+// margen y el dueño ve 60,0% en una pantalla y 59,9% en la otra.
+const pct = pctSobre
 
 export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]): EstadoResultados {
   let ingresos = 0, costoVentas = 0, gastosOperativos = 0
@@ -54,15 +92,22 @@ export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]):
   const margenBruto = round2(ingresos - costoVentas)
   const resultadoNeto = round2(ingresos - costoVentas - gastosOperativos)
 
+  // El % de cada concepto va SOBRE LOS INGRESOS, no sobre el total de su grupo:
+  // «Alimentos = 22% de lo que entra» es la cifra que compara un inversor entre
+  // negocios; «Alimentos = 58% del coste de ventas» solo se compara consigo misma.
   const deGrupo = (g: LineaDesglose['grupo']): CategoriaMonto[] =>
     lineas.filter(l => l.grupo === g)
       .sort((a, b) => a.orden - b.orden)
-      .map(l => ({ concepto: l.concepto, monto: round2(l.monto) }))
+      .map(l => ({ concepto: l.concepto, monto: round2(l.monto), pct: pct(round2(l.monto), ingresos) }))
 
   return {
-    ingresos, costoVentas, margenBruto,
+    ingresos, costoVentas,
+    costoVentasPct: pct(costoVentas, ingresos),
+    margenBruto,
     margenBrutoPct: pct(margenBruto, ingresos),
-    gastosOperativos, resultadoNeto,
+    gastosOperativos,
+    gastosOperativosPct: pct(gastosOperativos, ingresos),
+    resultadoNeto,
     margenNetoPct: pct(resultadoNeto, ingresos),
     ingresosPorCategoria: deGrupo('INGRESO'),
     costoPorCategoria: deGrupo('COSTO_VENTAS'),

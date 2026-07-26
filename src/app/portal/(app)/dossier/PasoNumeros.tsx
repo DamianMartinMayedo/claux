@@ -8,6 +8,7 @@ import {
   type DossierBasico, type PreviewActualizacion,
 } from '@/app/actions/portal/dossier'
 import { etiquetaMes, type FilaSerie } from '@/lib/dossier/snapshot'
+import AvisoContabilidad from './AvisoContabilidad'
 
 // Lista de meses 'YYYY-MM' del período (inclusive).
 function mesesDe(desde: string | null, hasta: string | null): string[] {
@@ -147,6 +148,15 @@ export default function PasoNumeros({
             </button>
           )}
         </div>
+
+        {/* Pre-compra: aquí el dolor se siente EN ESE MISMO MOMENTO, con el teclado
+            delante y 3 columnas × N meses por rellenar. Es el sitio con más
+            intención de compra de todo el producto, y hasta ahora no decía nada. */}
+        {!tieneBase && (
+          <AvisoContabilidad
+            texto="Estás escribiendo estos números a mano. Con Contabilidad, CLAUX los saca de tus ventas y gastos y rellena esta tabla sola — y lo que ya escribiste se conserva."
+          />
+        )}
 
         {nuncaTrajo && (
           <div className="dos-novedad" role="status">

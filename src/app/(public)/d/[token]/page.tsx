@@ -245,6 +245,46 @@ export default async function DeckPage({ params }: Props) {
           </div>
         ),
       })
+
+      // Detalle por concepto: SOLO si el dueño publica en modo DESGLOSADO y
+      // además escribió conceptos. Son dos condiciones distintas —una es su
+      // decisión, la otra es si hay dato— y ninguna implica a la otra.
+      const detalle: { titulo: string; cats: typeof er.costoPorCategoria }[] = [
+        { titulo: 'Ingresos',          cats: er.ingresosPorCategoria },
+        { titulo: 'Coste de ventas',   cats: er.costoPorCategoria },
+        { titulo: 'Gastos operativos', cats: er.gastosPorCategoria },
+      ].filter(g => g.cats.length > 0)
+
+      if (deck.estadoModo === 'DESGLOSADO' && detalle.length > 0) {
+        slides.push({
+          id: 'detalle', label: 'Detalle',
+          node: (
+            <div className="dp-bloque">
+              <span className="dp-kicker">El detalle</span>
+              <h2 className="dp-bloque-titulo">En qué se va</h2>
+              <div className="dp-detalle">
+                {detalle.map(g => (
+                  <div key={g.titulo} className="dp-detalle-grupo">
+                    <h3 className="dp-detalle-titulo">{g.titulo}</h3>
+                    <ul className="dp-detalle-lista">
+                      {g.cats.map(c => (
+                        <li key={c.concepto} className="dp-detalle-fila">
+                          <span className="dp-detalle-concepto">{c.concepto}</span>
+                          <span className="dp-detalle-monto">
+                            {nf(0).format(c.monto)}
+                            <span className="dp-detalle-pct">{fmtPct(c.pct)}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="dp-detalle-nota">Porcentajes sobre los ingresos del período · Importes en {deck.moneda}</p>
+            </div>
+          ),
+        })
+      }
     }
   }
 

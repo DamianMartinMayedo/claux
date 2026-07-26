@@ -8,6 +8,7 @@ import DossierDesfase from './DossierDesfase'
 import PasoBasicos from './PasoBasicos'
 import PasoCostoVentas from './PasoCostoVentas'
 import PasoNumeros from './PasoNumeros'
+import PasoDesglose from './PasoDesglose'
 import PasoCrecimiento from './PasoCrecimiento'
 import PasoRelato from './PasoRelato'
 import PasoMarca from './PasoMarca'
@@ -43,8 +44,9 @@ export default function DossierSecciones({
   // 'basicos' y 'numeros' existen siempre aquí (se entra a las pestañas con serie).
   const completado: Record<PasoEditable, boolean> = {
     basicos:     true,
-    costos:      data.categoriasCosto.some(c => c.es_costo_ventas),
+    costos:      data.categoriasCosto.some(c => c.rol_pl !== 'OPERATIVO'),
     numeros:     data.serie.length > 0,
+    desglose:    data.lineas.length > 0,
     crecimiento: (dossier.crecimiento_mensual_pct ?? 0) !== 0,
     relato:      data.secciones.some(s => (s.cuerpo ?? '').trim().length > 0),
     marca:       !!dossier.logo_url || dossier.color_principal.toUpperCase() !== '#00AFAA',
@@ -98,6 +100,14 @@ export default function DossierSecciones({
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
             simbolo={simbolo} onGuardado={onRefrescar} onCambio={onRefrescar}
+          />
+        )}
+        {activo === 'desglose' && (
+          <PasoDesglose
+            key={dossier.snapshot_at ?? 'nuevo'}
+            dossier={dossier} serie={data.serie} lineas={data.lineas}
+            conceptos={data.conceptosSector} tieneBase={data.tieneBase}
+            simbolo={simbolo} onGuardado={onRefrescar}
           />
         )}
         {activo === 'crecimiento' && (

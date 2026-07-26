@@ -8,6 +8,7 @@ import {
   type DossierBasico,
 } from '@/app/actions/portal/dossier'
 import DossierDesfase from './DossierDesfase'
+import AvisoContabilidad from './AvisoContabilidad'
 
 // Panel de control del enlace público. El deck vive en /d/<token>: una capability
 // URL (quien la tiene, la ve). No hay login que ponerle delante —el inversor no es
@@ -109,6 +110,14 @@ export default function PestanaPresentacion({
           <p className="dos-vacio">Carga tus números en «Mi dossier» y podrás publicar tu presentación.</p>
         ) : !publicado ? (
           <>
+            {/* Tercera ubicación del gancho (M3): publicar es el momento en que se
+                lo va a enseñar a alguien, y por tanto en el que más pesa que los
+                números estén al día solos. */}
+            {!tieneBase && (
+              <AvisoContabilidad
+                texto="Vas a enseñar estos números a alguien. Con Contabilidad se actualizan solos desde tus ventas y gastos, así que el enlace nunca queda viejo — y lo que escribiste a mano se conserva."
+              />
+            )}
             <p className="dos-section-hint">
               Todavía no está publicada: nadie puede verla. Al publicar obtendrás un enlace privado que
               solo funciona para quien se lo des.
