@@ -323,8 +323,11 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
   // Solo las que de verdad NO cuadran con sus conceptos: el desfase de SU línea lo
   // marca el servidor (`NominaLinea.desfasada`), no una copia de la fórmula aquí.
+  // Incluye las CONFIRMADAS sin pagos: se actualizan reabriéndolas, que es el caso
+  // real. Con pagos hechos no se ofrece — habría que anularlos en Tesorería.
   const desfasadas = miNomina
-    .filter(m => m.nomina.estado === 'BORRADOR' && m.linea.desfasada)
+    .filter(m => m.linea.desfasada
+      && (m.nomina.estado === 'BORRADOR' || m.nomina.pagado <= 0.005))
     .map(m => m.nomina)
 
   const detalleVivo = useMemo(() =>

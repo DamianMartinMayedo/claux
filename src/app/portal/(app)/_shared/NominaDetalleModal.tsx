@@ -6,6 +6,7 @@ import {
   guardarLineaNomina,
   previsualizarRecalculoNomina,
   recalcularNomina,
+  reabrirYActualizarNomina,
   type NominaConLineas,
   type NominaLinea,
   type RecalculoNomina,
@@ -102,6 +103,8 @@ export function ActualizarConceptosModal({
 }) {
   const [isPending, startTransition] = useTransition()
   const [plan, setPlan] = useState<RecalculoNomina | null>(null)
+  // Una confirmada hay que reabrirla antes: revertir sus gastos y volver a BORRADOR.
+  const confirmada = nomina.estado === 'CONFIRMADA'
 
   useEffect(() => {
     let vivo = true
@@ -115,14 +118,17 @@ export function ActualizarConceptosModal({
   const recortada = cambian.some(l => l.recortada)
 
   function aplicar() {
-    const ld = toastLoading('Actualizando…')
+    const ld = toastLoading(confirmada ? 'Reabriendo y actualizando…' : 'Actualizando…')
     startTransition(async () => {
-      const res = await recalcularNomina(nomina.nomina_id, empleadoId)
+      const res = confirmada
+        ? await reabrirYActualizarNomina(nomina.nomina_id, empleadoId)
+        : await recalcularNomina(nomina.nomina_id, empleadoId)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      toastSuccess(res.actualizadas === 1
-        ? `Actualizada 1 línea · Total ${formatMonto(res.total ?? 0)} ${nomina.moneda}`
-        : `Actualizadas ${res.actualizadas} líneas · Total ${formatMonto(res.total ?? 0)} ${nomina.moneda}`)
+      const lineas = res.actualizadas === 1 ? 'Actualizada 1 línea' : `Actualizadas ${res.actualizadas} líneas`
+      toastSuccess(confirmada
+        ? `${lineas} · Nómina reabierta en borrador: revísala y vuelve a confirmarla`
+        : `${lineas} · Total ${formatMonto(res.total ?? 0)} ${nomina.moneda}`)
       onDone()
     })
   }
@@ -132,7 +138,7 @@ export function ActualizarConceptosModal({
       <div className="modal modal-xl" role="dialog" aria-modal>
         <div className="modal-header">
           <div>
-            <h2 className="modal-title">Actualizar con los conceptos</h2>
+            <h2 className="modal-title">{confirmada ? 'Reabrir y actualizar' : 'Actualizar con los conceptos'}</h2>
             {/* El alcance, dicho: desde la ficha va solo ese trabajador; desde la
                 nómina van todos los que no cuadren, en una pasada. */}
             <p className="text-xs-muted mt-1">
@@ -164,6 +170,13 @@ export function ActualizarConceptosModal({
             <>
               {/* Un solo hijo por aviso: `.alert` es flex, así que varios trozos de
                   texto se reparten en columnas en vez de leerse como una frase. */}
+              {confirmada && (
+                <div className="alert alert-warning alert-intro">
+                  <span>Esta nómina está confirmada. Se revertirán sus gastos de Gastos y cobros
+                    y volverá a borrador con estos números; los vuelve a registrar cuando la
+                    confirmes de nuevo. Si ya tiene pagos en Tesorería, anúlalos primero.</span>
+                </div>
+              )}
               <div className="alert alert-warning alert-intro">
                 <span>Se recalcula desde el salario del período. Lo que hayas ajustado a mano
                   en {cambian.length === 1 ? 'esa línea' : 'esas líneas'} se pierde;
@@ -227,8 +240,9 @@ export function ActualizarConceptosModal({
           {plan?.ok && cambian.length > 0 && (
             <button type="button" className="btn btn-primary" onClick={aplicar} disabled={isPending}>
               {isPending
-                ? <><span className="spinner spinner-sm" /> Actualizando…</>
-                : <><RefreshCw size={15} strokeWidth={2} /> Actualizar {cambian.length === 1 ? 'la línea' : `${cambian.length} líneas`}</>}
+                ? <><span className="spinner spinner-sm" /> {confirmada ? 'Reabriendo…' : 'Actualizando…'}</>
+                : <><RefreshCw size={15} strokeWidth={2} />
+                    {confirmada ? ' Reabrir y actualizar' : ` Actualizar ${cambian.length === 1 ? 'la línea' : `${cambian.length} líneas`}`}</>}
             </button>
           )}
         </div>
@@ -258,6 +272,9 @@ export function NominaDetalleModal({
     : nomina.total
   const esVistaIndividual = !!empleadoId
   const desfasadas = lineasVisibles.filter(l => l.desfasada).length
+  // Con pagos hechos contra sus gastos no se puede reabrir: hay dinero movido contra
+  // un importe concreto y cambiarlo por debajo rompería la conciliación.
+  const tienePagos = !esBorrador && nomina.pagado > 0.005
 
   return (
     <>
@@ -286,8 +303,9 @@ export function NominaDetalleModal({
               con los conceptos del trabajador (`desfasada`), así que el aviso no
               sale «por si acaso» ni obliga a abrirlo para descubrir que no hay nada.
               `lineasVisibles` ya está acotado, así que en la vista de un trabajador
-              cuenta solo la suya. */}
-          {esBorrador && desfasadas > 0 && (
+              cuenta solo la suya. Sale también en CONFIRMADA: ahí actualizar implica
+              reabrirla, y no se ofrece si ya hay dinero movido contra sus gastos. */}
+          {desfasadas > 0 && (
             <div className="alert alert-warning alert-cta">
               <span className="alert-cta-texto">
                 {esVistaIndividual
@@ -295,10 +313,14 @@ export function NominaDetalleModal({
                   : desfasadas === 1
                     ? 'Un trabajador tiene conceptos sin aplicar en esta nómina.'
                     : `${desfasadas} trabajadores tienen conceptos sin aplicar en esta nómina.`}
+                {tienePagos && ' Para actualizarla hay que reabrirla, y ya tiene pagos registrados: anúlalos en Tesorería primero.'}
               </span>
-              <button type="button" className="btn btn-aviso btn-sm" onClick={() => setActualizar(true)}>
-                <RefreshCw size={14} strokeWidth={2} /> Actualizar con los conceptos
-              </button>
+              {!tienePagos && (
+                <button type="button" className="btn btn-aviso btn-sm" onClick={() => setActualizar(true)}>
+                  <RefreshCw size={14} strokeWidth={2} />
+                  {esBorrador ? ' Actualizar con los conceptos' : ' Reabrir y actualizar'}
+                </button>
+              )}
             </div>
           )}
 

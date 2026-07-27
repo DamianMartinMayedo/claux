@@ -97,9 +97,10 @@ export interface NominaLinea {
   notas:           string | null
   /**
    * La línea NO coincide con los conceptos vigentes del trabajador: le falta (o le
-   * sobra) un bono o una deducción. Solo puede ser `true` en una nómina BORRADOR —
-   * una CONFIRMADA ya no se recalcula, así que avisar ahí sería ofrecer algo que
-   * el servidor va a rechazar. Es lo que decide si sale el aviso de actualizar.
+   * sobra) un bono o una deducción. Es lo que decide si sale el aviso de actualizar.
+   * También se marca en una nómina CONFIRMADA: ahí actualizarla implica reabrirla
+   * (revertir sus gastos), que es un paso más pero es el caso real —cuando uno se
+   * acuerda de la retención, la nómina del mes ya está cerrada—.
    */
   desfasada:       boolean
 }
@@ -420,8 +421,10 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     const arr = lineasPorNomina.get(l.nomina_id) ?? []
     const devengado   = Number(l.devengado)
     const deducciones = Number(l.deducciones)
-    // Solo las editables: una CONFIRMADA no se recalcula, así que nunca «desfasa».
-    const calc = estadoPorNomina.get(l.nomina_id) === 'BORRADOR'
+    // También en las CONFIRMADAS: reabrirlas para meter una retención olvidada es
+    // el caso real (la nómina del mes ya está cerrada cuando uno se acuerda), así
+    // que ocultar el desfase ahí obligaba a borrar la nómina y regenerarla.
+    const calc = estadoPorNomina.has(l.nomina_id)
       ? aplicarConceptos(Number(l.salario_base), conceptosPorEmpleado.get(l.empleado_id) ?? [])
       : null
     arr.push({
@@ -1216,9 +1219,11 @@ async function planificarRecalculo(
   client_id:   string,
   nomina_id:   string,
   empleado_id?: string,
-): Promise<{ error?: string; lineas: RecalculoLineaNomina[]; total_otras: number }> {
+): Promise<{ error?: string; estado?: EstadoNomina; lineas: RecalculoLineaNomina[]; total_otras: number }> {
   const vacio = { lineas: [] as RecalculoLineaNomina[], total_otras: 0 }
 
+  // Planifica en CUALQUIER estado: previsualizar no escribe, y una CONFIRMADA sí
+  // se puede actualizar reabriéndola. Quién puede ESCRIBIR lo decide cada acción.
   const { data: nomina, error: nErr } = await db.from('nominas')
     .select('estado')
     .eq('nomina_id', nomina_id)
@@ -1226,16 +1231,14 @@ async function planificarRecalculo(
     .maybeSingle()
   if (nErr)    return { ...vacio, error: nErr.message }
   if (!nomina) return { ...vacio, error: 'Nómina no encontrada.' }
-  if (nomina.estado !== 'BORRADOR') {
-    return { ...vacio, error: 'La nómina ya está confirmada y no se puede actualizar.' }
-  }
+  const estado = nomina.estado as EstadoNomina
 
   const { data: todas, error: lErr } = await db.from('nomina_lineas')
     .select('linea_id, empleado_id, empleado_nombre, salario_base, devengado, deducciones, neto')
     .eq('nomina_id', nomina_id)
     .eq('client_id', client_id)
     .order('empleado_nombre')
-  if (lErr) return { ...vacio, error: lErr.message }
+  if (lErr) return { ...vacio, estado, error: lErr.message }
 
   const filas = (todas ?? []) as {
     linea_id: string; empleado_id: string; empleado_nombre: string
@@ -1249,7 +1252,7 @@ async function planificarRecalculo(
     .reduce((s, f) => s + Number(f.neto), 0)
 
   if (!enFoco.length) {
-    return { ...vacio, total_otras, error: 'Ese trabajador no tiene línea en esta nómina.' }
+    return { ...vacio, estado, total_otras, error: 'Ese trabajador no tiene línea en esta nómina.' }
   }
 
   const { data: cptData, error: cErr } = await db.from('conceptos_empleado')
@@ -1258,7 +1261,7 @@ async function planificarRecalculo(
     .in('empleado_id', Array.from(new Set(enFoco.map(f => f.empleado_id))))
     .eq('activo', true)
     .order('created_at')
-  if (cErr) return { ...vacio, total_otras, error: cErr.message }
+  if (cErr) return { ...vacio, estado, total_otras, error: cErr.message }
 
   const porEmpleado = new Map<string, { nombre: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }[]>()
   for (const c of (cptData ?? []) as { empleado_id: string; nombre: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }[]) {
@@ -1294,7 +1297,7 @@ async function planificarRecalculo(
     }
   })
 
-  return { lineas, total_otras }
+  return { estado, lineas, total_otras }
 }
 
 export async function previsualizarRecalculoNomina(
@@ -1319,6 +1322,49 @@ export async function previsualizarRecalculoNomina(
   }
 }
 
+// Escribe el plan en las líneas y recalcula el total. Lo comparten `recalcularNomina`
+// (borrador) y `reabrirYActualizarNomina` (confirmada): una segunda copia de este
+// bucle sería una segunda forma de que el total dejara de cuadrar con sus líneas.
+async function aplicarRecalculo(
+  db:          DbAdmin,
+  client_id:   string,
+  nomina_id:   string,
+  empleado_id?: string,
+): Promise<{ error?: string; actualizadas: number; total: number }> {
+  const plan = await planificarRecalculo(db, client_id, nomina_id, empleado_id)
+  if (plan.error) return { error: plan.error, actualizadas: 0, total: 0 }
+
+  const cambian = plan.lineas.filter(l => l.cambia)
+  for (const l of cambian) {
+    const { error } = await db.from('nomina_lineas')
+      .update({ devengado: l.devengado_despues, deducciones: l.deducciones_despues, neto: l.neto_despues })
+      .eq('linea_id', l.linea_id)
+      .eq('client_id', client_id)
+    if (error) return { error: error.message, actualizadas: 0, total: 0 }
+  }
+
+  // El total se relee de la base, no se toma del plan: entre previsualizar y
+  // aplicar, otra pestaña puede haber tocado una línea fuera del foco.
+  const { data: todas, error: tErr } = await db.from('nomina_lineas')
+    .select('neto')
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', client_id)
+  if (tErr) return { error: tErr.message, actualizadas: 0, total: 0 }
+  const total = redondear2((todas ?? []).reduce((s, l) => s + Number(l.neto), 0))
+  await db.from('nominas')
+    .update({ total, updated_at: new Date().toISOString() })
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', client_id)
+
+  return { actualizadas: cambian.length, total }
+}
+
+function revalidarNomina(empleado_id?: string) {
+  revalidatePath('/portal/nomina')
+  revalidatePath('/portal/rrhh')
+  if (empleado_id) revalidatePath(`/portal/rrhh/${empleado_id}`)
+}
+
 export async function recalcularNomina(
   nomina_id:    string,
   empleado_id?: string,
@@ -1327,36 +1373,102 @@ export async function recalcularNomina(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  const db   = createAdminClient()
-  const plan = await planificarRecalculo(db, session.client_id, nomina_id, empleado_id)
-  if (plan.error) return { ok: false, error: plan.error }
-
-  const cambian = plan.lineas.filter(l => l.cambia)
-  for (const l of cambian) {
-    const { error } = await db.from('nomina_lineas')
-      .update({ devengado: l.devengado_despues, deducciones: l.deducciones_despues, neto: l.neto_despues })
-      .eq('linea_id', l.linea_id)
-      .eq('client_id', session.client_id)
-    if (error) return { ok: false, error: error.message }
+  const db = createAdminClient()
+  const { data: nomina } = await db.from('nominas')
+    .select('estado').eq('nomina_id', nomina_id).eq('client_id', session.client_id).maybeSingle()
+  if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
+  // Una confirmada ya posteó su gasto: se actualiza por `reabrirYActualizarNomina`,
+  // que lo revierte primero. Aquí cambiaría las líneas dejando el gasto obsoleto.
+  if (nomina.estado !== 'BORRADOR') {
+    return { ok: false, error: 'La nómina está confirmada. Hay que reabrirla para actualizarla.' }
   }
 
-  // El total se relee de la base, no se toma del plan: entre previsualizar y
-  // aplicar, otra pestaña puede haber tocado una línea fuera del foco.
-  const { data: todas, error: tErr } = await db.from('nomina_lineas')
-    .select('neto')
-    .eq('nomina_id', nomina_id)
-    .eq('client_id', session.client_id)
-  if (tErr) return { ok: false, error: tErr.message }
-  const total = redondear2((todas ?? []).reduce((s, l) => s + Number(l.neto), 0))
-  await db.from('nominas')
-    .update({ total, updated_at: new Date().toISOString() })
-    .eq('nomina_id', nomina_id)
-    .eq('client_id', session.client_id)
+  const res = await aplicarRecalculo(db, session.client_id, nomina_id, empleado_id)
+  if (res.error) return { ok: false, error: res.error }
 
-  revalidatePath('/portal/nomina')
-  revalidatePath('/portal/rrhh')
-  if (empleado_id) revalidatePath(`/portal/rrhh/${empleado_id}`)
-  return { ok: true, actualizadas: cambian.length, total }
+  revalidarNomina(empleado_id)
+  return { ok: true, actualizadas: res.actualizadas, total: res.total }
+}
+
+// ── Reabrir una nómina CONFIRMADA y actualizarla de una vez ──────────────────────
+// El caso real: la nómina del mes ya está cerrada y se recuerda una retención. Sin
+// esto había que BORRAR la nómina entera y regenerarla.
+//
+// Reabrir = revertir los gastos que posteó al confirmar (Salarios + Retenciones) y
+// volver a BORRADOR. No se ajusta el gasto en caliente a propósito: al reconfirmar
+// se regenera de cero, así que es imposible dejarlo descuadrado con sus líneas.
+//
+// Se NIEGA si algún gasto tiene pagos en Tesorería: ahí ya hay dinero movido contra
+// un importe concreto y cambiarlo por debajo rompe la conciliación (podrías haber
+// pagado más de lo que el gasto acabaría diciendo que se debe).
+//
+// Deja la nómina en BORRADOR con los números puestos, SIN reconfirmar: si el
+// recálculo saca algo raro —una deducción que no cabe en el devengado— el dueño
+// tiene que verlo antes de que vuelva a contabilidad.
+export async function reabrirYActualizarNomina(
+  nomina_id:    string,
+  empleado_id?: string,
+): Promise<{ ok: boolean; error?: string; actualizadas?: number; total?: number }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { data: nomina } = await db.from('nominas')
+    .select('estado, gasto_id')
+    .eq('nomina_id', nomina_id).eq('client_id', session.client_id).maybeSingle()
+  if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
+  if (nomina.estado !== 'CONFIRMADA') {
+    // Ya es editable: el recálculo normal basta y no hay gasto que revertir.
+    return recalcularNomina(nomina_id, empleado_id)
+  }
+
+  // Los dos gastos de la nómina: el de Salarios por `gasto_id`, el de Retenciones
+  // por su origen (mig. 139).
+  const { data: porOrigen } = await db.from('gastos_cobros')
+    .select('registro_id')
+    .eq('client_id', session.client_id)
+    .eq('origen_tipo', 'NOMINA')
+    .eq('origen_id', nomina_id)
+  const gastoIds = Array.from(new Set([
+    ...(nomina.gasto_id ? [nomina.gasto_id] : []),
+    ...((porOrigen ?? []) as { registro_id: string }[]).map(g => g.registro_id),
+  ]))
+
+  if (gastoIds.length) {
+    const { count } = await db.from('movimientos_tesoreria')
+      .select('movimiento_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id)
+      .in('referencia_id', gastoIds)
+    if ((count ?? 0) > 0) {
+      return { ok: false, error: 'Esta nómina ya tiene pagos registrados. Anúlalos en Tesorería y vuelve a intentarlo.' }
+    }
+    const { error: delErr } = await db.from('gastos_cobros').delete()
+      .eq('client_id', session.client_id).in('registro_id', gastoIds)
+    if (delErr) return { ok: false, error: delErr.message }
+  }
+
+  const { error: reErr } = await db.from('nominas')
+    .update({ estado: 'BORRADOR', gasto_id: null, updated_at: new Date().toISOString() })
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', session.client_id)
+  if (reErr) return { ok: false, error: reErr.message }
+
+  const res = await aplicarRecalculo(db, session.client_id, nomina_id, empleado_id)
+  if (res.error) {
+    // La nómina ya está reabierta y sin gastos: es un estado válido (un borrador
+    // sin tocar), así que se informa en vez de intentar deshacer a medias.
+    revalidarNomina(empleado_id)
+    revalidarFinanzas()
+    return { ok: false, error: `La nómina se reabrió, pero no se pudo actualizar: ${res.error}` }
+  }
+
+  revalidarNomina(empleado_id)
+  revalidatePath('/portal/gastos')
+  revalidatePath('/portal/cxp')
+  revalidatePath('/portal/tesoreria')
+  revalidarFinanzas()
+  return { ok: true, actualizadas: res.actualizadas, total: res.total }
 }
 
 // ── Confirmar nómina ────────────────────────────────────────────────────────────
