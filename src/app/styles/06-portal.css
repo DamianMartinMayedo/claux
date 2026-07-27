@@ -1823,16 +1823,30 @@
   font-size: var(--text-sm); color: var(--color-text-muted);
 }
 .nom-total strong { font-size: var(--text-lg); color: var(--color-text); }
+/* Fila-formulario de alta de un concepto. Su único uso es «Conceptos recurrentes»
+   de la ficha del trabajador; el nombre viene del retirado «Aplicar a todas». */
 .nom-aplicar {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
   margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
   background: var(--color-surface-2); border-radius: var(--radius-md);
 }
-.nom-aplicar-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
 .nom-aplicar-sel { max-width: 160px; padding: 6px 9px; font-size: var(--text-sm); }
 .nom-aplicar-val { max-width: 110px; padding: 6px 9px; font-size: var(--text-sm); }
 /* Nombre del concepto: ocupa todo el espacio libre de la fila (no queda corto). */
 .nom-aplicar-nombre { flex: 1 1 12rem; min-width: 10rem; padding: 6px 9px; font-size: var(--text-sm); }
+/* Previsualización del recálculo: estado de carga. La acción vive en un aviso
+   ámbar (`.alert-cta` + `.btn-aviso`), que solo se pinta si hay desfase. */
+.nom-recalculo-cargando  {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-6) 0; justify-content: center;
+  font-size: var(--text-sm); color: var(--color-text-muted);
+}
+/* Antes → después de un importe. El valor viejo se tacha en tinta apagada; el
+   nuevo es el que se lee. Va en celdas `col-num`, así que no rompe el tabular. */
+.nom-cambio          { display: inline-flex; align-items: baseline; gap: var(--space-2); justify-content: flex-end; }
+.nom-cambio-antes    { color: var(--color-text-faint); text-decoration: line-through; }
+.nom-cambio-flecha   { color: var(--color-text-faint); }
+.nom-cambio-despues  { font-weight: 600; color: var(--color-text); }
 /* Turnos */
 .rrhh-card-gap { margin-bottom: var(--space-4); }
 .ter-card-head { padding: var(--space-4) var(--space-4) 0; }

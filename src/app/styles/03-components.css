@@ -398,8 +398,12 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .alert-cta       { align-items: center; flex-wrap: wrap; justify-content: space-between; margin-bottom: var(--space-4); }
 .alert-cta-texto { flex: 1 1 20rem; min-width: 0; }
 .alert-cta .btn  { flex-shrink: 0; }
+/* Varias acciones en el mismo aviso (una por período, p. ej.): envuelven entre
+   ellas en vez de estirar el aviso a lo ancho. Con una sola acción no hace falta. */
+.alert-cta-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }
 @media (max-width: 640px) {
   .alert-cta .btn { width: 100%; justify-content: center; }
+  .alert-cta-acciones { width: 100%; }
 }
 
 /* ═══════════════════════════════════════════════════

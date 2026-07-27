@@ -24,12 +24,13 @@ import {
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { RowActions } from '@/components/portal/RowActions'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
-import { Copy, FileText, Eye, Pencil, Plus, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { Copy, FileText, Eye, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
   NominaDetalleModal,
   ConfirmarNominaModal,
   PagarNominaModal,
+  ActualizarConceptosModal,
   formatMonto,
   hoyISO as hoyISOShared,
   formatPeriodo,
@@ -175,12 +176,15 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
 // ── Conceptos recurrentes (bonos/deducciones fijos) ─────────────────────────────
 
 function ConceptosSection({
-  empleadoId, moneda, conceptos, onChanged,
+  empleadoId, moneda, conceptos, desfasadas, onActualizar, onChanged,
 }: {
-  empleadoId: string
-  moneda:     string
-  conceptos:  ConceptoEmpleado[]
-  onChanged:  () => void
+  empleadoId:   string
+  moneda:       string
+  conceptos:    ConceptoEmpleado[]
+  /** Nóminas en BORRADOR cuya línea suya no cuadra con estos conceptos. */
+  desfasadas:   NominaConLineas[]
+  onActualizar: (n: NominaConLineas) => void
+  onChanged:    () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const [delId, setDelId] = useState<string | null>(null)
@@ -262,6 +266,27 @@ function ConceptosSection({
           </table>
         </div>
       )}
+
+      {/* Los conceptos se aplican al GENERAR la nómina, así que un borrador ya
+          creado se queda como estaba. El aviso sale SOLO si esa línea no cuadra
+          con estos conceptos; si cuadra, no hay nada que decir. */}
+      {desfasadas.length > 0 && (
+        <div className="alert alert-warning alert-cta mt-3">
+          <span className="alert-cta-texto">
+            Estos conceptos no están aplicados en {desfasadas.length === 1
+              ? 'su nómina en borrador'
+              : `sus ${desfasadas.length} nóminas en borrador`}.
+          </span>
+          <div className="alert-cta-acciones">
+            {desfasadas.map(n => (
+              <button key={n.nomina_id} type="button" className="btn btn-aviso btn-sm"
+                onClick={() => onActualizar(n)}>
+                <RefreshCw size={14} strokeWidth={2} /> Actualizar {formatPeriodo(n.periodo)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -283,6 +308,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const [detalleNominaId, setDetalleNominaId] = useState<string | null>(null)
   const [confirmarNom,  setConfirmarNom]  = useState<NominaConLineas | null>(null)
   const [pagarNom,      setPagarNom]      = useState<NominaConLineas | null>(null)
+  const [actualizarNom, setActualizarNom] = useState<NominaConLineas | null>(null)
 
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
@@ -294,6 +320,12 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
     return l ? [{ nomina: n, linea: l }] : []
   })
   const { pageItems: nominaItems, ...nominaPag } = usePagination(miNomina)
+
+  // Solo las que de verdad NO cuadran con sus conceptos: el desfase de SU línea lo
+  // marca el servidor (`NominaLinea.desfasada`), no una copia de la fórmula aquí.
+  const desfasadas = miNomina
+    .filter(m => m.nomina.estado === 'BORRADOR' && m.linea.desfasada)
+    .map(m => m.nomina)
 
   const detalleVivo = useMemo(() =>
     detalleNominaId ? data.nominas.find(n => n.nomina_id === detalleNominaId) ?? null : null,
@@ -454,7 +486,8 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
       {/* Conceptos recurrentes */}
       <ConceptosSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
-        conceptos={conceptos} onChanged={refrescar} />
+        conceptos={conceptos} desfasadas={desfasadas}
+        onActualizar={setActualizarNom} onChanged={refrescar} />
 
       {/* Nómina del trabajador */}
       <div className="det-card">
@@ -573,6 +606,11 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       {pagarNom && (
         <PagarNominaModal nomina={pagarNom} cuentas={data.cuentas}
           onClose={() => setPagarNom(null)} onPaid={() => { setPagarNom(null); router.refresh() }} />
+      )}
+      {actualizarNom && (
+        <ActualizarConceptosModal nomina={actualizarNom} empleadoId={empleado.empleado_id}
+          onClose={() => setActualizarNom(null)}
+          onDone={() => { setActualizarNom(null); router.refresh() }} />
       )}
     </div>
   )

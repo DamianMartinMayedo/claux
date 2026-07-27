@@ -1,16 +1,18 @@
 'use client'
 
-import { toastError, toastLoading } from '@/app/contexts/ToastContext'
-import { useState, useTransition } from 'react'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
+import { useEffect, useState, useTransition } from 'react'
 import {
   guardarLineaNomina,
-  aplicarConceptoNomina,
+  previsualizarRecalculoNomina,
+  recalcularNomina,
   type NominaConLineas,
   type NominaLinea,
+  type RecalculoNomina,
 } from '@/app/actions/portal/rrhh'
 import { registrarLiquidacion } from '@/app/actions/portal/gastos'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
-import { Check, CircleCheck, DollarSign, Wallet, X } from 'lucide-react'
+import { Check, CircleCheck, DollarSign, RefreshCw, Wallet, X } from 'lucide-react'
 
 type CuentaInfo = { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }
 
@@ -72,46 +74,166 @@ function LineaEditableRow({
   )
 }
 
-function AplicarATodas({
-  nominaId, moneda, onChanged,
+// ── Actualizar con los conceptos vigentes ────────────────────────────────────────
+// Para el olvido de siempre: la nómina ya está generada y falta una retención. Es
+// un recálculo desde el salario del período, así que PISA lo escrito a mano en las
+// líneas que toca — de ahí la previsualización: se ve el antes → después de cada
+// trabajador, con el desglose que la línea no guarda, antes de tocar nada.
+
+function Cambio({ antes, despues }: { antes: number; despues: number }) {
+  if (Math.abs(antes - despues) < 0.005) return <>{formatMonto(despues)}</>
+  return (
+    <span className="nom-cambio">
+      <span className="nom-cambio-antes">{formatMonto(antes)}</span>
+      <span className="nom-cambio-flecha" aria-hidden>→</span>
+      <span className="nom-cambio-despues">{formatMonto(despues)}</span>
+    </span>
+  )
+}
+
+export function ActualizarConceptosModal({
+  nomina, empleadoId, onClose, onDone,
 }: {
-  nominaId:  string
-  moneda:    string
-  onChanged: () => void
+  nomina:      NominaConLineas
+  /** Acota el recálculo a un trabajador; sin él, la nómina completa. */
+  empleadoId?: string
+  onClose:     () => void
+  onDone:      () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  const [plan, setPlan] = useState<RecalculoNomina | null>(null)
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const form = e.currentTarget
-    const fd = new FormData(form)
-    fd.set('nomina_id', nominaId)
-    const ld = toastLoading('Aplicando…')
+  useEffect(() => {
+    let vivo = true
+    previsualizarRecalculoNomina(nomina.nomina_id, empleadoId)
+      .then(r => { if (vivo) setPlan(r) })
+      .catch(() => { if (vivo) setPlan({ ok: false, error: 'No se pudo calcular la actualización.', lineas: [], total_antes: 0, total_despues: 0 }) })
+    return () => { vivo = false }
+  }, [nomina.nomina_id, empleadoId])
+
+  const cambian   = (plan?.lineas ?? []).filter(l => l.cambia)
+  const recortada = cambian.some(l => l.recortada)
+
+  function aplicar() {
+    const ld = toastLoading('Actualizando…')
     startTransition(async () => {
-      const res = await aplicarConceptoNomina(fd)
+      const res = await recalcularNomina(nomina.nomina_id, empleadoId)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      form.reset()
-      onChanged()
+      toastSuccess(res.actualizadas === 1
+        ? `Actualizada 1 línea · Total ${formatMonto(res.total ?? 0)} ${nomina.moneda}`
+        : `Actualizadas ${res.actualizadas} líneas · Total ${formatMonto(res.total ?? 0)} ${nomina.moneda}`)
+      onDone()
     })
   }
 
   return (
-    <form className="nom-aplicar" onSubmit={handleSubmit}>
-      <span className="nom-aplicar-label">Aplicar a todas</span>
-      <select className="input nom-aplicar-sel" name="concepto" defaultValue="DEDUCCION" aria-label="Concepto">
-        <option value="DEDUCCION">Deducción</option>
-        <option value="BONO">Bono</option>
-      </select>
-      <select className="input nom-aplicar-sel" name="modo" defaultValue="FIJO" aria-label="Modo">
-        <option value="FIJO">Fijo ({moneda})</option>
-        <option value="PORCENTAJE">% del devengado</option>
-      </select>
-      <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="any" placeholder="0.00" required aria-label="Valor" />
-      <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
-        {isPending ? <span className="spinner spinner-sm" /> : 'Aplicar'}
-      </button>
-    </form>
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-xl" role="dialog" aria-modal>
+        <div className="modal-header">
+          <div>
+            <h2 className="modal-title">Actualizar con los conceptos</h2>
+            {/* El alcance, dicho: desde la ficha va solo ese trabajador; desde la
+                nómina van todos los que no cuadren, en una pasada. */}
+            <p className="text-xs-muted mt-1">
+              Nómina {formatPeriodo(nomina.periodo)} · {nomina.moneda} ·{' '}
+              {empleadoId
+                ? `solo ${plan?.lineas[0]?.empleado_nombre ?? 'este trabajador'}`
+                : `nómina completa (${nomina.lineas.length} ${nomina.lineas.length === 1 ? 'trabajador' : 'trabajadores'})`}
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+
+        <div className="modal-body">
+          {!plan ? (
+            <div className="nom-recalculo-cargando"><span className="spinner" /> Calculando…</div>
+          ) : !plan.ok ? (
+            <div className="alert alert-error">{plan.error ?? 'No se pudo calcular la actualización.'}</div>
+          ) : cambian.length === 0 ? (
+            <div className="info-box">
+              <strong className="info-box-title">Ya está al día</strong>
+              <span className="text-xs-muted">
+                {empleadoId
+                  ? 'Su línea ya refleja los bonos y deducciones fijos que tiene puestos.'
+                  : 'Las líneas ya reflejan los bonos y deducciones fijos de cada trabajador.'}
+                {' '}Si esperabas un cambio, revisa que el concepto esté dado de alta en la ficha del trabajador.
+              </span>
+            </div>
+          ) : (
+            <>
+              {/* Un solo hijo por aviso: `.alert` es flex, así que varios trozos de
+                  texto se reparten en columnas en vez de leerse como una frase. */}
+              <div className="alert alert-warning alert-intro">
+                <span>Se recalcula desde el salario del período. Lo que hayas ajustado a mano
+                  en {cambian.length === 1 ? 'esa línea' : 'esas líneas'} se pierde;
+                  el resto de la nómina no se toca.</span>
+              </div>
+
+              {recortada && (
+                <div className="alert alert-error alert-intro">
+                  <span>En alguna línea la deducción no cabe en el devengado: se recorta y el
+                    neto queda en 0. Revisa el valor del concepto.</span>
+                </div>
+              )}
+
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Trabajador</th>
+                      <th className="col-num">Devengado</th>
+                      <th className="col-num">Deducciones</th>
+                      <th className="col-num">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cambian.map(l => (
+                      <tr key={l.linea_id}>
+                        <td data-label="Trabajador">
+                          <strong>{l.empleado_nombre}</strong>
+                          <div className="text-sm-muted">
+                            {l.conceptos.length === 0
+                              ? 'Sin conceptos activos'
+                              : l.conceptos.map(c =>
+                                  `${c.tipo === 'BONO' ? '+' : '−'}${formatMonto(c.monto)} ${c.nombre}`,
+                                ).join(' · ')}
+                          </div>
+                        </td>
+                        <td data-label="Devengado" className="col-num tes-monto-cell">
+                          <Cambio antes={l.devengado_antes} despues={l.devengado_despues} /></td>
+                        <td data-label="Deducciones" className="col-num tes-monto-cell">
+                          <Cambio antes={l.deducciones_antes} despues={l.deducciones_despues} /></td>
+                        <td data-label="Neto" className="col-num tes-monto-cell">
+                          <Cambio antes={l.neto_antes} despues={l.neto_despues} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="nom-total">
+                <span>Total de la nómina</span>
+                <strong><Cambio antes={plan.total_antes} despues={plan.total_despues} /> {nomina.moneda}</strong>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            {plan?.ok && cambian.length === 0 ? 'Cerrar' : 'Cancelar'}
+          </button>
+          {plan?.ok && cambian.length > 0 && (
+            <button type="button" className="btn btn-primary" onClick={aplicar} disabled={isPending}>
+              {isPending
+                ? <><span className="spinner spinner-sm" /> Actualizando…</>
+                : <><RefreshCw size={15} strokeWidth={2} /> Actualizar {cambian.length === 1 ? 'la línea' : `${cambian.length} líneas`}</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -126,6 +248,7 @@ export function NominaDetalleModal({
   empleadoId?: string
 }) {
   const esBorrador = nomina.estado === 'BORRADOR'
+  const [actualizar, setActualizar] = useState(false)
 
   const lineasVisibles = empleadoId
     ? nomina.lineas.filter(l => l.empleado_id === empleadoId)
@@ -134,10 +257,12 @@ export function NominaDetalleModal({
     ? lineasVisibles.reduce((s, l) => s + l.neto, 0)
     : nomina.total
   const esVistaIndividual = !!empleadoId
+  const desfasadas = lineasVisibles.filter(l => l.desfasada).length
 
   return (
+    <>
     <div className="modal-backdrop open">
-      <div className="modal modal-lg" role="dialog" aria-modal>
+      <div className="modal modal-xl" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Nómina {formatPeriodo(nomina.periodo)}</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
@@ -157,8 +282,24 @@ export function NominaDetalleModal({
             </span>
           </div>
 
-          {esBorrador && !esVistaIndividual && lineasVisibles.length > 0 && (
-            <AplicarATodas nominaId={nomina.nomina_id} moneda={nomina.moneda} onChanged={onChanged} />
+          {/* Solo si hay desfase real: el servidor marca cada línea que no cuadra
+              con los conceptos del trabajador (`desfasada`), así que el aviso no
+              sale «por si acaso» ni obliga a abrirlo para descubrir que no hay nada.
+              `lineasVisibles` ya está acotado, así que en la vista de un trabajador
+              cuenta solo la suya. */}
+          {esBorrador && desfasadas > 0 && (
+            <div className="alert alert-warning alert-cta">
+              <span className="alert-cta-texto">
+                {esVistaIndividual
+                  ? 'Sus conceptos no están aplicados en esta nómina.'
+                  : desfasadas === 1
+                    ? 'Un trabajador tiene conceptos sin aplicar en esta nómina.'
+                    : `${desfasadas} trabajadores tienen conceptos sin aplicar en esta nómina.`}
+              </span>
+              <button type="button" className="btn btn-aviso btn-sm" onClick={() => setActualizar(true)}>
+                <RefreshCw size={14} strokeWidth={2} /> Actualizar con los conceptos
+              </button>
+            </div>
           )}
 
           {lineasVisibles.length === 0 ? (
@@ -212,6 +353,16 @@ export function NominaDetalleModal({
         </div>
       </div>
     </div>
+
+    {actualizar && (
+      <ActualizarConceptosModal
+        nomina={nomina}
+        empleadoId={empleadoId}
+        onClose={() => setActualizar(false)}
+        onDone={() => { setActualizar(false); onChanged() }}
+      />
+    )}
+    </>
   )
 }
 
@@ -223,19 +374,63 @@ export function ConfirmarNominaModal({
   onClose:   () => void
   isPending: boolean
 }) {
+  // El coste de personal es el DEVENGADO; el neto es solo lo que sale hacia el
+  // trabajador. Lo retenido no se pierde: va en su propio gasto (mig. 139).
+  const devengado = nomina.lineas.reduce((s, l) => s + l.devengado, 0)
+  const retenido  = nomina.lineas.reduce((s, l) => s + l.deducciones, 0)
+
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-md" role="dialog" aria-modal>
+      <div className={`modal ${retenido > 0.005 ? 'modal-lg' : 'modal-md'}`} role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Confirmar nómina</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
-            Se registrará un gasto <strong>«Salarios»</strong> de <strong>{formatMonto(nomina.total)} {nomina.moneda}</strong> en
-            Gastos y cobros (nómina de {formatPeriodo(nomina.periodo)}), que podrás pagar con el botón Pagar y aparecerá en
-            Cuentas por pagar y Reportes. La nómina dejará de ser editable.
+            {retenido > 0.005 ? (
+              <>
+                Se registrarán <strong>dos gastos</strong> en Gastos y cobros por la nómina
+                de {formatPeriodo(nomina.periodo)}, que suman el coste real
+                de <strong>{formatMonto(devengado)} {nomina.moneda}</strong>:
+              </>
+            ) : (
+              <>
+                Se registrará un gasto <strong>«Salarios»</strong> de <strong>{formatMonto(nomina.total)} {nomina.moneda}</strong> en
+                Gastos y cobros (nómina de {formatPeriodo(nomina.periodo)}), que podrás pagar con el botón Pagar y aparecerá en
+                Cuentas por pagar y Reportes. La nómina dejará de ser editable.
+              </>
+            )}
           </p>
+          {retenido > 0.005 && (
+            <>
+              {/* Dos acreedores, dos filas: pagarle a la plantilla no paga los
+                  impuestos, y en una sola fila eso era un clic de más de la cuenta. */}
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead>
+                    <tr><th>Gasto</th><th>Se le paga a</th><th className="col-num">Importe</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td data-label="Gasto"><strong>Salarios</strong></td>
+                      <td data-label="Se le paga a">La plantilla</td>
+                      <td data-label="Importe" className="col-num tes-monto-cell">{formatMonto(nomina.total)} {nomina.moneda}</td>
+                    </tr>
+                    <tr>
+                      <td data-label="Gasto"><strong>Retenciones de nómina</strong></td>
+                      <td data-label="Se le paga a">La agencia tributaria</td>
+                      <td data-label="Importe" className="col-num tes-monto-cell">{formatMonto(retenido)} {nomina.moneda}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="modal-body-text">
+                Cada uno se paga por separado desde Cuentas por pagar; el botón Pagar de la
+                nómina liquida el de Salarios. La nómina dejará de ser editable.
+              </p>
+            </>
+          )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>

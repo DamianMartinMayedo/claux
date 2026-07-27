@@ -95,6 +95,13 @@ export interface NominaLinea {
   deducciones:     number
   neto:            number
   notas:           string | null
+  /**
+   * La línea NO coincide con los conceptos vigentes del trabajador: le falta (o le
+   * sobra) un bono o una deducción. Solo puede ser `true` en una nómina BORRADOR —
+   * una CONFIRMADA ya no se recalcula, así que avisar ahí sería ofrecer algo que
+   * el servidor va a rechazar. Es lo que decide si sale el aviso de actualizar.
+   */
+  desfasada:       boolean
 }
 
 export interface Nomina {
@@ -116,6 +123,8 @@ export interface NominaConLineas extends Nomina {
   lineas:          NominaLinea[]
   pagado:          number
   saldo_pendiente: number
+  /** Alguna de sus líneas está desfasada respecto a los conceptos vigentes. */
+  desactualizada:  boolean
 }
 
 export interface Turno {
@@ -166,6 +175,42 @@ function generarGastoId():      string { return `GAS-${corto()}` }
 function generarTurnoId():      string { return `TUR-${corto()}` }
 function generarAsignacionId(): string { return `TAS-${corto()}` }
 function generarConceptoId():   string { return `CPT-${corto()}` }
+
+function redondear2(n: number): number { return Math.round(n * 100) / 100 }
+
+interface ConceptoAplicable { nombre?: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }
+
+/**
+ * Fórmula ÚNICA de una línea de nómina: devengado = salario del período + bonos,
+ * deducciones = suma de las deducciones, y el PORCENTAJE se calcula sobre el
+ * SALARIO BASE (no sobre el devengado). La comparten los tres sitios que la
+ * necesitan —generar la nómina, recalcularla y detectar que está desfasada—:
+ * con una copia por sitio, lo que la pantalla avisa y lo que se guarda acabarían
+ * discrepando, y en dinero eso no se ve hasta que ya está confirmado.
+ */
+function aplicarConceptos(base: number, conceptos: ConceptoAplicable[]): {
+  devengado:   number
+  deducciones: number
+  neto:        number
+  /** Las deducciones superaban el devengado y se han recortado a él. */
+  recortada:   boolean
+  detalle:     { nombre: string; tipo: TipoConcepto; monto: number }[]
+} {
+  let devengado   = base
+  let deducciones = 0
+  const detalle: { nombre: string; tipo: TipoConcepto; monto: number }[] = []
+  for (const c of conceptos) {
+    const monto = redondear2(c.modo === 'PORCENTAJE' ? (base * c.valor) / 100 : c.valor)
+    if (c.tipo === 'BONO') devengado += monto
+    else                   deducciones += monto
+    detalle.push({ nombre: c.nombre ?? '', tipo: c.tipo, monto })
+  }
+  devengado   = redondear2(devengado)
+  deducciones = redondear2(deducciones)
+  const recortada = deducciones > devengado + EPS
+  if (recortada) deducciones = devengado
+  return { devengado, deducciones, neto: redondear2(Math.max(0, devengado - deducciones)), recortada, detalle }
+}
 
 // Copia un empleado a otra empresa como registro INDEPENDIENTE (misma persona, nueva
 // relación laboral: cada empresa tiene su contrato/salario/moneda). Se copian los
@@ -304,7 +349,7 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes, cuRes] = await Promise.all([
+  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes, cuRes, cptRes] = await Promise.all([
     db.from('empleados').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -335,6 +380,13 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       .eq('activa', true)
       .eq('es_apertura', false)   // técnica de la migración (mig. 130): no se paga desde ella
       .order('nombre'),
+    // Conceptos activos de TODO el cliente en una sola consulta: con ellos se marca
+    // el desfase de cada línea sin pedir nada por nómina (eran 3 consultas por
+    // borrador, y esta pantalla se abre en 3G).
+    db.from('conceptos_empleado').select('empleado_id, nombre, tipo, modo, valor')
+      .eq('client_id', session.client_id)
+      .eq('activo', true)
+      .order('created_at'),
   ])
 
   const empleados = ((empRes.data ?? []) as Empleado[]).map(e => ({
@@ -353,9 +405,25 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const nominasRaw = (nomRes.data ?? []) as Nomina[]
   const lineasRaw  = (nlnRes.data ?? []) as (NominaLinea & { client_id: string })[]
 
+  // Conceptos vigentes por trabajador → sirven para marcar qué línea de borrador
+  // NO los refleja (el aviso de «actualizar» solo aparece si hay desfase real).
+  const conceptosPorEmpleado = new Map<string, ConceptoAplicable[]>()
+  for (const c of (cptRes.data ?? []) as { empleado_id: string; nombre: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }[]) {
+    const arr = conceptosPorEmpleado.get(c.empleado_id) ?? []
+    arr.push({ nombre: c.nombre, tipo: c.tipo, modo: c.modo, valor: Number(c.valor) })
+    conceptosPorEmpleado.set(c.empleado_id, arr)
+  }
+  const estadoPorNomina = new Map(nominasRaw.map(n => [n.nomina_id, n.estado]))
+
   const lineasPorNomina = new Map<string, NominaLinea[]>()
   for (const l of lineasRaw) {
     const arr = lineasPorNomina.get(l.nomina_id) ?? []
+    const devengado   = Number(l.devengado)
+    const deducciones = Number(l.deducciones)
+    // Solo las editables: una CONFIRMADA no se recalcula, así que nunca «desfasa».
+    const calc = estadoPorNomina.get(l.nomina_id) === 'BORRADOR'
+      ? aplicarConceptos(Number(l.salario_base), conceptosPorEmpleado.get(l.empleado_id) ?? [])
+      : null
     arr.push({
       linea_id:        l.linea_id,
       nomina_id:       l.nomina_id,
@@ -363,10 +431,12 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       empleado_nombre: l.empleado_nombre,
       cargo:           l.cargo,
       salario_base:    Number(l.salario_base),
-      devengado:       Number(l.devengado),
-      deducciones:     Number(l.deducciones),
+      devengado,
+      deducciones,
       neto:            Number(l.neto),
       notas:           l.notas,
+      desfasada:       !!calc && (Math.abs(devengado - calc.devengado) > EPS
+                               || Math.abs(deducciones - calc.deducciones) > EPS),
     })
     lineasPorNomina.set(l.nomina_id, arr)
   }
@@ -388,12 +458,14 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const nominas: NominaConLineas[] = nominasRaw.map(n => {
     const total  = Number(n.total)
     const pagado = n.gasto_id ? (pagadoPorGasto.get(n.gasto_id) ?? 0) : 0
+    const lineas = lineasPorNomina.get(n.nomina_id) ?? []
     return {
       ...n,
       total,
-      lineas:          lineasPorNomina.get(n.nomina_id) ?? [],
+      lineas,
       pagado,
       saldo_pendiente: Math.max(0, total - pagado),
+      desactualizada:  lineas.some(l => l.desfasada),
     }
   })
 
@@ -844,6 +916,8 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   const contratos = ((consRes.data ?? []) as Contrato[]).map(c => ({ ...c, salario_base: Number(c.salario_base) }))
   const conceptos = ((cptRes.data ?? []) as ConceptoEmpleado[]).map(c => ({ ...c, valor: Number(c.valor) }))
 
+  // El desfase de cada línea ya viene marcado desde `obtenerRrhh`
+  // (`NominaLinea.desfasada`): la vista filtra por ahí, sin consultas extra.
   return { data, empleado, contratos, conceptos }
 }
 
@@ -974,28 +1048,21 @@ export async function crearNomina(
   // Conceptos recurrentes activos de cada empleado → se aplican solos a su línea
   const empIds = activos.map(e => e.empleado_id)
   const { data: cptData } = await db.from('conceptos_empleado')
-    .select('empleado_id, tipo, modo, valor')
+    .select('empleado_id, nombre, tipo, modo, valor')
     .eq('client_id', session.client_id)
     .in('empleado_id', empIds.length ? empIds : ['__none__'])
     .eq('activo', true)
-  const cptPorEmp = new Map<string, { tipo: string; modo: string; valor: number }[]>()
-  for (const c of (cptData ?? []) as { empleado_id: string; tipo: string; modo: string; valor: number }[]) {
+    .order('created_at')
+  const cptPorEmp = new Map<string, ConceptoAplicable[]>()
+  for (const c of (cptData ?? []) as { empleado_id: string; nombre: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }[]) {
     const arr = cptPorEmp.get(c.empleado_id) ?? []
-    arr.push({ tipo: c.tipo, modo: c.modo, valor: Number(c.valor) })
+    arr.push({ nombre: c.nombre, tipo: c.tipo, modo: c.modo, valor: Number(c.valor) })
     cptPorEmp.set(c.empleado_id, arr)
   }
 
   const lineas = activos.map(e => {
     const base = Number(e.salario_base)
-    let devengado   = base
-    let deducciones = 0
-    for (const c of cptPorEmp.get(e.empleado_id) ?? []) {
-      const monto = c.modo === 'PORCENTAJE' ? (base * c.valor) / 100 : c.valor
-      if (c.tipo === 'BONO') devengado += monto
-      else                   deducciones += monto
-    }
-    deducciones = Math.min(devengado, deducciones)
-    const neto  = Math.max(0, devengado - deducciones)
+    const { devengado, deducciones, neto } = aplicarConceptos(base, cptPorEmp.get(e.empleado_id) ?? [])
     return {
       linea_id:        generarLineaId(),
       nomina_id,
@@ -1009,7 +1076,7 @@ export async function crearNomina(
       neto,
     }
   })
-  const total = lineas.reduce((s, l) => s + l.neto, 0)
+  const total = redondear2(lineas.reduce((s, l) => s + l.neto, 0))
 
   const { error: nomErr } = await db.from('nominas').insert({
     nomina_id,
@@ -1092,63 +1159,204 @@ export async function guardarLineaNomina(
   return { ok: true }
 }
 
-// ── Aplicar un concepto a TODAS las líneas (bono/deducción, fijo o %) ────────────
-// Ahorra teclear: suma el mismo bono o deducción a cada empleado de la nómina.
+// RETIRADO: «Aplicar a todas» (`aplicarConceptoNomina`), que sumaba el mismo bono o
+// deducción a cada línea de la nómina. Aplicaba un importe suelto SIN concepto que
+// lo explicara —ni nombre, ni rastro, ni forma de saber después de dónde salía—, y
+// una retención de impuestos no es igual para todos: es del trabajador. Las
+// deducciones se llevan por trabajador, desde su ficha (`conceptos_empleado`), y
+// entran en la nómina al generarla o con `recalcularNomina`. Sin datos huérfanos:
+// no llegó a usarse en producción. Recuperable en git (llegó en `620ef85`).
 
-export async function aplicarConceptoNomina(
-  formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+// ── Actualizar una nómina BORRADOR con los conceptos vigentes ────────────────────
+// El olvido normal: se genera la nómina y DESPUÉS se recuerda una retención. Los
+// conceptos solo se aplican al crear (`crearNomina`), así que hasta ahora la única
+// salida era borrar la nómina entera y volver a generarla.
+//
+// Es un RECÁLCULO desde el `salario_base` de la línea —el del período, congelado
+// al generar— más los conceptos activos del trabajador. No es un añadido: la línea
+// guarda `deducciones` como un número sin desglose, así que no hay forma de saber
+// qué conceptos la formaron y "sumar solo lo que falta" sería inventarse el punto
+// de partida (y duplicar lo ya aplicado). Por eso pisa lo escrito a mano en las
+// líneas que toca, y por eso se previsualiza antes de aplicar en vez de confiar.
+//
+// `empleado_id` acota el recálculo a un solo trabajador (su ficha, o la vista
+// individual del modal); sin él va la nómina completa.
+
+export interface RecalculoLineaNomina {
+  linea_id:            string
+  empleado_id:         string
+  empleado_nombre:     string
+  salario_base:        number
+  devengado_antes:     number
+  deducciones_antes:   number
+  neto_antes:          number
+  devengado_despues:   number
+  deducciones_despues: number
+  neto_despues:        number
+  /** Desglose de lo que se va a aplicar (lo que la línea NO guarda). */
+  conceptos:           { nombre: string; tipo: TipoConcepto; monto: number }[]
+  /** Las deducciones superaban el devengado y se recortan a él. */
+  recortada:           boolean
+  cambia:              boolean
+}
+
+export interface RecalculoNomina {
+  ok:            boolean
+  error?:        string
+  lineas:        RecalculoLineaNomina[]
+  /** Totales de la nómina COMPLETA (las líneas fuera del foco cuentan igual). */
+  total_antes:   number
+  total_despues: number
+}
+
+type DbAdmin = ReturnType<typeof createAdminClient>
+
+async function planificarRecalculo(
+  db:          DbAdmin,
+  client_id:   string,
+  nomina_id:   string,
+  empleado_id?: string,
+): Promise<{ error?: string; lineas: RecalculoLineaNomina[]; total_otras: number }> {
+  const vacio = { lineas: [] as RecalculoLineaNomina[], total_otras: 0 }
+
+  const { data: nomina, error: nErr } = await db.from('nominas')
+    .select('estado')
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', client_id)
+    .maybeSingle()
+  if (nErr)    return { ...vacio, error: nErr.message }
+  if (!nomina) return { ...vacio, error: 'Nómina no encontrada.' }
+  if (nomina.estado !== 'BORRADOR') {
+    return { ...vacio, error: 'La nómina ya está confirmada y no se puede actualizar.' }
+  }
+
+  const { data: todas, error: lErr } = await db.from('nomina_lineas')
+    .select('linea_id, empleado_id, empleado_nombre, salario_base, devengado, deducciones, neto')
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', client_id)
+    .order('empleado_nombre')
+  if (lErr) return { ...vacio, error: lErr.message }
+
+  const filas = (todas ?? []) as {
+    linea_id: string; empleado_id: string; empleado_nombre: string
+    salario_base: number; devengado: number; deducciones: number; neto: number
+  }[]
+  const enFoco   = empleado_id ? filas.filter(f => f.empleado_id === empleado_id) : filas
+  const idsFoco  = new Set(enFoco.map(f => f.linea_id))
+  // Las líneas fuera del foco no se tocan, pero sí suman en el total de la nómina.
+  const total_otras = filas
+    .filter(f => !idsFoco.has(f.linea_id))
+    .reduce((s, f) => s + Number(f.neto), 0)
+
+  if (!enFoco.length) {
+    return { ...vacio, total_otras, error: 'Ese trabajador no tiene línea en esta nómina.' }
+  }
+
+  const { data: cptData, error: cErr } = await db.from('conceptos_empleado')
+    .select('empleado_id, nombre, tipo, modo, valor')
+    .eq('client_id', client_id)
+    .in('empleado_id', Array.from(new Set(enFoco.map(f => f.empleado_id))))
+    .eq('activo', true)
+    .order('created_at')
+  if (cErr) return { ...vacio, total_otras, error: cErr.message }
+
+  const porEmpleado = new Map<string, { nombre: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }[]>()
+  for (const c of (cptData ?? []) as { empleado_id: string; nombre: string; tipo: TipoConcepto; modo: ModoConcepto; valor: number }[]) {
+    const arr = porEmpleado.get(c.empleado_id) ?? []
+    arr.push({ nombre: c.nombre, tipo: c.tipo, modo: c.modo, valor: Number(c.valor) })
+    porEmpleado.set(c.empleado_id, arr)
+  }
+
+  const lineas = enFoco.map(f => {
+    const base = Number(f.salario_base)
+    // El recorte lo hace la fórmula compartida, pero aquí NO se queda en silencio:
+    // `recortada` viaja a la previsualización para que el dueño vea que su
+    // deducción no cabe entera antes de aplicar nada.
+    const { devengado, deducciones, neto, recortada, detalle } =
+      aplicarConceptos(base, porEmpleado.get(f.empleado_id) ?? [])
+
+    const devAntes = Number(f.devengado)
+    const dedAntes = Number(f.deducciones)
+    return {
+      linea_id:            f.linea_id,
+      empleado_id:         f.empleado_id,
+      empleado_nombre:     f.empleado_nombre,
+      salario_base:        base,
+      devengado_antes:     devAntes,
+      deducciones_antes:   dedAntes,
+      neto_antes:          Number(f.neto),
+      devengado_despues:   devengado,
+      deducciones_despues: deducciones,
+      neto_despues:        neto,
+      conceptos:           detalle,
+      recortada,
+      cambia: Math.abs(devAntes - devengado) > EPS || Math.abs(dedAntes - deducciones) > EPS,
+    }
+  })
+
+  return { lineas, total_otras }
+}
+
+export async function previsualizarRecalculoNomina(
+  nomina_id:    string,
+  empleado_id?: string,
+): Promise<RecalculoNomina> {
+  const nada = { lineas: [] as RecalculoLineaNomina[], total_antes: 0, total_despues: 0 }
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.', ...nada }
+
+  // Solo lee (la página ya pasa por requireModulo('rrhh')); el candado de
+  // escritura vive en `recalcularNomina`.
+  const db   = createAdminClient()
+  const plan = await planificarRecalculo(db, session.client_id, nomina_id, empleado_id)
+  if (plan.error) return { ok: false, error: plan.error, ...nada }
+
+  return {
+    ok:            true,
+    lineas:        plan.lineas,
+    total_antes:   redondear2(plan.total_otras + plan.lineas.reduce((s, l) => s + l.neto_antes, 0)),
+    total_despues: redondear2(plan.total_otras + plan.lineas.reduce((s, l) => s + l.neto_despues, 0)),
+  }
+}
+
+export async function recalcularNomina(
+  nomina_id:    string,
+  empleado_id?: string,
+): Promise<{ ok: boolean; error?: string; actualizadas?: number; total?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  const nomina_id = (formData.get('nomina_id') as string)?.trim()
-  const concepto  = (formData.get('concepto')  as string)?.trim()   // BONO | DEDUCCION
-  const modo      = (formData.get('modo')      as string)?.trim()   // FIJO | PORCENTAJE
-  const valor     = parseFloat(formData.get('valor') as string)
+  const db   = createAdminClient()
+  const plan = await planificarRecalculo(db, session.client_id, nomina_id, empleado_id)
+  if (plan.error) return { ok: false, error: plan.error }
 
-  if (!nomina_id)                              return { ok: false, error: 'Nómina no válida.' }
-  if (concepto !== 'BONO' && concepto !== 'DEDUCCION') return { ok: false, error: 'Concepto no válido.' }
-  if (modo !== 'FIJO' && modo !== 'PORCENTAJE')        return { ok: false, error: 'Modo no válido.' }
-  if (isNaN(valor) || valor <= 0)              return { ok: false, error: 'El valor debe ser positivo.' }
-
-  const db = createAdminClient()
-
-  const { data: nomina } = await db.from('nominas')
-    .select('estado')
-    .eq('nomina_id', nomina_id)
-    .eq('client_id', session.client_id)
-    .single()
-  if (!nomina)                      return { ok: false, error: 'Nómina no encontrada.' }
-  if (nomina.estado !== 'BORRADOR') return { ok: false, error: 'La nómina ya está confirmada.' }
-
-  const { data: lineas } = await db.from('nomina_lineas')
-    .select('linea_id, devengado, deducciones')
-    .eq('nomina_id', nomina_id)
-    .eq('client_id', session.client_id)
-
-  let total = 0
-  for (const l of (lineas ?? []) as { linea_id: string; devengado: number; deducciones: number }[]) {
-    let dev = Number(l.devengado)
-    let ded = Number(l.deducciones)
-    const monto = modo === 'PORCENTAJE' ? (dev * valor) / 100 : valor
-    if (concepto === 'BONO') dev += monto
-    else                     ded = Math.min(dev, ded + monto)
-    const neto = Math.max(0, dev - ded)
-    total += neto
-    await db.from('nomina_lineas')
-      .update({ devengado: dev, deducciones: ded, neto })
+  const cambian = plan.lineas.filter(l => l.cambia)
+  for (const l of cambian) {
+    const { error } = await db.from('nomina_lineas')
+      .update({ devengado: l.devengado_despues, deducciones: l.deducciones_despues, neto: l.neto_despues })
       .eq('linea_id', l.linea_id)
       .eq('client_id', session.client_id)
+    if (error) return { ok: false, error: error.message }
   }
 
+  // El total se relee de la base, no se toma del plan: entre previsualizar y
+  // aplicar, otra pestaña puede haber tocado una línea fuera del foco.
+  const { data: todas, error: tErr } = await db.from('nomina_lineas')
+    .select('neto')
+    .eq('nomina_id', nomina_id)
+    .eq('client_id', session.client_id)
+  if (tErr) return { ok: false, error: tErr.message }
+  const total = redondear2((todas ?? []).reduce((s, l) => s + Number(l.neto), 0))
   await db.from('nominas')
     .update({ total, updated_at: new Date().toISOString() })
     .eq('nomina_id', nomina_id)
     .eq('client_id', session.client_id)
 
   revalidatePath('/portal/nomina')
-  return { ok: true }
+  revalidatePath('/portal/rrhh')
+  if (empleado_id) revalidatePath(`/portal/rrhh/${empleado_id}`)
+  return { ok: true, actualizadas: cambian.length, total }
 }
 
 // ── Confirmar nómina ────────────────────────────────────────────────────────────
@@ -1171,40 +1379,77 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   if (nomina.estado !== 'BORRADOR')  return { ok: false, error: 'La nómina ya está confirmada.' }
 
   const { data: lineas } = await db.from('nomina_lineas')
-    .select('neto')
+    .select('devengado, deducciones, neto')
     .eq('nomina_id', nomina_id)
     .eq('client_id', session.client_id)
-  const total = (lineas ?? []).reduce((s, l) => s + Number(l.neto), 0)
-  if (total <= EPS) return { ok: false, error: 'La nómina no tiene importe a pagar.' }
+  const filas       = (lineas ?? []) as { devengado: number; deducciones: number; neto: number }[]
+  const devengado   = redondear2(filas.reduce((s, l) => s + Number(l.devengado), 0))
+  const retenido    = redondear2(filas.reduce((s, l) => s + Number(l.deducciones), 0))
+  const total       = redondear2(filas.reduce((s, l) => s + Number(l.neto), 0))
+  // El guardia mira el DEVENGADO, no el neto: una nómina en la que se retuvo todo
+  // tiene coste (y una deuda con la agencia tributaria) aunque no salga efectivo
+  // hacia el trabajador — con el neto, esa nómina no se podía confirmar.
+  if (devengado <= EPS) return { ok: false, error: 'La nómina no tiene importe que registrar.' }
 
-  // Categoría del sistema «Salarios» para el gasto de nómina. Se RESUELVE-O-CREA
-  // (mig. 133): buscarla por nombre dejaba sin `categoria_id` a todo cliente dado
-  // de alta después de la mig. 074, que nunca tuvo las categorías sembradas.
-  const catSalarios = await resolverCategoriaSistema(db, session.client_id, 'salarios')
+  // Categorías del sistema. Se RESUELVEN-O-CREAN (mig. 133): buscarlas por nombre
+  // dejaba sin `categoria_id` a todo cliente dado de alta después de la mig. 074,
+  // que nunca tuvo las categorías sembradas. El `rol_pl` lo pone la RPC (mig. 139).
+  const [catSalarios, catRetenciones] = await Promise.all([
+    resolverCategoriaSistema(db, session.client_id, 'salarios'),
+    retenido > EPS
+      ? resolverCategoriaSistema(db, session.client_id, 'retenciones_nomina')
+      : Promise.resolve(null),
+  ])
 
-  const gasto_id = generarGastoId()
-  const { error: gErr } = await db.from('gastos_cobros').insert({
-    registro_id: gasto_id,
+  // DOS gastos que suman el devengado (mig. 139): el coste de personal es el bruto,
+  // y lo retenido no se evapora — sigue debiéndose, pero a otro acreedor y con otro
+  // vencimiento, así que va en su propia fila de Cuentas por pagar.
+  const base = {
     client_id:   session.client_id,
     empresa_id:  nomina.empresa_id,
     tipo:        'GASTO',
     fecha:       nomina.fecha,
+    moneda:      nomina.moneda,
+    origen_tipo: 'NOMINA',
+    origen_id:   nomina_id,
+    updated_at:  new Date().toISOString(),
+  }
+  const gasto_id = generarGastoId()
+  const aInsertar: Record<string, unknown>[] = [{
+    ...base,
+    registro_id:  gasto_id,
     categoria:    catSalarios?.nombre ?? 'Salarios',
     categoria_id: catSalarios?.categoria_id ?? null,
-    descripcion: `Nómina ${nomina.periodo}`,
-    moneda:      nomina.moneda,
-    monto:       total,
-    notas:       `Nómina ${nomina_id}`,
-    updated_at:  new Date().toISOString(),
-  })
+    descripcion:  `Nómina ${nomina.periodo}`,
+    monto:        total,
+    notas:        `Nómina ${nomina_id}`,
+  }]
+  const retencion_id = retenido > EPS ? generarGastoId() : null
+  if (retencion_id) {
+    aInsertar.push({
+      ...base,
+      registro_id:  retencion_id,
+      categoria:    catRetenciones?.nombre ?? 'Retenciones de nómina',
+      categoria_id: catRetenciones?.categoria_id ?? null,
+      descripcion:  `Retenciones nómina ${nomina.periodo}`,
+      monto:        retenido,
+      notas:        `Nómina ${nomina_id} · retenido del salario, a ingresar a la agencia tributaria`,
+    })
+  }
+
+  const { error: gErr } = await db.from('gastos_cobros').insert(aInsertar)
   if (gErr) return { ok: false, error: gErr.message }
 
+  // `gasto_id` sigue apuntando al de Salarios: es el que gobierna el saldo con la
+  // plantilla, y de él salen `pagado`/`saldo_pendiente` y el botón «Pagar».
   const { error: nErr } = await db.from('nominas')
     .update({ estado: 'CONFIRMADA', gasto_id, total, updated_at: new Date().toISOString() })
     .eq('nomina_id', nomina_id)
     .eq('client_id', session.client_id)
   if (nErr) {
-    await db.from('gastos_cobros').delete().eq('registro_id', gasto_id).eq('client_id', session.client_id)
+    await db.from('gastos_cobros').delete()
+      .eq('client_id', session.client_id)
+      .in('registro_id', aInsertar.map(g => g.registro_id as string))
     return { ok: false, error: nErr.message }
   }
 
@@ -1217,7 +1462,7 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
 }
 
 // ── Eliminar nómina ──────────────────────────────────────────────────────────────
-// Si está confirmada, solo si el gasto enlazado no tiene pagos en Tesorería.
+// Si está confirmada, solo si NINGUNO de sus gastos tiene pagos en Tesorería.
 
 export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -1233,19 +1478,36 @@ export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; 
     .single()
   if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
 
-  if (nomina.estado === 'CONFIRMADA' && nomina.gasto_id) {
-    const { count } = await db.from('movimientos_tesoreria')
-      .select('movimiento_id', { count: 'exact', head: true })
+  if (nomina.estado === 'CONFIRMADA') {
+    // Confirmar escribe DOS gastos (mig. 139): Salarios y Retenciones. El de
+    // Salarios se localiza por `gasto_id`; el de retenciones por su origen —
+    // borrar solo el primero dejaba la deuda con la agencia tributaria viva y
+    // huérfana, sin nómina que la explicara.
+    const { data: porOrigen } = await db.from('gastos_cobros')
+      .select('registro_id')
       .eq('client_id', session.client_id)
-      .eq('referencia_id', nomina.gasto_id)
-    if ((count ?? 0) > 0) {
-      // Configurador (modo configuración): se lleva también los pagos del gasto de
-      // salarios. El usuario normal debe anularlos en Tesorería antes.
-      if (!session.imp) return { ok: false, error: 'El gasto de esta nómina tiene pagos registrados. Anúlalos en Tesorería antes de eliminar.' }
-      await db.from('movimientos_tesoreria').delete()
-        .eq('client_id', session.client_id).eq('referencia_id', nomina.gasto_id)
+      .eq('origen_tipo', 'NOMINA')
+      .eq('origen_id', nomina_id)
+    const gastoIds = Array.from(new Set([
+      ...(nomina.gasto_id ? [nomina.gasto_id] : []),
+      ...((porOrigen ?? []) as { registro_id: string }[]).map(g => g.registro_id),
+    ]))
+
+    if (gastoIds.length) {
+      const { count } = await db.from('movimientos_tesoreria')
+        .select('movimiento_id', { count: 'exact', head: true })
+        .eq('client_id', session.client_id)
+        .in('referencia_id', gastoIds)
+      if ((count ?? 0) > 0) {
+        // Configurador (modo configuración): se lleva también los pagos. El usuario
+        // normal debe anularlos en Tesorería antes.
+        if (!session.imp) return { ok: false, error: 'Los gastos de esta nómina tienen pagos registrados. Anúlalos en Tesorería antes de eliminar.' }
+        await db.from('movimientos_tesoreria').delete()
+          .eq('client_id', session.client_id).in('referencia_id', gastoIds)
+      }
+      await db.from('gastos_cobros').delete()
+        .eq('client_id', session.client_id).in('registro_id', gastoIds)
     }
-    await db.from('gastos_cobros').delete().eq('registro_id', nomina.gasto_id).eq('client_id', session.client_id)
   }
 
   await db.from('nomina_lineas').delete().eq('nomina_id', nomina_id).eq('client_id', session.client_id)

@@ -57,15 +57,23 @@ export async function etiquetaDeCategoria(
 export type ClaveCategoriaSistema =
   | 'compras'               // entrada de mercancía (inv_confirmar_compra)
   | 'servicios_terceros'    // CxP al proveedor de un servicio (srv_cxp_generar)
-  | 'salarios'              // nómina confirmada
+  | 'salarios'              // nómina confirmada: los netos que van a la plantilla
+  | 'retenciones_nomina'    // nómina confirmada: lo retenido, a la agencia tributaria
   | 'comisiones_bancarias'  // fees de transferencia
 
 const NOMBRE_DEFECTO: Record<ClaveCategoriaSistema, string> = {
   compras:              'Compras',
   servicios_terceros:   'Servicios de terceros',
   salarios:             'Salarios',
+  retenciones_nomina:   'Retenciones de nómina',
   comisiones_bancarias: 'Comisiones bancarias',
 }
+
+// El `rol_pl` de cada una NO se manda desde aquí: lo fija `cat_gasto_sistema`
+// (mig. 139) por su clave, para que nazca igual venga de TypeScript o de dentro de
+// otra función Postgres. Antes no se fijaba en absoluto y la categoría se quedaba
+// en el default 'OPERATIVO': el «Salarios» de todo cliente nuevo caía fuera del
+// renglón Personal del estado de resultados.
 
 /**
  * Resuelve —creándola si hace falta— la categoría de sistema de este cliente.
