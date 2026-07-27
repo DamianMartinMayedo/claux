@@ -1104,8 +1104,17 @@ export async function crearNomina(
   return { ok: true }
 }
 
-// ── Editar línea de nómina (solo BORRADOR) ──────────────────────────────────────
-// Ajusta devengado / deducciones; recalcula neto y el total de la nómina.
+// ── Editar el DEVENGADO de una línea de nómina (solo BORRADOR) ──────────────────
+// Solo el devengado. Las deducciones NO se editan aquí: salen de los conceptos del
+// trabajador y se mantienen tal cual. Se retiró el campo suelto de deducciones del
+// modal porque un importe sin concepto no se puede explicar a nadie, no se puede
+// clasificar como impuesto o no, no puede ir a un acreedor concreto en contabilidad
+// y lo borraba el primer recálculo (que no podía distinguirlo de un concepto sin
+// aplicar). Además su guardado dependía de un botón de check por fila y el importe
+// tecleado se perdía en silencio al cerrar el modal: le pasó a un cliente real.
+//
+// El importe deducido se LEE de la base y no se toca: si llegara vacío por
+// formulario, tomarlo como 0 borraría la retención al guardar el devengado.
 
 export async function guardarLineaNomina(
   formData: FormData,
@@ -1114,20 +1123,15 @@ export async function guardarLineaNomina(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  const linea_id        = (formData.get('linea_id') as string)?.trim()
-  const devengadoRaw    = parseFloat(formData.get('devengado')   as string)
-  const deduccionesRaw  = parseFloat(formData.get('deducciones') as string)
+  const linea_id     = (formData.get('linea_id') as string)?.trim()
+  const devengadoRaw = parseFloat(formData.get('devengado') as string)
   if (!linea_id) return { ok: false, error: 'Línea no válida.' }
-
-  const devengado   = isNaN(devengadoRaw)   || devengadoRaw   < 0 ? 0 : devengadoRaw
-  const deducciones = isNaN(deduccionesRaw) || deduccionesRaw < 0 ? 0 : deduccionesRaw
-  if (deducciones > devengado) return { ok: false, error: 'Las deducciones no pueden superar el devengado.' }
-  const neto = devengado - deducciones
+  const devengado = isNaN(devengadoRaw) || devengadoRaw < 0 ? 0 : redondear2(devengadoRaw)
 
   const db = createAdminClient()
 
   const { data: linea } = await db.from('nomina_lineas')
-    .select('nomina_id')
+    .select('nomina_id, deducciones')
     .eq('linea_id', linea_id)
     .eq('client_id', session.client_id)
     .single()
@@ -1141,8 +1145,19 @@ export async function guardarLineaNomina(
   if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
   if (nomina.estado !== 'BORRADOR') return { ok: false, error: 'La nómina ya está confirmada y no se puede editar.' }
 
+  // Bajar el devengado por debajo de lo ya deducido no se recorta en silencio: se
+  // rechaza diciendo el importe, porque el arreglo está en el concepto, no aquí.
+  const deducciones = Number(linea.deducciones)
+  if (deducciones > devengado + EPS) {
+    return {
+      ok: false,
+      error: `Esta línea tiene ${deducciones.toLocaleString('es-ES', { minimumFractionDigits: 2 })} de deducciones y no pueden superar el devengado. Ajusta primero los conceptos del trabajador en su ficha.`,
+    }
+  }
+  const neto = redondear2(devengado - deducciones)
+
   const { error } = await db.from('nomina_lineas')
-    .update({ devengado, deducciones, neto })
+    .update({ devengado, neto })
     .eq('linea_id', linea_id)
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
@@ -1152,7 +1167,7 @@ export async function guardarLineaNomina(
     .select('neto')
     .eq('nomina_id', linea.nomina_id)
     .eq('client_id', session.client_id)
-  const total = (todas ?? []).reduce((s, l) => s + Number(l.neto), 0)
+  const total = redondear2((todas ?? []).reduce((s, l) => s + Number(l.neto), 0))
   await db.from('nominas')
     .update({ total, updated_at: new Date().toISOString() })
     .eq('nomina_id', linea.nomina_id)

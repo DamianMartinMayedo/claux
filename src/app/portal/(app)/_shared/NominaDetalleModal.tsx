@@ -37,16 +37,18 @@ function LineaEditableRow({
 }) {
   const [isPending, startTransition] = useTransition()
   const [dev, setDev] = useState(String(linea.devengado))
-  const [ded, setDed] = useState(String(linea.deducciones))
 
-  const netoLive = Math.max(0, (parseFloat(dev) || 0) - (parseFloat(ded) || 0))
-  const dirty    = (parseFloat(dev) || 0) !== linea.devengado || (parseFloat(ded) || 0) !== linea.deducciones
+  // Las deducciones NO se editan aquí: son de solo lectura y vienen de los conceptos
+  // del trabajador (su ficha). Un importe suelto sin concepto no se podía explicar,
+  // ni clasificar, ni sobrevivía al recálculo — y su guardado por fila se perdía en
+  // silencio al cerrar el modal.
+  const netoLive = Math.max(0, (parseFloat(dev) || 0) - linea.deducciones)
+  const dirty    = (parseFloat(dev) || 0) !== linea.devengado
 
   function save() {
     const fd = new FormData()
     fd.set('linea_id', linea.linea_id)
     fd.set('devengado', dev)
-    fd.set('deducciones', ded)
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const res = await guardarLineaNomina(fd)
@@ -64,8 +66,7 @@ function LineaEditableRow({
       </td>
       <td data-label="Devengado" className="col-num"><input className="input nom-input" type="number" min="0" step="any" value={dev}
         onChange={e => setDev(e.target.value)} aria-label={`Devengado de ${linea.empleado_nombre}`} /></td>
-      <td data-label="Deducciones" className="col-num"><input className="input nom-input" type="number" min="0" step="any" value={ded}
-        onChange={e => setDed(e.target.value)} aria-label={`Deducciones de ${linea.empleado_nombre}`} /></td>
+      <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(linea.deducciones)}</td>
       <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(netoLive)} {moneda}</td>
       <td className="col-actions">
         <button type="button" className="ter-action-btn ter-action-restore" title="Guardar línea"
@@ -292,7 +293,7 @@ export function NominaDetalleModal({
             </strong>
             <span className="text-xs-muted">
               {esBorrador
-                ? 'Ajusta devengado y deducciones; guarda cada línea. Al confirmar se registra el gasto de salarios.'
+                ? 'Ajusta el devengado y guarda la línea. Las deducciones salen de los conceptos de cada trabajador, en su ficha. Al confirmar se registra el gasto de salarios.'
                 : nomina.saldo_pendiente <= 0.005
                   ? 'Confirmada y pagada por completo.'
                   : `Gasto registrado · Pagado ${formatMonto(nomina.pagado)} · Pendiente ${formatMonto(nomina.saldo_pendiente)} ${nomina.moneda}. Usa el botón Pagar para liquidar.`}
