@@ -56,8 +56,18 @@ export default function TopLoader() {
       if (activo) return
       activo = true
       if (ocultar) clearTimeout(ocultar)
-      setVisible(true)
-      setProgress(0.08)
+      // El primer repintado se aplaza UN MICROTASK a propósito. `begin` también se
+      // llama desde el `history.pushState` que parcheamos más abajo, y el App
+      // Router lo invoca dentro de un *insertion effect* de React, donde un
+      // `setState` es ilegal («useInsertionEffect must not schedule updates») y
+      // React lo canta por consola en cada navegación programática. El microtask
+      // sale de esa fase de commit sin retraso perceptible; lo que no es estado de
+      // React —banderas y temporizadores— sigue yendo en el momento.
+      queueMicrotask(() => {
+        if (!activo) return   // la ruta cambió antes de que llegáramos a pintar
+        setVisible(true)
+        setProgress(0.08)
+      })
       // Sube deprisa al principio y se va frenando hacia el 90% (nunca llega solo).
       trickle = setInterval(() => {
         setProgress(p => (p >= 0.9 ? p : p + (0.9 - p) * 0.12))
