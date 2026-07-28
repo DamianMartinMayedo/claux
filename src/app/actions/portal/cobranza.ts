@@ -195,12 +195,16 @@ export async function obtenerCuentasPorPagar():  Promise<CuentasPageData | null>
 export interface CobrosFacturaData {
   factura_id:    string
   moneda:        string
+  /** Empresa emisora: se cobra desde la caja que se quiera, pero hay que poder avisar
+   *  cuando esa caja es de otra empresa (el movimiento se sella con la de la caja). */
+  empresa_id:    string
   total:         number
   liquidado:     number
   saldo:         number
   estado:        string
   liquidaciones: LiquidacionDoc[]
-  cuentas:       { cuenta_id: string; nombre: string; moneda: string }[]
+  cuentas:       { cuenta_id: string; nombre: string; moneda: string; empresa_id: string }[]
+  empresa_nombres: Record<string, string>
 }
 
 export async function obtenerCobrosFactura(factura_id: string): Promise<CobrosFacturaData | null> {
@@ -214,18 +218,22 @@ export async function obtenerCobrosFactura(factura_id: string): Promise<CobrosFa
     .eq('factura_id', factura_id).eq('client_id', session.client_id).maybeSingle()
   if (!factura) return null
 
-  const [movRes, cuRes] = await Promise.all([
+  const [movRes, cuRes, empresas] = await Promise.all([
     db.from('movimientos_tesoreria')
       .select('movimiento_id, fecha, monto, monto_ref, cuenta_id')
       .eq('client_id', session.client_id)
       .eq('referencia_id', factura_id)
       .in('origen', ['COBRO', 'PAGO']),
-    db.from('cuentas').select('cuenta_id, nombre, moneda')
+    db.from('cuentas').select('cuenta_id, nombre, moneda, empresa_id')
       .eq('client_id', session.client_id)
       .eq('activa', true)
       .eq('es_apertura', false)
       .order('nombre'),
+    obtenerEmpresas(),
   ])
+
+  const empresa_nombres: Record<string, string> = {}
+  for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
 
   const cuentaNombre: Record<string, string> = {}
   for (const c of (cuRes.data ?? []) as { cuenta_id: string; nombre: string }[]) cuentaNombre[c.cuenta_id] = c.nombre
@@ -240,13 +248,15 @@ export async function obtenerCobrosFactura(factura_id: string): Promise<CobrosFa
 
   return {
     factura_id,
-    moneda:    factura.moneda,
+    moneda:     factura.moneda,
+    empresa_id: factura.empresa_id,
     total,
     liquidado,
     saldo:     Math.max(0, total - liquidado),
     estado:    factura.estado,
     liquidaciones,
-    cuentas:   (cuRes.data ?? []) as { cuenta_id: string; nombre: string; moneda: string }[],
+    cuentas:   (cuRes.data ?? []) as CobrosFacturaData['cuentas'],
+    empresa_nombres,
   }
 }
 

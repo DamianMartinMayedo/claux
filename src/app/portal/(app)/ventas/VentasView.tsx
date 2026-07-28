@@ -32,6 +32,7 @@ import {
   type Oferta,
   type Factura,
 } from '@/app/actions/portal/ventas'
+import { fmtFechaEs }                  from '@/lib/date-utils'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -534,7 +535,7 @@ function TablaOfertas({
                 </Link>
               </td>
               <td data-label="Fecha" className="text-sm-muted">
-                {fmtFecha(o.fecha_emision)}
+                {fmtFechaEs(o.fecha_emision)}
               </td>
               {mostrarEmpresa && (
                 <td data-label="Empresa">
@@ -611,7 +612,7 @@ function TablaFacturas({
                 </Link>
               </td>
               <td data-label="Fecha" className="text-sm-muted">
-                {fmtFecha(f.fecha_emision)}
+                {fmtFechaEs(f.fecha_emision)}
               </td>
               {mostrarEmpresa && (
                 <td data-label="Empresa">
@@ -620,7 +621,7 @@ function TablaFacturas({
               )}
               <td data-label="Cliente">{clienteNombres[f.cliente_id] ?? f.cliente_id}</td>
               <td data-label="Vencimiento" className="text-sm-muted">
-                {f.fecha_vencimiento ? fmtFecha(f.fecha_vencimiento) : '—'}
+                {f.fecha_vencimiento ? fmtFechaEs(f.fecha_vencimiento) : '—'}
               </td>
               <td data-label="Estado">
                 <BadgeFactura estado={f.estado} />
@@ -658,12 +659,6 @@ function BadgeFactura({ estado }: { estado: EstadoFactura }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtFecha(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 function filtrarOfertas(
   arr: Oferta[], empresa: string, cliente: string, estado: string, verArchivadas: boolean,

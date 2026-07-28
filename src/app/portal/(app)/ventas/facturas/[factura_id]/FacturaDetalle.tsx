@@ -4,6 +4,7 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import { useState, useTransition, useEffect, useRef }   from 'react'
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
+import { fmtFechaLargaEs }            from '@/lib/date-utils'
 import {
   cambiarEstadoFactura,
   duplicarFactura,
@@ -166,8 +167,8 @@ export default function FacturaDetalle({ data, cobros }: Props) {
             <BadgeFactura estado={factura.estado} />
           </h1>
           <p className="page-subtitle">
-            Factura · {fmtFecha(factura.fecha_emision)}
-            {factura.fecha_vencimiento && <> · Vence {fmtFecha(factura.fecha_vencimiento)}</>}
+            Factura · {fmtFechaLargaEs(factura.fecha_emision)}
+            {factura.fecha_vencimiento && <> · Vence {fmtFechaLargaEs(factura.fecha_vencimiento)}</>}
             {factura.condicion_pago && (
               <> · {CONDICION_PAGO_LABEL[factura.condicion_pago] ?? factura.condicion_pago}</>
             )}
@@ -370,9 +371,15 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
+  const [anularLiq, setAnularLiq] = useState<CobrosFacturaData['liquidaciones'][number] | null>(null)
 
   const [liq, setLiq] = useState<LiquidarState | null>(null)
   const puedeCobrar = cobros.estado === 'EMITIDA' && cobros.saldo > 0.005
+
+  // La caja puede ser de otra empresa (está permitido): se avisa, no se filtra.
+  const cuentasConEmpresa = cobros.cuentas.map(c => ({
+    ...c, empresa_nombre: cobros.empresa_nombres[c.empresa_id],
+  }))
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -393,6 +400,9 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
     })
   }
 
+  // Anular un cobro BORRA el movimiento de Tesorería y puede devolver la factura a
+  // EMITIDA: es irreversible y toca la caja, así que se confirma con el resumen delante
+  // (regla de acciones críticas de skills/ui/SKILL.md §5). El estado vive en el padre.
   function handleAnular(movimiento_id: string) {
     const ld = toastLoading('Anulando cobro…')
     startTransition(async () => {
@@ -421,11 +431,11 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
         ) : (
           cobros.liquidaciones.map(l => (
             <div key={l.movimiento_id} className="gc-liq-row">
-              <span className="text-sm-muted tes-nowrap">{fmtFecha(l.fecha)}</span>
+              <span className="text-sm-muted tes-nowrap">{fmtFechaLargaEs(l.fecha)}</span>
               <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
               <span className="gc-liq-monto">{formatearMoneda(l.monto, cobros.moneda)}</span>
               <button className="ter-action-btn ter-action-danger" title="Anular cobro"
-                onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+                onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
             </div>
           ))
         )}
@@ -460,9 +470,11 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
                 <form id="cobro-form" onSubmit={handleSubmit} className="gc-liq-form">
                   <div className="ter-form-grid">
                     <LiquidarCuentaFields
-                      cuentas={cobros.cuentas}
+                      cuentas={cuentasConEmpresa}
                       docMoneda={cobros.moneda}
                       saldo={cobros.saldo}
+                      docEmpresaId={cobros.empresa_id}
+                      docEmpresaNombre={cobros.empresa_nombres[cobros.empresa_id]}
                       onChange={setLiq}
                     />
                     <div className="input-group ter-col-span-3">
@@ -488,13 +500,19 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
           </div>
         </div>
       )}
+
+      {anularLiq && (
+        <ConfirmDialog
+          title="¿Anular este cobro?"
+          body={`Se eliminará el movimiento de ${formatearMoneda(anularLiq.monto, cobros.moneda)} en ${anularLiq.cuenta_nombre} del ${fmtFechaLargaEs(anularLiq.fecha)}.${cobros.estado === 'COBRADA' ? ' La factura volverá a Emitida.' : ''} No se puede deshacer.`}
+          confirmLabel="Anular cobro"
+          danger
+          onCancel={() => setAnularLiq(null)}
+          onConfirm={() => { const mov = anularLiq.movimiento_id; setAnularLiq(null); handleAnular(mov) }}
+        />
+      )}
     </div>
   )
 }
 
-function fmtFecha(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
-}
 

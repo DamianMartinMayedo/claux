@@ -16,6 +16,7 @@ import {
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import { ConfirmDialog }                from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -45,21 +46,27 @@ function formatFecha(f: string | null): string {
 // ── Modal: registrar cobro / pago + historial ───────────────────────────────────
 
 function PagoModal({
-  doc, cuentas, modo, onClose, onChanged,
+  doc, cuentas, modo, empresaNombres, onClose, onChanged,
 }: {
   doc:      DocumentoPendiente
   cuentas:  CuentasPageData['cuentas']
   modo:     CuentasPageData['modo']
+  empresaNombres: Record<string, string>
   onClose:  () => void
   onChanged: () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  const [anularLiq, setAnularLiq] = useState<DocumentoPendiente['liquidaciones'][number] | null>(null)
 
   const esCobro        = modo === 'COBRAR'
-  // Mostrar TODAS las cuentas (sin filtro por empresa).
+  // Mostrar TODAS las cuentas (sin filtro por empresa): cobrar o pagar desde la caja de
+  // otra empresa está PERMITIDO —el dueño suele tener una sola cartera—, pero el
+  // movimiento se sella con la empresa de la CAJA, así que se avisa (lo hace
+  // LiquidarCuentaFields con el nombre de la empresa delante).
   // Las de la misma moneda aparecen primero; las de otra moneda aplican tasa.
-  const cuentasOrdenadas = [...cuentas].sort((a, b) =>
-    (a.moneda === doc.moneda ? 0 : 1) - (b.moneda === doc.moneda ? 0 : 1))
+  const cuentasOrdenadas = [...cuentas]
+    .sort((a, b) => (a.moneda === doc.moneda ? 0 : 1) - (b.moneda === doc.moneda ? 0 : 1))
+    .map(c => ({ ...c, empresa_nombre: empresaNombres[c.empresa_id] }))
   const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -116,6 +123,8 @@ function PagoModal({
                     cuentas={cuentasOrdenadas}
                     docMoneda={doc.moneda}
                     saldo={doc.saldo}
+                    docEmpresaId={doc.empresa_id}
+                    docEmpresaNombre={empresaNombres[doc.empresa_id]}
                     onChange={setLiq}
                   />
                   <div className="input-group ter-col-span-3">
@@ -141,7 +150,7 @@ function PagoModal({
                   <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
                   <span className="gc-liq-monto">{formatMonto(l.monto)} {doc.moneda}</span>
                   <button className="ter-action-btn ter-action-danger" title="Anular"
-                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+                    onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                 </div>
               ))}
             </div>
@@ -156,6 +165,16 @@ function PagoModal({
           )}
         </div>
       </div>
+      {anularLiq && (
+        <ConfirmDialog
+          title={esCobro ? '¿Anular este cobro?' : '¿Anular este pago?'}
+          body={`Se eliminará el movimiento de ${formatMonto(anularLiq.monto)} ${doc.moneda} en ${anularLiq.cuenta_nombre} del ${formatFecha(anularLiq.fecha)}. El documento volverá a quedar pendiente. No se puede deshacer.`}
+          confirmLabel={esCobro ? 'Anular cobro' : 'Anular pago'}
+          danger
+          onCancel={() => setAnularLiq(null)}
+          onConfirm={() => { const mov = anularLiq.movimiento_id; setAnularLiq(null); handleAnular(mov) }}
+        />
+      )}
     </div>
   )
 }
@@ -327,6 +346,7 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
 
       {pagoVivo && (
         <PagoModal doc={pagoVivo} cuentas={data.cuentas} modo={data.modo}
+          empresaNombres={data.empresa_nombres}
           onClose={() => setPagoDoc(null)} onChanged={onChanged} />
       )}
     </div>

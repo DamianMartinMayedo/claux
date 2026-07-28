@@ -1044,6 +1044,12 @@ export async function duplicarFactura(
         descuento_pct:     l.descuento_pct     ?? 0,
         descuento_importe: l.descuento_importe ?? 0,
         total:             l.total,
+        // La foto del coste SE COPIA. Sin ella la factura duplicada sale con margen 0
+        // en Reportes, y duplicar es justo el camino del cliente recurrente: el
+        // margen que más se repite era el que más se falseaba.
+        // Lo que NO se copia es `suscripcion_id`: es el rastro de idempotencia de la
+        // facturación del período, y un segundo rastro dejaría el mes cobrado dos veces.
+        costo_unitario:    l.costo_unitario ?? null,
       })),
     )
   }
@@ -1330,6 +1336,25 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
     // cobros/pagos de Tesorería, si no quedarían movimientos huérfanos apuntando a
     // una factura inexistente (y descuadrando saldos y reportes).
     if (config) {
+      // Y la CxP a los proveedores de servicios que engendró al emitirse (mig. 118):
+      // sin este reverso, el gasto «Servicios de terceros» sobrevive apuntando a una
+      // factura que ya no existe. Sus pagos se borran ANTES de llamar a la RPC porque
+      // `srv_cxp_revertir` aborta con CXP_PAGADA si el proveedor ya está pagado — la
+      // guardia es correcta para el dueño, pero en modo limpieza estamos justamente
+      // borrando el pago también.
+      const { data: cxps } = await db.from('gastos_cobros')
+        .select('registro_id')
+        .eq('client_id', session.client_id)
+        .eq('origen_tipo', 'FACTURA')
+        .in('origen_id', borrables)
+      const cxpIds = ((cxps ?? []) as { registro_id: string }[]).map(g => g.registro_id)
+      if (cxpIds.length) {
+        await db.from('movimientos_tesoreria').delete()
+          .eq('client_id', session.client_id).in('referencia_id', cxpIds)
+      }
+      for (const factura_id of borrables) {
+        await db.rpc('srv_cxp_revertir', { p_factura_id: factura_id, p_client_id: session.client_id })
+      }
       await db.from('movimientos_tesoreria').delete()
         .eq('client_id', session.client_id)
         .in('origen', ['COBRO', 'PAGO'])

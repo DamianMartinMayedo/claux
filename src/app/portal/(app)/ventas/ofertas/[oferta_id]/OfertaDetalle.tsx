@@ -4,6 +4,7 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import { useState, useTransition, useEffect, useRef }   from 'react'
 import Link                           from 'next/link'
 import { useRouter }                  from 'next/navigation'
+import { fmtFechaLargaEs }            from '@/lib/date-utils'
 import {
   cambiarEstadoOferta,
   duplicarOferta,
@@ -144,8 +145,8 @@ export default function OfertaDetalle({ data }: Props) {
             <BadgeOferta estado={oferta.estado} />
           </h1>
           <p className="page-subtitle">
-            Oferta comercial · {fmtFecha(oferta.fecha_emision)}
-            {oferta.fecha_validez && <> · Válida hasta {fmtFecha(oferta.fecha_validez)}</>}
+            Oferta comercial · {fmtFechaLargaEs(oferta.fecha_emision)}
+            {oferta.fecha_validez && <> · Válida hasta {fmtFechaLargaEs(oferta.fecha_validez)}</>}
             {oferta.condicion_pago && (
               <> · {CONDICION_PAGO_LABEL[oferta.condicion_pago] ?? oferta.condicion_pago}</>
             )}
@@ -334,9 +335,4 @@ function BadgeOferta({ estado }: { estado: EstadoOferta }) {
   )
 }
 
-function fmtFecha(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
-}
 

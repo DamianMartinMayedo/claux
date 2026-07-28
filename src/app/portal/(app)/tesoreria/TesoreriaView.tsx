@@ -203,12 +203,13 @@ function CuentaModal({
 // ── Modal: Movimiento (ingreso / egreso) ────────────────────────────────────────
 
 function MovimientoModal({
-  cuentas, categorias, pendientes, cuentaInicial, onClose, onSaved,
+  cuentas, categorias, pendientes, cuentaInicial, empresaNombres, onClose, onSaved,
 }: {
   cuentas:       CuentaConSaldo[]
   categorias:    TesoreriaPageData['categorias_gastos']
   pendientes:    Pendientes
   cuentaInicial: string | null
+  empresaNombres: Record<string, string>
   onClose:       () => void
   onSaved:       () => void
 }) {
@@ -373,6 +374,7 @@ function MovimientoModal({
                       <option key={d.doc_id} value={d.doc_id}>
                         {d.numero} · {formatMonto(d.saldo)} {d.moneda}
                         {cuentaSel && d.moneda !== cuentaSel.moneda ? ' (otra moneda)' : ''}
+                        {cuentaSel && d.empresa_id !== cuentaSel.empresa_id ? ` · ${empresaNombres[d.empresa_id] ?? 'otra empresa'}` : ''}
                         {d.tercero_nombre ? ` · ${d.tercero_nombre}` : ''}
                       </option>
                     ))}
@@ -383,6 +385,14 @@ function MovimientoModal({
                   {cambiaMoneda && pendienteSel && cuentaSel && (
                     <span className="input-hint-warning">
                       Monedas distintas: el documento está en {pendienteSel.moneda} y la caja en {cuentaSel.moneda}. Se aplicará la tasa de cambio.
+                    </span>
+                  )}
+                  {/* Está permitido, pero el movimiento se sella con la empresa de la CAJA:
+                      sin decirlo, el ingreso de una empresa acaba en la caja de otra. */}
+                  {pendienteSel && cuentaSel && pendienteSel.empresa_id !== cuentaSel.empresa_id && (
+                    <span className="input-hint-warning">
+                      El documento es de {empresaNombres[pendienteSel.empresa_id] ?? 'otra empresa'} y la caja de{' '}
+                      {empresaNombres[cuentaSel.empresa_id] ?? 'otra empresa'}: el dinero se mueve en la otra empresa.
                     </span>
                   )}
                 </div>
@@ -494,9 +504,10 @@ function MovimientoModal({
 // ── Modal: Transferencia ────────────────────────────────────────────────────────
 
 function TransferenciaModal({
-  cuentas, onClose, onSaved,
+  cuentas, empresaNombres, onClose, onSaved,
 }: {
   cuentas: CuentaConSaldo[]
+  empresaNombres: Record<string, string>
   onClose: () => void
   onSaved: () => void
 }) {
@@ -645,6 +656,14 @@ function TransferenciaModal({
                     <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} · {c.moneda}</option>
                   ))}
                 </select>
+                {/* Mover dinero entre empresas está permitido, pero no es lo mismo que
+                    moverlo dentro de una: en los papeles es un préstamo entre ellas. */}
+                {cuentaOrigen && cuentaDestino && cuentaOrigen.empresa_id !== cuentaDestino.empresa_id && (
+                  <span className="input-hint-warning">
+                    Es una transferencia entre {empresaNombres[cuentaOrigen.empresa_id] ?? 'una empresa'} y{' '}
+                    {empresaNombres[cuentaDestino.empresa_id] ?? 'otra'}: el dinero cambia de empresa.
+                  </span>
+                )}
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Monto {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''} <span className="required">*</span></label>
@@ -1194,11 +1213,11 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       )}
       {movModal && (
         <MovimientoModal cuentas={cuentasActivas} categorias={data.categorias_gastos} pendientes={pendientes}
-          cuentaInicial={movCuentaIni}
+          cuentaInicial={movCuentaIni} empresaNombres={data.empresa_nombres}
           onClose={() => { setMovModal(false); setMovCuentaIni(null) }} onSaved={onSaved} />
       )}
       {transferModal && (
-        <TransferenciaModal cuentas={cuentasActivas}
+        <TransferenciaModal cuentas={cuentasActivas} empresaNombres={data.empresa_nombres}
           onClose={() => setTransferModal(false)} onSaved={onSaved} />
       )}
       {confirmCuenta && (

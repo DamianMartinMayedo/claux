@@ -10,7 +10,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { obtenerTasaTransferencia } from '@/app/actions/portal/tesoreria'
 
-export interface CuentaOpcion { cuenta_id: string; nombre: string; moneda: string }
+export interface CuentaOpcion {
+  cuenta_id: string
+  nombre:    string
+  moneda:    string
+  /** Empresa de la caja. Cobrar/pagar desde otra empresa está PERMITIDO (el dueño
+   *  suele tener una sola cartera), pero el movimiento se sella con la empresa de la
+   *  CAJA: si no se dice, el ingreso de una empresa acaba en la caja de otra sin que
+   *  nada lo indique, y el resultado por empresa deja de cuadrar con su flujo. */
+  empresa_id?:     string
+  empresa_nombre?: string
+}
 
 export interface LiquidarState {
   cuentaId:     string
@@ -30,11 +40,14 @@ function formatMonto(n: number): string {
 }
 
 export default function LiquidarCuentaFields({
-  cuentas, docMoneda, saldo, onChange,
+  cuentas, docMoneda, saldo, docEmpresaId, docEmpresaNombre, onChange,
 }: {
   cuentas:   CuentaOpcion[]
   docMoneda: string
   saldo:     number
+  /** Empresa del documento que se liquida, para avisar si la caja es de otra. */
+  docEmpresaId?:     string
+  docEmpresaNombre?: string
   onChange:  (s: LiquidarState) => void
 }) {
   // Misma moneda primero, luego alfabético
@@ -56,6 +69,10 @@ export default function LiquidarCuentaFields({
   const cuentaSel   = ordenadas.find(c => c.cuenta_id === cuentaId)
   const cajaMoneda  = cuentaSel?.moneda ?? docMoneda
   const cambiaMoneda = cajaMoneda !== docMoneda
+
+  /** Solo se puede saber si hay empresa en los dos lados; si falta, no se inventa aviso. */
+  const esDeOtraEmpresa = (c: CuentaOpcion) =>
+    !!docEmpresaId && !!c.empresa_id && c.empresa_id !== docEmpresaId
 
   // Cargar tasa vigente al cambiar de caja (solo si la moneda difiere)
   useEffect(() => {
@@ -124,9 +141,17 @@ export default function LiquidarCuentaFields({
           {ordenadas.map(c => (
             <option key={c.cuenta_id} value={c.cuenta_id}>
               {c.nombre} · {c.moneda}{c.moneda === docMoneda ? '' : ' (otra moneda)'}
+              {esDeOtraEmpresa(c) ? ` · ${c.empresa_nombre ?? 'otra empresa'}` : ''}
             </option>
           ))}
         </select>
+        {cuentaSel && esDeOtraEmpresa(cuentaSel) && (
+          <span className="input-hint-warning">
+            Esta caja es de {cuentaSel.empresa_nombre ?? 'otra empresa'}
+            {docEmpresaNombre ? ` y el documento es de ${docEmpresaNombre}` : ''}: el dinero
+            entrará en la caja de la otra empresa.
+          </span>
+        )}
       </div>
 
       <div className="input-group ter-col-span-3">
