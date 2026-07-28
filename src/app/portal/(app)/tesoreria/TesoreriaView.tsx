@@ -33,6 +33,7 @@ import {
   type ResultadoLoteCuentas,
 } from '@/app/actions/portal/tesoreria'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
+import ExportarTabla from '@/components/portal/ExportarTabla'
 
 // Pendientes por saldar (CxC / CxP) que se pueden liquidar desde un movimiento
 interface Pendientes {
@@ -939,6 +940,7 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
         </div>
         <div className="tes-header-actions">
+          <ExportarTabla clave="movimientos_tesoreria" />
           <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }} disabled={data.empresas.length === 0 || data.monedas.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
           </button>

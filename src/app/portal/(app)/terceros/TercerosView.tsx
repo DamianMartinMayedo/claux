@@ -28,6 +28,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
+import ExportarTabla from '@/components/portal/ExportarTabla'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -215,9 +216,12 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <h1 className="page-title">Clientes y proveedores</h1>
           <p className="page-subtitle">Tus clientes, proveedores y contactos comerciales.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate} disabled={empresasLista.length === 0}>
-          <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
-        </button>
+        <div className="tes-header-actions">
+          <ExportarTabla clave="terceros" />
+          <button className="btn btn-primary" onClick={openCreate} disabled={empresasLista.length === 0}>
+            <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
+          </button>
+        </div>
       </div>
 
       {empresasLista.length === 0 && (

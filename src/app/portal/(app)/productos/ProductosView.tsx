@@ -29,6 +29,7 @@ import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
 import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
 import Tabs from '@/components/Tabs'
+import ExportarTabla from '@/components/portal/ExportarTabla'
 
 const TIPO_CATEGORIA_LABEL: Record<TipoCategoria, string> = {
   PRODUCTO: 'Productos físicos', SERVICIO: 'Servicios', AMBAS: 'Ambos',
@@ -333,10 +334,13 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
               : 'Tus servicios y su precio. Se cargan solos en ofertas y facturas.'}
           </p>
         </div>
-        {tab === 'productos'
-          ? <button className="btn btn-primary" onClick={openCreate}><Plus size={14} strokeWidth={2.5} /> Nuevo</button>
-          : <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
-        }
+        <div className="tes-header-actions">
+          <ExportarTabla clave="productos" />
+          {tab === 'productos'
+            ? <button className="btn btn-primary" onClick={openCreate}><Plus size={14} strokeWidth={2.5} /> Nuevo</button>
+            : <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
+          }
+        </div>
       </div>
 
       {/* ── Tabs ── */}

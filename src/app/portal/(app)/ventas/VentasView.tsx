@@ -44,6 +44,7 @@ import { useConfigurador }             from '@/components/portal/ConfiguradorCon
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
+import ExportarTabla from '@/components/portal/ExportarTabla'
 
 interface Props { data: VentasResumenData; initialTab?: Tab }
 
@@ -145,6 +146,8 @@ export default function VentasView({ data, initialTab }: Props) {
             Gestiona ofertas comerciales y facturas. Las ofertas aprobadas generan factura automáticamente.
           </p>
         </div>
+        <div className="tes-header-actions">
+        <ExportarTabla clave={tab === 'ofertas' ? 'ofertas' : 'facturas'} />
         {tab === 'ofertas' ? (
           sinSetupEmpresas || sinLetra ? (
             <button
@@ -174,6 +177,7 @@ export default function VentasView({ data, initialTab }: Props) {
             </Link>
           )
         )}
+        </div>
       </div>
 
       {/* ── Prerrequisitos de configuración ── */}

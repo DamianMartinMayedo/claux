@@ -39,6 +39,7 @@ import Tabs                            from '@/components/Tabs'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
+import ExportarTabla                   from '@/components/portal/ExportarTabla'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -886,15 +887,20 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           </div>
           <p className="page-subtitle">Ingresos y egresos sin factura de por medio.</p>
         </div>
-        {puedeEditar && (
-          tab === 'gastos' ? (
-            <button className="btn btn-primary" onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
-          ) : tab === 'cobros' ? (
-            <button className="btn btn-primary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
-          ) : (
-            <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
-          )
-        )}
+        <div className="tes-header-actions">
+          {/* Solo en sesión de configuración: se pinta solo. La tabla que exporta es
+              la de la pestaña abierta. */}
+          <ExportarTabla clave={tab === 'categorias' ? 'categorias_gastos' : 'gastos_cobros'} />
+          {puedeEditar && (
+            tab === 'gastos' ? (
+              <button className="btn btn-primary" onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
+            ) : tab === 'cobros' ? (
+              <button className="btn btn-primary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
+            ) : (
+              <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

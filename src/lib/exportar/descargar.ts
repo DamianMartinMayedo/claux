@@ -8,6 +8,10 @@
 // el escritor de Excel (server-only) y no debe entrar en el bundle del cliente.
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+// Duplicado a propósito del de `./csv`, por la misma razón que el de Excel: ese
+// módulo es el GENERADOR y no tiene por qué entrar en el bundle del cliente solo
+// para leer una constante.
+export const CSV_MIME = 'text/csv;charset=utf-8'
 
 /** Descarga un binario recibido en base64. */
 export function descargarBase64(nombre: string, base64: string, mime: string): void {
