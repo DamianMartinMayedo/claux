@@ -7,7 +7,7 @@ import { MODULOS_CATALOGO, tieneModulo } from '@/lib/modulos'
 import { etiquetasDe }        from '@/lib/sector'
 import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
 import {
-  generarProductoId, siguienteCodigoProducto, construirCamposProducto,
+  generarProductoId, generarCategoriaProductoId, siguienteCodigoProducto, construirCamposProducto,
   type TipoProducto as _TipoProducto,
 } from '@/lib/productos-core'
 
@@ -91,10 +91,6 @@ async function contextoCatalogo(
     tieneInventario:  tieneModulo(data?.modulos_activos, 'inventario'),
     etiquetaServicio: etiquetasDe(plantilla?.etiquetas).servicio,
   }
-}
-
-function generarCategoriaId(): string {
-  return `CAT-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 
 // ── Obtener ───────────────────────────────────────────────────────────────────
@@ -535,7 +531,7 @@ export async function guardarCategoria(
     tipoRaw === 'PRODUCTO' || tipoRaw === 'SERVICIO' || tipoRaw === 'AMBAS' ? tipoRaw : 'AMBAS'
 
   if (!categoria_id_form) {
-    const categoria_id = generarCategoriaId()
+    const categoria_id = generarCategoriaProductoId()
     const { error } = await db.from('product_categories').insert({
       categoria_id,
       client_id:   session.client_id,

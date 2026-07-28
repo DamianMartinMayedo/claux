@@ -3,9 +3,10 @@
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, HelpCircle, Save, Undo2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
+import type { Pendiente, Resolucion } from '@/lib/importador/tipos'
 import {
   obtenerCamposEntidad, crearLoteImport, validarLoteImport, aplicarLoteImport,
   deshacerLoteImport, listarPlantillasImport, guardarPlantillaImport, cargarPlantillaImport,
@@ -21,8 +22,8 @@ type Campo    = { campo: string; etiqueta: string; obligatorio: boolean; ayuda?:
 type Default  = { campo: string; etiqueta: string; obligatorio: boolean; ayuda?: string; valor?: string; tipo?: 'texto' | 'fecha'; opciones?: { valor: string; etiqueta: string }[] }
 type Paso     = 'entidad' | 'subir' | 'mapear' | 'validar' | 'hecho'
 type Politica = 'SALTAR' | 'ACTUALIZAR' | 'CREAR'
-type FilaMala = { fila: number; ok: boolean; motivo?: string }
-type Total    = { etiqueta: string; valor: number }
+type FilaMala = { fila: number; ok: boolean; motivo?: string; decidir?: boolean }
+type Total    = { etiqueta: string; valor: number; entero?: boolean }
 
 // Maestros primero, estado financiero después: el orden de la lista es el orden
 // en que conviene importar (lo de abajo se apoya en lo de arriba).
@@ -44,6 +45,34 @@ const PASOS: { id: Paso; label: string }[] = [
   { id: 'validar', label: 'Revisar' },
   { id: 'hecho',   label: 'Listo' },
 ]
+
+/**
+ * Junta los nombres por decidir de todas las tandas: el mismo nombre sale en
+ * muchas filas y se pregunta UNA vez, con la cuenta de filas sumada.
+ */
+function fusionarPendientes(acumulado: Pendiente[], nuevos: Pendiente[]): Pendiente[] {
+  const mapa = new Map(acumulado.map(p => [p.clave, p]))
+  for (const p of nuevos) {
+    const ya = mapa.get(p.clave)
+    if (ya) ya.filas += p.filas
+    else    mapa.set(p.clave, { ...p })
+  }
+  return [...mapa.values()]
+}
+
+/** El valor del desplegable de un pendiente ⇄ la decisión que representa. */
+function aValor(r: Resolucion | undefined): string {
+  if (!r) return ''
+  return r.accion === 'USAR' ? `USAR|${r.destino ?? ''}` : r.accion
+}
+
+function aResolucion(valor: string): Resolucion | null {
+  if (!valor) return null
+  const [accion, destino] = valor.split('|')
+  return accion === 'USAR'
+    ? { accion: 'USAR', destino }
+    : { accion: accion as Resolucion['accion'] }
+}
 
 /**
  * Para comparar cabeceras con nombres de campo. Se come el asterisco final
@@ -88,6 +117,107 @@ function aBase64(buf: ArrayBuffer): string {
   return btoa(s)
 }
 
+/**
+ * Los nombres del archivo que no cuadraron, con lo que se puede hacer con cada
+ * uno. Dos bloques, y la diferencia entre ellos es la que evita los 80 clics:
+ *
+ *  · «Hay que decidir» — o hay más de una ficha con ese nombre, o hay una que se
+ *    le PARECE. Emparejar a ciegas metería el dinero en la partida equivocada y
+ *    crear a ciegas duplicaría lo que ya existe escrito de otra forma. Estas
+ *    filas no se importan hasta que se responde.
+ *  · «Se crearán solas» — no se parecen a nada, así que manda la política del
+ *    lote. Salen listadas de todos modos, porque «se va a crear una categoría
+ *    nueva» es algo que el dueño tiene derecho a ver antes, y se pueden
+ *    redirigir a una existente desde el mismo desplegable.
+ */
+function PanelPendientes({
+  pendientes, resoluciones, onDecidir, onRevalidar, cargando, etiquetaProgreso,
+}: {
+  pendientes:   Pendiente[]
+  resoluciones: Record<string, Resolucion>
+  onDecidir:    (clave: string, valor: string) => void
+  onRevalidar:  () => void
+  cargando:     boolean
+  etiquetaProgreso: string
+}) {
+  const urgentes = pendientes.filter(p => p.decidir)
+  const deOficio = pendientes.filter(p => !p.decidir)
+  const sinRespuesta = urgentes.filter(p => !resoluciones[p.clave]).length
+
+  const fila = (p: Pendiente) => (
+    <div key={p.clave} className="imprt-map-row">
+      <div className="imprt-map-campo">
+        <strong className="imprt-pend-nombre">«{p.texto}»</strong>
+        <span className="imprt-map-ayuda">
+          {p.etiqueta_tipo}
+          {p.ambito_etiqueta ? ` ${p.ambito_etiqueta}` : ''}
+          {' · '}
+          {p.filas === 1 ? `fila ${p.primera_fila}` : `${p.filas} filas (desde la ${p.primera_fila})`}
+          {p.causa === 'VARIAS' ? ' · hay más de una con ese nombre' : ''}
+        </span>
+        {p.aviso && <span className="imprt-pend-aviso">{p.aviso}</span>}
+      </div>
+      <select className="input" value={aValor(resoluciones[p.clave])}
+        aria-label={`Qué hacer con ${p.texto}`}
+        onChange={e => onDecidir(p.clave, e.target.value)}>
+        <option value="">— Elige qué es —</option>
+        {p.opciones.map(o => (
+          <option key={o.valor} value={`USAR|${o.valor}`}>Es «{o.etiqueta}»</option>
+        ))}
+        {p.creable  && <option value="CREAR">Crear «{p.texto}»</option>}
+        {p.omitible && <option value="OMITIR">Dejarlo en blanco</option>}
+        <option value="RECHAZAR">Dejar estas filas fuera</option>
+      </select>
+    </div>
+  )
+
+  return (
+    <div className="imprt-pend">
+      {urgentes.length > 0 && (
+        <>
+          <div className="alert alert-warning">
+            <HelpCircle size={16} strokeWidth={2} />
+            {urgentes.length === 1
+              ? 'Hay un nombre del archivo que se parece a algo que ya tienes, pero no es igual. Dinos qué es.'
+              : `Hay ${urgentes.length} nombres del archivo que se parecen a algo que ya tienes, pero no son iguales. Dinos qué son.`}
+          </div>
+          <div className="imprt-mapa">{urgentes.map(fila)}</div>
+        </>
+      )}
+
+      {deOficio.length > 0 && (
+        <details className="imprt-pend-mas">
+          <summary>
+            {deOficio.length === 1
+              ? 'Un nombre nuevo que se dará de alta'
+              : `${deOficio.length} nombres nuevos que se darán de alta`}
+          </summary>
+          <p className="input-hint">
+            No se parecen a nada de lo que ya tienes, así que se crean según lo que elegiste al mapear.
+            Si alguno era en realidad uno de los que ya existen, cámbialo aquí.
+          </p>
+          <div className="imprt-mapa">{deOficio.map(fila)}</div>
+        </details>
+      )}
+
+      <div className="imprt-pend-acciones">
+        <button type="button" className="btn btn-secondary" onClick={onRevalidar} disabled={cargando}>
+          {cargando
+            ? <><span className="spinner spinner-sm" /> Validando {etiquetaProgreso}…</>
+            : <>Volver a validar con estas decisiones</>}
+        </button>
+        {sinRespuesta > 0 && (
+          <span className="input-hint">
+            {sinRespuesta === 1
+              ? 'Queda 1 sin responder: sus filas se quedarán fuera.'
+              : `Quedan ${sinRespuesta} sin responder: sus filas se quedarán fuera.`}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ImportarWizard() {
   const [paso, setPaso]         = useState<Paso>('entidad')
   const [cargando, setCargando] = useState(false)
@@ -112,7 +242,13 @@ export default function ImportarWizard() {
   const [globales, setGlobales]   = useState<Record<string, string>>({})
   const [politica, setPolitica]   = useState<Politica>('SALTAR')
 
-  const [resultado, setResultado] = useState<{ total: number; ok: number; errores: number; filas: FilaMala[]; resumen: Total[] } | null>(null)
+  const [resultado, setResultado] = useState<{
+    total: number; ok: number; errores: number; por_decidir: number
+    filas: FilaMala[]; resumen: Total[]; pendientes: Pendiente[]
+  } | null>(null)
+  // Decisiones sobre los nombres que el archivo no emparejó. Viajan en el mapeo,
+  // así que revalidar y aplicar recorren el mismo camino.
+  const [resoluciones, setResoluciones] = useState<Record<string, Resolucion>>({})
   const [resumen, setResumen]     = useState<{ insertadas: number; actualizadas: number; saltadas: number; errores: number } | null>(null)
 
   const [plantillas, setPlantillas] = useState<{ plantilla_id: string; nombre: string }[]>([])
@@ -145,6 +281,7 @@ export default function ImportarWizard() {
     // El archivo pertenece a la entidad con la que se subió: al elegir entidad se
     // suelta, o se acabaría mapeando las columnas de un archivo a los campos de otra.
     setLoteId(''); setCabeceras([]); setTotal(0); setColumnas({}); setAvisos([]); setResultado(null)
+    setResoluciones({})
     setEntidad(en.id); setEtiqueta(res.etiqueta ?? en.etiqueta); setDestino(en.destino); setCampos(res.campos as Campo[])
     // Los valores globales (empresa, moneda, unidad…) los declara cada entidad.
     // Si solo hay una opción posible, se elige sola.
@@ -236,7 +373,8 @@ export default function ImportarWizard() {
       setCargando(false)
       if (!res.ok) { toastError(res.error ?? 'No se pudo leer el archivo.'); return }
       setLoteId(res.lote_id!); setCabeceras(res.cabeceras ?? []); setTotal(res.total ?? 0)
-      setAvisos(res.avisos ?? []); setResultado(null)   // lo revisado era del archivo anterior
+      // Lo revisado —y lo decidido— era del archivo anterior.
+      setAvisos(res.avisos ?? []); setResultado(null); setResoluciones({})
       // Auto-mapeo por nombre de campo, etiqueta o alias (normalizando acentos)
       const cabs = (res.cabeceras ?? []).map(c => ({ raw: c, n: normaliza(c) }))
       const cols: Record<string, string> = {}
@@ -265,35 +403,63 @@ export default function ImportarWizard() {
     if (file) procesarArchivo(file)
   }
 
-  async function validar() {
+  /**
+   * Dry-run. `resol` se pasa explícito al revalidar tras decidir: leer el estado
+   * aquí daría el de antes del último clic.
+   */
+  async function validar(resol: Record<string, Resolucion> = resoluciones) {
     const falta = defs.find(d => d.obligatorio && !(globales[d.campo] ?? '').trim())
     if (falta) { toastError(`Indica ${falta.etiqueta.toLowerCase()}.`); return }
     const mapeo = {
       columnas,
       defaults: Object.fromEntries(Object.entries(globales).filter(([, v]) => v.trim() !== '')),
       politica,
+      resoluciones: resol,
     }
     setCargando(true)
     const ld = toastLoading('Validando…')
     // El archivo se valida en tandas (una consulta por fila): se llama en bucle
     // hasta que el servidor dice que no queda nada, enseñando el avance.
-    const acc = { total, ok: 0, errores: 0, filas: [] as FilaMala[], resumen: [] as Total[] }
+    const acc = {
+      total, ok: 0, errores: 0, por_decidir: 0,
+      filas: [] as FilaMala[], resumen: [] as Total[], pendientes: [] as Pendiente[],
+    }
     let desde: number | null = 0
     let claves: string[] = []
     while (desde !== null) {
       const res = await validarLoteImport(loteId, mapeo, desde, claves)
       if (!res.ok || !res.trozo) { await ld.dismiss(); setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al validar.'); return }
       const t = res.trozo
-      acc.total = t.total; acc.ok += t.ok; acc.errores += t.errores
+      acc.total = t.total; acc.ok += t.ok; acc.errores += t.errores; acc.por_decidir += t.por_decidir
       acc.filas.push(...t.filas.filter(f => !f.ok))   // las buenas no se pintan: solo cuentan
-      acc.resumen = fusionarTotales(acc.resumen, t.resumen ?? [])
+      acc.resumen    = fusionarTotales(acc.resumen, t.resumen ?? [])
+      acc.pendientes = fusionarPendientes(acc.pendientes, t.pendientes ?? [])
       claves = t.claves
       desde  = t.siguiente
       setProgreso(desde === null ? null : { hechas: desde, total: t.total })
     }
     await ld.dismiss()
     setCargando(false)
+    // Lo que aún no se ha decidido arranca con la respuesta por defecto: así el
+    // desplegable enseña lo que va a pasar, no un hueco.
+    setResoluciones({
+      ...Object.fromEntries(acc.pendientes
+        .filter(p => !p.decidir)
+        .map(p => [p.clave, { accion: p.defecto } as Resolucion])),
+      ...resol,
+    })
     setResultado(acc); setPaso('validar')
+  }
+
+  /** Guarda una decisión. No revalida sola: son N consultas y la conexión es la que es. */
+  function decidir(clave: string, valor: string) {
+    const r = aResolucion(valor)
+    setResoluciones(prev => {
+      const siguiente = { ...prev }
+      if (r) siguiente[clave] = r
+      else   delete siguiente[clave]
+      return siguiente
+    })
   }
 
   async function aplicar() {
@@ -317,16 +483,19 @@ export default function ImportarWizard() {
     setResumen(acc); setPaso('hecho')
   }
 
+  /** Solo los errores de verdad: lo que espera una decisión se resuelve arriba. */
+  const malas = resultado?.filas.filter(f => !f.decidir) ?? []
+
   function descargarErrores() {
-    if (!resultado) return
     descargarCsv(`errores-${loteId}.csv`,
-      'fila,motivo\n' + resultado.filas.map(e => `${e.fila},${celdaCsv(e.motivo ?? '')}`).join('\n') + '\n')
+      'fila,motivo\n' + malas.map(e => `${e.fila},${celdaCsv(e.motivo ?? '')}`).join('\n') + '\n')
   }
 
   function reiniciar() {
     setPaso('entidad'); setEntidad(''); setCampos([]); setDefs([]); setLoteId(''); setCabeceras([]); setTotal(0)
     setColumnas({}); setGlobales({}); setResultado(null); setResumen(null); setPolitica('SALTAR')
     setPlantillas([]); setNombrePlantilla(''); setDeshecho(null); setAvisos([]); setProgreso(null)
+    setResoluciones({})
   }
 
   const etiquetaProgreso = progreso ? `${progreso.hechas} de ${progreso.total}` : ''
@@ -512,7 +681,7 @@ export default function ImportarWizard() {
             <button type="button" className="btn btn-ghost" onClick={() => setPaso('subir')}>
               <ArrowLeft size={15} strokeWidth={2} /> Atrás
             </button>
-            <button type="button" className="btn btn-primary" onClick={validar} disabled={cargando}>
+            <button type="button" className="btn btn-primary" onClick={() => validar()} disabled={cargando}>
               {cargando
                 ? <><span className="spinner spinner-sm" /> Validando {etiquetaProgreso}…</>
                 : <>Validar <ArrowRight size={15} strokeWidth={2} /></>}
@@ -527,8 +696,25 @@ export default function ImportarWizard() {
           <div className="imprt-tiles">
             <div className="imprt-tile"><strong>{resultado.total}</strong><span>Filas</span></div>
             <div className="imprt-tile"><strong>{resultado.ok}</strong><span>Listas para importar</span></div>
+            {resultado.por_decidir > 0 && (
+              <div className="imprt-tile"><strong>{resultado.por_decidir}</strong><span>Esperan que decidas</span></div>
+            )}
             <div className="imprt-tile"><strong>{resultado.errores}</strong><span>Con error</span></div>
           </div>
+
+          {/* Nombres que el archivo trae y no cuadran con nada. Se pregunta en vez
+              de emparejar por parecido: clasificar un gasto en la categoría
+              equivocada mete dinero en el renglón que no toca del informe. */}
+          {resultado.pendientes.length > 0 && (
+            <PanelPendientes
+              pendientes={resultado.pendientes}
+              resoluciones={resoluciones}
+              onDecidir={decidir}
+              onRevalidar={() => validar(resoluciones)}
+              cargando={cargando}
+              etiquetaProgreso={etiquetaProgreso}
+            />
+          )}
 
           {/* Totales de lo que se va a escribir: un decimal mal leído se ve aquí. */}
           {resultado.resumen.length > 0 && (
@@ -536,7 +722,11 @@ export default function ImportarWizard() {
               <p className="modal-body-text">Comprueba que estos totales son los que esperas antes de importar.</p>
               <div className="imprt-tiles">
                 {resultado.resumen.map(t => (
-                  <div key={t.etiqueta} className="imprt-tile"><strong>{formatearImporte(t.valor)}</strong><span>{t.etiqueta}</span></div>
+                  <div key={t.etiqueta} className="imprt-tile">
+                    {/* Las cuentas de filas van sin decimales: «3 filas», no «3,00». */}
+                    <strong>{t.entero ? t.valor : formatearImporte(t.valor)}</strong>
+                    <span>{t.etiqueta}</span>
+                  </div>
                 ))}
               </div>
             </>
@@ -555,7 +745,7 @@ export default function ImportarWizard() {
                   <table className="table">
                     <thead><tr><th className="col-num">Fila</th><th>Motivo</th></tr></thead>
                     <tbody>
-                      {resultado.filas.slice(0, 100).map(f => (
+                      {malas.slice(0, 100).map(f => (
                         <tr key={f.fila}>
                           <td data-label="Fila" className="col-num">{f.fila}</td>
                           <td data-label="Motivo">{f.motivo}</td>
@@ -605,9 +795,11 @@ export default function ImportarWizard() {
                       <table className="table">
                         <thead><tr><th className="col-num">Fila</th><th>Por qué no se pudo deshacer</th></tr></thead>
                         <tbody>
-                          {deshecho.motivos.slice(0, 50).map(m => (
-                            <tr key={m.fila}>
-                              <td data-label="Fila" className="col-num">{m.fila}</td>
+                          {/* La fila 0 es una ficha que creó el archivo sin ser una fila suya
+                              (el proveedor de un gasto): no tiene número, y puede haber varias. */}
+                          {deshecho.motivos.slice(0, 50).map((m, i) => (
+                            <tr key={`${m.fila}-${i}`}>
+                              <td data-label="Fila" className="col-num">{m.fila || '—'}</td>
                               <td data-label="Por qué no se pudo deshacer">{m.motivo}</td>
                             </tr>
                           ))}

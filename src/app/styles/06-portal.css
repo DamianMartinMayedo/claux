@@ -3974,6 +3974,31 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-map-campo { font-size: var(--text-sm); }
 .imprt-map-ayuda { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
 
+/* ── Importador · nombres por decidir ── */
+/* Reusa la rejilla del mapeo (`.imprt-map-*`): es la misma forma —a la izquierda
+   lo que dice el archivo, a la derecha el desplegable— y una familia propia solo
+   habría duplicado el responsive. */
+.imprt-pend { margin-top: var(--space-4); }
+.imprt-pend-nombre { display: block; }
+.imprt-pend-aviso {
+  display: block; margin-top: var(--space-1);
+  color: var(--color-warning); font-size: var(--text-xs);
+}
+.imprt-pend-mas { margin-top: var(--space-4); }
+.imprt-pend-mas > summary {
+  cursor: pointer; font-size: var(--text-sm); font-weight: 600;
+  padding: var(--space-2) 0; color: var(--color-text);
+}
+.imprt-pend-acciones {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+/* La fila del pendiente lleva más texto que la del mapeo (tipo, ámbito, cuántas
+   filas), así que en móvil el desplegable baja debajo en vez de quedarse en 8rem. */
+@media (max-width: 640px) {
+  .imprt-pend .imprt-map-row { grid-template-columns: 1fr; gap: var(--space-2); }
+}
+
 .imprt-tiles { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-4) 0; }
 .imprt-tile { flex: 1 1 8rem; padding: var(--space-4); border-radius: var(--radius-md); background: var(--color-surface-2); text-align: center; }
 .imprt-tile strong { display: block; font-size: var(--text-2xl); line-height: 1.1; }

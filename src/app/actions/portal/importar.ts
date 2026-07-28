@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { getPortalSession, puedeEditarAlgunModulo } from './auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { obtenerEmpresas } from './empresas'
-import { ADAPTADORES } from '@/lib/importador/adaptadores'
+import { ADAPTADORES, DESHACEDORES } from '@/lib/importador/adaptadores'
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
 import { construirXlsxBase64, texto, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
@@ -257,7 +257,10 @@ export async function deshacerLoteImport(
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
   if (!(await puedeEditarAlgunModulo(adaptador.modulos))) return { ok: false, error: 'Sin permiso para esta entidad.' }
 
-  const resumen = await deshacerLoteFilas(lote_id, adaptador, r.ctx)
+  // Con todos los deshacedores: un lote de gastos puede haber creado fichas de
+  // tercero o categorías, y esas se deshacen con el suyo, no con el de la
+  // entidad del lote.
+  const resumen = await deshacerLoteFilas(lote_id, adaptador, r.ctx, DESHACEDORES)
   // Si algo quedó en pie, el lote sigue APLICADO: aún hay cosas suyas en los datos.
   await r.ctx.db.from('import_lotes').update({
     estado: resumen.intactas > 0 ? 'APLICADO' : 'REVERTIDO',

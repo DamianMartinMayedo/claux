@@ -41,6 +41,11 @@ export function generarRegistroId(tipo: TipoRegistro): string {
   return `${pre}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 
+/** Id de una categoría de gasto. Lo usan el alta manual y el importador. */
+export function generarCategoriaGastoId(): string {
+  return `CATGAS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
+}
+
 /**
  * Parte «Bebidas, Carnes, Limpieza» en nombres limpios.
  *

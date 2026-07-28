@@ -14,6 +14,60 @@ export function norm(s: string | null | undefined): string {
     .replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Clave dura de un nombre: además de lo de `norm`, sin puntuación ni espacios.
+ * Es el segundo intento al buscar una ficha por su nombre, y es lo que hace que
+ * «Comercial S.A.» encuentre a «Comercial SA». Se usa SOLO si la comparación
+ * normal no encontró nada y esta encuentra una sola: es tolerante a propósito, y
+ * con dos candidatas elegir a ciegas sería peor que no encontrar.
+ */
+export function claveNombre(s: string | null | undefined): string {
+  return norm(s).replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+/**
+ * Distancia de edición (Levenshtein, dos filas). Cuenta cuántas letras hay que
+ * cambiar para pasar de un texto a otro: un dedazo («Alquier» por «Alquiler»)
+ * queda a 1, y dos palabras distintas quedan lejos.
+ */
+function distancia(a: string, b: string): number {
+  if (a === b)     return 0
+  if (!a.length)   return b.length
+  if (!b.length)   return a.length
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const fila = [i]
+    for (let j = 1; j <= b.length; j++) {
+      fila[j] = Math.min(prev[j] + 1, fila[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = fila
+  }
+  return prev[b.length]
+}
+
+/**
+ * Parecido entre dos nombres (0..1) sobre su forma normalizada. Que uno CONTENGA
+ * al otro cuenta como parecido alto aunque la distancia sea grande («Alquiler»
+ * dentro de «Alquiler del local»): es el caso del nombre abreviado, y por
+ * distancia se quedaría fuera. Se exige un mínimo de letras para que un «sa» no
+ * se parezca a media lista.
+ */
+export function parecido(a: string, b: string): number {
+  const x = norm(a), y = norm(b)
+  if (!x || !y) return 0
+  if (x === y)   return 1
+  const ratio  = 1 - distancia(x, y) / Math.max(x.length, y.length)
+  const dentro = (x.includes(y) || y.includes(x)) && Math.min(x.length, y.length) >= 4
+  return dentro ? Math.max(ratio, 0.78) : ratio
+}
+
+/**
+ * Por debajo de esto dos nombres NO se parecen: ofrecerlo como «¿quisiste
+ * decir…?» sería ruido, y el ruido en una lista de sugerencias es peor que la
+ * lista vacía —el operador acaba aceptando la primera.
+ */
+export const UMBRAL_PARECIDO = 0.62
+
 // Formato de miles puro: 1.500 · 12.345 · 1.234.567 (y su gemelo con comas).
 // Exige grupos de 3 exactos y que no empiece por cero, así «0.999» sigue siendo
 // un decimal y «1.500» son mil quinientos — que es lo que quiere decir un Excel
@@ -120,9 +174,12 @@ export function totalesPor(
 
 /** Junta los totales de varias tandas: misma etiqueta, se suman. */
 export function fusionarTotales(acumulado: TotalResumen[], nuevos: TotalResumen[]): TotalResumen[] {
-  const suma = new Map(acumulado.map(t => [t.etiqueta, t.valor]))
-  for (const t of nuevos) suma.set(t.etiqueta, (suma.get(t.etiqueta) ?? 0) + t.valor)
-  return [...suma.entries()].map(([etiqueta, valor]) => ({ etiqueta, valor }))
+  const suma = new Map(acumulado.map(t => [t.etiqueta, t]))
+  for (const t of nuevos) {
+    const ya = suma.get(t.etiqueta)
+    suma.set(t.etiqueta, ya ? { ...ya, valor: ya.valor + t.valor } : t)
+  }
+  return [...suma.values()]
 }
 
 /**
@@ -149,4 +206,80 @@ export async function memo<T>(ctx: CtxImport, clave: string, calcular: () => Pro
   const valor = await calcular()
   ctx.cache.set(clave, valor)
   return valor
+}
+
+/** Índice de fichas por nombre, tolerante. Lo devuelve `indicePorNombre`. */
+export interface IndiceNombres<T> {
+  /**
+   * Fichas cuyo nombre coincide con `nombre` (vacío si ninguna). `filtro` acota
+   * el ámbito —la empresa, el tipo— ANTES de decidir, para que una ficha de otra
+   * empresa no tape a la buena ni haga ambigua la segunda pasada.
+   */
+  buscar: (nombre: string, filtro?: (ficha: T) => boolean) => T[]
+  /**
+   * Las que se PARECEN a `nombre` sin coincidir, de más a menos (máx. 5). Es el
+   * «¿quisiste decir…?»: cubre el error humano (una letra de menos, dos
+   * cambiadas, el singular por el plural) que `buscar` no perdona a propósito.
+   */
+  sugerir: (nombre: string, filtro?: (ficha: T) => boolean) => T[]
+  /** Todas las fichas del índice, para ofrecer la lista completa al operador. */
+  todas: (filtro?: (ficha: T) => boolean) => T[]
+  /** Apunta una ficha que acaba de crear el propio lote, para las filas siguientes. */
+  anotar: (nombre: string, ficha: T) => void
+}
+
+/**
+ * Índice «nombre → ficha» de una tabla, cargado UNA vez por lote.
+ *
+ * Sustituye al `ilike('nombre', …)` fila a fila, que rechazaba fichas que sí
+ * existían por una tilde, un punto o un espacio doble de Excel —y que además
+ * trataba el `_` y el `%` del nombre como comodines—. Emparejar en memoria
+ * permite dos pasadas (normal y sin puntuación) y ahorra una consulta por fila.
+ */
+export async function indicePorNombre<T>(
+  ctx:    CtxImport,
+  clave:  string,
+  cargar: () => Promise<T[]>,
+  nombre: (ficha: T) => string,
+): Promise<IndiceNombres<T>> {
+  return memo(ctx, `idx|${clave}`, async () => {
+    const suave = new Map<string, T[]>()
+    const duro  = new Map<string, T[]>()
+    const lista: T[] = []
+    const meter = (mapa: Map<string, T[]>, k: string, ficha: T) => {
+      if (!k) return
+      const ya = mapa.get(k)
+      if (ya) ya.push(ficha)
+      else mapa.set(k, [ficha])
+    }
+    const anotar = (n: string, ficha: T) => {
+      meter(suave, norm(n), ficha)
+      meter(duro, claveNombre(n), ficha)
+      lista.push(ficha)
+    }
+    for (const ficha of await cargar()) anotar(nombre(ficha), ficha)
+    const buscar = (n: string, filtro?: (ficha: T) => boolean) => {
+      const pasa = (fichas: T[] | undefined) => (fichas ?? []).filter(f => !filtro || filtro(f))
+      const exacto = pasa(suave.get(norm(n)))
+      if (exacto.length) return exacto
+      const laxo = pasa(duro.get(claveNombre(n)))
+      return laxo.length === 1 ? laxo : []
+    }
+    return {
+      anotar,
+      // La segunda pasada solo vale si es inequívoca (ver `claveNombre`).
+      buscar,
+      todas: (filtro?: (ficha: T) => boolean) => lista.filter(f => !filtro || filtro(f)),
+      sugerir: (n: string, filtro?: (ficha: T) => boolean) => {
+        const ya = new Set(buscar(n, filtro))
+        return lista
+          .filter(f => !ya.has(f) && (!filtro || filtro(f)))
+          .map(f => ({ f, p: parecido(n, nombre(f)) }))
+          .filter(x => x.p >= UMBRAL_PARECIDO)
+          .sort((a, b) => b.p - a.p)
+          .slice(0, 5)
+          .map(x => x.f)
+      },
+    }
+  })
 }

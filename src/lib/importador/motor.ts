@@ -74,14 +74,20 @@ export async function validarLoteFilas(
   const vistos = new Set(clavesPrevias)
   const res: FilaResultado[] = []
   const buenas: Record<string, unknown>[] = []
+  // Los nombres sin emparejar se recogen aquí y suben al asistente para que el
+  // operador diga a qué corresponden (§`resolver.ts`).
+  ctx.pendientes  = new Map()
+  ctx.resoluciones = mapeo.resoluciones
+
   let i = desde
   for (; i < filas.length && !seAcabaElTiempo(t0, i - desde); i++) {
     const { valores, deColumna } = construirValores(filas[i], mapeo)
+    ctx.fila = i + 1
     if (esFilaEjemplo(valores, deColumna, adaptador)) {
       res.push({ fila: i + 1, ok: false, motivo: MOTIVO_EJEMPLO }); continue
     }
     const prep = await adaptador.preparar(valores, ctx, deColumna)
-    if (!prep.ok) { res.push({ fila: i + 1, ok: false, motivo: prep.motivo }); continue }
+    if (!prep.ok) { res.push({ fila: i + 1, ok: false, motivo: prep.motivo, decidir: prep.decidir }); continue }
     if (vistos.has(prep.clave)) { res.push({ fila: i + 1, ok: false, motivo: 'Fila duplicada dentro del archivo.' }); continue }
     vistos.add(prep.clave)
     const existente = await adaptador.buscarExistente(prep.datos, ctx)
@@ -91,12 +97,14 @@ export async function validarLoteFilas(
     if (accion !== 'SALTAR') buenas.push(prep.datos)
     res.push({ fila: i + 1, ok: true, accion })
   }
-  const ok = res.filter(f => f.ok).length
+  const ok         = res.filter(f => f.ok).length
+  const porDecidir = res.filter(f => f.decidir).length
   return {
-    total: filas.length, ok, errores: res.length - ok, filas: res,
-    resumen:   adaptador.resumen?.(buenas),
-    claves:    [...vistos],
-    siguiente: i < filas.length ? i : null,
+    total: filas.length, ok, errores: res.length - ok - porDecidir, por_decidir: porDecidir, filas: res,
+    resumen:    adaptador.resumen?.(buenas),
+    pendientes: [...ctx.pendientes.values()],
+    claves:     [...vistos],
+    siguiente:  i < filas.length ? i : null,
   }
 }
 
@@ -107,14 +115,37 @@ export interface ResumenDeshacer {
 }
 
 /**
+ * Traza de una ficha que creó el lote SIN ser una fila del archivo: el proveedor
+ * que un gasto nombraba y no existía todavía. Va con `fila_origen = 0` —el
+ * archivo empieza en 1— para no chocar con la idempotencia por fila, y por eso
+ * mismo `deshacerLoteFilas` la deshace DESPUÉS de las filas que la referencian.
+ */
+export async function registrarAuxiliar(
+  ctx: CtxImport, entidad: string, pk: string,
+): Promise<void> {
+  if (!ctx.lote_id) return   // dry-run: aquí no se escribe nada
+  await ctx.db.from('import_lote_items').insert({
+    lote_id: ctx.lote_id, entidad, fila_origen: 0, accion: 'INSERTADA', pk_destino: pk, motivo: null,
+  })
+}
+
+/**
  * Deshace un lote APLICADO: recorre lo que insertó y se lo pide al adaptador.
  * Lo que sí se deshace pierde su traza en `import_lote_items` —para poder volver
  * a aplicar el lote corregido—; lo que no se pudo deshacer la conserva, con su
  * motivo a la vista. Las filas ACTUALIZADAS no se tocan: no sabemos qué había
  * antes, y adivinarlo sería peor que dejarlo.
+ *
+ * Un lote puede haber creado fichas de OTRA entidad (`registrarAuxiliar`), así
+ * que cada traza se deshace con el deshacedor de la suya (`porEntidad`) y esas
+ * van al final: mientras el gasto que las nombra siga ahí, la ficha se niega a
+ * borrarse —y con razón—. `porEntidad` acepta adaptadores completos y también
+ * deshacedores sueltos: la categoría que un lote de gastos creó de paso no es
+ * una entidad importable, pero sí tiene que poder desaparecer al deshacer.
  */
 export async function deshacerLoteFilas(
   loteId: string, adaptador: Adaptador, ctx: CtxImport,
+  porEntidad: Record<string, Pick<Adaptador, 'deshacer'>> = {},
 ): Promise<ResumenDeshacer> {
   ctx.lote_id = loteId
   const r: ResumenDeshacer = { deshechas: 0, intactas: 0, motivos: [] }
@@ -122,20 +153,30 @@ export async function deshacerLoteFilas(
     return { deshechas: 0, intactas: 0, motivos: [{ fila: 0, motivo: 'Esta entidad no se puede deshacer automáticamente.' }] }
   }
   const { data } = await ctx.db.from('import_lote_items')
-    .select('item_id, fila_origen, pk_destino')
+    .select('item_id, entidad, fila_origen, pk_destino')
     .eq('lote_id', loteId).eq('accion', 'INSERTADA').order('fila_origen')
 
-  for (const it of (data ?? []) as { item_id: number; fila_origen: number; pk_destino: string | null }[]) {
+  type Traza = { item_id: number; entidad: string; fila_origen: number; pk_destino: string | null }
+  const trazas = ((data ?? []) as Traza[])
+    .sort((a, b) => Number(a.fila_origen === 0) - Number(b.fila_origen === 0))
+
+  for (const it of trazas) {
     if (!it.pk_destino) continue
+    const suyo = porEntidad[it.entidad] ?? adaptador
+    if (!suyo.deshacer) { r.intactas++; continue }
     let motivo: string | null
     try {
-      motivo = await adaptador.deshacer(it.pk_destino, ctx)
+      motivo = await suyo.deshacer(it.pk_destino, ctx)
     } catch (e) {
       motivo = (e as Error).message
     }
     if (motivo) {
       r.intactas++
-      r.motivos.push({ fila: it.fila_origen, motivo })
+      // Las auxiliares no tienen fila en el archivo: se identifican por su código.
+      r.motivos.push({
+        fila:   it.fila_origen,
+        motivo: it.fila_origen === 0 ? `${it.pk_destino}: ${motivo}` : motivo,
+      })
       await ctx.db.from('import_lote_items').update({ motivo }).eq('item_id', it.item_id)
     } else {
       r.deshechas++
@@ -164,6 +205,9 @@ export async function aplicarLoteFilas(
   desde = 0, clavesPrevias: string[] = [],
 ): Promise<TrozoAplicacion> {
   ctx.lote_id = loteId   // los adaptadores de ledger lo dejan como referencia del movimiento
+  // Las decisiones del operador van en el mapeo; aquí ya no se recoge ningún
+  // pendiente (`ctx.pendientes` sin poner): lo que siga sin decidir no se escribe.
+  ctx.resoluciones = mapeo.resoluciones
   const t0 = Date.now()
   const { data: prev } = await ctx.db.from('import_lote_items').select('fila_origen').eq('lote_id', loteId)
   const hechas = new Set((prev ?? []).map((r: { fila_origen: number }) => r.fila_origen))
@@ -175,6 +219,7 @@ export async function aplicarLoteFilas(
     const fila = i + 1
     if (hechas.has(fila)) continue   // ya procesada en un intento anterior
     const { valores, deColumna } = construirValores(filas[i], mapeo)
+    ctx.fila = fila
     if (esFilaEjemplo(valores, deColumna, adaptador)) {
       await registrarItem(ctx, loteId, adaptador.entidad, fila, 'ERROR', null, MOTIVO_EJEMPLO); r.errores++; continue
     }

@@ -12,6 +12,11 @@ export function generarProductoId(tipo: TipoProducto): string {
   return `${pfx}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 
+/** Id de una categoría del catálogo. Lo usan el alta manual y el importador. */
+export function generarCategoriaProductoId(): string {
+  return `CAT-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
+}
+
 /** Siguiente código visible del catálogo (PRD-0001 / SRV-0001) para un cliente. */
 export async function siguienteCodigoProducto(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

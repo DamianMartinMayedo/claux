@@ -6,7 +6,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
-import { etiquetaDeCategoria, generarRegistroId, parsearSubcategorias, type TipoRegistro as _TipoRegistro } from '@/lib/gastos-core'
+import {
+  etiquetaDeCategoria, generarCategoriaGastoId, generarRegistroId, parsearSubcategorias,
+  type TipoRegistro as _TipoRegistro,
+} from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 
@@ -86,9 +89,6 @@ export interface GastosCobrosPageData {
 
 const EPS = 0.005
 
-function generarCategoriaGastoId(): string {
-  return `CATGAS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-}
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
 }

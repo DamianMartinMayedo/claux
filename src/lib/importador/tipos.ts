@@ -49,11 +49,62 @@ export interface DefaultResuelto {
 
 export type PoliticaDuplicado = 'SALTAR' | 'ACTUALIZAR' | 'CREAR'
 
+/**
+ * Qué hacer con un nombre del archivo que no se pudo emparejar. `USAR` lleva el
+ * id de la ficha que el operador señaló; el resto no necesita destino.
+ */
+export type AccionResolucion = 'USAR' | 'CREAR' | 'OMITIR' | 'RECHAZAR'
+
+export interface Resolucion {
+  accion:   AccionResolucion
+  destino?: string
+}
+
+/**
+ * Un nombre del archivo que el importador no supo emparejar solo, con lo que
+ * necesita el asistente para preguntar: a qué se parece, si se puede crear y
+ * cuántas filas dependen de la respuesta.
+ *
+ * `decidir` separa las dos naturalezas, y es la que evita los 80 clics: si HAY
+ * dudas (varias fichas con ese nombre, o ninguna pero algo parecido al lado) la
+ * fila espera respuesta; si no se parece a nada, manda la política del lote y
+ * esto es solo información —el operador puede redirigirlo igualmente—.
+ */
+export interface Pendiente {
+  clave:         string   // identidad estable del pendiente (tipo|ámbito|nombre)
+  tipo:          string   // 'categoria_gasto', 'tercero', 'cuenta'…
+  etiqueta_tipo: string   // «Categoría de gasto»
+  texto:         string   // lo que dice el archivo, tal cual
+  ambito_etiqueta?: string   // «dentro de Suministros», «en Mi Empresa S.A.»
+  /** 'VARIAS' = hay más de una con ese nombre · 'NINGUNA' = no existe ninguna. */
+  causa:         'VARIAS' | 'NINGUNA'
+  /** true = las filas que lo usan no se importan hasta que el operador decida. */
+  decidir:       boolean
+  filas:         number
+  primera_fila:  number
+  /** Fichas que puede elegir, las más parecidas primero. */
+  opciones:      { valor: string; etiqueta: string }[]
+  /** ¿Se puede dar de alta al vuelo? (una categoría sí; una cuenta de caja no) */
+  creable:       boolean
+  /** ¿Se puede dejar el campo vacío? (solo si el campo es opcional) */
+  omitible:      boolean
+  /** Lo que hay que saber ANTES de crearla (dónde caerá en el informe). */
+  aviso?:        string
+  /** Lo que se hará si no se toca nada. Solo cuando `decidir` es false. */
+  defecto:       AccionResolucion
+}
+
 /** Mapeo elegido por el operador en el asistente. */
 export interface MapeoImport {
   columnas: Record<string, string>   // campo interno → columna del CSV ('' = no mapeado)
   defaults: Record<string, string>   // campo interno → valor por defecto (empresa, moneda…)
   politica: PoliticaDuplicado
+  /**
+   * Decisiones sobre los nombres que no se emparejaron, por `Pendiente.clave`.
+   * Viajan en el mapeo —y por tanto se guardan en el lote— para que revalidar y
+   * aplicar tomen exactamente el mismo camino.
+   */
+  resoluciones?: Record<string, Resolucion>
 }
 
 export interface FilaResultado {
@@ -61,6 +112,8 @@ export interface FilaResultado {
   ok:      boolean
   motivo?: string
   accion?: 'INSERTAR' | 'ACTUALIZAR' | 'SALTAR'
+  /** No es un error del archivo: espera que el operador decida (§`Pendiente`). */
+  decidir?: boolean
 }
 
 /**
@@ -71,15 +124,21 @@ export interface FilaResultado {
 export interface TotalResumen {
   etiqueta: string
   valor:    number
+  /** Es una cuenta de filas, no dinero: se pinta sin decimales. */
+  entero?:  boolean
 }
 
 export interface ResultadoValidacion {
   total:   number
   ok:      number
   errores: number
+  /** Filas que no son un error: esperan una decisión sobre un nombre. */
+  por_decidir: number
   filas:   FilaResultado[]
   /** Totales de lo que se va a escribir (importes, unidades) para revisarlo antes. */
   resumen?: TotalResumen[]
+  /** Nombres sin emparejar que recogió esta tanda (§`Pendiente`). */
+  pendientes?: Pendiente[]
 }
 
 export interface ResumenAplicacion {
@@ -118,6 +177,15 @@ export interface CtxImport {
   cache:     Map<string, unknown>
   /** Lote que se está aplicando; lo fija el motor en el commit (traza del ledger). */
   lote_id?:  string
+  /** Fila que se está procesando (1-based). La fija el motor antes de `preparar`. */
+  fila?:     number
+  /**
+   * Recolector de nombres sin emparejar. Solo lo pone el DRY-RUN: en el commit
+   * ya está todo decidido y no hay a quién preguntar.
+   */
+  pendientes?:   Map<string, Pendiente>
+  /** Decisiones ya tomadas por el operador (`MapeoImport.resoluciones`). */
+  resoluciones?: Record<string, Resolucion>
 }
 
 export type Preparado =
@@ -133,7 +201,16 @@ export type Preparado =
        */
       provistos?: string[]
     }
-  | { ok: false; motivo: string }
+  | {
+      ok: false
+      motivo: string
+      /**
+       * La fila no está mal: espera que el operador diga a qué corresponde un
+       * nombre. Se cuenta aparte de los errores porque la respuesta no es
+       * «corrige el archivo» sino «decide y vuelve a validar».
+       */
+      decidir?: boolean
+    }
 
 /** Un adaptador por entidad importable. */
 export interface Adaptador {

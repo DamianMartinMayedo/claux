@@ -15,7 +15,8 @@
 // Requiere productos y almacenes ya creados: aquí no se da de alta nada.
 
 import { aplicarMovimiento, stockEnAlmacen } from '@/app/actions/portal/_inventario-helpers'
-import { memo, norm, parseFecha, parseNumero } from '../util'
+import { indicePorNombre, memo, parseFecha, parseNumero } from '../util'
+import { aFallo, resolverRef } from '../resolver'
 import type { Adaptador, CtxImport, Preparado } from '../tipos'
 
 type DatosStock = {
@@ -27,34 +28,94 @@ type DatosStock = {
   fecha:       string
 }
 
+type FichaProducto = { producto_id: string; codigo: string | null; nombre: string; tipo: string }
+type FichaAlmacen  = { almacen_id: string; nombre: string; empresa_id: string }
+
+/**
+ * El catálogo y los almacenes del cliente, cargados UNA vez por lote. Emparejar
+ * en memoria tolera la tilde, el punto y el doble espacio que el `ilike` fila a
+ * fila rechazaba —dejando fuera productos que sí estaban— y ahorra tres
+ * consultas por fila, que es lo que hace lento el archivo grande.
+ */
+async function catalogo(ctx: CtxImport): Promise<FichaProducto[]> {
+  return memo(ctx, 'lista|productos', async () => {
+    const { data } = await ctx.db.from('products')
+      .select('producto_id, codigo, nombre, tipo').eq('client_id', ctx.client_id)
+    return (data ?? []) as FichaProducto[]
+  })
+}
+
+async function almacenes(ctx: CtxImport): Promise<FichaAlmacen[]> {
+  return memo(ctx, 'lista|almacenes', async () => {
+    const { data } = await ctx.db.from('almacenes')
+      .select('almacen_id, nombre, empresa_id').eq('client_id', ctx.client_id)
+    return (data ?? []) as FichaAlmacen[]
+  })
+}
+
+/** Índice por código exacto; el código del cliente manda sobre el PRD-/SRV-. */
+async function porCodigo(ctx: CtxImport): Promise<Map<string, FichaProducto>> {
+  return memo(ctx, 'codigos|productos', async () => {
+    const mapa = new Map<string, FichaProducto>()
+    for (const p of await catalogo(ctx)) mapa.set(p.producto_id.toUpperCase(), p)
+    for (const p of await catalogo(ctx)) if (p.codigo) mapa.set(p.codigo.trim().toUpperCase(), p)
+    return mapa
+  })
+}
+
+// Ni el producto ni el almacén se pueden crear desde aquí (uno necesita unidad y
+// precios, el otro empresa y dirección), así que el resolutor va con
+// `creable: false`: lo que aporta es el «¿quisiste decir…?» y poder señalar la
+// ficha correcta cuando el nombre del archivo no cuadra. Antes la fila moría con
+// un «no existe» y el operador tenía que adivinar cuál era.
+
 /** Producto por código visible, por su PRD-/SRV- o por nombre. */
 async function buscarProducto(
   ref: string, ctx: CtxImport,
-): Promise<{ producto_id: string; tipo: string } | null> {
-  return memo(ctx, `prod|${norm(ref)}`, async () => {
-    const cols = 'producto_id, tipo'
-    const base = () => ctx.db.from('products').select(cols).eq('client_id', ctx.client_id)
-    const porCodigo = await base().eq('codigo', ref.trim()).limit(1).maybeSingle()
-    if (porCodigo.data) return porCodigo.data as { producto_id: string; tipo: string }
-    const porId = await base().eq('producto_id', ref.trim().toUpperCase()).limit(1).maybeSingle()
-    if (porId.data) return porId.data as { producto_id: string; tipo: string }
-    const porNombre = await base().ilike('nombre', ref.trim()).limit(1).maybeSingle()
-    return (porNombre.data as { producto_id: string; tipo: string }) ?? null
+): Promise<{ ok: true; ficha: FichaProducto } | Extract<Preparado, { ok: false }>> {
+  const porRef = (await porCodigo(ctx)).get(ref.trim().toUpperCase())
+  if (porRef) return { ok: true, ficha: porRef }
+
+  const idx = await indicePorNombre(ctx, 'productos', () => catalogo(ctx), p => p.nombre)
+  const op  = (p: FichaProducto) => ({
+    valor: p.producto_id, etiqueta: p.codigo ? `${p.nombre} · ${p.codigo}` : p.nombre,
   })
+  const r = resolverRef({
+    tipo: 'producto', etiqueta_tipo: 'Producto', texto: ref,
+    coincidencias: idx.buscar(ref).map(op),
+    parecidos:     idx.sugerir(ref).map(op),
+    otras:         idx.todas().map(op),
+    creable: false, omitible: false, defecto: 'RECHAZAR',
+  }, ctx)
+  const fallo = aFallo(r)
+  if (fallo) return fallo
+  const ficha = (await catalogo(ctx)).find(p => p.producto_id === (r as { id: string }).id)
+  return ficha
+    ? { ok: true, ficha }
+    : { ok: false, motivo: `No existe el producto "${ref}". Impórtalo antes que el stock.` }
 }
 
 /** Almacén por su ALM- (lo que manda el desplegable) o por nombre (el CSV). */
 async function buscarAlmacen(
   ref: string, ctx: CtxImport,
-): Promise<{ almacen_id: string; empresa_id: string } | null> {
-  return memo(ctx, `alm|${norm(ref)}`, async () => {
-    const cols = 'almacen_id, empresa_id'
-    const base = () => ctx.db.from('almacenes').select(cols).eq('client_id', ctx.client_id)
-    const porId = await base().eq('almacen_id', ref.trim().toUpperCase()).limit(1).maybeSingle()
-    if (porId.data) return porId.data as { almacen_id: string; empresa_id: string }
-    const porNombre = await base().ilike('nombre', ref.trim()).limit(1).maybeSingle()
-    return (porNombre.data as { almacen_id: string; empresa_id: string }) ?? null
-  })
+): Promise<{ ok: true; ficha: FichaAlmacen } | Extract<Preparado, { ok: false }>> {
+  const id = ref.trim().toUpperCase()
+  const porId = (await almacenes(ctx)).find(a => a.almacen_id.toUpperCase() === id)
+  if (porId) return { ok: true, ficha: porId }
+
+  const idx = await indicePorNombre(ctx, 'almacenes', () => almacenes(ctx), a => a.nombre)
+  const op  = (a: FichaAlmacen) => ({ valor: a.almacen_id, etiqueta: a.nombre })
+  const r = resolverRef({
+    tipo: 'almacen', etiqueta_tipo: 'Almacén', texto: ref,
+    coincidencias: idx.buscar(ref).map(op),
+    parecidos:     idx.sugerir(ref).map(op),
+    otras:         idx.todas().map(op),
+    creable: false, omitible: false, defecto: 'RECHAZAR',
+  }, ctx)
+  const fallo = aFallo(r)
+  if (fallo) return fallo
+  const ficha = (await almacenes(ctx)).find(a => a.almacen_id === (r as { id: string }).id)
+  return ficha ? { ok: true, ficha } : { ok: false, motivo: `No existe el almacén "${ref}".` }
 }
 
 /** numeric(18,3): redondea para que la resta de dos flotantes no invente decimales. */
@@ -101,14 +162,18 @@ export const adaptadorStockInicial: Adaptador = {
   async preparar(valores, ctx): Promise<Preparado> {
     const refProducto = (valores.producto ?? '').trim()
     if (!refProducto) return { ok: false, motivo: 'Falta el producto.' }
-    const producto = await buscarProducto(refProducto, ctx)
-    if (!producto) return { ok: false, motivo: `No existe el producto "${refProducto}". Impórtalo antes que el stock.` }
-    if (producto.tipo === 'SERVICIO') return { ok: false, motivo: `"${refProducto}" es un servicio, y los servicios no tienen stock.` }
-
     const refAlmacen = (valores.almacen ?? '').trim()
     if (!refAlmacen) return { ok: false, motivo: 'Falta el almacén.' }
-    const almacen = await buscarAlmacen(refAlmacen, ctx)
-    if (!almacen) return { ok: false, motivo: `No existe el almacén "${refAlmacen}".` }
+
+    // Los dos se resuelven aunque el primero falle: así el asistente pregunta por
+    // el producto y por el almacén en la misma pasada.
+    const rp = await buscarProducto(refProducto, ctx)
+    const ra = await buscarAlmacen(refAlmacen, ctx)
+    if (!rp.ok) return rp
+    if (!ra.ok) return ra
+    const producto = rp.ficha
+    const almacen  = ra.ficha
+    if (producto.tipo === 'SERVICIO') return { ok: false, motivo: `"${refProducto}" es un servicio, y los servicios no tienen stock.` }
 
     const cantidad = parseNumero(valores.cantidad)
     if (cantidad === undefined) return { ok: false, motivo: 'La cantidad no es un número.' }

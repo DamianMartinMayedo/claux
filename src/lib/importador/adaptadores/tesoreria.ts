@@ -10,29 +10,58 @@
 // Ojo con no confundirlo con la cuenta técnica de «Apertura» (mig. 130): esa
 // absorbe el histórico YA PAGADO y está fuera de los saldos; esto es dinero real.
 
-import { memo, norm, parseNumero, totalesPor } from '../util'
+import { indicePorNombre, memo, parseNumero, totalesPor } from '../util'
+import { aFallo, resolverRef } from '../resolver'
 import { defEmpresa } from './comunes'
 import type { Adaptador, CtxImport, Preparado } from '../tipos'
 
-type DatosSaldo = { cuenta_id: string; saldo_inicial: number; moneda: string }
+type DatosSaldo  = { cuenta_id: string; saldo_inicial: number; moneda: string }
+type FichaCuenta = {
+  cuenta_id: string; nombre: string; moneda: string; empresa_id: string; es_apertura: boolean
+}
 
-/** Cuenta de la empresa por su CTA- o por nombre (nunca una de apertura). */
+/** Las cuentas del cliente, una sola vez por lote. */
+async function cuentas(ctx: CtxImport): Promise<FichaCuenta[]> {
+  return memo(ctx, 'lista|cuentas', async () => {
+    const { data } = await ctx.db.from('cuentas')
+      .select('cuenta_id, nombre, moneda, empresa_id, es_apertura').eq('client_id', ctx.client_id)
+    return (data ?? []) as FichaCuenta[]
+  })
+}
+
+/**
+ * Cuenta de la empresa por su CTA- o por nombre (nunca una de apertura). Una
+ * cuenta no se crea desde aquí —necesita tipo, moneda y su sitio en Tesorería—,
+ * así que el resolutor solo pregunta: con dos «Caja» o con un nombre que no
+ * cuadra, el operador señala cuál es. Pisar el saldo de la cuenta equivocada no
+ * deja ningún rastro de que se eligió a ciegas.
+ */
 async function buscarCuenta(
   ref: string, empresa_id: string, moneda: string, ctx: CtxImport,
-): Promise<{ cuenta_id: string; moneda: string } | null> {
-  return memo(ctx, `cta|${empresa_id}|${moneda}|${norm(ref)}`, async () => {
-    const base = () => ctx.db.from('cuentas').select('cuenta_id, moneda')
-      .eq('client_id', ctx.client_id).eq('empresa_id', empresa_id).eq('es_apertura', false)
-    const porId = await base().eq('cuenta_id', ref.trim().toUpperCase()).limit(1).maybeSingle()
-    if (porId.data) return porId.data as { cuenta_id: string; moneda: string }
-    // Con moneda se desambigua «Caja» en CUP de «Caja» en USD. Si aun así hay dos
-    // con el mismo nombre, se falla: pisar el saldo de la cuenta equivocada no
-    // deja rastro de que se eligió a ciegas.
-    const q = moneda ? base().eq('moneda', moneda) : base()
-    const { data } = await q.ilike('nombre', ref.trim()).limit(2)
-    const filas = (data ?? []) as { cuenta_id: string; moneda: string }[]
-    return filas.length === 1 ? filas[0] : null
-  })
+): Promise<{ ok: true; ficha: FichaCuenta } | Extract<Preparado, { ok: false }>> {
+  const dela = (c: FichaCuenta) => c.empresa_id === empresa_id && !c.es_apertura
+  const id = ref.trim().toUpperCase()
+  const porId = (await cuentas(ctx)).find(c => dela(c) && c.cuenta_id.toUpperCase() === id)
+  if (porId) return { ok: true, ficha: porId }
+
+  // Con moneda se desambigua «Caja» en CUP de «Caja» en USD.
+  const suya = (c: FichaCuenta) => dela(c) && (!moneda || c.moneda === moneda)
+  const idx  = await indicePorNombre(ctx, 'cuentas', () => cuentas(ctx), c => c.nombre)
+  const op   = (c: FichaCuenta) => ({ valor: c.cuenta_id, etiqueta: `${c.nombre} · ${c.moneda}` })
+  const r = resolverRef({
+    tipo: 'cuenta', etiqueta_tipo: 'Cuenta', texto: ref,
+    ambito: empresa_id,
+    coincidencias: idx.buscar(ref, suya).map(op),
+    parecidos:     idx.sugerir(ref, suya).map(op),
+    otras:         idx.todas(dela).map(op),
+    creable: false, omitible: false, defecto: 'RECHAZAR',
+  }, ctx)
+  const fallo = aFallo(r)
+  if (fallo) return fallo
+  const ficha = (await cuentas(ctx)).find(c => c.cuenta_id === (r as { id: string }).id)
+  return ficha
+    ? { ok: true, ficha }
+    : { ok: false, motivo: `No hay ninguna cuenta "${ref}" en esa empresa: créala en Tesorería.` }
 }
 
 export const adaptadorTesoreriaSaldo: Adaptador = {
@@ -59,8 +88,9 @@ export const adaptadorTesoreriaSaldo: Adaptador = {
     if (moneda && !ctx.monedas.includes(moneda))
       return { ok: false, motivo: `La moneda "${moneda}" no está configurada en Monedas y Tasas.` }
 
-    const cuenta = await buscarCuenta(ref, empresa_id, moneda, ctx)
-    if (!cuenta) return { ok: false, motivo: `No hay una única cuenta "${ref}" en esa empresa: créala en Tesorería, o indica la moneda si hay varias con ese nombre.` }
+    const rc = await buscarCuenta(ref, empresa_id, moneda, ctx)
+    if (!rc.ok) return rc
+    const cuenta = rc.ficha
     if (moneda && cuenta.moneda !== moneda)
       return { ok: false, motivo: `La cuenta "${ref}" es en ${cuenta.moneda}, no en ${moneda}.` }
 

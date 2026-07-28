@@ -15,46 +15,47 @@
 //     (`@/lib/tesoreria-core`, mig. 130), fechado en el período del gasto y NUNCA
 //     hoy: el resultado devengado cuadra por fecha y la caja real no se toca.
 
-import { etiquetaDeCategoria, generarRegistroId, type TipoRegistro } from '@/lib/gastos-core'
+import { generarRegistroId, type TipoRegistro } from '@/lib/gastos-core'
 import { generarMovimientoId, obtenerCuentaApertura } from '@/lib/tesoreria-core'
-import { memo, norm, parseBooleano, parseFecha, parseNumero, totalesPor } from '../util'
-import { defEmpresa, defMoneda } from './comunes'
-import type { Adaptador, CampoDef, CtxImport, Preparado } from '../tipos'
+import { norm, parseBooleano, parseFecha, parseNumero, totalesPor } from '../util'
+import {
+  defCategoriaFaltante, defEmpresa, defMoneda, defRolNuevas, defTerceroFaltante,
+} from './comunes'
+import {
+  aplicarPlanCategoria, nombresNuevos, resolverCategoriaGasto, type PlanCategoria,
+} from './categorias'
+import { crearTerceroImportado, resolverTerceroDeFila } from './terceros'
+import type { Adaptador, CampoDef, CtxImport, DefaultDef, Preparado } from '../tipos'
 
 const EPS = 0.005
 
 type DatosGasto = {
-  registro:  Record<string, unknown>   // fila de `gastos_cobros`
+  /** Fila de `gastos_cobros`. Sin `categoria_id`: ese se resuelve al escribir. */
+  registro:  Record<string, unknown>
   pagado:    number                    // cuánto se liquida contra «Apertura»
   categoria_nombre: string | null
+  /** Categoría (y subcategoría) ya decidida, pendiente de escribir. */
+  plan_categoria: PlanCategoria | null
+  /** Nombre del tercero que hay que dar de alta al escribir (política CREAR). */
+  tercero_nuevo: string | null
 }
 
 /**
- * Categoría de gasto por nombre; `parent` acota la búsqueda a sus hijas.
- * Null si no existe O si hay más de una con ese nombre: con dos «Alquiler» en el
- * catálogo, elegir una a ciegas clasifica el gasto donde nadie ha decidido.
+ * Categoría de las filas que no traigan ninguna. Solo se ofrecen las ACTIVAS de
+ * primer nivel: es un valor que el operador elige a mano, y ahí no tiene sentido
+ * proponer una archivada.
  */
-async function idCategoriaGasto(
-  nombre: string, parent: string | null, ctx: CtxImport,
-): Promise<string | null> {
-  return memo(ctx, `catgas|${parent ?? '-'}|${norm(nombre)}`, async () => {
-    let q = ctx.db.from('categorias_gastos').select('categoria_id')
-      .eq('client_id', ctx.client_id).eq('estado', 'ACTIVO').ilike('nombre', nombre.trim())
-    q = parent ? q.eq('parent_id', parent) : q.is('parent_id', null)
-    const { data } = await q.limit(2)
-    const filas = (data ?? []) as { categoria_id: string }[]
-    return filas.length === 1 ? filas[0].categoria_id : null
-  })
-}
-
-/** Tercero por nombre dentro de la empresa (proveedor del gasto o cliente del cobro). */
-async function idTercero(nombre: string, empresa_id: string, ctx: CtxImport): Promise<string | null> {
-  return memo(ctx, `ter|${empresa_id}|${norm(nombre)}`, async () => {
-    const { data } = await ctx.db.from('third_parties').select('tercero_id')
-      .eq('client_id', ctx.client_id).eq('empresa_id', empresa_id)
-      .ilike('nombre', nombre.trim()).limit(1).maybeSingle()
-    return (data?.tercero_id as string) ?? null
-  })
+const defCategoriaDefecto: DefaultDef = {
+  campo:       'categoria',
+  etiqueta:    'Categoría por defecto',
+  obligatorio: false,
+  ayuda:       'Para las filas que no traigan categoría en el archivo.',
+  opciones:    async (ctx: CtxImport) => {
+    const { data } = await ctx.db.from('categorias_gastos')
+      .select('nombre').eq('client_id', ctx.client_id)
+      .eq('estado', 'ACTIVO').is('parent_id', null).order('nombre')
+    return ((data ?? []) as { nombre: string }[]).map(c => ({ valor: c.nombre, etiqueta: c.nombre }))
+  },
 }
 
 const CAMPOS_COMUNES: CampoDef[] = [
@@ -93,6 +94,8 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
     defaults: [
       defEmpresa,
       defMoneda('moneda', true, 'La de las filas que no traigan moneda propia.'),
+      ...(esGasto ? [defCategoriaDefecto, defCategoriaFaltante(), defRolNuevas] : []),
+      defTerceroFaltante(esGasto ? 'proveedor' : 'cliente', true),
     ],
     campos: [...propios, ...CAMPOS_COMUNES, ...cobro],
 
@@ -100,12 +103,26 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
     // canta antes de escribir nada.
     resumen: filas => {
       const reg = (f: Record<string, unknown>) => (f as unknown as DatosGasto).registro
+      const nuevos = filas.filter(f => (f as unknown as DatosGasto).tercero_nuevo).length
+      // Categorías por NOMBRE, no por fila: el archivo repite la misma categoría
+      // en cien filas y crea una sola.
+      const cats = new Set(filas.flatMap(f => {
+        const plan = (f as unknown as DatosGasto).plan_categoria
+        return plan ? nombresNuevos(plan) : []
+      }))
       return [
         ...totalesPor(filas, f => reg(f).moneda as string, f => reg(f).monto as number,
           m => `Total ${esGasto ? 'gastos' : 'cobros'} ${m}`),
         ...totalesPor(filas.filter(f => (f as unknown as DatosGasto).pagado > EPS),
           f => reg(f).moneda as string, f => (f as unknown as DatosGasto).pagado,
           m => `Ya ${verbo.toLowerCase()} ${m}`),
+        // Que se vea ANTES de escribir cuántas fichas va a crear el archivo.
+        ...(nuevos > 0
+          ? [{ etiqueta: `Filas con un ${esGasto ? 'proveedor' : 'cliente'} nuevo`, valor: nuevos, entero: true }]
+          : []),
+        ...(cats.size > 0
+          ? [{ etiqueta: 'Categorías que se crearán', valor: cats.size, entero: true }]
+          : []),
       ]
     },
 
@@ -131,39 +148,52 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
       if (vencimiento === undefined) return { ok: false, motivo: 'El vencimiento no se entiende (usa dd/mm/aaaa).' }
 
       // Etiqueta y clasificación: el gasto la deriva de su categoría; el cobro
-      // lleva concepto libre (misma regla que el alta manual, mismo núcleo).
-      let descripcion: string
-      let categoria_id: string | null = null
+      // lleva concepto libre (misma regla que el alta manual, mismo núcleo). La
+      // categoría se DECIDE aquí y se escribe al insertar: validar no toca la
+      // base de datos, y crear la que falta es una escritura.
+      let descripcion = ''
+      let plan_categoria: PlanCategoria | null = null
       let categoria_nombre: string | null = null
+      // Si la categoría no cuadra, el tercero se resuelve IGUAL antes de rendirse:
+      // devolver al primer tropiezo obligaría al operador a decidir las
+      // categorías, revalidar el archivo entero y decidir los proveedores en otra
+      // pasada. Cada pasada son N consultas y la conexión es la que es.
+      let fallo: Extract<Preparado, { ok: false }> | null = null
 
       if (esGasto) {
         const cat = (valores.categoria ?? '').trim()
         if (!cat) return { ok: false, motivo: 'Falta la categoría del gasto.' }
-        const raizId = await idCategoriaGasto(cat, null, ctx)
-        if (!raizId) return { ok: false, motivo: `No hay una única categoría activa llamada "${cat}": créala, o desduplícala si hay varias con ese nombre.` }
-
-        categoria_id = raizId
-        const sub = (valores.subcategoria ?? '').trim()
-        if (sub) {
-          const subId = await idCategoriaGasto(sub, raizId, ctx)
-          if (!subId) return { ok: false, motivo: `No hay una única subcategoría "${sub}" dentro de "${cat}".` }
-          categoria_id = subId
+        const rc = await resolverCategoriaGasto(cat, (valores.subcategoria ?? '').trim(), valores, ctx)
+        if (!rc.ok) fallo = rc
+        else {
+          plan_categoria   = rc.plan
+          categoria_nombre = rc.plan.nombre
+          descripcion      = rc.plan.descripcion
         }
-        const etq = await etiquetaDeCategoria(ctx.db, ctx.client_id, categoria_id)
-        if (!etq) return { ok: false, motivo: 'Categoría no válida o inactiva.' }
-        categoria_nombre = etq.nombre
-        descripcion      = etq.descripcion
       } else {
         descripcion = (valores.concepto ?? '').trim()
         if (!descripcion) return { ok: false, motivo: 'Falta el concepto del cobro.' }
       }
 
-      let tercero_id: string | null = null
+      // El tercero que el archivo nombra y no tenemos: lo decide el operador en
+      // el asistente. Crear la ficha se APUNTA aquí y se hace al escribir
+      // (`insertar`), por lo mismo.
+      let tercero_id:    string | null = null
+      let tercero_nuevo: string | null = null
+      let sinTercero:    string | null = null
       const tercero = (valores.tercero ?? '').trim()
       if (tercero) {
-        tercero_id = await idTercero(tercero, empresa_id, ctx)
-        if (!tercero_id) return { ok: false, motivo: `No existe "${tercero}" como tercero de esa empresa.` }
+        const rt = await resolverTerceroDeFila(
+          tercero, empresa_id, esGasto ? 'proveedor' : 'cliente', valores, ctx,
+        )
+        if (!rt.ok) fallo ??= rt
+        else {
+          tercero_id    = rt.tercero.tercero_id
+          tercero_nuevo = rt.tercero.crear
+          sinTercero    = rt.tercero.sin_ficha
+        }
       }
+      if (fallo) return fallo
 
       // Cuánto está ya saldado: el importe parcial manda sobre el Sí/No.
       const marcado = parseBooleano(valores.pagado)
@@ -183,13 +213,15 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         vencimiento: vencimiento ?? (pagado < monto - EPS ? fecha : null),
         tercero_id,
         categoria:   categoria_nombre,
-        categoria_id,
         descripcion,
         moneda,
         monto,
-        notas:       (valores.notas ?? '').trim() || null,
+        // Si el operador eligió no crear la ficha, el nombre no se tira: queda
+        // escrito en las notas, que es donde se puede recuperar después.
+        notas: [(valores.notas ?? '').trim(), sinTercero && `${esGasto ? 'Proveedor' : 'Cliente'}: ${sinTercero}`]
+          .filter(Boolean).join(' · ') || null,
       }
-      const datos: DatosGasto = { registro, pagado, categoria_nombre }
+      const datos: DatosGasto = { registro, pagado, categoria_nombre, plan_categoria, tercero_nuevo }
       return {
         ok: true,
         datos: datos as unknown as Record<string, unknown>,
@@ -214,17 +246,20 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
 
     async insertar(datos, ctx) {
       const d = datos as unknown as DatosGasto
-      const registro_id = generarRegistroId(tipo)
+      const registro_id  = generarRegistroId(tipo)
+      const categoria_id = await resolverCategoria(d, ctx)
       const { error } = await ctx.db.from('gastos_cobros').insert({
         registro_id,
         client_id:   ctx.client_id,
         ...d.registro,
+        categoria_id,
+        tercero_id:  await resolverTercero(d, ctx),
         origen_tipo: 'IMPORTACION',
         origen_id:   ctx.lote_id ?? null,
         updated_at:  new Date().toISOString(),
       })
       if (error) throw new Error(error.message)
-      if (d.pagado > EPS) await saldar(ctx, registro_id, d, d.pagado)
+      if (d.pagado > EPS) await saldar(ctx, registro_id, d, d.pagado, categoria_id)
       return registro_id
     },
 
@@ -236,8 +271,9 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
     async actualizar(id, datos, ctx) {
       const d = datos as unknown as DatosGasto
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      const tercero_id = await resolverTercero(d, ctx)
       if (d.registro.vencimiento) patch.vencimiento = d.registro.vencimiento
-      if (d.registro.tercero_id)  patch.tercero_id  = d.registro.tercero_id
+      if (tercero_id)             patch.tercero_id  = tercero_id
       if (d.registro.notas)       patch.notas       = d.registro.notas
       const { error } = await ctx.db.from('gastos_cobros').update(patch)
         .eq('registro_id', id).eq('client_id', ctx.client_id)
@@ -249,7 +285,7 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         const ya = ((movs ?? []) as { monto: number; monto_ref: number | null }[])
           .reduce((s, m) => s + Number(m.monto_ref ?? m.monto), 0)
         const falta = Math.round((d.pagado - ya) * 100) / 100
-        if (falta > EPS) await saldar(ctx, id, d, falta)
+        if (falta > EPS) await saldar(ctx, id, d, falta, await resolverCategoria(d, ctx))
       }
     },
 
@@ -277,8 +313,33 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
     },
   }
 
+  /**
+   * La categoría con la que se escribe la fila. Lo que el plan tuviera pendiente
+   * —crear la categoría, crear la subcategoría, reactivar la archivada— se hace
+   * aquí, al escribir, y no en `preparar`: validar no toca la base de datos.
+   */
+  async function resolverCategoria(d: DatosGasto, ctx: CtxImport): Promise<string | null> {
+    return d.plan_categoria ? aplicarPlanCategoria(d.plan_categoria, ctx) : null
+  }
+
+  /**
+   * El tercero con el que se escribe la fila: el que ya existía, o la ficha
+   * mínima que se crea ahora si el operador eligió crearla. Se resuelve al
+   * escribir y no en `preparar` porque validar no puede tocar la base de datos.
+   */
+  async function resolverTercero(d: DatosGasto, ctx: CtxImport): Promise<string | null> {
+    if (d.registro.tercero_id) return d.registro.tercero_id as string
+    if (!d.tercero_nuevo)      return null
+    return crearTerceroImportado(
+      d.tercero_nuevo, d.registro.empresa_id as string, esGasto ? 'PROVEEDOR' : 'CLIENTE', ctx,
+    )
+  }
+
   /** Movimiento de liquidación contra la cuenta técnica de «Apertura». */
-  async function saldar(ctx: CtxImport, registro_id: string, d: DatosGasto, importe: number): Promise<void> {
+  async function saldar(
+    ctx: CtxImport, registro_id: string, d: DatosGasto, importe: number,
+    categoria_id: string | null,
+  ): Promise<void> {
     const empresa_id = d.registro.empresa_id as string
     const moneda     = d.registro.moneda as string
     const cuenta_id  = await obtenerCuentaApertura(ctx.db, ctx.client_id, empresa_id, moneda)
@@ -294,7 +355,7 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
       monto_ref:     importe,                      // misma moneda: la apertura es por moneda
       concepto:      `${esGasto ? 'Pago' : 'Cobro'} · ${d.registro.descripcion as string}`,
       categoria:     d.categoria_nombre,
-      categoria_id:  d.registro.categoria_id ?? null,
+      categoria_id,
       origen:        esGasto ? 'PAGO' : 'COBRO',
       referencia_id: registro_id,
       notas:         `Saldado en la migración de datos (${ctx.lote_id ?? 'importación'}).`,
