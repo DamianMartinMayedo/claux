@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
+import { cobroEsIngreso }    from '@/lib/gastos-core'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { tieneModulo }       from '@/lib/modulos'
@@ -163,7 +164,7 @@ export async function obtenerReportes(
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desdeQ).lte('fecha_emision', hastaQ),
-    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha')
+    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .gte('fecha', desdeQ).lte('fecha', hastaQ),
     db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha, cuenta_id')
@@ -194,7 +195,7 @@ export async function obtenerReportes(
   }))
 
   type FilaFactura = { factura_id: string; moneda: string; total: number; fecha_emision: string }
-  type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string }
+  type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null }
 
   const facturas = (facRes.data ?? []) as FilaFactura[]
   const gastosCobros = (gcRes.data ?? []) as FilaGC[]
@@ -212,6 +213,9 @@ export async function obtenerReportes(
     for (const g of gastosCobros) {
       if (!enRango(g.fecha, d, h)) continue
       if (g.tipo === 'COBRO') {
+        // Un COBRO de anticipo (el subsidio de la nómina) NO es ingreso: ver
+        // `cobroEsIngreso`. Sin esto infla ingresos y resultado neto.
+        if (!cobroEsIngreso(g.origen_tipo)) continue
         ingresos.push({ moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7), fuente: 'COBRO' })
       } else {
         gastos.push({
@@ -379,7 +383,10 @@ export async function obtenerReportes(
   const puente: PuenteMoneda[] = []
   {
     const facturasPer = facturas.filter(f => enRango(f.fecha_emision, desde, hasta))
-    const cobrosPer   = gastosCobros.filter(g => g.tipo === 'COBRO' && enRango(g.fecha, desde, hasta))
+    // Mismo criterio que `apuntesDe`: el anticipo no es ingreso devengado, así que
+    // no entra en el puente. Si entrara, el puente enseñaría un ingreso que el
+    // estado de resultados no tiene.
+    const cobrosPer   = gastosCobros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.origen_tipo) && enRango(g.fecha, desde, hasta))
     const gastosPer   = gastosCobros.filter(g => g.tipo === 'GASTO' && enRango(g.fecha, desde, hasta))
     const refs = [
       ...facturasPer.map(f => f.factura_id),

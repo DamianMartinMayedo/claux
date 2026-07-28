@@ -21,6 +21,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
+import { cobroEsIngreso } from '@/lib/gastos-core'
 import { construirConversor, type DetalleTasa } from '@/lib/tasas'
 import { indexarCategorias, type CategoriaPL } from '@/lib/pl/estado'
 import type { FilaSerie } from './snapshot'
@@ -70,7 +71,7 @@ export async function construirSnapshotDesdeBase(
       .eq('client_id', clientId).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desde).lte('fecha_emision', hasta),
-    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha')
+    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo')
       .eq('client_id', clientId).in('empresa_id', ids)
       .gte('fecha', desde).lte('fecha', hasta),
   ])
@@ -110,12 +111,17 @@ export async function construirSnapshotDesdeBase(
   // raíz, que es la que tiene el `rol_pl` y la que da nombre a la línea del
   // desglose. Sin subir, «Suministros · Electricidad» saldría suelta al lado de
   // «Suministros» como si fueran dos gastos distintos del mismo nivel.
-  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string }[]) {
+  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null }[]) {
     const v = conv(g.monto, g.moneda)
     if (v == null || !g.fecha) continue
     const mes = getMes(g.fecha.slice(0, 7))
 
     if (g.tipo === 'COBRO') {
+      // El COBRO de un anticipo no es ingreso (`cobroEsIngreso`). Aquí importaba el
+      // doble: además de inflar los ingresos, el subsidio se pintaba como una LÍNEA
+      // del desglose («Subsidios por cobrar») en el documento que se le enseña a un
+      // asesor o a un inversor.
+      if (!cobroEsIngreso(g.origen_tipo)) continue
       mes.ingresos += v
       const concepto = g.categoria?.trim() || 'Otros ingresos'
       ingresoCat.set(concepto, (ingresoCat.get(concepto) ?? 0) + v)
