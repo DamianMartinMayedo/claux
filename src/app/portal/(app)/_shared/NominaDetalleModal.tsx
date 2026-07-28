@@ -3,17 +3,20 @@
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useEffect, useState, useTransition } from 'react'
 import {
+  anadirItemPuntual,
+  eliminarItemPuntual,
   guardarLineaNomina,
   previsualizarRecalculoNomina,
   recalcularNomina,
   reabrirYActualizarNomina,
+  type ItemLinea,
   type NominaConLineas,
   type NominaLinea,
   type RecalculoNomina,
 } from '@/app/actions/portal/rrhh'
 import { registrarLiquidacion } from '@/app/actions/portal/gastos'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
-import { Check, CircleCheck, DollarSign, RefreshCw, Wallet, X } from 'lucide-react'
+import { Check, CircleCheck, DollarSign, Plus, RefreshCw, Wallet, X } from 'lucide-react'
 
 type CuentaInfo = { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }
 
@@ -28,12 +31,162 @@ export function formatPeriodo(periodo: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function LineaEditableRow({
-  linea, moneda, onChanged,
+// ── Desglose de la línea (mig. 140) ─────────────────────────────────────────────
+// De dónde sale cada importe. Antes la línea guardaba `deducciones` como un número
+// sin explicación, así que no se podía decir qué se retuvo ni por qué. Lo PUNTUAL
+// —el hecho de este mes— se distingue del resto porque es lo único que se quita
+// desde aquí: lo que baja de la ficha del trabajador se cambia en su ficha, o el
+// recálculo lo repondría y parecería que no se guardó.
+
+function DesgloseLinea({
+  linea, editable, onChanged, onAnadir,
 }: {
   linea:     NominaLinea
-  moneda:    string
+  editable:  boolean
   onChanged: () => void
+  onAnadir:  () => void
+}) {
+  const [quitando, setQuitando] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
+
+  // Un preservado puede quedar recortado a 0 y sigue en la base para que el
+  // desglose cuadre; en pantalla no aporta nada, así que no se pinta.
+  const items = linea.items.filter(i => i.monto > 0.005)
+
+  function quitar(item: ItemLinea) {
+    if (!item.item_id) return
+    setQuitando(item.item_id)
+    const ld = toastLoading('Quitando…')
+    startTransition(async () => {
+      const res = await eliminarItemPuntual(item.item_id!)
+      await ld.dismiss()
+      setQuitando(null)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Concepto quitado')
+      onChanged()
+    })
+  }
+
+  if (!items.length && !editable) return null
+
+  return (
+    <div className="nom-desglose">
+      {items.map((it, i) => {
+        const suma    = it.tipo === 'DEVENGO'
+        const puntual = it.origen === 'PUNTUAL'
+        return (
+          <span key={it.item_id ?? i} className={`nom-desglose-item${puntual ? ' nom-desglose-puntual' : ''}`}>
+            <span className={`nom-desglose-monto ${suma ? 'nom-desglose-mas' : 'nom-desglose-menos'}`}>
+              {suma ? '+' : '−'}{formatMonto(it.monto)}
+            </span>
+            <span>{it.nombre}</span>
+            {editable && puntual && (
+              <button type="button" className="nom-desglose-quitar"
+                aria-label={`Quitar ${it.nombre}`} title="Quitar"
+                disabled={quitando === it.item_id}
+                onClick={() => quitar(it)}>
+                <X size={12} strokeWidth={2.5} />
+              </button>
+            )}
+          </span>
+        )
+      })}
+      {!items.length && editable && <span className="nom-desglose-vacio">Solo el salario del período</span>}
+      {editable && (
+        <button type="button" className="nom-desglose-add" onClick={onAnadir}>
+          <Plus size={11} strokeWidth={2.5} /> Concepto del mes
+        </button>
+      )}
+    </div>
+  )
+}
+
+function PuntualModal({
+  linea, moneda, onClose, onDone,
+}: {
+  linea:   NominaLinea
+  moneda:  string
+  onClose: () => void
+  onDone:  () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [tipo, setTipo] = useState<'DEVENGO' | 'RETENCION'>('RETENCION')
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('linea_id', linea.linea_id)
+    const ld = toastLoading('Añadiendo…')
+    startTransition(async () => {
+      const res = await anadirItemPuntual(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Concepto añadido')
+      onDone()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-md" role="dialog" aria-modal>
+        <div className="modal-header">
+          <div>
+            <h2 className="modal-title">Concepto de este mes</h2>
+            <p className="text-xs-muted mt-1">{linea.empleado_nombre}</p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="info-box">
+            <strong className="info-box-title">Solo para esta nómina</strong>
+            <span className="text-xs-muted">
+              Un hecho de este mes: una rotura, un extra puntual, un descuento pactado una vez.
+              A diferencia de los conceptos de la ficha, <strong>no se repite el mes que viene</strong> y
+              se conserva si actualizas la nómina con los conceptos del trabajador.
+            </span>
+          </div>
+          <form id="puntual-form" onSubmit={handleSubmit}>
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-full">
+                <label htmlFor="puntual-nombre">Concepto <span className="required">*</span></label>
+                <input className="input" id="puntual-nombre" name="nombre" required maxLength={80}
+                  placeholder="Rotura de cristal, horas extra de diciembre…" />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="puntual-tipo">Tipo <span className="required">*</span></label>
+                <select className="input" id="puntual-tipo" name="tipo" value={tipo}
+                  onChange={e => setTipo(e.target.value as 'DEVENGO' | 'RETENCION')}>
+                  <option value="RETENCION">Se le descuenta</option>
+                  <option value="DEVENGO">Se le suma</option>
+                </select>
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="puntual-monto">Importe ({moneda}) <span className="required">*</span></label>
+                <input className="input" id="puntual-monto" name="monto" type="number" min="0.01" step="any" required />
+              </div>
+            </div>
+          </form>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" form="puntual-form" className="btn btn-primary" disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Añadiendo…</> : 'Añadir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LineaEditableRow({
+  linea, moneda, onChanged, onAnadirPuntual, devengadoCalculado,
+}: {
+  linea:           NominaLinea
+  moneda:          string
+  onChanged:       () => void
+  onAnadirPuntual: () => void
+  /** Bajo MIPYME_CUBA el devengado no se teclea: los impuestos dependen de él. */
+  devengadoCalculado: boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [dev, setDev] = useState(String(linea.devengado))
@@ -63,14 +216,23 @@ function LineaEditableRow({
       <td data-label="Empleado">
         <strong>{linea.empleado_nombre}</strong>
         {linea.cargo && <div className="text-sm-muted">{linea.cargo}</div>}
+        <DesgloseLinea linea={linea} editable onChanged={onChanged} onAnadir={onAnadirPuntual} />
       </td>
-      <td data-label="Devengado" className="col-num"><input className="input nom-input" type="number" min="0" step="any" value={dev}
-        onChange={e => setDev(e.target.value)} aria-label={`Devengado de ${linea.empleado_nombre}`} /></td>
+      <td data-label="Devengado" className="col-num">
+        {devengadoCalculado
+          ? <span className="tes-monto-cell">{formatMonto(linea.devengado)}</span>
+          : <input className="input nom-input" type="number" min="0" step="any" value={dev}
+              onChange={e => setDev(e.target.value)} aria-label={`Devengado de ${linea.empleado_nombre}`} />}
+      </td>
       <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(linea.deducciones)}</td>
-      <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(netoLive)} {moneda}</td>
+      <td data-label="Neto" className="col-num tes-monto-cell">
+        {formatMonto(devengadoCalculado ? linea.neto : netoLive)} {moneda}
+      </td>
       <td className="col-actions">
-        <button type="button" className="ter-action-btn ter-action-restore" title="Guardar línea"
-          onClick={save} disabled={isPending || !dirty}><Check size={15} strokeWidth={2} /></button>
+        {!devengadoCalculado && (
+          <button type="button" className="ter-action-btn ter-action-restore" title="Guardar línea"
+            onClick={save} disabled={isPending || !dirty}><Check size={15} strokeWidth={2} /></button>
+        )}
       </td>
     </tr>
   )
@@ -178,10 +340,13 @@ export function ActualizarConceptosModal({
                     confirmes de nuevo. Si ya tiene pagos en Tesorería, anúlalos primero.</span>
                 </div>
               )}
+              {/* Ya NO se pierde lo escrito a mano (mig. 140): los conceptos del mes
+                  son ítems propios y el recálculo los conserva. Solo se recompone lo
+                  que sale de la ficha del trabajador. */}
               <div className="alert alert-warning alert-intro">
-                <span>Se recalcula desde el salario del período. Lo que hayas ajustado a mano
-                  en {cambian.length === 1 ? 'esa línea' : 'esas líneas'} se pierde;
-                  el resto de la nómina no se toca.</span>
+                <span>Se recalcula desde el salario del período y los conceptos de la ficha
+                  de cada trabajador. Los conceptos que hayas añadido para este mes se
+                  conservan; el resto de la nómina no se toca.</span>
               </div>
 
               {recortada && (
@@ -207,11 +372,12 @@ export function ActualizarConceptosModal({
                         <td data-label="Trabajador">
                           <strong>{l.empleado_nombre}</strong>
                           <div className="text-sm-muted">
-                            {l.conceptos.length === 0
-                              ? 'Sin conceptos activos'
-                              : l.conceptos.map(c =>
-                                  `${c.tipo === 'BONO' ? '+' : '−'}${formatMonto(c.monto)} ${c.nombre}`,
-                                ).join(' · ')}
+                            {l.items.length === 0
+                              ? 'Solo el salario del período'
+                              : l.items
+                                  .filter(it => it.monto > 0.005)
+                                  .map(it => `${it.tipo === 'DEVENGO' ? '+' : '−'}${formatMonto(it.monto)} ${it.nombre}`)
+                                  .join(' · ')}
                           </div>
                         </td>
                         <td data-label="Devengado" className="col-num tes-monto-cell">
@@ -253,7 +419,7 @@ export function ActualizarConceptosModal({
 }
 
 export function NominaDetalleModal({
-  nomina, onClose, onChanged, onConfirmar, onPagar, empleadoId,
+  nomina, onClose, onChanged, onConfirmar, onPagar, empleadoId, devengadoCalculado = false,
 }: {
   nomina:      NominaConLineas
   onClose:     () => void
@@ -261,9 +427,14 @@ export function NominaDetalleModal({
   onConfirmar: () => void
   onPagar:     () => void
   empleadoId?: string
+  /** True si esta nómina la calcula el motor cubano: el devengado no se teclea. */
+  devengadoCalculado?: boolean
 }) {
   const esBorrador = nomina.estado === 'BORRADOR'
   const [actualizar, setActualizar] = useState(false)
+  // El estado del diálogo vive en el PADRE, no dentro de la fila: la fila se
+  // remonta con cada revalidación y se llevaría el modal abierto por delante.
+  const [puntualEn, setPuntualEn] = useState<NominaLinea | null>(null)
 
   const lineasVisibles = empleadoId
     ? nomina.lineas.filter(l => l.empleado_id === empleadoId)
@@ -293,7 +464,9 @@ export function NominaDetalleModal({
             </strong>
             <span className="text-xs-muted">
               {esBorrador
-                ? 'Ajusta el devengado y guarda la línea. Las deducciones salen de los conceptos de cada trabajador, en su ficha. Al confirmar se registra el gasto de salarios.'
+                ? devengadoCalculado
+                  ? 'Esta nómina la calcula el modelo MIPYME cubana, así que el devengado no se teclea: los impuestos dependen de él. Para cambiarlo, carga los días o el pago extra en «Incidencias del mes» de su ficha, o añade aquí un concepto puntual.'
+                  : 'Bajo cada trabajador ves de dónde sale su importe. Lo fijo viene de los conceptos de su ficha; lo de este mes lo añades aquí con «Concepto del mes». Al confirmar se registra el gasto de salarios.'
                 : nomina.saldo_pendiente <= 0.005
                   ? 'Confirmada y pagada por completo.'
                   : `Gasto registrado · Pagado ${formatMonto(nomina.pagado)} · Pendiente ${formatMonto(nomina.saldo_pendiente)} ${nomina.moneda}. Usa el botón Pagar para liquidar.`}
@@ -342,11 +515,20 @@ export function NominaDetalleModal({
                 <tbody>
                   {esBorrador
                     ? lineasVisibles.map(l => (
-                        <LineaEditableRow key={l.linea_id} linea={l} moneda={nomina.moneda} onChanged={onChanged} />
+                        <LineaEditableRow key={l.linea_id} linea={l} moneda={nomina.moneda}
+                          onChanged={onChanged} onAnadirPuntual={() => setPuntualEn(l)}
+                          devengadoCalculado={devengadoCalculado} />
                       ))
                     : lineasVisibles.map(l => (
                         <tr key={l.linea_id}>
-                          <td data-label="Empleado"><strong>{l.empleado_nombre}</strong>{l.cargo && <div className="text-sm-muted">{l.cargo}</div>}</td>
+                          <td data-label="Empleado">
+                            <strong>{l.empleado_nombre}</strong>
+                            {l.cargo && <div className="text-sm-muted">{l.cargo}</div>}
+                            {/* También en la confirmada: el desglose es justo lo que
+                                hay que poder consultar cuando la nómina ya está
+                                cerrada y alguien pregunta qué se le retuvo. */}
+                            <DesgloseLinea linea={l} editable={false} onChanged={onChanged} onAnadir={() => {}} />
+                          </td>
                           <td data-label="Devengado" className="col-num tes-monto-cell">{formatMonto(l.devengado)}</td>
                           <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(l.deducciones)}</td>
                           <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(l.neto)} {nomina.moneda}</td>
@@ -383,6 +565,15 @@ export function NominaDetalleModal({
         empleadoId={empleadoId}
         onClose={() => setActualizar(false)}
         onDone={() => { setActualizar(false); onChanged() }}
+      />
+    )}
+
+    {puntualEn && (
+      <PuntualModal
+        linea={puntualEn}
+        moneda={nomina.moneda}
+        onClose={() => setPuntualEn(null)}
+        onDone={() => { setPuntualEn(null); onChanged() }}
       />
     )}
     </>

@@ -9,11 +9,19 @@ import {
   eliminarNomina,
   confirmarNominasEnLote,
   eliminarNominasEnLote,
+  guardarReglaDeduccion,
+  alternarReglaDeduccion,
+  eliminarReglaDeduccion,
+  guardarConfigNomina,
+  exportarNominaXlsx,
   type NominaConLineas,
+  type ReglaDeduccion,
   type RrhhPageData,
   type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
-import { Check, Eye, Plus, Trash2, Wallet, X } from 'lucide-react'
+import { Check, Download, Eye, Pencil, Plus, Power, Trash2, Wallet, X } from 'lucide-react'
+import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
+import Tabs from '@/components/Tabs'
 import {
   NominaDetalleModal,
   ConfirmarNominaModal,
@@ -31,6 +39,396 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+
+// ── Reglas del negocio ───────────────────────────────────────────────────────────
+// «Así funciona mi nómina»: se escribe UNA vez y se aplica a toda la plantilla.
+// Vive aquí y no en la ficha del trabajador porque es configuración del NEGOCIO —
+// en la ficha solo va lo que esa persona tiene de particular. Antes no existía esta
+// distinción y una retención igual para todos eran tantas altas a mano como
+// trabajadores; cambiarla, tantos borrados y tantas altas.
+
+function ReglaModal({
+  data, regla, onClose, onDone,
+}: {
+  data:    RrhhPageData
+  regla:   ReglaDeduccion | null
+  onClose: () => void
+  onDone:  () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [modo, setModo] = useState<'FIJO' | 'PORCENTAJE'>(regla?.modo ?? 'FIJO')
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    if (regla) fd.set('regla_id', regla.regla_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarReglaDeduccion(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(regla ? 'Regla actualizada' : 'Regla creada')
+      onDone()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-md" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">{regla ? 'Editar regla' : 'Nueva regla'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="info-box">
+            <strong className="info-box-title">Se aplica a toda la plantilla</strong>
+            <span className="text-xs-muted">
+              Entra sola en cada nómina que generes a partir de ahora. Si alguien tiene otro
+              importe —o no le toca—, se marca como excepción en su ficha.
+              Las nóminas ya generadas no cambian.
+            </span>
+          </div>
+          <form id="regla-form" onSubmit={handleSubmit}>
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-full">
+                <label htmlFor="rg-nombre">Nombre <span className="required">*</span></label>
+                <input className="input" id="rg-nombre" name="nombre" required maxLength={80}
+                  defaultValue={regla?.nombre ?? ''} placeholder="Impuesto sobre ingresos personales…" />
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="rg-tipo">Tipo <span className="required">*</span></label>
+                <select className="input" id="rg-tipo" name="tipo" defaultValue={regla?.tipo ?? 'RETENCION'}>
+                  <option value="RETENCION">Se le descuenta</option>
+                  <option value="DEVENGO">Se le suma</option>
+                </select>
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="rg-empresa">Se aplica en</label>
+                <select className="input" id="rg-empresa" name="empresa_id" defaultValue={regla?.empresa_id ?? ''}>
+                  <option value="">Todas las empresas</option>
+                  {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+                </select>
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="rg-modo">Cómo se calcula <span className="required">*</span></label>
+                <select className="input" id="rg-modo" name="modo" value={modo}
+                  onChange={e => setModo(e.target.value as 'FIJO' | 'PORCENTAJE')}>
+                  <option value="FIJO">Importe fijo</option>
+                  <option value="PORCENTAJE">Porcentaje</option>
+                </select>
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="rg-valor">
+                  {modo === 'PORCENTAJE' ? 'Porcentaje (%)' : 'Importe'} <span className="required">*</span>
+                </label>
+                <input className="input" id="rg-valor" name="valor" type="number" required
+                  min="0.01" step="any" max={modo === 'PORCENTAJE' ? 100 : undefined}
+                  defaultValue={regla?.valor ?? ''} />
+                {modo === 'FIJO' && (
+                  <span className="input-hint">En la moneda de cada nómina donde se aplique.</span>
+                )}
+              </div>
+
+              {modo === 'PORCENTAJE' && (
+                <div className="input-group ter-col-full">
+                  <label htmlFor="rg-base">Porcentaje de</label>
+                  <select className="input" id="rg-base" name="base" defaultValue={regla?.base ?? 'SALARIO_BASE'}>
+                    <option value="SALARIO_BASE">El salario del período</option>
+                    <option value="DEVENGADO">El devengado (salario + lo que se le suma)</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          </form>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" form="regla-form" className="btn btn-primary" disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// `editando` vive en el PADRE: el botón «Nueva regla» va en el `.page-header`, al
+// lado del título y como el resto de las vistas, así que quien lo dispara está
+// fuera de este panel.
+function ReglasPanel({ data, editando, setEditando }: {
+  data:        RrhhPageData
+  editando:    ReglaDeduccion | 'nueva' | null
+  setEditando: (r: ReglaDeduccion | 'nueva' | null) => void
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [borrando, setBorrando] = useState<ReglaDeduccion | null>(null)
+
+  const nombreEmpresa = (id: string | null) =>
+    id ? (data.empresas.find(e => e.empresa_id === id)?.nombre ?? '—') : 'Todas'
+
+  function toggle(r: ReglaDeduccion) {
+    const ld = toastLoading(r.activa ? 'Desactivando…' : 'Activando…')
+    startTransition(async () => {
+      const res = await alternarReglaDeduccion(r.regla_id, !r.activa)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      router.refresh()
+    })
+  }
+
+  function borrar() {
+    if (!borrando) return
+    const ld = toastLoading('Eliminando…')
+    startTransition(async () => {
+      const res = await eliminarReglaDeduccion(borrando.regla_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setBorrando(null); return }
+      setBorrando(null); router.refresh()
+    })
+  }
+
+  return (
+    <>
+      <p className="text-sm-muted">
+        Lo que se aplica <strong>a toda la plantilla</strong>. Se escribe una vez y entra sola
+        en cada nómina nueva; lo particular de una persona va en su ficha.
+      </p>
+
+      <div className="card card-table">
+        {data.reglas.length === 0 ? (
+          <div className="mon-empty">
+            <Wallet size={40} strokeWidth={1} opacity={0.2} />
+            <p>Sin reglas. Si hay algo que se le aplica a todo el personal —un impuesto, un plus
+              de transporte—, ponlo aquí una sola vez en lugar de repetirlo en cada ficha.</p>
+          </div>
+        ) : (
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Regla</th>
+                  <th>Empresa</th>
+                  <th>Tipo</th>
+                  <th className="col-num">Valor</th>
+                  <th className="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.reglas.map(r => (
+                  <tr key={r.regla_id}>
+                    <td data-label="Regla">
+                      <strong>{r.nombre}</strong>{' '}
+                      {!r.activa && <span className="badge badge-neutral">Desactivada</span>}
+                    </td>
+                    <td data-label="Empresa">{nombreEmpresa(r.empresa_id)}</td>
+                    <td data-label="Tipo">
+                      <span className={`badge ${r.tipo === 'DEVENGO' ? 'badge-success' : 'badge-warning'}`}>
+                        {r.tipo === 'DEVENGO' ? 'Se le suma' : 'Se le descuenta'}
+                      </span>
+                    </td>
+                    <td data-label="Valor" className="col-num tes-monto-cell">
+                      {r.modo === 'PORCENTAJE'
+                        ? `${r.valor}% ${r.base === 'DEVENGADO' ? 'del devengado' : 'del salario'}`
+                        : formatMonto(r.valor)}
+                    </td>
+                    <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setEditando(r)}>
+                          <Pencil size={14} strokeWidth={2} /> Editar
+                        </button>
+                        <button className="row-actions-item" onClick={() => toggle(r)}>
+                          <Power size={14} strokeWidth={2} /> {r.activa ? 'Desactivar' : 'Activar'}
+                        </button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setBorrando(r)}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      </RowActions>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {editando && (
+        <ReglaModal
+          data={data}
+          regla={editando === 'nueva' ? null : editando}
+          onClose={() => setEditando(null)}
+          onDone={() => { setEditando(null); router.refresh() }}
+        />
+      )}
+
+      {borrando && (
+        <ConfirmDialog
+          danger
+          title="Eliminar regla"
+          body={`Se elimina «${borrando.nombre}» y las excepciones que algún trabajador tuviera sobre ella. Las nóminas ya generadas no cambian. Si solo quieres dejar de aplicarla, desactívala.`}
+          confirmLabel="Eliminar"
+          onConfirm={borrar}
+          onCancel={() => setBorrando(null)}
+        />
+      )}
+    </>
+  )
+}
+
+// ── Configuración de nómina por empresa ─────────────────────────────────────────
+// El modelo se elige POR EMPRESA, no por cliente: un negocio con varias empresas
+// puede tener una en el modelo cubano y el resto en el general. Cambiarlo NO
+// reescribe nada — solo afecta a las nóminas que se generen a partir de ahí.
+
+function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [editando, setEditando] = useState<string | null>(null)
+
+  const configDe = (empresa_id: string) =>
+    data.config_nomina.find(c => c.empresa_id === empresa_id)
+      ?? { empresa_id, modelo: 'GENERAL' as const, dias_laborables_default: 24 }
+
+  const hayCuba = data.empresas.some(e => configDe(e.empresa_id).modelo === 'MIPYME_CUBA')
+
+  function guardar(e: React.FormEvent<HTMLFormElement>, empresa_id: string) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('empresa_id', empresa_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarConfigNomina(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Configuración guardada')
+      setEditando(null); router.refresh()
+    })
+  }
+
+  return (
+    <>
+      {/* El aviso solo sale si alguna empresa usa de verdad el modelo cubano: en el
+          general estos tributos no se aplican y avisar de ellos sería ruido. */}
+      {hayCuba && data.fiscales_provisionales.length > 0 && (
+        <div className="alert alert-error alert-intro">
+          <span>
+            <strong>Los tipos de {data.fiscales_provisionales.join(', ')} son provisionales.</strong>{' '}
+            Están puestos solo para que el cálculo funcione y no corresponden a la norma
+            verificada. Puedes generar borradores y revisarlos, pero <strong>no se pueden
+            confirmar</strong>: registrarían en tu contabilidad una deuda con ONAT por un
+            importe que no es el real. En cuanto se carguen los tipos definitivos, las
+            nóminas se confirman sin tener que rehacer nada.
+          </span>
+        </div>
+      )}
+
+      <div className="ter-toolbar">
+        <p className="text-sm-muted">
+          Cómo calcula la nómina cada una de tus empresas. Cambiarlo <strong>no altera las
+          nóminas ya hechas</strong>: solo las que generes a partir de ahora.
+        </p>
+      </div>
+
+      <div className="card card-table">
+        {data.empresas.length === 0 ? (
+          <div className="mon-empty">
+            <Wallet size={40} strokeWidth={1} opacity={0.2} />
+            <p>Sin empresas todavía.</p>
+          </div>
+        ) : (
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Empresa</th>
+                  <th>Modelo de cálculo</th>
+                  <th className="col-num">Días laborables</th>
+                  <th className="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.empresas.map(emp => {
+                  const cfg = configDe(emp.empresa_id)
+                  const abierta = editando === emp.empresa_id
+                  return (
+                    <tr key={emp.empresa_id}>
+                      <td data-label="Empresa"><strong>{emp.nombre}</strong></td>
+                      {abierta ? (
+                        <>
+                          <td data-label="Modelo de cálculo">
+                            <form id={`cfg-${emp.empresa_id}`} onSubmit={e => guardar(e, emp.empresa_id)}>
+                              <select className="input nom-aplicar-sel" name="modelo" defaultValue={cfg.modelo}
+                                aria-label={`Modelo de nómina de ${emp.nombre}`}>
+                                <option value="GENERAL">General</option>
+                                <option value="MIPYME_CUBA">MIPYME cubana</option>
+                              </select>
+                            </form>
+                          </td>
+                          <td data-label="Días laborables" className="col-num">
+                            <input className="input nom-input" form={`cfg-${emp.empresa_id}`} type="number"
+                              name="dias_laborables_default" min="1" max="31" step="any"
+                              defaultValue={cfg.dias_laborables_default}
+                              aria-label={`Días laborables de ${emp.nombre}`} />
+                          </td>
+                          <td className="col-actions">
+                            <div className="ter-actions">
+                              <button type="submit" form={`cfg-${emp.empresa_id}`}
+                                className="btn btn-primary btn-sm" disabled={isPending}>
+                                {isPending ? <span className="spinner spinner-sm" /> : 'Guardar'}
+                              </button>
+                              <button type="button" className="btn btn-secondary btn-sm"
+                                onClick={() => setEditando(null)} disabled={isPending}>Cancelar</button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td data-label="Modelo de cálculo">
+                            {cfg.modelo === 'MIPYME_CUBA'
+                              ? <span className="badge badge-info">MIPYME cubana</span>
+                              : <span className="badge badge-neutral">General</span>}
+                          </td>
+                          <td data-label="Días laborables" className="col-num tes-monto-cell">
+                            {cfg.dias_laborables_default}
+                          </td>
+                          <td className="col-actions">
+                            <button className="ter-action-btn" title="Cambiar"
+                              aria-label={`Cambiar la configuración de ${emp.nombre}`}
+                              onClick={() => setEditando(emp.empresa_id)}>
+                              <Pencil size={14} strokeWidth={2} />
+                            </button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="info-box mt-3">
+        <strong className="info-box-title">Sobre el modelo MIPYME cubana</strong>
+        <span className="text-xs-muted">
+          Añade el cálculo de la ley cubana —impuesto sobre ingresos personales, Contribución
+          Especial a la Seguridad Social, Impuesto por la Utilización de la Fuerza de Trabajo y
+          la Contribución a la Seguridad Social a cargo de la empresa— y reparte el coste entre
+          sus acreedores en tu contabilidad. <strong>Solo se aplica a las nóminas en CUP</strong>;
+          si esa empresa además paga a alguien en divisa, esa nómina se calcula como General.
+          El trabajador marcado como socio no paga la Contribución Especial; todo lo demás se le
+          calcula igual.
+        </span>
+      </div>
+    </>
+  )
+}
 
 function mesActual(): string {
   return new Date().toISOString().slice(0, 7)
@@ -216,6 +614,32 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
   }))
   const [isPending, startTransition] = useTransition()
 
+  const [tab, setTab] = useState<'nominas' | 'reglas' | 'config'>('nominas')
+  // La regla que se está creando/editando: el disparador es el botón del
+  // `.page-header`, así que el estado no puede vivir dentro de `ReglasPanel`.
+  const [editandoRegla, setEditandoRegla] = useState<ReglaDeduccion | 'nueva' | null>(null)
+
+  // Una nómina la calcula el motor cubano solo si SU empresa usa ese modelo Y está
+  // en CUP: la misma empresa puede tener otra nómina en divisa, y esa va como General.
+  const esCubana = (n: NominaConLineas) =>
+    n.moneda === 'CUP' &&
+    data.config_nomina.find(c => c.empresa_id === n.empresa_id)?.modelo === 'MIPYME_CUBA'
+
+  // Disponible en BORRADOR y en CONFIRMADA: en borrador sirve para revisar el mes
+  // antes de cerrarlo, que es justo cuando más falta hace.
+  const [exportando, setExportando] = useState<string | null>(null)
+  function exportar(n: NominaConLineas) {
+    setExportando(n.nomina_id)
+    const ld = toastLoading('Preparando el Excel…')
+    startTransition(async () => {
+      const res = await exportarNominaXlsx(n.nomina_id)
+      await ld.dismiss()
+      setExportando(null)
+      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo exportar.'); return }
+      descargarBase64(res.nombre ?? 'nomina.xlsx', res.base64, XLSX_MIME)
+      toastSuccess('Excel descargado')
+    })
+  }
   const [modalNuevaNomina, setModalNuevaNomina] = useState(false)
   const [detalleNominaId,  setDetalleNominaId]  = useState<string | null>(null)
   const [confirmarNom,     setConfirmarNom]     = useState<NominaConLineas | null>(null)
@@ -315,11 +739,34 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
           <p className="page-subtitle">Paga a tu personal y lleva el control de los salarios.</p>
         </div>
         <div className="tes-header-actions">
-          <button className="btn btn-primary" onClick={() => setModalNuevaNomina(true)} disabled={data.empresas.length === 0}>
-            <Plus size={14} strokeWidth={2.5} /> Nueva nómina
-          </button>
+          {tab === 'nominas' && (
+            <button className="btn btn-primary" onClick={() => setModalNuevaNomina(true)} disabled={data.empresas.length === 0}>
+              <Plus size={14} strokeWidth={2.5} /> Nueva nómina
+            </button>
+          )}
+          {tab === 'reglas' && (
+            <button className="btn btn-primary" onClick={() => setEditandoRegla('nueva')}>
+              <Plus size={14} strokeWidth={2.5} /> Nueva regla
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Dos cosas distintas: las nóminas de cada mes y CÓMO funciona la nómina de
+          este negocio. La configuración vivía repartida por las fichas, que es lo
+          que hacía que una regla del negocio se escribiera una vez por trabajador. */}
+      <Tabs
+        ariaLabel="Secciones de nómina"
+        tabs={[
+          { id: 'nominas', label: 'Nóminas', count: data.nominas.length },
+          { id: 'reglas',  label: 'Reglas del negocio', count: data.reglas.length },
+          { id: 'config',  label: 'Configuración' },
+        ]}
+        active={tab}
+        // Al cambiar de pestaña se descarta la regla a medio abrir: el panel se
+        // desmonta con el modal dentro, y sin esto volver a «Reglas» lo reabriría.
+        onChange={(t) => { setEditandoRegla(null); setTab(t) }}
+      />
 
       {data.empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
@@ -327,6 +774,13 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
         </PrerequisitoAviso>
       )}
 
+      {tab === 'reglas' && (
+        <ReglasPanel data={data} editando={editandoRegla} setEditando={setEditandoRegla} />
+      )}
+      {tab === 'config' && <ConfigNominaPanel data={data} />}
+
+      {tab === 'nominas' && (
+      <>
       <div className="ter-toolbar">
         <EmpresaPills
           empresas={empresasFiltro}
@@ -396,6 +850,9 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => setDetalleNominaId(n.nomina_id)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
+                        <button className="row-actions-item" onClick={() => exportar(n)} disabled={exportando === n.nomina_id}>
+                          <Download size={15} strokeWidth={2} /> Exportar a Excel
+                        </button>
                         <button className="row-actions-item row-actions-item-danger"
                           onClick={() => setDelNomina(n)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
                       </RowActions>
@@ -408,12 +865,15 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
         )}
         <TablePagination {...pag} label="nómina" />
       </div>
+      </>
+      )}
 
       {modalNuevaNomina && (
         <NuevaNominaModal data={data} onClose={() => setModalNuevaNomina(false)} onSaved={onNominaCreada} />
       )}
       {detalleVivo && (
         <NominaDetalleModal nomina={detalleVivo}
+          devengadoCalculado={esCubana(detalleVivo)}
           onClose={() => setDetalleNominaId(null)}
           onChanged={() => router.refresh()}
           onConfirmar={() => setConfirmarNom(detalleVivo)}

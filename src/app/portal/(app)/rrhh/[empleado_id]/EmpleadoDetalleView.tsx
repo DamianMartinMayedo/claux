@@ -13,7 +13,11 @@ import {
   eliminarContrato,
   guardarConceptoEmpleado,
   eliminarConceptoEmpleado,
+  alternarConceptoEmpleado,
+  guardarIncidencia,
+  eliminarIncidencia,
   confirmarNomina,
+  type IncidenciaMes,
   type EmpleadoDetalleData,
   type Contrato,
   type ConceptoEmpleado,
@@ -22,6 +26,7 @@ import {
   type NominaConLineas,
 } from '@/app/actions/portal/rrhh'
 import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { Copy, FileText, Eye, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
@@ -35,6 +40,8 @@ import {
   hoyISO as hoyISOShared,
   formatPeriodo,
 } from '../../_shared/NominaDetalleModal'
+
+type IncidenciaConId = IncidenciaMes & { incidencia_id: string; periodo: string }
 
 // ── Constantes / helpers ────────────────────────────────────────────────────────
 
@@ -173,7 +180,366 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-// ── Conceptos recurrentes (bonos/deducciones fijos) ─────────────────────────────
+// ── Incidencias del mes ─────────────────────────────────────────────────────────
+// Lo variable de un período: días trabajados, nocturnidad, feriados, una
+// penalización. Se carga ANTES de generar la nómina, que es cuando el dueño tiene
+// los datos del mes delante. Antes no había dónde: la única vía era editar la línea
+// de una nómina ya generada, que perdía el motivo y lo borraba el recálculo.
+
+function mesActualISO(): string { return new Date().toISOString().slice(0, 7) }
+
+function IncidenciaModal({
+  empleadoId, moneda, incidencia, esCuba, onClose, onDone,
+}: {
+  empleadoId:  string
+  moneda:      string
+  incidencia:  IncidenciaConId | null
+  /** Los DÍAS solo se piden en el modelo cubano: el general no prorratea. */
+  esCuba:      boolean
+  onClose:     () => void
+  onDone:      () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('empleado_id', empleadoId)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarIncidencia(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      onDone()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-lg" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">{incidencia ? 'Editar incidencias' : 'Incidencias del mes'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="info-box">
+            <strong className="info-box-title">Lo que cambia este mes</strong>
+            <span className="text-xs-muted">
+              Se aplica al generar la nómina de ese mes. Lo que dejes vacío no se toca:
+              sin días trabajados se paga el <strong>mes completo</strong>, que es lo normal.
+            </span>
+          </div>
+          <form id="incidencia-form" onSubmit={handleSubmit}>
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="inc-periodo">Mes <span className="required">*</span></label>
+                <input className="input" id="inc-periodo" name="periodo" type="month" required
+                  defaultValue={incidencia?.periodo ?? mesActualISO()}
+                  readOnly={!!incidencia} />
+                {incidencia && <span className="input-hint">El mes no se cambia: crea otra incidencia.</span>}
+              </div>
+
+              {esCuba && (
+                <>
+                  <div className="input-group ter-col-span-3">
+                    <label htmlFor="inc-dias">Días trabajados</label>
+                    <input className="input" id="inc-dias" name="dias_trabajados" type="number"
+                      min="0" max="31" step="any" defaultValue={incidencia?.dias_trabajados ?? ''} />
+                    <span className="input-hint">Vacío = mes completo.</span>
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label htmlFor="inc-vac">Días de vacaciones que se pagan</label>
+                    <input className="input" id="inc-vac" name="dias_vacaciones" type="number"
+                      min="0" max="31" step="any" defaultValue={incidencia?.dias_vacaciones ?? 0} />
+                  </div>
+                </>
+              )}
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="inc-extra">Pago extra ({moneda})</label>
+                <input className="input" id="inc-extra" name="pago_extra" type="number" min="0" step="any"
+                  defaultValue={incidencia?.pago_extra ?? 0} />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="inc-noct">Nocturnidad ({moneda})</label>
+                <input className="input" id="inc-noct" name="pago_nocturnidad" type="number" min="0" step="any"
+                  defaultValue={incidencia?.pago_nocturnidad ?? 0} />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="inc-fer">Feriados ({moneda})</label>
+                <input className="input" id="inc-fer" name="feriados" type="number" min="0" step="any"
+                  defaultValue={incidencia?.feriados ?? 0} />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="inc-pen">Penalización ({moneda})</label>
+                <input className="input" id="inc-pen" name="penalizacion" type="number" min="0" step="any"
+                  defaultValue={incidencia?.penalizacion ?? 0} />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="inc-otros">Otros descuentos ({moneda})</label>
+                <input className="input" id="inc-otros" name="otros_descuentos" type="number" min="0" step="any"
+                  defaultValue={incidencia?.otros_descuentos ?? 0} />
+              </div>
+
+              {esCuba && (
+                <div className="input-group ter-col-full">
+                  <label htmlFor="inc-subs">Subsidios adelantados ({moneda})</label>
+                  <input className="input" id="inc-subs" name="pago_subsidios" type="number" min="0" step="any"
+                    defaultValue={incidencia?.pago_subsidios ?? 0} />
+                  <span className="input-hint">
+                    Se le suma al neto porque lo cobra, pero <strong>no cuenta como coste</strong>:
+                    al confirmar la nómina queda como pendiente de cobro a la Seguridad Social,
+                    y lo liquidas en Tesorería cuando llegue el reembolso.
+                  </span>
+                </div>
+              )}
+            </div>
+          </form>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" form="incidencia-form" className="btn btn-primary" disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IncidenciasSection({
+  empleadoId, moneda, incidencias, esCuba, vacaciones, onChanged,
+}: {
+  empleadoId:  string
+  moneda:      string
+  incidencias: IncidenciaConId[]
+  esCuba:      boolean
+  vacaciones:  { importe: number; moneda: string }
+  onChanged:   () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [editando, setEditando] = useState<IncidenciaConId | 'nueva' | null>(null)
+  const [borrando, setBorrando] = useState<IncidenciaConId | null>(null)
+
+  function borrar() {
+    if (!borrando) return
+    const ld = toastLoading('Eliminando…')
+    startTransition(async () => {
+      const res = await eliminarIncidencia(borrando.incidencia_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setBorrando(null); return }
+      setBorrando(null); onChanged()
+    })
+  }
+
+  const resumen = (i: IncidenciaConId): string => {
+    const p: string[] = []
+    if (esCuba && i.dias_trabajados !== null) p.push(`${i.dias_trabajados} días`)
+    if (esCuba && i.dias_vacaciones > 0)      p.push(`${i.dias_vacaciones} d. vacaciones`)
+    if (i.pago_extra > 0)       p.push(`+${formatMonto(i.pago_extra)} extra`)
+    if (i.pago_nocturnidad > 0) p.push(`+${formatMonto(i.pago_nocturnidad)} nocturnidad`)
+    if (i.feriados > 0)         p.push(`+${formatMonto(i.feriados)} feriados`)
+    if (i.penalizacion > 0)     p.push(`−${formatMonto(i.penalizacion)} penalización`)
+    if (i.otros_descuentos > 0) p.push(`−${formatMonto(i.otros_descuentos)} otros`)
+    return p.length ? p.join(' · ') : 'Mes completo, sin novedades'
+  }
+
+  return (
+    <div className="det-card">
+      <div className="card-header">
+        <h2 className="card-title">Incidencias del mes</h2>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditando('nueva')}>
+          <Plus size={14} strokeWidth={2.5} /> Añadir
+        </button>
+      </div>
+      <p className="text-sm-muted mb-3">
+        Lo que cambia en un mes concreto. Se aplica al generar la nómina de ese mes; sin
+        incidencia se paga el mes completo.
+      </p>
+
+      {/* El saldo se DERIVA de las nóminas confirmadas, no se guarda: así se
+          autocorrige si una nómina se reabre o se borra. */}
+      {esCuba && (
+        <div className="info-box mb-3">
+          <strong className="info-box-title">
+            Vacaciones acumuladas: {formatMonto(vacaciones.importe)} {vacaciones.moneda}
+          </strong>
+          <span className="text-xs-muted">
+            Lo acumulado en las nóminas ya confirmadas, menos lo que se le haya pagado.
+          </span>
+        </div>
+      )}
+
+      {incidencias.length === 0 ? (
+        <p className="text-sm-muted">Sin incidencias cargadas.</p>
+      ) : (
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr><th>Mes</th><th>Qué pasó</th><th className="col-actions"></th></tr>
+            </thead>
+            <tbody>
+              {incidencias.map(i => (
+                <tr key={i.incidencia_id}>
+                  <td data-label="Mes"><strong>{formatPeriodo(i.periodo)}</strong></td>
+                  <td data-label="Qué pasó" className="cell-truncate">{resumen(i)}</td>
+                  <td className="col-actions">
+                    <RowActions>
+                      <button className="row-actions-item" onClick={() => setEditando(i)}>
+                        <Pencil size={14} strokeWidth={2} /> Editar
+                      </button>
+                      <button className="row-actions-item row-actions-item-danger" onClick={() => setBorrando(i)}>
+                        <Trash2 size={14} strokeWidth={2} /> Eliminar
+                      </button>
+                    </RowActions>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editando && (
+        <IncidenciaModal
+          empleadoId={empleadoId}
+          moneda={moneda}
+          esCuba={esCuba}
+          incidencia={editando === 'nueva' ? null : editando}
+          onClose={() => setEditando(null)}
+          onDone={() => { setEditando(null); onChanged() }}
+        />
+      )}
+      {borrando && (
+        <ConfirmDialog
+          danger
+          title="Eliminar incidencias"
+          body={`Se eliminan las incidencias de ${formatPeriodo(borrando.periodo)}. Las nóminas ya generadas de ese mes no cambian: guardan su propia copia.`}
+          confirmLabel="Eliminar"
+          onConfirm={borrar}
+          onCancel={() => setBorrando(null)}
+        />
+      )}
+      {isPending && null}
+    </div>
+  )
+}
+
+// ── Conceptos del trabajador ────────────────────────────────────────────────────
+
+function ConceptoModal({
+  empleadoId, moneda, concepto, onClose, onDone,
+}: {
+  empleadoId: string
+  moneda:     string
+  /** null = alta. Editar de verdad llegó con la mig. 141: antes había que borrar y recrear. */
+  concepto:   ConceptoEmpleado | null
+  onClose:    () => void
+  onDone:     () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [modo, setModo]               = useState<'FIJO' | 'PORCENTAJE'>(concepto?.modo ?? 'FIJO')
+  const [recurrencia, setRecurrencia] = useState<'RECURRENTE' | 'PUNTUAL'>(concepto?.recurrencia ?? 'RECURRENTE')
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('empleado_id', empleadoId)
+    if (concepto) fd.set('concepto_id', concepto.concepto_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarConceptoEmpleado(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      onDone()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-md" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">{concepto ? 'Editar concepto' : 'Nuevo concepto'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <div className="modal-body">
+          <form id="concepto-form" onSubmit={handleSubmit}>
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-full">
+                <label htmlFor="cpt-nombre">Concepto <span className="required">*</span></label>
+                <input className="input" id="cpt-nombre" name="nombre" required maxLength={80}
+                  defaultValue={concepto?.nombre ?? ''} placeholder="Transporte, préstamo…" />
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="cpt-tipo">Tipo <span className="required">*</span></label>
+                <select className="input" id="cpt-tipo" name="tipo" defaultValue={concepto?.tipo ?? 'RETENCION'}>
+                  <option value="RETENCION">Se le descuenta</option>
+                  <option value="DEVENGO">Se le suma</option>
+                </select>
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="cpt-modo">Cómo se calcula <span className="required">*</span></label>
+                <select className="input" id="cpt-modo" name="modo" value={modo}
+                  onChange={e => setModo(e.target.value as 'FIJO' | 'PORCENTAJE')}>
+                  <option value="FIJO">Importe fijo</option>
+                  <option value="PORCENTAJE">Porcentaje</option>
+                </select>
+              </div>
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="cpt-valor">
+                  {modo === 'PORCENTAJE' ? 'Porcentaje (%)' : `Importe (${moneda})`} <span className="required">*</span>
+                </label>
+                <input className="input" id="cpt-valor" name="valor" type="number" required
+                  min="0.01" step="any" max={modo === 'PORCENTAJE' ? 100 : undefined}
+                  defaultValue={concepto?.valor ?? ''} />
+              </div>
+
+              {/* La base solo se pregunta si es un porcentaje QUE RESTA: un devengo
+                  porcentual solo puede salir del salario del período, porque un bono
+                  que fuera un % del devengado se estaría incluyendo a sí mismo. */}
+              {modo === 'PORCENTAJE' && (
+                <div className="input-group ter-col-span-3">
+                  <label htmlFor="cpt-base">Porcentaje de</label>
+                  <select className="input" id="cpt-base" name="base" defaultValue={concepto?.base ?? 'SALARIO_BASE'}>
+                    <option value="SALARIO_BASE">El salario del período</option>
+                    <option value="DEVENGADO">El devengado (salario + lo que se le suma)</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="cpt-recurrencia">Cuándo se aplica <span className="required">*</span></label>
+                <select className="input" id="cpt-recurrencia" name="recurrencia" value={recurrencia}
+                  onChange={e => setRecurrencia(e.target.value as 'RECURRENTE' | 'PUNTUAL')}>
+                  <option value="RECURRENTE">Todos los meses</option>
+                  <option value="PUNTUAL">Solo un mes</option>
+                </select>
+              </div>
+
+              {recurrencia === 'PUNTUAL' && (
+                <div className="input-group ter-col-span-3">
+                  <label htmlFor="cpt-periodo">Mes <span className="required">*</span></label>
+                  <input className="input" id="cpt-periodo" name="periodo_aplicable" type="month" required
+                    defaultValue={concepto?.periodo_aplicable ?? ''} />
+                  <span className="input-hint">Se desactiva solo al confirmar la nómina de ese mes.</span>
+                </div>
+              )}
+            </div>
+          </form>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" form="concepto-form" className="btn btn-primary" disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function ConceptosSection({
   empleadoId, moneda, conceptos, desfasadas, onActualizar, onChanged,
@@ -187,84 +553,154 @@ function ConceptosSection({
   onChanged:    () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [delId, setDelId] = useState<string | null>(null)
+  const [delId, setDelId]   = useState<ConceptoEmpleado | null>(null)
+  const [editando, setEditando] = useState<ConceptoEmpleado | 'nuevo' | null>(null)
 
-  function handleAdd(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const form = e.currentTarget
-    const fd = new FormData(form)
-    fd.set('empleado_id', empleadoId)
-    const ld = toastLoading('Añadiendo…')
-    startTransition(async () => {
-      const res = await guardarConceptoEmpleado(fd)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      form.reset()
-      onChanged()
-    })
-  }
+  // Una excepción a una regla del negocio no se edita como un concepto suelto: su
+  // nombre y su tipo los manda la regla, y aquí solo se ve qué tiene de particular.
+  const propios     = conceptos.filter(c => !c.regla_id)
+  const excepciones = conceptos.filter(c => !!c.regla_id)
 
-  function handleDel(id: string) {
+  function handleDel(c: ConceptoEmpleado) {
     const ld = toastLoading('Eliminando…')
     startTransition(async () => {
-      const res = await eliminarConceptoEmpleado(id)
+      const res = await eliminarConceptoEmpleado(c.concepto_id)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelId(null); return }
       setDelId(null); onChanged()
     })
   }
 
+  function handleToggle(c: ConceptoEmpleado) {
+    const ld = toastLoading(c.activo ? 'Desactivando…' : 'Activando…')
+    startTransition(async () => {
+      const res = await alternarConceptoEmpleado(c.concepto_id, !c.activo)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      onChanged()
+    })
+  }
+
+  function valorDe(c: ConceptoEmpleado): string {
+    return c.modo === 'PORCENTAJE'
+      ? `${c.valor}% ${c.base === 'DEVENGADO' ? 'del devengado' : 'del salario'}`
+      : `${c.valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${moneda}`
+  }
+
   return (
     <div className="det-card">
-      <div className="card-header"><h2 className="card-title">Conceptos recurrentes</h2></div>
-      <p className="text-sm-muted mb-3">Bonos y deducciones fijos del trabajador. Se aplican solos al generar la nómina.</p>
-
-      <form className="nom-aplicar" onSubmit={handleAdd}>
-        <input className="input nom-aplicar-nombre" name="nombre" placeholder="Nombre (ej: Transporte)" required aria-label="Nombre del concepto" />
-        <select className="input nom-aplicar-sel" name="tipo" defaultValue="DEDUCCION" aria-label="Tipo">
-          <option value="DEDUCCION">Deducción</option>
-          <option value="BONO">Bono</option>
-        </select>
-        <select className="input nom-aplicar-sel" name="modo" defaultValue="FIJO" aria-label="Modo">
-          <option value="FIJO">Fijo ({moneda})</option>
-          <option value="PORCENTAJE">% del salario</option>
-        </select>
-        <input className="input nom-aplicar-val" name="valor" type="number" min="0" step="any" placeholder="0.00" required aria-label="Valor" />
-        <button type="submit" className="btn btn-secondary btn-sm" disabled={isPending}>
-          {isPending ? <span className="spinner spinner-sm" /> : <><Plus size={14} strokeWidth={2.5} /> Añadir</>}
+      <div className="card-header">
+        <h2 className="card-title">Conceptos del trabajador</h2>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditando('nuevo')}>
+          <Plus size={14} strokeWidth={2.5} /> Añadir
         </button>
-      </form>
+      </div>
+      <p className="text-sm-muted mb-3">
+        Lo que este trabajador tiene <strong>de particular</strong>. Lo que es igual para toda la
+        plantilla se pone una sola vez como regla, en Nómina.
+      </p>
 
-      {conceptos.length > 0 && (
+      {propios.length > 0 && (
         <div className="table-wrapper mt-3">
           <table className="table">
             <thead>
               <tr><th>Concepto</th><th>Tipo</th><th className="col-num">Valor</th><th className="col-actions"></th></tr>
             </thead>
             <tbody>
-              {conceptos.map(c => (
+              {propios.map(c => (
                 <tr key={c.concepto_id}>
-                  <td data-label="Concepto"><strong>{c.nombre}</strong></td>
-                  <td data-label="Tipo"><span className={`badge ${c.tipo === 'BONO' ? 'badge-success' : 'badge-warning'}`}>{c.tipo === 'BONO' ? 'Bono' : 'Deducción'}</span></td>
-                  <td data-label="Valor" className="col-num tes-monto-cell">{c.modo === 'PORCENTAJE' ? `${c.valor}%` : `${c.valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${moneda}`}</td>
+                  <td data-label="Concepto">
+                    <strong>{c.nombre}</strong>{' '}
+                    {!c.activo && <span className="badge badge-neutral">Desactivado</span>}
+                    {c.recurrencia === 'PUNTUAL' && (
+                      <div className="text-sm-muted">Solo {formatPeriodo(c.periodo_aplicable ?? '')}</div>
+                    )}
+                  </td>
+                  <td data-label="Tipo">
+                    <span className={`badge ${c.tipo === 'DEVENGO' ? 'badge-success' : 'badge-warning'}`}>
+                      {c.tipo === 'DEVENGO' ? 'Se le suma' : 'Se le descuenta'}
+                    </span>
+                  </td>
+                  <td data-label="Valor" className="col-num tes-monto-cell">{valorDe(c)}</td>
                   <td className="col-actions">
-                    <div className="ter-actions">
-                      {delId === c.concepto_id ? (
-                        <>
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDel(c.concepto_id)} disabled={isPending}>Confirmar</button>
-                          <button className="btn btn-secondary btn-sm" onClick={() => setDelId(null)} disabled={isPending}>No</button>
-                        </>
-                      ) : (
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          onClick={() => setDelId(c.concepto_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      )}
-                    </div>
+                    <RowActions>
+                      <button className="row-actions-item" onClick={() => setEditando(c)}>
+                        <Pencil size={14} strokeWidth={2} /> Editar
+                      </button>
+                      <button className="row-actions-item" onClick={() => handleToggle(c)}>
+                        <RefreshCw size={14} strokeWidth={2} /> {c.activo ? 'Desactivar' : 'Activar'}
+                      </button>
+                      <button className="row-actions-item row-actions-item-danger" onClick={() => setDelId(c)}>
+                        <Trash2 size={14} strokeWidth={2} /> Eliminar
+                      </button>
+                    </RowActions>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Las excepciones a una regla se ven aparte: no son «suyas», son su versión
+          de algo del negocio, y mezclarlas haría creer que se editan igual. */}
+      {excepciones.length > 0 && (
+        <>
+          <p className="text-sm-muted mt-3 mb-2"><strong>Excepciones a las reglas del negocio</strong></p>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr><th>Regla</th><th>Qué se le aplica</th><th className="col-actions"></th></tr>
+              </thead>
+              <tbody>
+                {excepciones.map(c => (
+                  <tr key={c.concepto_id}>
+                    <td data-label="Regla"><strong>{c.nombre}</strong></td>
+                    <td data-label="Qué se le aplica">
+                      {c.excluida
+                        ? <span className="badge badge-neutral">No se le aplica</span>
+                        : valorDe(c)}
+                    </td>
+                    <td className="col-actions">
+                      <button className="ter-action-btn ter-action-danger" title="Quitar la excepción"
+                        aria-label={`Quitar la excepción de ${c.nombre}`}
+                        onClick={() => setDelId(c)} disabled={isPending}>
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {conceptos.length === 0 && (
+        <p className="text-sm-muted">Sin conceptos propios: cobra su salario y lo que digan las reglas del negocio.</p>
+      )}
+
+      {editando && (
+        <ConceptoModal
+          empleadoId={empleadoId}
+          moneda={moneda}
+          concepto={editando === 'nuevo' ? null : editando}
+          onClose={() => setEditando(null)}
+          onDone={() => { setEditando(null); onChanged() }}
+        />
+      )}
+
+      {delId && (
+        <ConfirmDialog
+          danger
+          title={delId.regla_id ? 'Quitar la excepción' : 'Eliminar concepto'}
+          body={delId.regla_id
+            ? `A partir de la próxima nómina, a este trabajador se le aplicará «${delId.nombre}» como al resto de la plantilla.`
+            : `Se elimina «${delId.nombre}». Las nóminas ya generadas no cambian: cada una guarda su propia copia.`}
+          confirmLabel={delId.regla_id ? 'Quitar' : 'Eliminar'}
+          onConfirm={() => handleDel(delId)}
+          onCancel={() => setDelId(null)}
+        />
       )}
 
       {/* Los conceptos se aplican al GENERAR la nómina, así que un borrador ya
@@ -295,8 +731,13 @@ function ConceptosSection({
 
 export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDetalleData }) {
   const router = useRouter()
-  const { data, empleado, contratos, conceptos } = detalle
+  const { data, empleado, contratos, conceptos, incidencias, vacaciones } = detalle
   const [isPending, startTransition] = useTransition()
+
+  // Los días y las vacaciones solo se piden si SU empresa usa el modelo cubano: en
+  // el general no prorratean nada y preguntarlos sería pedir un dato que no se usa.
+  const esCuba = data.config_nomina
+    .find(c => c.empresa_id === empleado.empresa_id)?.modelo === 'MIPYME_CUBA'
 
   const [showEdit,      setShowEdit]      = useState(false)
   const [copiar,        setCopiar]        = useState(false)
@@ -492,6 +933,11 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
         conceptos={conceptos} desfasadas={desfasadas}
         onActualizar={setActualizarNom} onChanged={refrescar} />
 
+      {/* Incidencias del mes */}
+      <IncidenciasSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
+        incidencias={incidencias} esCuba={esCuba} vacaciones={vacaciones}
+        onChanged={refrescar} />
+
       {/* Nómina del trabajador */}
       <div className="det-card">
         <div className="card-header"><h2 className="card-title">Sus nóminas</h2></div>
@@ -597,6 +1043,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       )}
       {detalleVivo && (
         <NominaDetalleModal nomina={detalleVivo} empleadoId={empleado.empleado_id}
+          devengadoCalculado={esCuba && detalleVivo.moneda === 'CUP'}
           onClose={() => setDetalleNominaId(null)}
           onChanged={() => router.refresh()}
           onConfirmar={() => setConfirmarNom(detalleVivo)}

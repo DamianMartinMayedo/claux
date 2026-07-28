@@ -7,6 +7,7 @@ import { EmpresaTag }   from '@/components/portal/EmpresaTag'
 import EmpresaPills     from '@/components/portal/EmpresaPills'
 import { useEmpresas }  from '@/components/portal/EmpresaColorContext'
 import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
+import { aniosDisponibles, construirReportesRrhh } from '@/lib/rrhh/reportes'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,11 +19,6 @@ function formatMes(periodo: string): string {
   if (!y || !m) return periodo
   const s = new Date(y, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
   return s.charAt(0).toUpperCase() + s.slice(1)
-}
-function porMoneda(entries: { moneda: string; monto: number }[]): { moneda: string; monto: number }[] {
-  const m = new Map<string, number>()
-  for (const e of entries) m.set(e.moneda, (m.get(e.moneda) ?? 0) + e.monto)
-  return Array.from(m.entries()).map(([moneda, monto]) => ({ moneda, monto })).sort((a, b) => a.moneda.localeCompare(b.moneda))
 }
 
 // ── Página: Reportes de RRHH ─────────────────────────────────────────────────────
@@ -37,97 +33,21 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
     empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
   }))
 
-  // Años disponibles (de nóminas) + el actual
-  const anios = useMemo(() => {
-    const set = new Set<string>([anioActual])
-    for (const n of data.nominas) if (n.periodo) set.add(n.periodo.slice(0, 4))
-    return Array.from(set).sort((a, b) => b.localeCompare(a))
-  }, [data.nominas, anioActual])
+  const anios = useMemo(() => aniosDisponibles(data.nominas, anioActual), [data.nominas, anioActual])
 
-  // Empleado → departamento (para desgloses), sobre toda la plantilla
-  const deptoDe = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const e of data.empleados) m.set(e.empleado_id, e.departamento || 'Sin departamento')
-    return m
-  }, [data.empleados])
-
-  const empleados = useMemo(
-    () => data.empleados.filter(e => !filtroEmpresa || e.empresa_id === filtroEmpresa),
-    [data.empleados, filtroEmpresa],
-  )
-  const nominas = useMemo(
-    () => data.nominas.filter(n =>
-      (!filtroEmpresa || n.empresa_id === filtroEmpresa) &&
-      n.estado === 'CONFIRMADA' &&
-      n.periodo.startsWith(anio),
+  // TODA la agregación sale de `src/lib/rrhh/reportes.ts`. Antes esta vista tenía su
+  // propia copia en `useMemo`s y el módulo compartido no lo importaba NADIE, así que
+  // había dos implementaciones del mismo número y solo una se enseñaba — la que
+  // sumaba NETOS y por tanto rebajaba el coste de personal con cada retención.
+  const { plantilla, altas, bajas, costeAnual, costePorMes, porDepto, porEmpresa } = useMemo(
+    () => construirReportesRrhh(
+      data.empleados,
+      data.nominas,
+      data.empresas,
+      { empresaId: filtroEmpresa, anio },
     ),
-    [data.nominas, filtroEmpresa, anio],
+    [data.empleados, data.nominas, data.empresas, filtroEmpresa, anio],
   )
-
-  const plantilla = empleados.filter(e => e.estado === 'ACTIVO').length
-  const altas     = empleados.filter(e => e.fecha_alta?.slice(0, 4) === anio).length
-  const bajas     = empleados.filter(e => e.fecha_baja && e.fecha_baja.slice(0, 4) === anio).length
-
-  const costeAnual = useMemo(
-    () => porMoneda(nominas.map(n => ({ moneda: n.moneda, monto: n.total }))),
-    [nominas],
-  )
-
-  // Coste por mes (período → moneda → total)
-  const costePorMes = useMemo(() => {
-    const m = new Map<string, { moneda: string; monto: number }[]>()
-    for (const n of nominas) {
-      const arr = m.get(n.periodo) ?? []
-      arr.push({ moneda: n.moneda, monto: n.total })
-      m.set(n.periodo, arr)
-    }
-    return Array.from(m.entries())
-      .map(([periodo, e]) => ({ periodo, monedas: porMoneda(e) }))
-      .sort((a, b) => b.periodo.localeCompare(a.periodo))
-  }, [nominas])
-
-  // Plantilla y coste por departamento
-  const porDepto = useMemo(() => {
-    const headcount = new Map<string, number>()
-    for (const e of empleados) {
-      if (e.estado !== 'ACTIVO') continue
-      const d = e.departamento || 'Sin departamento'
-      headcount.set(d, (headcount.get(d) ?? 0) + 1)
-    }
-    const coste = new Map<string, { moneda: string; monto: number }[]>()
-    for (const n of nominas) {
-      for (const l of n.lineas) {
-        const d = deptoDe.get(l.empleado_id) ?? 'Sin departamento'
-        const arr = coste.get(d) ?? []
-        arr.push({ moneda: n.moneda, monto: l.neto })
-        coste.set(d, arr)
-      }
-    }
-    const deptos = new Set<string>([...headcount.keys(), ...coste.keys()])
-    return Array.from(deptos).sort().map(d => ({
-      departamento: d,
-      activos:      headcount.get(d) ?? 0,
-      coste:        porMoneda(coste.get(d) ?? []),
-    }))
-  }, [empleados, nominas, deptoDe])
-
-  // Desglose por empresa (solo en vista consolidada "Todas"): plantilla y coste
-  // de cada empresa con su color. Usa los datos ya cargados en cliente.
-  const porEmpresa = useMemo(() => {
-    if (filtroEmpresa) return []
-    return data.empresas
-      .map(emp => ({
-        empresa_id: emp.empresa_id,
-        nombre:     emp.nombre,
-        activos:    data.empleados.filter(e => e.empresa_id === emp.empresa_id && e.estado === 'ACTIVO').length,
-        coste:      porMoneda(
-          data.nominas
-            .filter(n => n.empresa_id === emp.empresa_id && n.estado === 'CONFIRMADA' && n.periodo.startsWith(anio))
-            .map(n => ({ moneda: n.moneda, monto: n.total })),
-        ),
-      }))
-      .filter(e => e.activos > 0 || e.coste.length > 0)
-  }, [data.empresas, data.empleados, data.nominas, filtroEmpresa, anio])
 
   const sinDatos = data.empleados.length === 0
 

@@ -21,8 +21,23 @@ export interface NominaRrhh {
   estado:     string
   periodo:    string
   moneda:     string
+  /** Σ NETOS. Es lo que sale hacia la plantilla, NO lo que cuesta: ver `costeDe`. */
   total:      number
-  lineas:     { empleado_id: string; neto: number }[]
+  lineas:     { empleado_id: string; neto: number; devengado: number }[]
+}
+
+/**
+ * El coste de personal de una nómina es su DEVENGADO, no su neto.
+ *
+ * Esto estaba mal y se enseñaba mal: se sumaba `nominas.total`, que es Σ netos, así
+ * que cada retención REBAJABA el coste que veía el dueño — con 1.200 de devengado y
+ * 75 retenidos, este informe decía 1.125. Es el mismo error que la mig. 139 arregló
+ * en la contabilidad (allí lo retenido se evaporaba); el P&L quedó bien y este
+ * informe se quedó atrás. Una retención no es un ahorro: es el mismo coste con un
+ * segundo acreedor.
+ */
+export function costeDe(n: NominaRrhh): number {
+  return n.lineas.reduce((s, l) => s + l.devengado, 0)
 }
 
 export interface MontoMoneda { moneda: string; monto: number }
@@ -79,12 +94,12 @@ export function construirReportesRrhh(
   const altas     = empleados.filter(e => e.fecha_alta?.slice(0, 4) === anio).length
   const bajas     = empleados.filter(e => e.fecha_baja && e.fecha_baja.slice(0, 4) === anio).length
 
-  const costeAnual = porMoneda(nominas.map(n => ({ moneda: n.moneda, monto: n.total })))
+  const costeAnual = porMoneda(nominas.map(n => ({ moneda: n.moneda, monto: costeDe(n) })))
 
   const porPeriodo = new Map<string, MontoMoneda[]>()
   for (const n of nominas) {
     const arr = porPeriodo.get(n.periodo) ?? []
-    arr.push({ moneda: n.moneda, monto: n.total })
+    arr.push({ moneda: n.moneda, monto: costeDe(n) })
     porPeriodo.set(n.periodo, arr)
   }
   const costePorMes = Array.from(porPeriodo.entries())
@@ -102,7 +117,7 @@ export function construirReportesRrhh(
     for (const l of n.lineas) {
       const d = deptoDe.get(l.empleado_id) ?? SIN_DEPTO
       const arr = costeDepto.get(d) ?? []
-      arr.push({ moneda: n.moneda, monto: l.neto })
+      arr.push({ moneda: n.moneda, monto: l.devengado })
       costeDepto.set(d, arr)
     }
   }
@@ -120,7 +135,7 @@ export function construirReportesRrhh(
       coste:      porMoneda(
         nominasTodas
           .filter(n => n.empresa_id === emp.empresa_id && n.estado === 'CONFIRMADA' && n.periodo.startsWith(anio))
-          .map(n => ({ moneda: n.moneda, monto: n.total })),
+          .map(n => ({ moneda: n.moneda, monto: costeDe(n) })),
       ),
     }))
     .filter(e => e.activos > 0 || e.coste.length > 0)
