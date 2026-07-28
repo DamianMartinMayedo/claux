@@ -16,6 +16,7 @@ import {
   AJUSTE_TIPO_LABEL, CONDICION_PAGO_LABEL, formatearMoneda,
 } from '@/app/portal/(app)/ventas/_ventas-helpers'
 import type { DocumentoLinea, DocumentoAjuste } from '@/app/actions/portal/ventas'
+import { fmtFechaLargaEs } from '@/lib/date-utils'
 
 export interface EmpresaPdf {
   nombre:            string
@@ -60,11 +61,6 @@ export interface DocumentoVentaPdf {
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
 
-function fmtFecha(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
-}
 
 /**
  * Descarga una imagen y la re-codifica a PNG (vía canvas) con sus dimensiones,
@@ -173,8 +169,8 @@ export async function construirDocumentoVenta(
   texto(doc, MARCA.dark); doc.text(d.numero, right, dy, { align: 'right' })
   dy += 7
   doc.setFontSize(9)
-  const meta: [string, string][] = [['Fecha', fmtFecha(d.fechaEmision)]]
-  if (d.fechaSecundaria) meta.push([d.fechaSecundaria.label, fmtFecha(d.fechaSecundaria.valor)])
+  const meta: [string, string][] = [['Fecha', fmtFechaLargaEs(d.fechaEmision)]]
+  if (d.fechaSecundaria) meta.push([d.fechaSecundaria.label, fmtFechaLargaEs(d.fechaSecundaria.valor)])
   if (d.condicionPago && d.condicionPago !== 'CONTADO') {
     meta.push(['Pago', CONDICION_PAGO_LABEL[d.condicionPago] ?? d.condicionPago])
   }

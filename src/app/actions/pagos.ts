@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
-import { toDateStr } from '@/lib/date-utils'
+import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
@@ -14,9 +14,6 @@ import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { notificarPagoConfirmado } from '@/lib/notificaciones/eventos'
 import { avisarPagoRegistrado } from '@/lib/notificaciones/admin/eventos'
 
-function fmtFechaEs(iso: string): string {
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 // ── Datos por defecto para pre-rellenar el formulario de pago ────────
 // Modelo base + módulos: el importe sugerido sale del precio_mensual_usd del cliente y su ciclo

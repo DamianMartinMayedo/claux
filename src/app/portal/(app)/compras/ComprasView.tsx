@@ -19,15 +19,16 @@ import { RowActions }                   from '@/components/portal/RowActions'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
 import BulkBar                          from '@/components/portal/BulkBar'
 import { useRowSelection }              from '@/components/portal/useRowSelection'
+import { fmtFechaEs } from '@/lib/date-utils'
 
 function fmt(n: number, moneda: string) {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+// Columnas `date`: van por el helper compartido, que las parte en local. `new Date(iso)`
+// las leería como medianoche UTC y en La Habana saldría el día anterior.
+const fmtDate = fmtFechaEs
 
 const ESTADO_BADGE: Record<EstadoCompra, string> = {
   BORRADOR: 'badge-neutral', CONFIRMADA: 'badge-success', ANULADA: 'badge-error',

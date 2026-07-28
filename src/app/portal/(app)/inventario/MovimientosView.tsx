@@ -17,6 +17,7 @@ import {
   type Movimiento,
 } from '@/app/actions/portal/inventario'
 import type { TipoMovimiento } from '@/app/actions/portal/_inventario-helpers'
+import { fmtFechaEs } from '@/lib/date-utils'
 
 // ── Configuración de tipos ──────────────────────────────────────────────────────
 
@@ -42,9 +43,9 @@ function TipoIcon({ tipo, size = 15 }: { tipo: TipoMovimiento; size?: number }) 
   return <ArrowRightLeft {...props} />
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+// Columnas `date`: van por el helper compartido, que las parte en local. `new Date(iso)`
+// las leería como medianoche UTC y en La Habana saldría el día anterior.
+const fmtDate = fmtFechaEs
 
 // ── Modal: nuevo movimiento ───────────────────────────────────────────────────
 

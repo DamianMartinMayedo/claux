@@ -12,15 +12,16 @@ import {
 } from '@/app/actions/portal/compras'
 import { CompraFormModal } from '../_CompraFormModal'
 import { RowActions } from '@/components/portal/RowActions'
+import { fmtFechaEs } from '@/lib/date-utils'
 
 function fmt(n: number, moneda: string) {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+// Columnas `date`: van por el helper compartido, que las parte en local. `new Date(iso)`
+// las leería como medianoche UTC y en La Habana saldría el día anterior.
+const fmtDate = fmtFechaEs
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (

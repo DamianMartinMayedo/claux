@@ -17,6 +17,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs, { type TabItem } from '@/components/Tabs'
 import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
+import { fmtFechaEs } from '@/lib/date-utils'
 
 // ── Config de movimientos ───────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ function fmt(n: number, moneda: string) {
   }).format(n)
 }
 
+/** Solo para `timestamptz` (created_at/updated_at): el instante es real. Una columna
+ *  `date` va por `fmtFechaEs`, o en La Habana se retrasa un día. */
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-ES', {
     day: '2-digit', month: 'short', year: 'numeric',
@@ -251,7 +254,7 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
                 const s = signoMov(m)
                 return (
                   <tr key={m.movimiento_id}>
-                    <td data-label="Fecha" className="text-sm-muted">{fmtDate(m.fecha)}</td>
+                    <td data-label="Fecha" className="text-sm-muted">{fmtFechaEs(m.fecha)}</td>
                     <td data-label="Tipo"><span className={`badge ${MOV_TIPO_BADGE[m.tipo]}`}>{MOV_TIPO_LABEL[m.tipo]}</span></td>
                     <td data-label="Almacén" className="text-sm-muted">
                       {m.tipo === 'TRANSFERENCIA' && m.almacen_destino_id
