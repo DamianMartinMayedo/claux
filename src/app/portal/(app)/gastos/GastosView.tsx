@@ -12,6 +12,9 @@ import {
   guardarCategoriaGasto,
   archivarCategoriaGasto,
   restaurarCategoriaGasto,
+  eliminarCategoriaGasto,
+  impactoCategoria,
+  type ImpactoCategoria,
   type GastoCobro,
   type GastoCobroConSaldo,
   type CategoriaGasto,
@@ -272,20 +275,25 @@ function RegistroModal({
 // ── Modal: liquidar (pagar gasto / cobrar ingreso) + historial ──────────────────
 
 function LiquidarModal({
-  registro, cuentas, onClose, onChanged,
+  registro, cuentas, empresaNombres, onClose, onChanged,
 }: {
   registro: GastoCobroConSaldo
   cuentas:  GastosCobrosPageData['cuentas']
+  empresaNombres: Record<string, string>
   onClose:  () => void
   onChanged: () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  const [anularLiq, setAnularLiq] = useState<GastoCobroConSaldo['liquidaciones'][number] | null>(null)
 
   const esGasto        = registro.tipo === 'GASTO'
-  // Todas las cajas (sin filtrar por empresa ni moneda): la de la misma moneda
-  // aparece primero; si eliges otra, LiquidarCuentaFields aplica la tasa.
-  const cuentasOrdenadas = [...cuentas].sort((a, b) =>
-    (a.moneda === registro.moneda ? 0 : 1) - (b.moneda === registro.moneda ? 0 : 1))
+  // Todas las cajas (sin filtrar por empresa ni moneda): pagar desde la caja de otra
+  // empresa está permitido, y LiquidarCuentaFields lo avisa con el nombre delante — el
+  // movimiento se sella con la empresa de la CAJA, no con la del registro.
+  // La de la misma moneda aparece primero; si eliges otra, se aplica la tasa.
+  const cuentasOrdenadas = [...cuentas]
+    .sort((a, b) => (a.moneda === registro.moneda ? 0 : 1) - (b.moneda === registro.moneda ? 0 : 1))
+    .map(c => ({ ...c, empresa_nombre: empresaNombres[c.empresa_id] }))
   const [liq, setLiq]  = useState<LiquidarState | null>(null)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -343,6 +351,8 @@ function LiquidarModal({
                     cuentas={cuentasOrdenadas}
                     docMoneda={registro.moneda}
                     saldo={registro.saldo_pendiente}
+                    docEmpresaId={registro.empresa_id}
+                    docEmpresaNombre={empresaNombres[registro.empresa_id]}
                     onChange={setLiq}
                   />
                   <div className="input-group ter-col-span-3">
@@ -370,7 +380,7 @@ function LiquidarModal({
                   <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
                   <span className="gc-liq-monto">{formatMonto(l.monto)} {registro.moneda}</span>
                   <button className="ter-action-btn ter-action-danger" title="Anular"
-                    onClick={() => handleAnular(l.movimiento_id)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+                    onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                 </div>
               ))}
             </div>
@@ -386,6 +396,16 @@ function LiquidarModal({
           )}
         </div>
       </div>
+      {anularLiq && (
+        <ConfirmDialog
+          title={esGasto ? '¿Anular este pago?' : '¿Anular este cobro?'}
+          body={`Se eliminará el movimiento de ${formatMonto(anularLiq.monto)} ${registro.moneda} en ${anularLiq.cuenta_nombre} del ${formatFecha(anularLiq.fecha)}. El registro volverá a quedar pendiente. No se puede deshacer.`}
+          confirmLabel={esGasto ? 'Anular pago' : 'Anular cobro'}
+          danger
+          onCancel={() => setAnularLiq(null)}
+          onConfirm={() => { const mov = anularLiq.movimiento_id; setAnularLiq(null); handleAnular(mov) }}
+        />
+      )}
     </div>
   )
 }
@@ -428,15 +448,45 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!categoria
-  // Una categoría con subcategorías no puede volverse subcategoría (solo 2 niveles)
-  const tieneHijos     = isEdit && categorias.some(c => c.parent_id === categoria!.categoria_id)
-  const padresPosibles = categorias.filter(c =>
-    c.estado === 'ACTIVO' && !c.parent_id && c.categoria_id !== categoria?.categoria_id)
 
-  // El papel en el P&L solo se pregunta a las categorías principales, así que el
-  // formulario reacciona al selector de padre en vivo (no al guardar).
-  const [esHija, setEsHija]         = useState(!!categoria?.parent_id && !tieneHijos)
+  // Dos formularios distintos, decididos ANTES de pintar y que no cambian mientras
+  // se rellenan:
+  //
+  //  · Una categoría nueva es SIEMPRE principal, y sus subcategorías se escriben
+  //    aquí mismo. No se pregunta por «categoría padre»: era la pregunta que hacía
+  //    que el formulario se transformara solo (al elegir padre desaparecía el papel
+  //    en el informe y aparecía otro aviso), y la que obligaba a entender la
+  //    jerarquía antes de poder escribir un nombre.
+  //  · Para colgar subcategorías de una principal que ya existe, se EDITA la madre
+  //    y se añaden. Es el mismo campo, en el mismo sitio.
+  //
+  // `esHija` pasa a ser un HECHO de lo que estás editando, no un estado que se
+  // mueve: solo es cierto al editar una subcategoría que ya lo era.
+  const esHija = isEdit && !!categoria!.parent_id
   const [rolElegido, setRolElegido] = useState<RolPL>(categoria?.rol_pl ?? 'OPERATIVO')
+
+  // Mover una subcategoría a otra madre: el único caso en que sigue haciendo falta
+  // elegir padre. Sin esto, una subcategoría creada en la madre equivocada solo se
+  // podría arreglar archivándola y volviéndola a crear.
+  //
+  // La madre ACTUAL va en la lista aunque esté archivada. Si no, el `defaultValue`
+  // no casaría con ninguna opción, el navegador seleccionaría la primera y guardar
+  // movería la subcategoría de madre SIN QUE NADIE LO PIDA. Un select cuyo valor por
+  // defecto no existe entre sus opciones no se queda vacío: miente.
+  const madreActual = categoria?.parent_id
+    ? categorias.find(c => c.categoria_id === categoria.parent_id)
+    : undefined
+  const padresPosibles = [
+    ...(madreActual && madreActual.estado !== 'ACTIVO' ? [madreActual] : []),
+    ...categorias.filter(c =>
+      c.estado === 'ACTIVO' && !c.parent_id && c.categoria_id !== categoria?.categoria_id),
+  ]
+
+  // Las que ya cuelgan de esta categoría. Se enseñan para que quede claro que el
+  // campo AÑADE a lo que hay, y para no teclear una que ya existe.
+  const hijasActuales = isEdit
+    ? categorias.filter(c => c.parent_id === categoria!.categoria_id && c.estado === 'ACTIVO')
+    : []
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -446,15 +496,28 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
       const res = await guardarCategoriaGasto(fd)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      // Acuse de éxito siempre (antes no había ninguno: se cerraba el modal y a
+      // adivinar). Con el detalle de cuántas hijas entraron, que es lo que confirma
+      // que la coma se entendió sin tener que cerrar y mirar la lista.
+      const n = res.subcategorias_creadas ?? 0
+      const r = res.subcategorias_reactivadas ?? 0
+      const detalle = [
+        n ? `${n} subcategoría${n > 1 ? 's' : ''}` : '',
+        r ? `${r} restaurada${r > 1 ? 's' : ''}` : '',
+      ].filter(Boolean).join(' · ')
+      const que = !isEdit ? 'Categoría creada' : esHija ? 'Subcategoría guardada' : 'Categoría guardada'
+      toastSuccess(que + (detalle ? ` — ${detalle}` : ''))
       onSaved()
     })
   }
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
+      <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{isEdit ? 'Editar categoría' : 'Nueva categoría'}</h2>
+          <h2 className="modal-title">
+            {!isEdit ? 'Nueva categoría' : esHija ? 'Editar subcategoría' : 'Editar categoría'}
+          </h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -466,33 +529,32 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
               </div>
             )}
             <div className="input-group">
-              <label>Nombre <span className="required">*</span></label>
-              <input className="input" name="nombre" required autoFocus
+              <label htmlFor="cat-nombre">Nombre <span className="required">*</span></label>
+              <input id="cat-nombre" className="input" name="nombre" required autoFocus
                 defaultValue={categoria?.nombre ?? ''} placeholder="Ej: Alquiler, Insumos, Servicios…" />
             </div>
-            {tieneHijos ? (
-              <input type="hidden" name="parent_id" value="" />
-            ) : (
-              <div className="input-group">
-                <label htmlFor="cat-parent">Categoría padre</label>
-                <select id="cat-parent" className="input" name="parent_id"
-                  defaultValue={categoria?.parent_id ?? ''}
-                  onChange={e => setEsHija(!!e.target.value)}>
-                  <option value="">— Ninguna (categoría principal) —</option>
-                  {padresPosibles.map(p => <option key={p.categoria_id} value={p.categoria_id}>{p.nombre}</option>)}
-                </select>
-                <span className="input-hint">Elige una para convertir esta en subcategoría.</span>
-              </div>
-            )}
-            {/* Papel en el estado de resultados. Solo se pregunta en categorías
-                principales: una subcategoría hereda el de su madre, y preguntarlo
-                dos veces es la vía directa a que no cuadren entre ellas. */}
             {esHija ? (
-              <div className="alert alert-info mb-3">
-                Las subcategorías cuentan en el informe dentro de su categoría principal,
-                con el papel que ella tenga.
+              /* Subcategoría: solo su nombre, de quién cuelga y el concepto. Ni papel
+                 en el informe (lo hereda de la madre) ni subcategorías dentro. */
+              <div className="input-group">
+                <label htmlFor="cat-parent">Subcategoría de</label>
+                <select id="cat-parent" className="input" name="parent_id"
+                  defaultValue={categoria!.parent_id ?? ''}>
+                  {padresPosibles.map(p => (
+                    <option key={p.categoria_id} value={p.categoria_id}>
+                      {p.nombre}{p.estado !== 'ACTIVO' ? ' (archivada)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <span className="input-hint">
+                  Cuenta en el informe dentro de esta categoría, con el papel que ella tenga.
+                  Cámbiala para moverla a otra.
+                </span>
               </div>
-            ) : (
+            ) : (<>
+              {/* Principal: es la que decide el papel en el informe, y la que lleva
+                  las subcategorías colgadas. */}
+              <input type="hidden" name="parent_id" value="" />
               <div className="input-group">
                 <label htmlFor="cat-rol">En el estado de resultados</label>
                 <select id="cat-rol" className="input" name="rol_pl" value={rolElegido}
@@ -501,7 +563,24 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 </select>
                 <span className="input-hint">{ROL_PL_AYUDA[rolElegido]}</span>
               </div>
-            )}
+              <div className="input-group">
+                <label htmlFor="cat-subs">Subcategorías</label>
+                {hijasActuales.length > 0 && (
+                  <div className="badge-row">
+                    {hijasActuales.map(h => (
+                      <span key={h.categoria_id} className="badge badge-neutral">{h.nombre}</span>
+                    ))}
+                  </div>
+                )}
+                <textarea id="cat-subs" className="input input-textarea" name="subcategorias" rows={2}
+                  placeholder="Bebidas, Carnes, Limpieza" />
+                <span className="input-hint">
+                  Opcional, varias separadas por coma. {hijasActuales.length > 0
+                    ? 'Se añaden a las de arriba; las que ya estén se ignoran.'
+                    : 'Puedes añadir más luego editando esta categoría.'}
+                </span>
+              </div>
+            </>)}
             <div className="input-group">
               <label>Concepto</label>
               <textarea className="input input-textarea" name="descripcion" rows={2}
@@ -584,6 +663,9 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<CategoriaGasto | null>(null)
   const [confirmCat, setConfirmCat] = useState<CategoriaGasto | null>(null)
+  // El impacto se guarda junto a la categoría: el diálogo necesita las dos cosas y
+  // pintarlo antes de tenerlo sería preguntar sin poder decir qué pasa al aceptar.
+  const [borrarCat, setBorrarCat] = useState<{ cat: CategoriaGasto; impacto: ImpactoCategoria } | null>(null)
 
   const [filtroEstado,  setFiltroEstado]  = useState('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
@@ -732,6 +814,50 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   function handleRestaurarCat(c: CategoriaGasto) {
     startTransition(async () => { await restaurarCategoriaGasto(c.categoria_id); router.refresh() })
   }
+  // ── Eliminar categoría ──────────────────────────────────────────────────────
+  // No se pregunta «¿seguro?» a ciegas: primero se consulta al servidor QUÉ se
+  // lleva por delante (subcategorías por la cascada, y si tiene movimiento), y el
+  // diálogo lo dice. Si no se puede borrar, el mismo diálogo ofrece archivar, que
+  // es lo que el usuario quería casi siempre.
+  function pedirBorrarCat(c: CategoriaGasto) {
+    const ld = toastLoading('Comprobando…')
+    startTransition(async () => {
+      const res = await impactoCategoria(c.categoria_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      setBorrarCat({ cat: c, impacto: res })
+    })
+  }
+
+  function confirmarBorrarCat() {
+    if (!borrarCat) return
+    const ld = toastLoading('Eliminando…')
+    startTransition(async () => {
+      const res = await eliminarCategoriaGasto(borrarCat.cat.categoria_id)
+      await ld.dismiss()
+      setBorrarCat(null)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Categoría eliminada')
+      router.refresh()
+    })
+  }
+
+  // Del diálogo de «no se puede borrar» se sale archivando: un clic, sin volver a
+  // buscar la categoría en la lista.
+  function archivarDesdeBorrado() {
+    if (!borrarCat) return
+    const c = borrarCat.cat
+    const ld = toastLoading('Archivando…')
+    startTransition(async () => {
+      const res = await archivarCategoriaGasto(c.categoria_id)
+      await ld.dismiss()
+      setBorrarCat(null)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(`«${c.nombre}» archivada`)
+      router.refresh()
+    })
+  }
+
   function confirmarArchivarCat() {
     if (!confirmCat) return
     const ld = toastLoading('Archivando…')
@@ -988,9 +1114,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                             {c.estado === 'ACTIVO' ? (
                               <>
                                 <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                                {!c.es_sistema && (
-                                  <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
-                                )}
+                                {!c.es_sistema && (<>
+                                  <button className="row-actions-item" onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
+                                  <button className="row-actions-item row-actions-item-danger" onClick={() => pedirBorrarCat(c)} disabled={isPending}><Trash2 size={15} strokeWidth={2} /> Eliminar</button>
+                                </>)}
                               </>
                             ) : (
                               <button className="row-actions-item" onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
@@ -1016,6 +1143,7 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       )}
       {liquidarVivo && (
         <LiquidarModal registro={liquidarVivo} cuentas={data.cuentas}
+          empresaNombres={data.empresa_nombres}
           onClose={() => setLiquidar(null)} onChanged={onChanged} />
       )}
       {confirmDel && (
@@ -1029,6 +1157,61 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       {confirmCat && (
         <ConfirmArchivarCat nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}
           onClose={() => setConfirmCat(null)} isPending={isPending} />
+      )}
+
+      {/* Borrado: dos diálogos distintos según lo que diga el servidor, no uno con
+          un aviso genérico. Si la categoría tiene movimiento NO se ofrece borrar
+          siquiera: se explica por qué y se ofrece archivar, que es la acción que
+          resuelve el caso sin tocar la historia. */}
+      {borrarCat && !borrarCat.impacto.puede_borrar && (
+        <ConfirmDialog
+          title="Mejor archivarla"
+          confirmLabel="Archivar"
+          cancelLabel="Cancelar"
+          onConfirm={archivarDesdeBorrado}
+          onCancel={() => setBorrarCat(null)}
+          body={
+            <>
+              <strong>{borrarCat.impacto.nombre}</strong> se usa en{' '}
+              {borrarCat.impacto.registros > 0 && (
+                <>{borrarCat.impacto.registros} {borrarCat.impacto.registros === 1 ? 'gasto o cobro' : 'gastos y cobros'}</>
+              )}
+              {borrarCat.impacto.registros > 0 && borrarCat.impacto.movimientos > 0 && ' y '}
+              {borrarCat.impacto.movimientos > 0 && (
+                <>{borrarCat.impacto.movimientos} {borrarCat.impacto.movimientos === 1 ? 'movimiento de tesorería' : 'movimientos de tesorería'}</>
+              )}
+              {borrarCat.impacto.subcategorias.length > 0 && ' (contando sus subcategorías)'}.
+              {' '}Borrarla dejaría esos importes sin clasificar y <strong>cambiaría informes de
+              meses ya cerrados</strong>.
+              <br /><br />
+              Archivarla la quita de los desplegables al registrar gastos nuevos y conserva
+              intacto todo el historial. Puedes restaurarla cuando quieras.
+            </>
+          }
+        />
+      )}
+
+      {borrarCat && borrarCat.impacto.puede_borrar && (
+        <ConfirmDialog
+          danger
+          title="Eliminar categoría"
+          confirmLabel="Eliminar"
+          onConfirm={confirmarBorrarCat}
+          onCancel={() => setBorrarCat(null)}
+          body={
+            <>
+              ¿Eliminar <strong>{borrarCat.impacto.nombre}</strong>? No la usa ningún gasto
+              ni movimiento, así que no se pierde nada del historial.
+              {borrarCat.impacto.subcategorias.length > 0 && (
+                <>
+                  <br /><br />
+                  Se {borrarCat.impacto.subcategorias.length === 1 ? 'eliminará también su subcategoría' : 'eliminarán también sus subcategorías'}:{' '}
+                  <strong>{borrarCat.impacto.subcategorias.join(', ')}</strong>.
+                </>
+              )}
+            </>
+          }
+        />
       )}
 
       {/* Barra de acciones en lote (solo pestaña de gastos y con permiso de edición) */}

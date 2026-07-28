@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
-import { etiquetaDeCategoria, generarRegistroId, type TipoRegistro as _TipoRegistro } from '@/lib/gastos-core'
+import { etiquetaDeCategoria, generarRegistroId, parsearSubcategorias, type TipoRegistro as _TipoRegistro } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 
@@ -287,9 +287,34 @@ export async function guardarGastoCobro(
     })
     if (error) return { ok: false, error: error.message }
   } else {
-    // Editar — la moneda no se cambia (las liquidaciones quedarían inconsistentes)
+    // Un registro generado por otro documento no se edita a mano: lo manda su origen.
+    // Es la MISMA puerta que la guarda de borrado, por el otro lado — sin esto, cambiar
+    // el importe de «Retenciones de nómina» descuadra la nómina contra sus libros sin
+    // que nada avise, y el recálculo no lo arregla porque la fila ya está posteada.
+    const duenno = await documentoDeOrigen(db, session.client_id, registro_id)
+    if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}. Corrígelo desde ahí.` }
+
+    // El importe no puede bajar por debajo de lo ya pagado: el saldo se recortaría a 0
+    // y el estado derivado diría LIQUIDADO habiendo salido de la caja más dinero del que
+    // el gasto declara. Mismo criterio (y mismo tono) que la guardia de borrado.
+    const { data: liqs } = await db.from('movimientos_tesoreria')
+      .select('monto, monto_ref')
+      .eq('client_id', session.client_id)
+      .eq('referencia_id', registro_id)
+    const liquidado = ((liqs ?? []) as { monto: number; monto_ref: number | null }[])
+      .reduce((s, m) => s + Number(m.monto_ref ?? m.monto), 0)
+    if (liquidado > 0 && montoRaw < liquidado - EPS) {
+      return {
+        ok: false,
+        error: `Ya has ${tipo === 'GASTO' ? 'pagado' : 'cobrado'} ${liquidado.toFixed(2)} de este registro. Anula los movimientos antes de bajar el importe.`,
+      }
+    }
+
+    // Editar — la moneda no se cambia (las liquidaciones quedarían inconsistentes).
+    // `empresa_id` SÍ se guarda: antes el formulario lo ofrecía y el update lo
+    // descartaba, así que cambiar de empresa se guardaba «bien» y no hacía nada.
     const { error } = await db.from('gastos_cobros')
-      .update({ fecha, vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, monto: montoRaw, notas, updated_at: new Date().toISOString() })
+      .update({ empresa_id, fecha, vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, monto: montoRaw, notas, updated_at: new Date().toISOString() })
       .eq('registro_id', registro_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
@@ -301,6 +326,46 @@ export async function guardarGastoCobro(
 
 // ── Eliminar gasto / cobro ─────────────────────────────────────────────────────
 // Solo si no tiene liquidaciones (pagos/cobros). Si las tiene, anúlalas primero.
+
+// ── ¿Manda otro documento sobre este registro? ────────────────────────────────
+// Devuelve «una compra» / «una nómina» si el registro es un byproduct, o null si es
+// suyo. Lo usan las DOS puertas —editar y borrar—: con una copia por sitio, arreglar
+// una y olvidar la otra es exactamente lo que ya pasó.
+//
+// Se mira `origen_tipo` PRIMERO y `gasto_id` después, y las dos cosas siempre:
+//  · `origen_tipo` es lo único que ve las filas SECUNDARIAS. `nominas.gasto_id` apunta
+//    solo a «Salarios», y una nómina confirmada escribe hasta CINCO filas (Salarios ·
+//    Retenciones · Impuestos de salario · Contribución SS empresa · el COBRO del
+//    subsidio). Comprobando solo `gasto_id`, las otras cuatro se borraban de una en
+//    una desde Gastos: la nómina seguía confirmada y su deuda con la agencia
+//    tributaria desaparecía de los libros, sin aviso. `eliminarNomina` sí revierte
+//    por `origen_tipo`/`origen_id`; esta guarda era la única asimetría.
+//  · `gasto_id` cubre el histórico: las filas de nómina que hay en producción llevan
+//    `origen_tipo` a NULL (son anteriores, y todas son «Salarios» porque ninguna
+//    nómina confirmada tenía deducciones, así que la fila de Retenciones de la
+//    mig. 139 no llegó a crearse).
+//
+// Sin 'use server' export: es un helper interno (un export no-async rompe el build).
+async function documentoDeOrigen(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, registro_id: string,
+): Promise<string | null> {
+  const { data } = await db.from('gastos_cobros')
+    .select('origen_tipo')
+    .eq('registro_id', registro_id).eq('client_id', client_id)
+    .maybeSingle()
+  const origen = (data as { origen_tipo: string | null } | null)?.origen_tipo ?? null
+  if (origen === 'NOMINA') return 'una nómina'
+  if (origen === 'COMPRA') return 'una compra'
+
+  const [{ count: enCompra }, { count: enNomina }] = await Promise.all([
+    db.from('compras').select('compra_id', { count: 'exact', head: true }).eq('client_id', client_id).eq('gasto_id', registro_id),
+    db.from('nominas').select('nomina_id', { count: 'exact', head: true }).eq('client_id', client_id).eq('gasto_id', registro_id),
+  ])
+  if ((enCompra ?? 0) > 0) return 'una compra'
+  if ((enNomina ?? 0) > 0) return 'una nómina'
+  return null
+}
 
 export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -314,12 +379,8 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
   // por una compra o una nómina es un byproduct. Borrarlo suelto dejaría el documento
   // de origen apuntando a un gasto inexistente y, en compras, el stock sin revertir.
   // Se elimina borrando/anulando su documento de origen (que sí revierte todo).
-  const [{ count: enCompra }, { count: enNomina }] = await Promise.all([
-    db.from('compras').select('compra_id', { count: 'exact', head: true }).eq('client_id', session.client_id).eq('gasto_id', registro_id),
-    db.from('nominas').select('nomina_id', { count: 'exact', head: true }).eq('client_id', session.client_id).eq('gasto_id', registro_id),
-  ])
-  if ((enCompra ?? 0) > 0) return { ok: false, error: 'Este gasto lo generó una compra. Elimínala desde Compras.' }
-  if ((enNomina ?? 0) > 0) return { ok: false, error: 'Este gasto lo generó una nómina. Elimínala desde Nóminas.' }
+  const duenno = await documentoDeOrigen(db, session.client_id, registro_id)
+  if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}. Elimínalo desde ahí.` }
 
   const { count } = await db.from('movimientos_tesoreria')
     .select('movimiento_id', { count: 'exact', head: true })
@@ -520,9 +581,75 @@ export async function anularLiquidacion(movimiento_id: string): Promise<{ ok: bo
 
 // ── CRUD de categorías de gastos ──────────────────────────────────────────────
 
+// ── Alta de subcategorías en lote ─────────────────────────────────────────────
+// Crea las hijas de `padre_id` que falten. Antes había que crear la categoría y
+// volver a entrar al modal una vez POR subcategoría; con tres hijas eran cuatro
+// pasadas. Aquí van todas de una.
+//
+// Reutiliza lo que ya existe en vez de fallar:
+//  · Si la hija ya está y está ACTIVA, se salta (así reenviar el formulario con la
+//    lista entera no duplica nada ni revienta).
+//  · Si está ARCHIVADA, se REACTIVA. Es el caso que rompería el lote entero: el
+//    índice único `(client_id, coalesce(parent_id,''), nombre)` cuenta también las
+//    archivadas, así que insertarla daría 23505 y se caerían también las demás.
+async function crearSubcategorias(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, padre_id: string, nombres: string[],
+): Promise<{ creadas: number; reactivadas: number; error?: string }> {
+  if (nombres.length === 0) return { creadas: 0, reactivadas: 0 }
+
+  const { data: hijas } = await db.from('categorias_gastos')
+    .select('categoria_id, nombre, estado')
+    .eq('client_id', client_id).eq('parent_id', padre_id)
+
+  const porNombre = new Map<string, { categoria_id: string; estado: string }>()
+  for (const h of (hijas ?? []) as { categoria_id: string; nombre: string; estado: string }[]) {
+    porNombre.set(h.nombre.trim().toLowerCase(), { categoria_id: h.categoria_id, estado: h.estado })
+  }
+
+  const aInsertar: Record<string, unknown>[] = []
+  const aReactivar: string[] = []
+  const ahora = new Date().toISOString()
+
+  for (const nombre of nombres) {
+    const ya = porNombre.get(nombre.toLowerCase())
+    if (ya) {
+      if (ya.estado !== 'ACTIVO') aReactivar.push(ya.categoria_id)
+      continue
+    }
+    aInsertar.push({
+      categoria_id: generarCategoriaGastoId(),
+      client_id,
+      nombre,
+      descripcion: null,
+      parent_id:   padre_id,
+      // La hija cuenta en el informe dentro de su madre; su `rol_pl` propio no se
+      // usa, y por eso va al valor neutro (misma regla que el alta individual).
+      rol_pl:      'OPERATIVO',
+      estado:      'ACTIVO',
+      es_sistema:  false,
+      updated_at:  ahora,
+    })
+  }
+
+  if (aReactivar.length) {
+    await db.from('categorias_gastos')
+      .update({ estado: 'ACTIVO', updated_at: ahora })
+      .eq('client_id', client_id).in('categoria_id', aReactivar)
+  }
+  if (aInsertar.length) {
+    const { error } = await db.from('categorias_gastos').insert(aInsertar)
+    if (error) return { creadas: 0, reactivadas: aReactivar.length, error: error.message }
+  }
+  return { creadas: aInsertar.length, reactivadas: aReactivar.length }
+}
+
 export async function guardarCategoriaGasto(
   formData: FormData,
-): Promise<{ ok: boolean; error?: string; categoria_id?: string }> {
+): Promise<{
+  ok: boolean; error?: string; categoria_id?: string
+  subcategorias_creadas?: number; subcategorias_reactivadas?: number
+}> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
@@ -541,6 +668,21 @@ export async function guardarCategoriaGasto(
   const rol_pl: RolPL = parent_id ? 'OPERATIVO' : (esRolPL(rolForm) ? rolForm : 'OPERATIVO')
 
   if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
+
+  // Subcategorías escritas de una vez, separadas por coma. Solo tienen sentido en
+  // una categoría PRINCIPAL: la jerarquía es de dos niveles, así que si esta va a
+  // ser hija de otra no puede tener hijas a su vez. Se dice en claro en vez de
+  // ignorar el campo sin avisar — el usuario ha escrito algo y merece respuesta.
+  const subcategorias = parsearSubcategorias(formData.get('subcategorias') as string)
+  if (subcategorias.length > 0 && parent_id) {
+    return {
+      ok: false,
+      error: 'Una subcategoría no puede tener subcategorías dentro. Quita la categoría padre o vacía la lista.',
+    }
+  }
+  if (subcategorias.some(s => s.toLowerCase() === nombre.toLowerCase())) {
+    return { ok: false, error: `«${nombre}» no puede ser subcategoría de sí misma.` }
+  }
 
   // Jerarquía: solo 2 niveles (categoría → subcategoría)
   if (parent_id) {
@@ -586,8 +728,18 @@ export async function guardarCategoriaGasto(
       }
       return { ok: false, error: error.message }
     }
+    // La madre ya existe: si el lote de hijas falla, se dice EXACTAMENTE eso en vez
+    // de un «error inesperado» que haría pensar que no se creó nada.
+    const subs = await crearSubcategorias(db, session.client_id, categoria_id, subcategorias)
     revalidatePath('/portal/gastos')
-    return { ok: true, categoria_id }
+    if (subs.error) {
+      return { ok: false, error: `La categoría «${nombre}» se creó, pero sus subcategorías no: ${subs.error}` }
+    }
+    return {
+      ok: true, categoria_id,
+      subcategorias_creadas:     subs.creadas,
+      subcategorias_reactivadas: subs.reactivadas,
+    }
   } else {
     // Editar categoría existente
     const { data: cat } = await db.from('categorias_gastos')
@@ -614,10 +766,20 @@ export async function guardarCategoriaGasto(
       .eq('client_id', session.client_id).eq('categoria_id', categoria_id_form)
     await db.from('movimientos_tesoreria').update({ categoria: nombre })
       .eq('client_id', session.client_id).eq('categoria_id', categoria_id_form)
+    // Editando también se pueden añadir hijas nuevas: las que ya estén se saltan, así
+    // que el campo funciona como «añadir a las que ya hay», no como «reemplazarlas».
+    const subs = await crearSubcategorias(db, session.client_id, categoria_id_form, subcategorias)
     revalidatePath('/portal/gastos')
     revalidatePath('/portal/tesoreria')
     revalidarFinanzas()
-    return { ok: true, categoria_id: categoria_id_form }
+    if (subs.error) {
+      return { ok: false, error: `«${nombre}» se guardó, pero sus subcategorías nuevas no: ${subs.error}` }
+    }
+    return {
+      ok: true, categoria_id: categoria_id_form,
+      subcategorias_creadas:     subs.creadas,
+      subcategorias_reactivadas: subs.reactivadas,
+    }
   }
 }
 
@@ -651,6 +813,119 @@ export async function archivarCategoriaGasto(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/portal/gastos')
+  return { ok: true }
+}
+
+// ── Eliminar una categoría (o subcategoría) ───────────────────────────────────
+//
+// Borrar aquí NO es archivar, y la diferencia la marca la base de datos con dos
+// cascadas que se disparan solas y en silencio:
+//
+//   · `categorias_gastos.parent_id` es ON DELETE **CASCADE** → borrar una madre se
+//     lleva TODAS sus subcategorías. Nadie lo pide y nadie lo ve venir.
+//   · `gastos_cobros.categoria_id` y `movimientos_tesoreria.categoria_id` son
+//     ON DELETE **SET NULL** → los gastos históricos NO se borran, pero pierden el
+//     vínculo. Y como el estado de resultados clasifica por ese vínculo (y, si
+//     falla, por el nombre — que también desaparece), esos importes se caerían de
+//     su renglón: **cambiarían informes de meses ya cerrados**.
+//
+// De ahí la regla: **si la categoría o alguna de sus hijas tiene movimiento, no se
+// borra, se archiva.** Archivar la quita de los desplegables y conserva la historia
+// intacta, que es lo que el usuario quiere el 95 % de las veces. Borrar queda para
+// lo que se creó por error y nunca se usó.
+//
+// `impactoCategoria` es lo que el diálogo enseña ANTES de preguntar: nadie debería
+// confirmar un borrado sin saber que se lleva tres subcategorías por delante.
+
+export interface ImpactoCategoria {
+  ok:            boolean
+  error?:        string
+  nombre:        string
+  es_sistema:    boolean
+  subcategorias: string[]   // nombres de las hijas que caerían con ella
+  registros:     number     // gastos/cobros que la usan (ella o sus hijas)
+  movimientos:   number     // movimientos de tesorería que la usan
+  puede_borrar:  boolean
+}
+
+export async function impactoCategoria(categoria_id: string): Promise<ImpactoCategoria> {
+  const vacio = {
+    nombre: '', es_sistema: false, subcategorias: [], registros: 0, movimientos: 0,
+    puede_borrar: false,
+  }
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.', ...vacio }
+
+  const db = createAdminClient()
+  const { data: cat } = await db.from('categorias_gastos')
+    .select('nombre, es_sistema')
+    .eq('categoria_id', categoria_id).eq('client_id', session.client_id)
+    .maybeSingle()
+  if (!cat) return { ok: false, error: 'Categoría no encontrada.', ...vacio }
+
+  const { data: hijas } = await db.from('categorias_gastos')
+    .select('categoria_id, nombre')
+    .eq('client_id', session.client_id).eq('parent_id', categoria_id)
+
+  const nombresHijas = ((hijas ?? []) as { nombre: string }[]).map(h => h.nombre)
+  // El uso se mide sobre la categoría Y sus hijas: la cascada se las lleva a todas,
+  // así que preguntar solo por la madre daría vía libre a un borrado que sí rompe.
+  const ids = [categoria_id, ...((hijas ?? []) as { categoria_id: string }[]).map(h => h.categoria_id)]
+
+  const [{ count: registros }, { count: movimientos }] = await Promise.all([
+    db.from('gastos_cobros').select('registro_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id).in('categoria_id', ids),
+    db.from('movimientos_tesoreria').select('movimiento_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id).in('categoria_id', ids),
+  ])
+
+  const enUso = (registros ?? 0) + (movimientos ?? 0)
+  return {
+    ok: true,
+    nombre:        cat.nombre as string,
+    es_sistema:    !!cat.es_sistema,
+    subcategorias: nombresHijas,
+    registros:     registros ?? 0,
+    movimientos:   movimientos ?? 0,
+    puede_borrar:  !cat.es_sistema && enUso === 0,
+  }
+}
+
+export async function eliminarCategoriaGasto(
+  categoria_id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  // La comprobación se REPITE aquí aunque el diálogo ya la haya hecho: entre que se
+  // pinta el diálogo y se confirma puede entrar un gasto con esa categoría, y el
+  // cliente no es el sitio donde se decide si algo puede borrarse.
+  const impacto = await impactoCategoria(categoria_id)
+  if (!impacto.ok) return { ok: false, error: impacto.error }
+  if (impacto.es_sistema) {
+    return { ok: false, error: 'Las categorías del sistema las asigna CLAUX sola: no se pueden eliminar.' }
+  }
+  if (!impacto.puede_borrar) {
+    const usos = impacto.registros + impacto.movimientos
+    return {
+      ok: false,
+      error: `«${impacto.nombre}» se usa en ${usos} ${usos === 1 ? 'registro' : 'registros'}. `
+           + 'Elimínalos o archívala: archivar la quita de los desplegables y conserva el historial.',
+    }
+  }
+
+  const { error } = await createAdminClient()
+    .from('categorias_gastos')
+    .delete()
+    .eq('categoria_id', categoria_id)
+    .eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/gastos')
+  revalidatePath('/portal/tesoreria')
+  revalidarFinanzas()
   return { ok: true }
 }
 
