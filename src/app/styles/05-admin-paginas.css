@@ -101,20 +101,34 @@
   margin: 0;
 }
 
-/* Info banner (gracia, etc.) */
+/* Info banner (gracia, etc.)
+   Ocupa el ancho de su contenedor. NO lleva `max-width` ni márgenes laterales
+   `auto`: su contenedor habitual, `.detail-page`, es un flex column, y en un flex
+   item los márgenes laterales `auto` ANULAN el `stretch` — el banner se encogía a
+   su contenido y quedaba como una cajita centrada flotando en medio de la página,
+   sin alinear con las tarjetas de alrededor. El ancho lo manda `.view-container`,
+   que es quien tiene esa responsabilidad. */
 .info-banner {
   display: flex;
   gap: var(--space-4);
   align-items: flex-start;
-  max-width: var(--content-max);
-  margin: var(--space-8) auto 0 auto;
+  margin-top: var(--space-8);
   background: var(--color-info-bg);
-  border: 1px solid rgba(0,175,170,0.2);
+  border: 1px solid var(--color-info);
   border-radius: var(--radius-xl);
   padding: var(--space-5);
+  /* El tamaño va AQUÍ y se hereda, no en `p`/`span`. Antes estaba en `.info-banner p`
+     y los banners que usan `<span>` no lo recibían nunca. Puesto en el contenedor,
+     una regla propia del cuerpo (`.pro-rata-details`, que es `--text-xs`) sigue
+     ganando: la herencia pierde contra cualquier regla directa. */
+  font-size: var(--text-sm);
+  color: var(--color-text);
 }
 .info-banner svg { flex-shrink: 0; color: var(--color-primary); width: 20px; height: 20px; margin-top: 2px; }
-.info-banner p { font-size: var(--text-sm); color: var(--color-text); }
+/* El cuerpo apila sus líneas. Los `<span>` son inline: sin esto, «Motivo» y «Válido
+   hasta» se pegaban en un párrafo corrido. `.pro-rata-details` ya era una columna
+   por su cuenta; ahora lo es por defecto y no hace falta una clase por sitio. */
+.info-banner > div { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .info-banner strong { display: block; font-weight: 700; margin-bottom: var(--space-1); }
 .info-banner-gracia {
   background: var(--color-amber-highlight);

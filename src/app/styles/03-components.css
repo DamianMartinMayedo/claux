@@ -60,6 +60,11 @@
 .badge-indigo  { color: var(--color-indigo);  background: var(--color-indigo-bg); }
 .badge-rose    { color: var(--color-rose);    background: var(--color-rose-bg); }
 
+/* Fila de badges que envuelve (lista de etiquetas dentro de un formulario o ficha).
+   Va con la familia y no en el parcial de cada vista: `.usr-empresas-list`
+   (06-portal.css) es exactamente esto con otro nombre — al tocar Usuarios, converger. */
+.badge-row { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
+
 /* Dentro de tablas: sin fondo, más ligero visualmente */
 .table-wrapper .badge,
 table .badge { background: transparent; }

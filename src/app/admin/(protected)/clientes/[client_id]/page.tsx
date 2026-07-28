@@ -158,10 +158,12 @@ export default async function ClienteDetallePage({
           <Clock aria-hidden />
           <div>
             <strong>Período especial activo</strong>
-            <span>
-              Motivo: {MOTIVOS_GRACIA[cliente.motivo_gracia] ?? cliente.motivo_gracia}
-              {' · '}Válido hasta: <strong>{formatFecha(cliente.fecha_fin_gracia)}</strong>
-            </span>
+            {/* Una línea por dato, sin `<strong>` en medio de la frase: la regla
+                `.info-banner strong` es `display:block` (la necesitan los banners
+                que van en un `<p>`), así que un bold incrustado partía la frase y
+                dejaba la fecha suelta en su propio renglón. */}
+            <span>Motivo: {MOTIVOS_GRACIA[cliente.motivo_gracia] ?? cliente.motivo_gracia}</span>
+            <span>Válido hasta el {formatFecha(cliente.fecha_fin_gracia)}</span>
             {cliente.notas_gracia && (
               <span className="info-note">
                 {cliente.notas_gracia}
