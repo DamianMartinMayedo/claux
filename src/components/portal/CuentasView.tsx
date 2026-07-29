@@ -20,6 +20,8 @@ import { ConfirmDialog }                from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import ExportarMenu                    from '@/components/portal/ExportarMenu'
+import { SIN_TERCERO }                 from '@/lib/exportar/tablas'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -215,8 +217,8 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
     return data.documentos.filter(d => {
       if (filtroTramo   && d.tramo      !== filtroTramo)   return false
       if (filtroEmpresa && d.empresa_id !== filtroEmpresa) return false
-      if (filtroTercero === '__sin__'   && d.tercero_nombre) return false
-      if (filtroTercero && filtroTercero !== '__sin__' && d.tercero_nombre !== filtroTercero) return false
+      if (filtroTercero === SIN_TERCERO && d.tercero_nombre) return false
+      if (filtroTercero && filtroTercero !== SIN_TERCERO && d.tercero_nombre !== filtroTercero) return false
       if (t && !(
         d.numero.toLowerCase().includes(t)
         || (d.tercero_nombre ?? '').toLowerCase().includes(t)
@@ -265,6 +267,21 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
             <IaTouchpoint tipo="deudas" descripcion={esCobro ? 'un análisis de lo que te deben' : 'un análisis de lo que debes'} />
           </div>
           <p className="page-subtitle">{subtitulo}</p>
+        </div>
+        <div className="tes-header-actions">
+          <ExportarMenu
+            clave={esCobro ? 'cuentas_cobrar' : 'cuentas_pagar'}
+            filtro={{
+              q: busca, tramo: filtroTramo,
+              empresa_id: filtroEmpresa, tercero: filtroTercero,
+            }}
+            resumen={[
+              filtroTramo && TRAMO_LABEL[filtroTramo],
+              filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+              filtroTercero === SIN_TERCERO ? 'sin tercero' : filtroTercero,
+              busca && `«${busca}»`,
+            ].filter((x): x is string => Boolean(x))}
+          />
         </div>
       </div>
 

@@ -29,7 +29,7 @@ import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
 import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
 import Tabs from '@/components/Tabs'
-import ExportarTabla from '@/components/portal/ExportarTabla'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 const TIPO_CATEGORIA_LABEL: Record<TipoCategoria, string> = {
   PRODUCTO: 'Productos físicos', SERVICIO: 'Servicios', AMBAS: 'Ambos',
@@ -335,7 +335,34 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           </p>
         </div>
         <div className="tes-header-actions">
-          <ExportarTabla clave="productos" />
+          {/* La descarga sigue a la PESTAÑA: en Categorías se lleva las categorías, no
+              el catálogo. Y cada página (Inventario / Servicios) se lleva SU tipo. */}
+          {tab === 'categorias' ? (
+            <ExportarMenu
+              clave="categorias_productos"
+              filtro={{ tipo: data.modo }}
+              resumen={[esProducto ? 'categorías de productos' : 'categorías de servicios']}
+            />
+          ) : (
+            <ExportarMenu
+              clave="productos"
+              filtro={{
+                q:          search,
+                tipo:       data.modo,
+                categoria:  filtroCat === '__sin_categoria__' ? '' : filtroCat,
+                tercero:    filtroProv,
+                archivadas: verArchivados,
+              }}
+              resumen={[
+                esProducto ? 'productos' : 'servicios',
+                filtroCat && filtroCat !== '__sin_categoria__'
+                  && (data.categorias.find(c => c.categoria_id === filtroCat)?.nombre ?? ''),
+                filtroProv && (data.proveedores.find(p => p.tercero_id === filtroProv)?.nombre ?? ''),
+                verArchivados ? 'archivados' : '',
+                search && `«${search}»`,
+              ].filter((x): x is string => Boolean(x))}
+            />
+          )}
           {tab === 'productos'
             ? <button className="btn btn-primary" onClick={openCreate}><Plus size={14} strokeWidth={2.5} /> Nuevo</button>
             : <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>

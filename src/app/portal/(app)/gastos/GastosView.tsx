@@ -42,7 +42,6 @@ import RangoBusqueda                  from '@/components/portal/RangoBusqueda'
 import ExportarMenu                   from '@/components/portal/ExportarMenu'
 import { LIMITE_LISTADO }             from '@/lib/listados'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
-import ExportarTabla                   from '@/components/portal/ExportarTabla'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -866,10 +865,29 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         <div className="tes-header-actions">
           {/* Solo en sesión de configuración: se pinta solo. La tabla que exporta es
               la de la pestaña abierta. */}
-          {tab !== 'categorias' && (
-          <ExportarMenu clave="gastos_cobros" desde={data.rango.desde} hasta={data.rango.hasta} q={data.q} />
-        )}
-        <ExportarTabla clave={tab === 'categorias' ? 'categorias_gastos' : 'gastos_cobros'} />
+          {tab === 'categorias' ? (
+            <ExportarMenu clave="categorias_gastos" />
+          ) : (
+            <ExportarMenu
+              clave="gastos_cobros"
+              filtro={{
+                desde: data.rango.desde, hasta: data.rango.hasta, q: data.q,
+                // La pestaña ES el tipo: en Gastos no se baja uno los cobros.
+                tipo:       tab === 'gastos' ? 'GASTO' : 'COBRO',
+                empresa_id: filtroEmpresa,
+                categoria:  filtroCat,
+                tercero:    filtroTercero,
+                estado:     filtroEstado,
+              }}
+              resumen={[
+                tab === 'gastos' ? 'gastos' : 'cobros',
+                filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+                filtroCat && (data.categorias_gastos.find(c => c.categoria_id === filtroCat)?.nombre ?? ''),
+                filtroTercero && (data.terceros.find(t => t.tercero_id === filtroTercero)?.nombre ?? ''),
+                filtroEstado,
+              ].filter((x): x is string => Boolean(x))}
+            />
+          )}
           {puedeEditar && (
             tab === 'gastos' ? (
               <button className="btn btn-primary" onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>

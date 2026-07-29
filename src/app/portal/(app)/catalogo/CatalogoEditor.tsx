@@ -23,6 +23,7 @@ import {
   Plus, Pencil, Trash2, X, Check, Loader2, EyeOff, Eye, QrCode, Copy,
   Download, Package, FolderTree,
 } from 'lucide-react'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 type Tab = 'items' | 'categorias' | 'configuracion'
 
@@ -137,9 +138,18 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
           <p className="page-subtitle">Gestiona lo que verán tus clientes al abrir tu {data.etiquetas.catalogo.toLowerCase()}.</p>
         </div>
         {tab === 'items' && (
-          <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
-            <Plus size={16} strokeWidth={2} /> Producto
-          </button>
+          <div className="tes-header-actions">
+            <ExportarMenu
+              clave="catalogo_items"
+              filtro={{ categoria: filtroCategoria === 'todas' ? '' : filtroCategoria }}
+              resumen={[filtroCategoria !== 'todas'
+                ? (data.categorias.find(c => c.categoria_id === filtroCategoria)?.nombre ?? '')
+                : ''].filter((x): x is string => Boolean(x))}
+            />
+            <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
+              <Plus size={16} strokeWidth={2} /> Producto
+            </button>
+          </div>
         )}
         {tab === 'categorias' && (
           <button className="btn btn-primary" onClick={() => setModalCategoria('nueva')}>

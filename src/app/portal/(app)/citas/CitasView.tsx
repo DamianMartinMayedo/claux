@@ -26,6 +26,7 @@ import IaBotBanner from '@/components/portal/IaBotBanner'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import { opcionesCon } from '@/components/portal/form-helpers'
 import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -993,6 +994,19 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           </p>
         </div>
         <div className="tes-header-actions">
+          {activeTab === 'agenda' && (
+            <ExportarMenu
+              clave="citas"
+              filtro={{
+                desde: filtroDesde, hasta: filtroHasta,
+                estado: filtroEstado, categoria: filtroRecurso,
+              }}
+              resumen={[
+                filtroEstado,
+                filtroRecurso && (data.recursos.find(r => r.recurso_id === filtroRecurso)?.nombre ?? ''),
+              ].filter((x): x is string => Boolean(x))}
+            />
+          )}
           {activeTab === 'agenda' && (
             <button className="btn btn-primary" onClick={() => setShowNueva(true)}>
               <Plus size={14} strokeWidth={2.5} /> Nueva cita

@@ -34,6 +34,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -764,6 +765,13 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           </p>
         </div>
         <div className="tes-header-actions">
+          {activeTab === 'reservas' && (
+            <ExportarMenu
+              clave="reservas"
+              filtro={{ desde: filtroDesde, hasta: filtroHasta, estado: filtroEstado }}
+              resumen={[filtroEstado].filter((x): x is string => Boolean(x))}
+            />
+          )}
           {activeTab === 'reservas' && (
             <button className="btn btn-primary" onClick={() => setShowNueva(true)}>
               <Plus size={14} strokeWidth={2.5} /> Nueva reserva

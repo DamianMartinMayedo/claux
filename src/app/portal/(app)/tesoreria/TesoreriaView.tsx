@@ -35,7 +35,6 @@ import {
 } from '@/app/actions/portal/tesoreria'
 import type { CategoriaGasto } from '@/app/actions/portal/gastos'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
-import ExportarTabla from '@/components/portal/ExportarTabla'
 import RangoBusqueda from '@/components/portal/RangoBusqueda'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
 import { LIMITE_LISTADO } from '@/lib/listados'
@@ -1103,10 +1102,28 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
         </div>
         <div className="tes-header-actions">
-          {tab === 'movimientos' && (
-            <ExportarMenu clave="movimientos_tesoreria" desde={data.rango.desde} hasta={data.rango.hasta} q={data.q} />
+          {/* Una descarga por pestaña: lo que se lleva es la tabla que se está mirando. */}
+          {tab === 'movimientos' ? (
+            <ExportarMenu
+              clave="movimientos_tesoreria"
+              filtro={{
+                desde: data.rango.desde, hasta: data.rango.hasta, q: data.q,
+                empresa_id: filtroEmpresaMov, cuenta_id: filtroCuenta,
+                tipo: filtroTipo, categoria: filtroCatMov,
+              }}
+              resumen={[
+                filtroEmpresaMov && (data.empresas.find(e => e.empresa_id === filtroEmpresaMov)?.nombre ?? ''),
+                filtroCuenta && (data.cuentas.find(c => c.cuenta_id === filtroCuenta)?.nombre ?? ''),
+                filtroTipo, filtroCatMov,
+              ].filter((x): x is string => Boolean(x))}
+            />
+          ) : (
+            <ExportarMenu
+              clave="cuentas"
+              filtro={{ archivadas: verArchivadas }}
+              resumen={[verArchivadas ? 'archivadas' : 'activas']}
+            />
           )}
-          <ExportarTabla clave="movimientos_tesoreria" />
           <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }} disabled={data.empresas.length === 0 || data.monedas.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
           </button>

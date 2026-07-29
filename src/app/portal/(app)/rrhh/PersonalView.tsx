@@ -34,7 +34,7 @@ import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
-import ExportarTabla from '@/components/portal/ExportarTabla'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -505,7 +505,15 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
           <p className="page-subtitle">Empleados, contratos y bajas. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
         </div>
         <div className="tes-header-actions">
-          <ExportarTabla clave="empleados" />
+          <ExportarMenu
+            clave="empleados"
+            filtro={{ q: search, estado: filtroEstado, empresa_id: filtroEmpresa }}
+            resumen={[
+              filtroEstado === 'BAJA' ? 'bajas' : filtroEstado === 'ACTIVO' ? 'activos' : '',
+              filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+              search && `«${search}»`,
+            ].filter((x): x is string => Boolean(x))}
+          />
           <button className="btn btn-primary" onClick={openNuevo} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
         </div>
       </div>

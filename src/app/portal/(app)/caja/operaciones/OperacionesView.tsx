@@ -6,6 +6,7 @@ import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import Tabs from '@/components/Tabs'
 import FilterPills from '@/components/portal/FilterPills'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 interface Props {
   data: { tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string> }
@@ -53,6 +54,18 @@ export default function OperacionesView({ data }: Props) {
         <div>
           <h1 className="page-title">Operaciones</h1>
           <p className="page-subtitle">Detalle de las ventas sincronizadas desde tus puntos de venta, una a una.</p>
+        </div>
+        {/* Los movimientos de stock del TPV se descargan desde Inventario, que es su
+            listado de verdad; aquí se exporta lo que esta página es: las ventas. */}
+        <div className="tes-header-actions">
+          <ExportarMenu
+            clave="operaciones_caja"
+            filtro={{ q: search, cuenta_id: punto }}
+            resumen={[
+              punto && cajaNombre(punto),
+              search && `«${search}»`,
+            ].filter((x): x is string => Boolean(x))}
+          />
         </div>
       </div>
 

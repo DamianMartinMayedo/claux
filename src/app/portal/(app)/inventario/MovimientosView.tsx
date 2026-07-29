@@ -2,6 +2,7 @@
 
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { useState, useMemo, useTransition } from 'react'
@@ -256,6 +257,14 @@ export default function MovimientosView({ data }: { data: MovimientosPageData })
           <p className="page-subtitle">Entradas, salidas, ajustes y transferencias de stock entre almacenes.</p>
         </div>
         <div className="det-actions">
+          <ExportarMenu
+            clave="movimientos_inventario"
+            filtro={{ tipo: filtroTipo, almacen_id: filtroAlm }}
+            resumen={[
+              filtroTipo,
+              filtroAlm && (data.almacenes.find(a => a.almacen_id === filtroAlm)?.nombre ?? ''),
+            ].filter((x): x is string => Boolean(x))}
+          />
           <button className="btn btn-secondary" onClick={() => setShowRecalc(true)} disabled={recalcPending}
             title="Recalcula las existencias desde su historial de entradas y salidas">
             <RefreshCw size={14} strokeWidth={2} /> Recalcular stock

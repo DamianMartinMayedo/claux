@@ -27,6 +27,7 @@ import type {
   CalendarioFacturacion, MesCalendario, EstadoCobro,
 } from '@/lib/suscripciones'
 import { ESTADO_FACTURA_LABEL, ESTADO_FACTURA_BADGE, type EstadoFactura } from '../ventas/_ventas-helpers'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 const PERIODICIDAD_LABEL: Record<PeriodicidadSub, string> = {
   MENSUAL: 'Mensual', TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
@@ -812,9 +813,19 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
           <p className="page-subtitle">Los servicios que tus clientes tienen contratados, con su precio y renovación.</p>
         </div>
         {vista === 'acuerdos' && (
-          <button className="btn btn-primary" onClick={openCreate} disabled={!puedeCrear}>
-            <Plus size={14} strokeWidth={2.5} /> Nueva suscripción
-          </button>
+          <div className="tes-header-actions">
+            <ExportarMenu
+              clave="suscripciones"
+              filtro={{ q: search, estado: filtro === 'TODAS' ? '' : filtro }}
+              resumen={[
+                filtro === 'TODAS' ? 'todas' : filtro.toLowerCase(),
+                search && `«${search}»`,
+              ].filter((x): x is string => Boolean(x))}
+            />
+            <button className="btn btn-primary" onClick={openCreate} disabled={!puedeCrear}>
+              <Plus size={14} strokeWidth={2.5} /> Nueva suscripción
+            </button>
+          </div>
         )}
       </div>
 

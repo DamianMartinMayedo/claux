@@ -3,6 +3,7 @@
 import { Lock } from 'lucide-react'
 import type { Cierre } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 const money = (n: number) => Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fecha = (s: string | null) => s ? new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—'
@@ -21,6 +22,9 @@ export default function CierresView({ data }: { data: { cierres: Cierre[]; cajaN
         <div>
           <h1 className="page-title">Cierres</h1>
           <p className="page-subtitle">Cierres de caja de tus puntos de venta, con el resumen de cada día.</p>
+        </div>
+        <div className="tes-header-actions">
+          <ExportarMenu clave="cierres_caja" />
         </div>
       </div>
 

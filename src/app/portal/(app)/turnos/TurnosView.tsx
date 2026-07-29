@@ -13,6 +13,7 @@ import {
   type RrhhPageData,
 } from '@/app/actions/portal/rrhh'
 import { Clock, Pencil, Plus, Trash2, X } from 'lucide-react'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,12 @@ export default function TurnosView({ data }: { data: RrhhPageData }) {
           <p className="page-subtitle">Define los turnos de cada empresa y organiza la semana del personal.</p>
         </div>
         <div className="tes-header-actions">
+          <ExportarMenu
+            clave="turnos"
+            filtro={{ empresa_id: empresaId }}
+            resumen={[data.empresas.find(e => e.empresa_id === empresaId)?.nombre ?? '']
+              .filter((x): x is string => Boolean(x))}
+          />
           <button className="btn btn-primary" onClick={() => setModalNuevo(true)} disabled={!empresaId}>
             <Plus size={14} strokeWidth={2.5} /> Nuevo turno
           </button>

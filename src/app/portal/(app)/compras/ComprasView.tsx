@@ -4,6 +4,7 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter }                    from 'next/navigation'
 import IaTouchpoint                     from '@/components/portal/ia/IaTouchpoint'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 import { Eye, Plus, ShoppingCart, Ban, Trash2 } from 'lucide-react'
 import {
   eliminarComprasEnLote,
@@ -94,9 +95,16 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
           </div>
           <p className="page-subtitle">Compras a tus proveedores para reponer existencias.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
-          <Plus size={14} strokeWidth={2.5} /> Nueva compra
-        </button>
+        <div className="tes-header-actions">
+          <ExportarMenu
+            clave="compras"
+            filtro={{ estado: filtroEstado }}
+            resumen={[filtroEstado].filter((x): x is string => Boolean(x))}
+          />
+          <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
+            <Plus size={14} strokeWidth={2.5} /> Nueva compra
+          </button>
+        </div>
       </div>
 
       {sinAlmacenes && (

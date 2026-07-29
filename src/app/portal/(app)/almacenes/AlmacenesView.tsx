@@ -17,6 +17,7 @@ import { RowActions }                  from '@/components/portal/RowActions'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import PrerequisitoAviso               from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -259,9 +260,20 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
           <h1 className="page-title">Almacenes</h1>
           <p className="page-subtitle">Lugares donde guardas y controlas tus existencias.</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
-          <Plus size={14} strokeWidth={2.5} /> Nuevo almacén
-        </button>
+        <div className="tes-header-actions">
+          <ExportarMenu
+            clave="almacenes"
+            filtro={{ empresa_id: filtroEmpresa, tipo: filtroTipo, archivadas: verArchivados }}
+            resumen={[
+              filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+              filtroTipo,
+              verArchivados ? 'archivados' : '',
+            ].filter((x): x is string => Boolean(x))}
+          />
+          <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
+            <Plus size={14} strokeWidth={2.5} /> Nuevo almacén
+          </button>
+        </div>
       </div>
 
       {data.empresas.length === 0 && (

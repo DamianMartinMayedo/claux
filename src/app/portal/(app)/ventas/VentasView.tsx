@@ -45,7 +45,6 @@ import { useConfigurador }             from '@/components/portal/ConfiguradorCon
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
-import ExportarTabla from '@/components/portal/ExportarTabla'
 import RangoBusqueda from '@/components/portal/RangoBusqueda'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
 import { LIMITE_LISTADO } from '@/lib/listados'
@@ -168,11 +167,26 @@ export default function VentasView({ data, initialTab }: Props) {
           </p>
         </div>
         <div className="tes-header-actions">
+        {/* Los filtros de la barra viajan al fichero: filtrar «vencidas» y bajarse
+            todas era la queja. Y el desplegable dice qué se lleva antes de clicar. */}
         <ExportarMenu
           clave={tab === 'ofertas' ? 'ofertas' : 'facturas'}
-          desde={data.rango.desde} hasta={data.rango.hasta} q={data.q}
+          filtro={{
+            desde: data.rango.desde, hasta: data.rango.hasta, q: data.q,
+            empresa_id: filtroEmpresa, estado: filtroEstado, tercero: filtroCliente,
+            archivadas: verArchivadas,
+            con_saldo:  tab === 'facturas' && soloConSaldo,
+          }}
+          resumen={[
+            filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+            filtroCliente && (data.clientes.find(c => c.tercero_id === filtroCliente)?.nombre ?? ''),
+            filtroEstado && (tab === 'ofertas'
+              ? ESTADO_OFERTA_LABEL[filtroEstado as EstadoOferta]
+              : ESTADO_FACTURA_LABEL[filtroEstado as EstadoFactura]),
+            verArchivadas && 'con archivadas',
+            tab === 'facturas' && soloConSaldo && 'solo con saldo',
+          ].filter((x): x is string => Boolean(x))}
         />
-        <ExportarTabla clave={tab === 'ofertas' ? 'ofertas' : 'facturas'} />
         {tab === 'ofertas' ? (
           sinSetupEmpresas || sinLetra ? (
             <button

@@ -28,7 +28,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
-import ExportarTabla from '@/components/portal/ExportarTabla'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -217,7 +217,21 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           <p className="page-subtitle">Tus clientes, proveedores y contactos comerciales.</p>
         </div>
         <div className="tes-header-actions">
-          <ExportarTabla clave="terceros" />
+          <ExportarMenu
+            clave="terceros"
+            filtro={{
+              q:          search,
+              tipo:       filtroTipo === 'TODOS' ? '' : filtroTipo,
+              empresa_id: filtroEmpresa,
+              archivadas: verArchivados,
+            }}
+            resumen={[
+              filtroTipo === 'TODOS' ? 'todos' : TIPO_LABEL[filtroTipo],
+              filtroEmpresa && (empresasLista.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+              verArchivados ? 'archivados' : '',
+              search && `«${search}»`,
+            ].filter((x): x is string => Boolean(x))}
+          />
           <button className="btn btn-primary" onClick={openCreate} disabled={empresasLista.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
           </button>

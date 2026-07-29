@@ -31,6 +31,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Reglas del negocio ───────────────────────────────────────────────────────────
 // «Así funciona mi nómina»: se escribe UNA vez y se aplica a toda la plantilla.
@@ -700,6 +701,20 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
           <p className="page-subtitle">Paga a tu personal y lleva el control de los salarios.</p>
         </div>
         <div className="tes-header-actions">
+          {/* Solo en «Nóminas»: «Reglas» y «Configuración» no son listados de datos. */}
+          {tab === 'nominas' && (
+            <ExportarMenu
+              clave="nominas"
+              filtro={{
+                empresa_id: filtroEmpresa,
+                desde: filtroAnio ? `${filtroAnio}-01-01` : '',
+                hasta: filtroAnio ? `${filtroAnio}-12-31` : '',
+              }}
+              resumen={[
+                filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
+              ].filter((x): x is string => Boolean(x))}
+            />
+          )}
           {tab === 'nominas' && (
             <button className="btn btn-primary" onClick={() => setModalNuevaNomina(true)} disabled={data.empresas.length === 0}>
               <Plus size={14} strokeWidth={2.5} /> Nueva nómina
