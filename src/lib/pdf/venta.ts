@@ -31,6 +31,10 @@ export interface EmpresaPdf {
   mostrar_logo?:     boolean | null
   letra_facturacion: string | null
   color:             string
+  /** Cómo te pagan (mig. 151). Bloque «CÓMO PAGAR»; si está vacío no se imprime. */
+  datos_pago?:       string | null
+  /** Texto fijo al pie de las facturas de esta empresa (mig. 151). */
+  pie_factura?:      string | null
 }
 
 export interface ClientePdf {
@@ -240,7 +244,10 @@ export async function construirDocumentoVenta(
     doc.setFont('helvetica', 'normal'); texto(doc, MARCA.dark)
     doc.text(desc, descX, ty)
     texto(doc, MARCA.muted)
-    doc.text(String(Number(l.cantidad)), cCant, ty, { align: 'right' })
+    // «2 kg», no «2»: la unidad viene congelada en la línea (mig. 151). Las líneas
+    // anteriores a esa migración la llevan a null y siguen imprimiendo solo el número.
+    const cant = l.unidad ? `${Number(l.cantidad)} ${l.unidad}` : String(Number(l.cantidad))
+    doc.text(cant, cCant, ty, { align: 'right' })
     doc.text(formatearMoneda(Number(l.precio_unitario), d.moneda), cPrecio, ty, { align: 'right' })
     if (conDto) {
       doc.text(Number(l.descuento_pct) > 0 ? `${Number(l.descuento_pct)}%` : '', cDto, ty, { align: 'right' })
@@ -283,20 +290,39 @@ export async function construirDocumentoVenta(
   doc.text(formatearMoneda(d.total, d.moneda), right, y, { align: 'right' })
   y += 11
 
-  // ── Notas (bloque limpio, sin relleno) ────────────────────────────────────
-  if (d.notas) {
+  // ── Bloques de texto del final: CÓMO PAGAR, NOTAS y pie ───────────────────
+  // Cada uno se pinta SOLO si tiene contenido: un documento no puede crecer con
+  // secciones vacías, y una factura de una empresa que no ha configurado sus datos de
+  // pago tiene que salir exactamente igual que antes.
+  const bloqueTexto = (titulo: string, cuerpo: string) => {
     doc.setFontSize(9)
-    const notasLineas = doc.splitTextToSize(d.notas, right - M)
-    const bloqueH = 10 + notasLineas.length * 4.2
+    const lineas  = doc.splitTextToSize(cuerpo, right - M)
+    const bloqueH = 10 + lineas.length * 4.2
     if (y + bloqueH > limiteInferior) { doc.addPage(); y = M }
     trazo(doc, MARCA.border); doc.setLineWidth(0.2)
     doc.line(M, y, right, y)
     y += 5.5
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
-    texto(doc, MARCA.faint); doc.text('NOTAS', M, y)
+    texto(doc, MARCA.faint); doc.text(titulo, M, y)
     y += 5
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
-    texto(doc, MARCA.muted); doc.text(notasLineas, M, y)
+    texto(doc, MARCA.muted); doc.text(lineas, M, y)
+    y += lineas.length * 4.2 + 4
+  }
+
+  // «Cómo pagar» va ANTES de las notas: es la instrucción que el cliente busca, no una
+  // observación. Solo en la factura — en una oferta todavía no hay nada que pagar.
+  const datosPago = (d.empresa.datos_pago ?? '').trim()
+  if (d.titulo === 'FACTURA' && datosPago) bloqueTexto('CÓMO PAGAR', datosPago)
+  if (d.notas) bloqueTexto('NOTAS', d.notas)
+
+  const pie = (d.empresa.pie_factura ?? '').trim()
+  if (d.titulo === 'FACTURA' && pie) {
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5)
+    const lineas = doc.splitTextToSize(pie, right - M)
+    if (y + lineas.length * 4 > limiteInferior) { doc.addPage(); y = M }
+    texto(doc, MARCA.faint)
+    doc.text(lineas, (M + right) / 2, y, { align: 'center' })
   }
 }
 

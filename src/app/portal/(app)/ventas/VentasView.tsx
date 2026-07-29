@@ -19,6 +19,7 @@ import {
   type EstadoFactura,
 } from './_ventas-helpers'
 import {
+  cambiarEstadoFactura,
   cambiarEstadoOfertasEnLote,
   cambiarEstadoFacturasEnLote,
   duplicarOfertasEnLote,
@@ -275,6 +276,22 @@ export default function VentasView({ data, initialTab }: Props) {
               clienteNombres={data.cliente_nombres}
               mostrarEmpresa={data.empresas.length > 1}
               sel={selFacturas}
+              onEmitir={f => pedirConfirmacion({
+                title: `¿Emitir ${etiquetaNumero(f.numero)}?`,
+                body: 'Recibirá su número fiscal definitivo (el siguiente de la serie) y ya no podrás editarla.',
+                confirmLabel: 'Sí, emitir',
+                danger: false,
+                run: () => {
+                  const ld = toastLoading('Emitiendo…')
+                  startTransition(async () => {
+                    const r = await cambiarEstadoFactura(f.factura_id, 'EMITIDA')
+                    await ld.dismiss()
+                    if (!r.ok) { toastError(r.error ?? 'Error al emitir.'); return }
+                    toastSuccess('Factura emitida.')
+                    router.refresh()
+                  })
+                },
+              })}
             />
           )
         )}
@@ -567,13 +584,16 @@ function TablaOfertas({
 // ── Tabla de facturas ─────────────────────────────────────────────────────────
 
 function TablaFacturas({
-  facturas, empresaNombres, clienteNombres, mostrarEmpresa, sel,
+  facturas, empresaNombres, clienteNombres, mostrarEmpresa, sel, onEmitir,
 }: {
   facturas: Factura[]
   empresaNombres: Record<string, string>
   clienteNombres: Record<string, string>
   mostrarEmpresa: boolean
   sel: SelApi
+  /** Emitir desde la fila. Antes solo existía en lote: para emitir UNA factura había que
+   *  seleccionarla o entrar en su ficha, que es el camino más largo al gesto más común. */
+  onEmitir: (f: Factura) => void
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
@@ -594,6 +614,7 @@ function TablaFacturas({
             <th>Vencimiento</th>
             <th>Estado</th>
             <th className="col-num">Total</th>
+            <th className="col-actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -633,6 +654,21 @@ function TablaFacturas({
               </td>
               <td data-label="Total" className="col-num">
                 {formatearMoneda(Number(f.total), f.moneda)}
+              </td>
+              {/* Una sola acción → icono directo, sin menú «⋯» (regla de UI §3). Solo en
+                  BORRADOR: en cualquier otro estado la fila no tiene nada que ofrecer. */}
+              <td className="col-actions" onClick={e => e.stopPropagation()}>
+                {f.estado === 'BORRADOR' && !f.archivado && (
+                  <button
+                    type="button"
+                    className="ter-action-btn"
+                    onClick={() => onEmitir(f)}
+                    aria-label={`Emitir ${etiquetaNumero(f.numero)}`}
+                    title="Emitir"
+                  >
+                    <FileCheck size={14} strokeWidth={2} />
+                  </button>
+                )}
               </td>
             </tr>
           ))}

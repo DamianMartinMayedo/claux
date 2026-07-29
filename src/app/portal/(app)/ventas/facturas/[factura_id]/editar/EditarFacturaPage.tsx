@@ -44,6 +44,10 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
       cantidad:        Number(l.cantidad),
       precio_unitario: Number(l.precio_unitario),
       descuento_pct:   Number(l.descuento_pct),
+      // Con `descuento_pct` a 0 el importe guardado ES el que se escribió, así que el
+      // modo se deriva al releer (`modoDescuentoLinea`) sin una columna que lo diga.
+      descuento_importe: Number(l.descuento_importe ?? 0),
+      unidad:          l.unidad ?? null,
       // Guardar la factura borra y reinserta las líneas: sin arrastrar el rastro, editar
       // una factura de suscripciones borraría la defensa contra facturar dos veces.
       suscripcion_id:  l.suscripcion_id ?? null,
@@ -184,8 +188,14 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
             <div className="input-group">
               <label>Vencimiento</label>
               <input className="input" type="date" value={fecha_vencimiento}
+                min={fecha_emision}
                 onChange={e => setFechaVencimiento(e.target.value)} />
               <span className="input-hint">Se calcula desde la condición de pago.</span>
+              {fecha_vencimiento && fecha_vencimiento < fecha_emision && (
+                <span className="input-hint-warning">
+                  El vencimiento es anterior a la emisión: la factura quedaría vencida al guardar.
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -195,6 +205,7 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
           ajustes={ajustes}
           moneda={moneda}
           productos={contexto.productos}
+          almacenId={descuentaStock ? almacenId : undefined}
           notas={notas}
           notasInternas={notas_internas}
           onLineasChange={setLineas}

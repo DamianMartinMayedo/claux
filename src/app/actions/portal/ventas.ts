@@ -74,6 +74,11 @@ export interface Factura {
   descuenta_stock:   boolean
   /** Almacén del que sale la mercancía. Null si no descuenta o si aún no se eligió. */
   almacen_id:        string | null
+  /** Rastro mínimo (mig. 151): email y momento de las dos transiciones que importan. */
+  emitida_por:       string | null
+  emitida_at:        string | null
+  anulada_por:       string | null
+  anulada_at:        string | null
   created_at:        string
   updated_at:        string
 }
@@ -90,6 +95,8 @@ export interface DocumentoLinea {
   descuento_pct:     number
   descuento_importe: number
   total:             number
+  /** Unidad congelada en el documento (mig. 151); null en las líneas anteriores. */
+  unidad:            string | null
   /** Suscripción que generó la línea (facturación del período). Rastro de idempotencia. */
   suscripcion_id:    string | null
 }
@@ -152,7 +159,7 @@ export interface ContextoDocumentoData {
 
 export interface OfertaDetalleData {
   oferta:   Oferta
-  empresa:  { empresa_id: string; nombre: string; nombre_fiscal: string | null; rif_nit: string | null; direccion: string | null; ciudad: string | null; pais: string | null; telefono: string | null; email: string | null; logo_url: string | null; letra_facturacion: string | null; color: string }
+  empresa:  { empresa_id: string; nombre: string; nombre_fiscal: string | null; rif_nit: string | null; direccion: string | null; ciudad: string | null; pais: string | null; telefono: string | null; email: string | null; logo_url: string | null; mostrar_logo: boolean | null; letra_facturacion: string | null; color: string; datos_pago: string | null; pie_factura: string | null }
   cliente:  { tercero_id: string; nombre: string; identificacion: string | null; direccion: string | null; ciudad: string | null; pais: string | null; email: string | null; telefono: string | null }
   lineas:   DocumentoLinea[]
   ajustes:  DocumentoAjuste[]
@@ -386,7 +393,7 @@ export async function obtenerOfertaDetalle(
   // cargada (no entre sí) → una sola tanda en paralelo (antes eran secuenciales).
   const [empRes, cliRes, linRes, ajuRes, facRes] = await Promise.all([
     db.from('empresas')
-      .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
+      .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, mostrar_logo, letra_facturacion, color, datos_pago, pie_factura')
       .eq('empresa_id', oferta.empresa_id)
       .eq('client_id',  session.client_id)
       .maybeSingle(),
@@ -440,7 +447,7 @@ export async function obtenerFacturaDetalle(
   // cargada → una sola tanda en paralelo (antes eran secuenciales).
   const [empRes, cliRes, linRes, ajuRes, ofeRes, almRes] = await Promise.all([
     db.from('empresas')
-      .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
+      .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, mostrar_logo, letra_facturacion, color, datos_pago, pie_factura')
       .eq('empresa_id', factura.empresa_id)
       .eq('client_id',  session.client_id)
       .maybeSingle(),
@@ -616,6 +623,11 @@ export async function guardarFactura(
   if (!cliente_id) return { ok: false, error: 'Selecciona un cliente.' }
   if (!moneda)     return { ok: false, error: 'Selecciona una moneda.' }
   if (!fecha_emision) return { ok: false, error: 'La fecha de emisión es obligatoria.' }
+  // Un vencimiento anterior a la emisión nace vencido: CxC lo pinta en rojo el mismo día
+  // que se crea y el aviso de cobro sale antes de que exista la deuda.
+  if (fecha_vencimiento && fecha_vencimiento < fecha_emision) {
+    return { ok: false, error: 'El vencimiento no puede ser anterior a la fecha de emisión.' }
+  }
 
   const lineas  = parseJSON<LineaInput[]>(formData.get('lineas'),  [])
   const ajustes = parseJSON<AjusteInput[]>(formData.get('ajustes'), [])
@@ -905,8 +917,19 @@ export async function cambiarEstadoFactura(
     if (cxpErr) return { ok: false, error: traducirErrorCxP(cxpErr.message) }
   }
 
+  // Rastro mínimo de las dos transiciones que importan (mig. 151): quién y cuándo. Se
+  // guarda el EMAIL y no el id de usuario, porque la pregunta «¿quién anuló esto?» suele
+  // llegar cuando esa cuenta ya no existe. En una sesión de configuración se anota el
+  // correo del equipo, que es exactamente lo que hay que poder distinguir.
+  const ahora = new Date().toISOString()
+  const quien = session.imp?.admin_email ?? session.email
+  const patchRastro =
+      nuevoEstado === 'EMITIDA' ? { emitida_por: quien, emitida_at: ahora }
+    : nuevoEstado === 'ANULADA' ? { anulada_por: quien, anulada_at: ahora }
+    : {}
+
   // El número y el estado viajan juntos: emitida sin número no puede existir.
-  const patchEstado = { estado: nuevoEstado, updated_at: new Date().toISOString() }
+  const patchEstado = { estado: nuevoEstado, updated_at: ahora, ...patchRastro }
   let { error } = await db.from('facturas')
     .update(numeroFiscal ? { ...patchEstado, numero: numeroFiscal } : patchEstado)
     .eq('factura_id', factura_id)

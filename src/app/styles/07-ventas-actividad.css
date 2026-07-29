@@ -44,11 +44,40 @@
 .ven-lineas-head,
 .ven-lineas-row {
   display: grid;
-  grid-template-columns: 1fr 90px 90px 70px 100px 36px;
+  /* La columna de descuento lleva dos controles (modo + valor), de ahí los 130px. */
+  grid-template-columns: 1fr 90px 90px 130px 100px 36px;
   gap: var(--space-2);
   align-items: center;
 }
 .ven-col-del { text-align: center; }
+
+/* ── Línea: vínculo con el catálogo, unidad y descuento en dos modos ── */
+.ven-linea-articulo {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-top: 4px; min-height: 22px;
+}
+.ven-articulo-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px var(--space-2);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 600; color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ven-articulo-chip button {
+  display: inline-flex; align-items: center;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--color-text-faint);
+  transition: color var(--transition);
+}
+.ven-articulo-chip button:hover { color: var(--color-error); }
+.ven-linea-unidad {
+  display: block; margin-top: 2px;
+  font-size: 11px; color: var(--color-text-muted);
+}
+.ven-col-dto { display: flex; gap: 4px; align-items: center; }
+.ven-dto-modo { width: 58px; flex-shrink: 0; padding-inline: 6px; }
 .ven-lineas-head {
   background: var(--color-surface-2);
   padding: 8px 12px;
@@ -155,6 +184,10 @@
     margin-bottom: 4px;
   }
   .ven-lineas-row .ven-input-num { text-align: left; }
+  /* En tarjeta el descuento ocupa su fila entera: dos controles en media columna de
+     360px dejaban el selector de modo con 24px. */
+  .ven-lineas-row .ven-col-dto { grid-column: 1 / -1; flex-wrap: wrap; }
+  .ven-lineas-row .ven-col-dto::before { flex-basis: 100%; }
   .ven-lineas-row .ven-total-cell { align-self: end; }
   .ven-lineas-row .ven-col-del {
     position: absolute;
@@ -288,6 +321,13 @@
   padding: var(--space-4);
   background: var(--color-surface-2);
   border-radius: var(--radius-md);
+}
+/* Pie de factura de la empresa: se lee como en el PDF, centrado y discreto. */
+.ven-pie-factura {
+  margin-top: var(--space-4);
+  text-align: center; white-space: pre-wrap;
+  font-size: var(--text-xs); font-style: italic;
+  color: var(--color-text-faint);
 }
 .ven-notas p {
   margin: 6px 0 0 0;

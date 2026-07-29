@@ -44,6 +44,10 @@ export default function EditarOfertaPage({ data, contexto }: Props) {
       cantidad:        Number(l.cantidad),
       precio_unitario: Number(l.precio_unitario),
       descuento_pct:   Number(l.descuento_pct),
+      // Igual que en la factura: con `descuento_pct` a 0 el importe guardado es el que se
+      // escribió, y de ahí se deriva el modo (`modoDescuentoLinea`).
+      descuento_importe: Number(l.descuento_importe ?? 0),
+      unidad:          l.unidad ?? null,
     }))
   )
   const [ajustes, setAjustes] = useState<AjusteInput[]>(() =>

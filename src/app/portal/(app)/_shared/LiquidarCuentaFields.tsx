@@ -63,8 +63,12 @@ export default function LiquidarCuentaFields({
   const [impCaja, setImpCaja]           = useState('')
   const [editandoCaja, setEditandoCaja] = useState(false)
   const [tasaInput, setTasaInput]       = useState('')
-  const [tasaCompleta, setTasaCompleta] = useState(1)
-  const [cargandoTasa, setCargandoTasa] = useState(false)
+  /** Tasa traída del servidor o escrita a mano. Solo se usa si la moneda cambia. */
+  const [tasaCargada, setTasaCargada]   = useState(1)
+  /** Par de monedas cuya tasa ya llegó. «Cargando» se DERIVA de comparar con el par
+   *  actual, en vez de encender y apagar un flag desde el efecto: así no puede quedarse
+   *  encendido si la petición muere, y el efecto solo escribe en su callback. */
+  const [parResuelto, setParResuelto]   = useState<string | null>(null)
 
   const cuentaSel   = ordenadas.find(c => c.cuenta_id === cuentaId)
   const cajaMoneda  = cuentaSel?.moneda ?? docMoneda
@@ -74,34 +78,45 @@ export default function LiquidarCuentaFields({
   const esDeOtraEmpresa = (c: CuentaOpcion) =>
     !!docEmpresaId && !!c.empresa_id && c.empresa_id !== docEmpresaId
 
-  // Cargar tasa vigente al cambiar de caja (solo si la moneda difiere)
+  // Cargar la tasa vigente al cambiar de caja, solo si la moneda difiere.
+  //
+  // La rama de «misma moneda» ya NO escribe estado (era un `setState` síncrono dentro
+  // del efecto, con su cascada de repintados): `tasaCompleta` se lee derivada más abajo
+  // y vale 1 cuando no hay cambio de moneda, así que no había nada que resetear. Lo
+  // único que el efecto escribe ahora es el resultado de una petición, que es
+  // asíncrono por naturaleza y para eso está el efecto.
+  const parTasa = cambiaMoneda ? `${docMoneda}>${cajaMoneda}` : ''
+  const cargandoTasa = !!parTasa && parResuelto !== parTasa
+
   useEffect(() => {
-    if (!cambiaMoneda) { setTasaCompleta(1); setTasaInput(''); setCargandoTasa(false); return }
+    if (!parTasa) return
     let vivo = true
-    setCargandoTasa(true)
     obtenerTasaTransferencia(docMoneda, cajaMoneda)
       .then(r => {
         if (!vivo) return
-        if (r.ok && r.tasa) { setTasaCompleta(r.tasa); setTasaInput(truncar4(r.tasa)) }
-        else                { setTasaCompleta(0); setTasaInput('') }
+        if (r.ok && r.tasa) { setTasaCargada(r.tasa); setTasaInput(truncar4(r.tasa)) }
+        else                { setTasaCargada(0); setTasaInput('') }
       })
-      .catch(() => { if (vivo) { setTasaCompleta(0); setTasaInput('') } })
-      .finally(() => { if (vivo) setCargandoTasa(false) })
+      .catch(() => { if (vivo) { setTasaCargada(0); setTasaInput('') } })
+      .finally(() => { if (vivo) setParResuelto(parTasa) })
     return () => { vivo = false }
-  }, [cuentaId, cambiaMoneda, cajaMoneda, docMoneda])
+  }, [parTasa, cajaMoneda, docMoneda])
+
+  // Con la misma moneda la tasa es 1 por definición: se DERIVA en vez de guardarse, que
+  // es lo que obligaba a resetear estado desde el efecto de arriba.
+  const tasaCompleta = cambiaMoneda ? tasaCargada : 1
 
   const montoNum  = parseFloat(monto) || 0
-  const impCajaNum = editandoCaja ? (parseFloat(impCaja) || 0) : Math.round(montoNum * tasaCompleta * 100) / 100
+  // El importe en la caja es DERIVADO (importe × tasa) salvo que se haya escrito a mano.
+  // Antes se derivaba dos veces: aquí para el cálculo y en un efecto para el input, con
+  // un `setState` síncrono que disparaba una cascada de repintados por cada tecla. Ahora
+  // el input lee esta misma cifra, así que no hay dos verdades ni efecto que sincronizar.
+  const impCajaCalc = Math.round(montoNum * tasaCompleta * 100) / 100
+  const impCajaNum = editandoCaja ? (parseFloat(impCaja) || 0) : impCajaCalc
+  const impCajaVista = editandoCaja ? impCaja : (impCajaCalc > 0 ? String(impCajaCalc) : '')
   const cajaMonto = cambiaMoneda ? impCajaNum : montoNum
   const excedeSaldo = montoNum > saldo + 0.005 // margen de 0.005 para redondeos
   const valido    = !!cuentaId && montoNum > 0 && !excedeSaldo && (!cambiaMoneda || tasaCompleta > 0)
-
-  // Derivar el importe en la caja desde el importe del documento × tasa (salvo edición manual)
-  useEffect(() => {
-    if (cambiaMoneda && !editandoCaja && montoNum > 0 && tasaCompleta > 0) {
-      setImpCaja(String(Math.round(montoNum * tasaCompleta * 100) / 100))
-    }
-  }, [monto, tasaCompleta, cambiaMoneda, editandoCaja, montoNum])
 
   // Reportar estado al padre sin re-suscribir al cambiar la referencia de onChange.
   // La asignación va en su propio efecto (no en el render) para no escribir en un
@@ -117,7 +132,7 @@ export default function LiquidarCuentaFields({
 
   function handleTasa(v: string) {
     setTasaInput(v)
-    setTasaCompleta(parseFloat(v) || 0)
+    setTasaCargada(parseFloat(v) || 0)
     setEditandoCaja(false)
     setImpCaja('')
   }
@@ -128,7 +143,7 @@ export default function LiquidarCuentaFields({
     const caja = parseFloat(v) || 0
     if (caja > 0 && montoNum > 0) {
       const nueva = caja / montoNum
-      setTasaCompleta(nueva)
+      setTasaCargada(nueva)
       setTasaInput(truncar4(nueva))
     }
   }
@@ -178,7 +193,7 @@ export default function LiquidarCuentaFields({
           <div className="input-group ter-col-span-3">
             <label>Se moverá en la caja ({cajaMoneda})</label>
             <input className="input" type="number" min="0" step="any"
-              value={impCaja} onChange={e => handleImpCaja(e.target.value)} placeholder="0.00" />
+              value={impCajaVista} onChange={e => handleImpCaja(e.target.value)} placeholder="0.00" />
             <span className="input-hint">
               {montoNum > 0 && tasaCompleta > 0
                 ? `Saldas ${formatMonto(montoNum)} ${docMoneda}; en la caja ${formatMonto(impCajaNum)} ${cajaMoneda}.`

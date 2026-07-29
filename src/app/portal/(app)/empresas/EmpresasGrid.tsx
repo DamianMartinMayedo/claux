@@ -315,6 +315,37 @@ function EmpresaModal({
                 )}
               </div>
 
+              {/* Textos de facturación (mig. 151). Van en la empresa y no en cada
+                  documento porque son estables: el dueño los estaba copiando en las notas
+                  de cada factura, a mano, cada vez. */}
+              <div className="input-group emp-full">
+                <label htmlFor="emp-datos-pago">Cómo te pagan</label>
+                <textarea
+                  id="emp-datos-pago"
+                  className="input input-textarea"
+                  name="datos_pago"
+                  rows={3}
+                  defaultValue={state.empresa?.datos_pago ?? ''}
+                  placeholder={'Tarjeta 9224 0699 1234 5678 (MLC)\nEnzona / Transfermóvil: +53 5 123 4567\nBanco Metropolitano, cuenta 1234...'}
+                />
+                <span className="input-hint">
+                  Sale en tus facturas bajo «Cómo pagar». Si lo dejas vacío, ese bloque no se imprime.
+                </span>
+              </div>
+
+              <div className="input-group emp-full">
+                <label htmlFor="emp-pie-factura">Pie de factura</label>
+                <textarea
+                  id="emp-pie-factura"
+                  className="input input-textarea"
+                  name="pie_factura"
+                  rows={2}
+                  defaultValue={state.empresa?.pie_factura ?? ''}
+                  placeholder="Gracias por su confianza · Licencia de operaciones nº…"
+                />
+                <span className="input-hint">Texto fijo al final de todas tus facturas.</span>
+              </div>
+
               {/* Paleta de colores */}
               <div className="input-group emp-full">
                 <label>Color de identificación</label>

@@ -27,6 +27,10 @@ export interface Empresa {
   email:             string | null
   moneda_funcional:  string | null
   letra_facturacion: string | null
+  /** Cómo te pagan (mig. 151). Sale en el PDF bajo «CÓMO PAGAR» si tiene contenido. */
+  datos_pago:        string | null
+  /** Texto fijo al pie de las facturas de esta empresa (mig. 151). */
+  pie_factura:       string | null
   logo_url:          string | null
   mostrar_logo:      boolean
   color:             string
@@ -156,6 +160,10 @@ export async function guardarEmpresa(
     email:            ((formData.get('email')           as string) ?? '').trim() || null,
     moneda_funcional: ((formData.get('moneda_funcional') as string) ?? '').trim() || null,
     letra_facturacion,
+    // Textos de facturación (mig. 151). No se recortan los saltos de línea internos: son
+    // datos de pago escritos en varias líneas a propósito (tarjeta, Enzona, banco).
+    datos_pago:       ((formData.get('datos_pago')  as string) ?? '').trim() || null,
+    pie_factura:      ((formData.get('pie_factura') as string) ?? '').trim() || null,
     mostrar_logo,
     color,
     updated_at: new Date().toISOString(),

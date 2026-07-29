@@ -1,30 +1,66 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Plus, Trash2, PackageSearch, X } from 'lucide-react'
+import type { ProductoOpcion } from '@/app/actions/portal/ventas'
+import { SelectorArticulo } from './_SelectorArticulo'
 import {
   AJUSTE_TIPO_LABEL,
   calcularTotales,
   formatearMoneda,
+  modoDescuentoLinea,
+  parseNumeroEs,
   type AjusteInput,
   type AjusteModo,
   type AjusteTipo,
   type LineaInput,
 } from './_ventas-helpers'
 
-interface ProductoOption {
-  producto_id: string
-  codigo:      string
-  nombre:      string
-  unidad:      string
-  precios:     Record<string, number>
+/**
+ * Campo numérico que acepta **coma decimal** sin comerse lo que se escribe.
+ *
+ * El `type="number"` que había aquí devolvía cadena vacía con «0,5» en un navegador con
+ * locale es (la coma es inválida para el control), así que medio kilo se guardaba como
+ * 0 en silencio. Y un `type="text"` controlado ingenuo es igual de malo: al teclear
+ * «0,» el número vale 0 y el input se repinta como «0», borrando la coma.
+ *
+ * Lo que hace: guarda el TEXTO tal cual y lo enseña **mientras siga significando el
+ * número que tiene el documento**. Si el valor cambia desde fuera —el selector de
+ * moneda reexpresa los importes— el texto deja de cuadrar y se pinta el número nuevo.
+ * Derivado en el render, sin `useEffect`: un efecto aquí robaría el foco al repintar.
+ */
+function InputNumero({
+  valor, onValor, etiqueta, onKeyDown,
+}: {
+  valor: number
+  onValor: (n: number) => void
+  etiqueta: string
+  onKeyDown?: (e: React.KeyboardEvent) => void
+}) {
+  const [texto, setTexto] = useState<string | null>(null)
+  const mostrado = texto !== null && parseNumeroEs(texto) === valor
+    ? texto
+    : String(valor).replace('.', ',')
+  return (
+    <input
+      className="input input-sm ven-input-num"
+      type="text" inputMode="decimal"
+      aria-label={etiqueta}
+      value={mostrado}
+      onChange={e => { setTexto(e.target.value); onValor(parseNumeroEs(e.target.value)) }}
+      onFocus={e => e.target.select()}
+      onKeyDown={onKeyDown}
+    />
+  )
 }
 
 interface Props {
   lineas:        LineaInput[]
   ajustes:       AjusteInput[]
   moneda:        string
-  productos:     ProductoOption[]
+  productos:     ProductoOpcion[]
+  /** Almacén elegido para el descuento de stock: enseña existencias en el selector. */
+  almacenId?:    string
   notas?:              string
   notasInternas?:      string
   onLineasChange:       (v: LineaInput[])  => void
@@ -34,7 +70,7 @@ interface Props {
 }
 
 export function DocumentoLineasEditor({
-  lineas, ajustes, moneda, productos,
+  lineas, ajustes, moneda, productos, almacenId,
   notas, notasInternas,
   onLineasChange, onAjustesChange,
   onNotasChange, onNotasInternasChange,
@@ -43,13 +79,28 @@ export function DocumentoLineasEditor({
     () => calcularTotales(lineas, ajustes),
     [lineas, ajustes],
   )
+  // Índice de la línea cuyo selector de catálogo está abierto (null = ninguno).
+  const [eligiendo, setEligiendo] = useState<number | null>(null)
+  // Modo de descuento ELEGIDO por línea. Vive aquí y no solo derivado de los importes
+  // porque con descuento 0 los dos modos son indistinguibles en los datos: elegir
+  // «importe» y no escribir nada haría que el selector saltara solo de vuelta a «%».
+  const [modoDto, setModoDto] = useState<Record<number, AjusteModo>>({})
+  // Se enfoca la descripción de la línea recién añadida. Con `ref` y no con un efecto:
+  // el foco es un efecto del CLIC, no del render, y meterlo en un `useEffect` es la
+  // receta del aviso `set-state-in-effect` y de robarle el foco al usuario al repintar.
+  const filasRef = useRef<Record<number, HTMLInputElement | null>>({})
+
+  const catalogo = new Map(productos.map(p => [p.producto_id, p]))
 
   // ── Líneas ──────────────────────────────────────────────────────────────────
   function addLinea() {
+    const i = lineas.length
     onLineasChange([
       ...lineas,
       { producto_id: null, descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0 },
     ])
+    // Tras el repintado: el input de esa fila aún no existe en este tick.
+    requestAnimationFrame(() => filasRef.current[i]?.focus())
   }
   function removeLinea(i: number) {
     onLineasChange(lineas.filter((_, idx) => idx !== i))
@@ -58,18 +109,27 @@ export function DocumentoLineasEditor({
     onLineasChange(lineas.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
   }
 
-  function handleDescripcionChange(i: number, val: string) {
-    // Check if typed value matches a product exactly
-    const match = productos.find(p => `${p.codigo} — ${p.nombre}` === val)
-    if (match) {
-      updateLinea(i, {
-        producto_id:     match.producto_id,
-        descripcion:     val,
-        precio_unitario: match.precios[moneda] ?? lineas[i].precio_unitario ?? 0,
-      })
-    } else {
-      updateLinea(i, { producto_id: null, descripcion: val })
-    }
+  /**
+   * Enlaza la línea con un artículo del catálogo. La descripción se rellena si está
+   * vacía y **no se sobreescribe** si el dueño ya escribió algo: el vínculo y el texto
+   * son dos cosas distintas desde que se quitó el `datalist` (matizar «… mesa 4» ya no
+   * rompe el enlace, que era el bug que se llevaba por delante el coste de la línea).
+   */
+  function elegirArticulo(i: number, p: ProductoOpcion) {
+    const actual = lineas[i]
+    updateLinea(i, {
+      producto_id:     p.producto_id,
+      descripcion:     actual.descripcion.trim() || p.nombre,
+      unidad:          p.unidad,
+      precio_unitario: p.precios[moneda] ?? actual.precio_unitario ?? 0,
+    })
+  }
+
+  /** `Enter` en el último campo de la última línea añade otra: teclear sin ratón. */
+  function handleEnterUltimoCampo(e: React.KeyboardEvent, i: number) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()          // dentro de un <form>, Enter lo enviaría
+    if (i === lineas.length - 1) addLinea()
   }
 
   // ── Ajustes ──────────────────────────────────────────────────────────────────
@@ -111,60 +171,97 @@ export function DocumentoLineasEditor({
         ) : (
           <div className="ven-lineas-table">
             <div className="ven-lineas-head">
-              <div className="ven-col-prod">Producto / descripción</div>
+              <div className="ven-col-prod">Artículo / descripción</div>
               <div className="ven-col-num">Cant.</div>
               <div className="ven-col-num">Precio</div>
-              <div className="ven-col-num">Dto. %</div>
+              <div className="ven-col-num">Descuento</div>
               <div className="ven-col-num">Total</div>
               <div className="ven-col-del"></div>
             </div>
 
-            {lineas.map((l, i) => (
+            {lineas.map((l, i) => {
+              const art  = l.producto_id ? catalogo.get(l.producto_id) : undefined
+              const modo = modoDto[i] ?? modoDescuentoLinea(l)
+              return (
               <div key={i} className="ven-lineas-row">
-                {/* Unified product/description field */}
                 <div className="ven-col-prod">
                   <input
+                    ref={el => { filasRef.current[i] = el }}
                     className="input input-sm"
                     type="text"
-                    list={`prod-list-${i}`}
-                    placeholder="Escribe o selecciona un producto…"
+                    aria-label={`Descripción de la línea ${i + 1}`}
+                    placeholder="Describe lo que vendes…"
                     value={l.descripcion}
-                    onChange={e => handleDescripcionChange(i, e.target.value)}
+                    onChange={e => updateLinea(i, { descripcion: e.target.value })}
                   />
-                  <datalist id={`prod-list-${i}`}>
-                    {productos.map(p => (
-                      <option key={p.producto_id} value={`${p.codigo} — ${p.nombre}`} />
-                    ))}
-                  </datalist>
+                  <div className="ven-linea-articulo">
+                    {l.producto_id ? (
+                      <span className="ven-articulo-chip">
+                        {art ? art.codigo : l.producto_id}
+                        <button
+                          type="button"
+                          onClick={() => updateLinea(i, { producto_id: null, unidad: null })}
+                          aria-label="Desvincular del catálogo"
+                          title="Desvincular del catálogo"
+                        >
+                          <X size={11} strokeWidth={2.5} />
+                        </button>
+                      </span>
+                    ) : productos.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setEligiendo(i)}
+                      >
+                        <PackageSearch size={12} strokeWidth={2} /> Elegir del catálogo
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="ven-col-num" data-label="Cant.">
-                  <input
-                    className="input input-sm ven-input-num"
-                    type="number" min="0" step="any"
-                    value={l.cantidad}
-                    onChange={e => updateLinea(i, { cantidad: parseFloat(e.target.value) || 0 })}
-                    onFocus={e => e.target.select()}
+                  <InputNumero
+                    valor={l.cantidad}
+                    onValor={n => updateLinea(i, { cantidad: n })}
+                    etiqueta={`Cantidad de la línea ${i + 1}`}
                   />
+                  {l.unidad && <span className="ven-linea-unidad">{l.unidad}</span>}
                 </div>
 
                 <div className="ven-col-num" data-label="Precio">
-                  <input
-                    className="input input-sm ven-input-num"
-                    type="number" min="0" step="any"
-                    value={l.precio_unitario}
-                    onChange={e => updateLinea(i, { precio_unitario: parseFloat(e.target.value) || 0 })}
-                    onFocus={e => e.target.select()}
+                  <InputNumero
+                    valor={l.precio_unitario}
+                    onValor={n => updateLinea(i, { precio_unitario: n })}
+                    etiqueta={`Precio unitario de la línea ${i + 1}`}
                   />
                 </div>
 
-                <div className="ven-col-num" data-label="Dto. %">
-                  <input
-                    className="input input-sm ven-input-num"
-                    type="number" min="0" max="100" step="0.5"
-                    value={l.descuento_pct ?? 0}
-                    onChange={e => updateLinea(i, { descuento_pct: parseFloat(e.target.value) || 0 })}
-                    onFocus={e => e.target.select()}
+                <div className="ven-col-num ven-col-dto" data-label="Descuento">
+                  <select
+                    className="input input-sm ven-dto-modo"
+                    aria-label={`Modo de descuento de la línea ${i + 1}`}
+                    value={modo}
+                    onChange={e => {
+                      const nuevo = e.target.value as AjusteModo
+                      setModoDto(m => ({ ...m, [i]: nuevo }))
+                      updateLinea(i, nuevo === 'PORCENTAJE'
+                        ? { descuento_pct: l.descuento_importe ?? 0, descuento_importe: 0 }
+                        : { descuento_pct: 0, descuento_importe: l.descuento_pct ?? 0 })
+                    }}
+                  >
+                    <option value="PORCENTAJE">%</option>
+                    <option value="MONTO_FIJO">{moneda || 'Fijo'}</option>
+                  </select>
+                  {/* `key` con el modo: al cambiar de % a importe el campo es OTRO, y sin
+                      remontarlo se quedaría enseñando el texto del modo anterior. */}
+                  <InputNumero
+                    key={`dto-${modo}`}
+                    valor={modo === 'PORCENTAJE' ? (l.descuento_pct ?? 0) : (l.descuento_importe ?? 0)}
+                    onValor={n => updateLinea(i, modo === 'PORCENTAJE'
+                      ? { descuento_pct: n, descuento_importe: 0 }
+                      : { descuento_pct: 0, descuento_importe: n })}
+                    etiqueta={`Descuento de la línea ${i + 1}`}
+                    onKeyDown={e => handleEnterUltimoCampo(e, i)}
                   />
                 </div>
 
@@ -182,13 +279,15 @@ export function DocumentoLineasEditor({
                     type="button"
                     className="ter-action-btn ter-action-danger"
                     onClick={() => removeLinea(i)}
+                    aria-label={`Eliminar la línea ${i + 1}`}
                     title="Eliminar línea"
                   >
                     <Trash2 size={13} strokeWidth={2} />
                   </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -244,13 +343,13 @@ export function DocumentoLineasEditor({
                   <option value="PORCENTAJE">%</option>
                   <option value="MONTO_FIJO">Fijo</option>
                 </select>
-                <input
-                  className="input input-sm ven-input-num ven-aj-valor"
-                  type="number" min="0" step="any"
-                  value={a.valor}
-                  onChange={e => updateAjuste(i, { valor: parseFloat(e.target.value) || 0 })}
-                  onFocus={e => e.target.select()}
-                />
+                <div className="ven-aj-valor">
+                  <InputNumero
+                    valor={a.valor}
+                    onValor={v => updateAjuste(i, { valor: v })}
+                    etiqueta={`Valor del ajuste ${i + 1}`}
+                  />
+                </div>
                 <div className="ven-aj-monto">
                   <span className={a.tipo === 'DESCUENTO' ? 'ven-monto-neg' : 'ven-monto-pos'}>
                     {a.tipo === 'DESCUENTO' ? '−' : '+'}{formatearMoneda(totales.ajustes_calculados[i] ?? 0, moneda)}
@@ -290,6 +389,14 @@ export function DocumentoLineasEditor({
             <span>Total</span>
             <strong>{formatearMoneda(totales.total, moneda)}</strong>
           </div>
+          {ajustes.some(a => a.modo === 'PORCENTAJE') && (
+            // A12: no se cambia el cálculo, se dice lo que hace. Los porcentajes NO se
+            // acumulan entre sí — un 10% de descuento y un 16% de impuesto se calculan
+            // los dos sobre el subtotal, no el segundo sobre el resultado del primero.
+            <p className="input-hint">
+              Los ajustes en % se calculan sobre el subtotal de líneas, no unos sobre otros.
+            </p>
+          )}
         </div>
 
         {/* Notas públicas */}
@@ -323,6 +430,16 @@ export function DocumentoLineasEditor({
             placeholder="Observaciones para uso interno del equipo…"
           />
         </div>
+      )}
+
+      {eligiendo !== null && (
+        <SelectorArticulo
+          productos={productos}
+          moneda={moneda}
+          almacenId={almacenId}
+          onElegir={p => elegirArticulo(eligiendo, p)}
+          onCerrar={() => setEligiendo(null)}
+        />
       )}
 
     </div>

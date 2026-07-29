@@ -108,8 +108,14 @@ export async function escribirLineasYAjustes(
         cantidad:          l.cantidad,
         precio_unitario:   l.precio_unitario,
         descuento_pct:     l.descuento_pct ?? 0,
+        // El importe guardado es el CALCULADO, y con `descuento_pct = 0` es además el
+        // que el dueño escribió: de esas dos columnas se deriva el modo al releer
+        // (`modoDescuentoLinea`), sin una tercera que lo diga.
         descuento_importe: totales.lineas_descuentos[i] ?? 0,
         total:             totales.lineas_totales[i],
+        // Congelada en la línea (mig. 151): la unidad del catálogo puede cambiar y el
+        // documento emitido no.
+        unidad:            l.unidad ?? null,
         suscripcion_id:    l.suscripcion_id ?? null,
         costo_unitario:    l.producto_id ? costos.get(l.producto_id) ?? null : null,
       })),

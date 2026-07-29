@@ -109,8 +109,42 @@ export interface LineaInput {
   cantidad:        number
   precio_unitario: number
   descuento_pct:   number   // 0–100; descuento a nivel de línea
+  /** Descuento de línea en IMPORTE. Manda solo si `descuento_pct` es 0 (ver
+   *  `calcularTotales`): así los dos modos caben en las columnas que ya existen,
+   *  `descuento_pct` y `descuento_importe`, sin una tercera que diga cuál es. */
+  descuento_importe?: number
+  /** Unidad del artículo, congelada en el documento (mig. 151). */
+  unidad?:         string | null
   /** Suscripción de origen, si la línea la generó la facturación del período. */
   suscripcion_id?: string | null
+}
+
+/**
+ * El modo de descuento de una línea, DERIVADO de sus dos importes.
+ *
+ * Sin descuento (los dos a cero) el modo es PORCENTAJE, que es el que espera cualquiera
+ * al abrir una línea nueva. Es el valor INICIAL del selector: mientras el formulario
+ * está abierto, el modo elegido vive en el estado de la vista — si no, marcar «importe»
+ * y no escribir nada haría que el selector volviera solo a «%».
+ */
+export function modoDescuentoLinea(l: Pick<LineaInput, 'descuento_pct' | 'descuento_importe'>): AjusteModo {
+  if ((Number(l.descuento_pct) || 0) > 0)      return 'PORCENTAJE'
+  if ((Number(l.descuento_importe) || 0) > 0)  return 'MONTO_FIJO'
+  return 'PORCENTAJE'
+}
+
+/**
+ * Lee un número escrito por una persona.
+ *
+ * «0,5» es medio kilo en todo el mundo hispanohablante y `parseFloat('0,5')` devuelve
+ * **0**: el input `type=number` de un navegador con locale es y coma decimal entrega la
+ * cadena con coma, y el precio se guardaba a cero sin decir nada. Se normaliza antes de
+ * parsear, y una cadena vacía o basura vale 0 (no NaN, que envenena todos los totales).
+ */
+export function parseNumeroEs(v: string | number | null | undefined): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  const n = parseFloat(String(v ?? '').replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
 }
 
 export interface AjusteInput {
@@ -133,13 +167,17 @@ export interface TotalesCalculados {
  *
  * Reglas:
  *   linea.bruto        = cantidad × precio_unitario
- *   linea.descuento    = bruto × descuento_pct / 100
+ *   linea.descuento    = descuento_pct > 0 ? bruto × pct/100 : min(descuento_importe, bruto)
  *   linea.neto         = bruto − descuento
  *   subtotal           = sum(lineas.neto)
  *   ajuste.monto       = modo='PORCENTAJE' ? subtotal × valor/100 : valor
  *   total              = subtotal − sum(DESCUENTOS) + sum(CARGOS + IMPUESTOS)
  *
  * Los porcentajes de ajuste se aplican siempre sobre el subtotal (no acumulado).
+ *
+ * El descuento en importe se TOPA al bruto de la línea: «5 de descuento» sobre una
+ * línea de 3 no puede dar una línea de −2, que restaría del resto del documento y
+ * dejaría un total que no cuadra con ninguna suma visible.
  */
 export function calcularTotales(
   lineas:  LineaInput[],
@@ -148,9 +186,12 @@ export function calcularTotales(
   const lineas_brutos    = lineas.map(l =>
     redondear((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0)),
   )
-  const lineas_descuentos = lineas.map((l, i) =>
-    redondear(lineas_brutos[i] * (Number(l.descuento_pct) || 0) / 100),
-  )
+  const lineas_descuentos = lineas.map((l, i) => {
+    const pct = Number(l.descuento_pct) || 0
+    if (pct > 0) return redondear(lineas_brutos[i] * pct / 100)
+    const fijo = Number(l.descuento_importe) || 0
+    return redondear(Math.min(Math.max(fijo, 0), lineas_brutos[i]))
+  })
   const lineas_totales = lineas.map((_, i) =>
     redondear(lineas_brutos[i] - lineas_descuentos[i]),
   )

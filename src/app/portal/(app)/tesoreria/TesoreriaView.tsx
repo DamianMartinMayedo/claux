@@ -223,8 +223,11 @@ function MovimientoModal({
   const [impCaja, setImpCaja]           = useState('')   // lo que se mueve en la caja
   const [editandoCaja, setEditandoCaja] = useState(false)
   const [tasaInput, setTasaInput]       = useState('')
-  const [tasaCompleta, setTasaCompleta] = useState(1)
-  const [cargandoTasa, setCargandoTasa] = useState(false)
+  /** Tasa traída del servidor o escrita a mano. Solo cuenta si la moneda cambia. */
+  const [tasaCargada, setTasaCargada]   = useState(1)
+  /** Par cuya tasa ya llegó: «cargando» se deriva comparándolo con el par actual, en vez
+   *  de encender un flag desde el efecto (que puede quedarse encendido si algo falla). */
+  const [parResuelto, setParResuelto]   = useState<string | null>(null)
 
   const cuentaSel = cuentas.find(c => c.cuenta_id === cuentaId)
   const esEgreso  = tipo === 'EGRESO'
@@ -240,52 +243,64 @@ function MovimientoModal({
       .sort((a, b) => (a.moneda === cuentaSel.moneda ? 0 : 1) - (b.moneda === cuentaSel.moneda ? 0 : 1))
   }, [esEgreso, pendientes, cuentaSel])
 
+  // Si cambian tipo/cuenta y el pendiente elegido ya no está en la lista, se ignora.
+  // DERIVADO, no reseteado desde un efecto: el `setPendienteId('')` que había aquí era un
+  // `setState` síncrono dentro del efecto, con la cascada de repintados que eso arrastra,
+  // y además dejaba un fotograma con un pendiente seleccionado que ya no existía.
   const pendienteSel = listaPendientes.find(d => d.doc_id === pendienteId) ?? null
-
-  // Si cambian tipo/cuenta y el pendiente elegido ya no está en la lista, se limpia
-  useEffect(() => {
-    if (pendienteId && !listaPendientes.some(d => d.doc_id === pendienteId)) setPendienteId('')
-  }, [pendienteId, listaPendientes])
+  const pendienteEfectivo = pendienteSel ? pendienteId : ''
 
   // ¿El pendiente está en otra moneda que la caja? → se aplica tasa (como en transferencias)
   const cambiaMoneda = !!(pendienteSel && cuentaSel && pendienteSel.moneda !== cuentaSel.moneda)
 
-  // Al elegir/soltar un pendiente, el importe parte del saldo (en la moneda del documento)
-  useEffect(() => {
-    setImpDoc(pendienteSel ? pendienteSel.saldo.toFixed(2) : '')
-    setImpCaja('')
-    setEditandoCaja(false)
-  }, [pendienteId])
+  // Al elegir/soltar un pendiente, el importe parte del saldo del documento. Es un efecto
+  // del CLIC, no del render: va en el handler del selector (`elegirPendiente`), donde
+  // React sí puede agrupar los tres `setState` en un solo repintado.
 
-  // Cargar la tasa vigente cuando la moneda de la caja difiere de la del documento
+  // Cargar la tasa vigente cuando la moneda de la caja difiere de la del documento.
+  // La rama de «misma moneda» ya no escribe estado: `tasaCompleta` se deriva más abajo.
+  const parTasa = cambiaMoneda && pendienteSel && cuentaSel
+    ? `${pendienteSel.moneda}>${cuentaSel.moneda}` : ''
+  const cargandoTasa = !!parTasa && parResuelto !== parTasa
+
   useEffect(() => {
-    if (!cambiaMoneda || !pendienteSel || !cuentaSel) { setTasaCompleta(1); setTasaInput(''); setCargandoTasa(false); return }
+    if (!parTasa) return
+    const [desde, hasta] = parTasa.split('>')
     let vivo = true
-    setCargandoTasa(true)
-    obtenerTasaTransferencia(pendienteSel.moneda, cuentaSel.moneda)
+    obtenerTasaTransferencia(desde, hasta)
       .then(r => {
         if (!vivo) return
-        if (r.ok && r.tasa) { setTasaCompleta(r.tasa); setTasaInput(truncar4(r.tasa)); setEditandoCaja(false) }
-        else                { setTasaCompleta(0); setTasaInput('') }
+        if (r.ok && r.tasa) { setTasaCargada(r.tasa); setTasaInput(truncar4(r.tasa)); setEditandoCaja(false) }
+        else                { setTasaCargada(0); setTasaInput('') }
       })
-      .catch(() => { if (vivo) { setTasaCompleta(0); setTasaInput('') } })
-      .finally(() => { if (vivo) setCargandoTasa(false) })
+      .catch(() => { if (vivo) { setTasaCargada(0); setTasaInput('') } })
+      .finally(() => { if (vivo) setParResuelto(parTasa) })
     return () => { vivo = false }
-  }, [cambiaMoneda, pendienteSel, cuentaSel])
+  }, [parTasa])
+
+  // Sin cambio de moneda la tasa es 1 por definición: derivada, no guardada.
+  const tasaCompleta = cambiaMoneda ? tasaCargada : 1
 
   const impDocNum  = parseFloat(impDoc)  || 0
-  const impCajaNum = editandoCaja ? (parseFloat(impCaja) || 0) : Math.round(impDocNum * tasaCompleta * 100) / 100
+  // El importe en la caja es derivado (documento × tasa) salvo edición manual. El efecto
+  // que lo copiaba al estado disparaba un repintado extra por cada tecla y mantenía dos
+  // copias de la misma cifra; ahora el input lee esta.
+  const impCajaCalc  = Math.round(impDocNum * tasaCompleta * 100) / 100
+  const impCajaNum   = editandoCaja ? (parseFloat(impCaja) || 0) : impCajaCalc
+  const impCajaVista = editandoCaja ? impCaja : (impCajaCalc > 0 ? String(impCajaCalc) : '')
 
-  // Derivar el importe en la caja desde el importe del documento × tasa (salvo edición manual)
-  useEffect(() => {
-    if (cambiaMoneda && !editandoCaja && impDocNum > 0 && tasaCompleta > 0) {
-      setImpCaja(String(Math.round(impDocNum * tasaCompleta * 100) / 100))
-    }
-  }, [impDoc, tasaCompleta, cambiaMoneda, editandoCaja, impDocNum])
+  /** Elegir un pendiente arranca el importe en su saldo y suelta la edición manual. */
+  function elegirPendiente(id: string) {
+    setPendienteId(id)
+    const doc = listaPendientes.find(d => d.doc_id === id) ?? null
+    setImpDoc(doc ? doc.saldo.toFixed(2) : '')
+    setImpCaja('')
+    setEditandoCaja(false)
+  }
 
   function handleTasaChange(v: string) {
     setTasaInput(v)
-    setTasaCompleta(parseFloat(v) || 0)
+    setTasaCargada(parseFloat(v) || 0)
     setEditandoCaja(false)
     setImpCaja('')
   }
@@ -295,7 +310,7 @@ function MovimientoModal({
     const caja = parseFloat(v) || 0
     if (caja > 0 && impDocNum > 0) {
       const nueva = caja / impDocNum
-      setTasaCompleta(nueva)
+      setTasaCargada(nueva)
       setTasaInput(truncar4(nueva))
     }
   }
@@ -369,7 +384,7 @@ function MovimientoModal({
               {listaPendientes.length > 0 && (
                 <div className="input-group ter-col-full">
                   <label>{esEgreso ? 'Pagar un pendiente' : 'Cobrar un pendiente'}</label>
-                  <select className="input" value={pendienteId} onChange={e => setPendienteId(e.target.value)}>
+                  <select className="input" value={pendienteEfectivo} onChange={e => elegirPendiente(e.target.value)}>
                     <option value="">— Ninguno (registrar {labelRegistro} nuevo) —</option>
                     {listaPendientes.map(d => (
                       <option key={d.doc_id} value={d.doc_id}>
@@ -437,7 +452,7 @@ function MovimientoModal({
                   <div className="input-group ter-col-span-3">
                     <label>Se moverá en la caja ({cuentaSel.moneda})</label>
                     <input className="input" type="number" min="0" step="any"
-                      value={impCaja} onChange={e => handleImpCajaChange(e.target.value)} placeholder="0.00" />
+                      value={impCajaVista} onChange={e => handleImpCajaChange(e.target.value)} placeholder="0.00" />
                     <span className="input-hint">
                       {impDocNum > 0 && tasaCompleta > 0
                         ? `Saldas ${formatMonto(impDocNum)} ${pendienteSel.moneda}; en la caja ${esEgreso ? 'salen' : 'entran'} ${formatMonto(impCajaNum)} ${cuentaSel.moneda}.`
@@ -518,70 +533,75 @@ function TransferenciaModal({
   const [monto, setMonto]     = useState('')
   const [montoRecibido, setMontoRecibido] = useState('')
   const [tasaInput, setTasaInput] = useState('')
-  const [tasaCompleta, setTasaCompleta] = useState<number>(0)
+  /** Tasa traída o escrita a mano; solo cuenta si las monedas difieren. */
+  const [tasaCargada, setTasaCargada] = useState<number>(0)
   const [feeEnvio, setFeeEnvio]   = useState('')
   const [feeRecibo, setFeeRecibo] = useState('')
   const [tasaDisplay, setTasaDisplay] = useState<number | null>(null)
   const [tasaEsInversa, setTasaEsInversa] = useState(false)
-  const [cargandoTasa, setCargandoTasa] = useState(false)
+  /** Par cuya tasa ya llegó; «cargando» se deriva de él (ver el modal de movimiento). */
+  const [parResuelto, setParResuelto] = useState<string | null>(null)
   const [editandoMontoRecibido, setEditandoMontoRecibido] = useState(false)
 
   const cuentaOrigen  = cuentas.find(c => c.cuenta_id === origen)
   const cuentaDestino = cuentas.find(c => c.cuenta_id === destino)
   const monedasDiferentes = !!(cuentaOrigen && cuentaDestino && cuentaOrigen.moneda !== cuentaDestino.moneda)
 
+  // Solo el resultado de la petición se escribe en estado; el caso «misma moneda» se
+  // deriva (`tasaCompleta` más abajo) en vez de resetear cinco `useState` a mano dentro
+  // del efecto, que era una cascada de repintados y cinco sitios donde olvidarse uno.
+  const parTasa = monedasDiferentes && cuentaOrigen && cuentaDestino
+    ? `${cuentaOrigen.moneda}>${cuentaDestino.moneda}` : ''
+  const cargandoTasa = !!parTasa && parResuelto !== parTasa
+
   useEffect(() => {
-    if (!monedasDiferentes || !cuentaOrigen || !cuentaDestino) {
-      setTasaCompleta(0)
-      setTasaDisplay(null)
-      setTasaEsInversa(false)
-      setTasaInput('')
-      setMontoRecibido('')
-      return
-    }
-    setCargandoTasa(true)
-    obtenerTasaTransferencia(cuentaOrigen.moneda, cuentaDestino.moneda)
+    if (!parTasa) return
+    const [desde, hasta] = parTasa.split('>')
+    let vivo = true
+    obtenerTasaTransferencia(desde, hasta)
       .then(r => {
+        if (!vivo) return
         if (r.ok && r.tasa) {
-          setTasaCompleta(r.tasa)
+          setTasaCargada(r.tasa)
           setTasaInput(truncar4(r.tasa))
           setTasaDisplay(r.tasaDisplay ?? r.tasa)
           setTasaEsInversa(r.esInversa ?? false)
-          setMontoRecibido('')
-          setEditandoMontoRecibido(false)
         } else {
-          setTasaCompleta(0)
+          setTasaCargada(0)
           setTasaDisplay(null)
           setTasaEsInversa(false)
           setTasaInput('')
-          setMontoRecibido('')
         }
+        setMontoRecibido('')
+        setEditandoMontoRecibido(false)
       })
       .catch(() => {
-        setTasaCompleta(0)
-        setTasaDisplay(null)
-        setTasaEsInversa(false)
-        setTasaInput('')
-        setMontoRecibido('')
+        if (!vivo) return
+        setTasaCargada(0); setTasaDisplay(null); setTasaEsInversa(false)
+        setTasaInput(''); setMontoRecibido('')
       })
-      .finally(() => setCargandoTasa(false))
-  }, [origen, destino, monedasDiferentes])
+      .finally(() => { if (vivo) setParResuelto(parTasa) })
+    return () => { vivo = false }
+  }, [parTasa])
+
+  // Sin cambio de moneda no hay tasa que aplicar: 1 a 1.
+  const tasaCompleta = monedasDiferentes ? tasaCargada : 0
 
   const montoNum     = parseFloat(monto) || 0
   const feeEnvioNum  = parseFloat(feeEnvio) || 0
   const feeReciboNum = parseFloat(feeRecibo) || 0
   const montoRecibidoNum = parseFloat(montoRecibido) || 0
+  // Derivado, igual que en el modal de movimiento: el efecto que copiaba esta cifra al
+  // estado repintaba por cada tecla y mantenía dos copias del mismo número.
+  const montoConvertido = Math.round(montoNum * tasaCompleta * 1e6) / 1e6
   const montoDestino = monedasDiferentes
-    ? (editandoMontoRecibido ? montoRecibidoNum : montoNum * tasaCompleta)
+    ? (editandoMontoRecibido ? montoRecibidoNum : montoConvertido)
     : montoNum
+  const montoRecibidoVista = editandoMontoRecibido
+    ? montoRecibido
+    : (monedasDiferentes && montoConvertido > 0 ? String(montoConvertido) : '')
   const totalOrigen  = montoNum + feeEnvioNum
   const netoDestino  = montoDestino - feeReciboNum
-
-  useEffect(() => {
-    if (monedasDiferentes && !editandoMontoRecibido && montoNum > 0 && tasaCompleta > 0) {
-      setMontoRecibido(String(montoNum * tasaCompleta))
-    }
-  }, [monto, tasaCompleta, monedasDiferentes, editandoMontoRecibido, montoNum])
 
   function handleMontoRecibidoChange(value: string) {
     setMontoRecibido(value)
@@ -589,7 +609,7 @@ function TransferenciaModal({
     const mr = parseFloat(value) || 0
     if (mr > 0 && montoNum > 0) {
       const nuevaTasa = mr / montoNum
-      setTasaCompleta(nuevaTasa)
+      setTasaCargada(nuevaTasa)
       setTasaInput(truncar4(nuevaTasa))
     }
   }
@@ -597,7 +617,7 @@ function TransferenciaModal({
   function handleTasaChange(value: string) {
     setTasaInput(value)
     const num = parseFloat(value) || 0
-    setTasaCompleta(num)
+    setTasaCargada(num)
     setEditandoMontoRecibido(false)
     setMontoRecibido('')
   }
@@ -609,7 +629,7 @@ function TransferenciaModal({
       const m = parseFloat(value) || 0
       if (mr > 0 && m > 0) {
         const nuevaTasa = mr / m
-        setTasaCompleta(nuevaTasa)
+        setTasaCargada(nuevaTasa)
         setTasaInput(truncar4(nuevaTasa))
       }
     } else {
@@ -695,7 +715,7 @@ function TransferenciaModal({
                     <label>Monto recibido ({cuentaDestino?.moneda})</label>
                     <input className="input" type="number" min="0" step="any"
                       placeholder="0.00"
-                      value={montoRecibido} onChange={e => handleMontoRecibidoChange(e.target.value)} />
+                      value={montoRecibidoVista} onChange={e => handleMontoRecibidoChange(e.target.value)} />
                     <span className="input-hint">Editable si la tasa real difiere</span>
                   </div>
                 </>

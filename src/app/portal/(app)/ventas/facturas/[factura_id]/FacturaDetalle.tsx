@@ -184,6 +184,20 @@ export default function FacturaDetalle({ data, cobros }: Props) {
               {data.almacen_nombre ? ` · ${data.almacen_nombre}` : ''}.
             </p>
           )}
+          {/* Rastro mínimo (mig. 151): la respuesta a «¿quién anuló esto y cuándo?». */}
+          {(factura.emitida_at || factura.anulada_at) && (
+            <p className="input-hint">
+              {factura.emitida_at && (
+                <>Emitida {fmtFechaLargaEs(factura.emitida_at.slice(0, 10))}
+                  {factura.emitida_por ? ` por ${factura.emitida_por}` : ''}</>
+              )}
+              {factura.emitida_at && factura.anulada_at && ' · '}
+              {factura.anulada_at && (
+                <>Anulada {fmtFechaLargaEs(factura.anulada_at.slice(0, 10))}
+                  {factura.anulada_por ? ` por ${factura.anulada_por}` : ''}</>
+              )}
+            </p>
+          )}
         </div>
         <div className="ven-btn-group ven-btn-group-relative">
           {puedeEditar && (
@@ -194,8 +208,17 @@ export default function FacturaDetalle({ data, cobros }: Props) {
           <button className="btn btn-secondary" onClick={handleDescargarPdf} disabled={descargandoPdf}>
             <Download size={14} strokeWidth={2} /> {descargandoPdf ? 'Generando…' : 'Descargar PDF'}
           </button>
+          {/* Emitir sale del menú «⋯» y se pone delante: es LA acción que se espera de un
+              borrador, y estaba escondida a dos clics detrás de un icono sin etiqueta.
+              Sigue pasando por su ConfirmDialog (explica el número fiscal): «menos pasos»
+              es llegar antes a Emitir, no saltarse el borrador. */}
+          {factura.estado === 'BORRADOR' && (
+            <button className="btn btn-primary" onClick={() => cambiarEstado('EMITIDA')} disabled={isPending}>
+              <FileCheck size={14} strokeWidth={2} /> Emitir
+            </button>
+          )}
           <div className="ven-dropdown-wrap" ref={menuRef}>
-            <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)}>
+            <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} aria-label="Más acciones">
               <MoreHorizontal size={16} />
             </button>
             {menuOpen && (
@@ -203,22 +226,26 @@ export default function FacturaDetalle({ data, cobros }: Props) {
                 <button className="ven-dropdown-item" onClick={handleDuplicar} disabled={duplicating}>
                   <Copy size={14} strokeWidth={2} /> {duplicating ? 'Duplicando…' : 'Duplicar'}
                 </button>
-                {transiciones.length > 0 && (
+                {transiciones.filter(t => !(t === 'EMITIDA' && factura.estado === 'BORRADOR')).length > 0 && (
                   <>
                     <div className="ven-dropdown-sep" />
-                    {transiciones.map(t => {
-                      const Icon = t === 'EMITIDA' ? FileCheck : t === 'ANULADA' ? Ban : RotateCcw
-                      return (
-                        <button
-                          key={t}
-                          className={`ven-dropdown-item${t === 'ANULADA' ? ' ven-dropdown-item-danger' : ''}`}
-                          onClick={() => cambiarEstado(t)}
-                          disabled={isPending}
-                        >
-                          <Icon size={14} strokeWidth={2} /> {ACCION_FACTURA_LABEL[t]}
-                        </button>
-                      )
-                    })}
+                    {transiciones
+                      // Emitir ya está fuera como botón: repetirlo aquí son dos caminos
+                      // para lo mismo, y el usuario duda de si hacen algo distinto.
+                      .filter(t => !(t === 'EMITIDA' && factura.estado === 'BORRADOR'))
+                      .map(t => {
+                        const Icon = t === 'EMITIDA' ? FileCheck : t === 'ANULADA' ? Ban : RotateCcw
+                        return (
+                          <button
+                            key={t}
+                            className={`ven-dropdown-item${t === 'ANULADA' ? ' ven-dropdown-item-danger' : ''}`}
+                            onClick={() => cambiarEstado(t)}
+                            disabled={isPending}
+                          >
+                            <Icon size={14} strokeWidth={2} /> {ACCION_FACTURA_LABEL[t]}
+                          </button>
+                        )
+                      })}
                   </>
                 )}
               </div>
@@ -337,11 +364,24 @@ export default function FacturaDetalle({ data, cobros }: Props) {
         <CobrosFacturaCard cobros={cobros} numero={factura.numero} />
       )}
 
+      {/* Lo que el cliente va a leer en el PDF: se enseña aquí para que el dueño lo vea
+          sin tener que descargarlo. Se configura una vez, en la empresa (mig. 151). */}
+      {empresa.datos_pago && (
+        <div className="ven-notas">
+          <div className="ven-info-label">Cómo pagar</div>
+          <p>{empresa.datos_pago}</p>
+        </div>
+      )}
+
       {factura.notas && (
         <div className="ven-notas">
           <div className="ven-info-label">Notas</div>
           <p>{factura.notas}</p>
         </div>
+      )}
+
+      {empresa.pie_factura && (
+        <p className="ven-pie-factura">{empresa.pie_factura}</p>
       )}
 
       {factura.notas_internas && (

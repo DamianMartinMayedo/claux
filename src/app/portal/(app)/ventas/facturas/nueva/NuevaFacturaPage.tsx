@@ -197,8 +197,14 @@ export default function NuevaFacturaPage({ contexto }: Props) {
             <div className="input-group">
               <label>Vencimiento</label>
               <input className="input" type="date" value={fecha_vencimiento}
+                min={fecha_emision}
                 onChange={e => setFechaVencimiento(e.target.value)} />
               <span className="input-hint">Se calcula desde la condición de pago.</span>
+              {fecha_vencimiento && fecha_vencimiento < fecha_emision && (
+                <span className="input-hint-warning">
+                  El vencimiento es anterior a la emisión: la factura nacería vencida.
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -208,6 +214,7 @@ export default function NuevaFacturaPage({ contexto }: Props) {
           ajustes={ajustes}
           moneda={moneda}
           productos={contexto.productos}
+          almacenId={descuentaStock ? almacenId : undefined}
           notas={notas}
           notasInternas={notas_internas}
           onLineasChange={setLineas}
