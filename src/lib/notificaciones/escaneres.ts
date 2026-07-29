@@ -9,6 +9,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fmtFechaEs } from '@/lib/date-utils'
+import { etiquetaNumero } from '@/app/portal/(app)/ventas/_ventas-helpers'
 import { obtenerUsoMes } from '@/lib/ia/uso'
 import { umbralParaFecha, type Umbral } from './catalogo'
 import { crearNotificacion, resolverNotificaciones, type ContextoTenant } from './crear'
@@ -378,7 +379,7 @@ export async function escanearCuentas(
       .in('client_id', ids).in('origen', ['PAGO', 'COBRO']).not('referencia_id', 'is', null),
     db.from('facturas').select('factura_id, client_id, empresa_id, numero, cliente_id, fecha_vencimiento, moneda, total')
       .in('client_id', ids).eq('estado', 'EMITIDA').not('fecha_vencimiento', 'is', null),
-    db.from('gastos_cobros').select('registro_id, client_id, empresa_id, tipo, descripcion, tercero_id, vencimiento, moneda, monto')
+    db.from('gastos_cobros').select('registro_id, client_id, empresa_id, tipo, descripcion, concepto, tercero_id, vencimiento, moneda, monto')
       .in('client_id', ids).not('vencimiento', 'is', null),
     db.from('third_parties').select('tercero_id, client_id, nombre').in('client_id', ids),
   ])
@@ -399,24 +400,38 @@ export async function escanearCuentas(
   const vivasCxc = new Vivas()
   const vivasCxp = new Vivas()
 
-  // 1. Facturas emitidas vencidas → CxC.
+  // 1. Facturas emitidas: aviso ANTES del vencimiento y aviso urgente después.
+  //
+  // El aviso previo no existía, y su ausencia venía de una premisa falsa: «antes del
+  // vencimiento no hay nada que hacer con un cobro ajeno». Lo hay, y es lo más rentable
+  // que hace un negocio pequeño — llamar al cliente antes de la fecha. Cobrar a tiempo
+  // sale más barato que reclamar tarde.
   for (const f of facRes.data ?? []) {
     const saldo = Number(f.total) - (liquidado.get(f.factura_id as string) ?? 0)
     if (saldo <= EPS) continue
-    if (diasHasta(f.fecha_vencimiento as string, hoy) >= 0) continue
+
+    const dias = diasHasta(f.fecha_vencimiento as string, hoy)
+    const tipo: 'cxc_vencida' | 'cxc_por_vencer' = dias < 0 ? 'cxc_vencida' : 'cxc_por_vencer'
+    const umbral: Umbral | null = dias < 0 ? 'vencido' : umbralParaFecha('cxc_por_vencer', dias)
+    if (!umbral) continue
 
     const cliente = nombreTercero.get(`${f.client_id}:${f.cliente_id}`) ?? 'un cliente'
     vivasCxc.add(f.client_id as string, f.factura_id as string)
     const ok = await crearNotificacion({
       clientId:    f.client_id as string,
       empresaId:   f.empresa_id as string | null,
-      tipo:        'cxc_vencida',
-      titulo:      `Cobro vencido — ${cliente}`,
-      cuerpo:      `Factura ${f.numero}: quedan ${dinero(saldo, f.moneda as string)} por cobrar desde el ${fmtFechaEs(f.fecha_vencimiento as string)}.`,
+      tipo,
+      titulo:      `${dias < 0 ? 'Cobro vencido' : 'Cobro por vencer'} — ${cliente}`,
+      cuerpo:      dias < 0
+        ? `Factura ${f.numero}: quedan ${dinero(saldo, f.moneda as string)} por cobrar desde el ${fmtFechaEs(f.fecha_vencimiento as string)}.`
+        : `Factura ${f.numero}: ${dinero(saldo, f.moneda as string)} con vencimiento el ${fmtFechaEs(f.fecha_vencimiento as string)}.`,
       enlace:      `/portal/ventas/facturas/${f.factura_id}`,
       entidadTipo: 'documento',
       entidadId:   f.factura_id as string,
-      umbral:      'vencido',
+      umbral,
+      // Sin esto, el aviso previo y el vencido conviven como dos filas de la MISMA deuda:
+      // el urgente sustituye al aviso en cuanto pasa la fecha.
+      sustituyeA:  ['cxc_por_vencer', 'cxc_vencida'],
     }, ctxDe.get(f.client_id as string))
     if (ok) creadas++
   }
@@ -453,27 +468,94 @@ export async function escanearCuentas(
         sustituyeA:  ['cxp_por_vencer', 'cxp_vencida'],
       }, ctx)
       if (ok) creadas++
-    } else if (dias < 0) {
+    } else {
+      // Mismo criterio que las facturas: aviso previo y aviso urgente. El cobrable sin
+      // tercero (el subsidio de la nómina) también avisa: que el deudor no sea una ficha
+      // de `third_parties` no lo hace menos cobrable.
+      const tipo: 'cxc_vencida' | 'cxc_por_vencer' = dias < 0 ? 'cxc_vencida' : 'cxc_por_vencer'
+      const umbral: Umbral | null = dias < 0 ? 'vencido' : umbralParaFecha('cxc_por_vencer', dias)
+      if (!umbral) continue
       vivasCxc.add(r.client_id as string, r.registro_id as string)
+      const etiqueta = (r.concepto as string | null) || (r.descripcion as string)
       const ok = await crearNotificacion({
         clientId:  r.client_id as string,
         empresaId: r.empresa_id as string | null,
-        tipo:      'cxc_vencida',
-        titulo:    `Cobro vencido${quien ? ` — ${quien}` : ''}`,
-        cuerpo:    `${r.descripcion}: quedan ${dinero(saldo, r.moneda as string)} por cobrar desde el ${fmtFechaEs(r.vencimiento as string)}.`,
+        tipo,
+        titulo:    `${dias < 0 ? 'Cobro vencido' : 'Cobro por vencer'}${quien ? ` — ${quien}` : ''}`,
+        cuerpo:    dias < 0
+          ? `${etiqueta}: quedan ${dinero(saldo, r.moneda as string)} por cobrar desde el ${fmtFechaEs(r.vencimiento as string)}.`
+          : `${etiqueta}: ${dinero(saldo, r.moneda as string)} con vencimiento el ${fmtFechaEs(r.vencimiento as string)}.`,
         enlace:      '/portal/cxc',
         entidadTipo: 'documento',
         entidadId:   r.registro_id as string,
-        umbral:      'vencido',
+        umbral,
+        sustituyeA:  ['cxc_por_vencer', 'cxc_vencida'],
       }, ctx)
       if (ok) creadas++
     }
   }
 
-  // Cobrado/pagado (o borrado) ⇒ la notificación deja de aplicar.
+  // Cobrado/pagado (o borrado) ⇒ la notificación deja de aplicar. Los DOS tipos de cada
+  // lado se resuelven juntos: si solo se resolviera el urgente, el aviso previo de una
+  // factura ya cobrada se quedaría vivo para siempre.
   for (const t of tenants) {
-    await resolverNotificaciones(db, t.clientId, ['cxc_vencida'], 'documento', vivasCxc.de(t.clientId))
+    await resolverNotificaciones(db, t.clientId, ['cxc_por_vencer', 'cxc_vencida'], 'documento', vivasCxc.de(t.clientId))
     await resolverNotificaciones(db, t.clientId, ['cxp_por_vencer', 'cxp_vencida'], 'documento', vivasCxp.de(t.clientId))
+  }
+  return creadas
+}
+
+// ── Finanzas: borradores de factura estancados ────────────────────────────────
+//
+// Trabajo hecho y sin facturar: la factura existe, tiene líneas y total, y nadie la
+// emitió. Con el cron de suscripciones dejando borradores solos cada mes es cada vez más
+// fácil que uno se quede ahí para siempre — y una factura sin emitir no está en ningún
+// informe, ni en CxC, ni en la caja. No aparece en ninguna parte donde se pueda echar en
+// falta: por eso hace falta que alguien avise.
+//
+// Se auto-resuelve al emitir o borrar (el documento deja de estar en BORRADOR y sale de
+// la lista de «vivos»).
+export async function escanearBorradoresEstancados(
+  db: Db, tenants: ContextoTenant[], hoy: string,
+): Promise<number> {
+  const ids = tenants.map(t => t.clientId)
+  if (ids.length === 0) return 0
+
+  const DIAS = 15
+  const { data } = await db.from('facturas')
+    .select('factura_id, client_id, empresa_id, numero, fecha_emision, moneda, total')
+    .in('client_id', ids).eq('estado', 'BORRADOR').eq('archivado', false)
+
+  const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
+  const vivas = new Vivas()
+  let creadas = 0
+
+  for (const f of data ?? []) {
+    // Antigüedad por la fecha de EMISIÓN del documento, que es la que el dueño ve y la
+    // que decide en qué período entraría. `created_at` diría otra cosa en un borrador
+    // fechado hacia atrás, que es lo normal al registrar trabajo ya hecho.
+    const dias = -diasHasta(f.fecha_emision as string, hoy)
+    if (dias < DIAS) continue
+    // Un borrador vacío no es trabajo sin facturar, es un documento a medio empezar.
+    if (Number(f.total) <= 0) continue
+
+    vivas.add(f.client_id as string, f.factura_id as string)
+    const ok = await crearNotificacion({
+      clientId:    f.client_id as string,
+      empresaId:   f.empresa_id as string | null,
+      tipo:        'factura_borrador_estancada',
+      titulo:      'Borrador sin emitir',
+      cuerpo:      `${etiquetaNumero(f.numero as string)}: ${dinero(Number(f.total), f.moneda as string)} en borrador desde el ${fmtFechaEs(f.fecha_emision as string)}. Sin emitir no cuenta en tus informes ni en lo que te deben.`,
+      enlace:      `/portal/ventas/facturas/${f.factura_id}`,
+      entidadTipo: 'documento',
+      entidadId:   f.factura_id as string,
+      umbral:      '15d',
+    }, ctxDe.get(f.client_id as string))
+    if (ok) creadas++
+  }
+
+  for (const t of tenants) {
+    await resolverNotificaciones(db, t.clientId, ['factura_borrador_estancada'], 'documento', vivas.de(t.clientId))
   }
   return creadas
 }

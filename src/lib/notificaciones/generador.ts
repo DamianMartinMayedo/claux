@@ -15,7 +15,7 @@ import { umbralParaFecha, type Severidad } from './catalogo'
 import { crearNotificacion, type ContextoTenant, type Preferencia } from './crear'
 import {
   diasHasta,
-  escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
+  escanearBorradoresEstancados, escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
   escanearStock, escanearRrhh, escanearCredito, escanearReservas,
   escanearIa, escanearDossier, escanearServicios, escanearRenovaciones,
 } from './escaneres'
@@ -98,6 +98,7 @@ export async function generarNotificacionesInternas(
   creadas += await escanearContratosTerceros(db, conBase, hoy)
   creadas += await escanearCuentas(db, conBase, hoy)
   creadas += await escanearOfertas(db, conBase, hoy)
+  creadas += await escanearBorradoresEstancados(db, conBase, hoy)
   creadas += await escanearCredito(db, conBase)
 
   creadas += await escanearCaja(db, con('caja'))

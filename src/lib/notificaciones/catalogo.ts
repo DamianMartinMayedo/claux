@@ -138,13 +138,30 @@ export const CATALOGO = {
     descripcion: 'Le debes dinero a un proveedor y ya pasó la fecha.',
     umbrales: ['vencido'],
   },
-  // Solo "vencida", sin aviso previo: antes del vencimiento no hay nada que
-  // hacer con un cobro ajeno. Lo accionable es reclamarlo cuando ya se pasó.
+  // ⚠️ Este tipo NACIÓ de una premisa que resultó falsa: «antes del vencimiento no hay
+  // nada que hacer con un cobro ajeno». Sí lo hay, y es lo más rentable que hace un
+  // negocio pequeño: llamar al cliente ANTES de la fecha. Cobrar a tiempo es más barato
+  // que reclamar tarde, y en Cuba el cobro se persigue por teléfono. De ahí el aviso
+  // previo, con la misma escala que el pago por vencer.
+  cxc_por_vencer: {
+    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: true,
+    etiqueta: 'Cobro por vencer',
+    descripcion: 'Un cliente tiene un pago que se acerca a su fecha.',
+    ...ESCALA_VENCIMIENTO,
+  },
   cxc_vencida: {
     categoria: 'finanzas', modulo: 'base', severidad: 'urgente', implementado: true,
     etiqueta: 'Cobro vencido',
     descripcion: 'Un cliente te debe dinero y ya pasó la fecha.',
     umbrales: ['vencido'],
+  },
+  // Trabajo hecho y sin facturar. Con el cron de suscripciones dejando borradores
+  // solos, es cada vez más fácil que uno se quede ahí para siempre.
+  factura_borrador_estancada: {
+    categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: true,
+    etiqueta: 'Borrador sin emitir',
+    descripcion: 'Una factura lleva demasiado tiempo en borrador.',
+    umbrales: ['15d'],
   },
   oferta_por_caducar: {
     categoria: 'finanzas', modulo: 'base', severidad: 'aviso', implementado: true,
