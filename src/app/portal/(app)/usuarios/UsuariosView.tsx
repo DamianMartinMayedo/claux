@@ -10,7 +10,7 @@ import {
   type UsuarioPortal,
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
-import { empresaColorVar } from '@/components/portal/EmpresaTag'
+import { empresaColorVar, EmpresaTag } from '@/components/portal/EmpresaTag'
 import Tabs from '@/components/Tabs'
 import { Info, Key, Pencil, Plus, User, X } from 'lucide-react'
 
@@ -28,12 +28,16 @@ const ROL_LABEL: Record<string, string> = {
   usuario:       'Operador',
 }
 
+// Familia canónica `.badge`: se pinta dentro de la tabla, donde el design system apaga
+// el fondo. `.usr-badge-*` sigue existiendo para PerfilView, que la usa en una tarjeta
+// (ahí el pill es correcto); el modificador `usr-badge-lectura` no lleva fondo, así que
+// compone bien con `.badge`.
 function RolBadge({ rol, soloLectura }: { rol: string; soloLectura: boolean }) {
   const label = soloLectura
     ? `${ROL_LABEL[rol] ?? rol} · Solo lectura`
     : ROL_LABEL[rol] ?? rol
-  const cls = rol === 'admin_empresa' ? 'usr-badge-admin' : 'usr-badge-usuario'
-  return <span className={`usr-badge ${cls}${soloLectura ? ' usr-badge-lectura' : ''}`}>{label}</span>
+  const cls = rol === 'admin_empresa' ? 'badge-warning' : 'badge-info'
+  return <span className={`badge ${cls}${soloLectura ? ' usr-badge-lectura' : ''}`}>{label}</span>
 }
 
 // ── Modal Usuario ─────────────────────────────────────────────────────────────
@@ -411,19 +415,23 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                           <span className="text-xs-error">Sin asignar</span>
                         ) : (
                           <div className="usr-empresas-list">
+                            {/* `EmpresaTag` es el componente canónico para identidad de
+                                empresa en una tabla (punto de color + nombre, sin pill);
+                                es el mismo que usa la columna Empresa de Movimientos. La
+                                `.usr-empresa-tag` que había aquí era un recuadro gris con
+                                borde de color, que dentro de la tabla desentonaba. */}
                             {u.empresas.slice(0, 2).map(id => (
-                              <span key={id} className="usr-empresa-tag" style={empresaColorVar(empresaMap.get(id)?.color)}>
-                                {empresaMap.get(id)?.nombre ?? id}
-                              </span>
+                              <EmpresaTag key={id} color={empresaMap.get(id)?.color} nombre={empresaMap.get(id)?.nombre ?? id} />
                             ))}
+                            {/* El «+N» no es una empresa: no lleva punto de color. */}
                             {u.empresas.length > 2 && (
-                              <span className="usr-empresa-tag">+{u.empresas.length - 2}</span>
+                              <span className="text-xs-muted">+{u.empresas.length - 2}</span>
                             )}
                           </div>
                         )}
                       </td>
                       <td data-label="Estado">
-                        <span className={`usr-estado ${u.estado === 'ACTIVO' ? 'usr-estado-activo' : 'usr-estado-inactivo'}`}>
+                        <span className={`badge ${u.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
                           {u.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>

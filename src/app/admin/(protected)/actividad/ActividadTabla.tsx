@@ -19,6 +19,14 @@ const ENTITY_LABEL: Record<string, string> = {
   pago:    'Pago',
   sistema: 'Sistema',
 }
+// Variantes de la familia `.badge`, que dentro de la tabla van sin fondo. Los tonos son
+// los que tenía la antigua `.act-badge-*`, ahora vía tokens del design system.
+const ENTITY_BADGE: Record<string, string> = {
+  cliente: 'badge-info',
+  plan:    'badge-warning',
+  pago:    'badge-success',
+  sistema: 'badge-neutral',
+}
 
 const ACTION_LABEL: Record<string, string> = {
   crear:          'Crear',
@@ -127,7 +135,7 @@ export default function ActividadTabla({ registros }: { registros: Registro[] })
                 </td>
 
                 <td data-label="Entidad">
-                  <span className={`act-entity-badge act-badge-${r.entity}`}>
+                  <span className={`badge ${ENTITY_BADGE[r.entity] ?? 'badge-neutral'}`}>
                     {ENTITY_LABEL[r.entity] ?? r.entity}
                   </span>
                 </td>

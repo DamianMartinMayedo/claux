@@ -37,10 +37,13 @@ const TIPO_LABEL: Record<TipoTercero, string> = {
   PROVEEDOR: 'Proveedor',
   AMBOS:     'Ambos',
 }
+// Variantes de la familia canónica `.badge`, no una propia: dentro de una tabla el
+// design system le quita el fondo y el tipo se lee como texto de color. La antigua
+// `.ter-badge-*` además llevaba hex a pelo (#eff6ff…), sin par para el modo oscuro.
 const TIPO_CLS: Record<TipoTercero, string> = {
-  CLIENTE:   'ter-badge-cliente',
-  PROVEEDOR: 'ter-badge-proveedor',
-  AMBOS:     'ter-badge-ambos',
+  CLIENTE:   'badge-info',
+  PROVEEDOR: 'badge-purple',
+  AMBOS:     'badge-success',
 }
 
 const CONDICION_LABEL: Record<string, string> = {
@@ -344,7 +347,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
 
                     {/* Tipo */}
                     <td data-label="Tipo">
-                      <span className={`ter-badge ${TIPO_CLS[t.tipo]}`}>
+                      <span className={`badge ${TIPO_CLS[t.tipo]}`}>
                         {TIPO_LABEL[t.tipo]}
                       </span>
                     </td>

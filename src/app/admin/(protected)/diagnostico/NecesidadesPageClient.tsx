@@ -130,9 +130,12 @@ export default function NecesidadesPageClient({
                       </div>
                     </td>
                     <td data-label="Recomienda">
+                      {/* `.badge` como la columna Estado de esta MISMA fila, que ya salía
+                          plana: con `.dgn-chip` una llevaba pill y la otra no, y la
+                          incoherencia se veía de un vistazo. */}
                       <div className="dgn-chips">
                         {n.modulos.map((c) => (
-                          <span key={c} className="dgn-chip">{nombreModulo.get(c) ?? c}</span>
+                          <span key={c} className="badge badge-neutral">{nombreModulo.get(c) ?? c}</span>
                         ))}
                       </div>
                     </td>

@@ -16,6 +16,13 @@ const TIPO_LABEL: Record<string, string> = {
   funcionalidad: 'Funcionalidad',
   addon:         'Addon',
 }
+// Variantes de la familia `.badge` del design system, un tono por tipo.
+const TIPO_BADGE: Record<string, string> = {
+  base:          'badge-info',
+  modulo:        'badge-success',
+  funcionalidad: 'badge-purple',
+  addon:         'badge-warning',
+}
 
 type Pagina = { ruta: string; label: string; orden: number }
 
@@ -150,7 +157,10 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
                   <span className="table-empresa">{m.nombre}</span>
                 </td>
                 <td data-label="Tipo">
-                  <span className={`mod-tipo-badge mod-tipo-${m.tipo === 'funcionalidad' ? 'func' : m.tipo === 'addon' ? 'addon' : m.tipo}`}>
+                  {/* Familia canónica `.badge`: sin fondo dentro de la tabla. La antigua
+                      `.mod-tipo-badge` estaba definida DOS veces (05-admin-paginas y
+                      07-ventas-actividad) con fondos distintos, ganando la segunda. */}
+                  <span className={`badge ${TIPO_BADGE[m.tipo] ?? 'badge-neutral'}`}>
                     {TIPO_LABEL[m.tipo] ?? m.tipo}
                   </span>
                 </td>

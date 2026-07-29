@@ -65,9 +65,16 @@
    (06-portal.css) es exactamente esto con otro nombre — al tocar Usuarios, converger. */
 .badge-row { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
 
-/* Dentro de tablas: sin fondo, más ligero visualmente */
+/* Dentro de tablas: sin fondo, más ligero visualmente.
+   `.via-badge` (vías de pago de un tercero) entra aquí y NO se convirtió a `.badge`
+   porque el mismo componente `ViaBadge` se pinta también en el modal y en la ficha del
+   tercero, donde el pill sí es lo correcto: la clase se queda y el apagado depende del
+   contexto, que es exactamente el contrato de esta regla. Cualquier otra familia de
+   badge propia que acabe dentro de una tabla se converge a `.badge`, no se añade aquí. */
 .table-wrapper .badge,
-table .badge { background: transparent; }
+table .badge,
+.table-wrapper .via-badge,
+table .via-badge { background: transparent; }
 
 /* ═══════════════════════════════════════════════════
    FORMULARIOS

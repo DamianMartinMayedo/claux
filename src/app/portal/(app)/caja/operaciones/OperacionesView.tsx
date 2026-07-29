@@ -16,10 +16,13 @@ const money = (n: number) => Number(n).toLocaleString('es-ES', { minimumFraction
 const qty   = (n: number) => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 3 })
 const fecha = (s: string) => s ? new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 
+// `.badge` y no la familia propia `.mon-badge`: dentro de una tabla el design system
+// apaga el fondo del badge (`table .badge` en 03-components.css) y el estado se lee como
+// texto de color. `.mon-badge` no pasa por ahí, así que salía con pill.
 function estadoBadge(estado: string) {
-  if (estado === 'ANULADO')       return <span className="mon-badge mon-badge-warn">Anulada</span>
-  if (estado === 'RECTIFICACION') return <span className="mon-badge mon-badge-info">Rectificación</span>
-  return <span className="mon-badge mon-badge-neutral">Original</span>
+  if (estado === 'ANULADO')       return <span className="badge badge-warning">Anulada</span>
+  if (estado === 'RECTIFICACION') return <span className="badge badge-info">Rectificación</span>
+  return <span className="badge badge-neutral">Original</span>
 }
 
 export default function OperacionesView({ data }: Props) {

@@ -124,7 +124,10 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
         <div className="prf-card-header">
           <h2 className="prf-section-title">Mi usuario</h2>
           <div className="prf-badge-row">
-            <span className="usr-badge usr-badge-admin" style={perfil.rol !== 'admin_empresa' ? { background: 'var(--color-info-bg)', color: 'var(--color-primary)' } : {}}>
+            {/* La clase dice el rol; antes era `usr-badge-admin` con un estilo inline que
+                la repintaba de azul cuando NO era admin — los mismos valores que ya tiene
+                `usr-badge-usuario`. Estilo inline fuera (regla nº1 de la skill de UI). */}
+            <span className={`usr-badge ${perfil.rol === 'admin_empresa' ? 'usr-badge-admin' : 'usr-badge-usuario'}`}>
               {ROL_LABEL[perfil.rol] ?? perfil.rol}
             </span>
             {perfil.solo_lectura && (

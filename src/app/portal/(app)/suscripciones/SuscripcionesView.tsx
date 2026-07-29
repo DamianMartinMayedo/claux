@@ -244,7 +244,6 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                     <select className="input" value={empresaId} onChange={e => onEmpresaChange(e.target.value)} required>
                       {data.empresas.map(em => <option key={em.empresa_id} value={em.empresa_id}>{em.nombre}</option>)}
                     </select>
-                    <span className="input-hint">Cada empresa tiene sus propios clientes y su facturación.</span>
                   </div>
                 )}
               </div>
