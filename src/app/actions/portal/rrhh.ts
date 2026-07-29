@@ -369,27 +369,55 @@ function itemsDeIncidencia(inc: IncidenciaMes): ItemLinea[] {
   return out
 }
 
+const SELECT_INCIDENCIAS =
+  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios'
+
+/** Los importes llegan como texto (`numeric`): sin esto, todo suma concatenando. */
+function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaMes {
+  return {
+    ...r,
+    dias_trabajados:  r.dias_trabajados === null ? null : Number(r.dias_trabajados),
+    dias_vacaciones:  Number(r.dias_vacaciones),
+    pago_extra:       Number(r.pago_extra),
+    pago_nocturnidad: Number(r.pago_nocturnidad),
+    feriados:         Number(r.feriados),
+    penalizacion:     Number(r.penalizacion),
+    otros_descuentos: Number(r.otros_descuentos),
+    pago_subsidios:   Number(r.pago_subsidios),
+  }
+}
+
 /** Incidencias de un período, por trabajador. Una consulta para toda la página. */
 async function leerIncidencias(
   db: DbAdmin, client_id: string, periodo: string,
 ): Promise<Map<string, IncidenciaMes>> {
   const { data } = await db.from('incidencias_nomina')
-    .select('incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios')
+    .select(SELECT_INCIDENCIAS)
     .eq('client_id', client_id)
     .eq('periodo', periodo)
   const m = new Map<string, IncidenciaMes>()
   for (const r of (data ?? []) as (IncidenciaMes & { empleado_id: string })[]) {
-    m.set(r.empleado_id, {
-      ...r,
-      dias_trabajados:  r.dias_trabajados === null ? null : Number(r.dias_trabajados),
-      dias_vacaciones:  Number(r.dias_vacaciones),
-      pago_extra:       Number(r.pago_extra),
-      pago_nocturnidad: Number(r.pago_nocturnidad),
-      feriados:         Number(r.feriados),
-      penalizacion:     Number(r.penalizacion),
-      otros_descuentos: Number(r.otros_descuentos),
-      pago_subsidios:   Number(r.pago_subsidios),
-    })
+    m.set(r.empleado_id, normIncidencia(r))
+  }
+  return m
+}
+
+/**
+ * Lo mismo pero de VARIOS períodos a la vez, con clave `periodo|empleado_id`: la
+ * página de RRHH mide el desfase de todas las nóminas visibles, que pueden ser de
+ * meses distintos, y una consulta por nómina no es opción en 3G.
+ */
+async function leerIncidenciasDeVarios(
+  db: DbAdmin, client_id: string, periodos: string[],
+): Promise<Map<string, IncidenciaMes>> {
+  const m = new Map<string, IncidenciaMes>()
+  if (!periodos.length) return m
+  const { data } = await db.from('incidencias_nomina')
+    .select(SELECT_INCIDENCIAS)
+    .eq('client_id', client_id)
+    .in('periodo', periodos)
+  for (const r of (data ?? []) as (IncidenciaMes & { empleado_id: string })[]) {
+    m.set(`${r.periodo}|${r.empleado_id}`, normIncidencia(r))
   }
   return m
 }
@@ -680,21 +708,57 @@ function configDe(mapa: Map<string, ConfigNominaEmpresa>, empresa_id: string): C
  * con la ley de marzo aunque estemos en julio.
  */
 async function leerParametrosCuba(db: DbAdmin, fecha: string): Promise<ParametroFiscal[]> {
-  const { data } = await db.from('parametros_fiscales_cuba')
-    .select('parametro_id, concepto, tabla_tramos, base_calculo, provisional, vigente_desde, vigente_hasta')
-    .lte('vigente_desde', fecha)
-    .or(`vigente_hasta.is.null,vigente_hasta.gte.${fecha}`)
-    .order('vigente_desde', { ascending: false })
-  // Si hubiera dos filas vigentes del mismo tributo (vigencias mal cerradas), gana
-  // la más reciente: se queda la primera de cada concepto.
+  const { data } = await db.from('parametros_fiscales_cuba').select(SELECT_PARAMETROS)
+  return parametrosVigentes((data ?? []) as ParametroConVigencia[], fecha)
+}
+
+const SELECT_PARAMETROS =
+  'parametro_id, concepto, tabla_tramos, base_calculo, provisional, vigente_desde, vigente_hasta'
+
+type ParametroConVigencia = ParametroFiscal & { vigente_desde: string; vigente_hasta: string | null }
+
+/**
+ * Filtro de vigencia EN MEMORIA sobre la tabla entera. Se lee completa (son cuatro
+ * filas de ley, no datos del cliente) porque la página de RRHH necesita resolverla
+ * para varias fechas a la vez —una nómina por mes— y hacerlo en SQL sería una
+ * consulta por nómina.
+ */
+function parametrosVigentes(todos: ParametroConVigencia[], fecha: string): ParametroFiscal[] {
+  const vigentes = todos
+    .filter(p => p.vigente_desde <= fecha && (!p.vigente_hasta || p.vigente_hasta >= fecha))
+    // Si hubiera dos filas vigentes del mismo tributo (vigencias mal cerradas), gana
+    // la más reciente: se queda la primera de cada concepto.
+    .sort((a, b) => (a.vigente_desde < b.vigente_desde ? 1 : -1))
   const vistos = new Set<string>()
   const out: ParametroFiscal[] = []
-  for (const p of (data ?? []) as ParametroFiscal[]) {
+  for (const p of vigentes) {
     if (vistos.has(p.concepto)) continue
     vistos.add(p.concepto)
     out.push(p)
   }
   return out
+}
+
+/**
+ * Saldo de vacaciones ACUMULADO menos PAGADO de un empleado, derivado de las
+ * nóminas CONFIRMADA (mig. 142/143: no se guarda en ninguna parte — un total
+ * mutable se rompía al reabrir o borrar una nómina). Una sola fuente para las
+ * dos vistas que lo necesitan: la ficha del empleado (`obtenerEmpleadoDetalle`)
+ * y el aviso de tope al guardar una incidencia (`guardarIncidencia`).
+ */
+async function saldoVacacionesAcumulado(
+  db: DbAdmin, client_id: string, empleado_id: string,
+): Promise<number> {
+  const { data: confirmadas } = await db.from('nominas')
+    .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA')
+  const ids = ((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id)
+  if (!ids.length) return 0
+  const { data: lineas } = await db.from('nomina_lineas')
+    .select('vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+    .eq('client_id', client_id).eq('empleado_id', empleado_id).in('nomina_id', ids)
+  return redondear2(((lineas ?? []) as {
+    vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+  }[]).reduce((s, l) => s + (l.vacaciones_acumuladas_periodo ?? 0) - (l.vacaciones_pagadas_periodo ?? 0), 0))
 }
 
 /** El modelo cubano SOLO actúa sobre nóminas en CUP. Ver `crearNomina`. */
@@ -971,10 +1035,34 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     arr.push({ ...c, valor: Number(c.valor) })
     conceptosPorEmpleado.set(c.empleado_id, arr)
   }
-  // La nómina da la empresa (qué reglas le tocan) y el período (qué conceptos
-  // PUNTUAL cuentan): sin ambos, el desfase se mediría contra otra cosa.
+  // La nómina da la empresa (qué reglas le tocan), el período (qué conceptos
+  // PUNTUAL y qué incidencias cuentan) y la fecha (qué ley fiscal regía): sin los
+  // tres, el desfase se mediría contra otra cosa.
   const nominaPorId = new Map(nominasRaw.map(n => [n.nomina_id, n]))
-  const reglasDe    = await leerReglas(db, session.client_id)
+  const periodos    = Array.from(new Set(nominasRaw.map(n => n.periodo)))
+
+  const [reglasDe, reglasTodas, configNomina, incidenciasTodas, paramsRes] = await Promise.all([
+    leerReglas(db, session.client_id),
+    leerTodasLasReglas(db, session.client_id),
+    leerConfigNomina(db, session.client_id),
+    leerIncidenciasDeVarios(db, session.client_id, periodos),
+    db.from('parametros_fiscales_cuba').select(SELECT_PARAMETROS),
+  ])
+  const parametrosTodos = (paramsRes.data ?? []) as ParametroConVigencia[]
+  // Una nómina por mes son muchas fechas repetidas: se resuelve la ley una vez por
+  // fecha distinta, no una por línea.
+  const paramsPorFecha = new Map<string, ParametroFiscal[]>()
+  const parametrosEn = (fecha: string) => {
+    let p = paramsPorFecha.get(fecha)
+    if (!p) { p = parametrosVigentes(parametrosTodos, fecha); paramsPorFecha.set(fecha, p) }
+    return p
+  }
+  // `dias_laborables`/`es_socio` viven en `empleados` (mig. 143) pero no están en el
+  // tipo `Empleado` que consume la pantalla: aquí solo hacen falta para el cálculo.
+  const fichaCuba = new Map(
+    ((empRes.data ?? []) as unknown as
+      { empleado_id: string; es_socio: boolean | null; dias_laborables: number | null }[])
+      .map(e => [e.empleado_id, e]))
 
   // Ítems por línea: los del desglose que se pinta, y aparte los PUNTUAL, que son
   // los que el recálculo conservará y por tanto deben contar al medir el desfase.
@@ -1009,6 +1097,14 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     // el caso real (la nómina del mes ya está cerrada cuando uno se acuerda), así
     // que ocultar el desfase ahí obligaba a borrar la nómina y regenerarla.
     const nom  = nominaPorId.get(l.nomina_id)
+    // Se compone con EXACTAMENTE lo mismo que usará el recálculo —incidencias del
+    // mes y ley cubana incluidas—. Cuando faltaban, toda línea con una incidencia
+    // (o cualquiera bajo MIPYME_CUBA) salía «desfasada» para siempre y actualizar
+    // no encontraba nada que cambiar: el aviso mentía.
+    const cfg = nom ? configDe(configNomina, nom.empresa_id) : null
+    const inc = nom ? incidenciasTodas.get(`${nom.periodo}|${l.empleado_id}`) : undefined
+    const aplicaCuba = !!nom && !!cfg && cfg.modelo === 'MIPYME_CUBA' && nom.moneda === MONEDA_CUBA
+    const ficha = fichaCuba.get(l.empleado_id)
     const calc = nom
       ? componerLinea({
           salario_base: Number(l.salario_base),
@@ -1016,6 +1112,14 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
           conceptos:    conceptosPorEmpleado.get(l.empleado_id) ?? [],
           preservados:  preservadosPorLinea.get(l.linea_id) ?? [],
           periodo:      nom.periodo,
+          incidencia:   inc,
+          cuba: aplicaCuba ? {
+            parametros:      parametrosEn(nom.fecha),
+            dias_laborables: Number(ficha?.dias_laborables ?? cfg!.dias_laborables_default),
+            es_socio:        !!ficha?.es_socio,
+            dias_trabajados: inc?.dias_trabajados ?? null,
+            dias_vacaciones: inc?.dias_vacaciones ?? 0,
+          } : undefined,
         })
       : null
     arr.push({
@@ -1079,22 +1183,16 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const monedas = (monRes.data ?? []) as MonedaOpcion[]
   const tasas   = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
 
-  const [reglasTodas, configNomina, provisionales] = await Promise.all([
-    leerTodasLasReglas(db, session.client_id),
-    leerConfigNomina(db, session.client_id),
-    // Solo interesa si alguna empresa está en el modelo cubano: en el general estos
-    // tributos no se aplican y avisar de ellos sería ruido.
-    db.from('parametros_fiscales_cuba')
-      .select('concepto').eq('provisional', true).is('vigente_hasta', null),
-  ])
-
   return {
     empleados,
     nominas,
     reglas:        reglasTodas,
     config_nomina: Array.from(configNomina.values()),
+    // Los que siguen a la espera del valor real (vigencia abierta). En el modelo
+    // general estos tributos no se aplican, pero avisar solo cuesta una línea aquí:
+    // la tabla ya está leída para medir el desfase.
     fiscales_provisionales: Array.from(new Set(
-      ((provisionales.data ?? []) as { concepto: string }[]).map(p => p.concepto))),
+      parametrosTodos.filter(p => p.provisional && !p.vigente_hasta).map(p => p.concepto))),
     turnos_catalogo,
     asignaciones,
     cuentas,
@@ -1556,16 +1654,8 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   // Saldo de vacaciones DERIVADO: lo acumulado menos lo pagado, sobre las nóminas
   // CONFIRMADAS. Se autocorrige ante cualquier reversión —reabrir o borrar una
   // nómina lo recalcula solo—, que es justo lo que un total guardado no hacía.
-  const confirmadas = new Set(
-    data.nominas.filter(n => n.estado === 'CONFIRMADA').map(n => n.nomina_id))
-  let acumuladas = 0
-  for (const n of data.nominas) {
-    if (!confirmadas.has(n.nomina_id)) continue
-    for (const l of n.lineas) {
-      if (l.empleado_id !== empleado_id) continue
-      acumuladas += (l.vacaciones_acumuladas_periodo ?? 0) - (l.vacaciones_pagadas_periodo ?? 0)
-    }
-  }
+  // Misma derivación que usa el aviso de tope en `guardarIncidencia`.
+  const acumuladas = await saldoVacacionesAcumulado(db, session.client_id, empleado_id)
 
   // El desfase de cada línea ya viene marcado desde `obtenerRrhh`
   // (`NominaLinea.desfasada`): la vista filtra por ahí, sin consultas extra.
@@ -1715,7 +1805,7 @@ export async function exportarNominaXlsx(
   const empresa  = empresas.find(e => e.empresa_id === nomina.empresa_id)
   if (!empresa) return { ok: false, error: 'Empresa no válida.' }
 
-  const [{ data: lineas }, { data: items }, configs] = await Promise.all([
+  const [{ data: lineas }, { data: items }, configs, incidencias] = await Promise.all([
     db.from('nomina_lineas')
       .select('linea_id, empleado_id, empleado_nombre, cargo, salario_base, devengado, deducciones, neto, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo, subsidios')
       .eq('nomina_id', nomina_id).eq('client_id', session.client_id)
@@ -1724,15 +1814,17 @@ export async function exportarNominaXlsx(
       .select('linea_id, nombre, tipo, monto, origen')
       .eq('nomina_id', nomina_id).eq('client_id', session.client_id),
     leerConfigNomina(db, session.client_id),
+    leerIncidencias(db, session.client_id, nomina.periodo),
   ])
 
   const filas = (lineas ?? []) as Record<string, unknown>[]
   const { data: fichas } = await db.from('empleados')
-    .select('empleado_id, documento')
+    .select('empleado_id, documento, dias_laborables')
     .eq('client_id', session.client_id)
     .in('empleado_id', Array.from(new Set(filas.map(f => f.empleado_id as string))))
-  const docDe = new Map(((fichas ?? []) as { empleado_id: string; documento: string | null }[])
-    .map(f => [f.empleado_id, f.documento]))
+  const fichaDe = new Map(((fichas ?? []) as
+    { empleado_id: string; documento: string | null; dias_laborables: number | null }[])
+    .map(f => [f.empleado_id, f]))
 
   // El importe de cada tributo se reconstruye desde los ítems `LEY`, buscándolos por
   // su nombre canónico: es lo que quedó congelado en la línea, no un recálculo.
@@ -1747,8 +1839,12 @@ export async function exportarNominaXlsx(
     porLinea.set(it.linea_id, m)
   }
 
-  const esCuba = configDe(configs, nomina.empresa_id).modelo === 'MIPYME_CUBA'
-    && nomina.moneda === MONEDA_CUBA
+  const config = configDe(configs, nomina.empresa_id)
+  const esCuba = config.modelo === 'MIPYME_CUBA' && nomina.moneda === MONEDA_CUBA
+  // Sin incidencia, los días trabajados son los laborables del trabajador: se
+  // exporta ese número y no un «Completo», que en una hoja de cálculo no suma.
+  const diasDe = (empleado_id: string) =>
+    Number(fichaDe.get(empleado_id)?.dias_laborables ?? config.dias_laborables_default)
 
   const { nominaAXlsx } = await import('@/lib/rrhh/nomina-xlsx')
   const { base64, nombre } = await nominaAXlsx({
@@ -1759,7 +1855,7 @@ export async function exportarNominaXlsx(
     esCuba,
     lineas: filas.map(f => ({
       empleado_nombre: f.empleado_nombre as string,
-      documento:       docDe.get(f.empleado_id as string) ?? null,
+      documento:       fichaDe.get(f.empleado_id as string)?.documento ?? null,
       cargo:           (f.cargo as string) ?? null,
       salario_base:    Number(f.salario_base),
       devengado:       Number(f.devengado),
@@ -1768,6 +1864,14 @@ export async function exportarNominaXlsx(
       vacaciones_acumuladas_periodo: Number(f.vacaciones_acumuladas_periodo ?? 0),
       vacaciones_pagadas_periodo:    Number(f.vacaciones_pagadas_periodo ?? 0),
       subsidios:       Number(f.subsidios ?? 0),
+      dias_trabajados:  incidencias.get(f.empleado_id as string)?.dias_trabajados
+                          ?? diasDe(f.empleado_id as string),
+      dias_vacaciones:  incidencias.get(f.empleado_id as string)?.dias_vacaciones ?? 0,
+      pago_extra:       incidencias.get(f.empleado_id as string)?.pago_extra ?? 0,
+      pago_nocturnidad: incidencias.get(f.empleado_id as string)?.pago_nocturnidad ?? 0,
+      feriados:         incidencias.get(f.empleado_id as string)?.feriados ?? 0,
+      penalizacion:     incidencias.get(f.empleado_id as string)?.penalizacion ?? 0,
+      otros_descuentos: incidencias.get(f.empleado_id as string)?.otros_descuentos ?? 0,
       porConcepto:     porLinea.get(f.linea_id as string) ?? {},
     })),
   })
@@ -1779,7 +1883,7 @@ export async function exportarNominaXlsx(
 
 export async function guardarIncidencia(
   formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; aviso?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
@@ -1802,7 +1906,8 @@ export async function guardarIncidencia(
   if (dias_vacaciones > 31) return { ok: false, error: 'Los días de vacaciones no pueden pasar de 31.' }
 
   const db = createAdminClient()
-  const { data: emp } = await db.from('empleados').select('empleado_id')
+  const { data: emp } = await db.from('empleados')
+    .select('empleado_id, empresa_id, salario_base, dias_laborables')
     .eq('empleado_id', empleado_id).eq('client_id', session.client_id).maybeSingle()
   if (!emp) return { ok: false, error: 'Trabajador no encontrado.' }
 
@@ -1827,7 +1932,34 @@ export async function guardarIncidencia(
 
   revalidatePath(`/portal/rrhh/${empleado_id}`)
   revalidarNomina()
-  return { ok: true }
+
+  // Avisos que NO bloquean —la incidencia ya se guardó—: solo aplican bajo el
+  // modelo cubano, que es el único que prorratea por días y paga vacaciones
+  // por incidencia (Claudia, 2026-07-28).
+  const avisos: string[] = []
+  const config = configDe(await leerConfigNomina(db, session.client_id), emp.empresa_id as string)
+  if (config.modelo === 'MIPYME_CUBA') {
+    const efectivo = Number(emp.dias_laborables ?? config.dias_laborables_default)
+    if (dias_trabajados !== null && dias_trabajados > efectivo) {
+      avisos.push(
+        `Trabajó más días (${dias_trabajados}) que los laborables de su ficha (${efectivo}). ` +
+        'Si es su jornada real, sube «Días laborables» en su ficha; si fue un turno extra ' +
+        'puntual, mételo como «Pago extra» en vez de aquí.')
+    }
+    if (dias_vacaciones > 0) {
+      const salario_base = Number(emp.salario_base)
+      const valorDia = efectivo > 0 ? salario_base / efectivo : 0
+      const pago = redondear2(valorDia * dias_vacaciones)
+      const saldo = await saldoVacacionesAcumulado(db, session.client_id, empleado_id)
+      if (pago > saldo + EPS) {
+        avisos.push(
+          `El pago de vacaciones de este mes (${pago.toFixed(2)}) supera el saldo acumulado ` +
+          `(${saldo.toFixed(2)}). Se guarda igual — conviene revisarlo.`)
+      }
+    }
+  }
+
+  return { ok: true, aviso: avisos.length ? avisos.join(' ') : undefined }
 }
 
 export async function eliminarIncidencia(incidencia_id: string): Promise<{ ok: boolean; error?: string }> {
@@ -1849,6 +1981,150 @@ export async function eliminarIncidencia(incidencia_id: string): Promise<{ ok: b
   revalidatePath(`/portal/rrhh/${inc.empleado_id}`)
   revalidarNomina()
   return { ok: true }
+}
+
+// ── Página de detalle de una nómina (tabla) ─────────────────────────────────────
+
+export interface NominaDetalleData {
+  /** La página entera de RRHH: trae empresas, cuentas, config de modelo… ya
+   *  resuelto — mismo patrón que `EmpleadoDetalleData`, no se duplica nada. */
+  data:        RrhhPageData
+  nomina:      NominaConLineas
+  /** Lo variable del mes de cada trabajador (mig. 143), por `empleado_id`: son
+   *  los valores CRUDOS que rellenan las celdas editables — hoy nadie los
+   *  exponía fuera de `crearNomina`/`planificarRecalculo`. */
+  incidencias: Record<string, IncidenciaMes>
+  /** Días laborables ya resueltos por trabajador (los suyos o los de la empresa).
+   *  Es lo que vale un mes completo para él: la tabla enseña ese número en la
+   *  celda de días trabajados en vez de un «Completo» que no dice cuántos son. */
+  diasLaborables: Record<string, number>
+  esCuba:      boolean
+}
+
+export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDetalleData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const data = await obtenerRrhh()
+  if (!data) return null
+  const nomina = data.nominas.find(n => n.nomina_id === nomina_id)
+  if (!nomina) return null
+
+  const db = createAdminClient()
+  const [incidenciasMap, { data: fichas }] = await Promise.all([
+    leerIncidencias(db, session.client_id, nomina.periodo),
+    db.from('empleados').select('empleado_id, dias_laborables')
+      .eq('client_id', session.client_id)
+      .in('empleado_id', nomina.lineas.map(l => l.empleado_id)),
+  ])
+  // `data.config_nomina` viene ya aplanado a array por `obtenerRrhh` (es lo que
+  // consume el cliente); `configDe` trabaja sobre el mapa original.
+  const configs = new Map(data.config_nomina.map(c => [c.empresa_id, c]))
+  const config  = configDe(configs, nomina.empresa_id)
+  const esCuba  = config.modelo === 'MIPYME_CUBA' && nomina.moneda === MONEDA_CUBA
+
+  const propios = new Map(((fichas ?? []) as { empleado_id: string; dias_laborables: number | null }[])
+    .map(f => [f.empleado_id, f.dias_laborables]))
+  const diasLaborables: Record<string, number> = {}
+  for (const l of nomina.lineas) {
+    diasLaborables[l.empleado_id] = Number(propios.get(l.empleado_id) ?? config.dias_laborables_default)
+  }
+
+  return {
+    data, nomina, esCuba, diasLaborables,
+    incidencias: Object.fromEntries(incidenciasMap),
+  }
+}
+
+/**
+ * Guarda una incidencia desde la tabla de la nómina y recalcula SOLO esa
+ * línea: `guardarIncidencia` únicamente toca `incidencias_nomina`, nunca
+ * `nomina_lineas`, así que sin este paso la fila seguiría enseñando el
+ * importe de antes. Reusa `recalcularNomina`/`reabrirYActualizarNomina` tal
+ * cual —el mismo motor que ya usa «Actualizar con los conceptos»— para que
+ * no exista una segunda forma de que el total deje de cuadrar con sus líneas.
+ *
+ * Si la nómina ya está CONFIRMADA, reabrirla es un paso previo y SOLO bajo
+ * impersonación: es la vía para corregir un dato del cliente sin tocar la
+ * base a mano, no una edición normal de portal. La guardia de pagos ya
+ * registrados en Tesorería (dentro de `reabrirYActualizarNomina`) se respeta
+ * igual bajo impersonación — eso no es un dato mal cargado, es dinero ya
+ * movido.
+ */
+export async function guardarIncidenciaDeLinea(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; aviso?: string; reabierta?: boolean }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const nomina_id   = (formData.get('nomina_id')   as string)?.trim()
+  const empleado_id = (formData.get('empleado_id') as string)?.trim()
+  if (!nomina_id)   return { ok: false, error: 'Nómina no válida.' }
+  if (!empleado_id) return { ok: false, error: 'Trabajador no válido.' }
+
+  const db = createAdminClient()
+  const { data: nomina } = await db.from('nominas').select('estado')
+    .eq('nomina_id', nomina_id).eq('client_id', session.client_id).maybeSingle()
+  if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
+
+  let reabierta = false
+  if (nomina.estado === 'CONFIRMADA') {
+    if (!session.imp) {
+      return { ok: false, error: 'Esta nómina ya está confirmada. Solo se puede corregir desde el modo de configuración.' }
+    }
+    const r = await reabrirYActualizarNomina(nomina_id, empleado_id)
+    if (!r.ok) return { ok: false, error: r.error }
+    reabierta = true
+  }
+
+  const res = await guardarIncidencia(formData)
+  if (!res.ok) return res
+
+  const rec = await recalcularNomina(nomina_id, empleado_id)
+  if (!rec.ok) return { ok: false, error: rec.error }
+
+  return { ok: true, aviso: res.aviso, reabierta }
+}
+
+/**
+ * Igual que `guardarIncidenciaDeLinea` pero para el modelo GENERAL: el
+ * devengado se teclea directo (`guardarLineaNomina`), así que no hace falta
+ * un recálculo después — el valor tecleado YA es el definitivo. Mismo
+ * candado: sobre una CONFIRMADA, reabrir es previo y solo bajo impersonación.
+ */
+export async function guardarDevengadoDeLinea(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; reabierta?: boolean }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const linea_id = (formData.get('linea_id') as string)?.trim()
+  if (!linea_id) return { ok: false, error: 'Línea no válida.' }
+
+  const db = createAdminClient()
+  const { data: linea } = await db.from('nomina_lineas').select('nomina_id, empleado_id')
+    .eq('linea_id', linea_id).eq('client_id', session.client_id).maybeSingle()
+  if (!linea) return { ok: false, error: 'Línea no encontrada.' }
+
+  const { data: nomina } = await db.from('nominas').select('estado')
+    .eq('nomina_id', linea.nomina_id).eq('client_id', session.client_id).maybeSingle()
+  if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
+
+  let reabierta = false
+  if (nomina.estado === 'CONFIRMADA') {
+    if (!session.imp) {
+      return { ok: false, error: 'Esta nómina ya está confirmada. Solo se puede corregir desde el modo de configuración.' }
+    }
+    const r = await reabrirYActualizarNomina(linea.nomina_id, linea.empleado_id)
+    if (!r.ok) return { ok: false, error: r.error }
+    reabierta = true
+  }
+
+  const res = await guardarLineaNomina(formData)
+  if (!res.ok) return res
+  return { ok: true, reabierta }
 }
 
 // ── Configuración de nómina por empresa (mig. 142) ──────────────────────────────
@@ -2683,27 +2959,6 @@ async function planificarRecalculo(
   return { estado, lineas, total_otras }
 }
 
-export async function previsualizarRecalculoNomina(
-  nomina_id:    string,
-  empleado_id?: string,
-): Promise<RecalculoNomina> {
-  const nada = { lineas: [] as RecalculoLineaNomina[], total_antes: 0, total_despues: 0 }
-  const session = await getPortalSession()
-  if (!session) return { ok: false, error: 'Sesión inválida.', ...nada }
-
-  // Solo lee (la página ya pasa por requireModulo('rrhh')); el candado de
-  // escritura vive en `recalcularNomina`.
-  const db   = createAdminClient()
-  const plan = await planificarRecalculo(db, session.client_id, nomina_id, empleado_id)
-  if (plan.error) return { ok: false, error: plan.error, ...nada }
-
-  return {
-    ok:            true,
-    lineas:        plan.lineas,
-    total_antes:   redondear2(plan.total_otras + plan.lineas.reduce((s, l) => s + l.neto_antes, 0)),
-    total_despues: redondear2(plan.total_otras + plan.lineas.reduce((s, l) => s + l.neto_despues, 0)),
-  }
-}
 
 // Escribe el plan en las líneas y recalcula el total. Lo comparten `recalcularNomina`
 // (borrador) y `reabrirYActualizarNomina` (confirmada): una segunda copia de este

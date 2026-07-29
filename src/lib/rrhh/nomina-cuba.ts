@@ -12,11 +12,11 @@
 // que cambie la ESTRUCTURA del tributo (un tramo con una lógica distinta a
 // «porcentaje sobre el exceso»), que sí exigiría tocarlo.
 //
-// ⚠️  Hoy CESS, IUFT e IRPF están sembrados con valores PROVISIONALES: falta la
-// verificación normativa. Por eso `hayProvisionales()` existe y por eso
-// `confirmarNomina` se niega a postear una nómina cubana mientras lo estén: generar
-// el borrador y verlo es útil, crear una deuda real con ONAT por un importe
-// inventado no lo es.
+// `hayProvisionales()` es un chequeo puro sobre un array de parámetros ya
+// resueltos; el guardia real de `confirmarNomina` (rrhh.ts) no la llama —hace su
+// propia comprobación mirando los `parametro_id` concretos grabados en cada línea,
+// más preciso porque no depende de la vigencia de HOY sino de la que se usó al
+// generar—. Se deja exportada por si un futuro caller la necesita.
 
 export type ConceptoFiscal =
   | 'IRPF' | 'CESS' | 'IUFT' | 'SS_EMPRESA_125' | 'SS_EMPRESA_15' | 'VACACIONES'
@@ -103,10 +103,10 @@ export function aplicarTramos(base: number, tramos: TramoFiscal[]): number {
   return r2(elegido.acumulado_base + ((base - elegido.desde) * elegido.tasa) / 100)
 }
 
-function baseDe(b: BaseFiscal, v: { salario: number; devengado: number; vacaciones: number }): number {
+function baseDe(b: BaseFiscal, v: { salario: number; devengado: number; devengadoMasVacaciones: number }): number {
   switch (b) {
     case 'SALARIO_BASE':             return v.salario
-    case 'DEVENGADO_MAS_VACACIONES': return r2(v.devengado + v.vacaciones)
+    case 'DEVENGADO_MAS_VACACIONES': return v.devengadoMasVacaciones
     default:                         return v.devengado
   }
 }
@@ -150,7 +150,13 @@ export function calcularNominaCuba(
 
   const total_devengado = r2(devengadoSinVacaciones + vacaciones_pagar)
 
-  const vistas = { salario: salario_base, devengado: total_devengado, vacaciones: vacaciones_acumular }
+  // Base de IUFT y de la Contribución SS de empresa: devengado + acumulación de
+  // vacaciones del MES — sin el pago de vacaciones disfrutadas (`vacaciones_pagar`),
+  // que sí entra en `total_devengado` pero no en esta base (criterio de Claudia,
+  // validado contra un caso real). Van separadas a propósito: reutilizar
+  // `total_devengado` aquí coló ese término de más.
+  const devengadoMasVacaciones = r2(devengadoSinVacaciones + vacaciones_acumular)
+  const vistas = { salario: salario_base, devengado: total_devengado, devengadoMasVacaciones }
 
   const retenciones: ResultadoCuba['retenciones'] = []
   const aportes:     ResultadoCuba['aportes']     = []

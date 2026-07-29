@@ -1815,7 +1815,7 @@
   padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2);
   background: var(--color-surface-2); border-radius: var(--radius-md);
 }
-.nom-input { max-width: 120px; padding: 6px 9px; font-size: var(--text-sm); }
+.nom-input { max-width: 120px; padding: 6px 9px; font-size: var(--text-sm); text-align: right; }
 .nom-total {
   display: flex; align-items: center; justify-content: space-between;
   margin-top: var(--space-4); padding-top: var(--space-3);
@@ -1885,6 +1885,11 @@
 }
 .nom-desglose-add:hover { color: var(--color-primary-text); border-color: var(--color-primary-text); }
 .nom-desglose-vacio { font-size: var(--text-xs); color: var(--color-text-faint); }
+
+/* Página de detalle de nómina (tabla) */
+.nom-chevron-abierto { transform: rotate(180deg); }
+.nom-tabla-desglose-fila td { background: var(--color-surface-2); padding: var(--space-2) var(--space-4); }
+
 /* Turnos */
 .rrhh-card-gap { margin-bottom: var(--space-4); }
 .ter-card-head { padding: var(--space-4) var(--space-4) 0; }

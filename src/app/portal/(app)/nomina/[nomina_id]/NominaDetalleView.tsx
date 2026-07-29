@@ -1,0 +1,514 @@
+'use client'
+
+import { Fragment, useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
+import {
+  confirmarNomina, eliminarNomina, exportarNominaXlsx,
+  guardarIncidenciaDeLinea, guardarDevengadoDeLinea,
+  type NominaDetalleData, type NominaLinea, type ItemLinea,
+} from '@/app/actions/portal/rrhh'
+import {
+  ConfirmarNominaModal, PagarNominaModal, actualizarConceptosNominas, formatMonto, formatPeriodo,
+} from '../../_shared/NominaDetalleModal'
+import { useConfigurador } from '@/components/portal/ConfiguradorContext'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import { RowActions } from '@/components/portal/RowActions'
+import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
+import {
+  ChevronDown, CircleCheck, DollarSign, Download, Plus, RefreshCw, Trash2, X,
+} from 'lucide-react'
+
+// ── Lo variable del mes, en el cliente ──────────────────────────────────────────
+// Mismos campos que `IncidenciaMes` (rrhh.ts), pero sin depender de su forma
+// exacta aquí: un empleado sin incidencia guardada usa esta plantilla vacía.
+
+interface IncidenciaEditable {
+  dias_trabajados:  number | null
+  dias_vacaciones:  number
+  pago_extra:       number
+  pago_nocturnidad: number
+  feriados:         number
+  penalizacion:     number
+  otros_descuentos: number
+  pago_subsidios:   number
+}
+
+const INCIDENCIA_VACIA: IncidenciaEditable = {
+  dias_trabajados: null, dias_vacaciones: 0, pago_extra: 0, pago_nocturnidad: 0,
+  feriados: 0, penalizacion: 0, otros_descuentos: 0, pago_subsidios: 0,
+}
+
+/** Los seis campos en dinero que solo aparecen si alguien los usa este mes. */
+const CAMPOS_DISPERSOS: { campo: keyof IncidenciaEditable; etiqueta: string }[] = [
+  { campo: 'pago_extra',       etiqueta: 'Pago extra' },
+  { campo: 'pago_nocturnidad', etiqueta: 'Nocturnidad' },
+  { campo: 'feriados',         etiqueta: 'Feriados' },
+  { campo: 'penalizacion',     etiqueta: 'Penalización' },
+  { campo: 'otros_descuentos', etiqueta: 'Otros descuentos' },
+  { campo: 'pago_subsidios',   etiqueta: 'Subsidios' },
+]
+
+/**
+ * Lee una celda de días y NO la deja en blanco: si se borra, se repone el valor por
+ * defecto (los días laborables del trabajador, o 0 en vacaciones) y se devuelve ese
+ * número. Una celda vacía escondía el dato con el que se está calculando de verdad.
+ */
+function rellenar(input: HTMLInputElement, porDefecto: number): number {
+  const t = input.value.trim()
+  const n = t ? parseFloat(t) : NaN
+  if (isNaN(n)) { input.value = String(porDefecto); return porDefecto }
+  return n
+}
+function num(v: string): number {
+  const n = parseFloat(v)
+  return isNaN(n) ? 0 : n
+}
+
+// ── Desglose fiscal de una línea, plegado ───────────────────────────────────────
+// Lo que antes se enseñaba siempre en línea (`DesgloseLinea`); aquí solo al
+// desplegar, para que la tabla quepa con 50 filas. El coste de empresa
+// (APORTE_EMPRESA) va aparte: no resta del neto del trabajador, mezclarlo con
+// las retenciones en el mismo signo sería decir que sí.
+
+function DesgloseFila({ items, colSpan }: { items: ItemLinea[]; colSpan: number }) {
+  const propios  = items.filter(i => i.tipo !== 'APORTE_EMPRESA' && i.monto > 0.005)
+  const empresa  = items.filter(i => i.tipo === 'APORTE_EMPRESA' && i.monto > 0.005)
+  return (
+    <tr className="nom-tabla-desglose-fila">
+      <td colSpan={colSpan}>
+        <div className="nom-desglose">
+          {propios.length === 0 && empresa.length === 0 && (
+            <span className="nom-desglose-vacio">Solo el salario del período</span>
+          )}
+          {propios.map((it, i) => (
+            <span key={it.item_id ?? i} className="nom-desglose-item">
+              <span className={`nom-desglose-monto ${it.tipo === 'DEVENGO' ? 'nom-desglose-mas' : 'nom-desglose-menos'}`}>
+                {it.tipo === 'DEVENGO' ? '+' : '−'}{formatMonto(it.monto)}
+              </span>
+              <span>{it.nombre}</span>
+            </span>
+          ))}
+          {empresa.map((it, i) => (
+            <span key={it.item_id ?? `ae-${i}`} className="nom-desglose-item">
+              <span className="nom-desglose-monto text-xs-muted">+{formatMonto(it.monto)}</span>
+              <span className="text-xs-muted">{it.nombre} (coste de empresa, no reduce su neto)</span>
+            </span>
+          ))}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ── Modal: agregar una incidencia rara para un trabajador ───────────────────────
+
+function AgregarIncidenciaModal({
+  lineas, valores, onClose, onGuardar, isPending,
+}: {
+  lineas:     NominaLinea[]
+  valores:    Record<string, IncidenciaEditable>
+  onClose:    () => void
+  onGuardar:  (empleado_id: string, campo: keyof IncidenciaEditable, valor: number) => void
+  isPending:  boolean
+}) {
+  const [empleadoId, setEmpleadoId] = useState(lineas[0]?.empleado_id ?? '')
+  const [campo, setCampo] = useState<keyof IncidenciaEditable>('pago_extra')
+  const actual = valores[empleadoId]?.[campo] ?? 0
+  const [valor, setValor] = useState(String(actual || ''))
+
+  function cambiarEmpleado(id: string) {
+    setEmpleadoId(id)
+    setValor(String(valores[id]?.[campo] || ''))
+  }
+  function cambiarCampo(c: keyof IncidenciaEditable) {
+    setCampo(c)
+    setValor(String(valores[empleadoId]?.[c] || ''))
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    onGuardar(empleadoId, campo, num(valor))
+  }
+
+  return (
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-md" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Agregar incidencia</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-full">
+                <label htmlFor="ai-emp">Trabajador <span className="required">*</span></label>
+                <select className="input" id="ai-emp" value={empleadoId} onChange={e => cambiarEmpleado(e.target.value)}>
+                  {lineas.map(l => <option key={l.empleado_id} value={l.empleado_id}>{l.empleado_nombre}</option>)}
+                </select>
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="ai-tipo">Tipo de incidencia <span className="required">*</span></label>
+                <select className="input" id="ai-tipo" value={campo} onChange={e => cambiarCampo(e.target.value as keyof IncidenciaEditable)}>
+                  {CAMPOS_DISPERSOS.map(c => <option key={c.campo} value={c.campo}>{c.etiqueta}</option>)}
+                </select>
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="ai-valor">Valor <span className="required">*</span></label>
+                <input className="input" id="ai-valor" type="number" min="0" step="any" required
+                  value={valor} onChange={e => setValor(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={isPending}>
+              {isPending ? <><span className="spinner spinner-sm" /> Añadiendo…</> : <><Plus size={15} strokeWidth={2} /> Añadir</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Vista principal ──────────────────────────────────────────────────────────────
+
+export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleData }) {
+  const router = useRouter()
+  const esConfigurador = useConfigurador()
+  const [isPending, startTransition] = useTransition()
+  const { data, nomina, esCuba, diasLaborables } = detalle
+
+  const esBorrador  = nomina.estado === 'BORRADOR'
+  // Bajo impersonación, una CONFIRMADA se puede corregir sin tocar la base a
+  // mano; en sesión normal, una vez confirmada es de solo lectura.
+  const puedeEditar = esBorrador || esConfigurador
+
+  const [incidencias, setIncidencias] = useState<Record<string, IncidenciaEditable>>(() => {
+    const out: Record<string, IncidenciaEditable> = {}
+    for (const l of nomina.lineas) {
+      const i = detalle.incidencias[l.empleado_id]
+      out[l.empleado_id] = i ? { ...INCIDENCIA_VACIA, ...i } : { ...INCIDENCIA_VACIA }
+    }
+    return out
+  })
+  const [guardando, setGuardando] = useState<string | null>(null)
+  const [expandido, setExpandido] = useState<string | null>(null)
+  const [modalAgregar, setModalAgregar] = useState(false)
+  const [confirmarNom, setConfirmarNom] = useState(false)
+  const [pagarNom, setPagarNom] = useState(false)
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
+  const [exportando, setExportando] = useState(false)
+
+  // Reglas/conceptos del negocio cambiados desde que se generó — distinto de
+  // las incidencias: lo marca el servidor por línea (`desfasada`) y se resuelve
+  // con el mismo «Reabrir y actualizar» de siempre, disponible para cualquiera
+  // con permiso de escritura (no solo bajo impersonación: esto no es corregir
+  // un dato del cliente, es aplicar una regla que cambió para todos).
+  const desfasadas  = nomina.lineas.filter(l => l.desfasada).length
+  const tienePagos  = !esBorrador && nomina.pagado > 0.005
+
+  // Columnas dispersas: solo se pintan si ALGÚN trabajador tiene algo este mes.
+  const columnasVisibles = useMemo(() => {
+    return CAMPOS_DISPERSOS.filter(c => Object.values(incidencias).some(i => (i[c.campo] || 0) > 0))
+  }, [incidencias])
+
+  const totales = useMemo(() => {
+    let devengado = 0, retenciones = 0, costeEmpresa = 0, neto = 0
+    for (const l of nomina.lineas) {
+      devengado += l.devengado; retenciones += l.deducciones; neto += l.neto
+      for (const it of l.items) if (it.tipo === 'APORTE_EMPRESA') costeEmpresa += it.monto
+    }
+    return { devengado, retenciones, costeEmpresa, neto }
+  }, [nomina.lineas])
+
+  const colSpanFila = 5 + (esCuba ? 2 : 0) + columnasVisibles.length + 1
+
+  function guardarCampo(empleado_id: string, campo: keyof IncidenciaEditable, valor: number | null) {
+    const previa = incidencias[empleado_id] ?? INCIDENCIA_VACIA
+    const nueva  = { ...previa, [campo]: valor }
+    setIncidencias(prev => ({ ...prev, [empleado_id]: nueva }))
+
+    const fd = new FormData()
+    fd.set('nomina_id',   nomina.nomina_id)
+    fd.set('empleado_id', empleado_id)
+    fd.set('periodo',     nomina.periodo)
+    fd.set('dias_trabajados',  nueva.dias_trabajados === null ? '' : String(nueva.dias_trabajados))
+    fd.set('dias_vacaciones',  String(nueva.dias_vacaciones))
+    fd.set('pago_extra',       String(nueva.pago_extra))
+    fd.set('pago_nocturnidad', String(nueva.pago_nocturnidad))
+    fd.set('feriados',         String(nueva.feriados))
+    fd.set('penalizacion',     String(nueva.penalizacion))
+    fd.set('otros_descuentos', String(nueva.otros_descuentos))
+    fd.set('pago_subsidios',   String(nueva.pago_subsidios))
+
+    setGuardando(empleado_id)
+    // El toast de carga se crea FUERA de la transición: dentro no llega a pintarse,
+    // y en una conexión lenta la celda parece que no hizo nada.
+    const ld = toastLoading('Guardando y recalculando…')
+    startTransition(async () => {
+      const res = await guardarIncidenciaDeLinea(fd)
+      await ld.dismiss()
+      setGuardando(null)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Guardado · línea recalculada')
+      if (res.aviso) toastWarning(res.aviso)
+      if (res.reabierta) toastWarning('Se reabrió la nómina para aplicar tu corrección: revísala y vuelve a confirmarla.')
+      setModalAgregar(false)
+      router.refresh()
+    })
+  }
+
+  function guardarDevengado(linea: NominaLinea, valor: string) {
+    const fd = new FormData()
+    fd.set('linea_id', linea.linea_id)
+    fd.set('devengado', valor)
+    setGuardando(linea.empleado_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarDevengadoDeLinea(fd)
+      await ld.dismiss()
+      setGuardando(null)
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Guardado · línea recalculada')
+      if (res.reabierta) toastWarning('Se reabrió la nómina para aplicar tu corrección: revísala y vuelve a confirmarla.')
+      router.refresh()
+    })
+  }
+
+  function doConfirmar() {
+    const ld = toastLoading('Confirmando…')
+    startTransition(async () => {
+      const res = await confirmarNomina(nomina.nomina_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      setConfirmarNom(false); router.refresh()
+    })
+  }
+
+  function doEliminar() {
+    const ld = toastLoading('Eliminando…')
+    startTransition(async () => {
+      const res = await eliminarNomina(nomina.nomina_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setConfirmarEliminar(false); return }
+      router.push('/portal/nomina')
+    })
+  }
+
+  function exportar() {
+    setExportando(true)
+    const ld = toastLoading('Preparando el Excel…')
+    startTransition(async () => {
+      const res = await exportarNominaXlsx(nomina.nomina_id)
+      await ld.dismiss()
+      setExportando(false)
+      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo exportar.'); return }
+      descargarBase64(res.nombre ?? 'nomina.xlsx', res.base64, XLSX_MIME)
+      toastSuccess('Excel descargado')
+    })
+  }
+
+  return (
+    <div className="view-container">
+      <div className="breadcrumb">
+        <Link href="/portal/nomina">Nómina</Link>
+        <span>›</span>
+        <span className="breadcrumb-current">{formatPeriodo(nomina.periodo)}</span>
+      </div>
+
+      <div className="det-page-header">
+        <div>
+          <div className="det-title-group">
+            <h1 className="det-page-title">Nómina {formatPeriodo(nomina.periodo)}</h1>
+            <span className={`badge ${esBorrador ? 'badge-warning' : 'badge-success'}`}>
+              {esBorrador ? 'Borrador' : 'Confirmada'}
+            </span>
+          </div>
+          <div className="det-meta-row">
+            <span>{data.empresa_nombres[nomina.empresa_id] ?? '—'}</span>
+            <span>{nomina.moneda}</span>
+            {!esBorrador && nomina.saldo_pendiente > 0.005 && (
+              <span>Pendiente de pago: <strong>{formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong></span>
+            )}
+          </div>
+        </div>
+        <div className="det-actions">
+          <button className="btn btn-secondary" onClick={exportar} disabled={exportando}>
+            <Download size={14} strokeWidth={2} /> Exportar a Excel
+          </button>
+          {esBorrador && (
+            <button className="btn btn-primary" onClick={() => setConfirmarNom(true)}>
+              <CircleCheck size={15} strokeWidth={2} /> Confirmar nómina
+            </button>
+          )}
+          {!esBorrador && nomina.gasto_id && nomina.saldo_pendiente > 0.005 && (
+            <button className="btn btn-primary" onClick={() => setPagarNom(true)}>
+              <DollarSign size={15} strokeWidth={2} /> Pagar
+            </button>
+          )}
+          <RowActions>
+            <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarEliminar(true)}>
+              <Trash2 size={14} strokeWidth={2} /> Eliminar
+            </button>
+          </RowActions>
+        </div>
+      </div>
+
+      {!esBorrador && !esConfigurador && (
+        <div className="alert alert-info alert-intro">
+          Nómina confirmada: de solo lectura. Un desajuste se corrige desde el modo de configuración.
+        </div>
+      )}
+
+      {desfasadas > 0 && (
+        <div className="alert alert-warning alert-cta">
+          <span className="alert-cta-texto">
+            {desfasadas === 1
+              ? 'Un trabajador tiene conceptos sin aplicar en esta nómina.'
+              : `${desfasadas} trabajadores tienen conceptos sin aplicar en esta nómina.`}
+            {tienePagos && ' Para actualizarla hay que reabrirla, y ya tiene pagos registrados: anúlalos en Tesorería primero.'}
+          </span>
+          {!tienePagos && (
+            <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}
+                    onClick={() => actualizarConceptosNominas([nomina], undefined, startTransition, () => router.refresh())}>
+              <RefreshCw size={14} strokeWidth={2} />
+              {esBorrador ? ' Actualizar con los conceptos' : ' Reabrir y actualizar'}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="imprt-tiles mb-3">
+        <div className="imprt-tile"><strong>{formatMonto(totales.devengado)}</strong><span>Total devengado</span></div>
+        <div className="imprt-tile"><strong>{formatMonto(totales.retenciones)}</strong><span>Retenciones al personal</span></div>
+        {esCuba && (
+          <div className="imprt-tile"><strong>{formatMonto(totales.costeEmpresa)}</strong><span>Coste de empresa (IUFT+SS)</span></div>
+        )}
+        <div className="imprt-tile"><strong>{formatMonto(totales.neto)}</strong><span>Neto a pagar</span></div>
+      </div>
+
+      {puedeEditar && (
+        <div className="ter-toolbar">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModalAgregar(true)}>
+            <Plus size={14} strokeWidth={2.5} /> Agregar incidencia
+          </button>
+        </div>
+      )}
+
+      <div className="card card-table">
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Empleado</th>
+                <th className="col-num">Salario base</th>
+                {esCuba && <th className="col-num">Días trab.</th>}
+                {esCuba && <th className="col-num">Días vac.</th>}
+                {columnasVisibles.map(c => <th key={c.campo} className="col-num">{c.etiqueta}</th>)}
+                <th className="col-num">Devengado</th>
+                <th className="col-num">Retenciones</th>
+                <th className="col-num">Neto</th>
+                <th className="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {nomina.lineas.map(l => {
+                const inc = incidencias[l.empleado_id] ?? INCIDENCIA_VACIA
+                const ocupado = guardando === l.empleado_id
+                return (
+                  <Fragment key={l.linea_id}>
+                    <tr>
+                      <td data-label="Empleado">
+                        <strong>{l.empleado_nombre}</strong>
+                        {l.cargo && <div className="text-sm-muted">{l.cargo}</div>}
+                      </td>
+                      <td data-label="Salario base" className="col-num tes-monto-cell">{formatMonto(l.salario_base)}</td>
+                      {esCuba && (
+                        <td data-label="Días trabajados" className="col-num">
+                          {puedeEditar ? (
+                            <input className="input nom-input" type="number" min="0" max="31" step="any"
+                              disabled={ocupado}
+                              defaultValue={inc.dias_trabajados ?? diasLaborables[l.empleado_id] ?? ''}
+                              onBlur={e => guardarCampo(l.empleado_id, 'dias_trabajados',
+                                          rellenar(e.currentTarget, diasLaborables[l.empleado_id] ?? 0))}
+                              aria-label={`Días trabajados de ${l.empleado_nombre}`} />
+                          ) : (inc.dias_trabajados ?? diasLaborables[l.empleado_id] ?? '—')}
+                        </td>
+                      )}
+                      {esCuba && (
+                        <td data-label="Días de vacaciones" className="col-num">
+                          {puedeEditar ? (
+                            <input className="input nom-input" type="number" min="0" max="31" step="any" disabled={ocupado}
+                              defaultValue={inc.dias_vacaciones}
+                              onBlur={e => guardarCampo(l.empleado_id, 'dias_vacaciones', rellenar(e.currentTarget, 0))}
+                              aria-label={`Días de vacaciones de ${l.empleado_nombre}`} />
+                          ) : inc.dias_vacaciones}
+                        </td>
+                      )}
+                      {columnasVisibles.map(c => (
+                        <td key={c.campo} data-label={c.etiqueta} className="col-num">
+                          {puedeEditar ? (
+                            <input className="input nom-input" type="number" min="0" step="any" disabled={ocupado}
+                              defaultValue={inc[c.campo] || ''}
+                              onBlur={e => guardarCampo(l.empleado_id, c.campo, num(e.target.value))}
+                              aria-label={`${c.etiqueta} de ${l.empleado_nombre}`} />
+                          ) : (inc[c.campo] || '—')}
+                        </td>
+                      ))}
+                      <td data-label="Devengado" className="col-num">
+                        {!esCuba && puedeEditar ? (
+                          <input className="input nom-input" type="number" min="0" step="any" disabled={ocupado}
+                            defaultValue={l.devengado}
+                            onBlur={e => guardarDevengado(l, e.target.value)}
+                            aria-label={`Devengado de ${l.empleado_nombre}`} />
+                        ) : <span className="tes-monto-cell">{formatMonto(l.devengado)}</span>}
+                      </td>
+                      <td data-label="Retenciones" className="col-num tes-monto-cell">{formatMonto(l.deducciones)}</td>
+                      <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(l.neto)}</td>
+                      <td className="col-actions">
+                        <button type="button" className="ter-action-btn" title="Ver desglose"
+                          aria-label={`Ver desglose de ${l.empleado_nombre}`}
+                          onClick={() => setExpandido(expandido === l.linea_id ? null : l.linea_id)}>
+                          <ChevronDown size={15} strokeWidth={2}
+                            className={expandido === l.linea_id ? 'nom-chevron-abierto' : undefined} />
+                        </button>
+                      </td>
+                    </tr>
+                    {expandido === l.linea_id && <DesgloseFila items={l.items} colSpan={colSpanFila} />}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {modalAgregar && (
+        <AgregarIncidenciaModal lineas={nomina.lineas} valores={incidencias}
+          onClose={() => setModalAgregar(false)}
+          onGuardar={(empleadoId, campo, valor) => guardarCampo(empleadoId, campo, valor)}
+          isPending={isPending} />
+      )}
+      {confirmarNom && (
+        <ConfirmarNominaModal nomina={nomina} onConfirm={doConfirmar}
+          onClose={() => setConfirmarNom(false)} isPending={isPending} />
+      )}
+      {pagarNom && (
+        <PagarNominaModal nomina={nomina} cuentas={data.cuentas}
+          onClose={() => setPagarNom(false)} onPaid={() => { setPagarNom(false); router.refresh() }} />
+      )}
+      {confirmarEliminar && (
+        <ConfirmDialog
+          title="Eliminar nómina"
+          body={`¿Eliminar la nómina de ${formatPeriodo(nomina.periodo)} (${formatMonto(nomina.total)} ${nomina.moneda})? ${nomina.estado === 'CONFIRMADA' ? 'También se eliminará el gasto de salarios de esta nómina.' : ''}`}
+          confirmLabel="Eliminar" danger
+          onConfirm={doEliminar}
+          onCancel={() => setConfirmarEliminar(false)}
+        />
+      )}
+    </div>
+  )
+}

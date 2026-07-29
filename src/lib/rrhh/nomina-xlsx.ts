@@ -41,6 +41,15 @@ export interface LineaExport {
   vacaciones_acumuladas_periodo: number
   vacaciones_pagadas_periodo:    number
   subsidios:       number
+  /** Lo variable del mes (mig. 143). Sin incidencia, los laborables del trabajador
+   *  ya resueltos: un número siempre, que en una hoja de cálculo sí se puede sumar. */
+  dias_trabajados:  number
+  dias_vacaciones:  number
+  pago_extra:       number
+  pago_nocturnidad: number
+  feriados:         number
+  penalizacion:     number
+  otros_descuentos: number
   /** Importe por concepto fiscal, para las columnas del formato cubano. */
   porConcepto:     Partial<Record<ConceptoFiscal, number>>
 }
@@ -77,8 +86,18 @@ export async function nominaAXlsx(nom: NominaExport): Promise<{ base64: string; 
 
   if (nom.esCuba) {
     cols.push(
+      // Lo variable del mes, crudo (mig. 143): antes se quedaba fuera y solo se
+      // veía su efecto ya diluido en el devengado — aquí se ve el porqué.
+      // null = mes completo: no se pinta «0», que se leería como que no trabajó.
+      { cab: 'Días trabajados',       val: l => l.dias_trabajados },
+      { cab: 'Días de vacaciones',    val: l => l.dias_vacaciones,               num: true },
       { cab: 'Vacaciones acumuladas', val: l => l.vacaciones_acumuladas_periodo, num: true },
       { cab: 'Vacaciones pagadas',    val: l => l.vacaciones_pagadas_periodo,    num: true },
+      { cab: 'Pago extra',            val: l => l.pago_extra,                   num: true },
+      { cab: 'Nocturnidad',           val: l => l.pago_nocturnidad,             num: true },
+      { cab: 'Feriados',              val: l => l.feriados,                     num: true },
+      { cab: 'Penalización',          val: l => l.penalizacion,                 num: true },
+      { cab: 'Otros descuentos',      val: l => l.otros_descuentos,             num: true },
       { cab: 'Total devengado',       val: l => l.devengado,                     num: true },
       { cab: 'Subsidios',             val: l => l.subsidios,                     num: true },
       { cab: NOMBRE_CONCEPTO_FISCAL.CESS, val: l => l.porConcepto.CESS ?? 0,     num: true },
@@ -99,20 +118,15 @@ export async function nominaAXlsx(nom: NominaExport): Promise<{ base64: string; 
     )
   }
 
+  // Sin fila de TOTALES a propósito: este export es el detalle completo fila a
+  // fila para el cliente, y el resumen ya se ve en las tarjetas de la pantalla —
+  // repetirlo aquí es ruido en un volcado que ya de por sí lleva muchas columnas.
   const filas = [
     cols.map(c => texto(c.cab, CABECERA)),
     ...nom.lineas.map(l => cols.map(c =>
       c.num ? numero(Number(c.val(l) ?? 0), { format: MONEDA_FMT })
             : texto(String(c.val(l) ?? '')))),
   ]
-
-  // Fila de totales: es lo primero que mira quien recibe el archivo.
-  filas.push(cols.map((c, i) => {
-    if (i === 0) return texto('TOTAL', { fontWeight: 'bold' })
-    if (!c.num)  return texto('')
-    const suma = nom.lineas.reduce((s, l) => s + Number(c.val(l) ?? 0), 0)
-    return numero(suma, { format: MONEDA_FMT, fontWeight: 'bold' })
-  }))
 
   const hoja: HojaExcel = {
     nombre:   mesLargo(nom.periodo).slice(0, 31),   // Excel corta el nombre de hoja a 31

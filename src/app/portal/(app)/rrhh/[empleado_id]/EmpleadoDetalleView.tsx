@@ -1,7 +1,7 @@
 'use client'
 
-import { toastError, toastLoading } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo } from 'react'
+import { toastError, toastLoading, toastWarning } from '@/app/contexts/ToastContext'
+import { useState, useTransition } from 'react'
 import Link                        from 'next/link'
 import { useRouter }               from 'next/navigation'
 import {
@@ -16,7 +16,6 @@ import {
   alternarConceptoEmpleado,
   guardarIncidencia,
   eliminarIncidencia,
-  confirmarNomina,
   type IncidenciaMes,
   type EmpleadoDetalleData,
   type Contrato,
@@ -32,10 +31,7 @@ import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { Copy, FileText, Eye, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
-  NominaDetalleModal,
-  ConfirmarNominaModal,
-  PagarNominaModal,
-  ActualizarConceptosModal,
+  actualizarConceptosNominas,
   formatMonto,
   hoyISO as hoyISOShared,
   formatPeriodo,
@@ -210,6 +206,8 @@ function IncidenciaModal({
       const res = await guardarIncidencia(fd)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      // El aviso no bloquea: la incidencia ya se guardó, solo conviene revisarla.
+      if (res.aviso) toastWarning(res.aviso)
       onDone()
     })
   }
@@ -542,14 +540,13 @@ function ConceptoModal({
 }
 
 function ConceptosSection({
-  empleadoId, moneda, conceptos, desfasadas, onActualizar, onChanged,
+  empleadoId, moneda, conceptos, desfasadas, onChanged,
 }: {
   empleadoId:   string
   moneda:       string
   conceptos:    ConceptoEmpleado[]
   /** Nóminas en BORRADOR cuya línea suya no cuadra con estos conceptos. */
   desfasadas:   NominaConLineas[]
-  onActualizar: (n: NominaConLineas) => void
   onChanged:    () => void
 }) {
   const [isPending, startTransition] = useTransition()
@@ -709,18 +706,19 @@ function ConceptosSection({
       {desfasadas.length > 0 && (
         <div className="alert alert-warning alert-cta mt-3">
           <span className="alert-cta-texto">
+            {/* Los meses, dichos: sin ellos «4 nóminas» no dice cuáles se van a
+                tocar, y el botón las actualiza todas de una vez. */}
             Estos conceptos no están aplicados en {desfasadas.length === 1
-              ? 'su nómina en borrador'
-              : `sus ${desfasadas.length} nóminas en borrador`}.
+              ? `su nómina en borrador de ${formatPeriodo(desfasadas[0].periodo)}`
+              : `sus ${desfasadas.length} nóminas en borrador (${desfasadas.map(n => formatPeriodo(n.periodo)).join(', ')})`}.
           </span>
-          <div className="alert-cta-acciones">
-            {desfasadas.map(n => (
-              <button key={n.nomina_id} type="button" className="btn btn-aviso btn-sm"
-                onClick={() => onActualizar(n)}>
-                <RefreshCw size={14} strokeWidth={2} /> Actualizar {formatPeriodo(n.periodo)}
-              </button>
-            ))}
-          </div>
+          <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}
+            onClick={() => actualizarConceptosNominas(desfasadas, empleadoId, startTransition, onChanged)}>
+            <RefreshCw size={14} strokeWidth={2} />
+            {desfasadas.length === 1
+              ? ` Actualizar ${formatPeriodo(desfasadas[0].periodo)}`
+              : ` Actualizar las ${desfasadas.length}`}
+          </button>
         </div>
       )}
     </div>
@@ -746,10 +744,6 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const [showNuevo,     setShowNuevo]     = useState(false)
   const [editContrato,  setEditContrato]  = useState<Contrato | null>(null)
   const [delContrato,   setDelContrato]   = useState<Contrato | null>(null)
-  const [detalleNominaId, setDetalleNominaId] = useState<string | null>(null)
-  const [confirmarNom,  setConfirmarNom]  = useState<NominaConLineas | null>(null)
-  const [pagarNom,      setPagarNom]      = useState<NominaConLineas | null>(null)
-  const [actualizarNom, setActualizarNom] = useState<NominaConLineas | null>(null)
 
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
@@ -771,22 +765,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       && (m.nomina.estado === 'BORRADOR' || m.nomina.pagado <= 0.005))
     .map(m => m.nomina)
 
-  const detalleVivo = useMemo(() =>
-    detalleNominaId ? data.nominas.find(n => n.nomina_id === detalleNominaId) ?? null : null,
-    [detalleNominaId, data.nominas])
-
   function refrescar() { router.refresh() }
-
-  function doConfirmarNomina() {
-    if (!confirmarNom) return
-    const ld = toastLoading('Confirmando…')
-    startTransition(async () => {
-      const res = await confirmarNomina(confirmarNom.nomina_id)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      setConfirmarNom(null); router.refresh()
-    })
-  }
 
   function reactivar() {
     const ld = toastLoading('Reactivando…')
@@ -930,8 +909,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
       {/* Conceptos recurrentes */}
       <ConceptosSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
-        conceptos={conceptos} desfasadas={desfasadas}
-        onActualizar={setActualizarNom} onChanged={refrescar} />
+        conceptos={conceptos} desfasadas={desfasadas} onChanged={refrescar} />
 
       {/* Incidencias del mes */}
       <IncidenciasSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
@@ -962,7 +940,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
               <tbody>
                 {nominaItems.map(({ nomina, linea }) => (
                   <tr key={nomina.nomina_id} className="table-row-clickable"
-                    onClick={() => setDetalleNominaId(nomina.nomina_id)}>
+                    onClick={() => router.push(`/portal/nomina/${nomina.nomina_id}`)}>
                     <td data-label="Período"><strong>{formatPeriodo(nomina.periodo)}</strong></td>
                     <td data-label="Devengado" className="col-num tes-monto-cell">{formatMonto(linea.devengado)} {nomina.moneda}</td>
                     <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(linea.deducciones)}</td>
@@ -974,7 +952,7 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                     </td>
                     <td className="col-actions">
                       <RowActions>
-                        <button className="row-actions-item" onClick={() => setDetalleNominaId(nomina.nomina_id)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
+                        <button className="row-actions-item" onClick={() => router.push(`/portal/nomina/${nomina.nomina_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
                       </RowActions>
                     </td>
                   </tr>
@@ -1040,27 +1018,6 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
             </div>
           </div>
         </div>
-      )}
-      {detalleVivo && (
-        <NominaDetalleModal nomina={detalleVivo} empleadoId={empleado.empleado_id}
-          devengadoCalculado={esCuba && detalleVivo.moneda === 'CUP'}
-          onClose={() => setDetalleNominaId(null)}
-          onChanged={() => router.refresh()}
-          onConfirmar={() => setConfirmarNom(detalleVivo)}
-          onPagar={() => { setPagarNom(detalleVivo); setDetalleNominaId(null) }} />
-      )}
-      {confirmarNom && (
-        <ConfirmarNominaModal nomina={confirmarNom} onConfirm={doConfirmarNomina}
-          onClose={() => setConfirmarNom(null)} isPending={isPending} />
-      )}
-      {pagarNom && (
-        <PagarNominaModal nomina={pagarNom} cuentas={data.cuentas}
-          onClose={() => setPagarNom(null)} onPaid={() => { setPagarNom(null); router.refresh() }} />
-      )}
-      {actualizarNom && (
-        <ActualizarConceptosModal nomina={actualizarNom} empleadoId={empleado.empleado_id}
-          onClose={() => setActualizarNom(null)}
-          onDone={() => { setActualizarNom(null); router.refresh() }} />
       )}
     </div>
   )

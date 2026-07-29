@@ -5,7 +5,6 @@ import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }               from 'next/navigation'
 import {
   crearNomina,
-  confirmarNomina,
   eliminarNomina,
   confirmarNominasEnLote,
   eliminarNominasEnLote,
@@ -22,14 +21,7 @@ import {
 import { Check, Download, Eye, Pencil, Plus, Power, Trash2, Wallet, X } from 'lucide-react'
 import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
 import Tabs from '@/components/Tabs'
-import {
-  NominaDetalleModal,
-  ConfirmarNominaModal,
-  PagarNominaModal,
-  formatMonto,
-  hoyISO,
-  formatPeriodo,
-} from '../_shared/NominaDetalleModal'
+import { formatMonto, hoyISO, formatPeriodo } from '../_shared/NominaDetalleModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import BulkBar                          from '@/components/portal/BulkBar'
@@ -605,7 +597,7 @@ function ConfirmEliminarNomina({
 
 // ── Página: Nómina ───────────────────────────────────────────────────────────────
 
-export default function NominaView({ data, focusNominaId }: { data: RrhhPageData; focusNominaId?: string }) {
+export default function NominaView({ data }: { data: RrhhPageData }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -618,12 +610,6 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
   // La regla que se está creando/editando: el disparador es el botón del
   // `.page-header`, así que el estado no puede vivir dentro de `ReglasPanel`.
   const [editandoRegla, setEditandoRegla] = useState<ReglaDeduccion | 'nueva' | null>(null)
-
-  // Una nómina la calcula el motor cubano solo si SU empresa usa ese modelo Y está
-  // en CUP: la misma empresa puede tener otra nómina en divisa, y esa va como General.
-  const esCubana = (n: NominaConLineas) =>
-    n.moneda === 'CUP' &&
-    data.config_nomina.find(c => c.empresa_id === n.empresa_id)?.modelo === 'MIPYME_CUBA'
 
   // Disponible en BORRADOR y en CONFIRMADA: en borrador sirve para revisar el mes
   // antes de cerrarlo, que es justo cuando más falta hace.
@@ -641,10 +627,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
     })
   }
   const [modalNuevaNomina, setModalNuevaNomina] = useState(false)
-  const [detalleNominaId,  setDetalleNominaId]  = useState<string | null>(null)
-  const [confirmarNom,     setConfirmarNom]     = useState<NominaConLineas | null>(null)
   const [delNomina,        setDelNomina]        = useState<NominaConLineas | null>(null)
-  const [pagar,            setPagar]            = useState<NominaConLineas | null>(null)
 
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [filtroAnio,    setFiltroAnio]    = useState('')
@@ -695,29 +678,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
   function doConfirmarLote() { setConfirmLoteConf(false); ejecutarLote(() => confirmarNominasEnLote(sel.selectedIds)) }
   function doEliminarLote()  { setConfirmLoteDel(false);  ejecutarLote(() => eliminarNominasEnLote(sel.selectedIds)) }
 
-  useEffect(() => {
-    if (focusNominaId && data.nominas.some(n => n.nomina_id === focusNominaId)) {
-      setDetalleNominaId(focusNominaId)
-    }
-  }, [focusNominaId, data.nominas])
-
-  // Re-sincroniza la nómina abierta en el detalle tras un refresh
-  const detalleVivo = detalleNominaId
-    ? data.nominas.find(n => n.nomina_id === detalleNominaId) ?? null
-    : null
-
   function onNominaCreada() { setModalNuevaNomina(false); router.refresh() }
-
-  function doConfirmarNomina() {
-    if (!confirmarNom) return
-    const ld = toastLoading('Confirmando…')
-    startTransition(async () => {
-      const res = await confirmarNomina(confirmarNom.nomina_id)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      setConfirmarNom(null); router.refresh()
-    })
-  }
 
   function doEliminarNomina() {
     if (!delNomina) return
@@ -726,7 +687,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
       const res = await eliminarNomina(delNomina.nomina_id)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelNomina(null); return }
-      setDelNomina(null); setDetalleNominaId(null); router.refresh()
+      setDelNomina(null); router.refresh()
     })
   }
 
@@ -826,7 +787,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                     key={n.nomina_id}
                     className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(n.empresa_id)) : undefined}
-                    onClick={() => setDetalleNominaId(n.nomina_id)}
+                    onClick={() => router.push(`/portal/nomina/${n.nomina_id}`)}
                   >
                     <td className="col-check" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" className="row-check"
@@ -849,7 +810,7 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
                     </td>
                     <td className="col-actions">
                       <RowActions>
-                        <button className="row-actions-item" onClick={() => setDetalleNominaId(n.nomina_id)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
+                        <button className="row-actions-item" onClick={() => router.push(`/portal/nomina/${n.nomina_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
                         <button className="row-actions-item" onClick={() => exportar(n)} disabled={exportando === n.nomina_id}>
                           <Download size={15} strokeWidth={2} /> Exportar a Excel
                         </button>
@@ -871,25 +832,9 @@ export default function NominaView({ data, focusNominaId }: { data: RrhhPageData
       {modalNuevaNomina && (
         <NuevaNominaModal data={data} onClose={() => setModalNuevaNomina(false)} onSaved={onNominaCreada} />
       )}
-      {detalleVivo && (
-        <NominaDetalleModal nomina={detalleVivo}
-          devengadoCalculado={esCubana(detalleVivo)}
-          onClose={() => setDetalleNominaId(null)}
-          onChanged={() => router.refresh()}
-          onConfirmar={() => setConfirmarNom(detalleVivo)}
-          onPagar={() => { setPagar(detalleVivo); setDetalleNominaId(null) }} />
-      )}
-      {confirmarNom && (
-        <ConfirmarNominaModal nomina={confirmarNom} onConfirm={doConfirmarNomina}
-          onClose={() => setConfirmarNom(null)} isPending={isPending} />
-      )}
       {delNomina && (
         <ConfirmEliminarNomina nomina={delNomina} onConfirm={doEliminarNomina}
           onClose={() => setDelNomina(null)} isPending={isPending} />
-      )}
-      {pagar && (
-        <PagarNominaModal nomina={pagar} cuentas={data.cuentas}
-          onClose={() => setPagar(null)} onPaid={() => { setPagar(null); router.refresh() }} />
       )}
 
       <BulkBar count={sel.count} onClear={sel.clear}>

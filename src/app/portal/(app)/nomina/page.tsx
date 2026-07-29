@@ -5,14 +5,9 @@ import NominaView        from './NominaView'
 
 export const dynamic = 'force-dynamic'
 
-export default async function NominaPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ nomina_id?: string }>
-}) {
+export default async function NominaPage() {
   await requireModulo('rrhh')
   const data = await obtenerRrhh()
   if (!data) notFound()
-  const { nomina_id } = await searchParams
-  return <NominaView data={data} focusNominaId={nomina_id} />
+  return <NominaView data={data} />
 }
