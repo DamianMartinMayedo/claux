@@ -9,7 +9,6 @@ import {
   cambiarEstadoOferta,
   duplicarOferta,
   type OfertaDetalleData,
-  type VentasResumenData,
 } from '@/app/actions/portal/ventas'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { empresaColorVar }            from '@/components/portal/EmpresaTag'
@@ -27,7 +26,6 @@ import {
 
 interface Props {
   data:    OfertaDetalleData
-  resumen: VentasResumenData
 }
 
 export default function OfertaDetalle({ data }: Props) {

@@ -5,8 +5,9 @@ import { useState, useTransition } from 'react'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
 import { guardarFactura }                    from '@/app/actions/portal/ventas'
-import type { VentasResumenData }            from '@/app/actions/portal/ventas'
+import type { ContextoDocumentoData }            from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }             from '../../_DocumentoLineasEditor'
+import { DescuentoStock }                    from '../../_DescuentoStock'
 import { MonedaDocumento }                   from '../../_MonedaDocumento'
 import CrearTerceroInline                    from '@/components/portal/CrearTerceroInline'
 import {
@@ -18,19 +19,19 @@ import {
 } from '../../_ventas-helpers'
 
 interface Props {
-  resumen:      VentasResumenData
+  contexto:      ContextoDocumentoData
 }
 
-export default function NuevaFacturaPage({ resumen }: Props) {
+export default function NuevaFacturaPage({ contexto }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const empresasConLetra = resumen.empresas.filter(e => !!e.letra_facturacion)
-  const sinLetra         = resumen.empresas.length > 0 && empresasConLetra.length === 0
+  const empresasConLetra = contexto.empresas.filter(e => !!e.letra_facturacion)
+  const sinLetra         = contexto.empresas.length > 0 && empresasConLetra.length === 0
 
   const [empresa_id,        setEmpresaId]       = useState(empresasConLetra[0]?.empresa_id ?? '')
   const [cliente_id,        setClienteId]       = useState('')
-  const [moneda,            setMoneda]          = useState(resumen.monedas[0] ?? '')
+  const [moneda,            setMoneda]          = useState(contexto.monedas[0] ?? '')
   const [fecha_emision,     setFechaEmision]    = useState(new Date().toISOString().substring(0, 10))
   const [fecha_vencimiento, setFechaVencimiento] = useState('')
   const [condicion_pago,    setCondicionPago]   = useState('CONTADO')
@@ -39,14 +40,19 @@ export default function NuevaFacturaPage({ resumen }: Props) {
 
   const [lineas,  setLineas]  = useState<LineaInput[]>([])
   const [ajustes, setAjustes] = useState<AjusteInput[]>([])
+  // Marcado por defecto cuando el negocio tiene Inventario: si vende físico, lo normal
+  // es que la venta mueva existencias. El bloque solo se pinta si además hay líneas de
+  // producto físico, así que un negocio de servicios nunca lo ve.
+  const [descuentaStock, setDescuentaStock] = useState(contexto.hay_inventario)
+  const [almacenId,      setAlmacenId]      = useState('')
 
-  const clientesDeEmpresa = resumen.clientes.filter(c => c.empresa_id === empresa_id)
+  const clientesDeEmpresa = contexto.clientes.filter(c => c.empresa_id === empresa_id)
 
   function onClienteChange(id: string) {
     setClienteId(id)
-    const c = resumen.clientes.find(c => c.tercero_id === id)
+    const c = contexto.clientes.find(c => c.tercero_id === id)
     // Solo sin importes escritos: ver la nota en NuevaOfertaPage.
-    if (c?.moneda_defecto && resumen.monedas.includes(c.moneda_defecto)
+    if (c?.moneda_defecto && contexto.monedas.includes(c.moneda_defecto)
         && !tieneImportes(lineas, ajustes)) {
       setMoneda(c.moneda_defecto)
     }
@@ -83,6 +89,8 @@ export default function NuevaFacturaPage({ resumen }: Props) {
     fd.set('notas_internas',    notas_internas)
     fd.set('lineas',  JSON.stringify(lineas))
     fd.set('ajustes', JSON.stringify(ajustes))
+    fd.set('descuenta_stock', descuentaStock ? '1' : '0')
+    fd.set('almacen_id',      almacenId)
 
     const ld = toastLoading('Creando…')
     startTransition(async () => {
@@ -151,8 +159,8 @@ export default function NuevaFacturaPage({ resumen }: Props) {
                 <div className="crear-tercero-empty">
                   <span className="input-hint">Esta empresa no tiene clientes.</span>
                   <CrearTerceroInline
-                    empresas={resumen.empresas.filter(e => e.empresa_id === empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
-                    monedas={resumen.monedas}
+                    empresas={contexto.empresas.filter(e => e.empresa_id === empresa_id).map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
+                    monedas={contexto.monedas}
                     defaultTipo="CLIENTE"
                     label="Crear cliente"
                     onCreated={(id) => { if (id) onClienteChange(id) }}
@@ -163,9 +171,9 @@ export default function NuevaFacturaPage({ resumen }: Props) {
 
             <MonedaDocumento
               moneda={moneda}
-              monedas={resumen.monedas}
-              tasas={resumen.tasas}
-              productos={resumen.productos}
+              monedas={contexto.monedas}
+              tasas={contexto.tasas}
+              productos={contexto.productos}
               lineas={lineas}
               ajustes={ajustes}
               onChange={(m, l, a) => { setMoneda(m); setLineas(l); setAjustes(a) }}
@@ -199,13 +207,23 @@ export default function NuevaFacturaPage({ resumen }: Props) {
           lineas={lineas}
           ajustes={ajustes}
           moneda={moneda}
-          productos={resumen.productos}
+          productos={contexto.productos}
           notas={notas}
           notasInternas={notas_internas}
           onLineasChange={setLineas}
           onAjustesChange={setAjustes}
           onNotasChange={setNotas}
           onNotasInternasChange={setNotasInternas}
+        />
+
+        <DescuentoStock
+          contexto={contexto}
+          empresa_id={empresa_id}
+          lineas={lineas}
+          descuenta={descuentaStock}
+          almacen_id={almacenId}
+          onDescuentaChange={setDescuentaStock}
+          onAlmacenChange={setAlmacenId}
         />
 
       </form>

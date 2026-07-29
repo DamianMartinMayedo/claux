@@ -1,10 +1,10 @@
-import { notFound }             from 'next/navigation'
+import { notFound }        from 'next/navigation'
 import {
   obtenerFacturaDetalle,
-  obtenerVentasResumen,
+  obtenerContextoDocumento,
 } from '@/app/actions/portal/ventas'
-import { requireModulo }        from '@/app/actions/portal/auth'
-import EditarFacturaPage         from './EditarFacturaPage'
+import { requireModulo }   from '@/app/actions/portal/auth'
+import EditarFacturaPage   from './EditarFacturaPage'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,10 +15,10 @@ interface PageProps {
 export default async function Page({ params }: PageProps) {
   await requireModulo('base')
   const { factura_id } = await params
-  const [detalle, resumen] = await Promise.all([
+  const [detalle, contexto] = await Promise.all([
     obtenerFacturaDetalle(factura_id),
-    obtenerVentasResumen(),
+    obtenerContextoDocumento(),
   ])
-  if (!detalle || !resumen) notFound()
-  return <EditarFacturaPage data={detalle} resumen={resumen} />
+  if (!detalle || !contexto) notFound()
+  return <EditarFacturaPage data={detalle} contexto={contexto} />
 }

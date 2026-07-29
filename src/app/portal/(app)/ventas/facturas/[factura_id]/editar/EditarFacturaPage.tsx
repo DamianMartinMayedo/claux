@@ -5,8 +5,9 @@ import { useState, useTransition } from 'react'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
 import { guardarFactura }                    from '@/app/actions/portal/ventas'
-import type { VentasResumenData, FacturaDetalleData } from '@/app/actions/portal/ventas'
+import type { ContextoDocumentoData, FacturaDetalleData } from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }             from '../../../_DocumentoLineasEditor'
+import { DescuentoStock }                    from '../../../_DescuentoStock'
 import { MonedaDocumento }                   from '../../../_MonedaDocumento'
 import {
   CONDICION_PAGO_OPTIONS,
@@ -18,10 +19,10 @@ import {
 
 interface Props {
   data:         FacturaDetalleData
-  resumen:      VentasResumenData
+  contexto:      ContextoDocumentoData
 }
 
-export default function EditarFacturaPage({ data, resumen }: Props) {
+export default function EditarFacturaPage({ data, contexto }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -57,14 +58,19 @@ export default function EditarFacturaPage({ data, resumen }: Props) {
     }))
   )
 
-  const clientesDeEmpresa = resumen.clientes.filter(c => c.empresa_id === empresa_id)
+  // Vienen de la factura guardada: el borrador no ha movido nada todavía (el stock se
+  // mueve al emitir), así que aquí se edita la intención, no un efecto ya aplicado.
+  const [descuentaStock, setDescuentaStock] = useState(factura.descuenta_stock)
+  const [almacenId,      setAlmacenId]      = useState(factura.almacen_id ?? '')
+
+  const clientesDeEmpresa = contexto.clientes.filter(c => c.empresa_id === empresa_id)
 
   function onClienteChange(id: string) {
     setClienteId(id)
-    const c = resumen.clientes.find(c => c.tercero_id === id)
+    const c = contexto.clientes.find(c => c.tercero_id === id)
     // Solo sin importes escritos: ver la nota en NuevaOfertaPage. Aquí importa aún
     // más — un documento ya guardado siempre llega con líneas.
-    if (c?.moneda_defecto && resumen.monedas.includes(c.moneda_defecto)
+    if (c?.moneda_defecto && contexto.monedas.includes(c.moneda_defecto)
         && !tieneImportes(lineas, ajustes)) {
       setMoneda(c.moneda_defecto)
     }
@@ -97,6 +103,8 @@ export default function EditarFacturaPage({ data, resumen }: Props) {
     fd.set('notas_internas',    notas_internas)
     fd.set('lineas',  JSON.stringify(lineas))
     fd.set('ajustes', JSON.stringify(ajustes))
+    fd.set('descuenta_stock', descuentaStock ? '1' : '0')
+    fd.set('almacen_id',      almacenId)
 
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
@@ -150,9 +158,9 @@ export default function EditarFacturaPage({ data, resumen }: Props) {
 
             <MonedaDocumento
               moneda={moneda}
-              monedas={resumen.monedas}
-              tasas={resumen.tasas}
-              productos={resumen.productos}
+              monedas={contexto.monedas}
+              tasas={contexto.tasas}
+              productos={contexto.productos}
               lineas={lineas}
               ajustes={ajustes}
               onChange={(m, l, a) => { setMoneda(m); setLineas(l); setAjustes(a) }}
@@ -186,13 +194,23 @@ export default function EditarFacturaPage({ data, resumen }: Props) {
           lineas={lineas}
           ajustes={ajustes}
           moneda={moneda}
-          productos={resumen.productos}
+          productos={contexto.productos}
           notas={notas}
           notasInternas={notas_internas}
           onLineasChange={setLineas}
           onAjustesChange={setAjustes}
           onNotasChange={setNotas}
           onNotasInternasChange={setNotasInternas}
+        />
+
+        <DescuentoStock
+          contexto={contexto}
+          empresa_id={empresa_id}
+          lineas={lineas}
+          descuenta={descuentaStock}
+          almacen_id={almacenId}
+          onDescuentaChange={setDescuentaStock}
+          onAlmacenChange={setAlmacenId}
         />
 
       </form>

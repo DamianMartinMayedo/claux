@@ -5,7 +5,7 @@ import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
-import { tieneAlgunModulo, MODULOS_CATALOGO } from '@/lib/modulos'
+import { tieneAlgunModulo, tieneModulo, MODULOS_CATALOGO } from '@/lib/modulos'
 import { monedaValida, mapaTasas } from '@/lib/tasas'
 import { sumarPeriodo, restarPeriodo, type PeriodicidadSub } from '@/lib/suscripciones'
 // Núcleo sin sesión, compartido con el cron de facturación automática. Ver el porqué
@@ -13,6 +13,7 @@ import { sumarPeriodo, restarPeriodo, type PeriodicidadSub } from '@/lib/suscrip
 import {
   generarIdDocumento, siguienteCorrelativo, escribirLineasYAjustes, fotoDeCostes,
 } from '@/lib/ventas/factura-core'
+import { aplicarMovimiento } from './_inventario-helpers'
 import {
   calcularTotales,
   formatoNumero,
@@ -69,6 +70,10 @@ export interface Factura {
   notas:             string | null
   notas_internas:    string | null
   archivado:         boolean
+  /** Si al emitir se saca del inventario lo vendido (mig. 150). Elección por factura. */
+  descuenta_stock:   boolean
+  /** Almacén del que sale la mercancía. Null si no descuenta o si aún no se eligió. */
+  almacen_id:        string | null
   created_at:        string
   updated_at:        string
 }
@@ -101,6 +106,18 @@ export interface DocumentoAjuste {
   monto_calculado: number
 }
 
+export interface ProductoOpcion {
+  producto_id: string
+  codigo:      string
+  nombre:      string
+  unidad:      string
+  precios:     Record<string, number>
+  /** PRODUCTO (físico, mueve existencias) | SERVICIO. Solo el físico se descuenta. */
+  tipo:        string
+  /** Existencias por almacén. Sirve para AVISAR en la línea, no para bloquear. */
+  stock:       Record<string, number>
+}
+
 export interface VentasResumenData {
   ofertas:           Oferta[]
   facturas:          Factura[]
@@ -108,11 +125,29 @@ export interface VentasResumenData {
   empresa_nombres:   Record<string, string>
   clientes:          { tercero_id: string; nombre: string; empresa_id: string; moneda_defecto: string | null; identificacion: string | null; direccion: string | null; ciudad: string | null; pais: string | null; email: string | null; telefono: string | null }[]
   cliente_nombres:   Record<string, string>
-  productos:         { producto_id: string; codigo: string; nombre: string; unidad: string; precios: Record<string, number> }[]
   monedas:           string[]
+}
+
+/**
+ * Todo lo que necesita el FORMULARIO de un documento (factura u oferta), y nada más.
+ *
+ * Antes las cuatro pantallas de alta/edición llamaban a `obtenerVentasResumen`, que
+ * descarga **todas** las ofertas y **todas** las facturas del negocio para no usar
+ * ninguna: con dos años de histórico, crear una factura se traía miles de filas.
+ * Aquí no hay documentos, solo catálogos.
+ */
+export interface ContextoDocumentoData {
+  empresas:       VentasResumenData['empresas']
+  clientes:       VentasResumenData['clientes']
+  productos:      ProductoOpcion[]
+  monedas:        string[]
   /** "ORIGEN__DESTINO" → factor. Para convertir los importes al cambiar la moneda
    *  del documento sin ida y vuelta al servidor (ver `mapaTasas`). */
-  tasas:             Record<string, number>
+  tasas:          Record<string, number>
+  /** Almacenes activos: de dónde puede salir la mercancía al emitir (mig. 150). */
+  almacenes:      { almacen_id: string; nombre: string; empresa_id: string }[]
+  /** Sin el módulo Inventario el bloque de descuento de stock no existe. */
+  hay_inventario: boolean
 }
 
 export interface OfertaDetalleData {
@@ -131,6 +166,8 @@ export interface FacturaDetalleData {
   lineas:   DocumentoLinea[]
   ajustes:  DocumentoAjuste[]
   oferta?:  { oferta_id: string; numero: string } | null
+  /** Nombre del almacén de `facturas.almacen_id`, para la ficha (mig. 150). */
+  almacen_nombre?: string | null
 }
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
@@ -155,6 +192,27 @@ async function validarEmpresaAccesible(
 
 // ── Obtener resumen (hub) ─────────────────────────────────────────────────────
 
+type FilaCliente = {
+  tercero_id: string; nombre: string; empresa_id: string; moneda_defecto: string | null
+  identificacion: string | null; direccion: string | null; ciudad: string | null
+  pais: string | null; email: string | null; telefono: string | null
+}
+
+/** Clientes de las empresas accesibles. Los usan el listado y el formulario. */
+async function clientesFacturables(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, empresa_ids: string[],
+): Promise<FilaCliente[]> {
+  const { data } = await db.from('third_parties')
+    .select('tercero_id, nombre, empresa_id, moneda_defecto, identificacion, direccion, ciudad, pais, email, telefono')
+    .eq('client_id', client_id)
+    .in('empresa_id', empresa_ids)
+    .in('tipo', ['CLIENTE', 'AMBOS'])
+    .eq('activo', true)
+    .order('nombre')
+  return (data ?? []) as FilaCliente[]
+}
+
 export async function obtenerVentasResumen(): Promise<VentasResumenData | null> {
   const session = await getPortalSession()
   if (!session) return null
@@ -167,23 +225,11 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
       ofertas: [], facturas: [],
       empresas: [], empresa_nombres: {},
       clientes: [], cliente_nombres: {},
-      productos: [], monedas: [], tasas: {},
+      monedas: [],
     }
   }
 
-  // Gate por la lista de artículos (Inventario O la pieza Servicios): el selector es
-  // una conveniencia de llenado rápido. Sin ninguna de las dos, las líneas se
-  // rellenan con texto libre (la base funciona sola); con cualquiera, se ofrece el
-  // datalist. Es EL punto de la pieza Servicios: que una consultora tenga sus
-  // servicios en las facturas sin pagar almacenes que no usa.
-  const { data: clienteRow } = await db
-    .from('clients')
-    .select('modulos_activos')
-    .eq('client_id', session.client_id)
-    .single()
-  const tieneCatalogo = tieneAlgunModulo(clienteRow?.modulos_activos, MODULOS_CATALOGO)
-
-  const [ofRes, faRes, cliRes, prodRes, monRes] = await Promise.all([
+  const [ofRes, faRes, clientes, monRes] = await Promise.all([
     db.from('ofertas').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', empresa_ids)
@@ -192,20 +238,7 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
       .eq('client_id', session.client_id)
       .in('empresa_id', empresa_ids)
       .order('created_at', { ascending: false }),
-    db.from('third_parties')
-      .select('tercero_id, nombre, empresa_id, moneda_defecto, tipo, activo, identificacion, direccion, ciudad, pais, email, telefono')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', empresa_ids)
-      .in('tipo', ['CLIENTE', 'AMBOS'])
-      .eq('activo', true)
-      .order('nombre'),
-    tieneCatalogo
-      ? db.from('products')
-          .select('producto_id, codigo, nombre, unidad, precios')
-          .eq('client_id', session.client_id)
-          .eq('estado', 'ACTIVO')
-          .order('nombre')
-      : Promise.resolve({ data: [] as VentasResumenData['productos'] }),
+    clientesFacturables(db, session.client_id, empresa_ids),
     db.from('monedas')
       .select('codigo')
       .eq('client_id', session.client_id)
@@ -217,14 +250,7 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
   for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
 
   const cliente_nombres: Record<string, string> = {}
-  for (const c of (cliRes.data ?? [])) cliente_nombres[c.tercero_id] = c.nombre
-
-  // Tasas entre las monedas del cliente: viajan con la página para que cambiar la
-  // moneda del documento pueda reexpresar los importes en el acto. Son 2-4 monedas,
-  // un puñado de pares. Un par sin tasa NO aparece en el mapa: la UI lo interpreta
-  // como "no cotiza" y deja los importes intactos en vez de inventarse un factor.
-  const codigosMoneda = ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo)
-  const tasas = await mapaTasas(db, session.client_id, codigosMoneda)
+  for (const c of clientes) cliente_nombres[c.tercero_id] = c.nombre
 
   return {
     ofertas:          (ofRes.data  ?? []) as Oferta[],
@@ -235,22 +261,107 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
                         letra_facturacion: e.letra_facturacion,
                       })),
     empresa_nombres,
-    clientes:         (cliRes.data ?? []).map((c: { tercero_id: string; nombre: string; empresa_id: string; moneda_defecto: string | null; identificacion: string | null; direccion: string | null; ciudad: string | null; pais: string | null; email: string | null; telefono: string | null }) => ({
-                        tercero_id:     c.tercero_id,
-                        nombre:         c.nombre,
-                        empresa_id:     c.empresa_id,
-                        moneda_defecto: c.moneda_defecto,
-                        identificacion: c.identificacion,
-                        direccion:      c.direccion,
-                        ciudad:         c.ciudad,
-                        pais:           c.pais,
-                        email:          c.email,
-                        telefono:       c.telefono,
-                      })),
+    clientes,
     cliente_nombres,
-    productos:        (prodRes.data ?? []) as VentasResumenData['productos'],
-    monedas:          codigosMoneda,
+    monedas:          ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
+  }
+}
+
+// ── Contexto del formulario de un documento (C2) ───────────────────────────────
+
+export async function obtenerContextoDocumento(): Promise<ContextoDocumentoData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const db       = createAdminClient()
+  const empresas = await obtenerEmpresas()
+  const empresa_ids = empresas.map(e => e.empresa_id)
+  const vacio: ContextoDocumentoData = {
+    empresas: [], clientes: [], productos: [], monedas: [], tasas: {},
+    almacenes: [], hay_inventario: false,
+  }
+  if (!empresa_ids.length) return vacio
+
+  // Gate por la lista de artículos (Inventario O la pieza Servicios): el selector es
+  // una conveniencia de llenado rápido. Sin ninguna de las dos, las líneas se
+  // rellenan con texto libre (la base funciona sola); con cualquiera, se ofrece el
+  // catálogo. Es EL punto de la pieza Servicios: que una consultora tenga sus
+  // servicios en las facturas sin pagar almacenes que no usa.
+  const { data: clienteRow } = await db
+    .from('clients')
+    .select('modulos_activos')
+    .eq('client_id', session.client_id)
+    .single()
+  const tieneCatalogo  = tieneAlgunModulo(clienteRow?.modulos_activos, MODULOS_CATALOGO)
+  const hay_inventario = tieneModulo(clienteRow?.modulos_activos, 'inventario')
+
+  const [clientes, prodRes, monRes, almRes, stockRes] = await Promise.all([
+    clientesFacturables(db, session.client_id, empresa_ids),
+    tieneCatalogo
+      ? db.from('products')
+          .select('producto_id, codigo, nombre, unidad, precios, tipo')
+          .eq('client_id', session.client_id)
+          .eq('estado', 'ACTIVO')
+          .order('nombre')
+      : Promise.resolve({ data: [] }),
+    db.from('monedas')
+      .select('codigo')
+      .eq('client_id', session.client_id)
+      .eq('activa', true)
+      .order('codigo'),
+    hay_inventario
+      ? db.from('almacenes')
+          .select('almacen_id, nombre, empresa_id')
+          .eq('client_id', session.client_id)
+          .in('empresa_id', empresa_ids)
+          .eq('activo', true)
+          .order('nombre')
+      : Promise.resolve({ data: [] }),
+    // Existencias por (producto, almacén). Solo para AVISAR en la línea: facturar es
+    // un hecho comercial y un stock mal cuadrado no puede impedir emitir. Se trae con
+    // la página porque preguntarlo por línea sería un viaje por tecla en 3G.
+    hay_inventario
+      ? db.from('stock_almacenes')
+          .select('producto_id, almacen_id, cantidad')
+          .eq('client_id', session.client_id)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const stockPorProducto = new Map<string, Record<string, number>>()
+  for (const s of ((stockRes.data ?? []) as { producto_id: string; almacen_id: string; cantidad: number }[])) {
+    const m = stockPorProducto.get(s.producto_id) ?? {}
+    m[s.almacen_id] = Number(s.cantidad)
+    stockPorProducto.set(s.producto_id, m)
+  }
+
+  // Tasas entre las monedas del cliente: viajan con la página para que cambiar la
+  // moneda del documento pueda reexpresar los importes en el acto. Son 2-4 monedas,
+  // un puñado de pares. Un par sin tasa NO aparece en el mapa: la UI lo interpreta
+  // como "no cotiza" y deja los importes intactos en vez de inventarse un factor.
+  const codigosMoneda = ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo)
+  const tasas = await mapaTasas(db, session.client_id, codigosMoneda)
+
+  type FilaProd = { producto_id: string; codigo: string; nombre: string; unidad: string; precios: Record<string, number> | null; tipo: string | null }
+  return {
+    empresas:  empresas.map(e => ({
+                 empresa_id:        e.empresa_id,
+                 nombre:            e.nombre,
+                 letra_facturacion: e.letra_facturacion,
+               })),
+    clientes,
+    productos: ((prodRes.data ?? []) as FilaProd[]).map(p => ({
+                 producto_id: p.producto_id,
+                 codigo:      p.codigo,
+                 nombre:      p.nombre,
+                 unidad:      p.unidad,
+                 precios:     p.precios ?? {},
+                 tipo:        p.tipo ?? 'PRODUCTO',
+                 stock:       stockPorProducto.get(p.producto_id) ?? {},
+               })),
+    monedas:   codigosMoneda,
     tasas,
+    almacenes: (almRes.data ?? []) as ContextoDocumentoData['almacenes'],
+    hay_inventario,
   }
 }
 
@@ -327,7 +438,7 @@ export async function obtenerFacturaDetalle(
 
   // empresa, cliente, líneas, ajustes y oferta solo dependen de la factura ya
   // cargada → una sola tanda en paralelo (antes eran secuenciales).
-  const [empRes, cliRes, linRes, ajuRes, ofeRes] = await Promise.all([
+  const [empRes, cliRes, linRes, ajuRes, ofeRes, almRes] = await Promise.all([
     db.from('empresas')
       .select('empresa_id, nombre, nombre_fiscal, rif_nit, direccion, ciudad, pais, telefono, email, logo_url, letra_facturacion, color')
       .eq('empresa_id', factura.empresa_id)
@@ -345,6 +456,12 @@ export async function obtenerFacturaDetalle(
     factura.oferta_id
       ? db.from('ofertas').select('oferta_id, numero').eq('oferta_id', factura.oferta_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    // El nombre del almacén, para que la ficha diga de DÓNDE salió la mercancía y no
+    // un `ALM-` que no significa nada para el dueño.
+    factura.almacen_id
+      ? db.from('almacenes').select('nombre').eq('almacen_id', factura.almacen_id)
+          .eq('client_id', session.client_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   const empresa = empRes.data
@@ -360,6 +477,7 @@ export async function obtenerFacturaDetalle(
     lineas:  (linRes.data ?? []) as DocumentoLinea[],
     ajustes: (ajuRes.data ?? []) as DocumentoAjuste[],
     oferta,
+    almacen_nombre: (almRes.data as { nombre: string } | null)?.nombre ?? null,
   }
 }
 
@@ -509,6 +627,27 @@ export async function guardarFactura(
   const totales = calcularTotales(lineas, ajustes)
   const db      = createAdminClient()
 
+  // ── Descuento de inventario (mig. 150): elección por factura, no automatismo ──
+  // El check del formulario no basta: se revalidan el módulo y el almacén en servidor
+  // (la UI oculta no es control de acceso). Sin almacén válido no se descuenta, en vez
+  // de emitir y fallar al mover existencias con el número fiscal ya gastado.
+  let descuenta_stock = false
+  let almacen_id: string | null = null
+  if (formData.get('descuenta_stock') === '1') {
+    const almacenForm = (formData.get('almacen_id') as string)?.trim() || ''
+    const { data: cli } = await db.from('clients')
+      .select('modulos_activos').eq('client_id', session.client_id).maybeSingle()
+    if (tieneModulo(cli?.modulos_activos, 'inventario')) {
+      if (!almacenForm) return { ok: false, error: 'Elige el almacén del que sale la mercancía.' }
+      const { data: alm } = await db.from('almacenes')
+        .select('almacen_id').eq('client_id', session.client_id)
+        .eq('almacen_id', almacenForm).eq('activo', true).maybeSingle()
+      if (!alm) return { ok: false, error: 'El almacén elegido no existe o está inactivo.' }
+      descuenta_stock = true
+      almacen_id      = almacenForm
+    }
+  }
+
   if (!factura_id_form) {
     // ── Crear ──
     if (!await monedaValida(db, session.client_id, moneda)) {
@@ -533,6 +672,8 @@ export async function guardarFactura(
       total:            totales.total,
       notas,
       notas_internas,
+      descuenta_stock,
+      almacen_id,
     })
     if (error) return { ok: false, error: error.message }
 
@@ -560,6 +701,9 @@ export async function guardarFactura(
       condicion_pago, notas, notas_internas,
       subtotal:   totales.subtotal,
       total:      totales.total,
+      // Editar un BORRADOR no mueve existencias (eso pasa al emitir): aquí solo se
+      // guarda la intención.
+      descuenta_stock, almacen_id,
       updated_at: new Date().toISOString(),
     })
     .eq('factura_id', factura_id_form)
@@ -627,6 +771,78 @@ export async function cambiarEstadoOferta(
 }
 
 // ── Cambiar estado de factura ─────────────────────────────────────────────────
+
+// ── Existencias de una factura (mig. 150) ─────────────────────────────────────
+//
+// Al EMITIR se saca del almacén lo vendido; al ANULAR se devuelve. Dos reglas que no
+// son negociables y conviene tener escritas, porque las dos se «arreglan» mal:
+//
+//  1. **La idempotencia se pregunta a los movimientos, no a un flag.** Un flag en la
+//     factura se puede quedar escrito con el movimiento a medias (es exactamente el
+//     fallo que `lib/caja/ingesta.ts` sufrió y documenta). Con el ledger delante,
+//     emitir → anular → emitir no duplica ni pierde nada.
+//  2. **`permitir_negativo: true`.** La venta ya ocurrió: el documento es un hecho
+//     comercial. Un stock mal cuadrado no puede impedir facturar — que es también el
+//     criterio del cierre de caja. El aviso va en el formulario, antes.
+//
+// Y los FÍSICOS se filtran ANTES de llamar a la RPC, sin confiar en que la base lo
+// pare: con `permitir_negativo` no lo pararía, crearía stock negativo de un `SRV-` en
+// silencio (mismo filtro que `ingesta.ts`).
+async function moverStockFactura(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, factura_id: string, direccion: 'SALIDA' | 'ENTRADA',
+): Promise<void> {
+  const { data: fac } = await db.from('facturas')
+    .select('empresa_id, numero, fecha_emision, descuenta_stock, almacen_id')
+    .eq('factura_id', factura_id).eq('client_id', client_id).maybeSingle()
+  if (!fac?.descuenta_stock || !fac.almacen_id) return
+
+  const { data: previos } = await db.from('movimientos_inventario')
+    .select('tipo')
+    .eq('client_id', client_id).eq('origen', 'VENTA').eq('referencia_id', factura_id)
+  const hechos = (previos ?? []) as { tipo: string }[]
+  const salidas  = hechos.filter(m => m.tipo === 'SALIDA').length
+  const entradas = hechos.filter(m => m.tipo === 'ENTRADA').length
+  // SALIDA solo si no hay ninguna viva; ENTRADA solo si queda algo que devolver.
+  if (direccion === 'SALIDA'  && salidas > entradas) return
+  if (direccion === 'ENTRADA' && salidas <= entradas) return
+
+  const { data: lineas } = await db.from('documento_lineas')
+    .select('producto_id, cantidad')
+    .eq('documento_tipo', 'FACTURA').eq('documento_id', factura_id)
+    .not('producto_id', 'is', null)
+  type Lin = { producto_id: string; cantidad: number }
+  const ids = [...new Set(((lineas ?? []) as Lin[]).map(l => l.producto_id))]
+  if (!ids.length) return
+
+  const { data: prods } = await db.from('products')
+    .select('producto_id').eq('client_id', client_id).in('producto_id', ids).eq('tipo', 'PRODUCTO')
+  const fisicos = new Set(((prods ?? []) as { producto_id: string }[]).map(p => p.producto_id))
+
+  const porProducto = new Map<string, number>()
+  for (const l of ((lineas ?? []) as Lin[])) {
+    if (!fisicos.has(l.producto_id)) continue
+    porProducto.set(l.producto_id, (porProducto.get(l.producto_id) ?? 0) + Number(l.cantidad))
+  }
+
+  const verbo = direccion === 'SALIDA' ? 'Venta' : 'Anulación de la venta'
+  for (const [producto_id, cantidad] of porProducto) {
+    if (!(cantidad > 0)) continue
+    await aplicarMovimiento(db, {
+      client_id,
+      empresa_id:        fac.empresa_id as string,
+      fecha:             fac.fecha_emision as string,
+      tipo:              direccion,
+      producto_id,
+      almacen_id:        fac.almacen_id as string,
+      cantidad,
+      motivo:            `${verbo} — factura ${fac.numero}`,
+      origen:            'VENTA',
+      referencia_id:     factura_id,
+      permitir_negativo: true,
+    })
+  }
+}
 
 /** Traduce los RAISE EXCEPTION de `srv_cxp_*` (mig. 118) a lenguaje humano. */
 function traducirErrorCxP(msg: string): string {
@@ -723,6 +939,19 @@ export async function cambiarEstadoFactura(
   if (nuevoEstado === 'ANULADA') {
     revalidatePath('/portal/gastos')
     revalidatePath('/portal/cxp')
+  }
+
+  // Existencias (mig. 150). Va DESPUÉS del cambio de estado y sin abortarlo si falla:
+  // el documento fiscal ya está emitido —con su número gastado— y no puede quedar en
+  // el aire porque un almacén no cuadre. Si algo sale mal, el movimiento se corrige a
+  // mano en Inventario, que es reversible; deshacer una emisión, no.
+  if (nuevoEstado === 'EMITIDA' || nuevoEstado === 'ANULADA') {
+    try {
+      await moverStockFactura(db, session.client_id, factura_id,
+        nuevoEstado === 'EMITIDA' ? 'SALIDA' : 'ENTRADA')
+      revalidatePath('/portal/inventario')
+      revalidatePath('/portal/productos')
+    } catch { /* el estado manda; el movimiento se reintenta corrigiendo en Inventario */ }
   }
 
   // Anular es deshacer: si la factura salió de la facturación del período, sus
@@ -1027,6 +1256,10 @@ export async function duplicarFactura(
     total:            factura.total,
     notas:            factura.notas,
     notas_internas:   `Duplicado de ${factura.numero} — ${hoy}`,
+    // La intención de descontar stock SÍ se copia (es parte del documento), pero no
+    // mueve nada: la copia nace BORRADOR y el stock se mueve al emitir.
+    descuenta_stock:  factura.descuenta_stock ?? false,
+    almacen_id:       factura.almacen_id ?? null,
   })
   if (error) return { ok: false, error: error.message }
 
@@ -1354,6 +1587,10 @@ export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLo
       }
       for (const factura_id of borrables) {
         await db.rpc('srv_cxp_revertir', { p_factura_id: factura_id, p_client_id: session.client_id })
+        // Y las existencias que sacó al emitirse (mig. 150): devolverlas ANTES de borrar
+        // las líneas, que es de donde se leen las cantidades. Sin esto el stock se queda
+        // corto por una venta que ya no existe en ningún sitio.
+        try { await moverStockFactura(db, session.client_id, factura_id, 'ENTRADA') } catch { /* limpieza: no aborta el lote */ }
       }
       await db.from('movimientos_tesoreria').delete()
         .eq('client_id', session.client_id)

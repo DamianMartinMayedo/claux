@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import Link                                  from 'next/link'
 import { useRouter }                         from 'next/navigation'
 import { guardarOferta }                     from '@/app/actions/portal/ventas'
-import type { VentasResumenData, OfertaDetalleData } from '@/app/actions/portal/ventas'
+import type { ContextoDocumentoData, OfertaDetalleData } from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }             from '../../../_DocumentoLineasEditor'
 import { MonedaDocumento }                   from '../../../_MonedaDocumento'
 import {
@@ -17,10 +17,10 @@ import {
 
 interface Props {
   data:         OfertaDetalleData
-  resumen:      VentasResumenData
+  contexto:      ContextoDocumentoData
 }
 
-export default function EditarOfertaPage({ data, resumen }: Props) {
+export default function EditarOfertaPage({ data, contexto }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -55,14 +55,14 @@ export default function EditarOfertaPage({ data, resumen }: Props) {
     }))
   )
 
-  const clientesDeEmpresa = resumen.clientes.filter(c => c.empresa_id === empresa_id)
+  const clientesDeEmpresa = contexto.clientes.filter(c => c.empresa_id === empresa_id)
 
   function onClienteChange(id: string) {
     setClienteId(id)
-    const c = resumen.clientes.find(c => c.tercero_id === id)
+    const c = contexto.clientes.find(c => c.tercero_id === id)
     // Solo sin importes escritos: ver la nota en NuevaOfertaPage. Aquí importa aún
     // más — un documento ya guardado siempre llega con líneas.
-    if (c?.moneda_defecto && resumen.monedas.includes(c.moneda_defecto)
+    if (c?.moneda_defecto && contexto.monedas.includes(c.moneda_defecto)
         && !tieneImportes(lineas, ajustes)) {
       setMoneda(c.moneda_defecto)
     }
@@ -144,9 +144,9 @@ export default function EditarOfertaPage({ data, resumen }: Props) {
 
             <MonedaDocumento
               moneda={moneda}
-              monedas={resumen.monedas}
-              tasas={resumen.tasas}
-              productos={resumen.productos}
+              monedas={contexto.monedas}
+              tasas={contexto.tasas}
+              productos={contexto.productos}
               lineas={lineas}
               ajustes={ajustes}
               onChange={(m, l, a) => { setMoneda(m); setLineas(l); setAjustes(a) }}
@@ -178,7 +178,7 @@ export default function EditarOfertaPage({ data, resumen }: Props) {
           lineas={lineas}
           ajustes={ajustes}
           moneda={moneda}
-          productos={resumen.productos}
+          productos={contexto.productos}
           notas={notas}
           notasInternas={notas_internas}
           onLineasChange={setLineas}

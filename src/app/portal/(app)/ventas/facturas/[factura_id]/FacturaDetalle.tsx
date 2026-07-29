@@ -9,7 +9,6 @@ import {
   cambiarEstadoFactura,
   duplicarFactura,
   type FacturaDetalleData,
-  type VentasResumenData,
 } from '@/app/actions/portal/ventas'
 import {
   registrarPagoDoc,
@@ -35,7 +34,6 @@ import {
 
 interface Props {
   data:    FacturaDetalleData
-  resumen: VentasResumenData
   cobros:  CobrosFacturaData | null
 }
 
@@ -175,6 +173,16 @@ export default function FacturaDetalle({ data, cobros }: Props) {
           </p>
           {esNumeroProvisional(factura.numero) && (
             <p className="input-hint">Recibirá su número fiscal al emitirla.</p>
+          )}
+          {factura.descuenta_stock && (
+            <p className="input-hint">
+              {factura.estado === 'BORRADOR'
+                ? 'Al emitirla descontará del inventario'
+                : factura.estado === 'ANULADA'
+                  ? 'Descontó del inventario y se devolvió al anularla'
+                  : 'Descontó del inventario'}
+              {data.almacen_nombre ? ` · ${data.almacen_nombre}` : ''}.
+            </p>
           )}
         </div>
         <div className="ven-btn-group ven-btn-group-relative">
