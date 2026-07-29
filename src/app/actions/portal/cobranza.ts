@@ -5,6 +5,7 @@ import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import { ORIGEN_CIERRE_CAJA } from '@/lib/gastos-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -141,12 +142,23 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
   }
 
   // Registros de gastos_cobros (COBRO para CxC, GASTO para CxP)
+  //
+  // El COBRO del cierre de caja queda FUERA: su dinero ya está en la caja (entró por el
+  // movimiento `origen='CAJA'` del propio cierre, que no lleva `referencia_id` a este
+  // registro, así que su saldo calculado aquí sería el importe completo). Nadie debe ese
+  // dinero: dejarlo aparecer llenaría CxC de deuda fantasma que además no se puede cobrar.
+  //
+  // ⚠️ Se excluye ESE valor de `origen_tipo`, nunca «los registros con origen». El COBRO
+  // del subsidio de la nómina TIENE que seguir aquí: es una deuda real de la Seguridad
+  // Social y CxC es su único camino de cobro. Los dos son «un COBRO con origen» y
+  // significan lo contrario — uno ya está cobrado, el otro está por cobrar.
   const tipoRegistro = modo === 'COBRAR' ? 'COBRO' : 'GASTO'
   const { data: registros } = await db.from('gastos_cobros')
     .select('registro_id, descripcion, empresa_id, tercero_id, fecha, vencimiento, moneda, monto')
     .eq('client_id', session.client_id)
     .in('empresa_id', idsFiltro)
     .eq('tipo', tipoRegistro)
+    .or(`origen_tipo.is.null,origen_tipo.neq.${ORIGEN_CIERRE_CAJA}`)
   for (const r of (registros ?? []) as Record<string, unknown>[]) {
     const monto     = Number(r.monto)
     const liquidado = liquidadoPorDoc.get(r.registro_id as string) ?? 0

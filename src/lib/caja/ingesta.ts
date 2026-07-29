@@ -7,13 +7,15 @@
 // Regla de independencia (CONTEXTO §2): la caja guarda SIEMPRE su propio detalle
 // (caja_tickets/caja_ticket_lineas). Los efectos en módulos compartidos son
 // RESÚMENES POR CIERRE, y solo si el cliente tiene el módulo:
-//   · base       → un INGRESO de Tesorería por moneda (origen='CAJA').
+//   · base       → un INGRESO de Tesorería por moneda (origen='CAJA') **y** un COBRO
+//                  resumen en `gastos_cobros` por moneda (origen_tipo='CIERRE_CAJA').
 //   · inventario → un SALIDA de Inventario por producto (origen='VENTA', permitir_negativo).
 // Idempotencia: ticket_uuid (detalle) y los flags tesoreria_movs/stock_movs del
 // cierre (resúmenes). Re-sincronizar o re-subir un archivo no duplica.
 
 import { tieneModulo } from '@/lib/modulos'
 import { aplicarMovimiento } from '@/app/actions/portal/_inventario-helpers'
+import { ORIGEN_CIERRE_CAJA, generarRegistroId } from '@/lib/gastos-core'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
@@ -22,6 +24,9 @@ export interface CajaRow {
   caja_id:           string
   client_id:         string
   empresa_id:        string
+  /** Solo para etiquetar los resúmenes: con dos cajas cerrando el mismo día, dos
+   *  filas «Ventas de caja» son indistinguibles en Gastos y cobros. */
+  nombre?:           string | null
   almacen_id:        string | null
   cuentas_moneda:    Record<string, string>
   monedas_aceptadas: string[]
@@ -271,7 +276,7 @@ async function postearResumenCierre(
   const porMoneda = new Map<string, number>()
   for (const t of vigentes) porMoneda.set(t.moneda, (porMoneda.get(t.moneda) ?? 0) + Number(t.total))
 
-  // ── Tesorería: un INGRESO resumen por moneda ──
+  // ── Contabilidad: por moneda, un INGRESO de Tesorería y un COBRO de ventas ──
   // Lo ya posteado se pregunta a los MOVIMIENTOS, no al flag `tesoreria_movs`. Antes
   // el guardia era `tesoreria_movs == null` y el flag se escribía aunque una moneda se
   // hubiese saltado por no tener cuenta: quedaba a `{}` (o a medias), dejaba de ser
@@ -289,10 +294,57 @@ async function postearResumenCierre(
       movs[p.moneda] = p.movimiento_id
     }
 
+    // Lo ya CONTABILIZADO se pregunta igual, a los datos: una fila `COBRO` por moneda
+    // del cierre en `gastos_cobros` (mig. 149). Sin ella las ventas de mostrador entran
+    // en la caja pero NO en el estado de resultados: el renglón «Ventas» de un negocio
+    // que solo vende por TPV se queda en blanco, y con él el dossier del asesor, el
+    // dashboard y el contexto de la IA. Los cuatro leen `gastos_cobros`, así que una
+    // fila los arregla a los cuatro en vez de parchear cuatro consumidores.
+    const { data: regsPrevios } = await db.from('gastos_cobros')
+      .select('moneda')
+      .eq('client_id', caja.client_id)
+      .eq('origen_tipo', ORIGEN_CIERRE_CAJA).eq('origen_id', sesionUuid)
+    const contabilizadas = new Set(((regsPrevios ?? []) as { moneda: string }[]).map(r => r.moneda))
+    const etiquetaCaja = (caja.nombre ?? '').trim()
+
     for (const [moneda, monto] of porMoneda) {
-      if (movs[moneda]) continue // ya tiene su ingreso: no se repite
       const cuentaId = caja.cuentas_moneda?.[moneda]
-      if (!cuentaId) continue // sin cuenta mapeada → se deja PENDIENTE y se reintenta
+      // Sin cuenta mapeada NO se postea NADA de esta moneda —ni caja ni contabilidad— y
+      // se reintenta en la próxima sincronización. Los dos efectos van juntos a
+      // propósito: contabilizar la venta sin que su dinero entre en ninguna caja deja el
+      // puente devengado↔caja con un hueco que nada explica, y el registro diciendo
+      // «cobrado» un dinero que no está en ningún sitio. Con esto, arreglar el mapeo y
+      // resincronizar recupera la moneda completa, que es el camino que la vista de Caja
+      // ya le enseña al dueño con su badge de pendiente.
+      if (!movs[moneda] && !cuentaId) continue
+
+      // 1) El registro contable (idempotente por moneda del cierre).
+      if (!contabilizadas.has(moneda) && monto > 0) {
+        const { error } = await db.from('gastos_cobros').insert({
+          registro_id:  generarRegistroId('COBRO'),
+          client_id:    caja.client_id,
+          empresa_id:   caja.empresa_id,
+          tipo:         'COBRO',
+          fecha,
+          vencimiento:  null,                 // no hay nada que vencer: ya está cobrado
+          tercero_id:   null,                 // el mostrador no tiene cliente
+          categoria:    null,                 // un COBRO no lleva categoría
+          categoria_id: null,
+          descripcion:  `Ventas de caja${etiquetaCaja ? ` ${etiquetaCaja}` : ''} — cierre ${sesionUuid.substring(0, 8)}`,
+          moneda,
+          monto,
+          notas:        'Resumen del cierre del punto de venta. El detalle, ticket a ticket, está en Caja.',
+          origen_tipo:  ORIGEN_CIERRE_CAJA,
+          origen_id:    sesionUuid,
+          updated_at:   new Date().toISOString(),
+        })
+        if (error) throw new Error(`contabilidad ${moneda}: ${error.message}`)
+        contabilizadas.add(moneda)
+        did = true
+      }
+
+      // 2) El movimiento de Tesorería.
+      if (movs[moneda]) continue // ya tiene su ingreso: no se repite
       const movId = generarMovId()
       const { error } = await db.from('movimientos_tesoreria').insert({
         movimiento_id: movId,

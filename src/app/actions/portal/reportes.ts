@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
-import { cobroEsIngreso }    from '@/lib/gastos-core'
+import { cobroEsIngreso, cobroNaceLiquidado, fuenteDeCobro } from '@/lib/gastos-core'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { tieneModulo }       from '@/lib/modulos'
@@ -213,10 +213,18 @@ export async function obtenerReportes(
     for (const g of gastosCobros) {
       if (!enRango(g.fecha, d, h)) continue
       if (g.tipo === 'COBRO') {
-        // Un COBRO de anticipo (el subsidio de la nómina) NO es ingreso: ver
-        // `cobroEsIngreso`. Sin esto infla ingresos y resultado neto.
+        // Dos preguntas distintas sobre la misma fila, y conviene no mezclarlas:
+        //  · `cobroEsIngreso` decide SI SUMA. Un COBRO de anticipo (el subsidio de la
+        //    nómina) no es ingreso; sin este filtro infla ingresos y resultado neto.
+        //  · `fuenteDeCobro` decide EN QUÉ RENGLÓN. El cierre del punto de venta es una
+        //    venta de mostrador, así que va a «Ventas» junto a las facturas: sin esto el
+        //    importe cae en «cobros directos» y un negocio que solo vende por TPV ve su
+        //    renglón de Ventas en blanco.
         if (!cobroEsIngreso(g.origen_tipo)) continue
-        ingresos.push({ moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7), fuente: 'COBRO' })
+        ingresos.push({
+          moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
+          fuente: fuenteDeCobro(g.origen_tipo),
+        })
       } else {
         gastos.push({
           moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
@@ -412,7 +420,15 @@ export async function obtenerReportes(
     const pendCobro = new Map<string, number>()
     const pendPago  = new Map<string, number>()
     for (const f of facturasPer) pendCobro.set(f.moneda, (pendCobro.get(f.moneda) ?? 0) + saldo(f.factura_id, f.total))
-    for (const g of cobrosPer)   pendCobro.set(g.moneda, (pendCobro.get(g.moneda) ?? 0) + saldo(g.registro_id, g.monto))
+    for (const g of cobrosPer) {
+      // El resumen del cierre de caja SÍ es devengado del período (arriba, en `apuntesDe`,
+      // suma como Ventas) pero NO está pendiente: su dinero entró en la caja por el
+      // movimiento `origen='CAJA'`, que no lleva `referencia_id` a este registro. Sin
+      // esta excepción `saldo()` devuelve el importe completo y el puente enseña como
+      // «te deben» exactamente el dinero que el propio puente ya cuenta como cobrado.
+      if (cobroNaceLiquidado(g.origen_tipo)) continue
+      pendCobro.set(g.moneda, (pendCobro.get(g.moneda) ?? 0) + saldo(g.registro_id, g.monto))
+    }
     for (const g of gastosPer)   pendPago.set(g.moneda,  (pendPago.get(g.moneda)  ?? 0) + saldo(g.registro_id, g.monto))
 
     // Solo monedas CON devengado. Una moneda en la que solo hubo movimientos de

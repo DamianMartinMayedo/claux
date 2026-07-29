@@ -36,6 +36,45 @@ export function cobroEsIngreso(origen_tipo: string | null | undefined): boolean 
   return !origen_tipo || !ORIGENES_COBRO_ANTICIPO.has(origen_tipo)
 }
 
+// ── El COBRO del cierre de caja ───────────────────────────────────────────────
+// Cada cierre del punto de venta escribe UNA fila resumen por moneda en
+// `gastos_cobros` (mig. 149 + `lib/caja/ingesta.ts`). Su detalle —ticket a ticket—
+// se queda en el módulo Caja a propósito: en Contabilidad el dueño quiere una línea
+// por cierre, no cuatrocientas por día.
+//
+// Son TRES preguntas distintas sobre la misma fila, y mezclarlas es el error fácil:
+//   1. ¿suma como ingreso?   → sí (`cobroEsIngreso`: no es un anticipo)
+//   2. ¿en qué renglón?      → Ventas, no «cobros directos» (`fuenteDeCobro`)
+//   3. ¿está cobrado?        → sí, ya (`cobroNaceLiquidado`)
+// El COBRO del subsidio de la nómina responde justo lo contrario a la 1 y a la 3, y
+// los dos son «un COBRO con origen»: por eso ningún filtro puede generalizarse a
+// «tiene `origen_tipo`».
+export const ORIGEN_CIERRE_CAJA = 'CIERRE_CAJA'
+
+/**
+ * Renglón del estado de resultados al que va este COBRO.
+ *
+ * Un cierre de caja **es una venta** (mostrador, sin factura), así que va al renglón
+ * «Ventas» junto a las facturas. Sin esto el importe cae en «cobros directos» y el
+ * renglón de Ventas de un negocio que solo vende por TPV se queda en blanco.
+ */
+export function fuenteDeCobro(origen_tipo: string | null | undefined): 'VENTA' | 'COBRO' {
+  return origen_tipo === ORIGEN_CIERRE_CAJA ? 'VENTA' : 'COBRO'
+}
+
+/**
+ * ¿Este COBRO nace ya cobrado?
+ *
+ * El dinero del cierre de caja entró en la caja por el movimiento de Tesorería del
+ * propio cierre (`origen='CAJA'`), que **no** lleva `referencia_id` a este registro:
+ * la liquidación no existe como tal. Sin este predicado el registro se queda
+ * PENDIENTE para siempre, aparece en CxC como si alguien debiera ese dinero y el
+ * puente devengado↔caja enseña un «pendiente de cobro» que ya está en la caja.
+ */
+export function cobroNaceLiquidado(origen_tipo: string | null | undefined): boolean {
+  return origen_tipo === ORIGEN_CIERRE_CAJA
+}
+
 export function generarRegistroId(tipo: TipoRegistro): string {
   const pre = tipo === 'GASTO' ? 'GAS' : 'COB'
   return `${pre}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`

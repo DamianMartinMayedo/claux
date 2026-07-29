@@ -402,7 +402,7 @@ export async function ingestarLoteArchivo(
 
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')
-    .select('caja_id, client_id, empresa_id, almacen_id, cuentas_moneda, monedas_aceptadas, tipos_catalogo, activa')
+    .select('caja_id, client_id, empresa_id, nombre, almacen_id, cuentas_moneda, monedas_aceptadas, tipos_catalogo, activa')
     .eq('caja_id', destino).eq('client_id', session.client_id).maybeSingle()
   if (!caja) return { ok: false, error: 'Punto de venta no encontrado.' }
 

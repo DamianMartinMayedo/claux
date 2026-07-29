@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
+import { cobroEsIngreso }     from '@/lib/gastos-core'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
@@ -402,11 +403,15 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
   const desde6 = `${meses[0].mes}-01`
   const mesActual = hoy.slice(0, 7)
 
-  const [facturas6, gastos6, movimientos, cuentasCaja, ultimas, consolRow, tasas, categoriasGasto] = await Promise.all([
+  const [facturas6, registros6, movimientos, cuentasCaja, ultimas, consolRow, tasas, categoriasGasto] = await Promise.all([
     db.from('facturas').select('fecha_emision, total, moneda')
       .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ESTADOS_FACTURA_INGRESO).gte('fecha_emision', desde6),
-    db.from('gastos_cobros').select('fecha, monto, moneda, categoria_id')
-      .eq('client_id', cid).in('empresa_id', empresaIds).eq('tipo', 'GASTO').gte('fecha', desde6),
+    // Los DOS tipos, no solo los gastos. Este widget contaba como ventas únicamente las
+    // facturas, así que un negocio que cobra sin facturar —mostrador, TPV— veía «Ventas
+    // del mes: 0» y un neto igual a sus gastos en negativo, mientras Reportes le decía
+    // otra cosa. Y la IA lee este mismo resumen: le llegaba el cero como un hecho.
+    db.from('gastos_cobros').select('tipo, fecha, monto, moneda, categoria_id, origen_tipo')
+      .eq('client_id', cid).in('empresa_id', empresaIds).gte('fecha', desde6),
     db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
     db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true).eq('es_apertura', false),
     db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, moneda, estado')
@@ -417,10 +422,19 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     db.from('categorias_gastos').select('categoria_id, nombre').eq('client_id', cid),
   ])
 
+  // Se parten los registros en los dos lados del informe. El COBRO del subsidio de la
+  // nómina NO es ingreso (`cobroEsIngreso`): recupera un anticipo, así que se queda
+  // fuera de los dos lados — el mismo predicado que usan Reportes y el dossier, para
+  // que las tres pantallas no digan tres cifras.
+  type FilaGC = { tipo: string; fecha: string; monto: number; moneda: string; categoria_id: string | null; origen_tipo: string | null }
+  const registros = (registros6.data ?? []) as FilaGC[]
+  const gastosGC   = registros.filter(g => g.tipo === 'GASTO')
+  const ingresosGC = registros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.origen_tipo))
+
   // Serie mensual y totales del mes SEPARADOS POR MONEDA (no se suman entre sí).
   const monedasSet = new Set<string>()
   for (const f of (facturas6.data ?? [])) monedasSet.add(f.moneda)
-  for (const g of (gastos6.data ?? [])) monedasSet.add(g.moneda)
+  for (const g of registros) monedasSet.add(g.moneda)
 
   const porMoneda: ContabMonedaResumen[] = [...monedasSet].sort().map(moneda => {
     const serieMap = new Map(meses.map(m => [m.mes, { ...m, ventas: 0, gastos: 0 }]))
@@ -428,7 +442,11 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
       if (f.moneda !== moneda) continue
       const b = serieMap.get(String(f.fecha_emision).slice(0, 7)); if (b) b.ventas += Number(f.total) || 0
     }
-    for (const g of (gastos6.data ?? [])) {
+    for (const g of ingresosGC) {
+      if (g.moneda !== moneda) continue
+      const b = serieMap.get(String(g.fecha).slice(0, 7)); if (b) b.ventas += Number(g.monto) || 0
+    }
+    for (const g of gastosGC) {
       if (g.moneda !== moneda) continue
       const b = serieMap.get(String(g.fecha).slice(0, 7)); if (b) b.gastos += Number(g.monto) || 0
     }
@@ -502,7 +520,7 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     (categoriasGasto.data ?? []).map((c: { categoria_id: string; nombre: string }) => [c.categoria_id, c.nombre]),
   )
   const catAgg = new Map<string, { categoria: string; moneda: string; total: number }>()
-  for (const g of (gastos6.data ?? [])) {
+  for (const g of gastosGC) {
     if (String(g.fecha).slice(0, 7) !== mesActual) continue
     const categoria = g.categoria_id ? (nombreCat.get(g.categoria_id) ?? 'Sin categoría') : 'Sin categoría'
     const k = `${g.categoria_id ?? 'none'}__${g.moneda}`

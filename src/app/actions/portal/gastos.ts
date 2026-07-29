@@ -7,7 +7,8 @@ import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
 import {
-  etiquetaDeCategoria, generarCategoriaGastoId, generarRegistroId, parsearSubcategorias,
+  cobroNaceLiquidado, etiquetaDeCategoria, generarCategoriaGastoId, generarRegistroId,
+  ORIGEN_CIERRE_CAJA, parsearSubcategorias,
   type TipoRegistro as _TipoRegistro,
 } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
@@ -55,6 +56,10 @@ export interface GastoCobro {
   moneda:       string
   monto:        number
   notas:        string | null
+  /** Documento que engendró este registro (mig. 118): NOMINA · COMPRA · FACTURA ·
+   *  IMPORTACION · CIERRE_CAJA. Null = lo escribió el dueño a mano. */
+  origen_tipo:  string | null
+  origen_id:    string | null
   created_at:   string
   updated_at:   string
 }
@@ -167,6 +172,20 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
     const liqs            = liqsPorRegistro.get(r.registro_id) ?? []
     const monto_liquidado = liqs.reduce((s, l) => s + l.monto, 0)
     const monto           = Number(r.monto)
+
+    // El resumen de un cierre de caja NACE cobrado: su dinero entró en la caja por el
+    // movimiento `origen='CAJA'` del cierre, que no lleva `referencia_id` a este
+    // registro — la liquidación no existe como fila, así que el cálculo de arriba da
+    // cero y el estado derivado diría PENDIENTE para siempre.
+    //
+    // No se «arregla» apuntando el movimiento a este registro: ahí viven la idempotencia
+    // por moneda del cierre y el badge de sincronización del portal, y tocarlos deja
+    // ventas sin postear con el badge en verde (fallo que `lib/caja/ingesta.ts` ya sufrió
+    // y documenta). Se corrige aquí, en la lectura, que es donde no hay nada que romper.
+    if (cobroNaceLiquidado(r.origen_tipo)) {
+      return { ...r, monto, monto_liquidado: monto, saldo_pendiente: 0, estado: 'LIQUIDADO', liquidaciones: [] }
+    }
+
     return {
       ...r,
       monto,
@@ -345,6 +364,11 @@ export async function guardarGastoCobro(
 //    nómina confirmada tenía deducciones, así que la fila de Retenciones de la
 //    mig. 139 no llegó a crearse).
 //
+// Es una LISTA BLANCA a propósito, no un «tiene origen_tipo». El importador escribe
+// `origen_tipo='IMPORTACION'` y esas filas SÍ se editan y se borran: son datos migrados
+// de la contabilidad vieja del cliente, y corregirlos a mano es justo su caso de uso.
+// Generalizar la comprobación volvería intocable todo el histórico importado de golpe.
+//
 // Sin 'use server' export: es un helper interno (un export no-async rompe el build).
 async function documentoDeOrigen(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -355,8 +379,9 @@ async function documentoDeOrigen(
     .eq('registro_id', registro_id).eq('client_id', client_id)
     .maybeSingle()
   const origen = (data as { origen_tipo: string | null } | null)?.origen_tipo ?? null
-  if (origen === 'NOMINA') return 'una nómina'
-  if (origen === 'COMPRA') return 'una compra'
+  if (origen === 'NOMINA')             return 'una nómina'
+  if (origen === 'COMPRA')             return 'una compra'
+  if (origen === ORIGEN_CIERRE_CAJA)   return 'un cierre del punto de venta'
 
   const [{ count: enCompra }, { count: enNomina }] = await Promise.all([
     db.from('compras').select('compra_id', { count: 'exact', head: true }).eq('client_id', client_id).eq('gasto_id', registro_id),

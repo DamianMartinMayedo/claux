@@ -21,7 +21,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
-import { cobroEsIngreso } from '@/lib/gastos-core'
+import { cobroEsIngreso, fuenteDeCobro } from '@/lib/gastos-core'
 import { construirConversor, type DetalleTasa } from '@/lib/tasas'
 import { indexarCategorias, type CategoriaPL } from '@/lib/pl/estado'
 import type { FilaSerie } from './snapshot'
@@ -123,7 +123,13 @@ export async function construirSnapshotDesdeBase(
       // asesor o a un inversor.
       if (!cobroEsIngreso(g.origen_tipo)) continue
       mes.ingresos += v
-      const concepto = g.categoria?.trim() || 'Otros ingresos'
+      // El cierre del punto de venta va a la línea «Ventas», la misma que las facturas:
+      // es una venta de mostrador, no un ingreso suelto. En el documento que se le enseña
+      // a un asesor o a un inversor, un restaurante con TPV enseñaría toda su facturación
+      // real bajo «Otros ingresos» — que es lo que hay que llamar mal contado.
+      const concepto = fuenteDeCobro(g.origen_tipo) === 'VENTA'
+        ? 'Ventas'
+        : (g.categoria?.trim() || 'Otros ingresos')
       ingresoCat.set(concepto, (ingresoCat.get(concepto) ?? 0) + v)
       continue
     }
