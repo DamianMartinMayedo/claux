@@ -214,6 +214,11 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         tercero_id,
         categoria:   categoria_nombre,
         descripcion,
+        // El «Concepto» de la plantilla (mig. 152). Hasta ahora, en un GASTO se PERDÍA:
+        // la columna era obligatoria en el archivo, el operador la rellenaba, y la
+        // etiqueta guardada era la de la categoría. Ahora tiene sitio propio y el
+        // histórico importado llega con el texto que el cliente escribió.
+        concepto:    (valores.concepto ?? '').trim() || descripcion,
         moneda,
         monto,
         // Si el operador eligió no crear la ficha, el nombre no se tira: queda

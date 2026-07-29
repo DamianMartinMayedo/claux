@@ -13,6 +13,10 @@ import {
 } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
+import {
+  LIMITE_LISTADO, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  type FiltroListado as _FiltroListado,
+} from '@/lib/listados'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +24,7 @@ import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 // con el importador). Se re-declara directamente porque el re-export agregado
 // `export type { … } from …` rompe el loader de 'use server'.
 export type TipoRegistro   = _TipoRegistro
+export type FiltroListado  = _FiltroListado
 export type EstadoRegistro = 'PENDIENTE' | 'PARCIAL' | 'LIQUIDADO'
 export type EstadoCategoria = 'ACTIVO' | 'INACTIVO'
 export type RolPL           = _RolPL
@@ -53,6 +58,9 @@ export interface GastoCobro {
   categoria:    string | null  // nombre desnormalizado (display / reportes)
   categoria_id: string | null  // FK a categorias_gastos
   descripcion:  string
+  /** De qué es, en palabras del dueño (mig. 152). Null en el histórico y en lo que
+   *  escriben otros módulos sin concepto: la tabla cae a `descripcion`. */
+  concepto:     string | null
   moneda:       string
   monto:        number
   notas:        string | null
@@ -88,6 +96,11 @@ export interface GastosCobrosPageData {
   categorias_gastos: CategoriaGasto[]  // Lista de categorías de gastos
   empresa_nombres:   Record<string, string>
   empresas:          { empresa_id: string; nombre: string }[]
+  /** Rango y búsqueda realmente aplicados (viajan a la UI y a la URL). */
+  rango:             { desde: string; hasta: string }
+  q:                 string
+  /** Se alcanzó el techo de filas: hay más registros fuera de la vista. */
+  hay_mas:           boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,7 +118,9 @@ function estadoDe(monto: number, liquidado: number): EstadoRegistro {
 
 // ── Obtener gastos y cobros ────────────────────────────────────────────────────
 
-export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null> {
+export async function obtenerGastosCobros(
+  filtro?: FiltroListado,
+): Promise<GastosCobrosPageData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
@@ -114,12 +129,40 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
+  // Últimos 3 meses por defecto, aplicado EN LA QUERY. Este listado es el que más creció:
+  // una nómina confirmada pasó de escribir 2 filas a 5 (migs. 142-144), así que un negocio
+  // con dos empresas y nómina mensual añade ~120 filas al año solo por ahí.
+  const porDefecto = rangoUltimosMeses(3)
+  const desde  = filtro?.desde ?? porDefecto.desde
+  const hasta  = filtro?.hasta ?? porDefecto.hasta
+  const q      = (filtro?.q ?? '').trim()
+  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const patron  = patronBusqueda(q)
+  const importe = importeBuscado(q)
+
+  let regQuery = db.from('gastos_cobros').select('*')
+    .eq('client_id', session.client_id)
+    .in('empresa_id', idsFiltro)
+  if (desde) regQuery = regQuery.gte('fecha', desde)
+  if (hasta) regQuery = regQuery.lte('fecha', hasta)
+  if (patron) {
+    // El concepto es lo que el dueño reconoce; `descripcion` es la etiqueta de la
+    // categoría y `notas` el texto libre del histórico: se busca en los tres.
+    const partes = [
+      `concepto.ilike.${patron}`,
+      `descripcion.ilike.${patron}`,
+      `notas.ilike.${patron}`,
+    ]
+    if (importe != null) partes.push(`monto.eq.${importe}`)
+    regQuery = regQuery.or(partes.join(','))
+  }
+  regQuery = regQuery
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limite)
+
   const [regRes, movRes, cuRes, terRes, monRes, catRes] = await Promise.all([
-    db.from('gastos_cobros').select('*')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false }),
+    regQuery,
     db.from('movimientos_tesoreria')
       .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id, origen')
       .eq('client_id', session.client_id)
@@ -226,6 +269,9 @@ export async function obtenerGastosCobros(): Promise<GastosCobrosPageData | null
     categorias_gastos,
     empresa_nombres,
     empresas:          empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
+    rango:             { desde, hasta },
+    q,
+    hay_mas:           registros.length >= limite,
   }
 }
 
@@ -262,13 +308,20 @@ export async function guardarGastoCobro(
     return { ok: false, error: 'Empresa no válida.' }
   }
 
-  // Etiqueta (columna `descripcion`) y clasificación según el tipo:
-  //  · GASTO → se identifica por su categoría (obligatoria); la etiqueta es
-  //    «Categoría» o «Categoría · Subcategoría». El texto libre va en notas.
-  //  · COBRO → lleva concepto de texto libre; sin categoría.
+  // Etiqueta (columna `descripcion`), CONCEPTO y clasificación según el tipo:
+  //  · GASTO → se identifica por su categoría (obligatoria) Y por su concepto (mig. 152,
+  //    también obligatorio). La etiqueta derivada sigue siendo «Categoría · Subcategoría»
+  //    porque de ella vive el informe; el concepto es para reconocer la fila en la tabla.
+  //    Sin él, dos gastos de «Suministros · Electricidad» del mismo mes eran la misma
+  //    línea repetida y había que abrir cada uno para saber cuál era cuál.
+  //  · COBRO → su concepto libre ES la etiqueta (siempre lo fue). Se guarda en las dos
+  //    columnas para que la tabla lea `concepto` sin distinguir el tipo.
   let descripcion: string
   let categoria_id: string | null = null
   let categoriaNombre: string | null = null
+
+  if (!conceptoForm) return { ok: false, error: 'El concepto es obligatorio: en dos palabras, de qué es.' }
+  const concepto = conceptoForm
 
   if (tipo === 'GASTO') {
     if (!categoria_id_in) return { ok: false, error: 'Debes elegir una categoría para el gasto.' }
@@ -279,8 +332,7 @@ export async function guardarGastoCobro(
     categoriaNombre = etq.nombre
     descripcion     = etq.descripcion
   } else {
-    if (!conceptoForm) return { ok: false, error: 'El concepto es obligatorio.' }
-    descripcion = conceptoForm
+    descripcion = concepto
   }
 
   if (!registro_id) {
@@ -299,6 +351,7 @@ export async function guardarGastoCobro(
       categoria:   categoriaNombre,
       categoria_id,
       descripcion,
+      concepto,
       moneda,
       monto:       montoRaw,
       notas,
@@ -333,7 +386,7 @@ export async function guardarGastoCobro(
     // `empresa_id` SÍ se guarda: antes el formulario lo ofrecía y el update lo
     // descartaba, así que cambiar de empresa se guardaba «bien» y no hacía nada.
     const { error } = await db.from('gastos_cobros')
-      .update({ empresa_id, fecha, vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, monto: montoRaw, notas, updated_at: new Date().toISOString() })
+      .update({ empresa_id, fecha, vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, concepto, monto: montoRaw, notas, updated_at: new Date().toISOString() })
       .eq('registro_id', registro_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }

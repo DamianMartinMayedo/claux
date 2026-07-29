@@ -14,6 +14,11 @@ import {
   generarIdDocumento, siguienteCorrelativo, escribirLineasYAjustes, fotoDeCostes,
 } from '@/lib/ventas/factura-core'
 import { aplicarMovimiento } from './_inventario-helpers'
+import { estadoCobro } from '@/lib/cobranza-core'
+import {
+  LIMITE_LISTADO, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  type FiltroListado as _FiltroListado,
+} from '@/lib/listados'
 import {
   calcularTotales,
   formatoNumero,
@@ -29,6 +34,10 @@ import {
   type EstadoOferta,
   type LineaInput,
 } from '@/app/portal/(app)/ventas/_ventas-helpers'
+
+// El tipo se re-declara (no `export type { … } from`, que rompe el loader de
+// 'use server'): las vistas necesitan nombrarlo para pasar los filtros.
+export type FiltroListado = _FiltroListado
 
 // ── Tipos persistidos ─────────────────────────────────────────────────────────
 
@@ -125,14 +134,31 @@ export interface ProductoOpcion {
   stock:       Record<string, number>
 }
 
+/** Factura del listado + su estado de cobro, calculado en servidor (B2). */
+export interface FacturaListado extends Factura {
+  /** Cobrado en la moneda de la factura. */
+  liquidado:    number
+  saldo:        number
+  /** Hay cobros pero queda saldo. Derivado: el estado persistido sigue siendo EMITIDA. */
+  parcial:      boolean
+  /** Días de retraso si hay saldo vencido; null si está al día, cobrada o sin plazo. */
+  dias_vencido: number | null
+}
+
 export interface VentasResumenData {
   ofertas:           Oferta[]
-  facturas:          Factura[]
+  facturas:          FacturaListado[]
   empresas:          { empresa_id: string; nombre: string; letra_facturacion: string | null }[]
   empresa_nombres:   Record<string, string>
   clientes:          { tercero_id: string; nombre: string; empresa_id: string; moneda_defecto: string | null; identificacion: string | null; direccion: string | null; ciudad: string | null; pais: string | null; email: string | null; telefono: string | null }[]
   cliente_nombres:   Record<string, string>
   monedas:           string[]
+  /** Rango realmente aplicado (viaja a la UI para que las píldoras y la URL no mientan). */
+  rango:             { desde: string; hasta: string }
+  q:                 string
+  /** Se alcanzó el techo de filas: hay más documentos fuera de la vista. */
+  hay_mas_ofertas:   boolean
+  hay_mas_facturas:  boolean
 }
 
 /**
@@ -220,32 +246,62 @@ async function clientesFacturables(
   return (data ?? []) as FilaCliente[]
 }
 
-export async function obtenerVentasResumen(): Promise<VentasResumenData | null> {
+export async function obtenerVentasResumen(
+  filtro?: FiltroListado,
+): Promise<VentasResumenData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db       = createAdminClient()
   const empresas = await obtenerEmpresas()
   const empresa_ids = empresas.map(e => e.empresa_id)
+
+  // Por defecto, los últimos 3 meses. **En la query, no en el cliente**: antes se traían
+  // todas las ofertas y todas las facturas del negocio y se filtraba en memoria.
+  const porDefecto = rangoUltimosMeses(3)
+  const desde = filtro?.desde ?? porDefecto.desde
+  const hasta = filtro?.hasta ?? porDefecto.hasta
+  const q     = (filtro?.q ?? '').trim()
+  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const rango = { desde, hasta }
+
   if (!empresa_ids.length) {
     return {
       ofertas: [], facturas: [],
       empresas: [], empresa_nombres: {},
       clientes: [], cliente_nombres: {},
-      monedas: [],
+      monedas: [], rango, q, hay_mas_ofertas: false, hay_mas_facturas: false,
     }
   }
 
-  const [ofRes, faRes, clientes, monRes] = await Promise.all([
-    db.from('ofertas').select('*')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', empresa_ids)
-      .order('created_at', { ascending: false }),
-    db.from('facturas').select('*')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', empresa_ids)
-      .order('created_at', { ascending: false }),
-    clientesFacturables(db, session.client_id, empresa_ids),
+  const patron  = patronBusqueda(q)
+  const importe = importeBuscado(q)
+  const clientes = await clientesFacturables(db, session.client_id, empresa_ids)
+
+  // El texto también busca por CLIENTE, y el cliente es otra tabla: se resuelven sus ids
+  // aquí, con la lista que ya está cargada, en vez de pedirle a Postgres un join que
+  // PostgREST no expresa cómodamente en un `.or()`.
+  const idsClienteQ = patron
+    ? clientes.filter(c => c.nombre.toLowerCase().includes(q.toLowerCase())).map(c => c.tercero_id)
+    : []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conFiltros = (query: any, campoFecha: string, campoNumero: string) => {
+    let out = query.eq('client_id', session.client_id).in('empresa_id', empresa_ids)
+    if (desde) out = out.gte(campoFecha, desde)
+    if (hasta) out = out.lte(campoFecha, hasta)
+    if (patron) {
+      const partes = [`${campoNumero}.ilike.${patron}`]
+      if (idsClienteQ.length) partes.push(`cliente_id.in.(${idsClienteQ.join(',')})`)
+      if (importe != null)    partes.push(`total.eq.${importe}`)
+      out = out.or(partes.join(','))
+    }
+    return out.order(campoFecha, { ascending: false }).order('created_at', { ascending: false }).limit(limite)
+  }
+
+  const [ofRes, faRes, monRes] = await Promise.all([
+    conFiltros(db.from('ofertas').select('*'),  'fecha_emision', 'numero'),
+    conFiltros(db.from('facturas').select('*'), 'fecha_emision', 'numero'),
     db.from('monedas')
       .select('codigo')
       .eq('client_id', session.client_id)
@@ -259,9 +315,35 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
   const cliente_nombres: Record<string, string> = {}
   for (const c of clientes) cliente_nombres[c.tercero_id] = c.nombre
 
+  // ── Estado de cobro de las facturas del rango (B2) ──
+  // Antes había que salir a CxC para saber si una factura estaba cobrada. Los cobros se
+  // leen SIN filtro de fecha —una factura de julio cobrada en agosto ya no se debe— pero
+  // solo de los documentos del rango, que es lo que evita traer el histórico entero.
+  const facturasRaw = (faRes.data ?? []) as Factura[]
+  const liquidado = new Map<string, number>()
+  if (facturasRaw.length) {
+    const { data: liqs } = await db.from('movimientos_tesoreria')
+      .select('referencia_id, monto, monto_ref')
+      .eq('client_id', session.client_id)
+      .eq('origen', 'COBRO')
+      .in('referencia_id', facturasRaw.map(f => f.factura_id))
+    for (const m of ((liqs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[])) {
+      liquidado.set(m.referencia_id, (liquidado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
+    }
+  }
+  const hoy = new Date().toISOString().split('T')[0]
+  const facturas: FacturaListado[] = facturasRaw.map(f => {
+    // Una anulada no debe nada: su saldo no es deuda, es un documento invalidado.
+    if (f.estado === 'ANULADA' || f.estado === 'BORRADOR') {
+      return { ...f, liquidado: 0, saldo: 0, parcial: false, dias_vencido: null }
+    }
+    const e = estadoCobro(Number(f.total), liquidado.get(f.factura_id) ?? 0, f.fecha_vencimiento, hoy)
+    return { ...f, liquidado: e.liquidado, saldo: e.saldo, parcial: e.parcial, dias_vencido: e.dias_vencido }
+  })
+
   return {
-    ofertas:          (ofRes.data  ?? []) as Oferta[],
-    facturas:         (faRes.data  ?? []) as Factura[],
+    ofertas:          (ofRes.data ?? []) as Oferta[],
+    facturas,
     empresas:         empresas.map(e => ({
                         empresa_id:        e.empresa_id,
                         nombre:            e.nombre,
@@ -271,6 +353,10 @@ export async function obtenerVentasResumen(): Promise<VentasResumenData | null> 
     clientes,
     cliente_nombres,
     monedas:          ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
+    rango,
+    q,
+    hay_mas_ofertas:  (ofRes.data ?? []).length >= limite,
+    hay_mas_facturas: facturasRaw.length >= limite,
   }
 }
 

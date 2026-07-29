@@ -5,9 +5,16 @@ import GastosView              from './GastosView'
 
 export const dynamic = 'force-dynamic'
 
-export default async function GastosPage() {
+export default async function GastosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ desde?: string; hasta?: string; q?: string }>
+}) {
   const { puedeEditar } = await requireAccesoModulo('base')
-  const data = await obtenerGastosCobros()
+  // Rango y búsqueda viajan en la URL y se aplican EN LA QUERY. Este listado es el que
+  // más crece: una nómina confirmada escribe hasta 5 filas (migs. 142-144).
+  const { desde, hasta, q } = await searchParams
+  const data = await obtenerGastosCobros({ desde, hasta, q })
   if (!data) notFound()
   return <GastosView data={data} puedeEditar={puedeEditar} />
 }

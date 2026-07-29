@@ -6,12 +6,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { ORIGEN_CIERRE_CAJA } from '@/lib/gastos-core'
+import { tramoDe, EPS_SALDO, type Tramo as TramoCore } from '@/lib/cobranza-core'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type ModoCuentas = 'COBRAR' | 'PAGAR'
 export type DocTipo      = 'FACTURA' | 'REGISTRO'
-export type Tramo        = 'AL_DIA' | 'V_1_30' | 'V_31_60' | 'V_60'
+export type Tramo        = TramoCore
 
 export interface LiquidacionDoc {
   movimiento_id: string
@@ -46,28 +47,17 @@ export interface CuentasPageData {
   empresas:        { empresa_id: string; nombre: string }[]
 }
 
-const EPS = 0.005
+const EPS = EPS_SALDO
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// El cálculo de saldo y tramo vive en `lib/cobranza-core.ts`: lo comparten esta
+// pantalla y las columnas «Pendiente»/«Vencida» del listado de Ventas, y con una copia
+// por sitio la misma factura saldría vencida en una y al día en la otra.
 
 function generarMovimientoId(): string {
   return `MOV-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 function hoyISO(): string { return new Date().toISOString().split('T')[0] }
-
-function diasEntre(desde: string, hasta: string): number {
-  const [y1, m1, d1] = desde.split('T')[0].split('-').map(Number)
-  const [y2, m2, d2] = hasta.split('T')[0].split('-').map(Number)
-  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000)
-}
-
-function tramoDe(vencimiento: string | null, hoy: string): { dias: number | null; tramo: Tramo } {
-  if (!vencimiento || vencimiento.split('T')[0] >= hoy) return { dias: null, tramo: 'AL_DIA' }
-  const dias = diasEntre(vencimiento, hoy)
-  if (dias <= 30) return { dias, tramo: 'V_1_30' }
-  if (dias <= 60) return { dias, tramo: 'V_31_60' }
-  return { dias, tramo: 'V_60' }
-}
 
 // ── Cargar documentos pendientes (compartido por CxC y CxP) ─────────────────────
 

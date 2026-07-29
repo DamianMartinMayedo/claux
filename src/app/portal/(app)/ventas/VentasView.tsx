@@ -2,7 +2,7 @@
 
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useEffect, useTransition } from 'react'
-import { useRouter }            from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link                   from 'next/link'
 import {
   Copy, FileText, Plus, Send, Check, Ban, Clock, FileCheck,
@@ -31,7 +31,7 @@ import {
   type ResultadoLote,
   type VentasResumenData,
   type Oferta,
-  type Factura,
+  type FacturaListado,
 } from '@/app/actions/portal/ventas'
 import { fmtFechaEs }                  from '@/lib/date-utils'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
@@ -46,6 +46,8 @@ import { useRowSelection }             from '@/components/portal/useRowSelection
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
 import ExportarTabla from '@/components/portal/ExportarTabla'
+import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import { LIMITE_LISTADO } from '@/lib/listados'
 
 interface Props { data: VentasResumenData; initialTab?: Tab }
 
@@ -70,14 +72,20 @@ export default function VentasView({ data, initialTab }: Props) {
 
   // La pestaña activa se refleja en la URL (`?t=`): así volver desde el detalle
   // de una factura o refrescar conserva la pestaña en vez de saltar a Ofertas.
+  // Se preservan los demás parámetros (rango y búsqueda): cambiar de pestaña no puede
+  // tirar el filtro que el dueño acaba de poner.
+  const params = useSearchParams()
   function cambiarTab(t: Tab) {
     setTab(t)
-    router.replace(`/portal/ventas?t=${t}`, { scroll: false })
+    const next = new URLSearchParams(params.toString())
+    next.set('t', t)
+    router.replace(`/portal/ventas?${next.toString()}`, { scroll: false })
   }
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [filtroCliente, setFiltroCliente] = useState('')
   const [filtroEstado,  setFiltroEstado]  = useState('')
   const [verArchivadas, setVerArchivadas] = useState(false)
+  const [soloConSaldo,  setSoloConSaldo]  = useState(false)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -85,11 +93,22 @@ export default function VentasView({ data, initialTab }: Props) {
     () => filtrarOfertas(data.ofertas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas),
     [data.ofertas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas])
   const facturasFiltradas = useMemo(
-    () => filtrarFacturas(data.facturas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas),
-    [data.facturas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas])
+    () => filtrarFacturas(data.facturas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas)
+            .filter(f => !soloConSaldo || f.saldo > 0.005),
+    [data.facturas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas, soloConSaldo])
 
   const conteoOfertas  = data.ofertas.length
   const conteoFacturas = data.facturas.length
+
+  // Pendiente de cobro POR MONEDA de lo que se está viendo. Sin sumar monedas distintas
+  // (no cotizan aquí) y sobre las filas filtradas, no sobre toda la historia.
+  const pendienteTotal = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const f of facturasFiltradas) {
+      if (f.saldo > 0.005) m.set(f.moneda, (m.get(f.moneda) ?? 0) + f.saldo)
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [facturasFiltradas])
 
   const ofertaIds  = useMemo(() => ofertasFiltradas.map(o => o.oferta_id),  [ofertasFiltradas])
   const facturaIds = useMemo(() => facturasFiltradas.map(f => f.factura_id), [facturasFiltradas])
@@ -203,6 +222,16 @@ export default function VentasView({ data, initialTab }: Props) {
         ]}
       />
 
+      {/* ── Rango y búsqueda (en la URL, aplicados en la query del servidor) ── */}
+      <div className="ter-toolbar">
+        <RangoBusqueda
+          desde={data.rango.desde}
+          hasta={data.rango.hasta}
+          q={data.q}
+          placeholder="Buscar por número, cliente o importe…"
+        />
+      </div>
+
       {/* ── Toolbar de filtros ── */}
       <div className="ter-toolbar">
         <EmpresaPills
@@ -229,6 +258,13 @@ export default function VentasView({ data, initialTab }: Props) {
             onChange={e => setVerArchivadas(e.target.checked)} />
           Ver archivadas
         </label>
+        {tab === 'facturas' && (
+          <label className="filtro-toggle">
+            <input type="checkbox" className="row-check" checked={soloConSaldo}
+              onChange={e => setSoloConSaldo(e.target.checked)} />
+            Solo con saldo
+          </label>
+        )}
       </div>
 
       {/* ── Tabla ── */}
@@ -241,8 +277,20 @@ export default function VentasView({ data, initialTab }: Props) {
             {tab === 'ofertas'
               ? `${ofertasFiltradas.length} de ${conteoOfertas}`
               : `${facturasFiltradas.length} de ${conteoFacturas}`}
+            {/* Los totales dicen SOBRE QUÉ se calculan: antes la cabecera sumaba toda la
+                historia mientras la tabla enseñaba un filtro. */}
+            {tab === 'facturas' && pendienteTotal.length > 0 && (
+              <> · Pendiente {pendienteTotal.map(([mon, tot]) => formatearMoneda(tot, mon)).join(' · ')}</>
+            )}
           </span>
         </div>
+
+        {((tab === 'ofertas' && data.hay_mas_ofertas) || (tab === 'facturas' && data.hay_mas_facturas)) && (
+          <p className="listado-tope">
+            Se enseñan los primeros {LIMITE_LISTADO} documentos del rango. Acota el rango o
+            busca para ver el resto.
+          </p>
+        )}
 
         {tab === 'ofertas' ? (
           ofertasFiltradas.length === 0 ? (
@@ -305,7 +353,7 @@ export default function VentasView({ data, initialTab }: Props) {
               disabled={isPending} verArchivadas={verArchivadas}
               ejecutar={fn => ejecutar(fn, selOfertas)} pedirConfirmacion={pedirConfirmacion} />
           : <AccionesFacturas
-              items={selData.items as Factura[]} ids={selFacturas.selectedIds}
+              items={selData.items as FacturaListado[]} ids={selFacturas.selectedIds}
               disabled={isPending} verArchivadas={verArchivadas}
               ejecutar={fn => ejecutar(fn, selFacturas)} pedirConfirmacion={pedirConfirmacion} />
         }
@@ -417,7 +465,7 @@ function AccionesOfertas({
 function AccionesFacturas({
   items, ids, disabled, verArchivadas, ejecutar, pedirConfirmacion,
 }: {
-  items: Factura[]; ids: string[]; disabled: boolean; verArchivadas: boolean
+  items: FacturaListado[]; ids: string[]; disabled: boolean; verArchivadas: boolean
   ejecutar: (fn: () => Promise<ResultadoLote>) => void
   pedirConfirmacion: (c: Confirm) => void
 }) {
@@ -586,14 +634,14 @@ function TablaOfertas({
 function TablaFacturas({
   facturas, empresaNombres, clienteNombres, mostrarEmpresa, sel, onEmitir,
 }: {
-  facturas: Factura[]
+  facturas: FacturaListado[]
   empresaNombres: Record<string, string>
   clienteNombres: Record<string, string>
   mostrarEmpresa: boolean
   sel: SelApi
   /** Emitir desde la fila. Antes solo existía en lote: para emitir UNA factura había que
    *  seleccionarla o entrar en su ficha, que es el camino más largo al gesto más común. */
-  onEmitir: (f: Factura) => void
+  onEmitir: (f: FacturaListado) => void
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
@@ -614,6 +662,7 @@ function TablaFacturas({
             <th>Vencimiento</th>
             <th>Estado</th>
             <th className="col-num">Total</th>
+            <th className="col-num">Pendiente</th>
             <th className="col-actions"></th>
           </tr>
         </thead>
@@ -650,10 +699,25 @@ function TablaFacturas({
               </td>
               <td data-label="Estado">
                 <BadgeFactura estado={f.estado} />
+                {/* «Parcial» es DERIVADO (hay cobros y queda saldo); el estado persistido
+                    sigue siendo EMITIDA, igual que en Gastos y cobros. */}
+                {f.parcial && <span className="badge badge-warning ven-badge-archivada">Parcial</span>}
                 {f.archivado && <span className="badge badge-neutral ven-badge-archivada">Archivada</span>}
               </td>
               <td data-label="Total" className="col-num">
                 {formatearMoneda(Number(f.total), f.moneda)}
+              </td>
+              <td data-label="Pendiente" className="col-num">
+                {f.saldo > 0.005 ? (
+                  <>
+                    {formatearMoneda(f.saldo, f.moneda)}
+                    {f.dias_vencido != null && (
+                      <div className="ven-vencida-hint">
+                        Vencida {f.dias_vencido} {f.dias_vencido === 1 ? 'día' : 'días'}
+                      </div>
+                    )}
+                  </>
+                ) : <span className="text-muted">—</span>}
               </td>
               {/* Una sola acción → icono directo, sin menú «⋯» (regla de UI §3). Solo en
                   BORRADOR: en cualquier otro estado la fila no tiene nada que ofrecer. */}
@@ -713,8 +777,8 @@ function filtrarOfertas(
 }
 
 function filtrarFacturas(
-  arr: Factura[], empresa: string, cliente: string, estado: string, verArchivadas: boolean,
-): Factura[] {
+  arr: FacturaListado[], empresa: string, cliente: string, estado: string, verArchivadas: boolean,
+): FacturaListado[] {
   return arr.filter(f => {
     if (!verArchivadas && f.archivado) return false
     if (empresa && f.empresa_id !== empresa) return false

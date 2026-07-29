@@ -3350,7 +3350,14 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     })
   }
 
-  const { error: gErr } = await db.from('gastos_cobros').insert(aInsertar)
+  // El `concepto` (mig. 152) es la etiqueta que cada fila ya lleva: «Nómina 2026-03»,
+  // «Retenciones nómina 2026-03»… Se rellena aquí, en el insert, y no fila a fila, para
+  // que añadir un quinto acreedor mañana no se olvide de la columna. Sin esto, las cinco
+  // filas de cada nómina saldrían en la columna nueva con la etiqueta de su categoría y
+  // dos «Salarios» del mismo mes volverían a ser indistinguibles — exactamente el
+  // problema que la columna viene a arreglar.
+  const { error: gErr } = await db.from('gastos_cobros')
+    .insert(aInsertar.map(g => ({ ...g, concepto: g.descripcion })))
   if (gErr) return { ok: false, error: gErr.message }
 
   // `gasto_id` sigue apuntando al de Salarios: es el que gobierna el saldo con la

@@ -94,18 +94,25 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     clave: 'gastos_cobros',
     etiqueta: 'Gastos y cobros',
     cabeceras: ['Código', 'Tipo', 'Fecha', 'Vencimiento', 'Tercero', 'Categoría', 'Concepto',
-      'Moneda', 'Importe', 'Empresa', 'Generado por', 'Notas'],
+      'Etiqueta', 'Moneda', 'Importe', 'Empresa', 'Generado por', 'Notas'],
     cargar: async (db, cid) => {
       const [filas, terceros, empresas] = await Promise.all([
         leer(db, 'gastos_cobros', cid,
-          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, descripcion, moneda, monto, empresa_id, origen_tipo, notas', 'fecha'),
+          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, notas', 'fecha'),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
       return filas.map(f => [
         f.registro_id as string, f.tipo as string, f.fecha as string, f.vencimiento as string,
         f.tercero_id ? (terceros.get(f.tercero_id as string) ?? '') : '',
-        f.categoria as string, f.descripcion as string, f.moneda as string, f.monto as number,
+        f.categoria as string,
+        // «Concepto» era `descripcion`, que en un GASTO es la etiqueta de la categoría: el
+        // CSV exportaba el mismo defecto que la tabla (D4). Ahora sale el concepto real
+        // (mig. 152), con el histórico cayendo a la etiqueta, y la etiqueta derivada se
+        // conserva en su propia columna porque es la que usan los informes.
+        (f.concepto as string) || (f.descripcion as string),
+        f.descripcion as string,
+        f.moneda as string, f.monto as number,
         empresas.get(f.empresa_id as string) ?? '',
         (f.origen_tipo as string) ?? 'Manual', f.notas as string,
       ])

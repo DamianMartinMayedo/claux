@@ -320,6 +320,7 @@ async function postearResumenCierre(
 
       // 1) El registro contable (idempotente por moneda del cierre).
       if (!contabilizadas.has(moneda) && monto > 0) {
+        const etiqueta = `Ventas de caja${etiquetaCaja ? ` ${etiquetaCaja}` : ''} — cierre ${sesionUuid.substring(0, 8)}`
         const { error } = await db.from('gastos_cobros').insert({
           registro_id:  generarRegistroId('COBRO'),
           client_id:    caja.client_id,
@@ -330,7 +331,8 @@ async function postearResumenCierre(
           tercero_id:   null,                 // el mostrador no tiene cliente
           categoria:    null,                 // un COBRO no lleva categoría
           categoria_id: null,
-          descripcion:  `Ventas de caja${etiquetaCaja ? ` ${etiquetaCaja}` : ''} — cierre ${sesionUuid.substring(0, 8)}`,
+          descripcion:  etiqueta,
+          concepto:     etiqueta,             // mig. 152: la columna que lee la tabla
           moneda,
           monto,
           notas:        'Resumen del cierre del punto de venta. El detalle, ticket a ticket, está en Caja.',

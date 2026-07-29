@@ -38,6 +38,8 @@ import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint
 import Tabs                            from '@/components/Tabs'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
+import RangoBusqueda                  from '@/components/portal/RangoBusqueda'
+import { LIMITE_LISTADO }             from '@/lib/listados'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import ExportarTabla                   from '@/components/portal/ExportarTabla'
 
@@ -154,14 +156,25 @@ function RegistroModal({
           {registro && <input type="hidden" name="registro_id" value={registro.registro_id} />}
           <div className="modal-body">
             <div className="ter-form-grid">
-              {tipo === 'COBRO' && (
-                <div className="input-group ter-col-full">
-                  <label>Concepto <span className="required">*</span></label>
-                  <input className="input" name="descripcion" required autoFocus={!isEdit}
-                    defaultValue={registro?.descripcion ?? ''}
-                    placeholder="Ej: Venta directa, anticipo de cliente…" />
-                </div>
-              )}
+              {/* Concepto en los DOS tipos (mig. 152). En el gasto es ADEMÁS de la
+                  categoría, no en su lugar: la categoría clasifica el informe y el
+                  concepto identifica la fila. Sin él, dos «Suministros · Electricidad»
+                  del mismo mes eran la misma línea repetida en la tabla. */}
+              <div className="input-group ter-col-full">
+                <label htmlFor="gc-concepto">Concepto <span className="required">*</span></label>
+                <input
+                  id="gc-concepto"
+                  className="input" name="descripcion" required autoFocus={!isEdit}
+                  defaultValue={registro?.concepto ?? registro?.descripcion ?? ''}
+                  placeholder={tipo === 'GASTO'
+                    ? 'Ej: Factura de la ONE de marzo, alquiler del local…'
+                    : 'Ej: Venta directa, anticipo de cliente…'} />
+                <span className="input-hint">
+                  {tipo === 'GASTO'
+                    ? 'En dos palabras, de qué es. Lo verás en la tabla; la categoría es para el informe.'
+                    : 'Lo verás en la tabla y en Cuentas por cobrar.'}
+                </span>
+              </div>
 
               <div className="input-group ter-col-full">
                 <label>{tipo === 'GASTO' ? 'Proveedor' : 'Cliente'}</label>
@@ -411,37 +424,6 @@ function LiquidarModal({
   )
 }
 
-// ── Confirmación eliminar ───────────────────────────────────────────────────────
-
-function ConfirmEliminar({
-  registro, onConfirm, onClose, isPending,
-}: {
-  registro:  GastoCobroConSaldo
-  onConfirm: () => void
-  onClose:   () => void
-  isPending: boolean
-}) {
-  return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">Eliminar {registro.tipo === 'GASTO' ? 'gasto' : 'cobro'}</h2>
-          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
-        </div>
-        <div className="modal-body">
-          <p className="modal-body-text">¿Eliminar <strong>{registro.descripcion}</strong> ({formatMonto(registro.monto)} {registro.moneda})?</p>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
-            {isPending ? <><span className="spinner spinner-sm" /> Eliminando…</> : 'Eliminar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Modal: crear / editar categoría de gasto ─────────────────────────────────────
 
 function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
@@ -602,35 +584,6 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
   )
 }
 
-// ── Confirmación archivar categoría ──────────────────────────────────────────────
-
-function ConfirmArchivarCat({ nombre, onConfirm, onClose, isPending }: {
-  nombre: string; onConfirm: () => void; onClose: () => void; isPending: boolean
-}) {
-  return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">Archivar categoría</h2>
-          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
-        </div>
-        <div className="modal-body">
-          <p className="modal-body-text">
-            ¿Archivar <strong>{nombre}</strong>? Dejará de aparecer al clasificar gastos nuevos,
-            pero los registros que ya la usan la conservan y podrás restaurarla cuando quieras.
-          </p>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={isPending}>
-            {isPending ? <><span className="spinner spinner-sm" /> Archivando…</> : 'Archivar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Checkbox de cabecera (con estado indeterminado) ──────────────────────────────
 
 function HeaderCheck({ checked, indeterminate, onChange }: {
@@ -670,30 +623,52 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
 
   const [filtroEstado,  setFiltroEstado]  = useState('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
+  const [filtroCat,     setFiltroCat]     = useState('')
+  const [filtroTercero, setFiltroTercero] = useState('')
+
+  // Descendientes de una categoría raíz: filtrar por «Suministros» tiene que traer sus
+  // subcategorías, o el filtro miente por omisión (los gastos cuelgan de la hija).
+  const hijasDe = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const c of data.categorias_gastos) {
+      if (!c.parent_id) continue
+      const s = m.get(c.parent_id) ?? new Set<string>()
+      s.add(c.categoria_id)
+      m.set(c.parent_id, s)
+    }
+    return m
+  }, [data.categorias_gastos])
 
   // La pestaña activa decide el tipo (Gastos vs Cobros)
   const tipoActual: TipoRegistro = tab === 'cobros' ? 'COBRO' : 'GASTO'
   const registros = useMemo(() => {
+    const catsOk = filtroCat
+      ? new Set<string>([filtroCat, ...(hijasDe.get(filtroCat) ?? [])])
+      : null
     return data.registros.filter(r => {
       if (r.tipo !== tipoActual) return false
       if (filtroEstado  && r.estado  !== filtroEstado)  return false
       if (filtroEmpresa && r.empresa_id !== filtroEmpresa) return false
+      if (catsOk && !(r.categoria_id && catsOk.has(r.categoria_id))) return false
+      if (filtroTercero && r.tercero_id !== filtroTercero) return false
       return true
     })
-  }, [data.registros, tipoActual, filtroEstado, filtroEmpresa])
+  }, [data.registros, tipoActual, filtroEstado, filtroEmpresa, filtroCat, filtroTercero, hijasDe])
 
-  // Totales pendientes por tipo y moneda
+  // Totales pendientes por tipo y moneda. **De lo que se está viendo**, no de toda la
+  // historia: la cabecera sumaba todo mientras la tabla enseñaba un filtro, y las dos
+  // cifras no cuadraban sin ninguna pista de por qué (D4).
   const pendientes = useMemo(() => {
     const porPagar  = new Map<string, number>()
     const porCobrar = new Map<string, number>()
-    for (const r of data.registros) {
+    for (const r of registros) {
       if (r.saldo_pendiente <= 0.005) continue
       const m = r.tipo === 'GASTO' ? porPagar : porCobrar
       m.set(r.moneda, (m.get(r.moneda) ?? 0) + r.saldo_pendiente)
     }
     const toArr = (m: Map<string, number>) => Array.from(m.entries()).map(([moneda, monto]) => ({ moneda, monto })).sort((a, b) => a.moneda.localeCompare(b.moneda))
     return { porPagar: toArr(porPagar), porCobrar: toArr(porCobrar) }
-  }, [data.registros])
+  }, [registros])
 
   const terceroNombre = useMemo(() => {
     const m: Record<string, string> = {}
@@ -932,7 +907,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         <div className="gc-stats">
           <div className={`gc-stat-card ${tab === 'gastos' ? 'gc-stat-pagar' : 'gc-stat-cobrar'}`}>
             <span className="gc-stat-ico">{tab === 'gastos' ? <TrendingDown size={16} strokeWidth={2.2} /> : <TrendingUp size={16} strokeWidth={2.2} />}</span>
-            <span className="gc-stat-label">{tab === 'gastos' ? 'Por pagar' : 'Por cobrar'}</span>
+            <span className="gc-stat-label">
+              {tab === 'gastos' ? 'Por pagar' : 'Por cobrar'}
+              {' '}<em className="gc-stat-alcance">de lo que ves</em>
+            </span>
             <span className="gc-stat-amounts">
               {(tab === 'gastos' ? pendientes.porPagar : pendientes.porCobrar).map(p => (
                 <span key={p.moneda} className="gc-stat-amount"><strong>{formatMonto(p.monto)}</strong><em>{p.moneda}</em></span>
@@ -942,6 +920,16 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         </div>
       )}
 
+      {/* Rango y búsqueda (en la URL; el rango se aplica en la query del servidor) */}
+      <div className="ter-toolbar">
+        <RangoBusqueda
+          desde={data.rango.desde}
+          hasta={data.rango.hasta}
+          q={data.q}
+          placeholder="Buscar por concepto, notas o importe…"
+        />
+      </div>
+
       {/* Toolbar */}
       <div className="ter-toolbar">
         <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
@@ -950,6 +938,20 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           <option value="PARCIAL">Parciales</option>
           <option value="LIQUIDADO">Liquidados</option>
         </select>
+        {/* Filtro por categoría: es lo que hace que «cuánto llevo en Alquiler» se
+            responda aquí y no solo en Reportes. Solo raíces — incluye sus subcategorías. */}
+        {tab === 'gastos' && (
+          <select className="input ter-filter-select" value={filtroCat} onChange={e => setFiltroCat(e.target.value)}>
+            <option value="">Todas las categorías</option>
+            {data.categorias_gastos
+              .filter(c => !c.parent_id && c.estado === 'ACTIVO')
+              .map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+          </select>
+        )}
+        <select className="input ter-filter-select" value={filtroTercero} onChange={e => setFiltroTercero(e.target.value)}>
+          <option value="">{tab === 'gastos' ? 'Todos los proveedores' : 'Todos los clientes'}</option>
+          {data.terceros.map(t => <option key={t.tercero_id} value={t.tercero_id}>{t.nombre}</option>)}
+        </select>
         <EmpresaPills
           empresas={empresasFiltro}
           value={filtroEmpresa}
@@ -957,6 +959,13 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           todasLabel="Todas las empresas"
         />
       </div>
+
+      {data.hay_mas && (
+        <p className="listado-tope">
+          Se enseñan los primeros {LIMITE_LISTADO} registros del rango. Acota el rango o busca
+          para ver el resto.
+        </p>
+      )}
 
       {/* Tabla */}
       <div className="card card-table">
@@ -978,7 +987,11 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                     </th>
                   )}
                   <th>Fecha</th>
-                  {tab === 'gastos' ? <><th>Categoría</th><th>Subcategoría</th></> : <th>Concepto</th>}
+                  {/* El CONCEPTO es la columna principal (mig. 152): es lo que el dueño
+                      reconoce. La categoría va al lado, que es donde sirve — clasificar
+                      el informe, no identificar la fila. */}
+                  <th>Concepto</th>
+                  {tab === 'gastos' && <><th>Categoría</th><th>Subcategoría</th></>}
                   {multiempresa && <th>Empresa</th>}
                   <th className="col-num">Monto</th>
                   <th className="col-num">Pendiente</th>
@@ -1002,18 +1015,16 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                       </td>
                     )}
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(r.fecha)}</td>
-                    {tab === 'gastos' ? (<>
-                      <td data-label="Categoría">
-                        <strong>{cs!.cat}</strong>
-                        {r.tercero_id && <div className="tes-mov-sub"><span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span></div>}
-                      </td>
+                    {/* El histórico (y lo que escriba un módulo sin concepto) cae a
+                        `descripcion`, para que no quede ninguna celda en blanco. */}
+                    <td data-label="Concepto">
+                      <strong>{r.concepto || r.descripcion}</strong>
+                      {r.tercero_id && <div className="tes-mov-sub"><span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span></div>}
+                    </td>
+                    {tab === 'gastos' && (<>
+                      <td data-label="Categoría" className="text-sm-muted">{cs!.cat}</td>
                       <td data-label="Subcategoría" className="text-sm-muted">{cs!.sub ?? '—'}</td>
-                    </>) : (
-                      <td data-label="Concepto">
-                        <strong>{r.descripcion}</strong>
-                        {r.tercero_id && <div className="tes-mov-sub"><span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span></div>}
-                      </td>
-                    )}
+                    </>)}
                     {multiempresa && (
                       <td data-label="Empresa">
                         <EmpresaTag color={colorOf(r.empresa_id)} nombre={data.empresa_nombres[r.empresa_id] ?? '—'} />
@@ -1152,17 +1163,33 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           empresaNombres={data.empresa_nombres}
           onClose={() => setLiquidar(null)} onChanged={onChanged} />
       )}
+      {/* Los dos diálogos a mano que quedaban en este fichero convergen a
+          `<ConfirmDialog>`, que es lo que usa el resto del portal (y ya se usaba aquí
+          mismo en cuatro sitios): un modal propio por confirmación es un sitio más donde
+          el foco, el escape y el z-index se comportan distinto. */}
       {confirmDel && (
-        <ConfirmEliminar registro={confirmDel} onConfirm={confirmarEliminar}
-          onClose={() => setConfirmDel(null)} isPending={isPending} />
+        <ConfirmDialog
+          title={`Eliminar ${confirmDel.tipo === 'GASTO' ? 'gasto' : 'cobro'}`}
+          body={`¿Eliminar «${confirmDel.concepto || confirmDel.descripcion}» (${formatMonto(confirmDel.monto)} ${confirmDel.moneda})?`}
+          danger
+          confirmLabel="Eliminar"
+          onConfirm={confirmarEliminar}
+          onCancel={() => setConfirmDel(null)}
+        />
       )}
       {catModal && (
         <CategoriaModal categoria={editCat} categorias={data.categorias_gastos}
           onClose={() => { setCatModal(false); setEditCat(null) }} onSaved={onCatSaved} />
       )}
       {confirmCat && (
-        <ConfirmArchivarCat nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}
-          onClose={() => setConfirmCat(null)} isPending={isPending} />
+        <ConfirmDialog
+          title="Archivar categoría"
+          body={`¿Archivar «${confirmCat.nombre}»? Dejará de aparecer al clasificar gastos nuevos, pero los registros que ya la usan la conservan y podrás restaurarla cuando quieras.`}
+          danger
+          confirmLabel="Archivar"
+          onConfirm={confirmarArchivarCat}
+          onCancel={() => setConfirmCat(null)}
+        />
       )}
 
       {/* Borrado: dos diálogos distintos según lo que diga el servidor, no uno con
