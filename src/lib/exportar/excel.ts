@@ -36,6 +36,38 @@ export function numero(value: number | null | undefined, estilo: CeldaEstilo = {
   return { type: Number, value: value ?? undefined, ...estilo }
 }
 
+const ISO_FECHA = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)/
+
+/** ¿Es un `YYYY-MM-DD` (con o sin hora detrás)? */
+export function esFechaIso(v: unknown): v is string {
+  return typeof v === 'string' && ISO_FECHA.test(v)
+}
+
+/**
+ * Celda de FECHA de verdad (no texto) a partir de un `YYYY-MM-DD`.
+ *
+ * Que en el .xlsx la fecha sea una fecha no es cosmética: en texto no se ordena
+ * cronológicamente, no se filtra «este mes» y no entra en una tabla dinámica — que es
+ * justo para lo que alguien se baja el Excel.
+ *
+ * **En UTC a propósito.** La librería convierte con `getTime()/864e5 + 25569`, sin
+ * tocar la zona horaria: si se construyera con `new Date(2026, 6, 29)` en un servidor
+ * en UTC-… la celda saldría con el día anterior. `Date.UTC` de una fecha SIN hora es
+ * exactamente el serial que Excel espera. Devuelve `null` si no es una fecha ISO, para
+ * que quien llama caiga a texto en vez de escribir una celda inválida.
+ */
+export function fecha(v: unknown, estilo: CeldaEstilo = {}): Cell | null {
+  if (typeof v !== 'string') return null
+  const m = ISO_FECHA.exec(v)
+  if (!m) return null
+  return {
+    type:   Date,
+    value:  new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))),
+    format: 'dd/mm/yyyy',
+    ...estilo,
+  }
+}
+
 export interface HojaExcel {
   nombre:   string
   filas:    Row[]
@@ -64,4 +96,32 @@ export async function construirXlsxBase64(hojas: HojaExcel[]): Promise<string> {
 export function anchoPara(...textos: (string | undefined)[]): number {
   const max = Math.max(10, ...textos.map(t => (t ?? '').length + 2))
   return Math.min(max, 48)
+}
+
+/**
+ * Anchos de una tabla mirando **los datos**, no solo la cabecera.
+ *
+ * Con el ancho sacado del título, la columna «Cliente» sale a 10 caracteres y los
+ * nombres se ven cortados; peor con los importes, que Excel tapa con `######` cuando no
+ * caben — un fichero que hay que ensanchar a mano antes de poder leerlo.
+ *
+ * Se mira una MUESTRA de filas, no todas: con 20.000 filas medir la columna entera es
+ * recorrer la tabla otra vez para ganar un par de caracteres.
+ */
+export function anchosPorColumna(
+  cabeceras: string[], filas: unknown[][], muestra = 300,
+): { width: number }[] {
+  const tope = Math.min(filas.length, muestra)
+  return cabeceras.map((h, c) => {
+    let max = h.length
+    for (let i = 0; i < tope; i++) {
+      const v = filas[i]?.[c]
+      if (v == null) continue
+      // Un número se pinta más largo que su `String()`: separador de miles y dos
+      // decimales por el formato '#,##0.00'.
+      const largo = typeof v === 'number' ? String(Math.trunc(v)).length + 6 : String(v).length
+      if (largo > max) max = largo
+    }
+    return { width: Math.min(Math.max(max + 2, 10), 48) }
+  })
 }
