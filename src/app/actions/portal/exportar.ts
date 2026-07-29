@@ -13,8 +13,9 @@
 // un registro de datos no lo es.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession } from './auth'
-import { construirCsv, CSV_MIME, type ValorCelda } from '@/lib/exportar/csv'
+import { getPortalSession, requireAccesoModulo } from './auth'
+import { construirCsv, type ValorCelda } from '@/lib/exportar/csv'
+import { construirXlsxBase64, texto, numero, MARCA, anchoPara } from '@/lib/exportar/excel'
 import { tablaPorClave, TABLAS_EXPORTABLES, type TablaExportable } from '@/lib/exportar/tablas'
 
 export interface OpcionExportable { clave: string; etiqueta: string }
@@ -64,4 +65,77 @@ export async function exportarTabla(clave: string): Promise<ResultadoExportacion
     filas:     filas.length,
     contenido: construirCsv(tabla.cabeceras, filas),
   }
+}
+
+// ── Exportar LO QUE HAY EN PANTALLA (quick win 1) ─────────────────────────────
+//
+// Acción distinta de `exportarTabla`, no un parámetro más, porque son dos permisos
+// distintos con el mismo motor:
+//   · `exportarTabla`   → la tabla entera, solo la sesión de CONFIGURACIÓN. Ese candado
+//     existe para que el negocio no se lleve tablas completas por un endpoint construido
+//     a mano, y aflojarlo para añadir un caso de uso sería perderlo.
+//   · `exportarListado` → lo filtrado, para el DUEÑO. «Todas las facturas de este
+//     período» es el caso de uso del día a día y no tiene nada de excepcional.
+//
+// Aquí sí hay Excel además de CSV: lo filtrado es pequeño, y el propietario pidió los dos
+// formatos. La tabla entera se queda en CSV a secas por peso (ver la nota de arriba).
+
+export interface ResultadoListado {
+  ok:      boolean
+  error?:  string
+  nombre?: string
+  /** CSV como texto; Excel como base64. Nunca los dos. */
+  csv?:    string
+  xlsx?:   string
+  filas?:  number
+}
+
+export async function exportarListado(
+  clave: string,
+  filtro: { desde?: string; hasta?: string; q?: string },
+  formato: 'csv' | 'xlsx',
+): Promise<ResultadoListado> {
+  // Lectura, no escritura: basta con tener el módulo (y verlo). El candado de edición no
+  // aplica — un usuario de solo lectura puede y debe poder descargar lo que ve.
+  await requireAccesoModulo('base')
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  const tabla: TablaExportable | undefined = tablaPorClave(clave)
+  if (!tabla)            return { ok: false, error: 'Ese listado no se puede exportar.' }
+  if (!tabla.porRango)   return { ok: false, error: 'Ese listado no admite exportar por período.' }
+
+  let filas: ValorCelda[][]
+  try {
+    filas = await tabla.cargar(createAdminClient(), session.client_id, filtro)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudieron leer los datos.' }
+  }
+
+  // El nombre del fichero LLEVA EL PERÍODO. Sin él, tres descargas del mismo listado con
+  // rangos distintos son tres ficheros indistinguibles en la carpeta de descargas.
+  const sufijo = filtro.desde || filtro.hasta
+    ? `${filtro.desde || 'inicio'}_${filtro.hasta || 'hoy'}`
+    : 'todo'
+  const base = `${tabla.clave}-${sufijo}`
+
+  if (formato === 'csv') {
+    return { ok: true, nombre: `${base}.csv`, filas: filas.length, csv: construirCsv(tabla.cabeceras, filas) }
+  }
+
+  // Excel: los importes van como NÚMERO con formato, no como texto. Es la diferencia
+  // entre una columna que se suma sola y una que hay que reescribir a mano.
+  const cabecera = tabla.cabeceras.map(h =>
+    texto(h, { fontWeight: 'bold', color: MARCA.blanco, backgroundColor: MARCA.teal, align: 'left' }))
+  const cuerpo = filas.map(f => f.map(v =>
+    typeof v === 'number' ? numero(v, { format: '#,##0.00' })
+    : typeof v === 'boolean' ? texto(v ? 'Sí' : 'No')
+    : texto(v == null ? '' : String(v))))
+
+  const xlsx = await construirXlsxBase64([{
+    nombre:   tabla.etiqueta.slice(0, 31),   // Excel no admite hojas de más de 31 caracteres
+    filas:    [cabecera, ...cuerpo],
+    columnas: tabla.cabeceras.map(h => ({ width: anchoPara(h) })),
+  }])
+  return { ok: true, nombre: `${base}.xlsx`, filas: filas.length, xlsx }
 }

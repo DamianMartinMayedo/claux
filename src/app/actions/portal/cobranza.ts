@@ -161,7 +161,13 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
       empresa_id: r.empresa_id as string, fecha: r.fecha as string,
       vencimiento: (r.vencimiento as string | null) ?? null,
       moneda: r.moneda as string, monto, liquidado, saldo,
-      dias_vencido: dias, tramo, ref_url: '/portal/gastos',
+      dias_vencido: dias, tramo,
+      // Al gasto CONCRETO, con su búsqueda aplicada, no a la lista entera: el enlace de
+      // antes dejaba al dueño buscando a mano en un listado de cientos de filas. El rango
+      // va vacío a propósito (`desde=&hasta=` = todo): una deuda de hace ocho meses no
+      // está en los últimos 3 meses que Gastos enseña por defecto, y el enlace tiene que
+      // llevar al registro, no a una tabla vacía.
+      ref_url: `/portal/gastos?desde=&hasta=&q=${encodeURIComponent(r.registro_id as string)}`,
       liquidaciones: liqsPorDoc.get(r.registro_id as string) ?? [],
     })
   }

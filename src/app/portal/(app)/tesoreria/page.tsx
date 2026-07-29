@@ -6,10 +6,17 @@ import TesoreriaView        from './TesoreriaView'
 
 export const dynamic = 'force-dynamic'
 
-export default async function TesoreriaPage() {
+export default async function TesoreriaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ desde?: string; hasta?: string; q?: string }>
+}) {
   await requireModulo('base')
+  // El rango acota el LISTADO de movimientos, no los saldos: un saldo es la suma de toda
+  // la historia de la cuenta y filtrarlo sería enseñar un saldo que no existe.
+  const { desde, hasta, q } = await searchParams
   const [data, cxc, cxp] = await Promise.all([
-    obtenerTesoreria(),
+    obtenerTesoreria({ desde, hasta, q }),
     obtenerCuentasPorCobrar(),
     obtenerCuentasPorPagar(),
   ])

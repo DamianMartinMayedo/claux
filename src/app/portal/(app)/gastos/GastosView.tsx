@@ -39,6 +39,7 @@ import Tabs                            from '@/components/Tabs'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
 import RangoBusqueda                  from '@/components/portal/RangoBusqueda'
+import ExportarMenu                   from '@/components/portal/ExportarMenu'
 import { LIMITE_LISTADO }             from '@/lib/listados'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import ExportarTabla                   from '@/components/portal/ExportarTabla'
@@ -865,7 +866,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         <div className="tes-header-actions">
           {/* Solo en sesión de configuración: se pinta solo. La tabla que exporta es
               la de la pestaña abierta. */}
-          <ExportarTabla clave={tab === 'categorias' ? 'categorias_gastos' : 'gastos_cobros'} />
+          {tab !== 'categorias' && (
+          <ExportarMenu clave="gastos_cobros" desde={data.rango.desde} hasta={data.rango.hasta} q={data.q} />
+        )}
+        <ExportarTabla clave={tab === 'categorias' ? 'categorias_gastos' : 'gastos_cobros'} />
           {puedeEditar && (
             tab === 'gastos' ? (
               <button className="btn btn-primary" onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>

@@ -5,7 +5,7 @@ import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter }                        from 'next/navigation'
 import Link                                 from 'next/link'
-import { Check, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
+import { Check, DollarSign, ExternalLink, Search, Trash2, X } from 'lucide-react'
 import {
   registrarPagoDoc,
   anularPagoDoc,
@@ -193,23 +193,48 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
   const [pagoDoc,      setPagoDoc]      = useState<DocumentoPendiente | null>(null)
   const [filtroTramo,  setFiltroTramo]  = useState<Tramo | ''>('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
+  const [filtroTercero, setFiltroTercero] = useState('')
+  const [busca,        setBusca]        = useState('')
+
+  // Terceros que APARECEN en esta lista. Se derivan de los documentos y no del catálogo
+  // completo: ofrecer 200 proveedores para filtrar 3 deudas no es un filtro, es un
+  // desplegable. Ojo: no todo lo cobrable tiene tercero — el COBRO de subsidios de la
+  // nómina entra en CxC sin `tercero_id` porque el deudor es la Seguridad Social, que no
+  // es una ficha. De ahí la opción explícita «Sin {cliente}», para que se pueda ver y
+  // reclamar en vez de quedar escondido por no tener con quién agruparlo.
+  const tercerosEnLista = useMemo(() => {
+    const s = new Set<string>()
+    for (const d of data.documentos) if (d.tercero_nombre) s.add(d.tercero_nombre)
+    return [...s].sort((a, b) => a.localeCompare(b))
+  }, [data.documentos])
+  const haySinTercero = useMemo(
+    () => data.documentos.some(d => !d.tercero_nombre), [data.documentos])
 
   const documentos = useMemo(() => {
+    const t = busca.trim().toLowerCase()
     return data.documentos.filter(d => {
       if (filtroTramo   && d.tramo      !== filtroTramo)   return false
       if (filtroEmpresa && d.empresa_id !== filtroEmpresa) return false
+      if (filtroTercero === '__sin__'   && d.tercero_nombre) return false
+      if (filtroTercero && filtroTercero !== '__sin__' && d.tercero_nombre !== filtroTercero) return false
+      if (t && !(
+        d.numero.toLowerCase().includes(t)
+        || (d.tercero_nombre ?? '').toLowerCase().includes(t)
+        || d.saldo.toFixed(2) === t.replace(',', '.')
+      )) return false
       return true
     })
-  }, [data.documentos, filtroTramo, filtroEmpresa])
+  }, [data.documentos, filtroTramo, filtroEmpresa, filtroTercero, busca])
 
   const { pageItems, ...pag } = usePagination(documentos)
 
-  // Total pendiente por moneda
+  // Total pendiente por moneda DE LO QUE SE VE: la cabecera sumaba toda la lista mientras
+  // la tabla enseñaba un filtro, y las dos cifras no cuadraban sin pista de por qué.
   const porMoneda = useMemo(() => {
     const m = new Map<string, number>()
-    for (const d of data.documentos) m.set(d.moneda, (m.get(d.moneda) ?? 0) + d.saldo)
+    for (const d of documentos) m.set(d.moneda, (m.get(d.moneda) ?? 0) + d.saldo)
     return Array.from(m.entries()).map(([moneda, saldo]) => ({ moneda, saldo })).sort((a, b) => a.moneda.localeCompare(b.moneda))
-  }, [data.documentos])
+  }, [documentos])
 
   // Conteo por tramo
   const conteoTramo = useMemo(() => {
@@ -275,6 +300,27 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
             onChange={setFiltroEmpresa}
             todasLabel="Todas las empresas"
           />
+        </div>
+      )}
+
+      {/* Filtro por tercero + buscador. CxC/CxP NO llevan rango de fechas: una deuda vieja
+          no puede desaparecer del listado por un filtro que el dueño no ha puesto. */}
+      {data.documentos.length > 0 && (
+        <div className="ter-toolbar">
+          <select className="input ter-filter-select" value={filtroTercero} onChange={e => setFiltroTercero(e.target.value)}>
+            <option value="">{esCobro ? 'Todos los clientes' : 'Todos los proveedores'}</option>
+            {haySinTercero && <option value="__sin__">{esCobro ? 'Sin cliente' : 'Sin proveedor'}</option>}
+            {tercerosEnLista.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <div className="ter-search-wrap">
+            <Search size={14} strokeWidth={2} />
+            <input
+              className="ter-search" type="search" value={busca}
+              aria-label="Buscar por documento, tercero o importe"
+              placeholder="Buscar por documento, tercero o importe…"
+              onChange={e => setBusca(e.target.value)}
+            />
+          </div>
         </div>
       )}
 

@@ -152,6 +152,9 @@ export async function obtenerGastosCobros(
       `concepto.ilike.${patron}`,
       `descripcion.ilike.${patron}`,
       `notas.ilike.${patron}`,
+      // Por CÓDIGO también: es lo que usa el enlace de CxC/CxP para llevar al registro
+      // concreto en vez de dejar al dueño buscándolo a mano en la lista.
+      `registro_id.ilike.${patron}`,
     ]
     if (importe != null) partes.push(`monto.eq.${importe}`)
     regQuery = regQuery.or(partes.join(','))

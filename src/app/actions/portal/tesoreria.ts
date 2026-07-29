@@ -9,9 +9,14 @@ import { type CategoriaGasto } from './gastos'
 import { monedaValida }      from '@/lib/tasas'
 import { generarCuentaId, generarMovimientoId } from '@/lib/tesoreria-core'
 import { generarRegistroId, resolverCategoriaSistema } from '@/lib/gastos-core'
+import {
+  LIMITE_LISTADO, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  type FiltroListado as _FiltroListado,
+} from '@/lib/listados'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
+export type FiltroListado   = _FiltroListado
 export type TipoCuenta      = 'CAJA' | 'BANCO' | 'PASARELA' | 'OTRO'
 export type TipoMovimiento  = 'INGRESO' | 'EGRESO'
 export type OrigenMovimiento = 'MANUAL' | 'COBRO' | 'PAGO' | 'TRANSFERENCIA'
@@ -65,6 +70,10 @@ export interface TesoreriaPageData {
   empresas:          { empresa_id: string; nombre: string }[]
   monedas:           string[]   // códigos de monedas activas
   categorias_gastos: CategoriaGasto[]  // Para selects de categoría
+  /** Rango y búsqueda aplicados al LISTADO (los saldos son de toda la historia). */
+  rango:             { desde: string; hasta: string }
+  q:                 string
+  hay_mas:           boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,24 +87,53 @@ const TIPOS_MOVIMIENTO: TipoMovimiento[] = ['INGRESO', 'EGRESO']
 
 // ── Obtener tesorería (cuentas + movimientos + saldos) ─────────────────────────
 
-export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
+export async function obtenerTesoreria(
+  filtro?: FiltroListado,
+): Promise<TesoreriaPageData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db          = createAdminClient()
   const empresas    = await obtenerEmpresas()
   const empresa_ids = empresas.map(e => e.empresa_id)
+  const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [cuRes, movRes, monRes, catRes] = await Promise.all([
+  const porDefecto = rangoUltimosMeses(3)
+  const desde  = filtro?.desde ?? porDefecto.desde
+  const hasta  = filtro?.hasta ?? porDefecto.hasta
+  const q      = (filtro?.q ?? '').trim()
+  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const patron  = patronBusqueda(q)
+  const importe = importeBuscado(q)
+
+  // El LISTADO va acotado por rango; los SALDOS no pueden estarlo —un saldo es la suma de
+  // toda la historia de la cuenta— así que van en su propia consulta, con tres columnas en
+  // vez de `select('*')`. Antes esto era una sola query que se traía todas las columnas de
+  // todos los movimientos de siempre para pintar una tabla y calcular tres números.
+  let listaQuery = db.from('movimientos_tesoreria').select('*')
+    .eq('client_id', session.client_id)
+    .in('empresa_id', idsFiltro)
+  if (desde) listaQuery = listaQuery.gte('fecha', desde)
+  if (hasta) listaQuery = listaQuery.lte('fecha', hasta)
+  if (patron) {
+    const partes = [`concepto.ilike.${patron}`, `movimiento_id.ilike.${patron}`, `notas.ilike.${patron}`]
+    if (importe != null) partes.push(`monto.eq.${importe}`)
+    listaQuery = listaQuery.or(partes.join(','))
+  }
+  listaQuery = listaQuery
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limite)
+
+  const [cuRes, movRes, sumRes, monRes, catRes] = await Promise.all([
     db.from('cuentas').select('*')
       .eq('client_id', session.client_id)
-      .in('empresa_id', empresa_ids.length ? empresa_ids : ['__none__'])
+      .in('empresa_id', idsFiltro)
       .order('nombre'),
-    db.from('movimientos_tesoreria').select('*')
+    listaQuery,
+    db.from('movimientos_tesoreria').select('cuenta_id, tipo, monto')
       .eq('client_id', session.client_id)
-      .in('empresa_id', empresa_ids.length ? empresa_ids : ['__none__'])
-      .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false }),
+      .in('empresa_id', idsFiltro),
     db.from('monedas').select('codigo')
       .eq('client_id', session.client_id)
       .eq('activa', true)
@@ -112,11 +150,13 @@ export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
   const todasCuentas = (cuRes.data ?? []) as (Cuenta & { es_apertura?: boolean })[]
   const idsApertura  = new Set(todasCuentas.filter(c => c.es_apertura).map(c => c.cuenta_id))
   const cuentas      = todasCuentas.filter(c => !c.es_apertura) as Cuenta[]
-  const movimientos  = ((movRes.data ?? []) as Movimiento[]).filter(m => !idsApertura.has(m.cuenta_id))
+  const listaCruda   = (movRes.data ?? []) as Movimiento[]
+  const movimientos  = listaCruda.filter(m => !idsApertura.has(m.cuenta_id))
 
-  // Saldos por cuenta
+  // Saldos por cuenta: sobre TODOS los movimientos, no sobre los del rango.
   const agregados = new Map<string, { ingresos: number; egresos: number; num: number }>()
-  for (const m of movimientos) {
+  for (const m of ((sumRes.data ?? []) as { cuenta_id: string; tipo: string; monto: number }[])) {
+    if (idsApertura.has(m.cuenta_id)) continue
     const a = agregados.get(m.cuenta_id) ?? { ingresos: 0, egresos: 0, num: 0 }
     if (m.tipo === 'INGRESO') a.ingresos += Number(m.monto)
     else                      a.egresos  += Number(m.monto)
@@ -157,6 +197,9 @@ export async function obtenerTesoreria(): Promise<TesoreriaPageData | null> {
     empresas:          empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     monedas:           ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
     categorias_gastos: (catRes.data ?? []) as CategoriaGasto[],
+    rango:             { desde, hasta },
+    q,
+    hay_mas:           listaCruda.length >= limite,
   }
 }
 
@@ -344,6 +387,7 @@ export async function registrarMovimiento(
       tipo:         esGasto ? 'GASTO' : 'COBRO',
       fecha:        fechaFinal,
       descripcion:  concepto,
+      concepto,                 // mig. 152: la columna que lee la tabla de Gastos
       categoria:    categoriaNombre,
       categoria_id,
       moneda:       cuenta.moneda,
@@ -630,6 +674,80 @@ export async function registrarTransferencia(
   revalidatePath('/portal/tesoreria')
   revalidatePath('/portal/gastos')
   revalidatePath('/portal/cxp')
+  revalidarFinanzas()
+  return { ok: true }
+}
+
+// ── Editar un movimiento MANUAL ────────────────────────────────────────────────
+//
+// Hasta ahora un movimiento solo se podía borrar y volver a crear: para corregir una
+// fecha mal escrita había que destruir la fila y perder su código. Se permite editar con
+// las MISMAS guardas que el borrado y por la misma razón:
+//   · solo `origen='MANUAL'` — un movimiento de cobro/pago es el reflejo de un documento
+//     y se corrige desde él, no por detrás;
+//   · sin `transfer_grupo` — las dos patas de una transferencia tienen que cuadrar entre
+//     sí, y editar una sola dejaría dinero creado o destruido de la nada.
+//
+// La CUENTA y la MONEDA no se cambian: mover un movimiento de caja es cambiar dos saldos
+// a la vez, y si además cambia la moneda el importe deja de significar lo mismo. Para eso
+// está borrar y volver a registrar.
+export async function editarMovimiento(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+
+  const movimiento_id = (formData.get('movimiento_id') as string)?.trim()
+  const fecha         = (formData.get('fecha')     as string)?.trim()
+  const concepto      = (formData.get('concepto')  as string)?.trim()
+  const categoria_id  = (formData.get('categoria_id') as string)?.trim() || null
+  const notas         = (formData.get('notas')     as string)?.trim() || null
+  const montoRaw      = parseFloat(formData.get('monto') as string)
+
+  if (!movimiento_id)                   return { ok: false, error: 'Movimiento no indicado.' }
+  if (!concepto)                        return { ok: false, error: 'El concepto es obligatorio.' }
+  if (isNaN(montoRaw) || montoRaw <= 0) return { ok: false, error: 'El monto debe ser un número positivo.' }
+
+  const { data: mov } = await db.from('movimientos_tesoreria')
+    .select('origen, transfer_grupo, referencia_id, tipo, moneda')
+    .eq('movimiento_id', movimiento_id)
+    .eq('client_id', session.client_id)
+    .maybeSingle()
+  if (!mov) return { ok: false, error: 'Movimiento no encontrado.' }
+  if (mov.transfer_grupo) {
+    return { ok: false, error: 'Es una transferencia: bórrala y vuelve a registrarla para que las dos patas cuadren.' }
+  }
+  if (mov.origen !== 'MANUAL') {
+    return { ok: false, error: 'Este movimiento proviene de un cobro o pago. Corrígelo desde su documento.' }
+  }
+
+  let categoriaNombre: string | null = null
+  if (categoria_id) {
+    const { data: cat } = await db.from('categorias_gastos')
+      .select('nombre').eq('categoria_id', categoria_id)
+      .eq('client_id', session.client_id).eq('estado', 'ACTIVO').maybeSingle()
+    if (!cat) return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
+    categoriaNombre = cat.nombre as string
+  }
+
+  const { error } = await db.from('movimientos_tesoreria')
+    .update({
+      fecha:        fecha || undefined,
+      monto:        montoRaw,
+      monto_ref:    montoRaw,
+      concepto,
+      categoria:    categoriaNombre,
+      categoria_id,
+      notas,
+    })
+    .eq('movimiento_id', movimiento_id)
+    .eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/tesoreria')
   revalidarFinanzas()
   return { ok: true }
 }

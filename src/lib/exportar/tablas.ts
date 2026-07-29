@@ -22,23 +22,51 @@ import type { ValorCelda } from './csv'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
 
+/**
+ * Filtros que puede recibir una exportación.
+ *
+ * El mismo registro sirve para DOS casos de uso con el mismo motor:
+ *   · la tabla ENTERA (configuración) → sin filtro,
+ *   · lo que hay EN PANTALLA (el dueño) → con el rango y la búsqueda aplicados.
+ * Una entrada que no sepa filtrar simplemente ignora el argumento y devuelve todo:
+ * ninguna exporta MENOS de lo que debería por no implementarlo.
+ */
+export interface FiltroExport {
+  desde?: string
+  hasta?: string
+  q?:     string
+}
+
 export interface TablaExportable {
   /** Clave estable: viaja del cliente a la server action. */
   clave:     string
   /** Nombre visible en el menú y base del nombre de fichero. */
   etiqueta:  string
   cabeceras: string[]
-  cargar: (db: Db, client_id: string) => Promise<ValorCelda[][]>
+  cargar: (db: Db, client_id: string, filtro?: FiltroExport) => Promise<ValorCelda[][]>
+  /** Se puede exportar «lo que veo» desde su listado del portal (no solo la tabla entera). */
+  porRango?: boolean
 }
 
 /** `select` + filtro por tenant + orden, que es idéntico en todas. */
 async function leer(
   db: Db, tabla: string, client_id: string, columnas: string, orden: string,
+  filtro?: FiltroExport, campoFecha?: string, camposTexto?: string[],
 ): Promise<Record<string, unknown>[]> {
-  const { data, error } = await db.from(tabla)
+  let query = db.from(tabla)
     .select(columnas)
     .eq('client_id', client_id)
-    .order(orden, { ascending: true })
+  // El rango se aplica EN LA CONSULTA, igual que en los listados: exportar «las facturas
+  // de este período» no puede significar traerse el histórico y recortarlo en memoria.
+  if (campoFecha && filtro?.desde) query = query.gte(campoFecha, filtro.desde)
+  if (campoFecha && filtro?.hasta) query = query.lte(campoFecha, filtro.hasta)
+  const t = (filtro?.q ?? '').trim()
+  if (t && camposTexto?.length) {
+    // Se escapan los comodines del patrón: buscar «50%» no puede devolver media tabla.
+    const patron = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`
+    query = query.or(camposTexto.map(c => `${c}.ilike.${patron}`).join(','))
+  }
+  const { data, error } = await query.order(orden, { ascending: true })
   if (error) throw new Error(error.message)
   return (data ?? []) as Record<string, unknown>[]
 }
@@ -95,10 +123,12 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     etiqueta: 'Gastos y cobros',
     cabeceras: ['Código', 'Tipo', 'Fecha', 'Vencimiento', 'Tercero', 'Categoría', 'Concepto',
       'Etiqueta', 'Moneda', 'Importe', 'Empresa', 'Generado por', 'Notas'],
-    cargar: async (db, cid) => {
+    porRango: true,
+    cargar: async (db, cid, filtro) => {
       const [filas, terceros, empresas] = await Promise.all([
         leer(db, 'gastos_cobros', cid,
-          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, notas', 'fecha'),
+          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, notas', 'fecha',
+          filtro, 'fecha', ['concepto', 'descripcion', 'notas', 'registro_id']),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -123,10 +153,12 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     etiqueta: 'Facturas',
     cabeceras: ['Número', 'Fecha', 'Vencimiento', 'Cliente', 'Empresa', 'Moneda',
       'Subtotal', 'Total', 'Estado', 'Condición de pago', 'Notas'],
-    cargar: async (db, cid) => {
+    porRango: true,
+    cargar: async (db, cid, filtro) => {
       const [filas, terceros, empresas] = await Promise.all([
         leer(db, 'facturas', cid,
-          'numero, fecha_emision, fecha_vencimiento, cliente_id, empresa_id, moneda, subtotal, total, estado, condicion_pago, notas', 'fecha_emision'),
+          'numero, fecha_emision, fecha_vencimiento, cliente_id, empresa_id, moneda, subtotal, total, estado, condicion_pago, notas', 'fecha_emision',
+          filtro, 'fecha_emision', ['numero', 'notas']),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -144,10 +176,12 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     etiqueta: 'Ofertas y presupuestos',
     cabeceras: ['Número', 'Fecha', 'Válida hasta', 'Cliente', 'Empresa', 'Moneda',
       'Subtotal', 'Total', 'Estado', 'Notas'],
-    cargar: async (db, cid) => {
+    porRango: true,
+    cargar: async (db, cid, filtro) => {
       const [filas, terceros, empresas] = await Promise.all([
         leer(db, 'ofertas', cid,
-          'numero, fecha_emision, fecha_validez, cliente_id, empresa_id, moneda, subtotal, total, estado, notas', 'fecha_emision'),
+          'numero, fecha_emision, fecha_validez, cliente_id, empresa_id, moneda, subtotal, total, estado, notas', 'fecha_emision',
+          filtro, 'fecha_emision', ['numero', 'notas']),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -165,10 +199,12 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     etiqueta: 'Movimientos de tesorería',
     cabeceras: ['Fecha', 'Tipo', 'Cuenta', 'Concepto', 'Categoría', 'Moneda', 'Importe',
       'Empresa', 'Origen', 'Notas'],
-    cargar: async (db, cid) => {
+    porRango: true,
+    cargar: async (db, cid, filtro) => {
       const [filas, cuentas, empresas] = await Promise.all([
         leer(db, 'movimientos_tesoreria', cid,
-          'fecha, tipo, cuenta_id, concepto, categoria, moneda, monto, empresa_id, origen, notas', 'fecha'),
+          'fecha, tipo, cuenta_id, concepto, categoria, moneda, monto, empresa_id, origen, notas', 'fecha',
+          filtro, 'fecha', ['concepto', 'notas', 'movimiento_id']),
         diccionario(db, 'cuentas', cid, 'cuenta_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])

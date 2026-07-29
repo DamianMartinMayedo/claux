@@ -47,6 +47,7 @@ import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint
 import Tabs                            from '@/components/Tabs'
 import ExportarTabla from '@/components/portal/ExportarTabla'
 import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import ExportarMenu  from '@/components/portal/ExportarMenu'
 import { LIMITE_LISTADO } from '@/lib/listados'
 
 interface Props { data: VentasResumenData; initialTab?: Tab }
@@ -167,6 +168,10 @@ export default function VentasView({ data, initialTab }: Props) {
           </p>
         </div>
         <div className="tes-header-actions">
+        <ExportarMenu
+          clave={tab === 'ofertas' ? 'ofertas' : 'facturas'}
+          desde={data.rango.desde} hasta={data.rango.hasta} q={data.q}
+        />
         <ExportarTabla clave={tab === 'ofertas' ? 'ofertas' : 'facturas'} />
         {tab === 'ofertas' ? (
           sinSetupEmpresas || sinLetra ? (

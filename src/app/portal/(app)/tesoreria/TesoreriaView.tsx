@@ -21,6 +21,7 @@ import {
   archivarCuentasEnLote,
   registrarMovimiento,
   registrarTransferencia,
+  editarMovimiento,
   eliminarMovimiento,
   eliminarMovimientosEnLote,
   obtenerTasaTransferencia,
@@ -32,8 +33,12 @@ import {
   type TesoreriaPageData,
   type ResultadoLoteCuentas,
 } from '@/app/actions/portal/tesoreria'
+import type { CategoriaGasto } from '@/app/actions/portal/gastos'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
 import ExportarTabla from '@/components/portal/ExportarTabla'
+import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import ExportarMenu  from '@/components/portal/ExportarMenu'
+import { LIMITE_LISTADO } from '@/lib/listados'
 
 // Pendientes por saldar (CxC / CxP) que se pueden liquidar desde un movimiento
 interface Pendientes {
@@ -221,6 +226,7 @@ function MovimientoModal({
   const [pendienteId, setPendienteId] = useState('')
   const [impDoc, setImpDoc]             = useState('')   // importe en la moneda del documento
   const [impCaja, setImpCaja]           = useState('')   // lo que se mueve en la caja
+  const [montoLibre, setMontoLibre]     = useState('')   // importe de un movimiento sin documento
   const [editandoCaja, setEditandoCaja] = useState(false)
   const [tasaInput, setTasaInput]       = useState('')
   /** Tasa traída del servidor o escrita a mano. Solo cuenta si la moneda cambia. */
@@ -316,6 +322,15 @@ function MovimientoModal({
   }
 
   const pagoInvalido = !!pendienteSel && (impDocNum <= 0 || impDocNum > pendienteSel.saldo + 0.005 || (cambiaMoneda && tasaCompleta <= 0))
+
+  // Saldo que quedaría en la caja tras un EGRESO libre. `null` cuando no aplica (ingreso,
+  // sin cuenta, sin importe o liquidando un pendiente: ahí el importe es del documento).
+  const saldoResultante = (() => {
+    if (pendienteSel || tipo !== 'EGRESO' || !cuentaSel) return null
+    const n = parseFloat(montoLibre) || 0
+    if (n <= 0) return null
+    return Math.round((cuentaSel.saldo - n) * 100) / 100
+  })()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -429,7 +444,17 @@ function MovimientoModal({
                 <div className="input-group ter-col-span-3">
                   <label>Monto {cuentaSel ? `(${cuentaSel.moneda})` : ''} <span className="required">*</span></label>
                   <input className="input" name="monto" type="number" min="0" step="any" required
-                    autoFocus placeholder="0.00" />
+                    autoFocus placeholder="0.00"
+                    value={montoLibre} onChange={e => setMontoLibre(e.target.value)} />
+                  {/* Aviso ANTES de dejar la caja en rojo, no bloqueo: en Cuba se paga con
+                      lo que hay y el efectivo no siempre está registrado al minuto. Lo que
+                      no puede pasar es enterarse después, mirando el saldo. */}
+                  {saldoResultante != null && saldoResultante < 0 && (
+                    <span className="input-hint-warning">
+                      La caja se quedaría en {formatMonto(saldoResultante)} {cuentaSel!.moneda}.
+                      Se registra igual.
+                    </span>
+                  )}
                 </div>
               )}
               <div className="input-group ter-col-span-3">
@@ -509,6 +534,102 @@ function MovimientoModal({
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending || pagoInvalido}>
               {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: editar un movimiento manual ────────────────────────────────────────
+//
+// Antes solo se podía borrar y volver a crear: corregir una fecha mal escrita destruía la
+// fila y su código. La cuenta y la moneda NO se editan (ver `editarMovimiento`): mover
+// dinero de caja son dos saldos a la vez, y para eso está borrar y registrar de nuevo.
+
+function EditarMovimientoModal({
+  movimiento, categorias, cuentaNombre, onClose, onSaved,
+}: {
+  movimiento:   Movimiento
+  categorias:   CategoriaGasto[]
+  cuentaNombre: string
+  onClose:      () => void
+  onSaved:      () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('movimiento_id', movimiento.movimiento_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await editarMovimiento(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Movimiento actualizado.')
+      onSaved()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open">
+      <div className="modal modal-lg" role="dialog" aria-modal>
+        <div className="modal-header">
+          <div>
+            <h2 className="modal-title">Editar movimiento</h2>
+            <p className="text-xs-muted mt-1">
+              {movimiento.tipo === 'INGRESO' ? 'Ingreso' : 'Egreso'} en {cuentaNombre} · {movimiento.moneda}
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-full">
+                <label htmlFor="mov-concepto">Concepto <span className="required">*</span></label>
+                <input id="mov-concepto" className="input" name="concepto" required autoFocus
+                  defaultValue={movimiento.concepto} />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="mov-monto">Monto ({movimiento.moneda}) <span className="required">*</span></label>
+                <input id="mov-monto" className="input" name="monto" type="number" min="0" step="any" required
+                  defaultValue={String(movimiento.monto)} />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="mov-fecha">Fecha <span className="required">*</span></label>
+                <input id="mov-fecha" className="input" name="fecha" type="date" required
+                  defaultValue={movimiento.fecha} />
+              </div>
+              <div className="input-group ter-col-full">
+                <label htmlFor="mov-cat">Categoría</label>
+                <select id="mov-cat" className="input" name="categoria_id" defaultValue={movimiento.categoria_id ?? ''}>
+                  <option value="">— Sin categoría —</option>
+                  {categorias.map(c => (
+                    <option key={c.categoria_id} value={c.categoria_id}>
+                      {c.parent_id ? '· ' : ''}{c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group ter-col-full">
+                <label htmlFor="mov-notas">Notas</label>
+                <input id="mov-notas" className="input" name="notas" defaultValue={movimiento.notas ?? ''} />
+              </div>
+              <div className="input-group ter-col-full">
+                <span className="input-hint">
+                  La cuenta y la moneda no se cambian aquí: mover dinero de una caja a otra
+                  toca dos saldos, y para eso está borrar y registrar de nuevo.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={isPending}>
+              {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Guardar cambios'}
             </button>
           </div>
         </form>
@@ -840,10 +961,13 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
   const [transferModal,  setTransferModal]  = useState(false)
   const [confirmCuenta,  setConfirmCuenta]  = useState<CuentaConSaldo | null>(null)
   const [confirmMov,     setConfirmMov]     = useState<Movimiento | null>(null)
+  const [editMov,        setEditMov]        = useState<Movimiento | null>(null)
 
   const [verArchivadas,  setVerArchivadas]  = useState(false)
   const [filtroCuenta,   setFiltroCuenta]   = useState('')
   const [filtroTipo,     setFiltroTipo]     = useState('')
+  const [filtroEmpresaMov, setFiltroEmpresaMov] = useState('')
+  const [filtroCatMov,   setFiltroCatMov]   = useState('')
   const [tab,            setTab]            = useState<'cuentas' | 'movimientos'>('cuentas')
 
   const cuentasActivas = useMemo(() => data.cuentas.filter(c => c.activa), [data.cuentas])
@@ -882,13 +1006,32 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
     return m
   }, [data.cuentas])
 
+  // Descendientes de una categoría raíz: filtrar por «Suministros» tiene que traer sus
+  // subcategorías, igual que en Gastos.
+  const hijasDeCat = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const c of data.categorias_gastos) {
+      if (!c.parent_id) continue
+      const s = m.get(c.parent_id) ?? new Set<string>()
+      s.add(c.categoria_id)
+      m.set(c.parent_id, s)
+    }
+    return m
+  }, [data.categorias_gastos])
+
   const movimientosFiltrados = useMemo(() => {
+    const catsOk = filtroCatMov && filtroCatMov !== '__sin__'
+      ? new Set<string>([filtroCatMov, ...(hijasDeCat.get(filtroCatMov) ?? [])])
+      : null
     return data.movimientos.filter(m => {
       if (filtroCuenta && m.cuenta_id !== filtroCuenta) return false
       if (filtroTipo   && m.tipo      !== filtroTipo)   return false
+      if (filtroEmpresaMov && m.empresa_id !== filtroEmpresaMov) return false
+      if (filtroCatMov === '__sin__' && m.categoria_id) return false
+      if (catsOk && !(m.categoria_id && catsOk.has(m.categoria_id))) return false
       return true
     })
-  }, [data.movimientos, filtroCuenta, filtroTipo])
+  }, [data.movimientos, filtroCuenta, filtroTipo, filtroEmpresaMov, filtroCatMov, hijasDeCat])
 
   const { pageItems, ...pag } = usePagination(movimientosFiltrados)
 
@@ -899,7 +1042,7 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
   const movIds = useMemo(() => movimientosFiltrados.map(m => m.movimiento_id), [movimientosFiltrados])
   const selMov = useRowSelection(movIds)
   const [confirmLoteMov, setConfirmLoteMov] = useState(false)
-  useEffect(() => { selMov.clear() }, [filtroCuenta, filtroTipo, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { selMov.clear() }, [filtroCuenta, filtroTipo, filtroEmpresaMov, filtroCatMov, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function doEliminarLoteMov() {
     setConfirmLoteMov(false)
@@ -960,6 +1103,9 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
         </div>
         <div className="tes-header-actions">
+          {tab === 'movimientos' && (
+            <ExportarMenu clave="movimientos_tesoreria" desde={data.rango.desde} hasta={data.rango.hasta} q={data.q} />
+          )}
           <ExportarTabla clave="movimientos_tesoreria" />
           <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }} disabled={data.empresas.length === 0 || data.monedas.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
@@ -1108,6 +1254,16 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       </>)}
 
       {tab === 'movimientos' && (<>
+      {/* Rango y búsqueda (en la URL; el rango se aplica en la query) */}
+      <div className="ter-toolbar">
+        <RangoBusqueda
+          desde={data.rango.desde}
+          hasta={data.rango.hasta}
+          q={data.q}
+          placeholder="Buscar por concepto, código o importe…"
+        />
+      </div>
+
       {/* Movimientos */}
       <div className="ter-toolbar">
         <select className="input ter-filter-select" value={filtroCuenta} onChange={e => setFiltroCuenta(e.target.value)}>
@@ -1119,7 +1275,29 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           <option value="INGRESO">Solo ingresos</option>
           <option value="EGRESO">Solo egresos</option>
         </select>
+        {/* Empresa y categoría: sin ellos, un negocio con dos empresas no podía mirar el
+            movimiento de una sola, y «cuánto salió en Alquiler» no se respondía aquí. */}
+        {data.empresas.length > 1 && (
+          <select className="input ter-filter-select" value={filtroEmpresaMov} onChange={e => setFiltroEmpresaMov(e.target.value)}>
+            <option value="">Todas las empresas</option>
+            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+          </select>
+        )}
+        <select className="input ter-filter-select" value={filtroCatMov} onChange={e => setFiltroCatMov(e.target.value)}>
+          <option value="">Todas las categorías</option>
+          <option value="__sin__">Sin categoría</option>
+          {data.categorias_gastos.filter(c => !c.parent_id).map(c => (
+            <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
+          ))}
+        </select>
       </div>
+
+      {data.hay_mas && (
+        <p className="listado-tope">
+          Se enseñan los primeros {LIMITE_LISTADO} movimientos del rango. Los saldos de arriba
+          son de toda la historia, no del rango.
+        </p>
+      )}
 
       <div className="card card-table">
         {movimientosFiltrados.length === 0 ? (
@@ -1165,7 +1343,16 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
                     </td>
                     <td className="col-actions">
                       <div className="ter-actions">
+                        {/* Editar solo los MANUALES sin transferencia: mismas guardas que
+                            el borrado, y por lo mismo — un movimiento de cobro/pago es el
+                            reflejo de un documento y se corrige desde él. */}
+                        {m.origen === 'MANUAL' && !m.transfer_grupo && (
+                          <button className="ter-action-btn" title="Editar"
+                            aria-label={`Editar ${m.concepto}`}
+                            onClick={() => setEditMov(m)} disabled={isPending}><Pencil size={14} /></button>
+                        )}
                         <button className="ter-action-btn ter-action-danger" title="Eliminar"
+                          aria-label={`Eliminar ${m.concepto}`}
                           onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>
                       </div>
                     </td>
@@ -1245,6 +1432,15 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       {confirmCuenta && (
         <ConfirmArchivarCuenta cuenta={confirmCuenta} onConfirm={confirmarArchivar}
           onClose={() => setConfirmCuenta(null)} isPending={isPending} />
+      )}
+      {editMov && (
+        <EditarMovimientoModal
+          movimiento={editMov}
+          categorias={data.categorias_gastos}
+          cuentaNombre={cuentaNombre[editMov.cuenta_id] ?? editMov.cuenta_id}
+          onClose={() => setEditMov(null)}
+          onSaved={() => { setEditMov(null); router.refresh() }}
+        />
       )}
       {confirmMov && (
         <ConfirmEliminar movimiento={confirmMov} onConfirm={confirmarEliminarMov}
