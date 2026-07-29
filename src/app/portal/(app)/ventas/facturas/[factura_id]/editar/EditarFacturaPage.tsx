@@ -212,16 +212,17 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
           onAjustesChange={setAjustes}
           onNotasChange={setNotas}
           onNotasInternasChange={setNotasInternas}
-        />
-
-        <DescuentoStock
-          contexto={contexto}
-          empresa_id={empresa_id}
-          lineas={lineas}
-          descuenta={descuentaStock}
-          almacen_id={almacenId}
-          onDescuentaChange={setDescuentaStock}
-          onAlmacenChange={setAlmacenId}
+          trasLineas={
+            <DescuentoStock
+              contexto={contexto}
+              empresa_id={empresa_id}
+              lineas={lineas}
+              descuenta={descuentaStock}
+              almacen_id={almacenId}
+              onDescuentaChange={setDescuentaStock}
+              onAlmacenChange={setAlmacenId}
+            />
+          }
         />
 
       </form>

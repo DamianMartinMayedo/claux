@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { Plus, Trash2, PackageSearch, X } from 'lucide-react'
+import { Plus, Trash2, PackageSearch } from 'lucide-react'
 import type { ProductoOpcion } from '@/app/actions/portal/ventas'
 import { SelectorArticulo } from './_SelectorArticulo'
 import {
@@ -54,6 +54,119 @@ function InputNumero({
   )
 }
 
+/**
+ * Descripción de una línea, con AUTOCOMPLETADO del catálogo.
+ *
+ * El vínculo con el artículo se crea al elegir una sugerencia, nunca por coincidencia de
+ * texto: el `datalist` anterior ataba la línea solo si el input decía exactamente
+ * «CÓDIGO — Nombre», así que matizar la descripción rompía el enlace en silencio y con él
+ * el coste congelado de la línea, el margen del informe y la CxP al proveedor.
+ *
+ * La lista va en `position:absolute`, fuera del flujo: si empujara, abrir sugerencias
+ * estiraría la fila y descolocaría la rejilla entera (que es justo lo que hacía el chip
+ * del código debajo del input).
+ */
+function DescripcionLinea({
+  valor, productos, moneda, linkCodigo, inputRef,
+  onTexto, onElegir, onEnter,
+}: {
+  valor:      string
+  productos:  ProductoOpcion[]
+  moneda:     string
+  /** Código del artículo enlazado, o null. Se pinta DENTRO del input, a la derecha. */
+  linkCodigo: string | null
+  inputRef:   (el: HTMLInputElement | null) => void
+  onTexto:    (v: string) => void
+  onElegir:   (p: ProductoOpcion) => void
+  /** `Enter` sin sugerencias abiertas. Nunca envía el formulario. */
+  onEnter:    () => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [activo, setActivo]   = useState(0)
+
+  const sugerencias = useMemo(() => {
+    const t = valor.trim().toLowerCase()
+    if (t.length < 2) return []
+    return productos
+      .filter(p => p.codigo.toLowerCase().includes(t) || p.nombre.toLowerCase().includes(t))
+      .slice(0, 6)
+  }, [valor, productos])
+
+  // Se ofrecen sugerencias solo si la línea NO está ya enlazada: con vínculo, seguir
+  // sugiriendo invita a cambiarlo por accidente mientras se matiza el texto.
+  const visible = abierto && !linkCodigo && sugerencias.length > 0
+
+  function teclas(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!visible) {
+      // Enter en la descripción NUNCA envía la factura: en un formulario largo eso es
+      // casi siempre un accidente. Aquí significa «he terminado esta línea».
+      if (e.key === 'Enter') { e.preventDefault(); onEnter() }
+      return
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActivo(i => (i + 1) % sugerencias.length); return }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setActivo(i => (i - 1 + sugerencias.length) % sugerencias.length); return }
+    if (e.key === 'Escape')    { setAbierto(false); return }
+    if (e.key === 'Enter') {
+      // Con la lista abierta, Enter ELIGE la sugerencia marcada.
+      e.preventDefault()
+      onElegir(sugerencias[activo])
+      setAbierto(false)
+    }
+  }
+
+  return (
+    <div className="ven-desc-wrap">
+      <input
+        ref={inputRef}
+        className={`input input-sm${linkCodigo ? ' ven-desc-enlazada' : ''}`}
+        type="text"
+        aria-label="Descripción de la línea"
+        placeholder="Describe lo que vendes…"
+        value={valor}
+        onChange={e => { onTexto(e.target.value); setAbierto(true); setActivo(0) }}
+        onFocus={() => setAbierto(true)}
+        // `blur` con retardo: sin él, el clic en una sugerencia cierra la lista antes de
+        // que el `mousedown` llegue a registrarse y no se elige nada.
+        onBlur={() => setTimeout(() => setAbierto(false), 120)}
+        onKeyDown={teclas}
+      />
+      {/* El chip INFORMA del vínculo; no se puede quitar desde aquí. Quitarlo dejaba la
+          fila idéntica pero muda: sin descuento de existencias, sin coste congelado para
+          el margen y sin aviso de stock — y si se desenlazaban todas, el bloque entero de
+          Inventario desaparecía del formulario. Para vender algo sin tocar el catálogo se
+          borra la línea y se escribe a mano; para no mover existencias en TODO el
+          documento está el check de Inventario, que es donde vive esa decisión. */}
+      {linkCodigo && (
+        <span className="ven-desc-chip" title={`Enlazada al artículo ${linkCodigo} del catálogo`}>
+          {linkCodigo}
+        </span>
+      )}
+      {visible && (
+        <ul className="ven-autocomplete" role="listbox">
+          {sugerencias.map((p, i) => (
+            <li key={p.producto_id}>
+              <button
+                type="button"
+                className={`ven-autocomplete-item${i === activo ? ' active' : ''}`}
+                onMouseDown={e => { e.preventDefault(); onElegir(p); setAbierto(false) }}
+                onMouseEnter={() => setActivo(i)}
+              >
+                <span className="ven-autocomplete-cod">{p.codigo}</span>
+                <span className="ven-autocomplete-nom">{p.nombre}</span>
+                {p.precios[moneda] != null && (
+                  <span className="ven-autocomplete-precio">
+                    {formatearMoneda(p.precios[moneda], moneda)}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   lineas:        LineaInput[]
   ajustes:       AjusteInput[]
@@ -63,6 +176,8 @@ interface Props {
   almacenId?:    string
   notas?:              string
   notasInternas?:      string
+  /** Se pinta ENTRE las líneas y los ajustes (ahí va el bloque de inventario). */
+  trasLineas?:   React.ReactNode
   onLineasChange:       (v: LineaInput[])  => void
   onAjustesChange:      (v: AjusteInput[]) => void
   onNotasChange?:       (v: string) => void
@@ -71,7 +186,7 @@ interface Props {
 
 export function DocumentoLineasEditor({
   lineas, ajustes, moneda, productos, almacenId,
-  notas, notasInternas,
+  notas, notasInternas, trasLineas,
   onLineasChange, onAjustesChange,
   onNotasChange, onNotasInternasChange,
 }: Props) {
@@ -79,8 +194,9 @@ export function DocumentoLineasEditor({
     () => calcularTotales(lineas, ajustes),
     [lineas, ajustes],
   )
-  // Índice de la línea cuyo selector de catálogo está abierto (null = ninguno).
-  const [eligiendo, setEligiendo] = useState<number | null>(null)
+  // El selector del catálogo es UNO por documento, no uno por fila: se abre desde la
+  // cabecera y añade tantas líneas como artículos se marquen.
+  const [eligiendo, setEligiendo] = useState(false)
   // Modo de descuento ELEGIDO por línea. Vive aquí y no solo derivado de los importes
   // porque con descuento 0 los dos modos son indistinguibles en los datos: elegir
   // «importe» y no escribir nada haría que el selector saltara solo de vuelta a «%».
@@ -109,20 +225,51 @@ export function DocumentoLineasEditor({
     onLineasChange(lineas.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
   }
 
+  /** Línea nueva a partir de un artículo del catálogo. */
+  function lineaDe(p: ProductoOpcion): LineaInput {
+    return {
+      producto_id:     p.producto_id,
+      descripcion:     p.nombre,
+      cantidad:        1,
+      precio_unitario: p.precios[moneda] ?? 0,
+      descuento_pct:   0,
+      unidad:          p.unidad,
+    }
+  }
+
   /**
-   * Enlaza la línea con un artículo del catálogo. La descripción se rellena si está
-   * vacía y **no se sobreescribe** si el dueño ya escribió algo: el vínculo y el texto
-   * son dos cosas distintas desde que se quitó el `datalist` (matizar «… mesa 4» ya no
-   * rompe el enlace, que era el bug que se llevaba por delante el coste de la línea).
+   * Enlaza una línea EXISTENTE con un artículo (autocompletado). La descripción pasa a
+   * ser la del artículo solo si estaba vacía o si es un prefijo de lo que se estaba
+   * escribiendo: quien ya matizó «Cerveza — mesa 4» no quiere perder el matiz. El vínculo
+   * y el texto son dos cosas distintas desde que se quitó el `datalist`, que ataba la
+   * línea por coincidencia exacta y rompía el enlace en silencio al editar.
    */
-  function elegirArticulo(i: number, p: ProductoOpcion) {
+  function enlazarArticulo(i: number, p: ProductoOpcion) {
     const actual = lineas[i]
+    const escrito = actual.descripcion.trim()
+    const esBusqueda = !escrito
+      || p.nombre.toLowerCase().startsWith(escrito.toLowerCase())
+      || p.codigo.toLowerCase() === escrito.toLowerCase()
     updateLinea(i, {
       producto_id:     p.producto_id,
-      descripcion:     actual.descripcion.trim() || p.nombre,
+      descripcion:     esBusqueda ? p.nombre : escrito,
       unidad:          p.unidad,
       precio_unitario: p.precios[moneda] ?? actual.precio_unitario ?? 0,
     })
+  }
+
+  /**
+   * Añade una línea por artículo elegido en el catálogo. Si la última línea está vacía y
+   * sin enlazar —la que deja «Añadir línea» al pulsarlo sin escribir nada— se reutiliza
+   * en vez de dejarla ahí obligando a borrarla a mano.
+   */
+  function anadirDelCatalogo(elegidos: ProductoOpcion[]) {
+    if (elegidos.length === 0) return
+    const ultima = lineas[lineas.length - 1]
+    const base = ultima && !ultima.producto_id && !ultima.descripcion.trim()
+      ? lineas.slice(0, -1)
+      : lineas
+    onLineasChange([...base, ...elegidos.map(lineaDe)])
   }
 
   /** `Enter` en el último campo de la última línea añade otra: teclear sin ratón. */
@@ -159,14 +306,24 @@ export function DocumentoLineasEditor({
       <div className="ven-form-section">
         <div className="ven-section-header">
           <span className="ven-form-section-title">Líneas</span>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={addLinea}>
-            <Plus size={12} strokeWidth={2.5} /> Añadir línea
-          </button>
+          <div className="ven-section-actions">
+            {/* El catálogo se abre UNA vez y se marcan todos los artículos: llenar una
+                factura es elegir cinco cosas, no abrir cinco veces el mismo buscador. */}
+            {productos.length > 0 && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEligiendo(true)}>
+                <PackageSearch size={12} strokeWidth={2.5} /> Del catálogo
+              </button>
+            )}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addLinea}>
+              <Plus size={12} strokeWidth={2.5} /> Añadir línea
+            </button>
+          </div>
         </div>
 
         {lineas.length === 0 ? (
           <div className="ven-empty-mini">
-            Sin líneas todavía. Añade al menos una para poder guardar.
+            Sin líneas todavía. Añade al menos una para poder guardar
+            {productos.length > 0 && <> — o elige varias del catálogo de una vez</>}.
           </div>
         ) : (
           <div className="ven-lineas-table">
@@ -184,39 +341,20 @@ export function DocumentoLineasEditor({
               const modo = modoDto[i] ?? modoDescuentoLinea(l)
               return (
               <div key={i} className="ven-lineas-row">
+                {/* El código del artículo va DENTRO del input, a la derecha, no debajo:
+                    una segunda línea bajo el campo estiraba la fila y descolocaba la
+                    rejilla entera de cantidad/precio/descuento/total. */}
                 <div className="ven-col-prod">
-                  <input
-                    ref={el => { filasRef.current[i] = el }}
-                    className="input input-sm"
-                    type="text"
-                    aria-label={`Descripción de la línea ${i + 1}`}
-                    placeholder="Describe lo que vendes…"
-                    value={l.descripcion}
-                    onChange={e => updateLinea(i, { descripcion: e.target.value })}
+                  <DescripcionLinea
+                    valor={l.descripcion}
+                    productos={productos}
+                    moneda={moneda}
+                    linkCodigo={l.producto_id ? (art?.codigo ?? l.producto_id) : null}
+                    inputRef={el => { filasRef.current[i] = el }}
+                    onTexto={v => updateLinea(i, { descripcion: v })}
+                    onElegir={p => enlazarArticulo(i, p)}
+                    onEnter={() => { if (i === lineas.length - 1) addLinea() }}
                   />
-                  <div className="ven-linea-articulo">
-                    {l.producto_id ? (
-                      <span className="ven-articulo-chip">
-                        {art ? art.codigo : l.producto_id}
-                        <button
-                          type="button"
-                          onClick={() => updateLinea(i, { producto_id: null, unidad: null })}
-                          aria-label="Desvincular del catálogo"
-                          title="Desvincular del catálogo"
-                        >
-                          <X size={11} strokeWidth={2.5} />
-                        </button>
-                      </span>
-                    ) : productos.length > 0 && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => setEligiendo(i)}
-                      >
-                        <PackageSearch size={12} strokeWidth={2} /> Elegir del catálogo
-                      </button>
-                    )}
-                  </div>
                 </div>
 
                 <div className="ven-col-num" data-label="Cant.">
@@ -225,7 +363,6 @@ export function DocumentoLineasEditor({
                     onValor={n => updateLinea(i, { cantidad: n })}
                     etiqueta={`Cantidad de la línea ${i + 1}`}
                   />
-                  {l.unidad && <span className="ven-linea-unidad">{l.unidad}</span>}
                 </div>
 
                 <div className="ven-col-num" data-label="Precio">
@@ -292,6 +429,11 @@ export function DocumentoLineasEditor({
         )}
       </div>
 
+      {/* Inventario va AQUÍ, pegado a las líneas de las que habla, y no al final del
+          formulario: enterrado bajo los totales y las notas era una configuración que el
+          dueño no llegaba a ver. */}
+      {trasLineas}
+
       {/* ── Ajustes ── */}
       <div className="ven-form-section">
         <div className="ven-section-header">
@@ -324,10 +466,7 @@ export function DocumentoLineasEditor({
               <div></div>
             </div>
             {ajustes.map((a, i) => (
-              <div
-                key={i}
-                className={`ven-ajuste-row ven-ajuste-row-${a.tipo.toLowerCase()}`}
-              >
+              <div key={i} className="ven-ajuste-row">
                 <input
                   className="input input-sm ven-aj-nombre"
                   type="text"
@@ -432,13 +571,13 @@ export function DocumentoLineasEditor({
         </div>
       )}
 
-      {eligiendo !== null && (
+      {eligiendo && (
         <SelectorArticulo
           productos={productos}
           moneda={moneda}
           almacenId={almacenId}
-          onElegir={p => elegirArticulo(eligiendo, p)}
-          onCerrar={() => setEligiendo(null)}
+          onAnadir={anadirDelCatalogo}
+          onCerrar={() => setEligiendo(false)}
         />
       )}
 

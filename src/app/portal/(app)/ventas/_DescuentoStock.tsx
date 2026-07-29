@@ -77,6 +77,8 @@ export function DescuentoStock({
       </label>
 
       <p className="input-hint mt-2">
+        Solo bajan las líneas <strong>enlazadas a un artículo del catálogo</strong> — las que
+        llevan su código al final del campo; una línea escrita a mano no mueve existencias.
         El coste de esos productos ya está en tus Compras: esto solo mueve existencias,
         no vuelve a contar el gasto. El stock baja al <strong>emitir</strong> la factura,
         no al guardar el borrador, y vuelve si la anulas.

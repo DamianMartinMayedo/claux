@@ -379,6 +379,13 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .modal-lg   { max-width: 600px; }
 .modal-xl   { max-width: 800px; }
 .modal-1000 { max-width: 1000px; }
+/* Acciones siempre a la vista: scrollea SOLO el cuerpo, la cabecera y el pie se quedan
+   fijos. Con listas largas (elegir del catálogo) el botón de confirmar quedaba al final
+   de un scroll de cien filas, fuera de la pantalla. */
+.modal-fixed-actions { display: flex; flex-direction: column; overflow: hidden; }
+.modal-fixed-actions > .modal-header,
+.modal-fixed-actions > .modal-footer { flex-shrink: 0; }
+.modal-fixed-actions > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .modal-body-wide { padding: var(--space-5) var(--space-6); }
 .modal-body-form { padding: var(--space-5) var(--space-6); gap: var(--space-4); }
 .modal-body-text { color: var(--color-text-muted); line-height: 1.6; }

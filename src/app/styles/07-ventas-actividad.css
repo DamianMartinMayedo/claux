@@ -44,40 +44,74 @@
 .ven-lineas-head,
 .ven-lineas-row {
   display: grid;
-  /* La columna de descuento lleva dos controles (modo + valor), de ahí los 130px. */
-  grid-template-columns: 1fr 90px 90px 130px 100px 36px;
+  /* La columna de descuento lleva dos controles (modo + valor), de ahí los 150px: el
+     selector de modo enseña el código de la moneda («CUP»), que en 58px salía cortado.
+     Lo que cede el ancho es la descripción (1fr), que es la que puede encoger. */
+  grid-template-columns: 1fr 90px 90px 150px 100px 36px;
   gap: var(--space-2);
   align-items: center;
 }
 .ven-col-del { text-align: center; }
 
-/* ── Línea: vínculo con el catálogo, unidad y descuento en dos modos ── */
-.ven-linea-articulo {
-  display: flex; align-items: center; gap: var(--space-2);
-  margin-top: 4px; min-height: 22px;
-}
-.ven-articulo-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px var(--space-2);
+/* ── Línea: vínculo con el catálogo, autocompletado, unidad y descuento ──
+   Todo lo que informa de la línea (el código enlazado, las sugerencias, la unidad) vive
+   DENTRO de la altura del campo o flotando por encima. Nada empuja: una segunda línea
+   bajo el input estiraba la fila y descolocaba la rejilla entera. */
+.ven-desc-wrap { position: relative; }
+/* Hueco a la derecha para el chip del código, para que el texto no pase por debajo. */
+.ven-desc-enlazada { padding-right: 5.5rem; }
+/* Etiqueta, no control: el vínculo con el catálogo se ve, no se toca (ver el comentario
+   del chip en _DocumentoLineasEditor.tsx). Sin puntero ni hover: nada que pulsar. */
+.ven-desc-chip {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center;
+  max-width: 5rem;
+  padding: 1px var(--space-2);
   background: var(--color-surface-offset);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  font-size: 11px; font-weight: 600; color: var(--color-text-muted);
+  font-size: 10px; font-weight: 700; letter-spacing: .02em;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden; white-space: nowrap;
+  cursor: default; user-select: none;
+}
+
+.ven-autocomplete {
+  position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 2px);
+  margin: 0; padding: var(--space-1); list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 15rem; overflow-y: auto;
+}
+.ven-autocomplete-item {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  width: 100%; padding: 5px var(--space-2);
+  background: none; border: 0; border-radius: var(--radius-sm);
+  text-align: left; cursor: pointer;
+  font-size: var(--text-sm); color: var(--color-text);
+}
+.ven-autocomplete-item.active,
+.ven-autocomplete-item:hover { background: var(--color-surface-offset); }
+.ven-autocomplete-cod {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 700; color: var(--color-text-faint);
   font-variant-numeric: tabular-nums;
 }
-.ven-articulo-chip button {
-  display: inline-flex; align-items: center;
-  background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--color-text-faint);
-  transition: color var(--transition);
+.ven-autocomplete-nom {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ven-articulo-chip button:hover { color: var(--color-error); }
-.ven-linea-unidad {
-  display: block; margin-top: 2px;
-  font-size: 11px; color: var(--color-text-muted);
+.ven-autocomplete-precio {
+  flex-shrink: 0;
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
+
 .ven-col-dto { display: flex; gap: 4px; align-items: center; }
-.ven-dto-modo { width: 58px; flex-shrink: 0; padding-inline: 6px; }
+.ven-dto-modo { width: 76px; flex-shrink: 0; padding-inline: 6px; }
 .ven-lineas-head {
   background: var(--color-surface-2);
   padding: 8px 12px;
@@ -104,38 +138,36 @@
   text-align: center;
 }
 
-/* ── Ajustes ──────────────────────────────────────────────────────────────── */
-.ven-ajustes-list { display: flex; flex-direction: column; gap: 4px; }
-
-/* Header row for ajustes */
-.ven-ajuste-head {
-  display: grid;
-  grid-template-columns: 1fr 72px 82px 110px 36px;
-  gap: var(--space-2);
-  padding: 4px 10px 4px 14px;
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--color-text-muted);
+/* ── Ajustes ──────────────────────────────────────────────────────────────────
+   Misma caja que las líneas: UNA tabla con cabecera y filas separadas por un filete.
+   Antes cada ajuste era una tarjeta con borde y radio propios flotando dentro de la
+   sección, y parecía una tabla metida dentro de otro contenedor. */
+.ven-ajustes-list {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
-.ven-ajh-nombre { }
-.ven-ajh-modo   { text-align: center; }
-.ven-ajh-valor  { text-align: right; }
-.ven-ajh-monto  { text-align: right; }
-
-/* Data rows — same grid columns */
+.ven-ajuste-head,
 .ven-ajuste-row {
   display: grid;
   grid-template-columns: 1fr 72px 82px 110px 36px;
   gap: var(--space-2);
   align-items: center;
-  padding: 6px 10px 6px 10px;
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
 }
-.ven-aj-nombre { }
-.ven-aj-modo   { }
-.ven-aj-valor  { }
+.ven-ajuste-head {
+  background: var(--color-surface-2);
+  padding: 8px 12px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--color-text-muted);
+}
+.ven-ajh-modo   { text-align: center; }
+.ven-ajh-valor  { text-align: right; }
+.ven-ajh-monto  { text-align: right; }
+
+.ven-ajuste-row {
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border);
+}
 .ven-aj-monto  {
   text-align: right;
   font-size: var(--text-sm); font-weight: 600;
@@ -381,6 +413,13 @@
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius-md); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   min-width: 200px; z-index: 50; padding: var(--space-1) 0;
+}
+/* Qué se va a descargar, ANTES de clicar (mismo papel que `.rep-dl-ctx` en Reportes):
+   el error caro es bajarse un fichero creyendo que lleva el filtro puesto. */
+.ven-dropdown-ctx {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5;
+  border-bottom: 1px solid var(--color-divider); margin-bottom: var(--space-1);
 }
 .ven-dropdown-item {
   display: flex; align-items: center; gap: var(--space-2);
