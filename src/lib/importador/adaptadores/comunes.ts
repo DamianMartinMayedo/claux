@@ -101,6 +101,33 @@ export const defRolNuevas: DefaultDef = {
   opciones:    async () => ROLES_PL.map(r => ({ valor: r, etiqueta: ROL_PL_LABEL[r] })),
 }
 
+// ── Servicio que el archivo nombra y no existe ────────────────────────────────
+// Misma idea que el tercero, pero sin la opción de dejarlo vacío: una línea de
+// suscripción sin servicio no tiene sentido (a diferencia del proveedor de un
+// producto, que es opcional).
+
+export const CAMPO_SERVICIO_FALTANTE = 'servicio_faltante'
+
+/** Política del lote para el servicio que falta; sin ella, crearlo. */
+export function politicaServicio(valores: Record<string, string>): AccionResolucion {
+  return (valores[CAMPO_SERVICIO_FALTANTE] ?? '').trim().toUpperCase() === 'RECHAZAR'
+    ? 'RECHAZAR' : 'CREAR'
+}
+
+export function defServicioFaltante(): DefaultDef {
+  return {
+    campo:       CAMPO_SERVICIO_FALTANTE,
+    etiqueta:    'Si el servicio no existe',
+    obligatorio: true,
+    valor:       'CREAR',
+    ayuda:       'La ficha nueva se crea solo con el nombre y el precio de esa línea; lo demás se completa después en Servicios.',
+    opciones:    async () => [
+      { valor: 'CREAR',    etiqueta: 'Crear el servicio' },
+      { valor: 'RECHAZAR', etiqueta: 'Rechazar la fila' },
+    ],
+  }
+}
+
 /** Moneda por defecto. `campo` cambia según la entidad (moneda / moneda_defecto). */
 export function defMoneda(campo: string, obligatorio: boolean, ayuda?: string): DefaultDef {
   return {

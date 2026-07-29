@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { getPortalSession, puedeEditarAlgunModulo } from './auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { obtenerEmpresas } from './empresas'
-import { ADAPTADORES, DESHACEDORES } from '@/lib/importador/adaptadores'
+import { ADAPTADORES, DESHACEDORES, ETIQUETAS_AUXILIARES } from '@/lib/importador/adaptadores'
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
 import { construirXlsxBase64, texto, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
@@ -210,7 +210,12 @@ export async function validarLoteImport(
  */
 export async function aplicarLoteImport(
   lote_id: string, desde = 0, claves: string[] = [],
-): Promise<{ ok: boolean; error?: string; trozo?: TrozoAplicacion }> {
+): Promise<{
+  ok: boolean; error?: string; trozo?: TrozoAplicacion
+  /** Solo en la última tanda: lo que el lote creó DE PASO (proveedores, categorías,
+   *  clientes o servicios que nombraba una fila y no existían todavía). */
+  auxiliares?: { etiqueta: string; cantidad: number }[]
+}> {
   const r = await resolverCtx()
   if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
   const { data: lote } = await r.ctx.db.from('import_lotes').select('*')
@@ -235,6 +240,20 @@ export async function aplicarLoteImport(
       filas_error: await cuenta('ERROR'),
     }).eq('lote_id', lote_id).eq('client_id', r.ctx.client_id)
     revalidatePath(adaptador.revalidar)
+
+    // Lo que el lote creó DE PASO (fila_origen = 0): no es una fila del archivo,
+    // así que no sale en insertadas/actualizadas, y el operador tiene derecho a
+    // saber qué más tocó la importación antes de darla por revisada.
+    const { data: auxRows } = await r.ctx.db.from('import_lote_items')
+      .select('entidad').eq('lote_id', lote_id).eq('fila_origen', 0).eq('accion', 'INSERTADA')
+    const conteo = new Map<string, number>()
+    for (const fila of (auxRows ?? []) as { entidad: string }[]) {
+      conteo.set(fila.entidad, (conteo.get(fila.entidad) ?? 0) + 1)
+    }
+    const auxiliares = [...conteo.entries()]
+      .map(([entidad, cantidad]) => ({ etiqueta: ETIQUETAS_AUXILIARES[entidad] ?? entidad, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad)
+    return { ok: true, trozo, auxiliares }
   }
   return { ok: true, trozo }
 }

@@ -7,7 +7,8 @@ import { adaptadorPersonal } from './personal'
 import { adaptadorStockInicial } from './stock'
 import { adaptadorTesoreriaSaldo } from './tesoreria'
 import { adaptadorGastos, adaptadorCobros } from './gastos'
-import { DESHACEDORES_CATEGORIA } from './categorias'
+import { adaptadorSuscripciones } from './suscripciones'
+import { DESHACEDORES_CATEGORIA, ENT_CAT_GASTO, ENT_CAT_GASTO_REAC, ENT_CAT_PRODUCTO, ENT_CAT_PROD_REAC } from './categorias'
 import type { Adaptador } from '../tipos'
 
 export const ADAPTADORES: Record<string, Adaptador> = {
@@ -19,6 +20,7 @@ export const ADAPTADORES: Record<string, Adaptador> = {
   tesoreria_saldo: adaptadorTesoreriaSaldo,
   gastos:          adaptadorGastos,
   cobros:          adaptadorCobros,
+  suscripciones:   adaptadorSuscripciones,
 }
 
 /**
@@ -31,4 +33,20 @@ export const ADAPTADORES: Record<string, Adaptador> = {
 export const DESHACEDORES: Record<string, Pick<Adaptador, 'deshacer'>> = {
   ...ADAPTADORES,
   ...DESHACEDORES_CATEGORIA,
+}
+
+/**
+ * Etiquetas humanas de lo que un lote crea DE PASO (`fila_origen = 0`): el
+ * proveedor que un gasto nombraba, la categoría que no existía, el cliente o
+ * el servicio que una suscripción nombraba… Se enseñan en el resumen final
+ * para que el operador sepa qué más tocó la importación, no solo cuántas
+ * filas del archivo se escribieron.
+ */
+export const ETIQUETAS_AUXILIARES: Record<string, string> = {
+  terceros:  'Clientes o proveedores nuevos',
+  servicios: 'Servicios nuevos',
+  [ENT_CAT_GASTO]:      'Categorías de gasto nuevas',
+  [ENT_CAT_GASTO_REAC]: 'Categorías de gasto reactivadas',
+  [ENT_CAT_PRODUCTO]:      'Categorías de catálogo nuevas',
+  [ENT_CAT_PROD_REAC]:     'Categorías de catálogo reactivadas',
 }

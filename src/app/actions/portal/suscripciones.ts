@@ -4,9 +4,10 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo, accesoModulosSession } from './auth'
 import { construirPreview, construirCalendario, generarFacturasPeriodo } from '@/lib/facturacion-suscripciones'
-import { mapaTasas } from '@/lib/tasas'
+import { mapaTasas, monedaValida } from '@/lib/tasas'
+import { clienteDeEmpresa, serviciosSuscribibles, crearAcuerdoSuscripcion } from '@/lib/suscripciones-core'
 import {
-  estadoEfectivo, sumarPeriodo, hoyStr, generarSuscripcionId, generarLineaId, PERIODICIDADES,
+  estadoEfectivo, sumarPeriodo, hoyStr, generarLineaId, PERIODICIDADES,
   type PeriodicidadSub, type EstadoSub, type Suscripcion, type SuscripcionRow,
   type SuscripcionLineaRow,
   type SuscripcionesPageData, type FacturacionPreview, type CalendarioFacturacion,
@@ -199,28 +200,21 @@ export async function guardarSuscripcion(
 
   // La moneda SIEMPRE de las del cliente (nunca lista fija): una que no tiene no
   // cotiza y descuadraría la facturación.
-  const { data: mon } = await db.from('monedas')
-    .select('codigo').eq('client_id', session.client_id).eq('codigo', moneda).eq('activa', true).maybeSingle()
-  if (!mon) return { ok: false, error: 'Elige una moneda activa del negocio.' }
+  if (!(await monedaValida(db, session.client_id, moneda)))
+    return { ok: false, error: 'Elige una moneda activa del negocio.' }
 
   // Todos los servicios deben ser SERVICIOS suscribibles del cliente. Se comprueban
   // los del formulario contra la base de una vez: la lista del navegador no es
   // control de acceso, y aquí se cuelan `producto_id` por POST igual que uno solo.
-  const { data: srvs } = await db.from('products')
-    .select('producto_id').eq('client_id', session.client_id)
-    .eq('tipo', 'SERVICIO').eq('es_suscribible', true)
-    .in('producto_id', [...new Set(lineas.map(l => l.producto_id))])
-  const validos = new Set(((srvs ?? []) as { producto_id: string }[]).map(p => p.producto_id))
+  const validos = await serviciosSuscribibles(db, session.client_id, lineas.map(l => l.producto_id))
   if (lineas.some(l => !validos.has(l.producto_id)))
     return { ok: false, error: 'Algún servicio elegido no es suscribible.' }
 
   // El cliente tiene que ser de ESA empresa. Los terceros son por empresa, así que sin
   // esta guardia se podía atar una suscripción de la Empresa 1 a la ficha de la Empresa 3
   // y la factura —que sí pertenece a una empresa— saldría a nombre de un tercero ajeno.
-  const { data: ter } = await db.from('third_parties')
-    .select('tercero_id').eq('client_id', session.client_id)
-    .eq('tercero_id', cliente_id).eq('empresa_id', empresa_id).maybeSingle()
-  if (!ter) return { ok: false, error: 'Ese cliente no es de la empresa elegida.' }
+  if (!(await clienteDeEmpresa(db, session.client_id, cliente_id, empresa_id)))
+    return { ok: false, error: 'Ese cliente no es de la empresa elegida.' }
 
   const campos = {
     empresa_id, cliente_id, moneda, periodicidad,
@@ -246,15 +240,13 @@ export async function guardarSuscripcion(
   }
 
   if (!suscripcion_id_form) {
-    const suscripcion_id = generarSuscripcionId()
-    const { error } = await db.from('suscripciones').insert({
-      suscripcion_id,
-      client_id: session.client_id,
-      estado:    'ACTIVA',
-      created_at: new Date().toISOString(),
-      ...campos,
-    })
-    if (error) { console.error('[suscripciones] insert:', error); return { ok: false, error: `Error al crear: ${error.message}` } }
+    let suscripcion_id: string
+    try {
+      suscripcion_id = await crearAcuerdoSuscripcion(db, session.client_id, campos)
+    } catch (e) {
+      console.error('[suscripciones] insert:', e)
+      return { ok: false, error: `Error al crear: ${(e as Error).message}` }
+    }
 
     const { error: errLin } = await escribirLineas(suscripcion_id, session.client_id)
     if (errLin) {

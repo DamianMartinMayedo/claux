@@ -31,6 +31,7 @@ const ENTIDADES = [
   { id: 'terceros',        etiqueta: 'Clientes y proveedores', desc: 'Terceros con contacto y datos de pago.',      disponible: true, destino: '/portal/terceros' },
   { id: 'productos',       etiqueta: 'Productos',              desc: 'Catálogo físico: precios, costos y unidad.',   disponible: true, destino: '/portal/productos' },
   { id: 'servicios',       etiqueta: 'Servicios',              desc: 'Catálogo de servicios y suscribibles.',        disponible: true, destino: '/portal/servicios' },
+  { id: 'suscripciones',   etiqueta: 'Suscripciones',          desc: 'Acuerdos recurrentes por cliente. Requiere los servicios ya creados o creables al vuelo.', disponible: true, destino: '/portal/suscripciones' },
   { id: 'personal',        etiqueta: 'Personal',               desc: 'Trabajadores: identidad, puesto y contacto.',  disponible: true, destino: '/portal/rrhh' },
   { id: 'stock_inicial',   etiqueta: 'Stock inicial',          desc: 'Existencias a la fecha de corte. Requiere el catálogo y los almacenes ya creados.', disponible: true, destino: '/portal/inventario' },
   { id: 'tesoreria_saldo', etiqueta: 'Saldos de caja',         desc: 'Lo que hay en cada cuenta a la fecha de corte.', disponible: true, destino: '/portal/tesoreria' },
@@ -59,6 +60,32 @@ function fusionarPendientes(acumulado: Pendiente[], nuevos: Pendiente[]): Pendie
   }
   return [...mapa.values()]
 }
+
+/**
+ * Agrupa filas con error por motivo IDÉNTICO: la misma causa repetida en 40
+ * filas (p. ej. «no existe el proveedor "Otros"» rechazada fila a fila) se lee
+ * mejor como una línea con un contador que como 40 filas iguales.
+ */
+function agruparPorMotivo(filas: FilaMala[]): { motivo: string; filas: number[] }[] {
+  const mapa = new Map<string, number[]>()
+  for (const f of filas) {
+    const motivo = f.motivo ?? '—'
+    const ya = mapa.get(motivo)
+    if (ya) ya.push(f.fila)
+    else    mapa.set(motivo, [f.fila])
+  }
+  return [...mapa.entries()].map(([motivo, filas]) => ({ motivo, filas }))
+}
+
+/** «1, 2, 3 y 12 más» en vez de una lista que puede tener cientos de números. */
+function textoFilas(filas: number[]): string {
+  const MAX = 15
+  return filas.length <= MAX ? filas.join(', ') : `${filas.slice(0, MAX).join(', ')} y ${filas.length - MAX} más`
+}
+
+/** Por encima de esto, vincular una a una deja de ahorrar tiempo frente a
+ *  corregir el archivo de origen: se retira el panel y se enseña un resumen. */
+const TOPE_COTEJO = 50
 
 /** El valor del desplegable de un pendiente ⇄ la decisión que representa. */
 function aValor(r: Resolucion | undefined): string {
@@ -250,6 +277,9 @@ export default function ImportarWizard() {
   // así que revalidar y aplicar recorren el mismo camino.
   const [resoluciones, setResoluciones] = useState<Record<string, Resolucion>>({})
   const [resumen, setResumen]     = useState<{ insertadas: number; actualizadas: number; saltadas: number; errores: number } | null>(null)
+  // Lo que el lote creó DE PASO (proveedores, categorías, clientes o servicios
+  // que una fila nombraba y no existían): solo llega en la última tanda.
+  const [auxiliares, setAuxiliares] = useState<{ etiqueta: string; cantidad: number }[]>([])
 
   const [plantillas, setPlantillas] = useState<{ plantilla_id: string; nombre: string }[]>([])
   const [nombrePlantilla, setNombrePlantilla] = useState('')
@@ -466,6 +496,7 @@ export default function ImportarWizard() {
     setCargando(true)
     const ld = toastLoading('Importando…')
     const acc = { insertadas: 0, actualizadas: 0, saltadas: 0, errores: 0 }
+    let aux: { etiqueta: string; cantidad: number }[] = []
     let desde: number | null = 0
     let claves: string[] = []
     while (desde !== null) {
@@ -474,17 +505,20 @@ export default function ImportarWizard() {
       const t = res.trozo
       acc.insertadas += t.insertadas; acc.actualizadas += t.actualizadas
       acc.saltadas   += t.saltadas;   acc.errores      += t.errores
+      if (res.auxiliares) aux = res.auxiliares   // solo llega en la última tanda
       claves = t.claves
       desde  = t.siguiente
       setProgreso(desde === null ? null : { hechas: desde, total: resultado?.total ?? total })
     }
     await ld.dismiss()
     setCargando(false)
-    setResumen(acc); setPaso('hecho')
+    setResumen(acc); setAuxiliares(aux); setPaso('hecho')
   }
 
   /** Solo los errores de verdad: lo que espera una decisión se resuelve arriba. */
   const malas = resultado?.filas.filter(f => !f.decidir) ?? []
+  const erroresAgrupados = agruparPorMotivo(malas)
+  const urgentes = resultado?.pendientes.filter(p => p.decidir) ?? []
 
   function descargarErrores() {
     descargarCsv(`errores-${loteId}.csv`,
@@ -495,7 +529,7 @@ export default function ImportarWizard() {
     setPaso('entidad'); setEntidad(''); setCampos([]); setDefs([]); setLoteId(''); setCabeceras([]); setTotal(0)
     setColumnas({}); setGlobales({}); setResultado(null); setResumen(null); setPolitica('SALTAR')
     setPlantillas([]); setNombrePlantilla(''); setDeshecho(null); setAvisos([]); setProgreso(null)
-    setResoluciones({})
+    setResoluciones({}); setAuxiliares([])
   }
 
   const etiquetaProgreso = progreso ? `${progreso.hechas} de ${progreso.total}` : ''
@@ -704,16 +738,48 @@ export default function ImportarWizard() {
 
           {/* Nombres que el archivo trae y no cuadran con nada. Se pregunta en vez
               de emparejar por parecido: clasificar un gasto en la categoría
-              equivocada mete dinero en el renglón que no toca del informe. */}
+              equivocada mete dinero en el renglón que no toca del informe. Por
+              encima del tope, vincular una a una deja de ahorrar tiempo frente a
+              corregir el archivo de origen: se retira el panel interactivo y se
+              enseña un resumen agrupado, igual que la tabla de errores de abajo. */}
           {resultado.pendientes.length > 0 && (
-            <PanelPendientes
-              pendientes={resultado.pendientes}
-              resoluciones={resoluciones}
-              onDecidir={decidir}
-              onRevalidar={() => validar(resoluciones)}
-              cargando={cargando}
-              etiquetaProgreso={etiquetaProgreso}
-            />
+            urgentes.length > TOPE_COTEJO ? (
+              <div className="imprt-pend">
+                <div className="alert alert-warning">
+                  <AlertTriangle size={16} strokeWidth={2} />
+                  Hay {urgentes.length} incompatibilidades distintas por resolver: son demasiadas para
+                  vincularlas aquí una a una. Corrige el archivo de origen (o divídelo en partes más
+                  pequeñas) y vuelve a subirlo.
+                </div>
+                <div className="card-table">
+                  <div className="table-wrapper">
+                    <table className="table">
+                      <thead><tr><th className="col-num">Filas</th><th>Qué no cuadra</th></tr></thead>
+                      <tbody>
+                        {urgentes.map(p => (
+                          <tr key={p.clave}>
+                            <td data-label="Filas" className="col-num">{p.filas}</td>
+                            <td data-label="Qué no cuadra">
+                              «{p.texto}» — {p.etiqueta_tipo.toLowerCase()}{p.ambito_etiqueta ? ` ${p.ambito_etiqueta}` : ''}
+                              {p.causa === 'VARIAS' ? ' (hay más de una con ese nombre)' : ''}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <PanelPendientes
+                pendientes={resultado.pendientes}
+                resoluciones={resoluciones}
+                onDecidir={decidir}
+                onRevalidar={() => validar(resoluciones)}
+                cargando={cargando}
+                etiquetaProgreso={etiquetaProgreso}
+              />
+            )
           )}
 
           {/* Totales de lo que se va a escribir: un decimal mal leído se ve aquí. */}
@@ -743,12 +809,15 @@ export default function ImportarWizard() {
               <div className="card-table">
                 <div className="table-wrapper">
                   <table className="table">
-                    <thead><tr><th className="col-num">Fila</th><th>Motivo</th></tr></thead>
+                    <thead><tr><th className="col-num">Filas</th><th>Motivo</th></tr></thead>
                     <tbody>
-                      {malas.slice(0, 100).map(f => (
-                        <tr key={f.fila}>
-                          <td data-label="Fila" className="col-num">{f.fila}</td>
-                          <td data-label="Motivo">{f.motivo}</td>
+                      {erroresAgrupados.map(g => (
+                        <tr key={g.motivo}>
+                          <td data-label="Filas" className="col-num">{g.filas.length === 1 ? g.filas[0] : `${g.filas.length} filas`}</td>
+                          <td data-label="Motivo">
+                            {g.motivo}
+                            {g.filas.length > 1 && <span className="input-hint"> — {textoFilas(g.filas)}</span>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -781,6 +850,21 @@ export default function ImportarWizard() {
             <div className="imprt-tile"><strong>{resumen.saltadas}</strong><span>Saltadas</span></div>
             <div className="imprt-tile"><strong>{resumen.errores}</strong><span>Con error</span></div>
           </div>
+
+          {/* Lo que el archivo NOMBRABA y no existía todavía (un cliente, un
+              proveedor, una categoría, un servicio…): no es una fila del
+              archivo, así que no sale arriba, y conviene saber qué más tocó
+              la importación antes de darla por revisada. */}
+          {auxiliares.length > 0 && (
+            <>
+              <p className="modal-body-text">De paso, esta importación creó (o reactivó):</p>
+              <div className="imprt-tiles">
+                {auxiliares.map(a => (
+                  <div key={a.etiqueta} className="imprt-tile"><strong>{a.cantidad}</strong><span>{a.etiqueta}</span></div>
+                ))}
+              </div>
+            </>
+          )}
 
           {deshecho && (
             deshecho.intactas === 0
