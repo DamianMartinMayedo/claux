@@ -24,6 +24,7 @@
 // No es 'use server': lo consume la server action `exportarListado`.
 
 import { estadoCobro, type Tramo } from '@/lib/cobranza-core'
+import { MOTIVO_LABEL, type MotivoTipo } from '@/app/actions/portal/_inventario-helpers'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
 import type { ValorCelda } from './csv'
 
@@ -62,6 +63,8 @@ export interface FiltroExport {
   categoria?:  string
   cuenta_id?:  string
   almacen_id?: string
+  /** Acta de un conteo físico concreto (mig. 159). */
+  conteo_id?:  string
   /** CxC/CxP: tramo de antigüedad de la deuda (`AL_DIA`, `V_1_30`…). */
   tramo?:      string
   /** Los listados esconden lo archivado salvo que se pida verlo. */
@@ -100,6 +103,13 @@ async function leer(
   iguales?: Record<string, string | boolean | undefined>,
   /** Pertenencias a un conjunto (una categoría y sus hijas). Se ignora lo vacío. */
   enLista?: Record<string, string[] | undefined>,
+  /**
+   * «Cualquiera de estos campos vale esto» (OR entre campos distintos). Existe por la
+   * TRANSFERENCIA: un movimiento toca el almacén como origen (`almacen_id`) o como
+   * destino (`almacen_destino_id`), así que filtrar por igualdad dejaba fuera de la
+   * descarga las entradas por traspaso que la pantalla sí enseña. Se ignora lo vacío.
+   */
+  algunoIgual?: Record<string, string | undefined>,
 ): Promise<Record<string, unknown>[]> {
   let query = db.from(tabla)
     .select(columnas)
@@ -111,6 +121,12 @@ async function leer(
   for (const [campo, valores] of Object.entries(enLista ?? {})) {
     if (!valores?.length) continue
     query = query.in(campo, valores)
+  }
+  // Un `.or()` por bloque: PostgREST los combina con AND entre sí, que es lo que se
+  // quiere (este OR acota, no ensancha lo que ya filtran los demás).
+  const alguno = Object.entries(algunoIgual ?? {}).filter(([, v]) => v !== undefined && v !== '')
+  if (alguno.length) {
+    query = query.or(alguno.map(([campo, valor]) => `${campo}.eq.${valor}`).join(','))
   }
   // El rango se aplica EN LA CONSULTA, igual que en los listados: exportar «las facturas
   // de este período» no puede significar traerse el histórico y recortarlo en memoria.
@@ -462,9 +478,13 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
           {
             empresa_id: filtro?.empresa_id,
             tipo:       filtro?.tipo,
-            almacen_id: filtro?.almacen_id,
             producto_id: filtro?.categoria,
-          }),
+          },
+          undefined,
+          // El almacén cuenta como ORIGEN o como DESTINO, igual que en la pantalla
+          // (`obtenerAlmacenDetalle` y el filtro de Movimientos): con `.eq()` a secas, una
+          // transferencia recibida salía en la tabla y faltaba en el fichero.
+          { almacen_id: filtro?.almacen_id, almacen_destino_id: filtro?.almacen_id }),
         diccionario(db, 'products',  cid, 'producto_id', 'nombre'),
         diccionario(db, 'almacenes', cid, 'almacen_id',  'nombre'),
         diccionario(db, 'empresas',  cid, 'empresa_id',  'nombre'),
@@ -477,6 +497,248 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         f.cantidad as number, f.costo_unitario as number,
         f.motivo as string, f.origen as string,
         empresas.get(f.empresa_id as string) ?? '',
+      ])
+    },
+  },
+  {
+    // La foto del inventario, que era justo la que no se podía descargar: se
+    // exportaban movimientos, productos, almacenes y compras, pero no «qué tengo y
+    // cuánto vale», que es lo que se lleva uno al conteo físico.
+    clave: 'stock',
+    etiqueta: 'Existencias',
+    modulos: ['inventario'],
+    cabeceras: ['Código', 'Producto', 'Almacén', 'Empresa', 'Unidad', 'Cantidad',
+      'Mínimo', 'Coste unitario', 'Moneda', 'Valor'],
+    cargar: async (db, cid, filtro) => {
+      const [filas, prodRes, almRes, cfgRes, empresas, monRes] = await Promise.all([
+        leer(db, 'stock_almacenes', cid, 'producto_id, almacen_id, cantidad', 'producto_id',
+          filtro, undefined, undefined,
+          { almacen_id: filtro?.almacen_id }),
+        db.from('products')
+          .select('producto_id, codigo, nombre, unidad, stock_minimo, costos, tipo, estado')
+          .eq('client_id', cid),
+        db.from('almacenes').select('almacen_id, nombre, empresa_id').eq('client_id', cid),
+        db.from('producto_almacen_config').select('producto_id, almacen_id, stock_minimo')
+          .eq('client_id', cid),
+        diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
+        db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
+      ])
+
+      type Prd = { producto_id: string; codigo: string; nombre: string; unidad: string; stock_minimo: number; costos: Record<string, number> | null; tipo: string; estado: string }
+      const prodDe = new Map(((prodRes.data ?? []) as Prd[]).map(p => [p.producto_id, p]))
+      const almDe  = new Map(((almRes.data ?? []) as { almacen_id: string; nombre: string; empresa_id: string }[])
+        .map(a => [a.almacen_id, a]))
+      const minDe  = new Map(((cfgRes.data ?? []) as { producto_id: string; almacen_id: string; stock_minimo: number | null }[])
+        .filter(c => c.stock_minimo != null)
+        .map(c => [`${c.producto_id}@${c.almacen_id}`, Number(c.stock_minimo)]))
+      // La moneda de valoración sale de las del CLIENTE, nunca de una lista fija.
+      const monedas = ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo)
+
+      const out: ValorCelda[][] = []
+      for (const f of filas) {
+        const p = prodDe.get(f.producto_id as string)
+        const a = almDe.get(f.almacen_id as string)
+        if (!p || p.tipo === 'SERVICIO') continue
+        const cantidad = Number(f.cantidad)
+        if (Math.abs(cantidad) <= 0.0005) continue
+        const clave  = `${f.producto_id}@${f.almacen_id}`
+        const minimo = minDe.get(clave) ?? Number(p.stock_minimo ?? 0)
+        // Primera moneda del cliente con coste registrado; sin coste van vacías, no a 0
+        // (un producto sin coste no vale 0, es que no se sabe).
+        const moneda = monedas.find(m => p.costos?.[m] != null) ?? ''
+        const coste  = moneda ? Number(p.costos![moneda]) : null
+        out.push([
+          p.codigo, p.nombre,
+          a?.nombre ?? (f.almacen_id as string),
+          a ? (empresas.get(a.empresa_id) ?? '') : '',
+          p.unidad ?? '', cantidad, minimo,
+          coste ?? '', moneda,
+          coste != null && cantidad > 0 ? Math.round(cantidad * coste * 100) / 100 : '',
+        ])
+      }
+      return out
+    },
+  },
+  {
+    // La hoja de conteo: lo mismo que «Existencias» pero SIN la cantidad, con la
+    // casilla en blanco para apuntar a mano. Es una entrada aparte y no un `formato`
+    // porque `formato` ya significa csv/xlsx en el motor; aquí lo que cambia es qué
+    // columnas se llevan, que es exactamente lo que decide una entrada del registro.
+    // El que cuenta con el papel delante llena la última columna y luego teclea el
+    // resultado en /portal/almacenes/<id>/conteo.
+    clave: 'hoja_conteo',
+    etiqueta: 'Hoja de conteo',
+    modulos: ['inventario'],
+    cabeceras: ['Código', 'Producto', 'Almacén', 'Unidad', 'Contado'],
+    cargar: async (db, cid, filtro) => {
+      const [filas, prodRes, almRes] = await Promise.all([
+        leer(db, 'stock_almacenes', cid, 'producto_id, almacen_id, cantidad', 'producto_id',
+          filtro, undefined, undefined,
+          { almacen_id: filtro?.almacen_id }),
+        db.from('products').select('producto_id, codigo, nombre, unidad, tipo, estado').eq('client_id', cid),
+        db.from('almacenes').select('almacen_id, nombre').eq('client_id', cid),
+      ])
+      type Prd = { producto_id: string; codigo: string; nombre: string; unidad: string; tipo: string; estado: string }
+      const prodDe = new Map(((prodRes.data ?? []) as Prd[]).map(p => [p.producto_id, p]))
+      const almDe  = new Map(((almRes.data ?? []) as { almacen_id: string; nombre: string }[])
+        .map(a => [a.almacen_id, a.nombre]))
+
+      const out: ValorCelda[][] = []
+      for (const f of filas) {
+        const p = prodDe.get(f.producto_id as string)
+        if (!p || p.tipo === 'SERVICIO' || p.estado !== 'ACTIVO') continue
+        if (Math.abs(Number(f.cantidad)) <= 0.0005) continue
+        out.push([
+          p.codigo, p.nombre,
+          almDe.get(f.almacen_id as string) ?? (f.almacen_id as string),
+          p.unidad ?? '',
+          '',   // la casilla que se llena a mano
+        ])
+      }
+      // Por almacén y luego por nombre: es el orden en que se recorre un estante.
+      return out.sort((a, b) =>
+        String(a[2]).localeCompare(String(b[2]), 'es') || String(a[1]).localeCompare(String(b[1]), 'es'))
+    },
+  },
+  {
+    // El ACTA de un conteo: qué faltó, qué sobró, por qué y cuánto cuesta (mig. 159).
+    // Es el documento que el dueño puede enseñar y guardar; la «hoja de conteo» de
+    // arriba es lo contrario, el papel en blanco con el que se va a contar.
+    //
+    // La diferencia sale del LEDGER cuando el conteo ya se aplicó (`referencia_id`),
+    // no de `contado − esperado`: el stock se movió mientras se contaba, así que la
+    // única diferencia real es la que se ajustó. En un borrador todavía no hay ajuste,
+    // así que se compara con el stock de ahora, que es lo que haría al aplicarse.
+    //
+    // LLEVA LA HOJA ENTERA, contado y sin contar. Solo traía las líneas contadas, y eso
+    // convertía la descarga en un resumen de descuadres: el dueño no podía ver qué pasa
+    // con TODOS sus productos ni, sobre todo, CUÁLES SE QUEDARON SIN CONTAR — que en un
+    // conteo a medias es la información más útil que hay. Lo no contado sale con «Sin
+    // contar» y sin diferencia: no es un cero, es que nadie fue a ese estante.
+    clave: 'acta_conteo',
+    etiqueta: 'Acta del conteo',
+    archivo: f => `acta_conteo_${f?.conteo_id ?? ''}`,
+    modulos: ['inventario'],
+    cabeceras: ['Código', 'Producto', 'Unidad', 'Sistema', 'Contado', 'Diferencia', 'Causa', 'Explicación', 'Coste unitario', 'Valor de la diferencia'],
+    cargar: async (db, cid, filtro) => {
+      const conteo_id = filtro?.conteo_id
+      if (!conteo_id) return []
+
+      const { data: cab } = await db.from('conteos').select('almacen_id, estado')
+        .eq('client_id', cid).eq('conteo_id', conteo_id).maybeSingle()
+      if (!cab) return []
+
+      const [lineasRes, prodRes, stockRes, movRes, monRes] = await Promise.all([
+        db.from('conteo_lineas').select('producto_id, contado, motivo_tipo, nota')
+          .eq('client_id', cid).eq('conteo_id', conteo_id),
+        db.from('products').select('producto_id, codigo, nombre, unidad, costos').eq('client_id', cid),
+        db.from('stock_almacenes').select('producto_id, cantidad')
+          .eq('client_id', cid).eq('almacen_id', cab.almacen_id as string),
+        db.from('movimientos_inventario').select('producto_id, cantidad')
+          .eq('client_id', cid).eq('referencia_id', conteo_id).eq('tipo', 'AJUSTE'),
+        db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
+      ])
+
+      type Prd = { producto_id: string; codigo: string; nombre: string; unidad: string; costos: Record<string, number> | null }
+      const prodDe = new Map(((prodRes.data ?? []) as Prd[]).map(p => [p.producto_id, p]))
+      const vivoDe = new Map(((stockRes.data ?? []) as { producto_id: string; cantidad: number }[])
+        .map(s => [s.producto_id, Number(s.cantidad)]))
+      const aplicadoDe = new Map<string, number>()
+      for (const m of (movRes.data ?? []) as { producto_id: string; cantidad: number }[]) {
+        aplicadoDe.set(m.producto_id, (aplicadoDe.get(m.producto_id) ?? 0) + Number(m.cantidad))
+      }
+
+      type Lin = { producto_id: string; contado: number | null; motivo_tipo: string | null; nota: string | null }
+      const lineas = (lineasRes.data ?? []) as Lin[]
+      const moneda = ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo)
+        .find(m => lineas.some(l => prodDe.get(l.producto_id)?.costos?.[m] != null)) ?? null
+
+      const out: ValorCelda[][] = []
+      for (const l of lineas) {
+        const p = prodDe.get(l.producto_id)
+        if (!p) continue
+        const costo = moneda ? (p.costos?.[moneda] ?? null) : null
+        const vivo  = vivoDe.get(l.producto_id) ?? 0
+
+        // Sin contar: se dice con esas dos palabras y las columnas de diferencia van
+        // VACÍAS. Un 0 en «Diferencia» diría «cuadra», que es la conclusión contraria.
+        if (l.contado == null) {
+          out.push([
+            p.codigo, p.nombre, p.unidad ?? '',
+            vivo, 'Sin contar', '', '', '',
+            costo != null ? `${costo} ${moneda}` : '', '',
+          ])
+          continue
+        }
+
+        const contado = Number(l.contado)
+        const dif     = aplicadoDe.get(l.producto_id) ?? (contado - vivo)
+        out.push([
+          p.codigo, p.nombre, p.unidad ?? '',
+          Math.round((contado - dif) * 1000) / 1000,
+          contado,
+          Math.round(dif * 1000) / 1000,
+          l.motivo_tipo ? (MOTIVO_LABEL[l.motivo_tipo as MotivoTipo] ?? l.motivo_tipo) : '',
+          l.nota ?? '',
+          costo != null ? `${costo} ${moneda}` : '',
+          costo != null ? `${Math.round(dif * costo * 100) / 100} ${moneda}` : '',
+        ])
+      }
+      // Orden: primero lo que descuadra (faltantes arriba, que es lo que hay que
+      // explicar), luego lo que cuadra y AL FINAL lo que no se contó — que no es un
+      // resultado del conteo, es una tarea pendiente. Dentro de cada grupo, por nombre.
+      const rango = (f: ValorCelda[]) => f[5] === '' ? 2 : Number(f[5]) === 0 ? 1 : 0
+      return out.sort((a, b) =>
+        rango(a) - rango(b)
+        || (rango(a) === 0 ? Number(a[5]) - Number(b[5]) : 0)
+        || String(a[1]).localeCompare(String(b[1]), 'es'))
+    },
+  },
+  {
+    // El HISTORIAL de conteos de un almacén: cuándo se contó, quién y cómo salió. Es lo
+    // que pide la pestaña «Conteos», y no lo cubría ninguna entrada: `acta_conteo` es UN
+    // conteo (el detalle de sus líneas) y este es la lista. Sin él, el botón de descarga
+    // de esa pestaña se llevaba los movimientos del almacén — otra cosa, y sin decirlo.
+    clave: 'conteos',
+    etiqueta: 'Conteos',
+    modulos: ['inventario'],
+    cabeceras: ['Fecha', 'Conteo', 'Almacén', 'Contado por', 'Contadas', 'Diferencias',
+      'Estado', 'Aplicado', 'Notas'],
+    cargar: async (db, cid, filtro) => {
+      const [filas, almacenes] = await Promise.all([
+        leer(db, 'conteos', cid,
+          'conteo_id, almacen_id, fecha, estado, contado_por, notas, aplicado_at', 'fecha',
+          filtro, 'fecha', ['contado_por', 'notas'],
+          { almacen_id: filtro?.almacen_id }),
+        diccionario(db, 'almacenes', cid, 'almacen_id', 'nombre'),
+      ])
+      if (!filas.length) return []
+
+      // Contadas y descuadres, del mismo tirón para todos. Una línea CON CAUSA es, por
+      // definición, una que descuadró (la causa solo se pide cuando hay diferencia), así
+      // que no hay que reconstruir el descuadre de cada conteo viejo contra el stock de
+      // hoy — que además ya no es el de entonces.
+      const ids = filas.map(f => f.conteo_id as string)
+      const { data: lineas } = await db.from('conteo_lineas')
+        .select('conteo_id, motivo_tipo')
+        .eq('client_id', cid).in('conteo_id', ids).not('contado', 'is', null)
+      const contadas = new Map<string, number>()
+      const difs     = new Map<string, number>()
+      for (const l of (lineas ?? []) as { conteo_id: string; motivo_tipo: string | null }[]) {
+        contadas.set(l.conteo_id, (contadas.get(l.conteo_id) ?? 0) + 1)
+        if (l.motivo_tipo) difs.set(l.conteo_id, (difs.get(l.conteo_id) ?? 0) + 1)
+      }
+
+      return filas.map(f => [
+        f.fecha as string,
+        f.conteo_id as string,
+        almacenes.get(f.almacen_id as string) ?? (f.almacen_id as string),
+        (f.contado_por as string) ?? '',
+        contadas.get(f.conteo_id as string) ?? 0,
+        difs.get(f.conteo_id as string) ?? 0,
+        f.estado === 'APLICADO' ? 'Aplicado' : 'Borrador',
+        (f.aplicado_at as string)?.slice(0, 10) ?? '',
+        (f.notas as string) ?? '',
       ])
     },
   },
@@ -656,6 +918,53 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         f.fecha as string, cajas.get(f.caja_id as string) ?? (f.caja_id as string),
         f.moneda as string, f.total as number, f.medio_pago as string, f.estado as string,
       ])
+    },
+  },
+  {
+    // Las LÍNEAS de las ventas del TPV: la pestaña «Movimientos de stock» de Operaciones.
+    // No existía, así que el botón de esa pestaña se llevaba los TICKETS
+    // (`operaciones_caja`), que es la otra pestaña: el mismo botón, otro archivo, y sin
+    // decirlo en ninguna parte.
+    clave: 'lineas_caja',
+    etiqueta: 'Movimientos de stock del punto de venta',
+    modulos: ['caja'],
+    cabeceras: ['Fecha', 'Punto de venta', 'Producto', 'Cantidad', 'Precio unitario', 'Moneda'],
+    cargar: async (db, cid, filtro) => {
+      // Los tickets primero: la línea no tiene fecha ni punto de venta propios —los
+      // hereda del suyo— y es el ticket el que sabe si se anuló.
+      const [tickets, cajas] = await Promise.all([
+        leer(db, 'caja_tickets', cid, 'ticket_uuid, fecha, caja_id, moneda, estado', 'fecha',
+          filtro, 'fecha', undefined, { caja_id: filtro?.cuenta_id }),
+        diccionario(db, 'cajas', cid, 'caja_id', 'nombre'),
+      ])
+      // Un ticket ANULADO no movió stock (se rectificó): sus líneas no son un movimiento.
+      // Mismo criterio que la pantalla — si el archivo las trajera, no cuadraría con ella.
+      const vigentes = tickets.filter(t => (t.estado as string) !== 'ANULADO')
+      if (!vigentes.length) return []
+
+      const tkDe = new Map(vigentes.map(t => [t.ticket_uuid as string, t]))
+      const { data: lineas } = await db.from('caja_ticket_lineas')
+        .select('ticket_uuid, descripcion, cantidad, precio_unitario')
+        .eq('client_id', cid).in('ticket_uuid', [...tkDe.keys()])
+
+      // La búsqueda se aplica AQUÍ y no en `leer`: en esta pantalla el texto busca en el
+      // nombre del producto, que vive en la línea y no en el ticket.
+      const q = (filtro?.q ?? '').trim().toLowerCase()
+      type Lin = { ticket_uuid: string; descripcion: string; cantidad: number; precio_unitario: number }
+      return ((lineas ?? []) as Lin[])
+        .map(l => ({ l, tk: tkDe.get(l.ticket_uuid)! }))
+        .filter(({ l, tk }) => !q
+          || (l.descripcion ?? '').toLowerCase().includes(q)
+          || (cajas.get(tk.caja_id as string) ?? '').toLowerCase().includes(q))
+        .sort((a, b) => String(a.tk.fecha).localeCompare(String(b.tk.fecha)))
+        .map(({ l, tk }) => [
+          tk.fecha as string,
+          cajas.get(tk.caja_id as string) ?? (tk.caja_id as string),
+          l.descripcion ?? '',
+          Number(l.cantidad),
+          Number(l.precio_unitario),
+          tk.moneda as string,
+        ])
     },
   },
   {

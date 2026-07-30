@@ -58,13 +58,15 @@ export default function OperacionesView({ data }: Props) {
           <h1 className="page-title">Operaciones</h1>
           <p className="page-subtitle">Detalle de las ventas sincronizadas desde tus puntos de venta, una a una.</p>
         </div>
-        {/* Los movimientos de stock del TPV se descargan desde Inventario, que es su
-            listado de verdad; aquí se exporta lo que esta página es: las ventas. */}
+        {/* La descarga sigue a la PESTAÑA y lo dice en el desplegable. Antes bajaba
+            siempre los tickets: desde «Movimientos de stock» te llevabas las ventas, con
+            el mismo botón y sin un texto que lo desmintiera. */}
         <div className="tes-header-actions">
           <ExportarMenu
-            clave="operaciones_caja"
+            clave={tab === 'ventas' ? 'operaciones_caja' : 'lineas_caja'}
             filtro={{ q: search, cuenta_id: punto }}
             resumen={[
+              tab === 'ventas' ? 'Ventas' : 'Movimientos de stock',
               punto && cajaNombre(punto),
               search && `«${search}»`,
             ].filter((x): x is string => Boolean(x))}

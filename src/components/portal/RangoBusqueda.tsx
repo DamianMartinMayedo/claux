@@ -22,15 +22,21 @@ interface Props {
   /** Rango realmente aplicado por el servidor (no lo que pide la URL). */
   desde: string
   hasta: string
-  q:     string
+  q?:    string
   /** Placeholder del buscador: cada listado busca por cosas distintas. */
   placeholder?: string
   /** Presets a ofrecer. CxC/CxP no ofrece rango: pasa `[]` y solo queda el buscador. */
   presets?: PresetRango[]
+  /**
+   * Solo el rango, sin buscador. El simétrico de `presets={[]}`: un listado que
+   * filtra por fechas pero cuyo servidor no busca por texto (Compras, Movimientos)
+   * no puede enseñar una caja de búsqueda que no hace nada.
+   */
+  sinBuscador?: boolean
 }
 
 export default function RangoBusqueda({
-  desde, hasta, q, placeholder = 'Buscar…', presets,
+  desde, hasta, q = '', placeholder = 'Buscar…', presets, sinBuscador,
 }: Props) {
   const router  = useRouter()
   const params  = useSearchParams()
@@ -64,7 +70,10 @@ export default function RangoBusqueda({
   }
 
   return (
-    <div className="rango-busqueda">
+    // Sin buscador NO ocupa la fila entera: si la sigue reclamando, el filtro que la
+    // vista pone a su lado (el estado, en Compras) cae a una segunda línea suelto y
+    // parece de otro sitio. Con buscador sí la ocupa, que la caja necesita el ancho.
+    <div className={`rango-busqueda${sinBuscador ? ' rango-busqueda-compacto' : ''}`}>
       {lista.length > 0 && (
         <div className="rango-presets" role="group" aria-label="Rango de fechas">
           {lista.map(p => (
@@ -105,27 +114,29 @@ export default function RangoBusqueda({
         </div>
       )}
 
-      <form className="ter-search-wrap" onSubmit={buscar}>
-        <Search size={14} strokeWidth={2} />
-        <input
-          className="ter-search"
-          type="search"
-          value={texto}
-          aria-label={placeholder}
-          placeholder={placeholder}
-          onChange={e => setTexto(e.target.value)}
-        />
-        {q && (
-          <button
-            type="button"
-            className="rango-limpiar"
-            onClick={() => { setTexto(''); navegar({ q: null }) }}
-            aria-label="Quitar la búsqueda"
-          >
-            <X size={13} strokeWidth={2.5} />
-          </button>
-        )}
-      </form>
+      {!sinBuscador && (
+        <form className="ter-search-wrap" onSubmit={buscar}>
+          <Search size={14} strokeWidth={2} />
+          <input
+            className="ter-search"
+            type="search"
+            value={texto}
+            aria-label={placeholder}
+            placeholder={placeholder}
+            onChange={e => setTexto(e.target.value)}
+          />
+          {q && (
+            <button
+              type="button"
+              className="rango-limpiar"
+              onClick={() => { setTexto(''); navegar({ q: null }) }}
+              aria-label="Quitar la búsqueda"
+            >
+              <X size={13} strokeWidth={2.5} />
+            </button>
+          )}
+        </form>
+      )}
     </div>
   )
 }
