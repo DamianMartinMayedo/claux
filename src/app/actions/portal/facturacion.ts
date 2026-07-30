@@ -26,6 +26,8 @@ export interface FacturacionData {
   precio_mensual:   number
   ciclo:            string
   fecha_expiracion: string | null
+  fecha_fin_gracia: string | null
+  email_soporte:    string
   pagos:            PagoPortal[]
 }
 
@@ -39,7 +41,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
 
   const [{ data: cliente }, { data: pagos }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
+      .select('nombre_empresa, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
       .eq('client_id', session.client_id)
       .single(),
     db.from('payments')
@@ -54,6 +56,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
   const ciclo       = cliente.ciclo_facturacion ?? 'mensual'
   const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const suscripcion = suscripcionLabel(precioMes, ciclo, descuento)
+  const emailSoporte = await leerSetting('email_soporte', 'soporte@claux.es')
 
   return {
     client_id:        session.client_id,
@@ -63,6 +66,8 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
     precio_mensual:   precioMes,
     ciclo,
     fecha_expiracion: cliente.fecha_expiracion ?? null,
+    fecha_fin_gracia: cliente.fecha_fin_gracia ?? null,
+    email_soporte:    emailSoporte,
     pagos:            (pagos ?? []) as PagoPortal[],
   }
 }

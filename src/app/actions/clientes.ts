@@ -12,6 +12,7 @@ import { diasCiclo, importeCiclo } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
 import { avisarClienteNuevo } from '@/lib/notificaciones/admin/eventos'
+import { notificarGraciaActivada } from '@/lib/notificaciones/eventos'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
 
@@ -557,6 +558,13 @@ export async function aplicarGracia(formData: FormData) {
     entity_id:   client_id,
     action:      'gracia',
     description: `Aplicó período especial al cliente ${client_id} — ${dias} días — Motivo: ${motivo}`,
+  })
+
+  // Aviso en la campana del portal del cliente: sin esto, lo único que ve es el
+  // "tu suscripción venció" del cron del día siguiente, sin ninguna pista de que
+  // ya tiene acceso extendido.
+  after(async () => {
+    await notificarGraciaActivada({ clientId: client_id, fechaFinGracia: toDateStr(fechaGracia) })
   })
 
   revalidatePath('/admin/clientes')

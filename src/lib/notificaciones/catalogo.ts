@@ -64,6 +64,11 @@ export const CATALOGO = {
     descripcion: 'Tu suscripción caducó y el acceso puede cortarse.',
     umbrales: ['vencido'],
   },
+  periodo_gracia_activado: {
+    categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
+    etiqueta: 'Se activó tu período especial',
+    descripcion: 'Te avisamos cuando te damos más tiempo para ponerte al día sin perder el acceso.',
+  },
   pago_confirmado: {
     categoria: 'suscripcion', modulo: null, severidad: 'info', implementado: true,
     etiqueta: 'Pago confirmado',

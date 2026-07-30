@@ -41,7 +41,13 @@ function diasRestantes(fechaStr: string | null): number | null {
 
 export default function FacturacionView({ data }: { data: FacturacionData }) {
   const { pageItems, ...pag } = usePagination(data.pagos)
-  const dias = diasRestantes(data.fecha_expiracion)
+
+  // En GRACIA, lo vigente es `fecha_fin_gracia` — la suscripción de base ya venció
+  // (por eso el cliente está en gracia) y seguir mirando `fecha_expiracion` es lo
+  // que hacía salir "Expirado" con el acceso todavía activo.
+  const enGracia = data.estado === 'GRACIA' && !!data.fecha_fin_gracia
+  const fechaVigencia = enGracia ? data.fecha_fin_gracia : data.fecha_expiracion
+  const dias = diasRestantes(fechaVigencia)
 
   const diasCls =
     dias === null         ? ''                :
@@ -72,8 +78,20 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
         </div>
       </div>
 
-      {/* ── Alerta si vence pronto o ya venció ── */}
-      {dias !== null && dias <= 7 && (
+      {/* ── Alerta: período especial, o vence pronto / ya venció ── */}
+      {enGracia ? (
+        <div className="alert alert-warning alert-cta">
+          <span className="alert-cta-texto">
+            Tu suscripción venció, pero tienes un período especial activo hasta el {fmt(data.fecha_fin_gracia)}. Contáctanos para ponerte al día.
+          </span>
+          <a
+            href={`mailto:${data.email_soporte}?subject=${encodeURIComponent(`Quiero renovar mi suscripción — ${data.client_id}`)}`}
+            className="btn btn-aviso btn-sm"
+          >
+            Contactar
+          </a>
+        </div>
+      ) : dias !== null && dias <= 7 && (
         <div className={`alert mb-5 ${dias <= 0 ? 'alert-error' : 'alert-warning'}`}>
           {dias <= 0
             ? 'Tu suscripción ha expirado. Contacta a soporte para renovarla.'
@@ -95,7 +113,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
           <div className="fac-plan-right">
             <div className="fac-expiry-block">
               <span className="fac-expiry-label">Vigente hasta</span>
-              <span className="fac-expiry-date">{fmt(data.fecha_expiracion)}</span>
+              <span className="fac-expiry-date">{fmt(fechaVigencia)}</span>
               {diasLabel && (
                 <span className={`fac-dias ${diasCls}`}>{diasLabel}</span>
               )}

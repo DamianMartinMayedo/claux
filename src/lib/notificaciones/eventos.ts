@@ -87,3 +87,25 @@ export async function notificarPagoConfirmado(params: {
     entidadId:   params.fechaExpiracion,
   })
 }
+
+/**
+ * Un admin de CLAUX activó un período de gracia: el acceso se conserva más allá
+ * del vencimiento aunque la suscripción ya haya caducado (ver `aplicarGracia`).
+ */
+export async function notificarGraciaActivada(params: {
+  clientId:       string
+  fechaFinGracia: string
+}): Promise<void> {
+  await crearNotificacion({
+    clientId: params.clientId,
+    tipo:     'periodo_gracia_activado',
+    titulo:   'Se activó tu período especial',
+    cuerpo:   `Aunque tu suscripción venció, mantenemos tu acceso hasta el ${fmtFechaEs(params.fechaFinGracia)}. Contáctanos para ponerte al día.`,
+    enlace:   '/portal/facturacion',
+    // La fecha de fin identifica el período: uno nuevo con otra fecha es un aviso
+    // distinto, y volver a guardar la misma fecha no duplica (mismo patrón que
+    // `notificarPagoConfirmado`).
+    entidadTipo: 'gracia',
+    entidadId:   params.fechaFinGracia,
+  })
+}
