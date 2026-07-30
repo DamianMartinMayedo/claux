@@ -398,6 +398,78 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .modal-body-text { color: var(--color-text-muted); line-height: 1.6; }
 
 /* ═══════════════════════════════════════════════════
+   AUTOCOMPLETADO (`.ac-*`)
+   ═══════════════════════════════════════════════════
+   ÚNICO patrón de sugerencias sobre un campo de texto en todo el portal. Nació en la
+   descripción de las líneas de Ventas con prefijo `ven-` y vive aquí desde que lo
+   comparten Ventas, Compras y el conteo físico.
+
+   NUNCA `<datalist>`: el nativo no se puede estilar (en cada navegador es otra cosa), en
+   Android abre un desplegable del sistema y —lo grave— empareja por COINCIDENCIA DE
+   TEXTO, así que un vínculo creado «porque el texto cuadraba» se rompe en silencio al
+   matizar una palabra. Aquí el vínculo lo crea el CLIC en la sugerencia, y nada más.
+
+   La lista es `position:absolute` y flota: si empujara, abrir sugerencias estiraría la
+   fila y descolocaría la rejilla entera. El contenedor de una fila con autocompletado
+   NO puede llevar `overflow:hidden`. */
+.ac-wrap { position: relative; }
+.ac-lista {
+  position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 2px);
+  margin: 0; padding: var(--space-1); list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 15rem; overflow-y: auto;
+}
+.ac-item {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  width: 100%; padding: 5px var(--space-2);
+  background: none; border: 0; border-radius: var(--radius-sm);
+  text-align: left; cursor: pointer;
+  font-size: var(--text-sm); color: var(--color-text);
+}
+.ac-item.active,
+.ac-item:hover { background: var(--color-surface-offset); }
+/* Código o referencia a la izquierda: OPCIONAL. Solo donde el dato existe y sirve para
+   desambiguar (dos productos con el mismo nombre); un campo de texto libre —quién contó,
+   un concepto— no lleva ninguno, y meterle uno inventado es ruido. */
+.ac-cod {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 700; color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ac-nom {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* El dato de la derecha (un precio, un coste): también opcional. */
+.ac-extra {
+  flex-shrink: 0;
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* ── Variante con vínculo: el chip del artículo enlazado, DENTRO del input ── */
+/* Hueco a la derecha para el chip, para que el texto no pase por debajo. */
+.ac-enlazada { padding-right: 5.5rem; }
+/* Etiqueta, no control: el vínculo con el catálogo se ve, no se toca. Sin puntero ni
+   hover: no hay nada que pulsar. Para soltar el vínculo se borra la línea. */
+.ac-chip {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center;
+  max-width: 5rem;
+  padding: 1px var(--space-2);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 10px; font-weight: 700; letter-spacing: .02em;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden; white-space: nowrap;
+  cursor: default; user-select: none;
+}
+
+/* ═══════════════════════════════════════════════════
    ALERT
    ═══════════════════════════════════════════════════ */
 .alert { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: var(--text-sm); }

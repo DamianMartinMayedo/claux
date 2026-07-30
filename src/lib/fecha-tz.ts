@@ -21,6 +21,19 @@ export function ahoraEnTz(tz: string = TZ_NEGOCIO): string {
   }).format(new Date())
 }
 
+/**
+ * Hora (HH:MM, 24h) de un instante ISO, en la zona del negocio.
+ *
+ * Con `timeZone` FIJO a propósito: un `toLocaleTimeString()` a secas en un componente
+ * cliente da una hora en el SSR (UTC en Vercel) y otra en el navegador — mismatch de
+ * hidratación y, encima, una hora que no es la del negocio.
+ */
+export function horaEnTz(iso: string, tz: string = TZ_NEGOCIO): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(new Date(iso))
+}
+
 /** Suma días a una fecha YYYY-MM-DD (aritmética de calendario, sin saltos por DST). */
 export function sumarDias(fechaISO: string, dias: number): string {
   const [y, m, d] = fechaISO.split('-').map(Number)

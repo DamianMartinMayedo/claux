@@ -6,6 +6,7 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, HelpCircle, Save, Undo2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
+import { aBase64 } from '@/lib/subir-archivo'
 import type { Pendiente, Resolucion } from '@/lib/importador/tipos'
 import {
   obtenerCamposEntidad, crearLoteImport, validarLoteImport, aplicarLoteImport,
@@ -132,16 +133,6 @@ function descargarBase64(nombre: string, base64: string, mime: string) {
   const a     = document.createElement('a')
   a.href = url; a.download = nombre; a.click()
   URL.revokeObjectURL(url)
-}
-
-/** Excel viaja en base64 por la server action (es binario, no texto). */
-function aBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf)
-  let s = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  }
-  return btoa(s)
 }
 
 /**

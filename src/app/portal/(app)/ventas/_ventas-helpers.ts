@@ -133,20 +133,6 @@ export function modoDescuentoLinea(l: Pick<LineaInput, 'descuento_pct' | 'descue
   return 'PORCENTAJE'
 }
 
-/**
- * Lee un número escrito por una persona.
- *
- * «0,5» es medio kilo en todo el mundo hispanohablante y `parseFloat('0,5')` devuelve
- * **0**: el input `type=number` de un navegador con locale es y coma decimal entrega la
- * cadena con coma, y el precio se guardaba a cero sin decir nada. Se normaliza antes de
- * parsear, y una cadena vacía o basura vale 0 (no NaN, que envenena todos los totales).
- */
-export function parseNumeroEs(v: string | number | null | undefined): number {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
-  const n = parseFloat(String(v ?? '').replace(',', '.'))
-  return Number.isFinite(n) ? n : 0
-}
-
 export interface AjusteInput {
   tipo:   AjusteTipo
   nombre: string

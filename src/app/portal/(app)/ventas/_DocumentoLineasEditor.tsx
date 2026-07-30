@@ -4,12 +4,13 @@ import { useMemo, useRef, useState } from 'react'
 import { Plus, Trash2, PackageSearch } from 'lucide-react'
 import type { ProductoOpcion } from '@/app/actions/portal/ventas'
 import { SelectorArticulo } from './_SelectorArticulo'
+import { CampoNumero } from '@/components/portal/CampoNumero'
+import { DescripcionCatalogo } from '@/components/portal/DescripcionCatalogo'
 import {
   AJUSTE_TIPO_LABEL,
   calcularTotales,
   formatearMoneda,
   modoDescuentoLinea,
-  parseNumeroEs,
   type AjusteInput,
   type AjusteModo,
   type AjusteTipo,
@@ -17,154 +18,17 @@ import {
 } from './_ventas-helpers'
 
 /**
- * Campo numérico que acepta **coma decimal** sin comerse lo que se escribe.
- *
- * El `type="number"` que había aquí devolvía cadena vacía con «0,5» en un navegador con
- * locale es (la coma es inválida para el control), así que medio kilo se guardaba como
- * 0 en silencio. Y un `type="text"` controlado ingenuo es igual de malo: al teclear
- * «0,» el número vale 0 y el input se repinta como «0», borrando la coma.
- *
- * Lo que hace: guarda el TEXTO tal cual y lo enseña **mientras siga significando el
- * número que tiene el documento**. Si el valor cambia desde fuera —el selector de
- * moneda reexpresa los importes— el texto deja de cuadrar y se pinta el número nuevo.
- * Derivado en el render, sin `useEffect`: un efecto aquí robaría el foco al repintar.
+ * El campo numérico con coma decimal nació aquí y ahora se comparte: vive en
+ * `components/portal/CampoNumero.tsx` (Fase 1 del plan de Inventario), que lo
+ * necesitaba igual en cinco formularios más. Aquí solo se le fija la clase.
  */
-function InputNumero({
-  valor, onValor, etiqueta, onKeyDown,
-}: {
+function InputNumero(props: {
   valor: number
   onValor: (n: number) => void
   etiqueta: string
   onKeyDown?: (e: React.KeyboardEvent) => void
 }) {
-  const [texto, setTexto] = useState<string | null>(null)
-  const mostrado = texto !== null && parseNumeroEs(texto) === valor
-    ? texto
-    : String(valor).replace('.', ',')
-  return (
-    <input
-      className="input input-sm ven-input-num"
-      type="text" inputMode="decimal"
-      aria-label={etiqueta}
-      value={mostrado}
-      onChange={e => { setTexto(e.target.value); onValor(parseNumeroEs(e.target.value)) }}
-      onFocus={e => e.target.select()}
-      onKeyDown={onKeyDown}
-    />
-  )
-}
-
-/**
- * Descripción de una línea, con AUTOCOMPLETADO del catálogo.
- *
- * El vínculo con el artículo se crea al elegir una sugerencia, nunca por coincidencia de
- * texto: el `datalist` anterior ataba la línea solo si el input decía exactamente
- * «CÓDIGO — Nombre», así que matizar la descripción rompía el enlace en silencio y con él
- * el coste congelado de la línea, el margen del informe y la CxP al proveedor.
- *
- * La lista va en `position:absolute`, fuera del flujo: si empujara, abrir sugerencias
- * estiraría la fila y descolocaría la rejilla entera (que es justo lo que hacía el chip
- * del código debajo del input).
- */
-function DescripcionLinea({
-  valor, productos, moneda, linkCodigo, inputRef,
-  onTexto, onElegir, onEnter,
-}: {
-  valor:      string
-  productos:  ProductoOpcion[]
-  moneda:     string
-  /** Código del artículo enlazado, o null. Se pinta DENTRO del input, a la derecha. */
-  linkCodigo: string | null
-  inputRef:   (el: HTMLInputElement | null) => void
-  onTexto:    (v: string) => void
-  onElegir:   (p: ProductoOpcion) => void
-  /** `Enter` sin sugerencias abiertas. Nunca envía el formulario. */
-  onEnter:    () => void
-}) {
-  const [abierto, setAbierto] = useState(false)
-  const [activo, setActivo]   = useState(0)
-
-  const sugerencias = useMemo(() => {
-    const t = valor.trim().toLowerCase()
-    if (t.length < 2) return []
-    return productos
-      .filter(p => p.codigo.toLowerCase().includes(t) || p.nombre.toLowerCase().includes(t))
-      .slice(0, 6)
-  }, [valor, productos])
-
-  // Se ofrecen sugerencias solo si la línea NO está ya enlazada: con vínculo, seguir
-  // sugiriendo invita a cambiarlo por accidente mientras se matiza el texto.
-  const visible = abierto && !linkCodigo && sugerencias.length > 0
-
-  function teclas(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!visible) {
-      // Enter en la descripción NUNCA envía la factura: en un formulario largo eso es
-      // casi siempre un accidente. Aquí significa «he terminado esta línea».
-      if (e.key === 'Enter') { e.preventDefault(); onEnter() }
-      return
-    }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActivo(i => (i + 1) % sugerencias.length); return }
-    if (e.key === 'ArrowUp')   { e.preventDefault(); setActivo(i => (i - 1 + sugerencias.length) % sugerencias.length); return }
-    if (e.key === 'Escape')    { setAbierto(false); return }
-    if (e.key === 'Enter') {
-      // Con la lista abierta, Enter ELIGE la sugerencia marcada.
-      e.preventDefault()
-      onElegir(sugerencias[activo])
-      setAbierto(false)
-    }
-  }
-
-  return (
-    <div className="ven-desc-wrap">
-      <input
-        ref={inputRef}
-        className={`input input-sm${linkCodigo ? ' ven-desc-enlazada' : ''}`}
-        type="text"
-        aria-label="Descripción de la línea"
-        placeholder="Describe lo que vendes…"
-        value={valor}
-        onChange={e => { onTexto(e.target.value); setAbierto(true); setActivo(0) }}
-        onFocus={() => setAbierto(true)}
-        // `blur` con retardo: sin él, el clic en una sugerencia cierra la lista antes de
-        // que el `mousedown` llegue a registrarse y no se elige nada.
-        onBlur={() => setTimeout(() => setAbierto(false), 120)}
-        onKeyDown={teclas}
-      />
-      {/* El chip INFORMA del vínculo; no se puede quitar desde aquí. Quitarlo dejaba la
-          fila idéntica pero muda: sin descuento de existencias, sin coste congelado para
-          el margen y sin aviso de stock — y si se desenlazaban todas, el bloque entero de
-          Inventario desaparecía del formulario. Para vender algo sin tocar el catálogo se
-          borra la línea y se escribe a mano; para no mover existencias en TODO el
-          documento está el check de Inventario, que es donde vive esa decisión. */}
-      {linkCodigo && (
-        <span className="ven-desc-chip" title={`Enlazada al artículo ${linkCodigo} del catálogo`}>
-          {linkCodigo}
-        </span>
-      )}
-      {visible && (
-        <ul className="ven-autocomplete" role="listbox">
-          {sugerencias.map((p, i) => (
-            <li key={p.producto_id}>
-              <button
-                type="button"
-                className={`ven-autocomplete-item${i === activo ? ' active' : ''}`}
-                onMouseDown={e => { e.preventDefault(); onElegir(p); setAbierto(false) }}
-                onMouseEnter={() => setActivo(i)}
-              >
-                <span className="ven-autocomplete-cod">{p.codigo}</span>
-                <span className="ven-autocomplete-nom">{p.nombre}</span>
-                {p.precios[moneda] != null && (
-                  <span className="ven-autocomplete-precio">
-                    {formatearMoneda(p.precios[moneda], moneda)}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
+  return <CampoNumero {...props} className="input input-sm ven-input-num" />
 }
 
 interface Props {
@@ -345,12 +209,20 @@ export function DocumentoLineasEditor({
                     una segunda línea bajo el campo estiraba la fila y descolocaba la
                     rejilla entera de cantidad/precio/descuento/total. */}
                 <div className="ven-col-prod">
-                  <DescripcionLinea
+                  {/* El chip del código INFORMA del vínculo; no se puede quitar desde
+                      aquí. Quitarlo dejaba la fila idéntica pero muda: sin descuento de
+                      existencias, sin coste congelado para el margen y sin aviso de
+                      stock. Para vender algo sin tocar el catálogo se borra la línea y se
+                      escribe a mano; para no mover existencias en TODO el documento está
+                      el check de Inventario, que es donde vive esa decisión. */}
+                  <DescripcionCatalogo
                     valor={l.descripcion}
-                    productos={productos}
-                    moneda={moneda}
+                    articulos={productos}
+                    placeholder="Describe lo que vendes…"
                     linkCodigo={l.producto_id ? (art?.codigo ?? l.producto_id) : null}
                     inputRef={el => { filasRef.current[i] = el }}
+                    importeTexto={p => p.precios[moneda] != null
+                      ? formatearMoneda(p.precios[moneda], moneda) : null}
                     onTexto={v => updateLinea(i, { descripcion: v })}
                     onElegir={p => enlazarArticulo(i, p)}
                     onEnter={() => { if (i === lineas.length - 1) addLinea() }}
