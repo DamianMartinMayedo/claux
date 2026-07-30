@@ -164,8 +164,22 @@ export function contextoComoTexto(ctx: ContextoNegocio, foco?: FocoContexto): st
 
   // Inventario: en su foco propio con la lista bajo mínimo; en general, solo conteos.
   if ((general || foco === 'inventario') && d.inventario) {
+    // En su foco propio va el dato REAL, no el resumen: sin la cobertura y sin el
+    // almacén, el modelo solo puede repetir lo que la pantalla ya dice, y eso no era
+    // culpa del prompt (que además es editable desde el admin) sino del contexto.
+    // Recortado a lo urgente: el presupuesto de tokens es real y volcar el ledger
+    // entero empeora la respuesta, no la mejora.
     snap.inventario = foco === 'inventario'
-      ? { total_productos: d.inventario.totalProductos, bajo_minimo_count: d.inventario.bajoMinimoCount, bajo_minimo: d.inventario.bajoMinimo }
+      ? {
+          total_productos:    d.inventario.totalProductos,
+          bajo_minimo_count:  d.inventario.bajoMinimoCount,
+          // Producto · almacén · stock · mínimo · días que queda al ritmo actual.
+          urgentes:           d.inventario.urgentes,
+          // Permitido a propósito: se cuenta como hecho, nunca como alarma.
+          stock_negativo:     d.inventario.negativos,
+          valor_inventario:   d.inventario.valor,
+          nota_cobertura:     'La cobertura en días es una ESTIMACIÓN al ritmo de los últimos 90 días; null = no hay historia suficiente para estimar.',
+        }
       : { total_productos: d.inventario.totalProductos, bajo_minimo_count: d.inventario.bajoMinimoCount }
   }
 

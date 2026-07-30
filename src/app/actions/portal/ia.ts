@@ -6,7 +6,8 @@ import { tieneModulo }       from '@/lib/modulos'
 import { configAgente }      from '@/lib/ia/contexto'
 import { generarInsight, responderChat, type TipoInsight, type TurnoChat } from '@/lib/ia/agente'
 import { sugerirDatosItem, type SugerenciaItem } from '@/lib/ia/catalogo'
-import { sugerirDescripcionProducto } from '@/lib/ia/producto'
+import { sugerirDatosProducto, type SugerenciaProducto } from '@/lib/ia/producto'
+import { interpretarConteoDictado, emparejarConteo } from '@/lib/ia/conteo'
 import { sugerirSeccionDossier } from '@/lib/ia/dossier'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { estadoDeResultados } from '@/lib/dossier/estado'
@@ -110,24 +111,96 @@ export async function autocompletarItemCatalogo(nombre: string): Promise<IaSuger
   }
 }
 
-// ── Sugerir descripción de un producto/servicio (IA de cara al dueño) ──
-export type IaSugerenciaTexto = { ok: true; texto: string } | { ok: false; error: string }
+// ── Autocompletar la ficha de un producto/servicio (IA de cara al dueño) ──
+//
+// Antes solo sugería la DESCRIPCIÓN; ahora también unidad y categoría, que es el
+// grueso del alta. Las dos listas cerradas se las pasa el CÓDIGO (las unidades del
+// selector y las categorías activas de ESTE cliente) y se verifican al volver: la IA
+// no inventa unidades ni crea categorías.
+export type IaFichaProducto =
+  | { ok: true; sugerencia: SugerenciaProducto }
+  | { ok: false; error: string }
 
-export async function autocompletarDescripcionProducto(nombre: string, esServicio: boolean): Promise<IaSugerenciaTexto> {
+export async function autocompletarFichaProducto(
+  nombre: string,
+  esServicio: boolean,
+  unidades: string[],
+): Promise<IaFichaProducto> {
   const guard = await requireAddonIa()
   if ('error' in guard) return { ok: false, error: guard.error }
   const nombre0 = (nombre ?? '').trim()
   if (!nombre0) return { ok: false, error: 'Escribe primero el nombre.' }
 
   const db = createAdminClient()
-  const { data: cli } = await db.from('clients').select('sector').eq('client_id', guard.clientId).single()
+  const tipo = esServicio ? 'SERVICIO' : 'PRODUCTO'
+  const [{ data: cli }, { data: cats }] = await Promise.all([
+    db.from('clients').select('sector').eq('client_id', guard.clientId).single(),
+    // Las de SU tipo (o AMBAS) y solo activas: mig. 122.
+    db.from('product_categories').select('categoria_id, nombre')
+      .eq('client_id', guard.clientId).eq('estado', 'ACTIVO')
+      .in('tipo', [tipo, 'AMBAS']).order('nombre'),
+  ])
 
   try {
-    const texto = await sugerirDescripcionProducto(guard.clientId, nombre0, esServicio, (cli?.sector as string | null) ?? null)
-    if (!texto) return { ok: false, error: 'No pude sugerir una descripción ahora mismo. Inténtalo de nuevo.' }
-    return { ok: true, texto }
+    const sugerencia = await sugerirDatosProducto(
+      guard.clientId, nombre0, esServicio, (cli?.sector as string | null) ?? null,
+      Array.isArray(unidades) ? unidades : [],
+      ((cats ?? []) as { categoria_id: string; nombre: string }[]),
+    )
+    if (!sugerencia) return { ok: false, error: 'No pude generar sugerencias ahora mismo. Inténtalo de nuevo.' }
+    return { ok: true, sugerencia }
   } catch (e) {
-    console.error('[ia] autocompletarDescripcionProducto', e)
+    console.error('[ia] autocompletarFichaProducto', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+// ── Interpretar un conteo dictado (IA de cara al dueño) ──
+//
+// «Quedan doce cajas de agua y tres de cerveza» → líneas del conteo precargadas.
+// NADA se aplica: se devuelven las cantidades reconocidas para que la pantalla las
+// ponga en la columna «contado» de un BORRADOR y el dueño revise y aplique.
+//
+// El modelo devuelve texto + cantidad; el EMPAREJAMIENTO con el catálogo lo hace el
+// código (`lib/ia/conteo.ts`). Lo que no empareja se devuelve aparte, nunca se
+// descarta en silencio.
+export type IaConteoDictado =
+  | { ok: true; reconocidos: { producto_id: string; nombre: string; cantidad: number; texto: string }[]
+      noReconocidos: { texto: string; cantidad: number }[] }
+  | { ok: false; error: string }
+
+export async function interpretarConteo(conteo_id: string, dictado: string): Promise<IaConteoDictado> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+  const texto = (dictado ?? '').trim()
+  if (!texto) return { ok: false, error: 'Dicta o escribe lo que has contado.' }
+
+  const db = createAdminClient()
+  // El catálogo con el que se empareja es el del CONTEO: los productos que ya están
+  // en su hoja. Emparejar contra el catálogo entero metería en el conteo productos de
+  // otro almacén.
+  const { data: conteo } = await db.from('conteos').select('conteo_id, estado')
+    .eq('conteo_id', conteo_id).eq('client_id', guard.clientId).maybeSingle()
+  if (!conteo) return { ok: false, error: 'Conteo no encontrado.' }
+  if (conteo.estado !== 'BORRADOR') return { ok: false, error: 'Este conteo ya se aplicó: es solo lectura.' }
+
+  const { data: lineas } = await db.from('conteo_lineas').select('producto_id')
+    .eq('conteo_id', conteo_id).eq('client_id', guard.clientId)
+  const ids = ((lineas ?? []) as { producto_id: string }[]).map(l => l.producto_id)
+  if (ids.length === 0) return { ok: false, error: 'Este conteo no tiene líneas todavía.' }
+
+  const { data: prods } = await db.from('products').select('producto_id, nombre, codigo')
+    .eq('client_id', guard.clientId).in('producto_id', ids)
+
+  try {
+    const items = await interpretarConteoDictado(guard.clientId, texto)
+    if (!items) return { ok: false, error: 'No pude interpretar lo que has dictado. Inténtalo de nuevo.' }
+    const { reconocidos, noReconocidos } = emparejarConteo(
+      items, (prods ?? []) as { producto_id: string; nombre: string; codigo: string }[],
+    )
+    return { ok: true, reconocidos, noReconocidos }
+  } catch (e) {
+    console.error('[ia] interpretarConteo', e)
     return { ok: false, error: mensajeError(e) }
   }
 }

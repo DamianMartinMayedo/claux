@@ -4,7 +4,9 @@
 // como el admin (listado/edición en modal). Añadir un documento nuevo = una fila
 // más en DOCUMENTOS_IA. Sin dependencias de otros módulos de IA (evita ciclos).
 
-export type TipoInsight = 'ventas' | 'gastos' | 'proyeccion' | 'general' | 'inventario' | 'rrhh' | 'tesoreria' | 'catalogo' | 'caja' | 'reservas' | 'citas' | 'suscripciones' | 'deudas' | 'compras'
+// `revisar` comparte el foco de contexto con `inventario` pero es una tarea distinta
+// (narrar descuadres, no recomendar reposición). Precedente exacto: `compras`.
+export type TipoInsight = 'ventas' | 'gastos' | 'proyeccion' | 'general' | 'inventario' | 'rrhh' | 'tesoreria' | 'catalogo' | 'caja' | 'reservas' | 'citas' | 'suscripciones' | 'deudas' | 'compras' | 'revisar'
 
 // Prompt de TAREA por sección (lo que se le pide analizar). El contexto del
 // negocio (datos reales) se añade aparte, por código.
@@ -13,7 +15,7 @@ export const PROMPTS_INSIGHT_DEFAULT: Record<TipoInsight, string> = {
   ventas:     'Analiza la evolución de mis VENTAS de los últimos 6 meses: tendencia, mejor y peor mes, y una recomendación. Máximo 5 frases.',
   gastos:     'Analiza mis GASTOS: tendencia de los últimos 6 meses y, con el desglose por categoría del mes, las categorías que más pesan y dónde podría ahorrar. Máximo 5 frases.',
   proyeccion: 'Proyecta mis ingresos y resultado del próximo mes según la tendencia reciente, indicando el supuesto usado. Sé prudente. Máximo 5 frases.',
-  inventario: 'Analiza mi INVENTARIO: productos bajo mínimo, riesgo de quedarme sin stock y qué conviene reponer primero. Máximo 5 frases.',
+  inventario: 'Analiza mi INVENTARIO usando la lista `urgentes` (con su almacén y su cobertura en días): di qué se me acaba antes y en qué almacén, con la fecha aproximada si hay cobertura, y qué conviene reponer primero. Menciona el valor del inventario solo si aporta. La cobertura es una estimación: dilo así. Máximo 5 frases.',
   rrhh:       'Analiza mi PERSONAL: tamaño de la plantilla, altas recientes y lo más relevante del coste de personal. Máximo 5 frases.',
   tesoreria:  'Analiza mi LIQUIDEZ: saldos de caja por moneda y cómo se ven frente a mis ventas y gastos recientes. Máximo 5 frases.',
   catalogo:   'Revisa mi CATÁLOGO público: ítems sin foto, sin descripción o sin precio que conviene completar para vender mejor, y 1-2 mejoras concretas. Máximo 5 frases.',
@@ -22,7 +24,8 @@ export const PROMPTS_INSIGHT_DEFAULT: Record<TipoInsight, string> = {
   citas:      'Analiza mi AGENDA DE CITAS: citas de hoy, próxima cita y la carga de los próximos 7 días, con una recomendación para llenar huecos. Máximo 5 frases.',
   suscripciones: 'Analiza mis SUSCRIPCIONES: ingreso recurrente por moneda, suscripciones activas y las que se renuevan en los próximos 30 días. Señala el dinero por cobrar y posibles riesgos. Máximo 5 frases.',
   deudas:     'Analiza mis DEUDAS: cuánto me deben (por cobrar) y cuánto debo (por pagar), por moneda, cuánto está vencido y quiénes son los principales. Prioriza a quién reclamar primero. Máximo 5 frases.',
-  compras:    'Dime qué conviene REPONER: productos bajo mínimo o agotados, en qué priorizar la próxima compra a proveedores y por qué. Máximo 5 frases.',
+  compras:    'Dime qué conviene REPONER: productos bajo mínimo o agotados, en qué priorizar la próxima compra a proveedores y por qué. Usa la cobertura en días si está. Máximo 5 frases.',
+  revisar:    'Explica en lenguaje llano los DESCUADRES de mi inventario a partir de `stock_negativo`: qué producto, en qué almacén y qué significa (se vendió o se sacó mercancía de un almacén donde el sistema no tenía existencias). No es un error del sistema ni una acusación: es que el stock registrado iba por detrás de la realidad. Termina diciendo que se arregla contando ese almacén. Máximo 5 frases.',
 }
 
 // Documento de personalidad (system prompt base). Placeholders que el código
@@ -70,6 +73,7 @@ export const DOCUMENTOS_IA: DocumentoIa[] = [
   { key: 'ia_prompt_suscripciones', label: 'Análisis de suscripciones',  descripcion: 'Icono de IA en Suscripciones.',             valorDefault: PROMPTS_INSIGHT_DEFAULT.suscripciones, grupo: 'analisis' },
   { key: 'ia_prompt_deudas',     label: 'Análisis de deudas',            descripcion: 'Icono de IA en Cuentas por cobrar y por pagar.', valorDefault: PROMPTS_INSIGHT_DEFAULT.deudas,   grupo: 'analisis' },
   { key: 'ia_prompt_compras',    label: 'Sugerencia de reposición',      descripcion: 'Icono de IA en Compras.',                   valorDefault: PROMPTS_INSIGHT_DEFAULT.compras,    grupo: 'analisis' },
+  { key: 'ia_prompt_revisar',    label: 'Explicación de descuadres',     descripcion: 'Icono de IA en Inventario → Revisar.',      valorDefault: PROMPTS_INSIGHT_DEFAULT.revisar,    grupo: 'analisis' },
 ]
 
 const PORDEFECTO = new Map(DOCUMENTOS_IA.map(d => [d.key, d.valorDefault]))
