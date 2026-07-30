@@ -77,7 +77,18 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 
 **Color de empresa** (tablas multi-empresa): `<tr className="… row-empresa-accent" style={empresaColorVar(colorOf(id))}>` (única excepción al no-inline: custom property de runtime). Acento lateral izquierdo; en tarjeta pasa a `border-left`. No añadas más color que ese acento.
 
-## 3.1 Pestañas internas — un solo componente
+## 3.1 Autocompletado — un solo patrón, y NUNCA `<datalist>`
+
+Todo campo de texto con sugerencias usa la familia **`.ac-*`** de `03-components.css` (`.ac-wrap`, `.ac-lista`, `.ac-item`, `.ac-nom`, y opcionales `.ac-cod` / `.ac-extra`), a través de uno de los dos componentes que ya existen:
+
+- **`AutocompletarTexto`** (`src/components/portal/AutocompletarTexto.tsx`) — texto libre con sugerencias: se guarda lo escrito, elegir es solo escribir rápido. **Sin código ni chip**: en un campo libre no hay referencia que enseñar y una inventada es ruido. Es el que se usa por defecto.
+- **`DescripcionCatalogo`** — la variante CON vínculo: elegir enlaza la línea a un artículo y el chip del código (`.ac-chip`) lo informa dentro del input.
+
+**Prohibido `<datalist>`.** No se puede estilar (en cada navegador es otro control y en Android abre un desplegable del sistema, así que el mismo campo se ve distinto en cada sitio) y empareja por **coincidencia de texto**: donde eso creaba un vínculo, matizar una palabra lo rompía en silencio (se perdían el coste congelado y el descuento de existencias sin decir nada). El vínculo lo crea el CLIC en la sugerencia, nunca el parecido del texto.
+
+Detalles ya resueltos en los componentes, no los reinventes: `blur` con 120 ms de retardo (sin él el clic en una sugerencia no llega a registrarse), navegación con ↑/↓/Enter/Escape, `Enter` que **elige y no envía el formulario**, y la lista `position:absolute` que flota — el contenedor de una fila con autocompletado **no puede llevar `overflow:hidden`**.
+
+## 3.2 Pestañas internas — un solo componente
 
 Toda pestaña interna usa **`<Tabs>`** (`src/components/Tabs.tsx`) + clases `.tabs`/`.tab`/`.tab-count` de `03-components.css`. Es presentacional y **controlado**: el padre guarda la pestaña activa (`useState`) y pasa `tabs`, `active`, `onChange`. Conteos opcionales con `count` (pill); `countTone: 'warning'` para conteos de alerta (p. ej. sin leer). **No crees familias nuevas** de pestañas: `.usr-/.ven-/.detail-/.prd-/.res-/.rrhh-/.caja-/.pv-` son **legado a converger**, no a imitar. El portal todavía usa algunas; al tocar esas vistas, migra a `<Tabs>`. Desde un Server Component, extrae un envoltorio cliente (patrón: `configuracion/ConfiguracionTabs.tsx`, recibe los paneles ya resueltos como props).
 
