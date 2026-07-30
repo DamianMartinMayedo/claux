@@ -5,15 +5,19 @@ import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter }                    from 'next/navigation'
 import IaTouchpoint                     from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
-import { Eye, Plus, ShoppingCart, Ban, Trash2 } from 'lucide-react'
+import { Eye, Plus, ShoppingCart, Ban, Trash2, Copy, PackageSearch } from 'lucide-react'
 import {
   eliminarComprasEnLote,
   anularComprasEnLote,
+  duplicarCompra,
   type ResultadoLote,
   type ComprasPageData,
   type EstadoCompra,
 } from '@/app/actions/portal/compras'
+import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import { LIMITE_LISTADO } from '@/lib/listados'
 import { CompraFormModal }              from './_CompraFormModal'
+import { ReposicionModal }              from './_ReposicionModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { RowActions }                   from '@/components/portal/RowActions'
@@ -43,6 +47,7 @@ type Confirm = { title: string; body?: string; confirmLabel: string; danger: boo
 export default function ComprasView({ data }: { data: ComprasPageData }) {
   const router = useRouter()
   const [modalOpen,    setModalOpen]    = useState(false)
+  const [reponiendo,   setReponiendo]   = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -64,6 +69,26 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
   const seleccionadas = filtradas.filter(c => sel.isSelected(c.compra_id))
   const nConfirmadas   = seleccionadas.filter(c => c.estado === 'CONFIRMADA').length
   const nBorradores    = seleccionadas.filter(c => c.estado === 'BORRADOR').length
+
+  // La reposición ya no crea nada a ciegas: abre el modal, que enseña qué falta y dónde
+  // antes de tocar nada (ver la cabecera de `_ReposicionModal`).
+  function alCrearReposicion(compra_id?: string) {
+    setReponiendo(false)
+    if (compra_id) router.push(`/portal/compras/${compra_id}`)
+    else           router.refresh()
+  }
+
+  function duplicar(compra_id: string) {
+    // El loading se crea FUERA de la transición: dentro no llega a pintarse.
+    const ld = toastLoading('Duplicando…')
+    startTransition(async () => {
+      const r = await duplicarCompra(compra_id)
+      await ld.dismiss()
+      if (!r.ok) { toastError(r.error ?? 'No se pudo duplicar.'); return }
+      toastSuccess('Borrador creado a partir de esta compra')
+      router.push(`/portal/compras/${r.compra_id}`)
+    })
+  }
 
   // ── Orquestación de acciones en lote (toast de resumen) ──
   function ejecutar(fn: () => Promise<ResultadoLote>, msg: string) {
@@ -101,6 +126,11 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
             filtro={{ estado: filtroEstado }}
             resumen={[filtroEstado].filter((x): x is string => Boolean(x))}
           />
+          {/* Cierra la cadena del módulo: el mínimo detecta la falta, la cobertura la
+              ordena y esto la convierte en la compra. Nada se confirma solo. */}
+          <button className="btn btn-secondary" onClick={() => setReponiendo(true)} disabled={sinAlmacenes || isPending}>
+            <PackageSearch size={14} strokeWidth={2} /> Comprar lo que falta
+          </button>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
             <Plus size={14} strokeWidth={2.5} /> Nueva compra
           </button>
@@ -114,6 +144,9 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
       )}
 
       <div className="ter-toolbar">
+        {/* El rango va en la URL y se aplica en la consulta: antes se traían todas las
+            compras de la historia del cliente y el contador «X de Y» mentía. */}
+        <RangoBusqueda desde={data.rango.desde} hasta={data.rango.hasta} sinBuscador />
         <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="BORRADOR">Borrador</option>
@@ -121,6 +154,13 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
           <option value="ANULADA">Anulada</option>
         </select>
       </div>
+
+      {data.hay_mas && (
+        <p className="listado-tope">
+          Se enseñan las primeras {LIMITE_LISTADO} compras del rango. Acota el rango para
+          ver el resto — la descarga sí se lleva el rango completo.
+        </p>
+      )}
 
       <div className="card card-table">
         <div className="mon-card-header">
@@ -173,6 +213,11 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => router.push(`/portal/compras/${c.compra_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
+                        {/* Comprar lo mismo al mismo proveedor es LA operación repetida
+                            del módulo, y había que teclearla entera cada vez. */}
+                        <button className="row-actions-item" onClick={() => duplicar(c.compra_id)} disabled={isPending}>
+                          <Copy size={15} strokeWidth={2} /> Duplicar
+                        </button>
                       </RowActions>
                     </td>
                   </tr>
@@ -228,9 +273,17 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
             almacenes:   data.almacenes,
             productos:   data.productos,
             monedas:     data.monedas,
+            tasas:       data.tasas,
           }}
           onClose={() => setModalOpen(false)}
           onSaved={(compra_id) => router.push(`/portal/compras/${compra_id}`)}
+        />
+      )}
+
+      {reponiendo && (
+        <ReposicionModal
+          onCerrar={() => setReponiendo(false)}
+          onCreadas={alCrearReposicion}
         />
       )}
     </div>

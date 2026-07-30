@@ -10,6 +10,9 @@ import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
+import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
+import { valorarPorMoneda } from '@/lib/inventario/valoracion'
+import { consumoDiario, diasDeCobertura, DIAS_VENTANA, type MovimientoConsumo } from '@/lib/inventario/consumo'
 import { hoyEnTz, ahoraEnTz, sumarDias, TZ_NEGOCIO } from '@/lib/fecha-tz'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
@@ -49,8 +52,30 @@ export interface ContabilidadResumen {
 }
 export interface InventarioResumen {
   totalProductos: number
+  /** Cuenta parejas (producto, almacén) donde hay mínimo por almacén; productos donde no. */
   bajoMinimoCount: number
-  bajoMinimo: { nombre: string; stock: number; minimo: number; unidad: string }[]
+  /** `almacen` solo viene cuando la alerta es de un almacén concreto (mig. 153). */
+  bajoMinimo: { nombre: string; stock: number; minimo: number; unidad: string; almacen?: string }[]
+  /**
+   * Lo que el insight de IA necesitaba y no tenía. Con `{total, bajoMinimoCount}` el
+   * modelo solo podía repetir lo que la pantalla ya dice; con la cobertura pasa de
+   * «tienes 3 bajo mínimo» a «al ritmo de las últimas semanas te quedas sin arroz en
+   * Central el 12 de agosto». Recortado a los 10 más urgentes: el prompt tiene
+   * presupuesto y volcar el ledger entero es la forma de empeorarlo.
+   */
+  urgentes: {
+    producto: string
+    almacen:  string
+    unidad:   string
+    stock:    number
+    minimo:   number
+    /** Días estimados al ritmo de los últimos 90 días; `null` si no hay historia. */
+    cobertura: number | null
+  }[]
+  /** Stock negativo: se informa, nunca se alarma (es un flujo permitido). */
+  negativos: { producto: string; almacen: string; stock: number; unidad: string }[]
+  /** Valor del inventario, nativo por moneda y sin convertir. */
+  valor: { moneda: string; valor: number; sinCoste: number }[]
 }
 /**
  * Equipo. «Empleados activos» y «altas del mes» son censo, no gestión: no piden
@@ -605,19 +630,122 @@ async function resumenCatalogo(db: Db, cid: string): Promise<CatalogoResumen> {
   }
 }
 
+// El mismo criterio que el escáner de avisos y que el listado, vía `estadoStock`:
+// antes había tres copias con dos criterios y el resultado era campana roja con
+// dashboard en verde sobre el mismo producto.
+//
+// OJO: este resumen alimenta también el contexto de la IA (`lib/ia/contexto.ts`).
+// Lo que se añada aquí lo ve el modelo; lo que se rompa aquí, también.
 async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen> {
-  const { data: productos } = await db
-    .from('products')
-    .select('nombre, stock_actual, stock_minimo, unidad, tipo, activo')
-    .eq('client_id', cid).eq('activo', true).neq('tipo', 'SERVICIO')
+  const desdeConsumo = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString().split('T')[0]
+  const [{ data: productos }, { data: config }, { data: stock }, { data: almacenes }, { data: movs }, { data: mon }] = await Promise.all([
+    db.from('products')
+      .select('producto_id, nombre, stock_actual, stock_minimo, unidad, tipo, estado, costos')
+      .eq('client_id', cid).eq('estado', 'ACTIVO').neq('tipo', 'SERVICIO'),
+    db.from('producto_almacen_config')
+      .select('producto_id, almacen_id, stock_minimo').eq('client_id', cid).not('stock_minimo', 'is', null),
+    db.from('stock_almacenes').select('producto_id, almacen_id, cantidad').eq('client_id', cid),
+    // `almacenes` archiva con `activo` boolean; no tiene columna `estado`.
+    db.from('almacenes').select('almacen_id, nombre').eq('client_id', cid).eq('activo', true),
+    db.from('movimientos_inventario')
+      .select('producto_id, almacen_id, almacen_destino_id, tipo, origen, cantidad, fecha')
+      .eq('client_id', cid).in('tipo', ['SALIDA', 'TRANSFERENCIA']).gte('fecha', desdeConsumo),
+    db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
+  ])
 
-  const lista = (productos ?? []) as { nombre: string; stock_actual: number; stock_minimo: number; unidad: string }[]
-  const bajo = lista
-    .filter(p => Number(p.stock_minimo) > 0 && Number(p.stock_actual) <= Number(p.stock_minimo))
-    .map(p => ({ nombre: p.nombre, stock: Number(p.stock_actual) || 0, minimo: Number(p.stock_minimo) || 0, unidad: p.unidad ?? '' }))
-    .sort((a, b) => (a.stock - a.minimo) - (b.stock - b.minimo))
+  type Fila = { producto_id: string; nombre: string; stock_actual: number; stock_minimo: number; unidad: string; costos: Record<string, number> | null }
+  const lista       = (productos ?? []) as Fila[]
+  const filasCfg    = (config    ?? []) as { producto_id: string; almacen_id: string; stock_minimo: number }[]
+  const filasStk    = (stock     ?? []) as { producto_id: string; almacen_id: string; cantidad: number }[]
+  const filasAlm    = (almacenes ?? []) as { almacen_id: string; nombre: string }[]
 
-  return { totalProductos: lista.length, bajoMinimoCount: bajo.length, bajoMinimo: bajo.slice(0, 5) }
+  const productoDe  = new Map(lista.map(p => [p.producto_id, p]))
+  const nombreAlm   = new Map(filasAlm.map(a => [a.almacen_id, a.nombre]))
+  const cantidadDe  = new Map(filasStk.map(s => [`${s.producto_id}@${s.almacen_id}`, Number(s.cantidad ?? 0)]))
+  const conConfig   = new Set(filasCfg.map(c => c.producto_id))
+
+  const bajo: InventarioResumen['bajoMinimo'] = []
+
+  // Con mínimo por almacén, la alerta es de ese almacén.
+  for (const c of filasCfg) {
+    const p = productoDe.get(c.producto_id)
+    const almacen = nombreAlm.get(c.almacen_id)
+    if (!p || !almacen) continue
+    const stockAlm = cantidadDe.get(`${c.producto_id}@${c.almacen_id}`) ?? 0
+    const minimo   = Number(c.stock_minimo)
+    if (!pideAtencion(estadoStock(stockAlm, minimo))) continue
+    bajo.push({ nombre: p.nombre, stock: stockAlm, minimo, unidad: p.unidad ?? '', almacen })
+  }
+
+  // Sin configuración, el consolidado con el mínimo global — como siempre.
+  for (const p of lista) {
+    if (conConfig.has(p.producto_id)) continue
+    const actual = Number(p.stock_actual) || 0
+    const minimo = Number(p.stock_minimo) || 0
+    if (!pideAtencion(estadoStock(actual, minimo))) continue
+    bajo.push({ nombre: p.nombre, stock: actual, minimo, unidad: p.unidad ?? '' })
+  }
+
+  bajo.sort((a, b) => (a.stock - a.minimo) - (b.stock - b.minimo))
+
+  // ── Lo que la IA necesita y no tenía (Fase 9.1) ──
+  // El consumo se calcula sobre el MISMO ledger, con la misma función que la pantalla:
+  // así el modelo no puede decir un número distinto del que el dueño está viendo.
+  const consumo = consumoDiario((movs ?? []) as MovimientoConsumo[])
+  const urgentes = bajo
+    .map(b => {
+      // La cobertura es por almacén; para una alerta consolidada se suma el consumo
+      // de todos sus almacenes, que es el ritmo con el que se vacía el total.
+      const p = lista.find(x => x.nombre === b.nombre)
+      let diario = 0, movimientos = 0, dias = 0
+      for (const [clave, c] of consumo) {
+        if (!p || !clave.startsWith(`${p.producto_id}@`)) continue
+        if (b.almacen && nombreAlm.get(clave.split('@')[1]) !== b.almacen) continue
+        diario      += c.diario
+        movimientos += c.movimientos
+        dias         = Math.max(dias, c.diasHistoria)
+      }
+      return {
+        producto:  b.nombre,
+        almacen:   b.almacen ?? 'todos los almacenes',
+        unidad:    b.unidad,
+        stock:     b.stock,
+        minimo:    b.minimo,
+        cobertura: diasDeCobertura(b.stock, diario > 0 ? { diario, movimientos, diasHistoria: dias } : undefined),
+      }
+    })
+    // Lo que se acaba antes, primero: es el orden con el que hay que reponer.
+    .sort((a, b) => (a.cobertura ?? Number.MAX_SAFE_INTEGER) - (b.cobertura ?? Number.MAX_SAFE_INTEGER))
+    .slice(0, 10)
+
+  // Solo productos vivos: uno archivado con negativo es cosa de «Revisar», no del
+  // resumen que se le cuenta al dueño.
+  const negativos = filasStk
+    .filter(s => Number(s.cantidad) < -0.0005 && productoDe.has(s.producto_id))
+    .map(s => ({
+      producto: productoDe.get(s.producto_id)!.nombre,
+      almacen:  nombreAlm.get(s.almacen_id) ?? s.almacen_id,
+      stock:    Number(s.cantidad),
+      unidad:   productoDe.get(s.producto_id)!.unidad ?? '',
+    }))
+    .slice(0, 10)
+
+  // Valor nativo por moneda, sin convertir, y con las referencias sin coste aparte:
+  // un producto sin coste NO vale 0.
+  const monedas = ((mon ?? []) as { codigo: string }[]).map(m => m.codigo)
+  const valor = valorarPorMoneda(
+    filasStk
+      .map(s => ({ producto_id: s.producto_id, cantidad: Number(s.cantidad), costos: productoDe.get(s.producto_id)?.costos }))
+      .filter(f => productoDe.has(f.producto_id)),
+    monedas,
+  ).map(v => ({ moneda: v.moneda, valor: Math.round(v.valor * 100) / 100, sinCoste: v.sinCoste }))
+
+  return {
+    totalProductos: lista.length,
+    bajoMinimoCount: bajo.length,
+    bajoMinimo: bajo.slice(0, 5),
+    urgentes, negativos, valor,
+  }
 }
 
 // Resumen del Punto de venta. Sirve a los DOS tipos de cliente: al que tiene
@@ -1018,7 +1146,9 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   }
   if (inventario && inventario.bajoMinimoCount > 0) {
     pendiente.push({
-      clave: 'stock', tono: 'alerta', ruta: '/portal/inventario',
+      // A los productos que faltan, no a Movimientos: el pendiente tiene que llevar
+      // a donde se resuelve.
+      clave: 'stock', tono: 'alerta', ruta: '/portal/productos?stock=bajo',
       texto: `${inventario.bajoMinimoCount} ${plural(inventario.bajoMinimoCount, 'producto', 'productos')} bajo mínimo`,
     })
   }

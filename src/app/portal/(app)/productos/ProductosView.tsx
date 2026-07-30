@@ -7,7 +7,7 @@ import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                         from 'next/navigation'
+import { useRouter, useSearchParams }        from 'next/navigation'
 import Link                                  from 'next/link'
 import {
   archivarProducto,
@@ -25,6 +25,7 @@ import {
   type ProductosPageData,
   type ResultadoLoteProductos,
 } from '@/app/actions/portal/productos'
+import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
 import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
@@ -105,9 +106,15 @@ function CategoriaModal({ categoria, modo, onClose, onSaved }: {
 
 // ── ConfirmArchivar ───────────────────────────────────────────────────────────
 
-function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
-  nombre: string; onConfirm: () => void; onClose: () => void; isPending: boolean
+function ConfirmArchivar({ nombre, existencias, unidad, onConfirm, onClose, isPending }: {
+  nombre: string
+  /** Reparto por almacén, cuando lo hay: archivar con mercancía dentro se avisa. */
+  existencias?: { nombre: string; cantidad: number }[]
+  unidad?: string
+  onConfirm: () => void; onClose: () => void; isPending: boolean
 }) {
+  const conStock = (existencias ?? []).filter(e => Math.abs(e.cantidad) > 0.0005)
+  const total    = conStock.reduce((s, e) => s + e.cantidad, 0)
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
@@ -120,6 +127,16 @@ function ConfirmArchivar({ nombre, onConfirm, onClose, isPending }: {
             ¿Archivar <strong>{nombre}</strong>? No aparecerá en listas activas,
             pero podrás restaurarlo cuando lo necesites.
           </p>
+          {/* No se prohíbe archivar con existencias, pero se dice: hoy se hace a
+              ciegas y la mercancía se queda ahí sin que nadie vuelva a mirarla. */}
+          {conStock.length > 0 && (
+            <div className="alert alert-warning">
+              Quedan <strong>{total.toLocaleString('es-ES')} {unidad ?? ''}</strong> en
+              {' '}{conStock.map(e => `${e.nombre} (${e.cantidad.toLocaleString('es-ES')})`).join(', ')}.
+              Al archivarlo, esas existencias se quedan dentro y dejarás de verlas en el listado.
+              Sácalas antes si ya no están.
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -177,6 +194,7 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 export default function ProductosView({ data }: { data: ProductosPageData }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
   // Inventario y Servicios comparten esta vista pero cada uno cataloga UN tipo
@@ -197,10 +215,44 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const [filtroCat,     setFiltroCat]     = useState('')
   const [filtroProv,    setFiltroProv]    = useState('')
   const [verArchivados, setVerArchivados] = useState(false)
+  // `?stock=bajo` lo pone el pendiente del dashboard: llevaba a Movimientos, que no
+  // es donde se ve lo que falta.
+  const [soloBajoMinimo, setSoloBajoMinimo] = useState(searchParams.get('stock') === 'bajo')
 
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<Categoria | null>(null)
   const [confirmCat, setConfirmCat] = useState<Categoria | null>(null)
+
+  // ── Alerta de stock, con el MISMO criterio que la campana y el dashboard ──
+  //
+  // Antes esto era `stock_minimo > 0 && stock_actual <= stock_minimo` escrito a
+  // mano aquí, otra copia en el dashboard y una tercera —distinta— en el escáner
+  // de avisos. Ahora las tres pasan por `estadoStock`, y con el mínimo por almacén
+  // (mig. 153) la alerta puede venir de UN almacén aunque el total vaya sobrado.
+  const repartoDe = useMemo(() => {
+    const mapa = data.stockPorAlmacen ?? {}
+    return (p: Producto) => mapa[p.producto_id] ?? []
+  }, [data.stockPorAlmacen])
+
+  const alertasDe = useMemo(() => (p: Producto) => {
+    const reparto = repartoDe(p)
+    const configurados = reparto.filter(s => s.minimo != null)
+    // Con mínimos por almacén se evalúan esos almacenes; sin ninguno, el consolidado.
+    if (configurados.length > 0) {
+      return configurados
+        .map(s => ({ almacen: s.nombre, estado: estadoStock(s.cantidad, s.minimo), cantidad: s.cantidad, minimo: s.minimo! }))
+        .filter(a => pideAtencion(a.estado))
+    }
+    const estado = estadoStock(p.stock_actual, p.stock_minimo)
+    return pideAtencion(estado)
+      ? [{ almacen: null as string | null, estado, cantidad: p.stock_actual, minimo: p.stock_minimo }]
+      : []
+  }, [repartoDe])
+
+  const tieneAlerta  = (p: Producto) => alertasDe(p).length > 0
+  const tituloAlerta = (p: Producto) => alertasDe(p)
+    .map(a => a.almacen ? `${a.almacen}: ${a.cantidad} (mínimo ${a.minimo})` : `Mínimo: ${a.minimo}`)
+    .join(' · ')
 
   const categoriaMap = useMemo(() => {
     const m: Record<string, string> = {}
@@ -220,10 +272,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
   const sinCategoriaCount = productosPorCategoria['__sin_categoria__'] ?? 0
 
+  const bajoMinimoCount = useMemo(
+    () => data.productos.filter(p => p.estado === 'ACTIVO' && tieneAlerta(p)).length,
+    [data.productos, tieneAlerta], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   const productosFiltrados = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.productos.filter(p => {
       if ((p.estado === 'ACTIVO') === verArchivados)       return false
+      if (soloBajoMinimo && !tieneAlerta(p))               return false
       if (filtroCat === '__sin_categoria__') {
         if (p.categoria_id) return false
       } else if (filtroCat && p.categoria_id !== filtroCat) return false
@@ -237,7 +295,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       }
       return true
     })
-  }, [data.productos, search, filtroCat, filtroProv, verArchivados, categoriaMap])
+  }, [data.productos, search, filtroCat, filtroProv, verArchivados, soloBajoMinimo, categoriaMap]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
@@ -276,6 +334,13 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
   const archivados        = data.productos.filter(p => p.estado === 'INACTIVO').length
   const categoriasActivas = data.categorias.filter(c => c.estado === 'ACTIVO')
+  // Mismo criterio que en ProductoFormModal: agrupar por empresa solo si hay más de
+  // una, o un proveedor con ficha en dos empresas sale como duplicado sin explicación.
+  const proveedoresPorEmpresa = data.empresas.length > 1
+    ? data.empresas
+        .map(e => ({ empresa: e, items: data.proveedores.filter(p => p.empresa_id === e.empresa_id) }))
+        .filter(g => g.items.length > 0)
+    : null
 
   function openCreate()           { setEditProducto(null); setProductoModal(true) }
   function openEdit(p: Producto)  { setEditProducto(p);    setProductoModal(true) }
@@ -283,13 +348,28 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   function onSaved()              { closeModal(); router.refresh() }
   function onStockSaved()         { setStockProducto(null); router.refresh() }
 
+  // Archivar y restaurar SON escrituras: llevan su carga y su resultado como cualquier
+  // otra. Iban mudas y además se tragaban el `{ ok, error }`, así que un fallo
+  // —permisos, dependencias— se veía como «no ha pasado nada».
   function handleRestaurar(p: Producto) {
-    startTransition(async () => { await restaurarProducto(p.producto_id); router.refresh() })
+    const ld = toastLoading('Restaurando…')
+    startTransition(async () => {
+      const r = await restaurarProducto(p.producto_id)
+      await ld.dismiss()
+      if (!r?.ok) { toastError(r?.error ?? 'No se pudo restaurar.'); return }
+      toastSuccess(`«${p.nombre}» vuelve a estar activo`)
+      router.refresh()
+    })
   }
   function confirmarArchivar() {
     if (!confirmProd) return
+    const prod = confirmProd
+    const ld = toastLoading('Archivando…')
     startTransition(async () => {
-      await archivarProducto(confirmProd.producto_id)
+      const r = await archivarProducto(prod.producto_id)
+      await ld.dismiss()
+      if (!r?.ok) { toastError(r?.error ?? 'No se pudo archivar.'); return }
+      toastSuccess(`«${prod.nombre}» archivado`)
       setConfirmProd(null); router.refresh()
     })
   }
@@ -311,12 +391,24 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   function onCatSaved()             { closeCatModal(); router.refresh() }
 
   function handleRestaurarCat(c: Categoria) {
-    startTransition(async () => { await restaurarCategoria(c.categoria_id); router.refresh() })
+    const ld = toastLoading('Restaurando…')
+    startTransition(async () => {
+      const r = await restaurarCategoria(c.categoria_id)
+      await ld.dismiss()
+      if (!r?.ok) { toastError(r?.error ?? 'No se pudo restaurar.'); return }
+      toastSuccess(`Categoría «${c.nombre}» restaurada`)
+      router.refresh()
+    })
   }
   function confirmarArchivarCat() {
     if (!confirmCat) return
+    const cat = confirmCat
+    const ld = toastLoading('Archivando…')
     startTransition(async () => {
-      await archivarCategoria(confirmCat.categoria_id)
+      const r = await archivarCategoria(cat.categoria_id)
+      await ld.dismiss()
+      if (!r?.ok) { toastError(r?.error ?? 'No se pudo archivar.'); return }
+      toastSuccess(`Categoría «${cat.nombre}» archivada`)
       setConfirmCat(null); router.refresh()
     })
   }
@@ -408,10 +500,29 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
               <select className="input ter-filter-select" value={filtroProv}
                 onChange={e => setFiltroProv(e.target.value)}>
                 <option value="">Todos los proveedores</option>
-                {data.proveedores.map(p => (
-                  <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
-                ))}
+                {proveedoresPorEmpresa ? (
+                  proveedoresPorEmpresa.map(({ empresa, items }) => (
+                    <optgroup key={empresa.empresa_id} label={empresa.nombre}>
+                      {items.map(p => (
+                        <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
+                      ))}
+                    </optgroup>
+                  ))
+                ) : (
+                  data.proveedores.map(p => (
+                    <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
+                  ))
+                )}
               </select>
+            )}
+            {/* El triángulo de alerta se pintaba sin forma de filtrar por él, y el
+                dashboard llevaba a Movimientos en vez de a lo que falta. */}
+            {esProducto && (
+              <label className="ter-archivados-toggle">
+                <input type="checkbox" checked={soloBajoMinimo}
+                  onChange={e => setSoloBajoMinimo(e.target.checked)} />
+                <span>Solo bajo mínimo{bajoMinimoCount > 0 && ` (${bajoMinimoCount})`}</span>
+              </label>
             )}
             <label className="ter-archivados-toggle">
               <input type="checkbox" checked={verArchivados}
@@ -454,7 +565,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                   </thead>
                   <tbody>
                     {prodItems.map(p => {
-                      const stockBajo = p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo
+                      const stockBajo = tieneAlerta(p)
                       return (
                         <tr
                           key={p.producto_id}
@@ -517,11 +628,18 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                   {p.stock_actual.toLocaleString('es-ES')}
                                 </span>
                                 {stockBajo && (
-                                  <span className="prd-stock-alert" title={`Mínimo: ${p.stock_minimo}`}>
+                                  <span className="prd-stock-alert" title={tituloAlerta(p)}>
                                     <AlertTriangle size={13} strokeWidth={2} />
                                   </span>
                                 )}
                               </div>
+                              {/* Con más de un almacén el total no responde a ninguna
+                                  pregunta: puede esconder un local a cero. */}
+                              {repartoDe(p).length > 1 && (
+                                <div className="table-cell-sub">
+                                  {repartoDe(p).map(s => `${s.nombre}: ${s.cantidad.toLocaleString('es-ES')}`).join(' · ')}
+                                </div>
+                              )}
                             </td>
                           )}
 
@@ -669,6 +787,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                       <td data-label="Nombre">
                         <span className="text-sm-muted text-italic">Sin categoría</span>
                       </td>
+                      <td data-label="Se usa en" className="text-sm-muted">—</td>
                       <td data-label="Descripción" className="text-sm-muted">Artículos sin categoría asignada</td>
                       <td data-label="Artículos" className="col-center">
                         <button
@@ -679,7 +798,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           {sinCategoriaCount}
                         </button>
                       </td>
-                      <td data-label="Estado"><span className="prd-cat-badge-revisar">Revisar</span></td>
+                      {/* `.badge` como el resto de la columna: antes esta fila especial
+                          llevaba una clase propia con fondo y era la única con pill,
+                          justo al lado de las filas normales que ya salían planas. */}
+                      <td data-label="Estado"><span className="badge badge-warning">Revisar</span></td>
                       <td className="col-actions" />
                     </tr>
                   )}
@@ -694,7 +816,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {/* Modales */}
       {productoModal && (
         <ProductoFormModal producto={editProducto} categorias={data.categorias}
-          proveedores={data.proveedores} monedas={data.monedas}
+          proveedores={data.proveedores} empresas={data.empresas} monedas={data.monedas}
           hayAlmacenes={data.almacenes.length > 0}
           modo={data.modo} etiquetaServicio={data.etiquetaServicio}
           onClose={closeModal} onSaved={onSaved} />
@@ -711,6 +833,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       )}
       {confirmProd && (
         <ConfirmArchivar nombre={confirmProd.nombre} onConfirm={confirmarArchivar}
+          existencias={repartoDe(confirmProd)} unidad={confirmProd.unidad}
           onClose={() => setConfirmProd(null)} isPending={isPending} />
       )}
       {eliminarProd && (

@@ -244,7 +244,10 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
       {/* Modales */}
       {showEdit && (
         <CompraFormModal
-          form={{ proveedores: data.proveedores, almacenes: data.almacenes, productos: data.productos, monedas: data.monedas }}
+          form={{
+            proveedores: data.proveedores, almacenes: data.almacenes,
+            productos: data.productos, monedas: data.monedas, tasas: data.tasas,
+          }}
           compra={compra}
           lineasIniciales={lineas}
           onClose={() => setShowEdit(false)}

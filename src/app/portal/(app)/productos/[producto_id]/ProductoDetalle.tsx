@@ -8,9 +8,12 @@ import { useRouter }                from 'next/navigation'
 import {
   archivarProducto,
   restaurarProducto,
+  guardarStockMinimoAlmacen,
   type ProductoDetalleData,
   type MovimientoProducto,
 } from '@/app/actions/portal/productos'
+import { estadoStock, minimoAplicable, ESTADO_STOCK_BADGE, ESTADO_STOCK_LABEL } from '@/lib/inventario/stock'
+import { parseNumeroEs, textoNumeroEs } from '@/lib/numeros'
 import { ProductoFormModal } from '../_ProductoFormModal'
 import { StockAjusteModal } from '../_StockAjusteModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -61,6 +64,78 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <div className="det-label">{label}</div>
       <div className="det-value">{value ?? <span className="text-faint">—</span>}</div>
+    </div>
+  )
+}
+
+// ── Mínimo por almacén (mig. 153) ─────────────────────────────────────────────
+//
+// El mínimo de la ficha es UNO para todo el cliente, pero el stock vive por
+// almacén y los almacenes son de empresas distintas: un local puede quedarse a
+// cero mientras el consolidado va sobrado. Aquí se afina, que es donde ya se ve el
+// reparto. Vacío = «este almacén se rige por el global», no «mínimo cero».
+
+function FilaAlmacen({
+  fila, unidad, minimoGlobal, producto_id,
+}: {
+  fila: ProductoDetalleData['stock_por_almacen'][number]
+  unidad: string
+  minimoGlobal: number
+  producto_id: string
+}) {
+  const [editando, setEditando] = useState(false)
+  const [texto,    setTexto]    = useState(fila.minimo != null ? textoNumeroEs(fila.minimo) : '')
+  const [pending,  start]       = useTransition()
+  const router = useRouter()
+
+  const minimo = minimoAplicable(fila.minimo, minimoGlobal)
+  const estado = estadoStock(fila.cantidad, minimo)
+
+  function guardar() {
+    const limpio = texto.trim()
+    if (limpio && !/^\d+([.,]\d+)?$/.test(limpio)) { toastError('Escribe un número, o déjalo vacío.'); return }
+    // El toast de carga se crea ANTES de la transición: dentro no llega a pintarse.
+    const t = toastLoading('Guardando mínimo…')
+    start(async () => {
+      const r = await guardarStockMinimoAlmacen(producto_id, fila.almacen_id, limpio ? parseNumeroEs(limpio) : null)
+      t.dismiss()
+      if (!r.ok) { toastError(r.error ?? 'No se pudo guardar.'); return }
+      toastSuccess(limpio ? 'Mínimo actualizado.' : 'Este almacén vuelve al mínimo general.')
+      setEditando(false)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="det-stock-alm-row">
+      <span className="det-stock-alm-nombre">{fila.nombre}</span>
+      {estado !== 'ok' && (
+        <span className={`badge ${ESTADO_STOCK_BADGE[estado]}`}>{ESTADO_STOCK_LABEL[estado]}</span>
+      )}
+      <strong>{fila.cantidad.toLocaleString('es-ES')} {unidad}</strong>
+      {editando ? (
+        <span className="det-stock-alm-min">
+          <input className="input input-sm det-stock-alm-input" type="text" inputMode="decimal"
+            aria-label={`Stock mínimo en ${fila.nombre}`} value={texto} autoFocus
+            placeholder={`General: ${minimoGlobal.toLocaleString('es-ES')}`}
+            onChange={e => setTexto(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); guardar() } }} />
+          <button type="button" className="btn btn-primary btn-sm" onClick={guardar} disabled={pending}>
+            {pending ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditando(false)} disabled={pending}>
+            Cancelar
+          </button>
+        </span>
+      ) : (
+        <button type="button" className="det-stock-alm-min-btn" onClick={() => setEditando(true)}
+          aria-label={`Editar el stock mínimo en ${fila.nombre}`}>
+          {fila.minimo != null
+            ? <>Mín. {fila.minimo.toLocaleString('es-ES')}</>
+            : <span className="text-faint">Mín. general</span>}
+          <Pencil size={12} strokeWidth={2} />
+        </button>
+      )}
     </div>
   )
 }
@@ -133,10 +208,8 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
           {stock_por_almacen.length > 0 ? (
             <div className="det-stock-almacenes">
               {stock_por_almacen.map(s => (
-                <div key={s.almacen_id} className="det-stock-alm-row">
-                  <span>{s.nombre}</span>
-                  <strong>{s.cantidad.toLocaleString('es-ES')} {producto.unidad}</strong>
-                </div>
+                <FilaAlmacen key={s.almacen_id} fila={s} unidad={producto.unidad}
+                  minimoGlobal={producto.stock_minimo} producto_id={producto.producto_id} />
               ))}
             </div>
           ) : (
@@ -511,6 +584,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
           producto={data.producto}
           categorias={data.categorias}
           proveedores={data.proveedores}
+          empresas={data.empresas}
           monedas={data.monedas}
           hayAlmacenes={data.almacenes.length > 0}
           modo={producto.tipo}

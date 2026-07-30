@@ -206,7 +206,7 @@ export const adaptadorStockInicial: Adaptador = {
   /** Devuelve la pareja producto+almacén si YA tiene existencias (0 no cuenta). */
   async buscarExistente(datos, ctx) {
     const d = datos as DatosStock
-    const actual = await stockEnAlmacen(ctx.db, d.producto_id, d.almacen_id)
+    const actual = await stockEnAlmacen(ctx.db, ctx.client_id, d.producto_id, d.almacen_id)
     return actual !== 0 ? `${d.producto_id}|${d.almacen_id}` : null
   },
 
@@ -235,7 +235,7 @@ export const adaptadorStockInicial: Adaptador = {
    */
   async actualizar(_id, datos, ctx) {
     const d = datos as DatosStock
-    const actual = await stockEnAlmacen(ctx.db, d.producto_id, d.almacen_id)
+    const actual = await stockEnAlmacen(ctx.db, ctx.client_id, d.producto_id, d.almacen_id)
     const delta  = redondear(d.cantidad - actual)
     if (delta === 0) return   // ya cuadra con el archivo
     await aplicarMovimiento(ctx.db, {

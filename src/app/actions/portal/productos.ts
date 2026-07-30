@@ -3,8 +3,10 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo, puedeEditarAlgunModulo }  from './auth'
+import { obtenerEmpresas }    from './empresas'
 import { MODULOS_CATALOGO, tieneModulo } from '@/lib/modulos'
 import { etiquetasDe }        from '@/lib/sector'
+import { parseNumeroEs }      from '@/lib/numeros'
 import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
 import {
   generarProductoId, generarCategoriaProductoId, siguienteCodigoProducto, construirCamposProducto,
@@ -60,9 +62,22 @@ export interface ProductosPageData {
    *  Inventario y Servicios comparten la tabla `products` pero NO la página. */
   modo:        TipoProducto
   categorias:  Categoria[]
-  proveedores: { tercero_id: string; nombre: string }[]
+  /** Con `empresa_id`: `third_parties` es por-empresa (mig. 008), así que el MISMO
+   *  proveedor real puede tener una ficha en cada empresa. Sin distinguirlas, el
+   *  desplegable las enseñaba como un duplicado exacto. */
+  proveedores: { tercero_id: string; nombre: string; empresa_id: string }[]
   monedas:     string[]   // códigos de monedas activas del cliente, ej: ['USD','CUP']
   almacenes:   { almacen_id: string; nombre: string }[]
+  /** Empresas visibles para este usuario (obtenerEmpresas ya filtra por rol). Sirve
+   *  para agrupar/etiquetar los proveedores por empresa cuando hay más de una. */
+  empresas:    { empresa_id: string; nombre: string }[]
+  /**
+   * Reparto por almacén de cada producto, con el mínimo que aplica en cada uno
+   * (mig. 153). Con varias empresas el total consolidado no responde a ninguna
+   * pregunta: 217 unidades «de sobra» pueden esconder un −3 en un local.
+   * Vacío si el cliente no tiene `inventario`.
+   */
+  stockPorAlmacen: Record<string, { almacen_id: string; nombre: string; cantidad: number; minimo: number | null }[]>
   /** Con `inventario`: existencias, almacenes y productos físicos. Sin él (pieza
    *  `servicios` a secas) la página es solo la lista de servicios con su precio. */
   tieneInventario: boolean
@@ -100,8 +115,14 @@ export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise
   if (!session) return null
 
   const db = createAdminClient()
+  // obtenerEmpresas() ya resuelve el acceso por rol (admin_empresa ve todas; un
+  // usuario, solo las asignadas): proveedores y almacenes se acotan a esas mismas
+  // empresas, igual que en Compras y Ventas — no a todo el client_id.
+  const empresas    = await obtenerEmpresas()
+  const empresa_ids = empresas.map(e => e.empresa_id)
+  const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [prodRes, catRes, provRes, monRes, almRes, ctx] = await Promise.all([
+  const [prodRes, catRes, provRes, monRes, almRes, stkRes, cfgRes, ctx] = await Promise.all([
     db.from('products')
       .select('*')
       .eq('client_id', session.client_id)
@@ -115,8 +136,9 @@ export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise
       .in('tipo', [modo, 'AMBAS'])
       .order('nombre'),
     db.from('third_parties')
-      .select('tercero_id, nombre')
+      .select('tercero_id, nombre, empresa_id')
       .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
       .in('tipo', ['PROVEEDOR', 'AMBOS'])
       .eq('activo', true)
       .order('nombre'),
@@ -128,8 +150,15 @@ export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise
     db.from('almacenes')
       .select('almacen_id, nombre')
       .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
       .eq('activo', true)
       .order('nombre'),
+    db.from('stock_almacenes')
+      .select('producto_id, almacen_id, cantidad')
+      .eq('client_id', session.client_id),
+    db.from('producto_almacen_config')
+      .select('producto_id, almacen_id, stock_minimo')
+      .eq('client_id', session.client_id),
     // Sin `inventario` la página es solo la lista de servicios: ni existencias, ni
     // almacenes, ni tipo. La etiqueta la pone el sector (Servicio / Tratamiento /
     // Clase…), nunca se hornea en el código (MODELO-MODULOS §6).
@@ -144,15 +173,50 @@ export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise
     stock_minimo: Number(p.stock_minimo) || 0,
   })) as Producto[]
 
-  const monedas = (monRes.data ?? []).map((m: { codigo: string }) => m.codigo)
+  const monedas   = (monRes.data ?? []).map((m: { codigo: string }) => m.codigo)
+  const almacenes = (almRes.data ?? []) as { almacen_id: string; nombre: string }[]
+
+  // Reparto por almacén, indexado por producto. Solo almacenes vivos: uno archivado
+  // sigue teniendo filas de stock y saldría como un código crudo («ALM-5EED03»).
+  const nombreAlm = new Map(almacenes.map(a => [a.almacen_id, a.nombre]))
+  const minimoDe  = new Map(
+    ((cfgRes.data ?? []) as { producto_id: string; almacen_id: string; stock_minimo: number | null }[])
+      .filter(c => c.stock_minimo != null)
+      .map(c => [`${c.producto_id}@${c.almacen_id}`, Number(c.stock_minimo)]),
+  )
+  const stockPorAlmacen: ProductosPageData['stockPorAlmacen'] = {}
+  for (const s of (stkRes.data ?? []) as { producto_id: string; almacen_id: string; cantidad: number }[]) {
+    const nombre = nombreAlm.get(s.almacen_id)
+    if (!nombre) continue
+    ;(stockPorAlmacen[s.producto_id] ??= []).push({
+      almacen_id: s.almacen_id,
+      nombre,
+      cantidad:   Number(s.cantidad),
+      minimo:     minimoDe.get(`${s.producto_id}@${s.almacen_id}`) ?? null,
+    })
+  }
+  // Y los almacenes con mínimo configurado pero sin fila de stock: están a cero, que
+  // es justo el caso que hay que enseñar.
+  for (const [clave, minimo] of minimoDe) {
+    const [producto_id, almacen_id] = clave.split('@')
+    const nombre = nombreAlm.get(almacen_id)
+    if (!nombre) continue
+    const filas = (stockPorAlmacen[producto_id] ??= [])
+    if (!filas.some(f => f.almacen_id === almacen_id)) {
+      filas.push({ almacen_id, nombre, cantidad: 0, minimo })
+    }
+  }
+  for (const filas of Object.values(stockPorAlmacen)) filas.sort((a, b) => b.cantidad - a.cantidad)
 
   return {
     productos,
     modo,
     categorias:  (catRes.data  ?? []) as Categoria[],
-    proveedores: (provRes.data ?? []) as { tercero_id: string; nombre: string }[],
+    proveedores: (provRes.data ?? []) as ProductosPageData['proveedores'],
     monedas:     monedas.length ? monedas : ['USD'],   // fallback si no hay monedas configuradas
-    almacenes:   (almRes.data  ?? []) as { almacen_id: string; nombre: string }[],
+    almacenes,
+    empresas:    empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
+    stockPorAlmacen,
     ...ctx,
   }
 }
@@ -207,7 +271,7 @@ export async function guardarProducto(
     costos,
     es_suscribible:       (formData.get('es_suscribible')       as string) === '1',
     periodicidad_defecto: (formData.get('periodicidad_defecto') as string) ?? null,
-    stock_minimo:         parseFloat((formData.get('stock_minimo') as string) ?? '0') || 0,
+    stock_minimo:         parseNumeroEs(formData.get('stock_minimo') as string),
   })
 
   if (!producto_id_form) {
@@ -288,12 +352,30 @@ export async function guardarProducto(
 
 // ── Archivar / restaurar producto ─────────────────────────────────────────────
 
+// El módulo al que pertenece una ficha, por su TIPO. Archivar y eliminar gatean
+// como guardarProducto: con el gate compartido de MODULOS_CATALOGO, un cliente
+// solo de Servicios no podía crear ni editar un producto físico pero SÍ
+// archivarlo o eliminarlo, y la UI oculta no es control de acceso.
+// El `puedeEditarModulo` va INLINE en cada acción, no aquí: `audit-gating` lee el
+// cuerpo de la acción y un candado escondido en un helper le pasa desapercibido.
+// No se exporta: en un fichero 'use server' todo export es un endpoint HTTP.
+async function moduloDeProducto(client_id: string, producto_id: string): Promise<'inventario' | 'servicios' | null> {
+  const db = createAdminClient()
+  const { data: prod } = await db.from('products')
+    .select('tipo').eq('producto_id', producto_id).eq('client_id', client_id).maybeSingle()
+  if (!prod) return null
+  return prod.tipo === 'SERVICIO' ? 'servicios' : 'inventario'
+}
+
 export async function archivarProducto(
   producto_id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const modulo = await moduloDeProducto(session.client_id, producto_id)
+  if (!modulo) return { ok: false, error: 'Producto no encontrado.' }
+  if (!(await puedeEditarModulo(modulo)))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -312,7 +394,10 @@ export async function restaurarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const modulo = await moduloDeProducto(session.client_id, producto_id)
+  if (!modulo) return { ok: false, error: 'Producto no encontrado.' }
+  if (!(await puedeEditarModulo(modulo)))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -336,7 +421,10 @@ export async function eliminarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const modulo = await moduloDeProducto(session.client_id, producto_id)
+  if (!modulo) return { ok: false, error: 'Producto no encontrado.' }
+  if (!(await puedeEditarModulo(modulo)))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -349,22 +437,30 @@ export async function eliminarProducto(
   if (!prod)                     return { ok: false, error: 'Producto no encontrado.' }
   if (prod.estado !== 'INACTIVO') return { ok: false, error: 'Archiva el producto antes de eliminarlo.' }
 
-  const dependencias: { tabla: string; etiqueta: string }[] = [
-    { tabla: 'documento_lineas',       etiqueta: 'ventas u ofertas' },
-    { tabla: 'compra_lineas',          etiqueta: 'compras' },
-    { tabla: 'movimientos_inventario', etiqueta: 'movimientos de inventario' },
-    { tabla: 'catalogo_items',         etiqueta: 'tu catálogo público' },
-    { tabla: 'caja_ticket_lineas',     etiqueta: 'tickets de caja' },
+  // `documento_lineas` es la única sin client_id (mig. 014: cuelga del documento,
+  // no del cliente), así que ahí la comprobación se queda por producto_id. En las
+  // demás se filtra: producto_id no tiene índice único en producción y un código
+  // repetido entre tenants bloquearía —o peor, dejaría pasar— el borrado ajeno.
+  const dependencias: { tabla: string; etiqueta: string; conClientId: boolean }[] = [
+    { tabla: 'documento_lineas',       etiqueta: 'ventas u ofertas',             conClientId: false },
+    { tabla: 'compra_lineas',          etiqueta: 'compras',                      conClientId: true  },
+    { tabla: 'movimientos_inventario', etiqueta: 'movimientos de inventario',    conClientId: true  },
+    { tabla: 'catalogo_items',         etiqueta: 'tu catálogo público',          conClientId: true  },
+    { tabla: 'caja_ticket_lineas',     etiqueta: 'tickets de caja',              conClientId: true  },
   ]
   for (const d of dependencias) {
-    const { count } = await db.from(d.tabla).select('*', { count: 'exact', head: true }).eq('producto_id', producto_id)
+    let q = db.from(d.tabla).select('*', { count: 'exact', head: true }).eq('producto_id', producto_id)
+    if (d.conClientId) q = q.eq('client_id', session.client_id)
+    const { count } = await q
     if ((count ?? 0) > 0) {
       return { ok: false, error: `No se puede eliminar: tiene ${d.etiqueta} asociadas. Se mantiene archivado.` }
     }
   }
 
-  await db.from('producto_precios_historial').delete().eq('producto_id', producto_id)
-  await db.from('stock_almacenes').delete().eq('producto_id', producto_id)
+  await db.from('producto_precios_historial').delete()
+    .eq('client_id', session.client_id).eq('producto_id', producto_id)
+  await db.from('stock_almacenes').delete()
+    .eq('client_id', session.client_id).eq('producto_id', producto_id)
   const { error } = await db
     .from('products')
     .delete()
@@ -399,13 +495,28 @@ export async function archivarProductosEnLote(
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()
+
+  // Candado por tipo, como en la acción individual: el lote no puede ser la vía
+  // por la que se archiva lo que no se puede editar de uno en uno.
+  const { data: prods } = await db.from('products')
+    .select('producto_id, nombre, tipo').eq('client_id', session.client_id).in('producto_id', ids)
+  const filas = (prods ?? []) as { producto_id: string; nombre: string; tipo: string }[]
+  const [puedeInv, puedeSrv] = await Promise.all([
+    puedeEditarModulo('inventario'), puedeEditarModulo('servicios'),
+  ])
+  const permitidos = filas.filter(p => (p.tipo === 'SERVICIO' ? puedeSrv : puedeInv))
+  const omitidas   = filas
+    .filter(p => !(p.tipo === 'SERVICIO' ? puedeSrv : puedeInv))
+    .map(p => ({ nombre: p.nombre, motivo: 'No tienes permiso para editar en este módulo.' }))
+  if (!permitidos.length) return { ok: true, hechas: 0, omitidas }
+
   const { data, error } = await db.from('products')
     .update({ estado: archivar ? 'INACTIVO' : 'ACTIVO', updated_at: new Date().toISOString() })
-    .eq('client_id', session.client_id).in('producto_id', ids)
+    .eq('client_id', session.client_id).in('producto_id', permitidos.map(p => p.producto_id))
     .select('producto_id')
   if (error) return { ok: false, hechas: 0, omitidas: [], error: error.message }
   revalidatePath('/portal/productos')
-  return { ok: true, hechas: (data ?? []).length, omitidas: [] }
+  return { ok: true, hechas: (data ?? []).length, omitidas }
 }
 
 export async function eliminarProductosEnLote(ids: string[]): Promise<ResultadoLoteProductos> {
@@ -450,6 +561,59 @@ export async function obtenerStockPorAlmacen(
     .map(s => ({ almacen_id: s.almacen_id, cantidad: Number(s.cantidad) }))
 }
 
+// ── Stock mínimo por almacén (mig. 153) ────────────────────────────────────────
+
+/**
+ * Fija —o borra— el mínimo de un producto en UN almacén.
+ *
+ * `minimo` a `null` no es «mínimo cero»: es «este almacén vuelve a regirse por el
+ * global de la ficha». Por eso se borra la fila en vez de guardar 0, que sí sería
+ * un umbral (y uno que no avisa nunca).
+ */
+export async function guardarStockMinimoAlmacen(
+  producto_id: string,
+  almacen_id:  string,
+  minimo:      number | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  // `inventario` a secas: el mínimo por almacén es del módulo de existencias, no
+  // del catálogo compartido con Servicios.
+  if (!(await puedeEditarModulo('inventario')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!almacen_id) return { ok: false, error: 'Selecciona un almacén.' }
+  if (minimo != null && (!Number.isFinite(minimo) || minimo < 0))
+    return { ok: false, error: 'El mínimo no puede ser negativo.' }
+
+  const db = createAdminClient()
+
+  // El almacén tiene que ser suyo: sin esta comprobación se podría configurar un
+  // almacén de otro tenant, que es justo lo que el client_id no puede impedir solo.
+  const { data: alm } = await db.from('almacenes')
+    .select('almacen_id').eq('almacen_id', almacen_id).eq('client_id', session.client_id).maybeSingle()
+  if (!alm) return { ok: false, error: 'Almacén no encontrado.' }
+
+  if (minimo == null) {
+    const { error } = await db.from('producto_almacen_config').delete()
+      .eq('client_id', session.client_id)
+      .eq('producto_id', producto_id).eq('almacen_id', almacen_id)
+    if (error) return { ok: false, error: 'No se pudo quitar el mínimo.' }
+  } else {
+    const { error } = await db.from('producto_almacen_config').upsert({
+      client_id: session.client_id,
+      producto_id, almacen_id,
+      stock_minimo: minimo,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'producto_id,almacen_id' })
+    if (error) return { ok: false, error: 'No se pudo guardar el mínimo.' }
+  }
+
+  revalidatePath('/portal/productos')
+  revalidatePath('/portal/almacenes')
+  revalidatePath('/portal/inventario')
+  return { ok: true }
+}
+
 export async function ajustarStock(
   producto_id: string,
   almacen_id:  string,
@@ -481,7 +645,7 @@ export async function ajustarStock(
     .select('empresa_id, nombre').eq('almacen_id', almacen_id).eq('client_id', session.client_id).single()
   if (!alm) return { ok: false, error: 'Almacén no válido.' }
 
-  const disp = await stockEnAlmacen(db, producto_id, almacen_id)
+  const disp = await stockEnAlmacen(db, session.client_id, producto_id, almacen_id)
   if (disp + cantidad < 0)
     return { ok: false, error: `El ajuste dejaría el stock negativo. Disponible en ${alm.nombre}: ${disp}.` }
 
@@ -496,6 +660,9 @@ export async function ajustarStock(
       almacen_id,
       cantidad,                 // delta con signo
       motivo:     motivo.trim(),
+      // El modal de ajuste es «añadir/quitar/fijar», siempre un ajuste de conteo o
+      // corrección: entra tipificado como CONTEO y el texto libre queda de detalle.
+      motivo_tipo: 'CONTEO',
       origen:     'MANUAL',
     })
     stock_nuevo = res.stock_global
@@ -632,9 +799,13 @@ export interface ProductoDetalleData {
   proveedor:         { tercero_id: string; nombre: string } | null
   monedas:           string[]
   categorias:        Categoria[]
-  proveedores:       { tercero_id: string; nombre: string }[]
+  proveedores:       { tercero_id: string; nombre: string; empresa_id: string }[]
+  /** Empresas visibles para este usuario — agrupa el selector de proveedor cuando
+   *  hay más de una (ver ProductosPageData.empresas). */
+  empresas:          { empresa_id: string; nombre: string }[]
   almacenes:         { almacen_id: string; nombre: string; empresa_id: string }[]
-  stock_por_almacen: { almacen_id: string; nombre: string; cantidad: number }[]
+  /** `minimo` es el de ESE almacén (mig. 153); `null` = se rige por el global. */
+  stock_por_almacen: { almacen_id: string; nombre: string; cantidad: number; minimo: number | null }[]
   movimientos:       MovimientoProducto[]
   almacen_nombres:   Record<string, string>
   historialPrecios:  HistorialPrecio[]
@@ -651,8 +822,13 @@ export async function obtenerProductoDetalle(
   if (!session) return null
 
   const db = createAdminClient()
+  // Mismo acotado por rol que en obtenerProductos: proveedores y almacenes solo de
+  // las empresas que este usuario puede ver, no de todo el client_id.
+  const empresas    = await obtenerEmpresas()
+  const empresa_ids = empresas.map(e => e.empresa_id)
+  const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [prodRes, catRes, provRes, monRes, almRes, stkRes, movRes, histRes] = await Promise.all([
+  const [prodRes, catRes, provRes, monRes, almRes, stkRes, cfgRes, movRes, histRes] = await Promise.all([
     db.from('products')
       .select('*')
       .eq('producto_id', producto_id)
@@ -663,8 +839,9 @@ export async function obtenerProductoDetalle(
       .eq('client_id', session.client_id)
       .order('nombre'),
     db.from('third_parties')
-      .select('tercero_id, nombre')
+      .select('tercero_id, nombre, empresa_id')
       .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
       .in('tipo', ['PROVEEDOR', 'AMBOS'])
       .eq('activo', true)
       .order('nombre'),
@@ -673,13 +850,20 @@ export async function obtenerProductoDetalle(
       .eq('client_id', session.client_id)
       .eq('activa', true)
       .order('codigo'),
+    // TODOS, incluidos los archivados: si no, la ficha pintaba el código crudo
+    // («ALM-5EED03») en cuanto un almacén con existencias se archivaba. Los
+    // archivados se marcan al resolver el nombre y no entran en los selectores.
     db.from('almacenes')
-      .select('almacen_id, nombre, empresa_id')
+      .select('almacen_id, nombre, empresa_id, activo')
       .eq('client_id', session.client_id)
-      .eq('activo', true)
+      .in('empresa_id', idsFiltro)
       .order('nombre'),
     db.from('stock_almacenes')
       .select('almacen_id, cantidad')
+      .eq('client_id', session.client_id)
+      .eq('producto_id', producto_id),
+    db.from('producto_almacen_config')
+      .select('almacen_id, stock_minimo')
       .eq('client_id', session.client_id)
       .eq('producto_id', producto_id),
     db.from('movimientos_inventario')
@@ -712,7 +896,7 @@ export async function obtenerProductoDetalle(
   const todasCat    = (catRes.data ?? []) as Categoria[]
   const categorias  = todasCat.filter(c =>
     c.tipo === 'AMBAS' || c.tipo === producto.tipo || c.categoria_id === producto.categoria_id)
-  const proveedores = (provRes.data ?? []) as { tercero_id: string; nombre: string }[]
+  const proveedores = (provRes.data ?? []) as ProductoDetalleData['proveedores']
   const monedas     = (monRes.data  ?? []).map((m: { codigo: string }) => m.codigo)
 
   const categoria = producto.categoria_id
@@ -723,17 +907,33 @@ export async function obtenerProductoDetalle(
     ? (proveedores.find(p => p.tercero_id === producto.proveedor_id) ?? null)
     : null
 
-  const almacenes = (almRes.data ?? []) as { almacen_id: string; nombre: string; empresa_id: string }[]
+  const todosAlmacenes = (almRes.data ?? []) as { almacen_id: string; nombre: string; empresa_id: string; activo: boolean }[]
   const almacen_nombres: Record<string, string> = {}
-  for (const a of almacenes) almacen_nombres[a.almacen_id] = a.nombre
+  for (const a of todosAlmacenes) almacen_nombres[a.almacen_id] = a.activo ? a.nombre : `${a.nombre} (archivado)`
+  // Los selectores (ajustar stock, mover) solo ofrecen los vivos.
+  const almacenes = todosAlmacenes.filter(a => a.activo)
+    .map(({ almacen_id, nombre, empresa_id }) => ({ almacen_id, nombre, empresa_id }))
 
-  const stock_por_almacen = ((stkRes.data ?? []) as { almacen_id: string; cantidad: number }[])
-    .map(s => ({
-      almacen_id: s.almacen_id,
-      nombre:     almacen_nombres[s.almacen_id] ?? s.almacen_id,
-      cantidad:   Number(s.cantidad),
+  const minimoDe = new Map(
+    ((cfgRes.data ?? []) as { almacen_id: string; stock_minimo: number | null }[])
+      .filter(c => c.stock_minimo != null)
+      .map(c => [c.almacen_id, Number(c.stock_minimo)]),
+  )
+
+  // Un almacén con mínimo configurado se enseña AUNQUE esté a cero: es justo el
+  // momento en que el mínimo importa, y filtrarlo sería esconder el problema.
+  const cantidadDe = new Map(
+    ((stkRes.data ?? []) as { almacen_id: string; cantidad: number }[])
+      .map(s => [s.almacen_id, Number(s.cantidad)]),
+  )
+  const stock_por_almacen = [...new Set([...cantidadDe.keys(), ...minimoDe.keys()])]
+    .map(almacen_id => ({
+      almacen_id,
+      nombre:   almacen_nombres[almacen_id] ?? almacen_id,
+      cantidad: cantidadDe.get(almacen_id) ?? 0,
+      minimo:   minimoDe.get(almacen_id) ?? null,
     }))
-    .filter(s => Math.abs(s.cantidad) > 0.0005)
+    .filter(s => Math.abs(s.cantidad) > 0.0005 || s.minimo != null)
     .sort((a, b) => b.cantidad - a.cantidad)
 
   const movimientos = ((movRes.data ?? []) as Record<string, unknown>[]).map(m => ({
@@ -762,6 +962,7 @@ export async function obtenerProductoDetalle(
     monedas: monedas.length ? monedas : ['USD'],
     categorias,
     proveedores,
+    empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     almacenes,
     stock_por_almacen,
     movimientos,

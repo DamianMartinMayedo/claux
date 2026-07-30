@@ -377,10 +377,11 @@ async function postearResumenCierre(
     const { data: lineas } = await db.from('caja_ticket_lineas')
       .select('producto_id, cantidad').in('ticket_uuid', ticketUuids).not('producto_id', 'is', null)
 
-    // Solo los FÍSICOS mueven existencias. Un servicio no tiene stock que sacar, y aquí
-    // se llama con `permitir_negativo: true`, así que la RPC no lo rechazaría: crearía
-    // stock negativo de un SRV- en silencio. Se filtra ANTES de llamar, sin confiar en
-    // que la base lo pare. Vale también para un dispositivo con semilla vieja.
+    // Solo los FÍSICOS mueven existencias. Un servicio no tiene stock que sacar, y el
+    // cierre lleva `permitir_negativo: true`, así que sin este filtro se creaba stock
+    // negativo de un SRV- en silencio (pasó: mig. 157 limpió el resto). Se filtra AQUÍ
+    // aunque la RPC ya tenga su propio candado: la RPC lanza, y un cierre de caja no
+    // puede romperse entero porque un dispositivo con semilla vieja mande un servicio.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const idsLinea = [...new Set((lineas ?? []).map((l: any) => l.producto_id as string))]
     const fisicos = new Set<string>()

@@ -32,7 +32,11 @@ export default function InventarioWidget({ data }: { data: InventarioResumen }) 
             <li key={i} className="dash-list-item">
               <span className="dash-list-main">
                 <span className="dash-list-title">{p.nombre}</span>
-                <span className="dash-list-meta">Mínimo {p.minimo} {p.unidad}</span>
+                {/* Con mínimo por almacén la alerta es de UN almacén: decirlo es la
+                    diferencia entre «faltan 3» y «faltan 3, y es en Playa». */}
+                <span className="dash-list-meta">
+                  {p.almacen ? `${p.almacen} · mínimo ${p.minimo} ${p.unidad}` : `Mínimo ${p.minimo} ${p.unidad}`}
+                </span>
               </span>
               <span className="dash-list-amount is-neg">{p.stock} {p.unidad}</span>
             </li>

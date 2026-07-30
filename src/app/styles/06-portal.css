@@ -728,21 +728,13 @@
 .usr-badge-usuario { background: var(--color-info-bg); color: var(--color-primary); }
 .usr-badge-lectura { opacity: 0.8; font-style: italic; }
 
-/* Badge estado */
-.usr-estado {
-  display: inline-block; font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: var(--radius-full);
-}
-.usr-estado-activo   { background: var(--color-success-bg); color: var(--color-success); }
-.usr-estado-inactivo { background: var(--color-surface-2);  color: var(--color-text-muted); }
+/* La columna «Estado» de la tabla usa `.badge` (03-components.css), que dentro de tabla
+   va sin fondo. Las clases `.usr-badge-*` de arriba se quedan porque PerfilView las pinta
+   en una tarjeta, donde el pill sí corresponde. */
 
-/* Tags de empresas en la fila */
-.usr-empresas-list { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.usr-empresa-tag {
-  font-size: 10px; padding: 1px 6px; border-radius: var(--radius-full);
-  border: 1.5px solid var(--empresa-color, var(--color-border)); background: var(--color-surface-2);
-  color: var(--color-text-muted); white-space: nowrap;
-}
+/* Envoltorio de las empresas en la fila. Las etiquetas las pone `EmpresaTag` (punto de
+   color + nombre), el componente canónico para esto en una tabla. */
+.usr-empresas-list { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 
 /* Grid del formulario del modal */
 .usr-form-grid {
@@ -968,6 +960,101 @@
 .alm-stat-count { font-size: 24px; font-weight: 800; color: var(--color-text); }
 .alm-stat-label { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
 .alm-id-text    { font-size: 11px; color: var(--color-text-muted); font-family: monospace; margin-top: 1px; }
+/* Valor del inventario: un chip por moneda, sin convertir (regla de Reportes). */
+.alm-stat-valor { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-lg); }
+.alm-valor-chip { font-variant-numeric: tabular-nums; }
+.alm-stat-count-alerta { color: var(--color-warning); }
+.alm-col-valor  { font-variant-numeric: tabular-nums; }
+
+/* Salidas por motivo (mig. 154): una tira de conteos, no una tabla. */
+.mov-motivos-card { padding: var(--space-4); margin-bottom: var(--space-4); }
+.mov-motivos-grid { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); }
+.mov-motivo-item  { display: flex; flex-direction: column; gap: 2px; min-width: 6rem; }
+.mov-motivo-label { font-size: var(--text-xs); color: var(--color-text-muted); }
+.mov-motivo-valor { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+
+/* Conteo físico (mig. 156): la casilla donde se escribe lo que hay de verdad. */
+.cnt-input { width: 6rem; text-align: right; font-variant-numeric: tabular-nums; }
+.cnt-dictado {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); margin-bottom: var(--space-4);
+}
+.cnt-dictado-acciones { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+
+/* ── Acta del conteo (mig. 159) ──
+   Contar no es ajustar: cada diferencia lleva su causa, y el faltante se ve en dinero
+   mientras se cuenta. Lo que falta por justificar se marca en rojo en el propio
+   campo — que el dueño lo descubra al pulsar «Aplicar» es descubrirlo tarde. */
+/* Los bloques de esta pantalla respiran MÁS que en un listado: se usa de pie, con el
+   móvil en la mano, y aquí se toman decisiones sobre dinero. Con el espaciado normal
+   la cabecera, los datos del acta, el resumen y la tabla se leían como un bloque
+   pegado. */
+.cnt-acta-datos {
+  padding: var(--space-5); margin-bottom: var(--space-6);
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+.cnt-resumen {
+  padding: var(--space-5); margin-bottom: var(--space-6);
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+/* La barra de herramientas del conteo (filtros, dictado, hoja) separada de la tabla. */
+.cnt-toolbar { margin-bottom: var(--space-5); }
+.cnt-resumen-cifras { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.cnt-resumen-cifras > div { display: flex; flex-direction: column; gap: var(--space-1); }
+.cnt-lote {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--space-2); margin-top: var(--space-3); font-size: var(--text-xs);
+}
+/* Las líneas que aún no dicen por qué, dentro del aviso: se nombran, no se cuentan.
+   «Faltan 4 causas» no dice dónde mirar; «Arroz 1kg −3» sí. */
+.cnt-lista-faltan {
+  margin: var(--space-3) 0 0; padding-left: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+/* El cierre del conteo, al pie de la tabla: el recuento manda y el botón no encoge. En
+   móvil el botón pasa a ancho completo — es la acción de la pantalla, no un apéndice. */
+.cnt-cierre {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-4);
+  padding: var(--space-5); margin-top: var(--space-5);
+}
+.cnt-cierre-texto {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  flex: 1 1 22rem; min-width: 0;
+  font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.cnt-cierre-texto strong { font-size: var(--text-base); color: var(--color-text); }
+.cnt-cierre .btn { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .cnt-cierre .btn { width: 100%; justify-content: center; }
+}
+
+/* La salida secundaria del diálogo «ya hay un conteo abierto»: la acción y su
+   consecuencia juntas, porque la consecuencia es que se tira lo contado. */
+.alm-conteo-nuevo {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--space-3); margin-top: var(--space-4);
+}
+
+/* El input de archivo de «Importar conteo»: se dispara desde el botón, así que se saca
+   del flujo sin `display:none` (que lo dejaría fuera del árbol de accesibilidad). */
+.cnt-archivo-input {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; overflow: hidden; pointer-events: none;
+}
+/* Los dos avisos de esta pantalla —la hoja que no es de hoy y lo que el archivo
+   importado no pudo colocar— tienen la misma forma: titular y qué hacer. Comparten
+   clase en vez de repetir el flex en cada uno. */
+.cnt-aviso-texto {
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 1 1 20rem; min-width: 0;
+}
+.cnt-causa { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.cnt-causa select { min-width: 9rem; }
+.cnt-causa input  { flex: 1 1 10rem; min-width: 10rem; }
+.cnt-causa-falta  { border-color: var(--color-error); }
+.cnt-sin-causa    { color: var(--color-error); font-weight: 600; }
 .alm-desc-td    { font-size: var(--text-sm); color: var(--color-text-muted); max-width: 280px; }
 .alm-nota-info  {
   margin-top: var(--space-4); padding: 12px 16px;
@@ -1013,6 +1100,11 @@
   display: flex; align-items: center; flex-wrap: wrap;
   gap: var(--space-3); flex: 1 1 100%;
 }
+/* Sin buscador, el rango no reclama la fila entera: así el filtro que la vista ponga
+   al lado (el estado en Compras) queda en la MISMA línea y no suelto debajo. Va
+   DESPUÉS de `.rango-busqueda` a propósito: misma especificidad, gana el orden, y así
+   no hace falta un `!important` que luego nadie sabe por qué está. */
+.rango-busqueda-compacto { flex: 0 1 auto; }
 .rango-presets { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .rango-pill {
   padding: 5px var(--space-3);
@@ -1090,11 +1182,9 @@
 .ter-contacto-item { display: flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-text-muted); }
 .ter-contacto-item svg { flex-shrink: 0; opacity: .7; }
 
-/* Tipo badges */
-.ter-badge           { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
-.ter-badge-cliente   { background: #eff6ff; color: #1d4ed8; }
-.ter-badge-proveedor { background: #fdf4ff; color: #7e22ce; }
-.ter-badge-ambos     { background: #f0fdf4; color: #15803d; }
+/* La columna «Tipo» usa la familia canónica `.badge` (03-components.css). Había aquí
+   una `.ter-badge-*` propia que, por no llamarse `.badge`, se saltaba el apagado de
+   fondo dentro de tablas y encima fijaba hex a pelo sin par para el modo oscuro. */
 
 /* Vía pago badges — un color por tipo de vía; la moneda va como sufijo, ya que
    ya no forma parte del tipo (una misma vía sirve en CUP, USD o la que sea). */
@@ -1387,10 +1477,15 @@
 /* ── Lista de productos (tabla) ───────────────────────────────────────────── */
 .code-value         { font-size: var(--text-sm); font-weight: 600; font-family: monospace; color: var(--color-text); }
 .prd-cat-col-count  { width: 110px; }
-.prd-cat-count-btn  { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; padding: 2px 10px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 700; background: var(--color-info-bg); color: var(--color-primary-text); border: none; cursor: pointer; }
-.prd-cat-count-warn { background: var(--color-warning-bg); color: var(--color-warning); }
+/* Contador de artículos: sin fondo, como el resto de las etiquetas de tabla. NO se
+   convierte a `.badge` porque es un BOTÓN (lleva a la pestaña Productos ya filtrada por
+   esa categoría), y un badge no dice que se pueda pulsar: la afordancia la dan el
+   subrayado al pasar por encima y el cursor. */
+.prd-cat-count-btn  { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; padding: 2px 6px; font-size: var(--text-xs); font-weight: 700; background: none; color: var(--color-primary-text); border: none; cursor: pointer; }
+.prd-cat-count-btn:hover { text-decoration: underline; }
+.prd-cat-count-warn { color: var(--color-warning); }
 .prd-cat-row-special { background: var(--color-surface-2); }
-.prd-cat-badge-revisar { display: inline-block; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: var(--radius-full); background: var(--color-warning-bg); color: var(--color-warning); }
+/* La etiqueta «Revisar» de la fila «Sin categoría» usa `.badge badge-warning`. */
 
 /* ── Prices/costs detail table (usa el sistema .table estándar) ─────────────── */
 .prd-moneda-badge { display: inline-block; padding: 2px 10px; border-radius: 6px; background: var(--color-surface-2); font-weight: 700; font-size: var(--text-xs); font-family: monospace; letter-spacing: 0.04em; }
@@ -1974,7 +2069,7 @@
     padding: var(--space-4) var(--space-3);
     position: relative;
   }
-  .cmp-lineas-row .cmp-col-prod { grid-column: 1 / -1; padding-right: var(--space-8); }
+  .cmp-lineas-row .ven-col-prod { grid-column: 1 / -1; padding-right: var(--space-8); }
   .cmp-lineas-row .ven-col-num { text-align: left; }
   .cmp-lineas-row .ven-col-num::before {
     content: attr(data-label);
@@ -2006,6 +2101,19 @@
   font-size: var(--text-sm);
 }
 .det-stock-alm-row strong { font-variant-numeric: tabular-nums; }
+.det-stock-alm-nombre { flex: 1 1 8rem; min-width: 0; }
+/* Mínimo por almacén (mig. 153): botón discreto que abre la edición en línea. */
+.det-stock-alm-min-btn {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: none; color: var(--color-text-muted);
+  font-size: var(--text-xs); font-family: var(--font-body); cursor: pointer;
+  transition: var(--transition);
+}
+.det-stock-alm-min-btn:hover { border-color: var(--color-border); color: var(--color-text); }
+.det-stock-alm-min { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.det-stock-alm-input { width: 7rem; }
 .det-stock-num.det-stock-num-low { color: var(--color-error); }
 
 /* ── Reservas · Checkbox row (días de la semana) ── */

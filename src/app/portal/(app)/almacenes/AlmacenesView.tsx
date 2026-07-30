@@ -1,17 +1,20 @@
 'use client'
 
-import { toastError, toastLoading } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo } from 'react'
+import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter }                         from 'next/navigation'
 import { Archive, Pencil, Plus, RotateCcw, Warehouse, X } from 'lucide-react'
 import {
   guardarAlmacen,
   archivarAlmacen,
   restaurarAlmacen,
+  resumenAlmacen,
   type Almacen,
   type TipoAlmacen,
   type AlmacenesPageData,
 } from '@/app/actions/portal/almacenes'
+import Link                          from 'next/link'
+import { fmtValor }                  from '@/lib/inventario/valoracion'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import EmpresaPills                    from '@/components/portal/EmpresaPills'
@@ -167,6 +170,13 @@ function ConfirmArchivar({
   onClose:   () => void
   isPending: boolean
 }) {
+  const [contenido, setContenido] = useState<{ referencias: number; unidades: number } | null>(null)
+  useEffect(() => {
+    let vivo = true
+    resumenAlmacen(almacen.almacen_id).then(r => { if (vivo) setContenido(r) })
+    return () => { vivo = false }
+  }, [almacen.almacen_id])
+
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
@@ -179,6 +189,20 @@ function ConfirmArchivar({
             ¿Archivar <strong>{almacen.nombre}</strong>? No aparecerá en listas activas
             pero podrás restaurarlo cuando lo necesites.
           </p>
+          {/* Archivar un almacén con mercancía dentro no se prohíbe, pero tiene que
+              decirse: sus existencias siguen sumando en el total de cada producto
+              mientras el almacén desaparece de movimientos, ajustes y compras. */}
+          {contenido === null ? (
+            <p className="modal-body-text text-xs-muted">Comprobando qué hay dentro…</p>
+          ) : contenido.referencias > 0 && (
+            <div className="alert alert-warning">
+              <strong>{contenido.referencias} {contenido.referencias === 1 ? 'referencia' : 'referencias'}</strong>
+              {' '}y {contenido.unidades.toLocaleString('es-ES')} unidades siguen dentro.
+              Al archivarlo dejarás de verlo en movimientos, ajustes y compras, pero esas
+              existencias seguirán contando en el total de cada producto. Transfiérelas antes
+              si quieres que el total cuadre.
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -229,27 +253,51 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
   function closeModal()           { setModalOpen(false);  setEditAlmacen(null) }
   function onSaved()              { closeModal(); router.refresh() }
 
+  // Archivar y restaurar SON escrituras: llevan su carga y su resultado como cualquier
+  // otra. Iban mudas y además se tragaban el `{ ok, error }`, así que un fallo
+  // —permisos, dependencias— se veía como «no ha pasado nada».
   function handleRestaurar(a: Almacen) {
-    startTransition(async () => { await restaurarAlmacen(a.almacen_id); router.refresh() })
+    const ld = toastLoading('Restaurando…')
+    startTransition(async () => {
+      const r = await restaurarAlmacen(a.almacen_id)
+      await ld.dismiss()
+      if (!r?.ok) { toastError(r?.error ?? 'No se pudo restaurar.'); return }
+      toastSuccess(`«${a.nombre}» vuelve a estar activo`)
+      router.refresh()
+    })
   }
 
   function confirmarArchivar() {
     if (!confirmAlm) return
+    const alm = confirmAlm
+    const ld = toastLoading('Archivando…')
     startTransition(async () => {
-      await archivarAlmacen(confirmAlm.almacen_id)
+      const r = await archivarAlmacen(alm.almacen_id)
+      await ld.dismiss()
+      if (!r?.ok) { toastError(r?.error ?? 'No se pudo archivar.'); return }
+      toastSuccess(`«${alm.nombre}» archivado`)
       setConfirmAlm(null)
       router.refresh()
     })
   }
 
-  // Resumen por tipo
-  const conteoTipo = useMemo(() => {
-    const m: Record<string, number> = {}
-    for (const a of data.almacenes.filter(a => a.activo)) {
-      m[a.tipo] = (m[a.tipo] ?? 0) + 1
+  // Resumen del conjunto. Las cuatro tarjetas contaban «almacenes por tipo», que es
+  // el número menos útil que se puede enseñar: nadie entra aquí a saber cuántos
+  // almacenes virtuales tiene, sino cuánto hay guardado y cuánto vale.
+  const totales = useMemo(() => {
+    const vivos = data.almacenes.filter(a => a.activo)
+    let referencias = 0, unidades = 0, alertas = 0
+    const porMoneda = new Map<string, number>()
+    for (const a of vivos) {
+      const r = data.resumen[a.almacen_id]
+      if (!r) continue
+      referencias += r.referencias
+      unidades    += r.unidades
+      alertas     += r.alertas
+      for (const v of r.valor) porMoneda.set(v.moneda, (porMoneda.get(v.moneda) ?? 0) + v.valor)
     }
-    return m
-  }, [data.almacenes])
+    return { referencias, unidades, alertas, valor: [...porMoneda].map(([moneda, valor]) => ({ moneda, valor })) }
+  }, [data.almacenes, data.resumen])
 
   return (
     <div className="view-container">
@@ -282,20 +330,31 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
         </PrerequisitoAviso>
       )}
 
-      {/* ── Tarjetas resumen por tipo ── */}
+      {/* ── Qué guardas, no cuántos almacenes de cada tipo tienes ── */}
       {activos > 0 && (
         <div className="alm-stats-grid">
-          {TIPOS.map(t => (
-            <div key={t} className="alm-stat-card">
-              <div className="alm-stat-badge">
-                <span className={`badge ${TIPO_BADGE[t]}`}>
-                  {TIPO_ALMACEN_LABEL[t]}
-                </span>
-              </div>
-              <div className="alm-stat-count">{conteoTipo[t] ?? 0}</div>
-              <div className="alm-stat-label">almacén{(conteoTipo[t] ?? 0) !== 1 ? 'es' : ''}</div>
+          <div className="alm-stat-card">
+            <div className="alm-stat-count">{totales.referencias}</div>
+            <div className="alm-stat-label">referencias con existencias</div>
+          </div>
+          <div className="alm-stat-card">
+            <div className="alm-stat-count">{totales.unidades.toLocaleString('es-ES')}</div>
+            <div className="alm-stat-label">unidades</div>
+          </div>
+          <div className="alm-stat-card">
+            <div className="alm-stat-count alm-stat-valor">
+              {totales.valor.length === 0
+                ? <span className="text-faint">—</span>
+                : totales.valor.map(v => (
+                    <span key={v.moneda} className="alm-valor-chip">{fmtValor(v.valor, v.moneda)}</span>
+                  ))}
             </div>
-          ))}
+            <div className="alm-stat-label">valor del inventario</div>
+          </div>
+          <div className="alm-stat-card">
+            <div className={`alm-stat-count${totales.alertas > 0 ? ' alm-stat-count-alerta' : ''}`}>{totales.alertas}</div>
+            <div className="alm-stat-label">bajo mínimo</div>
+          </div>
         </div>
       )}
 
@@ -349,22 +408,32 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                   <th>Nombre</th>
                   {multiempresa && <th>Empresa</th>}
                   <th>Tipo</th>
-                  <th>Descripción</th>
+                  <th className="col-num">Referencias</th>
+                  <th className="col-num">Unidades</th>
+                  <th className="col-num">Valor</th>
                   <th>Estado</th>
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {almacenesFiltrados.map(a => (
+                {almacenesFiltrados.map(a => {
+                  const r = data.resumen[a.almacen_id]
+                  return (
                   <tr
                     key={a.almacen_id}
-                    className={`${!a.activo ? 'ter-row-archivada' : ''}${multiempresa ? ' row-empresa-accent' : ''}`}
+                    className={`table-row-clickable${!a.activo ? ' ter-row-archivada' : ''}${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(a.empresa_id)) : undefined}
+                    onClick={() => router.push(`/portal/almacenes/${a.almacen_id}`)}
                   >
 
+                    {/* Se retira el ALM-XXXX: ninguna otra tabla del portal enseña el
+                        código interno, y ocupaba el sitio de un dato que sí importa. */}
                     <td data-label="Nombre">
-                      <strong>{a.nombre}</strong>
-                      <div className="alm-id-text">{a.almacen_id}</div>
+                      <Link href={`/portal/almacenes/${a.almacen_id}`} className="table-name-link"
+                        onClick={e => e.stopPropagation()}>
+                        {a.nombre}
+                      </Link>
+                      {a.descripcion && <div className="table-cell-sub">{a.descripcion}</div>}
                     </td>
 
                     {multiempresa && (
@@ -379,8 +448,19 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                       </span>
                     </td>
 
-                    <td data-label="Descripción" className="alm-desc-td cell-truncate">
-                      {a.descripcion ?? '—'}
+                    <td data-label="Referencias" className="col-num">
+                      {r?.referencias ?? 0}
+                      {(r?.alertas ?? 0) > 0 && <span className="text-xs-hint"> · {r!.alertas} bajo mín.</span>}
+                    </td>
+
+                    <td data-label="Unidades" className="col-num">
+                      {(r?.unidades ?? 0).toLocaleString('es-ES')}
+                    </td>
+
+                    <td data-label="Valor" className="col-num alm-col-valor">
+                      {!r || r.valor.length === 0
+                        ? <span className="text-faint">—</span>
+                        : r.valor.map(v => <div key={v.moneda}>{fmtValor(v.valor, v.moneda)}</div>)}
                     </td>
 
                     <td data-label="Estado">
@@ -391,6 +471,10 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
 
                     <td className="col-actions">
                       <RowActions>
+                        <button className="row-actions-item"
+                          onClick={() => router.push(`/portal/almacenes/${a.almacen_id}`)}>
+                          <Warehouse size={15} strokeWidth={2} /> Ver contenido
+                        </button>
                         {a.activo ? (
                           <>
                             <button className="row-actions-item" onClick={() => openEdit(a)}>
@@ -410,7 +494,8 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                       </RowActions>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

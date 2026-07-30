@@ -3,6 +3,7 @@
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useEffect, useTransition } from 'react'
 import { ajustarStock, obtenerStockPorAlmacen } from '@/app/actions/portal/productos'
+import { parseNumeroEs } from '@/lib/numeros'
 import { AlertTriangle, Plus, Minus, Equal, X } from 'lucide-react'
 
 // Modal único de ajuste de stock, compartido por la tabla de Productos y el
@@ -21,16 +22,22 @@ interface Props {
   nombre:      string
   unidad:      string
   almacenes:   { almacen_id: string; nombre: string }[]
+  /** Fija el almacén de entrada (lo usa «Revisar»: el descuadre ya sabe cuál es). */
+  almacenInicial?: string
+  /** «Fijar» para un conteo o un saneamiento; por defecto, añadir. */
+  modoInicial?: Modo
   onClose:     () => void
   onSaved:     () => void
 }
 
-export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClose, onSaved }: Props) {
+export function StockAjusteModal({
+  producto_id, nombre, unidad, almacenes, almacenInicial, modoInicial, onClose, onSaved,
+}: Props) {
   const [isPending, startTransition] = useTransition()
   const [cargando,  setCargando]     = useState(true)
   const [stockMap,  setStockMap]     = useState<Record<string, number>>({})
-  const [almacenId, setAlmacenId]    = useState(almacenes[0]?.almacen_id ?? '')
-  const [modo,      setModo]         = useState<Modo>('añadir')
+  const [almacenId, setAlmacenId]    = useState(almacenInicial ?? almacenes[0]?.almacen_id ?? '')
+  const [modo,      setModo]         = useState<Modo>(modoInicial ?? 'añadir')
   const [cantidad,  setCantidad]     = useState('')
   const [motivo,    setMotivo]       = useState('')
 
@@ -43,7 +50,15 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
       for (const s of res) map[s.almacen_id] = s.cantidad
       setStockMap(map)
 
-      // Seleccionar almacén por defecto: el que más stock tenga, o el primero si ninguno tiene
+      // Si el llamador ya sabe de qué almacén se trata (Revisar), manda él.
+      if (almacenInicial) {
+        // Nunca arranca en negativo: el campo no admite signo y, viniendo de un
+        // descuadre, lo que se va a teclear es lo que hay de verdad en el estante.
+        if (modoInicial === 'fijar') setCantidad(String(Math.max(0, map[almacenInicial] ?? 0)))
+        setCargando(false)
+        return
+      }
+      // Si no: el que más stock tenga, o el primero si ninguno tiene.
       let bestId = almacenes[0]?.almacen_id ?? ''
       let bestStock = -1
       for (const a of almacenes) {
@@ -72,8 +87,11 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
     setCantidad(nuevo === 'fijar' ? String(stockMap[almacenId] ?? 0) : '')
   }
 
-  const cantNum = parseFloat(cantidad)
-  const numOk    = cantidad !== '' && !isNaN(cantNum) && cantNum >= 0
+  // parseNumeroEs, no parseFloat: «0,5» es medio kilo y parseFloat lo corta a 0.
+  // El patrón sigue exigiendo un número de verdad: con parseNumeroEs a secas, «abc»
+  // valdría 0 y el aviso pasaría de «cantidad no válida» a «el stock no ha cambiado».
+  const cantNum = parseNumeroEs(cantidad)
+  const numOk   = /^\d+([.,]\d+)?$/.test(cantidad.trim()) && cantNum >= 0
   // Delta con signo según el modo (lo que espera ajustarStock).
   const delta      = !numOk ? 0
     : modo === 'añadir' ? cantNum
@@ -150,7 +168,7 @@ export function StockAjusteModal({ producto_id, nombre, unidad, almacenes, onClo
 
                 <div className="input-group">
                   <label htmlFor="stk-cant">{labelCantidad} <span className="required">*</span></label>
-                  <input id="stk-cant" className="input" type="number" step="any" min="0"
+                  <input id="stk-cant" className="input" type="text" inputMode="decimal"
                     value={cantidad} onChange={e => setCantidad(e.target.value)} autoFocus />
                   {numOk && delta !== 0 && !negativo && (
                     <span className="input-hint prd-stock-preview">

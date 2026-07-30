@@ -1,7 +1,7 @@
 'use client'
 
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { Plus, X, Sparkles, Loader2 } from 'lucide-react'
 import {
@@ -10,8 +10,9 @@ import {
   type Categoria,
   type TipoProducto,
 } from '@/app/actions/portal/productos'
-import { autocompletarDescripcionProducto } from '@/app/actions/portal/ia'
+import { autocompletarFichaProducto } from '@/app/actions/portal/ia'
 import { useIa } from '@/components/portal/ia/IaContext'
+import { parseNumeroEs, textoNumeroEs } from '@/lib/numeros'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ export function PreciosCostosEditor({
             {monedasDisponibles.filter(m => m === row.moneda || !usadas.has(m))
               .map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <input className="input prd-editor-input" type="number" step="any" min="0" placeholder="0.00"
+          <input className="input prd-editor-input" type="text" inputMode="decimal" placeholder="0,00"
             aria-label={`Importe en ${row.moneda || 'la moneda elegida'} — ${label}`}
             value={row.valor} onChange={e => updateRow(i, 'valor', e.target.value)} />
           <button type="button" onClick={() => removeRow(i)} title="Quitar" aria-label={`Quitar ${row.moneda || 'esta fila'}`}
@@ -97,25 +98,36 @@ export function PreciosCostosEditor({
 export function rowsToObj(rows: PrecioRow[]): Record<string, number> {
   const obj: Record<string, number> = {}
   for (const r of rows) {
-    if (r.moneda && r.valor !== '') {
-      const v = parseFloat(r.valor)
-      if (!isNaN(v) && v >= 0) obj[r.moneda] = v
+    if (r.moneda && r.valor.trim() !== '') {
+      const v = parseNumeroEs(r.valor)
+      if (v >= 0) obj[r.moneda] = v
     }
   }
   return obj
 }
 
 export function objToRows(obj: Record<string, number>): PrecioRow[] {
-  return Object.entries(obj).map(([moneda, valor]) => ({ moneda, valor: String(valor) }))
+  return Object.entries(obj).map(([moneda, valor]) => ({ moneda, valor: textoNumeroEs(valor) }))
 }
 
 // ── UnidadSelect ──────────────────────────────────────────────────────────────
 
-export function UnidadSelect({ defaultValue }: { defaultValue?: string }) {
+/**
+ * `sugerida` la usa el autocompletado con IA: llega una unidad de la lista cerrada y
+ * el selector se posiciona en ella. Es una preselección que el dueño ve antes de
+ * guardar, nunca una escritura.
+ */
+export function UnidadSelect({ defaultValue, sugerida }: { defaultValue?: string; sugerida?: string | null }) {
   const inicial    = defaultValue ?? 'unidad'
   const esConocida = TODAS_UNIDADES.includes(inicial)
   const [sel,      setSel]    = useState(esConocida ? inicial : '__otra__')
   const [custom,   setCustom] = useState(esConocida ? '' : inicial)
+
+  // Solo si es de la lista: una unidad inventada dejaría el selector en un estado
+  // que no existe. La verificación de fondo está en `lib/ia/producto.ts`.
+  useEffect(() => {
+    if (sugerida && TODAS_UNIDADES.includes(sugerida)) { setSel(sugerida); setCustom('') }
+  }, [sugerida])
 
   const valor = sel === '__otra__' ? custom : sel
 
@@ -143,12 +155,18 @@ export function UnidadSelect({ defaultValue }: { defaultValue?: string }) {
 // ── ProductoFormModal ─────────────────────────────────────────────────────────
 
 export function ProductoFormModal({
-  producto, categorias, proveedores, monedas, hayAlmacenes, modo,
+  producto, categorias, proveedores, empresas, monedas, hayAlmacenes, modo,
   etiquetaServicio, onClose, onSaved,
 }: {
   producto:     Producto | null
   categorias:   Categoria[]
-  proveedores:  { tercero_id: string; nombre: string }[]
+  /** Con `empresa_id`: el mismo proveedor real puede tener una ficha por empresa
+   *  (third_parties es por-empresa). Con `empresas` se filtra el <select> a una
+   *  empresa a la vez, para no enseñar dos filas idénticas sin poder distinguirlas. */
+  proveedores:  { tercero_id: string; nombre: string; empresa_id: string }[]
+  /** Empresas visibles para este usuario. Con 2+, aparece el selector «Empresa del
+   *  proveedor» que filtra la lista; con 0 o 1 no hace falta (ya se ve todo o nada). */
+  empresas:     { empresa_id: string; nombre: string }[]
   monedas:      string[]
   hayAlmacenes: boolean
   /** Qué se crea/edita en esta página: PRODUCTO (Inventario) o SERVICIO (Servicios).
@@ -165,17 +183,53 @@ export function ProductoFormModal({
   const [periodicidad,  setPeriodicidad]  = useState(producto?.periodicidad_defecto ?? 'MENSUAL')
   const [descripcion,   setDescripcion]   = useState(producto?.descripcion ?? '')
   const [sugiriendo,    setSugiriendo]    = useState(false)
+  // Controlados para que el autocompletado con IA pueda preseleccionarlos.
+  const [categoriaId,     setCategoriaId]     = useState(producto?.categoria_id ?? '')
+  const [unidadSugerida,  setUnidadSugerida]  = useState<string | null>(null)
+  // Empresa por la que se filtra el selector de Proveedor (ver más abajo): al editar,
+  // la del proveedor ya enlazado; si no, la primera. Es un filtro de UI, no un campo
+  // del producto — el catálogo sigue siendo del cliente entero, no de una empresa.
+  const [proveedorEmpresaId, setProveedorEmpresaId] = useState(() => {
+    const actual = producto?.proveedor_id
+      ? proveedores.find(p => p.tercero_id === producto.proveedor_id)
+      : undefined
+    return actual?.empresa_id ?? empresas[0]?.empresa_id ?? ''
+  })
+  const [proveedorId, setProveedorId] = useState(producto?.proveedor_id ?? '')
   const nombreRef = useRef<HTMLInputElement>(null)
   const { tieneIa } = useIa()
 
-  async function sugerirDescripcion() {
+  /** Cambiar de empresa cambia el juego de proveedores: el elegido deja de valer. */
+  function onProveedorEmpresaChange(id: string) {
+    setProveedorEmpresaId(id)
+    if (proveedorId && !proveedores.some(p => p.tercero_id === proveedorId && p.empresa_id === id)) {
+      setProveedorId('')
+    }
+  }
+
+  /**
+   * Autocompletar con IA: descripción + unidad + categoría en UNA llamada.
+   *
+   * Nada se guarda: los tres campos quedan rellenos y el dueño los revisa. La lista
+   * de unidades se le pasa cerrada al servidor, y la categoría vuelve verificada
+   * contra las del cliente (`lib/ia/producto.ts`).
+   */
+  async function sugerirConIa() {
     const nombre = nombreRef.current?.value.trim() ?? ''
     if (!nombre) { toastError('Escribe primero el nombre.'); return }
     setSugiriendo(true)
-    const r = await autocompletarDescripcionProducto(nombre, (producto?.tipo ?? modo) === 'SERVICIO')
+    const r = await autocompletarFichaProducto(nombre, (producto?.tipo ?? modo) === 'SERVICIO', TODAS_UNIDADES)
     setSugiriendo(false)
     if (!r.ok) { toastError(r.error); return }
-    setDescripcion(r.texto)
+    const s = r.sugerencia
+    if (s.descripcion) setDescripcion(s.descripcion)
+    if (s.unidad)      setUnidadSugerida(s.unidad)
+    if (s.categoria_id && categorias.some(c => c.categoria_id === s.categoria_id)) {
+      setCategoriaId(s.categoria_id)
+    }
+    if (!s.descripcion && !s.unidad && !s.categoria_id) {
+      toastError('No pude sugerir nada con ese nombre. Rellena la ficha a mano.')
+    }
   }
 
   const isEdit             = !!producto
@@ -185,6 +239,11 @@ export function ProductoFormModal({
   const esServicio         = tipo === 'SERVICIO'
   const nombreTipo         = esServicio ? etiquetaServicio.toLowerCase() : 'producto'
   const categoriasActivas  = categorias.filter(c => c.estado === 'ACTIVO')
+  const proveedoresDeEmpresa = proveedores.filter(p => p.empresa_id === proveedorEmpresaId)
+  // El selector de Empresa solo se enseña con 2+: con una sola no hay nada que elegir
+  // (filtrar por ella ya deja pasar a todos). Categoría/Empresa/Proveedor reparten la
+  // misma fila de 6 columnas: a dos (sin empresa) o a tres (con ella).
+  const provSpan = empresas.length > 1 ? 'ter-col-span-2' : 'ter-col-span-3'
   const monedasDisponibles = monedas.length ? monedas : MONEDAS_FALLBACK
   // Un producto FÍSICO necesita un almacén donde vivir su stock; un servicio no.
   // Al crear un físico sin almacén, se bloquea el guardado y se ofrece crear uno.
@@ -209,7 +268,7 @@ export function ProductoFormModal({
 
   return (
     <div className="modal-backdrop open">
-      <div className="modal modal-lg" role="dialog" aria-modal>
+      <div className="modal modal-xl" role="dialog" aria-modal>
 
         <div className="modal-header">
           <h2 className="modal-title">
@@ -237,23 +296,44 @@ export function ProductoFormModal({
                 {!esServicio && (
                   <div className="input-group ter-col-span-2">
                     <label>Unidad <span className="required">*</span></label>
-                    <UnidadSelect defaultValue={producto?.unidad} />
+                    <UnidadSelect defaultValue={producto?.unidad} sugerida={unidadSugerida} />
                   </div>
                 )}
-                <div className="input-group ter-col-span-3">
+                <div className={`input-group ${provSpan}`}>
                   <label>Categoría</label>
-                  <select className="input" name="categoria_id" defaultValue={producto?.categoria_id ?? ''}>
+                  <select className="input" name="categoria_id"
+                    value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
                     <option value="">— Sin categoría —</option>
                     {categoriasActivas.map(c => (
                       <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
                     ))}
+                    {/* La que ya tiene asignada se conserva aunque esté archivada: si no,
+                        editar el precio de una ficha vieja le cambiaría la categoría. */}
+                    {categoriaId && !categoriasActivas.some(c => c.categoria_id === categoriaId) && (
+                      <option value={categoriaId}>
+                        {categorias.find(c => c.categoria_id === categoriaId)?.nombre ?? categoriaId}
+                      </option>
+                    )}
                   </select>
                 </div>
-                <div className="input-group ter-col-span-3">
+                {/* Los proveedores son por-empresa (third_parties): con 2+ empresas, se
+                    elige primero la empresa para no ofrecer un mismo proveedor real
+                    repetido sin decir a cuál pertenece cada fila (patrón de Suscripciones). */}
+                {empresas.length > 1 && (
+                  <div className={`input-group ${provSpan}`}>
+                    <label>Empresa del proveedor</label>
+                    <select className="input" value={proveedorEmpresaId}
+                      onChange={e => onProveedorEmpresaChange(e.target.value)}>
+                      {empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className={`input-group ${provSpan}`}>
                   <label>Proveedor</label>
-                  <select className="input" name="proveedor_id" defaultValue={producto?.proveedor_id ?? ''}>
+                  <select className="input" name="proveedor_id" value={proveedorId}
+                    onChange={e => setProveedorId(e.target.value)}>
                     <option value="">— Sin especificar —</option>
-                    {proveedores.map(p => (
+                    {proveedoresDeEmpresa.map(p => (
                       <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
                     ))}
                   </select>
@@ -261,9 +341,13 @@ export function ProductoFormModal({
                 <div className="input-group ter-col-full">
                   <label>Descripción</label>
                   {tieneIa && (
-                    <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={sugerirDescripcion} disabled={sugiriendo}>
+                    <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={sugerirConIa}
+                      disabled={sugiriendo}
+                      title={esServicio
+                        ? 'Sugiere la descripción y la categoría a partir del nombre'
+                        : 'Sugiere la descripción, la unidad y la categoría a partir del nombre'}>
                       {sugiriendo ? <Loader2 size={14} strokeWidth={2} className="img-upload-spin" /> : <Sparkles size={14} strokeWidth={2} />}
-                      {sugiriendo ? 'Pensando…' : 'Sugerir con IA'}
+                      {sugiriendo ? 'Pensando…' : 'Completar con IA'}
                     </button>
                   )}
                   <textarea className="input input-textarea" name="descripcion" rows={2}
@@ -329,10 +413,12 @@ export function ProductoFormModal({
                       </div>
                     )}
                     <div className="input-group ter-col-span-3">
-                      <label>Stock mínimo</label>
-                      <input className="input" type="number" name="stock_minimo"
-                        step="any" min="0" defaultValue={producto?.stock_minimo ?? 0} placeholder="0" />
-                      <span className="input-hint">Aviso cuando el stock baje de este nivel.</span>
+                      <label>Stock mínimo (todos los almacenes)</label>
+                      <input className="input" type="text" inputMode="decimal" name="stock_minimo"
+                        defaultValue={textoNumeroEs(producto?.stock_minimo ?? 0)} placeholder="0" />
+                      <span className="input-hint">
+                        Aviso cuando el stock baje de este nivel. Puedes afinarlo por almacén desde la ficha del producto.
+                      </span>
                     </div>
                   </div>
                 )}

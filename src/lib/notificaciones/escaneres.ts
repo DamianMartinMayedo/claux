@@ -14,6 +14,7 @@ import { obtenerUsoMes } from '@/lib/ia/uso'
 import { umbralParaFecha, type Umbral } from './catalogo'
 import { crearNotificacion, resolverNotificaciones, type ContextoTenant } from './crear'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
+import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -641,34 +642,103 @@ export async function escanearCaja(db: Db, tenants: ContextoTenant[]): Promise<n
 }
 
 // ── Inventario: stock bajo y agotado ──────────────────────────────────────────
+//
+// Desde la mig. 153 el mínimo puede ser POR ALMACÉN, y el aviso va con él: un
+// negocio con tres almacenes en tres empresas puede quedarse sin arroz en un local
+// mientras el consolidado va sobrado. El reparto es deliberadamente conservador:
+//
+//   · Producto CON mínimo configurado en algún almacén → se evalúa almacén por
+//     almacén, y SOLO los que tienen mínimo configurado.
+//   · Producto sin ninguna configuración → se evalúa el consolidado con el mínimo
+//     global, exactamente como antes. Quien no toque nada no nota el cambio.
+//
+// ⚠️ LA ENTIDAD ES LA TRAMPA (misma clase que el gotcha 5b de las suscripciones).
+// La clave de idempotencia de `crearNotificacion` es tipo + entidad + umbral: con
+// `producto_id` a secas, el aviso de un almacén se tragaría el de los otros dos en
+// silencio. Por eso la entidad es `<producto_id>@<almacen_id>` y con `entidadTipo`
+// PROPIO — si compartiera 'producto', el barrido de resolución de los consolidados
+// archivaría los nuevos en la misma pasada.
+//
+// Y NUNCA se avisa de un stock negativo: está permitido a propósito (el dueño vende
+// de mostrador con el sistema por detrás) y una campana roja diaria por algo que ya
+// acepta convierte la bandeja en ruido. Se enseña en «Revisar», no se alarma.
 export async function escanearStock(db: Db, tenants: ContextoTenant[]): Promise<number> {
   const ids = tenants.map(t => t.clientId)
   if (ids.length === 0) return 0
 
   // Solo PRODUCTO: un SERVICIO no tiene existencias que reponer.
-  const { data } = await db.from('products')
-    .select('producto_id, client_id, nombre, unidad, stock_actual, stock_minimo')
-    .in('client_id', ids).eq('tipo', 'PRODUCTO').eq('estado', 'ACTIVO')
+  const [{ data: productos }, { data: config }, { data: stock }, { data: almacenes }] = await Promise.all([
+    db.from('products')
+      .select('producto_id, client_id, nombre, unidad, stock_actual, stock_minimo')
+      .in('client_id', ids).eq('tipo', 'PRODUCTO').eq('estado', 'ACTIVO'),
+    db.from('producto_almacen_config')
+      .select('client_id, producto_id, almacen_id, stock_minimo')
+      .in('client_id', ids).not('stock_minimo', 'is', null),
+    db.from('stock_almacenes')
+      .select('client_id, producto_id, almacen_id, cantidad').in('client_id', ids),
+    // `almacenes` archiva con `activo` boolean, NO con `estado` (no tiene esa
+    // columna): pedirla haría fallar la consulta entera, no la ignoraría.
+    db.from('almacenes')
+      .select('almacen_id, client_id, nombre').in('client_id', ids).eq('activo', true),
+  ])
 
-  const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
-  const vivas = new Vivas()
+  const ctxDe        = new Map(tenants.map(t => [t.clientId, t]))
+  const nombreAlmacen = new Map((almacenes ?? []).map(a => [a.almacen_id as string, a.nombre as string]))
+  const cantidadDe    = new Map((stock ?? []).map(s => [`${s.producto_id}@${s.almacen_id}`, Number(s.cantidad ?? 0)]))
+  const conConfig     = new Set((config ?? []).map(c => c.producto_id as string))
+
+  const vivasProducto = new Vivas()   // avisos consolidados (entidadTipo 'producto')
+  const vivasAlmacen  = new Vivas()   // avisos por almacén  (entidadTipo 'producto_almacen')
   let creadas = 0
 
-  for (const p of data ?? []) {
-    const actual = Number(p.stock_actual ?? 0)
-    const minimo = Number(p.stock_minimo ?? 0)
-    // Sin mínimo definido no hay umbral que cruzar: solo avisa si se agota.
-    const agotado = actual <= 0
-    const bajo    = !agotado && minimo > 0 && actual <= minimo
-    if (!agotado && !bajo) continue
+  const nombreDe = new Map((productos ?? []).map(p => [p.producto_id as string, p]))
 
-    vivas.add(p.client_id as string, p.producto_id as string)
+  // 1) Los que tienen mínimo por almacén: uno por (producto, almacén) configurado.
+  for (const c of config ?? []) {
+    const p = nombreDe.get(c.producto_id as string)
+    if (!p) continue                                   // archivado o servicio
+    const clave  = `${c.producto_id}@${c.almacen_id}`
+    const actual = cantidadDe.get(clave) ?? 0
+    const minimo = Number(c.stock_minimo)
+    const estado = estadoStock(actual, minimo)
+    if (!pideAtencion(estado)) continue                // 'ok' y 'negativo' no avisan
+
+    const almacen = nombreAlmacen.get(c.almacen_id as string)
+    if (!almacen) continue                             // almacén archivado: no es un aviso accionable
+    vivasAlmacen.add(c.client_id as string, clave)
     const unidad = p.unidad ? ` ${p.unidad}` : ''
     const ok = await crearNotificacion({
+      clientId: c.client_id as string,
+      tipo:     estado === 'agotado' ? 'stock_agotado' : 'stock_bajo',
+      titulo:   estado === 'agotado'
+        ? `Sin existencias — ${p.nombre} en ${almacen}`
+        : `Stock bajo — ${p.nombre} en ${almacen}`,
+      cuerpo:   estado === 'agotado'
+        ? `Se agotó en ${almacen}. Repón para poder seguir vendiéndolo desde ahí.`
+        : `Quedan ${actual}${unidad} en ${almacen} y el mínimo ahí es ${minimo}${unidad}.`,
+      enlace:      `/portal/almacenes/${c.almacen_id}`,
+      entidadTipo: 'producto_almacen',
+      entidadId:   clave,
+      sustituyeA:  ['stock_bajo', 'stock_agotado'],
+    }, ctxDe.get(c.client_id as string))
+    if (ok) creadas++
+  }
+
+  // 2) Los que no tienen ninguna configuración: consolidado, como siempre.
+  for (const p of productos ?? []) {
+    if (conConfig.has(p.producto_id as string)) continue
+    const actual = Number(p.stock_actual ?? 0)
+    const estado = estadoStock(actual, Number(p.stock_minimo ?? 0))
+    if (!pideAtencion(estado)) continue
+
+    vivasProducto.add(p.client_id as string, p.producto_id as string)
+    const unidad = p.unidad ? ` ${p.unidad}` : ''
+    const minimo = Number(p.stock_minimo ?? 0)
+    const ok = await crearNotificacion({
       clientId: p.client_id as string,
-      tipo:     agotado ? 'stock_agotado' : 'stock_bajo',
-      titulo:   agotado ? `Sin existencias — ${p.nombre}` : `Stock bajo — ${p.nombre}`,
-      cuerpo:   agotado
+      tipo:     estado === 'agotado' ? 'stock_agotado' : 'stock_bajo',
+      titulo:   estado === 'agotado' ? `Sin existencias — ${p.nombre}` : `Stock bajo — ${p.nombre}`,
+      cuerpo:   estado === 'agotado'
         ? 'Se agotó. Repón para poder seguir vendiéndolo.'
         : `Quedan ${actual}${unidad} y el mínimo es ${minimo}${unidad}.`,
       enlace:      `/portal/productos/${p.producto_id}`,
@@ -679,8 +749,11 @@ export async function escanearStock(db: Db, tenants: ContextoTenant[]): Promise<
     if (ok) creadas++
   }
 
+  // Dos barridos, uno por tipo de entidad. Si se hiciera uno solo, el del tipo que
+  // falta archivaría en falso todo lo del otro.
   for (const t of tenants) {
-    await resolverNotificaciones(db, t.clientId, ['stock_bajo', 'stock_agotado'], 'producto', vivas.de(t.clientId))
+    await resolverNotificaciones(db, t.clientId, ['stock_bajo', 'stock_agotado'], 'producto',          vivasProducto.de(t.clientId))
+    await resolverNotificaciones(db, t.clientId, ['stock_bajo', 'stock_agotado'], 'producto_almacen',  vivasAlmacen.de(t.clientId))
   }
   return creadas
 }
