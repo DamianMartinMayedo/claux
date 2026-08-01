@@ -14,6 +14,42 @@ export interface ResultadoTasas {
   errores:      string[]
 }
 
+// ── Antigüedad de una tasa ───────────────────────────────────────────────────
+//
+// La misma en TODAS partes: el widget del dashboard y la tabla de Monedas hablan
+// de la misma tasa, y si una dice «hace 3 d» y la otra enseña una fecha suelta,
+// el dueño tiene que restar de cabeza para saber si puede fiarse del número.
+//
+// Se calcula en el SERVIDOR y viaja ya resuelta: pedirle la fecha de hoy al
+// navegador dentro de un componente cliente da una cosa en el SSR y otra tras
+// hidratar (§skills/ui, gotcha del reloj).
+
+/** A partir de aquí la tasa ya no representa el mercado. Criterio de producto
+ *  para la volatilidad cubana, no un número mágico del cambio: quincena. */
+export const DIAS_TASA_VIEJA = 15
+
+/** Días entre una fecha 'YYYY-MM-DD' y hoy. UTC en las dos, sin saltos por huso. */
+export function diasDeTasa(fecha: string | null | undefined, hoy: string): number | null {
+  if (!fecha) return null
+  const a = Date.parse(`${fecha.slice(0, 10)}T00:00:00Z`)
+  const b = Date.parse(`${hoy}T00:00:00Z`)
+  if (Number.isNaN(a) || Number.isNaN(b)) return null
+  return Math.max(0, Math.round((b - a) / 86_400_000))
+}
+
+/** «hoy» · «ayer» · «hace 5 d». Lo que se lee al lado de la tasa. */
+export function edadTasa(dias: number | null | undefined): string {
+  if (dias == null) return 'sin fecha'
+  if (dias === 0)   return 'hoy'
+  if (dias === 1)   return 'ayer'
+  return `hace ${dias} d`
+}
+
+/** ¿Hay que avisar de que esta tasa ya no vale? */
+export function tasaVieja(dias: number | null | undefined): boolean {
+  return dias != null && dias >= DIAS_TASA_VIEJA
+}
+
 export type TonoToast = 'success' | 'warning' | 'error' | 'info'
 
 export function mensajeTasas(r: ResultadoTasas): { tono: TonoToast; texto: string } {

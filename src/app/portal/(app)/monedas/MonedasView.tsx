@@ -1,7 +1,8 @@
 'use client'
 
 import { toastError, toastLoading, toastTono } from '@/app/contexts/ToastContext'
-import { mensajeTasas } from '@/lib/tasas-mensaje'
+import { mensajeTasas, edadTasa, tasaVieja } from '@/lib/tasas-mensaje'
+import { fmtFechaEs } from '@/lib/date-utils'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
@@ -603,7 +604,9 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
     if (parEdit && tasa != null) {
       setLocalPares(prev => prev.map(p =>
         p.par_id === parEdit.par_id
-          ? { ...p, fuente: parEdit.fuente, tasa, fecha }
+          // `dias: 0` va con la fecha nueva: sin él, la columna seguiría
+          // diciendo «hace 3 d» al lado de una tasa que se acaba de guardar.
+          ? { ...p, fuente: parEdit.fuente, tasa, fecha, dias: fecha ? 0 : p.dias }
           : p
       ))
     }
@@ -739,8 +742,17 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                         <span className="mon-fuente-dot" style={{ '--dot-color': FUENTE_COLOR[p.fuente] } as React.CSSProperties} />
                         <span className="text-xs">{FUENTE_LABEL[p.fuente]}</span>
                       </td>
+                      {/* La antigüedad primero y la fecha después: lo que decide
+                          si el número de al lado sirve es «hace cuánto», no el
+                          día exacto — y con la actualización automática de las
+                          5:00 lo normal es que ponga «hoy». */}
                       <td data-label="Actualizada" className="text-xs-muted">
-                        {p.fecha ?? '—'}
+                        {p.fecha
+                          ? <>
+                              <span className={tasaVieja(p.dias) ? 'is-vieja' : ''}>{edadTasa(p.dias)}</span>
+                              {' · '}{fmtFechaEs(p.fecha)}
+                            </>
+                          : '—'}
                       </td>
                       {esAdmin && (
                         <td className="col-actions">

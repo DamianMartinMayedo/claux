@@ -14,6 +14,7 @@ import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { valorarPorMoneda } from '@/lib/inventario/valoracion'
 import { consumoDiario, diasDeCobertura, DIAS_VENTANA, type MovimientoConsumo } from '@/lib/inventario/consumo'
 import { hoyEnTz, ahoraEnTz, sumarDias, TZ_NEGOCIO } from '@/lib/fecha-tz'
+import { diasDeTasa } from '@/lib/tasas-mensaje'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
 
@@ -408,19 +409,10 @@ async function resumenTasas(db: Db, cid: string, hoy: string): Promise<TasasResu
       origen: p.origen, destino: p.destino, fuente: p.fuente,
       tasa:  r ? r.tasa : null,
       fecha: r?.fecha ?? null,
-      dias:  diasDesde(r?.fecha ?? null, hoy),
+      dias:  diasDeTasa(r?.fecha ?? null, hoy),
     }
   })
   return { filas }
-}
-
-/** Días entre una fecha 'YYYY-MM-DD' y hoy. UTC en las dos, así no hay saltos por huso. */
-function diasDesde(fecha: string | null, hoy: string): number | null {
-  if (!fecha) return null
-  const a = Date.parse(`${fecha.slice(0, 10)}T00:00:00Z`)
-  const b = Date.parse(`${hoy}T00:00:00Z`)
-  if (Number.isNaN(a) || Number.isNaN(b)) return null
-  return Math.max(0, Math.round((b - a) / 86_400_000))
 }
 
 async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds: string[]): Promise<ContabilidadResumen> {

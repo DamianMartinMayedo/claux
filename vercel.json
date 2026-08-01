@@ -10,7 +10,11 @@
     },
     {
       "path": "/api/cron/tasas",
-      "schedule": "0 12 * * *"
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/tasas",
+      "schedule": "0 10 * * *"
     }
   ],
   "functions": {

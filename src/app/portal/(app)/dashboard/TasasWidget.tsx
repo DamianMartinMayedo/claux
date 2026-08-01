@@ -1,5 +1,6 @@
 import { Coins, AlertTriangle } from 'lucide-react'
 import type { TasasResumen, FuenteTasa } from '@/app/actions/portal/dashboard'
+import { edadTasa, tasaVieja } from '@/lib/tasas-mensaje'
 import TasasActualizar from './TasasActualizar'
 
 // Tasas de cambio en el dashboard.
@@ -21,10 +22,6 @@ const FUENTE_LABEL: Record<FuenteTasa, string> = {
   MANUAL:      'Manual',
 }
 
-// A partir de aquí la tasa ya no representa el mercado. Criterio de producto para
-// la volatilidad cubana, no un número mágico del cambio: quincena.
-const DIAS_VIEJA = 15
-
 function fmtTasa(n: number): string {
   // Las tasas van de 0,004 (CUP→USD) a cientos (USD→CUP): con dos decimales fijos
   // la pequeña se ve como «0,00». Se dan más decimales cuanto más pequeña es.
@@ -32,16 +29,9 @@ function fmtTasa(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: maxDec })
 }
 
-function edad(dias: number | null): string {
-  if (dias === null) return 'sin fecha'
-  if (dias === 0) return 'hoy'
-  if (dias === 1) return 'ayer'
-  return `hace ${dias} d`
-}
-
 export default function TasasWidget({ data }: { data: TasasResumen }) {
   const sinTasa = data.filas.filter(f => f.tasa === null).length
-  const viejas  = data.filas.filter(f => f.tasa !== null && f.dias !== null && f.dias >= DIAS_VIEJA).length
+  const viejas  = data.filas.filter(f => f.tasa !== null && tasaVieja(f.dias)).length
 
   return (
     <section className="card dash-card-sm">
@@ -55,7 +45,7 @@ export default function TasasWidget({ data }: { data: TasasResumen }) {
 
       <ul className="dash-tasas">
         {data.filas.map(f => {
-          const vieja = f.tasa !== null && f.dias !== null && f.dias >= DIAS_VIEJA
+          const vieja = f.tasa !== null && tasaVieja(f.dias)
           return (
             <li key={`${f.origen}-${f.destino}`} className="dash-tasa">
               <span className="dash-tasa-par">
@@ -68,7 +58,7 @@ export default function TasasWidget({ data }: { data: TasasResumen }) {
               </span>
               <span className="dash-tasa-meta">
                 {FUENTE_LABEL[f.fuente]}
-                {f.tasa !== null && <> · <span className={vieja ? 'is-vieja' : ''}>{edad(f.dias)}</span></>}
+                {f.tasa !== null && <> · <span className={vieja ? 'is-vieja' : ''}>{edadTasa(f.dias)}</span></>}
               </span>
             </li>
           )

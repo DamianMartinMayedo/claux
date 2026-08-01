@@ -17,11 +17,23 @@ type Db = ReturnType<typeof createAdminClient>
 const EL_TOQUE_MAPA: Record<string, string> = { EUR: 'ECU' }
 const codElToque = (cod: string): string => EL_TOQUE_MAPA[cod] ?? cod
 
+/** Un par que de verdad cambió de valor, para poder CONTARLO en un aviso. */
+export interface CambioTasa {
+  origen:  string
+  destino: string
+  tasa:    number
+}
+
 export interface ResultadoTasas {
   actualizadas: number
   /** Pares consultados cuya tasa venía IGUAL a la última guardada. */
   sinCambios:   number
   errores:      string[]
+  /**
+   * Los pares que cambiaron (los mismos que cuenta `actualizadas`). El cron los
+   * necesita para decirle al dueño QUÉ cambió; el botón del portal no los usa.
+   */
+  cambios:      CambioTasa[]
 }
 
 interface Previa { tasa: number; fecha: string | null }
@@ -103,13 +115,22 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
     .eq('activo', true)
     .neq('fuente', 'MANUAL')
 
-  if (!pares?.length) return { actualizadas: 0, sinCambios: 0, errores: [] }
+  if (!pares?.length) return { actualizadas: 0, sinCambios: 0, errores: [], cambios: [] }
 
   const previas = await ultimasTasas(db, clientId)
   const hoy = new Date().toISOString().split('T')[0]
   const errores: string[] = []
+  const cambios: CambioTasa[] = []
   let   actualizadas = 0
   let   sinCambios   = 0
+
+  /** Guardado sin error: los que traían valor nuevo cuentan y se anotan. */
+  const anotar = (pendientes: Pendiente[]): void => {
+    for (const p of pendientes.filter(p => p.cambio)) {
+      actualizadas++
+      cambios.push({ origen: p.fila.moneda_origen, destino: p.fila.moneda_destino, tasa: p.fila.tasa })
+    }
+  }
 
   // ── El Toque: una sola llamada para todos los pares EL_TOQUE ──────────────
   const paresElToque = pares.filter(p => p.fuente === 'EL_TOQUE')
@@ -159,7 +180,7 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
             if (pendientes.length > 0) {
               const { error } = await db.from('tasas_cambio').insert(pendientes.map(p => p.fila))
               if (error) errores.push(`No se pudieron guardar las tasas de El Toque: ${error.message}`)
-              else actualizadas += pendientes.filter(p => p.cambio).length
+              else anotar(pendientes)
             }
           }
         }
@@ -206,7 +227,7 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
         if (pendientes.length === 0) continue
         const { error } = await db.from('tasas_cambio').insert(pendientes.map(p => p.fila))
         if (error) errores.push(`No se pudieron guardar las tasas de Frankfurter: ${error.message}`)
-        else actualizadas += pendientes.filter(p => p.cambio).length
+        else anotar(pendientes)
       } catch {
         // Caída de red: el mensaje del fetch («fetch failed») no dice nada al dueño.
         errores.push('No se pudo conectar con Frankfurter. Revisa la conexión.')
@@ -214,5 +235,5 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
     }
   }
 
-  return { actualizadas, sinCambios, errores }
+  return { actualizadas, sinCambios, errores, cambios }
 }

@@ -89,6 +89,9 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
   return {
     entidad:   esGasto ? 'gastos' : 'cobros',
     etiqueta:  esGasto ? 'Gastos' : 'Cobros',
+    // Dos filas idénticas pueden ser dos hechos distintos: el mismo cliente paga
+    // dos veces lo mismo el mismo día. Con «Crear otro» se importan las dos.
+    repetible: true,
     modulos:   ['base'],
     revalidar: '/portal/gastos',
     defaults: [
@@ -230,14 +233,37 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
       return {
         ok: true,
         datos: datos as unknown as Record<string, unknown>,
-        clave: `${empresa_id}|${tipo}|${fecha}|${moneda}|${monto.toFixed(2)}|${norm(descripcion)}`,
+        // El TERCERO forma parte de la identidad de la fila, y no es un adorno: se
+        // migra la cartera entera de golpe, así que la fecha, el importe y el
+        // concepto COINCIDEN a propósito en decenas de filas («Cuota de julio»,
+        // 500 CUP, mismo día) y lo único que las distingue es de quién es cada
+        // una. Sin esto, 30 cobros de 30 clientes eran uno solo.
+        //
+        // Por `tercero_id` cuando la ficha ya existe, y por el nombre del archivo
+        // cuando todavía no (el operador pidió crearla, o dejarla sin ficha): en
+        // una migración lo NORMAL es que ninguna exista aún, así que quedarse solo
+        // con el id dejaría todas esas filas con la misma clave vacía y no
+        // arreglaría nada.
+        clave: [
+          empresa_id, tipo, fecha, moneda, monto.toFixed(2), norm(descripcion),
+          tercero_id ?? (tercero ? `nom:${norm(tercero)}` : 'sin'),
+        ].join('|'),
       }
     },
 
-    /** Mismo registro = misma empresa, fecha, importe, moneda y etiqueta. */
+    /**
+     * Mismo registro = misma empresa, fecha, importe, moneda, etiqueta y TERCERO.
+     *
+     * Con la ficha ya creada se compara por `tercero_id`; sin ella, el registro
+     * que buscamos también se escribió sin tercero. Al repetir el mismo archivo la
+     * comparación acierta igual: la ficha que creó la primera pasada ya existe, la
+     * fila la encuentra y llega aquí con su id. Lo que sí crea dos registros es
+     * cambiar de idea entre pasadas (primero «sin ficha», después «crearla»), y es
+     * correcto: son dos decisiones distintas sobre quién es el tercero.
+     */
     async buscarExistente(datos, ctx) {
       const { registro } = datos as unknown as DatosGasto
-      const { data } = await ctx.db.from('gastos_cobros').select('registro_id')
+      const q = ctx.db.from('gastos_cobros').select('registro_id')
         .eq('client_id', ctx.client_id)
         .eq('empresa_id', registro.empresa_id as string)
         .eq('tipo', tipo)
@@ -245,6 +271,8 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         .eq('moneda', registro.moneda as string)
         .eq('monto', registro.monto as number)
         .eq('descripcion', registro.descripcion as string)
+      const tercero_id = registro.tercero_id as string | null
+      const { data } = await (tercero_id ? q.eq('tercero_id', tercero_id) : q.is('tercero_id', null))
         .limit(1).maybeSingle()
       return (data?.registro_id as string) ?? null
     },

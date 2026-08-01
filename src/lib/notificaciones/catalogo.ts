@@ -174,6 +174,16 @@ export const CATALOGO = {
     descripcion: 'Un presupuesto se acerca al fin de su validez.',
     umbrales: ['5d', '1d'],
   },
+  // La tasa se refresca sola de madrugada (cron `/api/cron/tasas`), y por eso
+  // mismo hay que avisar: TODO lo consolidado —ventas, deudas, el dashboard—
+  // cambia de número sin que nadie haya tocado nada. Es 'info' y solo se crea
+  // cuando la tasa cambió DE VERDAD: un aviso diario de «sigue igual» sería
+  // ruido, y el ruido enseña a ignorar la campana.
+  tasas_actualizadas: {
+    categoria: 'finanzas', modulo: 'base', severidad: 'info', implementado: true,
+    etiqueta: 'Tasas de cambio actualizadas',
+    descripcion: 'La actualización automática de la madrugada trajo una tasa distinta.',
+  },
   caja_abierta_sin_cerrar: {
     categoria: 'finanzas', modulo: 'caja', severidad: 'aviso', implementado: true,
     etiqueta: 'Caja abierta sin cerrar',

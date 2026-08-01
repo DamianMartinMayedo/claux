@@ -65,6 +65,26 @@ function esFilaEjemplo(
   return true
 }
 
+/**
+ * Dos filas del archivo con la misma clave natural: ¿es un error del archivo o
+ * son dos hechos distintos que se parecen?
+ *
+ * En un maestro siempre es un error (dos fichas del mismo producto). En una
+ * entidad de hechos (`Adaptador.repetible`: gastos, cobros) puede ser real —el
+ * mismo cliente paga dos veces lo mismo el mismo día—, y ahí lo decide la
+ * política del lote: con «Crear otro» entran las dos. Antes no había salida
+ * posible, porque esta colisión se descartaba ANTES de mirar la política y la
+ * segunda fila no se importaba eligiera el operador lo que eligiera.
+ */
+function repiteAdrede(adaptador: Adaptador, mapeo: MapeoImport): boolean {
+  return !!adaptador.repetible && mapeo.politica === 'CREAR'
+}
+
+const MOTIVO_REPETIDA = (adaptador: Adaptador): string =>
+  adaptador.repetible
+    ? 'Fila repetida dentro del archivo. Si de verdad son dos, elige «Crear otro».'
+    : 'Fila duplicada dentro del archivo.'
+
 /** Dry-run: valida cada fila SIN escribir. Marca duplicados dentro del archivo. */
 export async function validarLoteFilas(
   filas: Record<string, string>[], mapeo: MapeoImport, adaptador: Adaptador, ctx: CtxImport,
@@ -88,7 +108,9 @@ export async function validarLoteFilas(
     }
     const prep = await adaptador.preparar(valores, ctx, deColumna)
     if (!prep.ok) { res.push({ fila: i + 1, ok: false, motivo: prep.motivo, decidir: prep.decidir }); continue }
-    if (vistos.has(prep.clave)) { res.push({ fila: i + 1, ok: false, motivo: 'Fila duplicada dentro del archivo.' }); continue }
+    if (vistos.has(prep.clave) && !repiteAdrede(adaptador, mapeo)) {
+      res.push({ fila: i + 1, ok: false, motivo: MOTIVO_REPETIDA(adaptador) }); continue
+    }
     vistos.add(prep.clave)
     const existente = await adaptador.buscarExistente(prep.datos, ctx)
     const accion = !existente ? 'INSERTAR'
@@ -225,7 +247,10 @@ export async function aplicarLoteFilas(
     }
     const prep = await adaptador.preparar(valores, ctx, deColumna)
     if (!prep.ok) { await registrarItem(ctx, loteId, adaptador.entidad, fila, 'ERROR', null, prep.motivo); r.errores++; continue }
-    if (vistos.has(prep.clave)) { await registrarItem(ctx, loteId, adaptador.entidad, fila, 'SALTADA', null, 'Duplicada en el archivo'); r.saltadas++; continue }
+    if (vistos.has(prep.clave) && !repiteAdrede(adaptador, mapeo)) {
+      await registrarItem(ctx, loteId, adaptador.entidad, fila, 'SALTADA', null, 'Duplicada en el archivo')
+      r.saltadas++; continue
+    }
     vistos.add(prep.clave)
     try {
       const existente = await adaptador.buscarExistente(prep.datos, ctx)

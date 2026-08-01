@@ -6,7 +6,8 @@ import { getPortalSession } from './auth'
 import { actualizarTasasCliente } from '@/lib/tasas-auto'
 // El contrato del resultado lo fija quien redacta el mensaje, para que la acción
 // no pueda devolver algo que el toast no sepa contar.
-import type { ResultadoTasas as ResultadoTasasAccion } from '@/lib/tasas-mensaje'
+import { diasDeTasa, type ResultadoTasas as ResultadoTasasAccion } from '@/lib/tasas-mensaje'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,14 @@ export interface Par {
   activo:    boolean
   tasa?:     number
   fecha?:    string
+  /**
+   * Días desde esa fecha, resueltos EN EL SERVIDOR. La vista es un componente
+   * cliente: si calculara «hoy» con el reloj del navegador, el SSR y la
+   * hidratación podrían pintar días distintos. Además, la actualización
+   * automática de madrugada mueve `fecha`, y este número es lo que hace que la
+   * pantalla lo cuente («hoy») en vez de enseñar una fecha suelta.
+   */
+  dias?:     number | null
 }
 
 /**
@@ -135,11 +144,11 @@ export async function obtenerPares(): Promise<Par[]> {
     if (!rateMap.has(key)) rateMap.set(key, { tasa: t.tasa, fecha: t.fecha })
   }
 
-  return (pares ?? []).map(p => ({
-    ...(p as Par),
-    tasa:  rateMap.get(`${p.origen}__${p.destino}`)?.tasa,
-    fecha: rateMap.get(`${p.origen}__${p.destino}`)?.fecha,
-  }))
+  const hoy = hoyEnTz()
+  return (pares ?? []).map(p => {
+    const r = rateMap.get(`${p.origen}__${p.destino}`)
+    return { ...(p as Par), tasa: r?.tasa, fecha: r?.fecha, dias: diasDeTasa(r?.fecha, hoy) }
+  })
 }
 
 // ── Guardar moneda (crear / editar) ───────────────────────────────────────────

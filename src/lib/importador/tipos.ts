@@ -216,6 +216,15 @@ export type Preparado =
 export interface Adaptador {
   entidad:   string
   etiqueta:  string
+  /**
+   * Sus filas son HECHOS, no fichas: dos idénticas pueden ser dos cosas reales
+   * distintas (el mismo cliente paga dos veces lo mismo el mismo día). En esas
+   * entidades, la colisión de clave DENTRO del archivo no es un error del
+   * archivo, así que la decide la política del lote y con «Crear otro» entran
+   * las dos. En un maestro (un producto, una ficha de cliente) es al revés: dos
+   * filas con la misma identidad son un error y se avisa siempre.
+   */
+  repetible?: boolean
   modulos:   string[]     // módulos que habilitan escribir esta entidad (candado)
   revalidar: string       // ruta a revalidar tras aplicar
   campos:    CampoDef[]

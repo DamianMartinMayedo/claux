@@ -34,6 +34,39 @@ export function horaEnTz(iso: string, tz: string = TZ_NEGOCIO): string {
   }).format(new Date(iso))
 }
 
+export interface RelojNegocio {
+  /** Fecha del calendario del negocio (YYYY-MM-DD). */
+  fecha: string
+  /** Hora del reloj del negocio, 0-23. Para comparar («¿ya son las 5?»). */
+  hora:  number
+  /** «05:00». Para decírselo al dueño tal cual. */
+  hhmm:  string
+}
+
+/**
+ * Fecha y hora del negocio en UNA lectura del reloj.
+ *
+ * `hoyEnTz` + `ahoraEnTz` valen para leer una cosa u otra, pero quien decide
+ * «¿toca ya el barrido de hoy?» necesita las dos a la vez y COHERENTES: dos
+ * llamadas separadas pueden caer a lados distintos de la medianoche y dar la
+ * fecha de ayer con la hora de hoy. Lo usa el cron de tasas, que se programa en
+ * UTC pero tiene que dispararse a una hora del reloj cubano — y La Habana no
+ * tiene desfase fijo (UTC−4 en verano, UTC−5 en invierno), así que la hora se
+ * pregunta a la zona horaria, no se resta a mano.
+ */
+export function relojNegocio(ahora: Date = new Date(), tz: string = TZ_NEGOCIO): RelojNegocio {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(ahora)
+  const v = (tipo: string): string => partes.find(p => p.type === tipo)?.value ?? ''
+  return {
+    fecha: `${v('year')}-${v('month')}-${v('day')}`,
+    hora:  Number(v('hour')),
+    hhmm:  `${v('hour')}:${v('minute')}`,
+  }
+}
+
 /** Suma días a una fecha YYYY-MM-DD (aritmética de calendario, sin saltos por DST). */
 export function sumarDias(fechaISO: string, dias: number): string {
   const [y, m, d] = fechaISO.split('-').map(Number)
