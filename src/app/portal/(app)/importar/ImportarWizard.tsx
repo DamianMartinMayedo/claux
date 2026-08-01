@@ -7,7 +7,9 @@ import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, Fi
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
 import { aBase64 } from '@/lib/subir-archivo'
-import type { Pendiente, Resolucion } from '@/lib/importador/tipos'
+import type {
+  ClavesVistas, DecisionRepetidas, FilaRepetida, Pendiente, Resolucion,
+} from '@/lib/importador/tipos'
 import {
   obtenerCamposEntidad, crearLoteImport, validarLoteImport, aplicarLoteImport,
   deshacerLoteImport, listarPlantillasImport, guardarPlantillaImport, cargarPlantillaImport,
@@ -148,11 +150,27 @@ function descargarBase64(nombre: string, base64: string, mime: string) {
  *    nueva» es algo que el dueño tiene derecho a ver antes, y se pueden
  *    redirigir a una existente desde el mismo desplegable.
  */
+/**
+ * Lo que se ha decidido sobre un nombre, EN CONSECUENCIAS. El desplegable solo
+ * enseñaba la opción elegida, así que elegir «Crear X» no se distinguía de no
+ * haber tocado nada: ni pasaba nada en pantalla ni se escribía nada (no se
+ * escribe hasta revalidar). Esta línea es el acuse de recibo.
+ */
+function consecuencia(p: Pendiente, r: Resolucion | undefined): string | null {
+  if (!r) return null
+  if (r.accion === 'CREAR')  return `Se creará «${p.texto}»`
+  if (r.accion === 'OMITIR') return 'Se dejará en blanco'
+  if (r.accion === 'RECHAZAR') return `Sus ${p.filas === 1 ? 'fila' : `${p.filas} filas`} se quedarán fuera`
+  const elegida = p.opciones.find(o => o.valor === r.destino)?.etiqueta
+  return elegida ? `Se usará «${elegida}»` : null
+}
+
 function PanelPendientes({
-  pendientes, resoluciones, onDecidir, onRevalidar, cargando, etiquetaProgreso,
+  pendientes, resoluciones, sinAplicar, onDecidir, onRevalidar, cargando, etiquetaProgreso,
 }: {
   pendientes:   Pendiente[]
   resoluciones: Record<string, Resolucion>
+  sinAplicar:   string[]
   onDecidir:    (clave: string, valor: string) => void
   onRevalidar:  () => void
   cargando:     boolean
@@ -161,6 +179,7 @@ function PanelPendientes({
   const urgentes = pendientes.filter(p => p.decidir)
   const deOficio = pendientes.filter(p => !p.decidir)
   const sinRespuesta = urgentes.filter(p => !resoluciones[p.clave]).length
+  const pendientesDeAplicar = sinAplicar.length
 
   const fila = (p: Pendiente) => (
     <div key={p.clave} className="imprt-map-row">
@@ -174,6 +193,13 @@ function PanelPendientes({
           {p.causa === 'VARIAS' ? ' · hay más de una con ese nombre' : ''}
         </span>
         {p.aviso && <span className="imprt-pend-aviso">{p.aviso}</span>}
+        {consecuencia(p, resoluciones[p.clave]) && (
+          <span className="imprt-pend-decidido">
+            <Check size={13} strokeWidth={2.5} />
+            {consecuencia(p, resoluciones[p.clave])}
+            {sinAplicar.includes(p.clave) && <em> · sin aplicar todavía</em>}
+          </span>
+        )}
       </div>
       <select className="input" value={aValor(resoluciones[p.clave])}
         aria-label={`Qué hacer con ${p.texto}`}
@@ -190,7 +216,7 @@ function PanelPendientes({
   )
 
   return (
-    <div className="imprt-pend">
+    <section className="imprt-bloque imprt-pend">
       {urgentes.length > 0 && (
         <>
           <div className="alert alert-warning">
@@ -218,13 +244,23 @@ function PanelPendientes({
         </details>
       )}
 
+      {/* El botón se vuelve la acción principal en cuanto hay algo decidido y sin
+          aplicar: es lo único que hace efecto a lo elegido, y antes se confundía
+          con el resto de botones secundarios del paso. */}
       <div className="imprt-pend-acciones">
-        <button type="button" className="btn btn-secondary" onClick={onRevalidar} disabled={cargando}>
+        <button type="button"
+          className={`btn ${pendientesDeAplicar > 0 ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={onRevalidar} disabled={cargando}>
           {cargando
-            ? <><span className="spinner spinner-sm" /> Validando {etiquetaProgreso}…</>
-            : <>Volver a validar con estas decisiones</>}
+            ? <><span className="spinner spinner-sm" /> Comprobando {etiquetaProgreso}…</>
+            : pendientesDeAplicar > 0
+              ? <>Aplicar {pendientesDeAplicar === 1 ? 'esta decisión' : `estas ${pendientesDeAplicar} decisiones`}</>
+              : <>Volver a comprobar</>}
         </button>
-        {sinRespuesta > 0 && (
+        {pendientesDeAplicar > 0 && (
+          <span className="input-hint">Lo que elijas no cuenta hasta que pulses aquí.</span>
+        )}
+        {pendientesDeAplicar === 0 && sinRespuesta > 0 && (
           <span className="input-hint">
             {sinRespuesta === 1
               ? 'Queda 1 sin responder: sus filas se quedarán fuera.'
@@ -232,7 +268,98 @@ function PanelPendientes({
           </span>
         )}
       </div>
-    </div>
+    </section>
+  )
+}
+
+/**
+ * Filas que dicen lo mismo que otra fila del archivo.
+ *
+ * No es un error y no se puede adivinar: dos facturas al mismo cliente, el mismo
+ * día y por el mismo importe existen de verdad. Así que se enfrentan las dos
+ * filas, se enseña EN QUÉ SE DIFERENCIAN —que es lo único que permite decidir sin
+ * abrir el Excel— y se pregunta una sola vez para todas.
+ */
+function PanelRepetidas({
+  repetidas, decision, onDecidir, cargando,
+}: {
+  repetidas: FilaRepetida[]
+  decision:  DecisionRepetidas
+  onDecidir: (d: DecisionRepetidas) => void
+  cargando:  boolean
+}) {
+  // Idénticas en todo lo mapeado: ahí no hay nada que decidir y decirlo evita que
+  // el operador busque una diferencia que no existe.
+  const gemelasExactas = repetidas.filter(r => r.difieren.length === 0).length
+
+  return (
+    <section className="imprt-bloque">
+      <div className="alert alert-warning">
+        <HelpCircle size={16} strokeWidth={2} />
+        <span>
+          {repetidas.length === 1
+            ? 'Hay 1 fila que dice lo mismo que otra fila del archivo.'
+            : `Hay ${repetidas.length} filas que dicen lo mismo que otra fila del archivo.`}
+          {' '}Compáralas y dinos si son cosas distintas o la misma repetida.
+        </span>
+      </div>
+
+      <ul className="imprt-rep">
+        {repetidas.slice(0, 20).map(r => (
+          <li key={r.fila} className="imprt-rep-item">
+            <strong className="imprt-rep-filas">Fila {r.fila} = fila {r.gemela}</strong>
+            <span className="imprt-map-ayuda">{r.resumen}</span>
+            {r.difieren.length === 0 ? (
+              <span className="imprt-pend-aviso">
+                Son idénticas en todo lo que trae el archivo. Si de verdad son dos, añade algo que
+                las diferencie (el nº de documento) antes de importar.
+              </span>
+            ) : (
+              <span className="imprt-rep-difieren">
+                Solo se diferencian en{' '}
+                {r.difieren.map((d, i) => (
+                  <span key={d.etiqueta}>
+                    {i > 0 && ', '}
+                    {d.etiqueta.toLowerCase()}: «{d.aqui}» / «{d.alli}»
+                  </span>
+                ))}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {repetidas.length > 20 && (
+        <p className="input-hint">Y {repetidas.length - 20} más. La decisión vale para todas.</p>
+      )}
+
+      <div className="imprt-pend-acciones">
+        <button type="button" className={`btn ${decision === 'DISTINTAS' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => onDecidir('DISTINTAS')} disabled={cargando}>
+          Son distintas: impórtalas
+        </button>
+        <button type="button" className={`btn ${decision === 'FUERA' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => onDecidir('FUERA')} disabled={cargando}>
+          Es la misma: déjala fuera
+        </button>
+        {/* Lo decidido, dicho: el botón marcado se ve, pero la consecuencia hay
+            que escribirla o el clic parece no haber hecho nada. */}
+        {decision !== 'DECIDIR' && (
+          <span className="imprt-pend-decidido">
+            <Check size={13} strokeWidth={2.5} />
+            {decision === 'DISTINTAS'
+              ? `Se importarán ${repetidas.length === 1 ? 'las dos' : 'todas'} como registros distintos.`
+              : `Se quedará solo la primera de cada pareja: ${repetidas.length} ${repetidas.length === 1 ? 'fila queda' : 'filas quedan'} fuera.`}
+          </span>
+        )}
+        {gemelasExactas > 0 && (
+          <span className="input-hint">
+            {gemelasExactas === 1
+              ? '1 de ellas es idéntica a su gemela: aunque digas que son distintas, no hay forma de guardarlas por separado.'
+              : `${gemelasExactas} son idénticas a su gemela: aunque digas que son distintas, no hay forma de guardarlas por separado.`}
+          </span>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -262,11 +389,17 @@ export default function ImportarWizard() {
 
   const [resultado, setResultado] = useState<{
     total: number; ok: number; errores: number; por_decidir: number
-    filas: FilaMala[]; resumen: Total[]; pendientes: Pendiente[]
+    filas: FilaMala[]; resumen: Total[]; pendientes: Pendiente[]; repetidas: FilaRepetida[]
   } | null>(null)
   // Decisiones sobre los nombres que el archivo no emparejó. Viajan en el mapeo,
   // así que revalidar y aplicar recorren el mismo camino.
   const [resoluciones, setResoluciones] = useState<Record<string, Resolucion>>({})
+  // Decisiones tomadas y todavía SIN aplicar: elegir en un desplegable no cambia
+  // nada hasta revalidar, y sin esta marca parecía que el clic no hacía nada.
+  const [sinAplicar, setSinAplicar] = useState<string[]>([])
+  // Qué son las filas que dicen lo mismo que otra. Viaja en el mapeo, como las
+  // resoluciones, para que revalidar y aplicar tomen el mismo camino.
+  const [repetidas, setRepetidas] = useState<DecisionRepetidas>('DECIDIR')
   const [resumen, setResumen]     = useState<{ insertadas: number; actualizadas: number; saltadas: number; errores: number } | null>(null)
   // Lo que el lote creó DE PASO (proveedores, categorías, clientes o servicios
   // que una fila nombraba y no existían): solo llega en la última tanda.
@@ -428,7 +561,10 @@ export default function ImportarWizard() {
    * Dry-run. `resol` se pasa explícito al revalidar tras decidir: leer el estado
    * aquí daría el de antes del último clic.
    */
-  async function validar(resol: Record<string, Resolucion> = resoluciones) {
+  async function validar(
+    resol: Record<string, Resolucion> = resoluciones,
+    rep:   DecisionRepetidas = repetidas,
+  ) {
     const falta = defs.find(d => d.obligatorio && !(globales[d.campo] ?? '').trim())
     if (falta) { toastError(`Indica ${falta.etiqueta.toLowerCase()}.`); return }
     const mapeo = {
@@ -436,6 +572,7 @@ export default function ImportarWizard() {
       defaults: Object.fromEntries(Object.entries(globales).filter(([, v]) => v.trim() !== '')),
       politica,
       resoluciones: resol,
+      repetidas:    rep,
     }
     setCargando(true)
     const ld = toastLoading('Validando…')
@@ -444,9 +581,10 @@ export default function ImportarWizard() {
     const acc = {
       total, ok: 0, errores: 0, por_decidir: 0,
       filas: [] as FilaMala[], resumen: [] as Total[], pendientes: [] as Pendiente[],
+      repetidas: [] as FilaRepetida[],
     }
     let desde: number | null = 0
-    let claves: string[] = []
+    let claves: ClavesVistas = []
     while (desde !== null) {
       const res = await validarLoteImport(loteId, mapeo, desde, claves)
       if (!res.ok || !res.trozo) { await ld.dismiss(); setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al validar.'); return }
@@ -455,6 +593,7 @@ export default function ImportarWizard() {
       acc.filas.push(...t.filas.filter(f => !f.ok))   // las buenas no se pintan: solo cuentan
       acc.resumen    = fusionarTotales(acc.resumen, t.resumen ?? [])
       acc.pendientes = fusionarPendientes(acc.pendientes, t.pendientes ?? [])
+      acc.repetidas.push(...(t.repetidas ?? []))
       claves = t.claves
       desde  = t.siguiente
       setProgreso(desde === null ? null : { hechas: desde, total: t.total })
@@ -469,12 +608,14 @@ export default function ImportarWizard() {
         .map(p => [p.clave, { accion: p.defecto } as Resolucion])),
       ...resol,
     })
+    setSinAplicar([])   // lo elegido ya está aplicado: el aviso desaparece
     setResultado(acc); setPaso('validar')
   }
 
   /** Guarda una decisión. No revalida sola: son N consultas y la conexión es la que es. */
   function decidir(clave: string, valor: string) {
     const r = aResolucion(valor)
+    setSinAplicar(prev => prev.includes(clave) ? prev : [...prev, clave])
     setResoluciones(prev => {
       const siguiente = { ...prev }
       if (r) siguiente[clave] = r
@@ -489,7 +630,7 @@ export default function ImportarWizard() {
     const acc = { insertadas: 0, actualizadas: 0, saltadas: 0, errores: 0 }
     let aux: { etiqueta: string; cantidad: number }[] = []
     let desde: number | null = 0
-    let claves: string[] = []
+    let claves: ClavesVistas = []
     while (desde !== null) {
       const res = await aplicarLoteImport(loteId, desde, claves)
       if (!res.ok || !res.trozo) { await ld.dismiss(); setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al importar.'); return }
@@ -519,11 +660,14 @@ export default function ImportarWizard() {
   function reiniciar() {
     setPaso('entidad'); setEntidad(''); setCampos([]); setDefs([]); setLoteId(''); setCabeceras([]); setTotal(0)
     setColumnas({}); setGlobales({}); setResultado(null); setResumen(null); setPolitica('SALTAR')
+    setSinAplicar([]); setRepetidas('DECIDIR')
     setPlantillas([]); setNombrePlantilla(''); setDeshecho(null); setAvisos([]); setProgreso(null)
     setResoluciones({}); setAuxiliares([])
   }
 
   const etiquetaProgreso = progreso ? `${progreso.hechas} de ${progreso.total}` : ''
+  /** Cómo llamar a lo que se está importando al hablarle al dueño: «cobros», no «filas». */
+  const etiquetaEntidad = ENTIDADES.find(e => e.id === entidad)?.etiqueta ?? 'filas'
 
   return (
     <div className="view-container">
@@ -735,7 +879,7 @@ export default function ImportarWizard() {
               enseña un resumen agrupado, igual que la tabla de errores de abajo. */}
           {resultado.pendientes.length > 0 && (
             urgentes.length > TOPE_COTEJO ? (
-              <div className="imprt-pend">
+              <section className="imprt-bloque">
                 <div className="alert alert-warning">
                   <AlertTriangle size={16} strokeWidth={2} />
                   Hay {urgentes.length} incompatibilidades distintas por resolver: son demasiadas para
@@ -760,11 +904,12 @@ export default function ImportarWizard() {
                     </table>
                   </div>
                 </div>
-              </div>
+              </section>
             ) : (
               <PanelPendientes
                 pendientes={resultado.pendientes}
                 resoluciones={resoluciones}
+                sinAplicar={sinAplicar}
                 onDecidir={decidir}
                 onRevalidar={() => validar(resoluciones)}
                 cargando={cargando}
@@ -773,9 +918,21 @@ export default function ImportarWizard() {
             )
           )}
 
+          {/* Filas que dicen lo mismo que otra del archivo. No es un error y no se
+              adivina: se enfrentan las dos y se pregunta, porque solo el dueño sabe
+              si son dos cobros de verdad o uno escrito dos veces. */}
+          {resultado.repetidas.length > 0 && (
+            <PanelRepetidas
+              repetidas={resultado.repetidas}
+              decision={repetidas}
+              onDecidir={d => { setRepetidas(d); validar(resoluciones, d) }}
+              cargando={cargando}
+            />
+          )}
+
           {/* Totales de lo que se va a escribir: un decimal mal leído se ve aquí. */}
           {resultado.resumen.length > 0 && (
-            <>
+            <section className="imprt-bloque">
               <p className="modal-body-text">Comprueba que estos totales son los que esperas antes de importar.</p>
               <div className="imprt-tiles">
                 {resultado.resumen.map(t => (
@@ -786,17 +943,19 @@ export default function ImportarWizard() {
                   </div>
                 ))}
               </div>
-            </>
+            </section>
           )}
 
           {resultado.errores > 0 && (
-            <>
+            <section className="imprt-bloque">
               <div className="alert alert-warning">
                 <AlertTriangle size={16} strokeWidth={2} /> Hay {resultado.errores} filas con problemas. Se importarán solo las correctas; corrige el resto y vuelve a subirlas.
               </div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={descargarErrores}>
-                <Download size={14} strokeWidth={2} /> Descargar errores
-              </button>
+              <div className="imprt-bloque-cab">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={descargarErrores}>
+                  <Download size={14} strokeWidth={2} /> Descargar errores
+                </button>
+              </div>
               <div className="card-table">
                 <div className="table-wrapper">
                   <table className="table">
@@ -815,8 +974,46 @@ export default function ImportarWizard() {
                   </table>
                 </div>
               </div>
-            </>
+            </section>
           )}
+
+          {/* Qué va a pasar, dicho con las palabras del dueño y no con las del
+              importador: «se crearán 383 cobros» se entiende, «383 filas OK» no.
+              Y sobre todo CUÁNDO pasa: hasta aquí no se ha escrito nada, y esa
+              frase es la que quita el miedo a pulsar el botón. */}
+          <section className="imprt-bloque">
+            <h3 className="imprt-bloque-titulo">Qué va a pasar al importar</h3>
+            <ul className="imprt-plan">
+              {resultado.ok > 0 && (
+                <li>
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>Se {politica === 'ACTUALIZAR' ? 'crearán o actualizarán' : 'crearán'} <strong>{resultado.ok} {etiquetaEntidad.toLowerCase()}</strong>.</span>
+                </li>
+              )}
+              {resultado.por_decidir > 0 && (
+                <li>
+                  <AlertTriangle size={14} strokeWidth={2} />
+                  <span><strong>{resultado.por_decidir} filas</strong> esperan que decidas ahí arriba. Si las dejas así, no se importan.</span>
+                </li>
+              )}
+              {resultado.errores > 0 && (
+                <li>
+                  <AlertTriangle size={14} strokeWidth={2} />
+                  <span><strong>{resultado.errores} filas</strong> se quedan fuera por errores del archivo.</span>
+                </li>
+              )}
+              {politica === 'SALTAR' && (
+                <li>
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>Lo que ya exista en CLAUX <strong>no se toca</strong>.</span>
+                </li>
+              )}
+            </ul>
+            <p className="imprt-plan-cuando">
+              Nada de esto se ha escrito todavía. Se escribe cuando pulses «Importar», y podrás
+              deshacerlo entero desde el paso siguiente.
+            </p>
+          </section>
 
           <div className="imprt-acciones">
             <button type="button" className="btn btn-ghost" onClick={() => setPaso('mapear')}>

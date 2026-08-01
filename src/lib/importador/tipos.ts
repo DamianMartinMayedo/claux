@@ -105,6 +105,36 @@ export interface MapeoImport {
    * aplicar tomen exactamente el mismo camino.
    */
   resoluciones?: Record<string, Resolucion>
+  /** Qué hacer con las filas que dicen lo mismo que otra (§`DecisionRepetidas`). */
+  repetidas?: DecisionRepetidas
+}
+
+/**
+ * Qué hacer con una fila del archivo que dice lo MISMO que otra fila anterior
+ * (misma clave natural). No es la política del lote —esa habla de lo que ya está
+ * en la base—, y por eso es una decisión aparte: aquí las dos filas están en el
+ * mismo archivo y solo el dueño del negocio sabe si son dos hechos o uno escrito
+ * dos veces.
+ *
+ *  · 'DECIDIR'  — por defecto: no se importan y se PREGUNTA, con las dos filas
+ *                 enfrentadas y lo que las diferencia a la vista.
+ *  · 'DISTINTAS'— son hechos distintos: se importan todas.
+ *  · 'FUERA'    — es la misma escrita dos veces: se queda solo la primera.
+ */
+export type DecisionRepetidas = 'DECIDIR' | 'DISTINTAS' | 'FUERA'
+
+/**
+ * Una fila que repite la clave de otra, con la comparación ya hecha: qué campos
+ * del archivo dicen cosas distintas en una y en otra. `difieren` vacío significa
+ * que son idénticas en todo lo mapeado —ahí no hay nada que decidir, son la misma
+ * escrita dos veces—, y es lo que permite redactar el aviso sin adivinar.
+ */
+export interface FilaRepetida {
+  fila:   number
+  gemela: number
+  difieren: { etiqueta: string; aqui: string; alli: string }[]
+  /** Resumen legible de lo que COMPARTEN, para reconocer la fila sin abrir el archivo. */
+  resumen: string
 }
 
 export interface FilaResultado {
@@ -139,6 +169,8 @@ export interface ResultadoValidacion {
   resumen?: TotalResumen[]
   /** Nombres sin emparejar que recogió esta tanda (§`Pendiente`). */
   pendientes?: Pendiente[]
+  /** Filas que dicen lo mismo que otra del archivo (§`FilaRepetida`). */
+  repetidas?: FilaRepetida[]
 }
 
 export interface ResumenAplicacion {
@@ -155,16 +187,21 @@ export interface ResumenAplicacion {
  * y así además puede enseñar el progreso.
  *
  * `claves` viaja de ida y vuelta para que la tanda siguiente siga detectando
- * duplicados de las anteriores dentro del mismo archivo.
+ * duplicados de las anteriores dentro del mismo archivo. Cada entrada es
+ * `[clave, nº de fila]`: guardar TAMBIÉN la fila es lo que permite decir «es
+ * igual que la fila 50» en vez de un «repetida» a secas que obliga al operador
+ * a buscarla a mano en un archivo de 400 líneas.
  */
+export type ClavesVistas = [string, number][]
+
 export interface TrozoValidacion extends ResultadoValidacion {
   siguiente: number | null
-  claves:    string[]
+  claves:    ClavesVistas
 }
 
 export interface TrozoAplicacion extends ResumenAplicacion {
   siguiente: number | null
-  claves:    string[]
+  claves:    ClavesVistas
 }
 
 /** Contexto de ejecución, resuelto desde la sesión (impersonada). */

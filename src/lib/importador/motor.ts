@@ -10,8 +10,8 @@
 
 import { norm } from './util'
 import type {
-  Adaptador, CtxImport, MapeoImport, FilaResultado, ResumenAplicacion,
-  TrozoValidacion, TrozoAplicacion,
+  Adaptador, ClavesVistas, CtxImport, MapeoImport, FilaRepetida, FilaResultado,
+  ResumenAplicacion, TrozoValidacion, TrozoAplicacion,
 } from './tipos'
 
 /** Presupuesto de una tanda: lo que llegue antes. */
@@ -69,30 +69,62 @@ function esFilaEjemplo(
  * Dos filas del archivo con la misma clave natural: ¿es un error del archivo o
  * son dos hechos distintos que se parecen?
  *
- * En un maestro siempre es un error (dos fichas del mismo producto). En una
- * entidad de hechos (`Adaptador.repetible`: gastos, cobros) puede ser real —el
- * mismo cliente paga dos veces lo mismo el mismo día—, y ahí lo decide la
- * política del lote: con «Crear otro» entran las dos. Antes no había salida
- * posible, porque esta colisión se descartaba ANTES de mirar la política y la
- * segunda fila no se importaba eligiera el operador lo que eligiera.
+ * En un MAESTRO siempre es un error: dos fichas del mismo producto no existen.
+ * En una entidad de HECHOS (`Adaptador.repetible`: gastos, cobros) puede ser
+ * perfectamente real —dos facturas al mismo cliente, el mismo día y por el mismo
+ * importe—, y eso no lo sabe el importador: lo sabe el dueño del negocio. Así que
+ * no se adivina, se PREGUNTA (`MapeoImport.repetidas`), igual que con los nombres
+ * que no se emparejan.
+ *
+ * Y para poder preguntar bien hace falta enseñar la comparación: `compararFilas`
+ * mira las dos filas del archivo campo a campo y devuelve en qué se diferencian.
+ * Con eso el aviso puede decir «se diferencian en las notas: "Factura No. 56" /
+ * "Factura No. 49"», que es lo único que permite decidir sin abrir el Excel.
  */
-function repiteAdrede(adaptador: Adaptador, mapeo: MapeoImport): boolean {
-  return !!adaptador.repetible && mapeo.politica === 'CREAR'
+function compararFilas(
+  aqui: Record<string, string>, alli: Record<string, string>,
+  mapeo: MapeoImport, adaptador: Adaptador,
+): FilaRepetida['difieren'] {
+  const out: FilaRepetida['difieren'] = []
+  for (const [campo, columna] of Object.entries(mapeo.columnas)) {
+    if (!columna) continue
+    const a = (aqui[columna] ?? '').toString().trim()
+    const b = (alli[columna] ?? '').toString().trim()
+    if (norm(a) === norm(b)) continue
+    out.push({
+      etiqueta: adaptador.campos.find(c => c.campo === campo)?.etiqueta ?? campo,
+      aqui: a || '—',
+      alli: b || '—',
+    })
+  }
+  return out
 }
 
-const MOTIVO_REPETIDA = (adaptador: Adaptador): string =>
-  adaptador.repetible
-    ? 'Fila repetida dentro del archivo. Si de verdad son dos, elige «Crear otro».'
-    : 'Fila duplicada dentro del archivo.'
+/**
+ * Lo que las dos filas COMPARTEN, en una línea: los tres primeros campos mapeados
+ * que coinciden. Sirve para reconocer de qué fila se habla sin abrir el archivo.
+ */
+function resumenFila(
+  valores: Record<string, string>, mapeo: MapeoImport, adaptador: Adaptador,
+): string {
+  const partes: string[] = []
+  for (const campo of Object.keys(mapeo.columnas)) {
+    if (!mapeo.columnas[campo] || !valores[campo]) continue
+    partes.push(valores[campo])
+    if (partes.length === 3) break
+  }
+  return partes.join(' · ') || adaptador.etiqueta
+}
 
 /** Dry-run: valida cada fila SIN escribir. Marca duplicados dentro del archivo. */
 export async function validarLoteFilas(
   filas: Record<string, string>[], mapeo: MapeoImport, adaptador: Adaptador, ctx: CtxImport,
-  desde = 0, clavesPrevias: string[] = [],
+  desde = 0, clavesPrevias: ClavesVistas = [],
 ): Promise<TrozoValidacion> {
   const t0 = Date.now()
-  const vistos = new Set(clavesPrevias)
+  const vistos = new Map(clavesPrevias)
   const res: FilaResultado[] = []
+  const repetidas: FilaRepetida[] = []
   const buenas: Record<string, unknown>[] = []
   // Los nombres sin emparejar se recogen aquí y suben al asistente para que el
   // operador diga a qué corresponden (§`resolver.ts`).
@@ -108,10 +140,34 @@ export async function validarLoteFilas(
     }
     const prep = await adaptador.preparar(valores, ctx, deColumna)
     if (!prep.ok) { res.push({ fila: i + 1, ok: false, motivo: prep.motivo, decidir: prep.decidir }); continue }
-    if (vistos.has(prep.clave) && !repiteAdrede(adaptador, mapeo)) {
-      res.push({ fila: i + 1, ok: false, motivo: MOTIVO_REPETIDA(adaptador) }); continue
+    const gemela = vistos.get(prep.clave)
+    if (gemela !== undefined) {
+      // Un maestro no se pregunta: dos fichas con la misma identidad son un error
+      // del archivo y punto.
+      if (!adaptador.repetible) {
+        res.push({ fila: i + 1, ok: false, motivo: `Fila duplicada: es la misma que la fila ${gemela}.` })
+        continue
+      }
+      // Se reportan SIEMPRE, incluso ya decididas: el panel del asistente es lo
+      // único que dice qué se decidió, y si desapareciera al elegir, el operador
+      // se quedaría sin saber si su clic hizo algo.
+      const decision = mapeo.repetidas ?? 'DECIDIR'
+      const difieren = compararFilas(filas[i], filas[gemela - 1], mapeo, adaptador)
+      repetidas.push({ fila: i + 1, gemela, difieren, resumen: resumenFila(valores, mapeo, adaptador) })
+      if (decision !== 'DISTINTAS') {
+        res.push({
+          fila: i + 1, ok: false, decidir: decision === 'DECIDIR',
+          motivo: decision === 'DECIDIR'
+            ? `Dice lo mismo que la fila ${gemela}.`
+            : `Repetida de la fila ${gemela}: la dejaste fuera.`,
+        })
+        continue
+      }
+      // 'DISTINTAS': el operador ya dijo que son hechos distintos. Pasa como
+      // cualquier otra fila —incluida la comprobación contra la base, que sí mira
+      // lo que las diferencia y por eso encuentra su propio registro al reimportar.
     }
-    vistos.add(prep.clave)
+    vistos.set(prep.clave, i + 1)
     const existente = await adaptador.buscarExistente(prep.datos, ctx)
     const accion = !existente ? 'INSERTAR'
       : mapeo.politica === 'ACTUALIZAR' ? 'ACTUALIZAR'
@@ -125,6 +181,7 @@ export async function validarLoteFilas(
     total: filas.length, ok, errores: res.length - ok - porDecidir, por_decidir: porDecidir, filas: res,
     resumen:    adaptador.resumen?.(buenas),
     pendientes: [...ctx.pendientes.values()],
+    repetidas,
     claves:     [...vistos],
     siguiente:  i < filas.length ? i : null,
   }
@@ -224,7 +281,7 @@ async function registrarItem(
  */
 export async function aplicarLoteFilas(
   loteId: string, filas: Record<string, string>[], mapeo: MapeoImport, adaptador: Adaptador, ctx: CtxImport,
-  desde = 0, clavesPrevias: string[] = [],
+  desde = 0, clavesPrevias: ClavesVistas = [],
 ): Promise<TrozoAplicacion> {
   ctx.lote_id = loteId   // los adaptadores de ledger lo dejan como referencia del movimiento
   // Las decisiones del operador van en el mapeo; aquí ya no se recoge ningún
@@ -233,7 +290,7 @@ export async function aplicarLoteFilas(
   const t0 = Date.now()
   const { data: prev } = await ctx.db.from('import_lote_items').select('fila_origen').eq('lote_id', loteId)
   const hechas = new Set((prev ?? []).map((r: { fila_origen: number }) => r.fila_origen))
-  const vistos = new Set(clavesPrevias)
+  const vistos = new Map(clavesPrevias)
   const r: ResumenAplicacion = { insertadas: 0, actualizadas: 0, saltadas: 0, errores: 0 }
 
   let i = desde
@@ -247,11 +304,14 @@ export async function aplicarLoteFilas(
     }
     const prep = await adaptador.preparar(valores, ctx, deColumna)
     if (!prep.ok) { await registrarItem(ctx, loteId, adaptador.entidad, fila, 'ERROR', null, prep.motivo); r.errores++; continue }
-    if (vistos.has(prep.clave) && !repiteAdrede(adaptador, mapeo)) {
-      await registrarItem(ctx, loteId, adaptador.entidad, fila, 'SALTADA', null, 'Duplicada en el archivo')
+    const gemela = vistos.get(prep.clave)
+    // Solo se escriben las repetidas que el operador declaró distintas. Sin
+    // decidir (o decididas fuera) se saltan: el commit no pregunta nada.
+    if (gemela !== undefined && !(adaptador.repetible && mapeo.repetidas === 'DISTINTAS')) {
+      await registrarItem(ctx, loteId, adaptador.entidad, fila, 'SALTADA', null, `Repetida de la fila ${gemela}`)
       r.saltadas++; continue
     }
-    vistos.add(prep.clave)
+    vistos.set(prep.clave, fila)
     try {
       const existente = await adaptador.buscarExistente(prep.datos, ctx)
       if (existente && mapeo.politica === 'SALTAR') {

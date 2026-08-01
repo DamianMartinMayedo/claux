@@ -16,7 +16,7 @@ import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDesh
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
 import { construirXlsxBase64, texto, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
 import type {
-  CtxImport, DefaultResuelto, MapeoImport, TrozoValidacion, TrozoAplicacion,
+  ClavesVistas, CtxImport, DefaultResuelto, MapeoImport, TrozoValidacion, TrozoAplicacion,
 } from '@/lib/importador/tipos'
 
 function generarLoteId(): string {
@@ -176,7 +176,7 @@ export async function crearLoteImport(
  * el presupuesto de tiempo. El asistente repite mientras `siguiente` no sea null.
  */
 export async function validarLoteImport(
-  lote_id: string, mapeo: MapeoImport, desde = 0, claves: string[] = [],
+  lote_id: string, mapeo: MapeoImport, desde = 0, claves: ClavesVistas = [],
 ): Promise<{ ok: boolean; error?: string; trozo?: TrozoValidacion }> {
   const r = await resolverCtx()
   if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
@@ -209,7 +209,7 @@ export async function validarLoteImport(
  * a medias, repetir la llamada sigue por donde iba sin duplicar nada.
  */
 export async function aplicarLoteImport(
-  lote_id: string, desde = 0, claves: string[] = [],
+  lote_id: string, desde = 0, claves: ClavesVistas = [],
 ): Promise<{
   ok: boolean; error?: string; trozo?: TrozoAplicacion
   /** Solo en la última tanda: lo que el lote creó DE PASO (proveedores, categorías,

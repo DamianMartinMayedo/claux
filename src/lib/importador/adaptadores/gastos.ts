@@ -244,6 +244,14 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         // una migración lo NORMAL es que ninguna exista aún, así que quedarse solo
         // con el id dejaría todas esas filas con la misma clave vacía y no
         // arreglaría nada.
+        //
+        // Las NOTAS, en cambio, NO entran: son texto libre, no identidad. Que dos
+        // facturas del mismo cliente, día e importe solo se distingan por un
+        // «Factura No. 56» escrito ahí es precisamente lo que hay que AVISAR para
+        // que el operador decida, no algo que el importador deba resolver solo
+        // (§`motor.ts`, decisión de repetidas). La comprobación contra la BASE sí
+        // las mira, y esa asimetría es a propósito: aquí se avisa, allí se
+        // reconoce lo ya escrito.
         clave: [
           empresa_id, tipo, fecha, moneda, monto.toFixed(2), norm(descripcion),
           tercero_id ?? (tercero ? `nom:${norm(tercero)}` : 'sin'),
@@ -252,7 +260,12 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
     },
 
     /**
-     * Mismo registro = misma empresa, fecha, importe, moneda, etiqueta y TERCERO.
+     * Mismo registro = misma empresa, fecha, importe, moneda, etiqueta, TERCERO y
+     * NOTAS. Las notas están aquí y NO en la clave del archivo a propósito: dos
+     * filas que solo se diferencian en ellas se avisan para que el operador
+     * decida, pero una vez escritas son dos registros distintos, y al reimportar
+     * el archivo cada uno tiene que reconocer el suyo en vez de fundirse con el
+     * otro (que es lo que haría la comparación gruesa).
      *
      * Con la ficha ya creada se compara por `tercero_id`; sin ella, el registro
      * que buscamos también se escribió sin tercero. Al repetir el mismo archivo la
@@ -272,7 +285,9 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         .eq('monto', registro.monto as number)
         .eq('descripcion', registro.descripcion as string)
       const tercero_id = registro.tercero_id as string | null
-      const { data } = await (tercero_id ? q.eq('tercero_id', tercero_id) : q.is('tercero_id', null))
+      const notas      = registro.notas as string | null
+      const conTercero = tercero_id ? q.eq('tercero_id', tercero_id) : q.is('tercero_id', null)
+      const { data } = await (notas ? conTercero.eq('notas', notas) : conTercero.is('notas', null))
         .limit(1).maybeSingle()
       return (data?.registro_id as string) ?? null
     },

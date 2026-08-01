@@ -4135,7 +4135,9 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 /* Reusa la rejilla del mapeo (`.imprt-map-*`): es la misma forma —a la izquierda
    lo que dice el archivo, a la derecha el desplegable— y una familia propia solo
    habría duplicado el responsive. */
-.imprt-pend { margin-top: var(--space-4); }
+/* `.imprt-pend` ya no lleva margen propio: viaja siempre junto a `.imprt-bloque`,
+   que es quien pone el aire. Sobrevive como ÁMBITO de las reglas de dentro (el
+   responsive de su fila, al final de esta sección). */
 .imprt-pend-nombre { display: block; }
 .imprt-pend-aviso {
   display: block; margin-top: var(--space-1);
@@ -4155,6 +4157,58 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 @media (max-width: 640px) {
   .imprt-pend .imprt-map-row { grid-template-columns: 1fr; gap: var(--space-2); }
 }
+
+/* Lo que se ha decidido sobre un nombre, DICHO: el desplegable solo devolvía el
+   texto de la opción elegida y elegir «Crear X» no se distinguía de no haber
+   tocado nada. La consecuencia en palabras es el acuse de recibo. */
+.imprt-pend-decidido {
+  display: flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-1); font-size: var(--text-xs); color: var(--color-success);
+}
+.imprt-pend-decidido svg { flex-shrink: 0; }
+.imprt-pend-decidido em { font-style: normal; color: var(--color-text-muted); }
+
+/* ── Importador · bloques del paso de revisar ── */
+/* Cifras, nombres por decidir, totales y errores se apilaban sin separación —ni
+   `.alert` ni `.imprt-tiles` la traen por sí solos—, así que el paso se leía como
+   un muro. Cada uno es una sección con su aire y su ritmo interno. */
+.imprt-bloque {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+.imprt-bloque > .imprt-tiles,
+.imprt-bloque > .imprt-mapa,
+.imprt-bloque > .imprt-pend-mas,
+.imprt-bloque > .imprt-pend-acciones { margin: 0; }
+.imprt-bloque-titulo { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+/* Fila de cabecera de un bloque: texto a la izquierda, su acción a la derecha
+   (y el botón conserva su tamaño en vez de estirarse a lo ancho de la columna). */
+.imprt-bloque-cab {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-3);
+}
+.imprt-bloque-cab .btn { flex-shrink: 0; }
+
+/* ── Importador · filas que dicen lo mismo que otra ── */
+/* Se enfrentan las dos filas y se enseña EN QUÉ se diferencian: sin esa
+   comparación el operador tiene que abrir el Excel y buscarlas a mano. */
+.imprt-rep { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.imprt-rep-item {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3); border-radius: var(--radius-md);
+  background: var(--color-surface-2); font-size: var(--text-sm);
+}
+.imprt-rep-filas { color: var(--color-text); }
+.imprt-rep-difieren { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+/* ── Importador · qué va a pasar al importar ── */
+/* En consecuencias y no en contadores: «se crearán 383 cobros» se entiende, «383
+   filas OK» no. La última línea dice CUÁNDO se escribe, que es lo que quita el
+   miedo a pulsar el botón. */
+.imprt-plan { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.imprt-plan li { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-sm); }
+.imprt-plan li svg { flex-shrink: 0; margin-top: 0.15em; color: var(--color-text-muted); }
+.imprt-plan-cuando { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
 
 .imprt-tiles { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-4) 0; }
 .imprt-tile { flex: 1 1 8rem; padding: var(--space-4); border-radius: var(--radius-md); background: var(--color-surface-2); text-align: center; }
