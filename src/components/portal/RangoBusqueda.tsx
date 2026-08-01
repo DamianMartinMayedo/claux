@@ -15,7 +15,7 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { Search, X } from 'lucide-react'
+import { Check, Search, X } from 'lucide-react'
 import { PRESETS_RANGO, fechasDePreset, presetDeFechas, type PresetRango } from '@/lib/listados'
 
 interface Props {
@@ -43,6 +43,22 @@ export default function RangoBusqueda({
   const ruta    = usePathname()
   const [texto, setTexto] = useState(q)
   const [abierto, setAbierto] = useState(false)
+  // Las fechas del rango personalizado se escriben AQUÍ y solo viajan al pulsar
+  // «Aplicar». Navegar en cada `change` de un `input[type=date]` es una consulta
+  // por cada tecla —el navegador dispara el evento con la fecha a medio escribir,
+  // «0002-01-01» incluido—, así que el listado se recargaba varias veces con
+  // rangos absurdos antes de llegar al que el dueño quería. En una conexión de
+  // Cuba eso son segundos perdidos y una pantalla que parpadea sola.
+  const [borrador, setBorrador] = useState({ desde, hasta })
+  // Cuando el servidor aplica otro rango (una píldora, volver del detalle), el
+  // borrador se pone al día DURANTE EL RENDER y no en un efecto: con efecto se
+  // pinta un fotograma con las fechas viejas y luego salta.
+  const [aplicado, setAplicado] = useState({ desde, hasta })
+  if (aplicado.desde !== desde || aplicado.hasta !== hasta) {
+    setAplicado({ desde, hasta })
+    setBorrador({ desde, hasta })
+  }
+  const sinAplicar = borrador.desde !== desde || borrador.hasta !== hasta
 
   const activo = presetDeFechas(desde, hasta)
   const lista  = presets ? PRESETS_RANGO.filter(p => presets.includes(p.id)) : PRESETS_RANGO
@@ -98,20 +114,27 @@ export default function RangoBusqueda({
       )}
 
       {(abierto || activo === 'personalizado') && lista.length > 0 && (
-        <div className="rango-fechas">
+        <form className="rango-fechas" onSubmit={e => { e.preventDefault(); navegar(borrador) }}>
           <label htmlFor="rango-desde">Desde</label>
           <input
-            id="rango-desde" className="input input-sm" type="date" value={desde}
-            max={hasta || undefined}
-            onChange={e => navegar({ desde: e.target.value })}
+            id="rango-desde" className="input input-sm" type="date" value={borrador.desde}
+            max={borrador.hasta || undefined}
+            onChange={e => setBorrador(b => ({ ...b, desde: e.target.value }))}
           />
           <label htmlFor="rango-hasta">Hasta</label>
           <input
-            id="rango-hasta" className="input input-sm" type="date" value={hasta}
-            min={desde || undefined}
-            onChange={e => navegar({ hasta: e.target.value })}
+            id="rango-hasta" className="input input-sm" type="date" value={borrador.hasta}
+            min={borrador.desde || undefined}
+            onChange={e => setBorrador(b => ({ ...b, hasta: e.target.value }))}
           />
-        </div>
+          {/* Aparece solo cuando hay algo que aplicar: si estuviera siempre, sería un
+              botón muerto la mayor parte del tiempo. Enter dentro del campo hace lo
+              mismo, que es lo que espera quien teclea la fecha en vez de elegirla. */}
+          <button type="submit" className={`btn btn-sm ${sinAplicar ? 'btn-primary' : 'btn-secondary'}`}
+            disabled={!sinAplicar}>
+            <Check size={13} strokeWidth={2.5} /> Aplicar
+          </button>
+        </form>
       )}
 
       {!sinBuscador && (

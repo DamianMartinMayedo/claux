@@ -15,6 +15,16 @@
  *  en 3G el scroll infinito es una promesa que no se puede cumplir. */
 export const LIMITE_LISTADO = 500
 
+/**
+ * Techo de «Ver más». El listado ordena por fecha DESCENDENTE, así que el techo no
+ * recorta «los primeros»: recorta **los más viejos**. Un negocio con 523 registros
+ * veía los 500 recientes y creía que su histórico empezaba en enero —y el aviso le
+ * decía «acota el rango», que para llegar a lo viejo no sirve de nada—. Con esto se
+ * puede pedir más de una vez hasta traerlo todo, sin renunciar al techo que protege
+ * la conexión en el primer pintado.
+ */
+export const TOPE_VER_MAS = 5_000
+
 export interface FiltroListado {
   /** ISO `YYYY-MM-DD`. Ausente = sin límite inferior. */
   desde?: string

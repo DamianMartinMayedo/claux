@@ -101,6 +101,9 @@ export interface GastosCobrosPageData {
   q:                 string
   /** Se alcanzó el techo de filas: hay más registros fuera de la vista. */
   hay_mas:           boolean
+  /** Cuántos hay DE VERDAD en el rango (sin techo), y cuántos se están enseñando. */
+  total:             number
+  limite:            number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -140,7 +143,11 @@ export async function obtenerGastosCobros(
   const patron  = patronBusqueda(q)
   const importe = importeBuscado(q)
 
-  let regQuery = db.from('gastos_cobros').select('*')
+  // `count: 'exact'` en la MISMA consulta: devuelve las filas del techo y, aparte, el
+  // total que cumple el filtro. Sin él, «Todo» enseñaba las 500 más recientes y no había
+  // forma de saber que faltaban las viejas —el aviso decía «los primeros 500», que además
+  // era mentira: son los últimos 500—.
+  let regQuery = db.from('gastos_cobros').select('*', { count: 'exact' })
     .eq('client_id', session.client_id)
     .in('empresa_id', idsFiltro)
   if (desde) regQuery = regQuery.gte('fecha', desde)
@@ -275,6 +282,8 @@ export async function obtenerGastosCobros(
     rango:             { desde, hasta },
     q,
     hay_mas:           registros.length >= limite,
+    total:             regRes.count ?? registros.length,
+    limite,
   }
 }
 

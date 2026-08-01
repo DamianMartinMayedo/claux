@@ -288,6 +288,10 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .card-table .mon-card-header + .table-wrapper { border: none; box-shadow: none; border-radius: 0; }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
 .card-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; }
+/* Título de una tarjeta que es SECCIÓN de una pantalla, no la pantalla entera:
+   varias apiladas con el título grande compiten con el título de la página.
+   (`.dash-card-title-sm` es lo mismo con prefijo del dashboard: converge aquí.) */
+.card-title-sm { font-size: var(--text-lg); line-height: 1.25; }
 .card-body { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 
 /* ═══════════════════════════════════════════════════

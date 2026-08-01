@@ -1,9 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, HelpCircle, Save, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Undo2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
 import { aBase64 } from '@/lib/subir-archivo'
@@ -90,12 +90,7 @@ function textoFilas(filas: number[]): string {
  *  corregir el archivo de origen: se retira el panel y se enseña un resumen. */
 const TOPE_COTEJO = 50
 
-/** El valor del desplegable de un pendiente ⇄ la decisión que representa. */
-function aValor(r: Resolucion | undefined): string {
-  if (!r) return ''
-  return r.accion === 'USAR' ? `USAR|${r.destino ?? ''}` : r.accion
-}
-
+/** Lo que devuelve un botón o el buscador ⇄ la decisión que representa. */
 function aResolucion(valor: string): Resolucion | null {
   if (!valor) return null
   const [accion, destino] = valor.split('|')
@@ -138,23 +133,90 @@ function descargarBase64(nombre: string, base64: string, mime: string) {
 }
 
 /**
- * Los nombres del archivo que no cuadraron, con lo que se puede hacer con cada
- * uno. Dos bloques, y la diferencia entre ellos es la que evita los 80 clics:
+ * Elegir una ficha entre las que ya existen, BUSCANDO en vez de desplegando.
  *
- *  · «Hay que decidir» — o hay más de una ficha con ese nombre, o hay una que se
- *    le PARECE. Emparejar a ciegas metería el dinero en la partida equivocada y
- *    crear a ciegas duplicaría lo que ya existe escrito de otra forma. Estas
- *    filas no se importan hasta que se responde.
- *  · «Se crearán solas» — no se parecen a nada, así que manda la política del
- *    lote. Salen listadas de todos modos, porque «se va a crear una categoría
- *    nueva» es algo que el dueño tiene derecho a ver antes, y se pueden
- *    redirigir a una existente desde el mismo desplegable.
+ * El desplegable anterior listaba TODAS las fichas del cliente: con trescientos
+ * clientes es inservible, y en Android un `select` largo abre un selector del
+ * sistema con las trescientas. Aquí se ofrecen las más parecidas —el emparejado
+ * ya las ordena por parecido, y la buena está casi siempre entre las dos
+ * primeras— y el resto se alcanza escribiendo.
+ *
+ * Reusa la familia `.ac-*` del portal (el patrón de autocompletado del design
+ * system) con sus detalles ya resueltos: blur con retardo —sin él el clic en una
+ * sugerencia no llega a registrarse—, ↑/↓/Enter/Escape, y Enter que ELIGE y no
+ * envía nada.
  */
+function BuscarFicha({
+  opciones, elegida, etiquetaTipo, onElegir,
+}: {
+  opciones:     { valor: string; etiqueta: string }[]
+  elegida:      { valor: string; etiqueta: string } | undefined
+  etiquetaTipo: string
+  onElegir:     (valor: string) => void
+}) {
+  const [texto, setTexto]     = useState('')
+  const [abierto, setAbierto] = useState(false)
+  const [activo, setActivo]   = useState(0)
+
+  const sugerencias = useMemo(() => {
+    const t = normaliza(texto)
+    return opciones.filter(o => !t || normaliza(o.etiqueta).includes(t)).slice(0, 6)
+  }, [texto, opciones])
+
+  const visible = abierto && sugerencias.length > 0
+
+  function elegir(o: { valor: string; etiqueta: string }) {
+    onElegir(o.valor)
+    setTexto(o.etiqueta)
+    setAbierto(false)
+  }
+
+  function teclas(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!visible) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActivo(i => (i + 1) % sugerencias.length); return }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setActivo(i => (i - 1 + sugerencias.length) % sugerencias.length); return }
+    if (e.key === 'Escape')    { setAbierto(false); return }
+    if (e.key === 'Enter')     { e.preventDefault(); elegir(sugerencias[activo]) }
+  }
+
+  return (
+    <div className="ac-wrap">
+      <input
+        className="input"
+        type="text"
+        autoComplete="off"
+        aria-label={`Buscar entre tus ${etiquetaTipo.toLowerCase()}s`}
+        placeholder={opciones.length > 6
+          ? `Busca entre tus ${opciones.length} fichas…`
+          : 'Busca la ficha que es…'}
+        value={texto || elegida?.etiqueta || ''}
+        onChange={e => { setTexto(e.target.value); setAbierto(true); setActivo(0) }}
+        onFocus={() => setAbierto(true)}
+        onBlur={() => setTimeout(() => setAbierto(false), 120)}
+        onKeyDown={teclas}
+      />
+      {visible && (
+        <ul className="ac-lista" role="listbox">
+          {sugerencias.map((o, i) => (
+            <li key={o.valor}>
+              <button type="button"
+                className={`ac-item${i === activo ? ' active' : ''}`}
+                onMouseDown={e => { e.preventDefault(); elegir(o) }}
+                onMouseEnter={() => setActivo(i)}>
+                <span className="ac-nom">{o.etiqueta}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /**
- * Lo que se ha decidido sobre un nombre, EN CONSECUENCIAS. El desplegable solo
- * enseñaba la opción elegida, así que elegir «Crear X» no se distinguía de no
- * haber tocado nada: ni pasaba nada en pantalla ni se escribía nada (no se
- * escribe hasta revalidar). Esta línea es el acuse de recibo.
+ * Lo que se ha decidido sobre un nombre, EN CONSECUENCIAS. El control solo
+ * enseñaba la opción marcada, así que elegir «Crear X» no se distinguía de no
+ * haber tocado nada. Esta línea es el acuse de recibo.
  */
 function consecuencia(p: Pendiente, r: Resolucion | undefined): string | null {
   if (!r) return null
@@ -165,25 +227,31 @@ function consecuencia(p: Pendiente, r: Resolucion | undefined): string | null {
   return elegida ? `Se usará «${elegida}»` : null
 }
 
-function PanelPendientes({
-  pendientes, resoluciones, sinAplicar, onDecidir, onRevalidar, cargando, etiquetaProgreso,
+/**
+ * Un nombre del archivo y qué hacer con él.
+ *
+ * Buscar una ficha y decidir una acción son DOS cosas distintas, y antes
+ * competían dentro del mismo desplegable: «Crear «Yarini SURL»» aparecía en la
+ * posición 301, detrás de trescientos nombres de clientes. Ahora el buscador
+ * busca fichas y las acciones son botones a la vista.
+ */
+function FilaPendiente({
+  p, resolucion, sinAplicar, onDecidir,
 }: {
-  pendientes:   Pendiente[]
-  resoluciones: Record<string, Resolucion>
-  sinAplicar:   string[]
-  onDecidir:    (clave: string, valor: string) => void
-  onRevalidar:  () => void
-  cargando:     boolean
-  etiquetaProgreso: string
+  p:           Pendiente
+  resolucion:  Resolucion | undefined
+  sinAplicar:  boolean
+  onDecidir:   (clave: string, valor: string) => void
 }) {
-  const urgentes = pendientes.filter(p => p.decidir)
-  const deOficio = pendientes.filter(p => !p.decidir)
-  const sinRespuesta = urgentes.filter(p => !resoluciones[p.clave]).length
-  const pendientesDeAplicar = sinAplicar.length
+  const elegida = resolucion?.accion === 'USAR'
+    ? p.opciones.find(o => o.valor === resolucion.destino)
+    : undefined
+  const activa = (a: string) => resolucion?.accion === a ? 'btn-primary' : 'btn-secondary'
+  const texto  = consecuencia(p, resolucion)
 
-  const fila = (p: Pendiente) => (
-    <div key={p.clave} className="imprt-map-row">
-      <div className="imprt-map-campo">
+  return (
+    <div className="imprt-pend-ficha">
+      <div className="imprt-pend-quien">
         <strong className="imprt-pend-nombre">«{p.texto}»</strong>
         <span className="imprt-map-ayuda">
           {p.etiqueta_tipo}
@@ -192,83 +260,94 @@ function PanelPendientes({
           {p.filas === 1 ? `fila ${p.primera_fila}` : `${p.filas} filas (desde la ${p.primera_fila})`}
           {p.causa === 'VARIAS' ? ' · hay más de una con ese nombre' : ''}
         </span>
-        {p.aviso && <span className="imprt-pend-aviso">{p.aviso}</span>}
-        {consecuencia(p, resoluciones[p.clave]) && (
-          <span className="imprt-pend-decidido">
-            <Check size={13} strokeWidth={2.5} />
-            {consecuencia(p, resoluciones[p.clave])}
-            {sinAplicar.includes(p.clave) && <em> · sin aplicar todavía</em>}
-          </span>
-        )}
       </div>
-      <select className="input" value={aValor(resoluciones[p.clave])}
-        aria-label={`Qué hacer con ${p.texto}`}
-        onChange={e => onDecidir(p.clave, e.target.value)}>
-        <option value="">— Elige qué es —</option>
-        {p.opciones.map(o => (
-          <option key={o.valor} value={`USAR|${o.valor}`}>Es «{o.etiqueta}»</option>
-        ))}
-        {p.creable  && <option value="CREAR">Crear «{p.texto}»</option>}
-        {p.omitible && <option value="OMITIR">Dejarlo en blanco</option>}
-        <option value="RECHAZAR">Dejar estas filas fuera</option>
-      </select>
+
+      {p.opciones.length > 0 && (
+        <BuscarFicha
+          opciones={p.opciones}
+          elegida={elegida}
+          etiquetaTipo={p.etiqueta_tipo}
+          onElegir={v => onDecidir(p.clave, `USAR|${v}`)}
+        />
+      )}
+
+      <div className="imprt-pend-botones">
+        {p.creable  && (
+          <button type="button" className={`btn btn-sm ${activa('CREAR')}`}
+            onClick={() => onDecidir(p.clave, 'CREAR')}>Crear ficha nueva</button>
+        )}
+        {p.omitible && (
+          <button type="button" className={`btn btn-sm ${activa('OMITIR')}`}
+            onClick={() => onDecidir(p.clave, 'OMITIR')}>Dejarlo en blanco</button>
+        )}
+        <button type="button" className={`btn btn-sm ${activa('RECHAZAR')}`}
+          onClick={() => onDecidir(p.clave, 'RECHAZAR')}>Dejar sus filas fuera</button>
+      </div>
+
+      {p.aviso && resolucion?.accion === 'CREAR' && <span className="imprt-pend-aviso">{p.aviso}</span>}
+      {texto && (
+        <span className="imprt-pend-decidido">
+          <Check size={13} strokeWidth={2.5} />
+          {texto}
+          {sinAplicar && <em> · pendiente de recalcular</em>}
+        </span>
+      )}
     </div>
   )
+}
+
+/**
+ * Los nombres del archivo que NO cuadran con nada y hay que decidir: o existe más
+ * de una ficha con ese nombre, o hay una que se le PARECE. Emparejar a ciegas
+ * metería el dinero en la partida equivocada y crear a ciegas duplicaría lo que ya
+ * existe escrito de otra forma. Estas filas no se importan hasta que se responde.
+ *
+ * Los que no se parecen a nada NO están aquí: se crean solos según la política del
+ * lote, no preguntan nada, y mezclar «contéstame» con «te informo» en la misma
+ * tarjeta era la mitad de la confusión de este paso. Van a «Qué va a pasar».
+ */
+function PanelPendientes({
+  pendientes, resoluciones, sinAplicar, onDecidir,
+}: {
+  pendientes:   Pendiente[]
+  resoluciones: Record<string, Resolucion>
+  sinAplicar:   string[]
+  onDecidir:    (clave: string, valor: string) => void
+}) {
+  const sinRespuesta = pendientes.filter(p => !resoluciones[p.clave]).length
 
   return (
-    <section className="imprt-bloque imprt-pend">
-      {urgentes.length > 0 && (
-        <>
-          <div className="alert alert-warning">
-            <HelpCircle size={16} strokeWidth={2} />
-            {urgentes.length === 1
-              ? 'Hay un nombre del archivo que se parece a algo que ya tienes, pero no es igual. Dinos qué es.'
-              : `Hay ${urgentes.length} nombres del archivo que se parecen a algo que ya tienes, pero no son iguales. Dinos qué son.`}
-          </div>
-          <div className="imprt-mapa">{urgentes.map(fila)}</div>
-        </>
-      )}
-
-      {deOficio.length > 0 && (
-        <details className="imprt-pend-mas">
-          <summary>
-            {deOficio.length === 1
-              ? 'Un nombre nuevo que se dará de alta'
-              : `${deOficio.length} nombres nuevos que se darán de alta`}
-          </summary>
-          <p className="input-hint">
-            No se parecen a nada de lo que ya tienes, así que se crean según lo que elegiste al mapear.
-            Si alguno era en realidad uno de los que ya existen, cámbialo aquí.
-          </p>
-          <div className="imprt-mapa">{deOficio.map(fila)}</div>
-        </details>
-      )}
-
-      {/* El botón se vuelve la acción principal en cuanto hay algo decidido y sin
-          aplicar: es lo único que hace efecto a lo elegido, y antes se confundía
-          con el resto de botones secundarios del paso. */}
-      <div className="imprt-pend-acciones">
-        <button type="button"
-          className={`btn ${pendientesDeAplicar > 0 ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={onRevalidar} disabled={cargando}>
-          {cargando
-            ? <><span className="spinner spinner-sm" /> Comprobando {etiquetaProgreso}…</>
-            : pendientesDeAplicar > 0
-              ? <>Aplicar {pendientesDeAplicar === 1 ? 'esta decisión' : `estas ${pendientesDeAplicar} decisiones`}</>
-              : <>Volver a comprobar</>}
-        </button>
-        {pendientesDeAplicar > 0 && (
-          <span className="input-hint">Lo que elijas no cuenta hasta que pulses aquí.</span>
-        )}
-        {pendientesDeAplicar === 0 && sinRespuesta > 0 && (
-          <span className="input-hint">
-            {sinRespuesta === 1
-              ? 'Queda 1 sin responder: sus filas se quedarán fuera.'
-              : `Quedan ${sinRespuesta} sin responder: sus filas se quedarán fuera.`}
-          </span>
-        )}
+    <div className="card imprt-pend">
+      <div className="card-header">
+        <h2 className="card-title card-title-sm">Nombres que no acabamos de reconocer</h2>
+        <span className="text-xs-muted">
+          {pendientes.length === 1 ? '1 nombre' : `${pendientes.length} nombres`}
+        </span>
       </div>
-    </section>
+
+      <p className="modal-body-text">
+        {pendientes.length === 1
+          ? 'Se parece a algo que ya tienes, pero no es igual. Dinos qué es.'
+          : 'Se parecen a algo que ya tienes, pero no son iguales. Dinos qué son.'}
+      </p>
+
+      <div className="imprt-pend-lista">
+        {pendientes.map(p => (
+          <FilaPendiente key={p.clave} p={p}
+            resolucion={resoluciones[p.clave]}
+            sinAplicar={sinAplicar.includes(p.clave)}
+            onDecidir={onDecidir} />
+        ))}
+      </div>
+
+      {sinRespuesta > 0 && (
+        <p className="input-hint">
+          {sinRespuesta === 1
+            ? 'Queda 1 sin responder: sus filas se quedarán fuera.'
+            : `Quedan ${sinRespuesta} sin responder: sus filas se quedarán fuera.`}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -281,28 +360,29 @@ function PanelPendientes({
  * abrir el Excel— y se pregunta una sola vez para todas.
  */
 function PanelRepetidas({
-  repetidas, decision, onDecidir, cargando,
+  repetidas, decision, sinAplicar, onDecidir,
 }: {
-  repetidas: FilaRepetida[]
-  decision:  DecisionRepetidas
-  onDecidir: (d: DecisionRepetidas) => void
-  cargando:  boolean
+  repetidas:  FilaRepetida[]
+  decision:   DecisionRepetidas
+  sinAplicar: boolean
+  onDecidir:  (d: DecisionRepetidas) => void
 }) {
   // Idénticas en todo lo mapeado: ahí no hay nada que decidir y decirlo evita que
   // el operador busque una diferencia que no existe.
   const gemelasExactas = repetidas.filter(r => r.difieren.length === 0).length
 
   return (
-    <section className="imprt-bloque">
-      <div className="alert alert-warning">
-        <HelpCircle size={16} strokeWidth={2} />
-        <span>
-          {repetidas.length === 1
-            ? 'Hay 1 fila que dice lo mismo que otra fila del archivo.'
-            : `Hay ${repetidas.length} filas que dicen lo mismo que otra fila del archivo.`}
-          {' '}Compáralas y dinos si son cosas distintas o la misma repetida.
+    <div className="card">
+      <div className="card-header">
+        <h2 className="card-title card-title-sm">Filas que dicen lo mismo que otra</h2>
+        <span className="text-xs-muted">
+          {repetidas.length === 1 ? '1 fila' : `${repetidas.length} filas`}
         </span>
       </div>
+
+      <p className="modal-body-text">
+        Compáralas y dinos si son cosas distintas o la misma escrita dos veces.
+      </p>
 
       <ul className="imprt-rep">
         {repetidas.slice(0, 20).map(r => (
@@ -332,34 +412,34 @@ function PanelRepetidas({
         <p className="input-hint">Y {repetidas.length - 20} más. La decisión vale para todas.</p>
       )}
 
-      <div className="imprt-pend-acciones">
-        <button type="button" className={`btn ${decision === 'DISTINTAS' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => onDecidir('DISTINTAS')} disabled={cargando}>
+      <div className="imprt-pend-botones">
+        <button type="button" className={`btn btn-sm ${decision === 'DISTINTAS' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => onDecidir('DISTINTAS')}>
           Son distintas: impórtalas
         </button>
-        <button type="button" className={`btn ${decision === 'FUERA' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => onDecidir('FUERA')} disabled={cargando}>
+        <button type="button" className={`btn btn-sm ${decision === 'FUERA' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => onDecidir('FUERA')}>
           Es la misma: déjala fuera
         </button>
-        {/* Lo decidido, dicho: el botón marcado se ve, pero la consecuencia hay
-            que escribirla o el clic parece no haber hecho nada. */}
-        {decision !== 'DECIDIR' && (
-          <span className="imprt-pend-decidido">
-            <Check size={13} strokeWidth={2.5} />
-            {decision === 'DISTINTAS'
-              ? `Se importarán ${repetidas.length === 1 ? 'las dos' : 'todas'} como registros distintos.`
-              : `Se quedará solo la primera de cada pareja: ${repetidas.length} ${repetidas.length === 1 ? 'fila queda' : 'filas quedan'} fuera.`}
-          </span>
-        )}
-        {gemelasExactas > 0 && (
-          <span className="input-hint">
-            {gemelasExactas === 1
-              ? '1 de ellas es idéntica a su gemela: aunque digas que son distintas, no hay forma de guardarlas por separado.'
-              : `${gemelasExactas} son idénticas a su gemela: aunque digas que son distintas, no hay forma de guardarlas por separado.`}
-          </span>
-        )}
       </div>
-    </section>
+
+      {decision !== 'DECIDIR' && (
+        <span className="imprt-pend-decidido">
+          <Check size={13} strokeWidth={2.5} />
+          {decision === 'DISTINTAS'
+            ? `Se importarán ${repetidas.length === 1 ? 'las dos' : 'todas'} como registros distintos.`
+            : `Se quedará solo la primera de cada pareja: ${repetidas.length} ${repetidas.length === 1 ? 'fila queda' : 'filas quedan'} fuera.`}
+          {sinAplicar && <em> · pendiente de recalcular</em>}
+        </span>
+      )}
+      {gemelasExactas > 0 && (
+        <p className="input-hint">
+          {gemelasExactas === 1
+            ? '1 de ellas es idéntica a su gemela: aunque digas que son distintas, no hay forma de guardarlas por separado.'
+            : `${gemelasExactas} son idénticas a su gemela: aunque digas que son distintas, no hay forma de guardarlas por separado.`}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -400,6 +480,9 @@ export default function ImportarWizard() {
   // Qué son las filas que dicen lo mismo que otra. Viaja en el mapeo, como las
   // resoluciones, para que revalidar y aplicar tomen el mismo camino.
   const [repetidas, setRepetidas] = useState<DecisionRepetidas>('DECIDIR')
+  // La última decisión que SÍ viajó al servidor. Comparándola con la de arriba se
+  // sabe si las cifras que se están enseñando ya la incluyen.
+  const [repetidasAplicadas, setRepetidasAplicadas] = useState<DecisionRepetidas>('DECIDIR')
   const [resumen, setResumen]     = useState<{ insertadas: number; actualizadas: number; saltadas: number; errores: number } | null>(null)
   // Lo que el lote creó DE PASO (proveedores, categorías, clientes o servicios
   // que una fila nombraba y no existían): solo llega en la última tanda.
@@ -608,7 +691,7 @@ export default function ImportarWizard() {
         .map(p => [p.clave, { accion: p.defecto } as Resolucion])),
       ...resol,
     })
-    setSinAplicar([])   // lo elegido ya está aplicado: el aviso desaparece
+    setSinAplicar([]); setRepetidasAplicadas(rep)   // las cifras ya incluyen lo elegido
     setResultado(acc); setPaso('validar')
   }
 
@@ -651,6 +734,12 @@ export default function ImportarWizard() {
   const malas = resultado?.filas.filter(f => !f.decidir) ?? []
   const erroresAgrupados = agruparPorMotivo(malas)
   const urgentes = resultado?.pendientes.filter(p => p.decidir) ?? []
+  /** Los que no preguntan nada: se crean solos. Son consecuencia, no decisión. */
+  const deOficio = resultado?.pendientes.filter(p => !p.decidir) ?? []
+  // Lo elegido en pantalla que todavía no ha viajado al servidor: mientras haya
+  // algo, las cifras de arriba no lo incluyen y el botón final lo dice.
+  const repetidasSinAplicar    = repetidas !== repetidasAplicadas
+  const hayDecisionesSinAplicar = sinAplicar.length > 0 || repetidasSinAplicar
 
   function descargarErrores() {
     descargarCsv(`errores-${loteId}.csv`,
@@ -660,7 +749,7 @@ export default function ImportarWizard() {
   function reiniciar() {
     setPaso('entidad'); setEntidad(''); setCampos([]); setDefs([]); setLoteId(''); setCabeceras([]); setTotal(0)
     setColumnas({}); setGlobales({}); setResultado(null); setResumen(null); setPolitica('SALTAR')
-    setSinAplicar([]); setRepetidas('DECIDIR')
+    setSinAplicar([]); setRepetidas('DECIDIR'); setRepetidasAplicadas('DECIDIR')
     setPlantillas([]); setNombrePlantilla(''); setDeshecho(null); setAvisos([]); setProgreso(null)
     setResoluciones({}); setAuxiliares([])
   }
@@ -859,16 +948,24 @@ export default function ImportarWizard() {
         </div>
       )}
 
-      {/* ── Paso 4: revisar (dry-run) ── */}
+      {/* ── Paso 4: revisar (dry-run) ──
+          Una TARJETA por asunto, y el corte no es por tema sino por naturaleza:
+          lo que me PREGUNTA algo va en su tarjeta con sus botones dentro, lo que
+          me INFORMA va en las suyas. Todo esto vivía en una sola tarjeta y el
+          resultado era que el botón de aplicar quedaba flotando entre dos bloques
+          y parecía de otro: una acción sin contenedor propio se pega a lo que
+          tenga más cerca. */}
       {paso === 'validar' && resultado && (
-        <div className="card">
-          <div className="imprt-tiles">
-            <div className="imprt-tile"><strong>{resultado.total}</strong><span>Filas</span></div>
-            <div className="imprt-tile"><strong>{resultado.ok}</strong><span>Listas para importar</span></div>
-            {resultado.por_decidir > 0 && (
-              <div className="imprt-tile"><strong>{resultado.por_decidir}</strong><span>Esperan que decidas</span></div>
-            )}
-            <div className="imprt-tile"><strong>{resultado.errores}</strong><span>Con error</span></div>
+        <div className="imprt-revisar">
+          <div className="card">
+            <div className="imprt-tiles">
+              <div className="imprt-tile"><strong>{resultado.total}</strong><span>Filas</span></div>
+              <div className="imprt-tile"><strong>{resultado.ok}</strong><span>Listas para importar</span></div>
+              {resultado.por_decidir > 0 && (
+                <div className="imprt-tile"><strong>{resultado.por_decidir}</strong><span>Esperan que decidas</span></div>
+              )}
+              <div className="imprt-tile"><strong>{resultado.errores}</strong><span>Con error</span></div>
+            </div>
           </div>
 
           {/* Nombres que el archivo trae y no cuadran con nada. Se pregunta en vez
@@ -876,46 +973,42 @@ export default function ImportarWizard() {
               equivocada mete dinero en el renglón que no toca del informe. Por
               encima del tope, vincular una a una deja de ahorrar tiempo frente a
               corregir el archivo de origen: se retira el panel interactivo y se
-              enseña un resumen agrupado, igual que la tabla de errores de abajo. */}
-          {resultado.pendientes.length > 0 && (
-            urgentes.length > TOPE_COTEJO ? (
-              <section className="imprt-bloque">
-                <div className="alert alert-warning">
-                  <AlertTriangle size={16} strokeWidth={2} />
-                  Hay {urgentes.length} incompatibilidades distintas por resolver: son demasiadas para
-                  vincularlas aquí una a una. Corrige el archivo de origen (o divídelo en partes más
-                  pequeñas) y vuelve a subirlo.
-                </div>
-                <div className="card-table">
-                  <div className="table-wrapper">
-                    <table className="table">
-                      <thead><tr><th className="col-num">Filas</th><th>Qué no cuadra</th></tr></thead>
-                      <tbody>
-                        {urgentes.map(p => (
-                          <tr key={p.clave}>
-                            <td data-label="Filas" className="col-num">{p.filas}</td>
-                            <td data-label="Qué no cuadra">
-                              «{p.texto}» — {p.etiqueta_tipo.toLowerCase()}{p.ambito_etiqueta ? ` ${p.ambito_etiqueta}` : ''}
-                              {p.causa === 'VARIAS' ? ' (hay más de una con ese nombre)' : ''}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
-            ) : (
-              <PanelPendientes
-                pendientes={resultado.pendientes}
-                resoluciones={resoluciones}
-                sinAplicar={sinAplicar}
-                onDecidir={decidir}
-                onRevalidar={() => validar(resoluciones)}
-                cargando={cargando}
-                etiquetaProgreso={etiquetaProgreso}
-              />
-            )
+              enseña un resumen agrupado, igual que la tabla de errores. */}
+          {urgentes.length > TOPE_COTEJO ? (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title card-title-sm">Nombres que no acabamos de reconocer</h2>
+                <span className="text-xs-muted">{urgentes.length} nombres</span>
+              </div>
+              <div className="alert alert-warning alert-intro">
+                <AlertTriangle size={16} strokeWidth={2} />
+                Son demasiados para vincularlos aquí uno a uno. Corrige el archivo de origen (o
+                divídelo en partes más pequeñas) y vuelve a subirlo.
+              </div>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead><tr><th className="col-num">Filas</th><th>Qué no cuadra</th></tr></thead>
+                  <tbody>
+                    {urgentes.map(p => (
+                      <tr key={p.clave}>
+                        <td data-label="Filas" className="col-num">{p.filas}</td>
+                        <td data-label="Qué no cuadra">
+                          «{p.texto}» — {p.etiqueta_tipo.toLowerCase()}{p.ambito_etiqueta ? ` ${p.ambito_etiqueta}` : ''}
+                          {p.causa === 'VARIAS' ? ' (hay más de una con ese nombre)' : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : urgentes.length > 0 && (
+            <PanelPendientes
+              pendientes={urgentes}
+              resoluciones={resoluciones}
+              sinAplicar={sinAplicar}
+              onDecidir={decidir}
+            />
           )}
 
           {/* Filas que dicen lo mismo que otra del archivo. No es un error y no se
@@ -925,15 +1018,18 @@ export default function ImportarWizard() {
             <PanelRepetidas
               repetidas={resultado.repetidas}
               decision={repetidas}
-              onDecidir={d => { setRepetidas(d); validar(resoluciones, d) }}
-              cargando={cargando}
+              sinAplicar={repetidasSinAplicar}
+              onDecidir={setRepetidas}
             />
           )}
 
           {/* Totales de lo que se va a escribir: un decimal mal leído se ve aquí. */}
           {resultado.resumen.length > 0 && (
-            <section className="imprt-bloque">
-              <p className="modal-body-text">Comprueba que estos totales son los que esperas antes de importar.</p>
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title card-title-sm">Totales</h2>
+                <span className="text-xs-muted">Comprueba que son los que esperas</span>
+              </div>
               <div className="imprt-tiles">
                 {resultado.resumen.map(t => (
                   <div key={t.etiqueta} className="imprt-tile">
@@ -943,51 +1039,63 @@ export default function ImportarWizard() {
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
           )}
 
           {resultado.errores > 0 && (
-            <section className="imprt-bloque">
-              <div className="alert alert-warning">
-                <AlertTriangle size={16} strokeWidth={2} /> Hay {resultado.errores} filas con problemas. Se importarán solo las correctas; corrige el resto y vuelve a subirlas.
-              </div>
-              <div className="imprt-bloque-cab">
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title card-title-sm">Filas con problemas</h2>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={descargarErrores}>
                   <Download size={14} strokeWidth={2} /> Descargar errores
                 </button>
               </div>
-              <div className="card-table">
-                <div className="table-wrapper">
-                  <table className="table">
-                    <thead><tr><th className="col-num">Filas</th><th>Motivo</th></tr></thead>
-                    <tbody>
-                      {erroresAgrupados.map(g => (
-                        <tr key={g.motivo}>
-                          <td data-label="Filas" className="col-num">{g.filas.length === 1 ? g.filas[0] : `${g.filas.length} filas`}</td>
-                          <td data-label="Motivo">
-                            {g.motivo}
-                            {g.filas.length > 1 && <span className="input-hint"> — {textoFilas(g.filas)}</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="alert alert-warning alert-intro">
+                <AlertTriangle size={16} strokeWidth={2} /> Se importarán solo las correctas; corrige
+                estas {resultado.errores} y vuelve a subirlas.
               </div>
-            </section>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead><tr><th className="col-num">Filas</th><th>Motivo</th></tr></thead>
+                  <tbody>
+                    {erroresAgrupados.map(g => (
+                      <tr key={g.motivo}>
+                        <td data-label="Filas" className="col-num">{g.filas.length === 1 ? g.filas[0] : `${g.filas.length} filas`}</td>
+                        <td data-label="Motivo">
+                          {g.motivo}
+                          {g.filas.length > 1 && <span className="input-hint"> — {textoFilas(g.filas)}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
 
           {/* Qué va a pasar, dicho con las palabras del dueño y no con las del
               importador: «se crearán 383 cobros» se entiende, «383 filas OK» no.
-              Y sobre todo CUÁNDO pasa: hasta aquí no se ha escrito nada, y esa
-              frase es la que quita el miedo a pulsar el botón. */}
-          <section className="imprt-bloque">
-            <h3 className="imprt-bloque-titulo">Qué va a pasar al importar</h3>
+              Aquí caen también los nombres que se dan de alta solos: no preguntan
+              nada, son una CONSECUENCIA, y estaban en la tarjeta de decisiones
+              mezclados con lo que sí espera respuesta. */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title card-title-sm">Qué va a pasar al importar</h2>
+            </div>
             <ul className="imprt-plan">
               {resultado.ok > 0 && (
                 <li>
                   <Check size={14} strokeWidth={2.5} />
                   <span>Se {politica === 'ACTUALIZAR' ? 'crearán o actualizarán' : 'crearán'} <strong>{resultado.ok} {etiquetaEntidad.toLowerCase()}</strong>.</span>
+                </li>
+              )}
+              {deOficio.length > 0 && (
+                <li>
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>
+                    Se {deOficio.length === 1 ? 'creará' : 'crearán'} <strong>{deOficio.length} {deOficio.length === 1 ? 'ficha nueva' : 'fichas nuevas'}</strong>
+                    {' '}que el archivo nombra y todavía no tienes.
+                  </span>
                 </li>
               )}
               {resultado.por_decidir > 0 && (
@@ -1009,21 +1117,53 @@ export default function ImportarWizard() {
                 </li>
               )}
             </ul>
+
+            {deOficio.length > 0 && (
+              <details className="imprt-pend-mas">
+                <summary>Ver las {deOficio.length} fichas que se crearán</summary>
+                <p className="input-hint">
+                  No se parecen a nada de lo que ya tienes. Si alguna era en realidad una de las
+                  que ya existen, cámbiala aquí.
+                </p>
+                <div className="imprt-pend-lista">
+                  {deOficio.map(p => (
+                    <FilaPendiente key={p.clave} p={p}
+                      resolucion={resoluciones[p.clave]}
+                      sinAplicar={sinAplicar.includes(p.clave)}
+                      onDecidir={decidir} />
+                  ))}
+                </div>
+              </details>
+            )}
+
             <p className="imprt-plan-cuando">
               Nada de esto se ha escrito todavía. Se escribe cuando pulses «Importar», y podrás
               deshacerlo entero desde el paso siguiente.
             </p>
-          </section>
 
-          <div className="imprt-acciones">
-            <button type="button" className="btn btn-ghost" onClick={() => setPaso('mapear')}>
-              <ArrowLeft size={15} strokeWidth={2} /> Atrás
-            </button>
-            <button type="button" className="btn btn-primary" onClick={aplicar} disabled={cargando || resultado.ok === 0}>
-              {cargando
-                ? <><span className="spinner spinner-sm" /> Importando {etiquetaProgreso}…</>
-                : <>Importar {resultado.ok} filas</>}
-            </button>
+            {/* Un solo botón principal en todo el paso, y su etiqueta dice lo que
+                hará AHORA. Elegir es gratis; recalcular cuesta N consultas contra
+                una conexión mala, así que se paga una vez y en un único sitio —en
+                vez de un «aplicar» por tarjeta que además parecía una confirmación
+                de algo que ya se veía escrito. */}
+            <div className="imprt-acciones">
+              <button type="button" className="btn btn-ghost" onClick={() => setPaso('mapear')}>
+                <ArrowLeft size={15} strokeWidth={2} /> Atrás
+              </button>
+              {hayDecisionesSinAplicar ? (
+                <button type="button" className="btn btn-primary" onClick={() => validar()} disabled={cargando}>
+                  {cargando
+                    ? <><span className="spinner spinner-sm" /> Comprobando {etiquetaProgreso}…</>
+                    : <>Recalcular con tus decisiones <ArrowRight size={15} strokeWidth={2} /></>}
+                </button>
+              ) : (
+                <button type="button" className="btn btn-primary" onClick={aplicar} disabled={cargando || resultado.ok === 0}>
+                  {cargando
+                    ? <><span className="spinner spinner-sm" /> Importando {etiquetaProgreso}…</>
+                    : <>Importar {resultado.ok} filas</>}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

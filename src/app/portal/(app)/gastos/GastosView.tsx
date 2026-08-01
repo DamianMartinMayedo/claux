@@ -40,7 +40,7 @@ import { useRowSelection }             from '@/components/portal/useRowSelection
 import BulkBar                         from '@/components/portal/BulkBar'
 import RangoBusqueda                  from '@/components/portal/RangoBusqueda'
 import ExportarMenu                   from '@/components/portal/ExportarMenu'
-import { LIMITE_LISTADO }             from '@/lib/listados'
+import { LIMITE_LISTADO, TOPE_VER_MAS } from '@/lib/listados'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -600,6 +600,13 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPageData; puedeEditar: boolean }) {
   const router = useRouter()
+
+  /** Sube el techo en la URL: el servidor vuelve a consultar con más filas. */
+  function verMas() {
+    const url = new URL(window.location.href)
+    url.searchParams.set('limite', String(Math.min(data.limite + LIMITE_LISTADO, TOPE_VER_MAS)))
+    router.replace(`${url.pathname}${url.search}`, { scroll: false })
+  }
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
   const empresasFiltro = data.empresas.map(e => ({
@@ -982,10 +989,23 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         />
       </div>
 
+      {/* El techo recorta por FECHA DESCENDENTE: lo que falta son los registros más
+          VIEJOS, no «los siguientes». Decir «los primeros N» era literalmente al revés,
+          y mandar a acotar el rango no ayudaba a llegar a lo antiguo — había que
+          adivinar unas fechas pasadas a mano. Ahora se dice cuántos faltan y se pueden
+          traer. */}
       {data.hay_mas && (
         <p className="listado-tope">
-          Se enseñan los primeros {LIMITE_LISTADO} registros del rango. Acota el rango o busca
-          para ver el resto.
+          Se enseñan los <strong>{data.registros.length} más recientes</strong> de {data.total}
+          {' '}del rango: faltan los {Math.max(0, data.total - data.registros.length)} más antiguos.
+          {data.limite < TOPE_VER_MAS && (
+            <>
+              {' '}
+              <button type="button" className="btn btn-ghost btn-xs" onClick={verMas}>
+                Traer {Math.min(LIMITE_LISTADO, data.total - data.registros.length)} más
+              </button>
+            </>
+          )}
         </p>
       )}
 

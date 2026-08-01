@@ -1119,21 +1119,24 @@
   color: var(--color-text-inv);
 }
 .rango-fechas {
-  display: flex; align-items: center; gap: var(--space-2);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2);
   font-size: var(--text-xs); color: var(--color-text-muted);
 }
 .rango-fechas input { width: 9.5rem; }
+.rango-fechas .btn { flex-shrink: 0; }
 .rango-limpiar {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   display: inline-flex; background: none; border: 0; padding: 2px; cursor: pointer;
   color: var(--color-text-faint); transition: color var(--transition);
 }
 .rango-limpiar:hover { color: var(--color-text); }
-/* El aviso de «hay más filas de las que caben»: no es un error, es un límite. */
+/* El aviso de «hay más filas de las que caben»: no es un error, es un límite —y
+   lleva dentro la forma de superarlo, que es lo que le faltaba. */
 .listado-tope {
   margin-top: var(--space-2);
   font-size: var(--text-xs); color: var(--color-text-muted);
 }
+.listado-tope .btn { vertical-align: baseline; }
 /* «de lo que ves»: el total de cabecera dice sobre qué se calcula. */
 .gc-stat-alcance {
   font-style: normal; font-weight: 400;
@@ -4132,13 +4135,21 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-map-ayuda { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
 
 /* ── Importador · nombres por decidir ── */
-/* Reusa la rejilla del mapeo (`.imprt-map-*`): es la misma forma —a la izquierda
-   lo que dice el archivo, a la derecha el desplegable— y una familia propia solo
-   habría duplicado el responsive. */
-/* `.imprt-pend` ya no lleva margen propio: viaja siempre junto a `.imprt-bloque`,
-   que es quien pone el aire. Sobrevive como ÁMBITO de las reglas de dentro (el
-   responsive de su fila, al final de esta sección). */
+/* Cada nombre es una FICHA apilada, no una fila de rejilla: la de antes ponía el
+   desplegable a la derecha y todo lo demás a la izquierda, y con el buscador más
+   los botones de acción no cabía. Apilado se lee igual en móvil y en escritorio,
+   que es donde acaba haciéndose media migración. */
+.imprt-pend-lista { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-4); }
+.imprt-pend-ficha {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); border-radius: var(--radius-md);
+  border: 1px solid var(--color-border); background: var(--color-surface-2);
+}
+.imprt-pend-quien { font-size: var(--text-sm); }
 .imprt-pend-nombre { display: block; }
+/* Buscar una ficha y decidir una acción son dos cosas distintas: antes competían
+   dentro del mismo desplegable y «Crear X» quedaba detrás de 300 nombres. */
+.imprt-pend-botones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .imprt-pend-aviso {
   display: block; margin-top: var(--space-1);
   color: var(--color-warning); font-size: var(--text-xs);
@@ -4147,15 +4158,6 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-pend-mas > summary {
   cursor: pointer; font-size: var(--text-sm); font-weight: 600;
   padding: var(--space-2) 0; color: var(--color-text);
-}
-.imprt-pend-acciones {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
-  margin-top: var(--space-4);
-}
-/* La fila del pendiente lleva más texto que la del mapeo (tipo, ámbito, cuántas
-   filas), así que en móvil el desplegable baja debajo en vez de quedarse en 8rem. */
-@media (max-width: 640px) {
-  .imprt-pend .imprt-map-row { grid-template-columns: 1fr; gap: var(--space-2); }
 }
 
 /* Lo que se ha decidido sobre un nombre, DICHO: el desplegable solo devolvía el
@@ -4168,26 +4170,14 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-pend-decidido svg { flex-shrink: 0; }
 .imprt-pend-decidido em { font-style: normal; color: var(--color-text-muted); }
 
-/* ── Importador · bloques del paso de revisar ── */
-/* Cifras, nombres por decidir, totales y errores se apilaban sin separación —ni
-   `.alert` ni `.imprt-tiles` la traen por sí solos—, así que el paso se leía como
-   un muro. Cada uno es una sección con su aire y su ritmo interno. */
-.imprt-bloque {
-  display: flex; flex-direction: column; gap: var(--space-3);
-  margin-top: var(--space-6);
-}
-.imprt-bloque > .imprt-tiles,
-.imprt-bloque > .imprt-mapa,
-.imprt-bloque > .imprt-pend-mas,
-.imprt-bloque > .imprt-pend-acciones { margin: 0; }
-.imprt-bloque-titulo { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
-/* Fila de cabecera de un bloque: texto a la izquierda, su acción a la derecha
-   (y el botón conserva su tamaño en vez de estirarse a lo ancho de la columna). */
-.imprt-bloque-cab {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: var(--space-3);
-}
-.imprt-bloque-cab .btn { flex-shrink: 0; }
+/* ── Importador · paso de revisar ── */
+/* UNA TARJETA POR ASUNTO, y el corte es por naturaleza: lo que PREGUNTA lleva sus
+   botones dentro, lo que INFORMA no lleva ninguno. Todo esto vivía en una sola
+   tarjeta y el botón de aplicar quedaba flotando entre dos bloques, así que
+   parecía de otro — una acción sin contenedor propio se pega a lo que tenga más
+   cerca. */
+.imprt-revisar { display: flex; flex-direction: column; gap: var(--space-5); }
+.imprt-revisar > .card > .imprt-tiles:only-child { margin: 0; }
 
 /* ── Importador · filas que dicen lo mismo que otra ── */
 /* Se enfrentan las dos filas y se enseña EN QUÉ se diferencian: sin esa
