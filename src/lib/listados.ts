@@ -25,6 +25,26 @@ export const LIMITE_LISTADO = 500
  */
 export const TOPE_VER_MAS = 5_000
 
+/**
+ * Techo de filas de ESTA consulta.
+ *
+ * El de 500 protege el primer pintado, que es el que se paga en 3G. Pero **cuando
+ * el dueño pide «Todo» explícitamente, «todo» tiene que ser todo**: el techo
+ * recorta por fecha descendente, o sea que se come los registros más VIEJOS, y un
+ * filtro que se llama «Todo» y omite filas en silencio miente. Con 523 registros,
+ * el único de 2025 desaparecía y el histórico parecía empezar en enero — y el
+ * aviso mandaba a «acotar el rango», que para llegar a lo antiguo no sirve.
+ *
+ * «Todo» llega como rango VACÍO (`desde: ''`), que es distinto de no haber pedido
+ * nada (`undefined` → últimos 3 meses). Sigue habiendo techo, pero al nivel en el
+ * que ya no es un recorte accidental sino una barbaridad de volumen.
+ */
+export function limiteDelFiltro(filtro?: FiltroListado): number {
+  if (filtro?.limite) return Math.min(filtro.limite, TOPE_VER_MAS)
+  const pidioTodo = filtro?.desde === '' && filtro?.hasta === ''
+  return pidioTodo ? TOPE_VER_MAS : LIMITE_LISTADO
+}
+
 export interface FiltroListado {
   /** ISO `YYYY-MM-DD`. Ausente = sin límite inferior. */
   desde?: string

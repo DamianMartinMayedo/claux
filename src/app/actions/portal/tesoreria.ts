@@ -10,7 +10,7 @@ import { monedaValida }      from '@/lib/tasas'
 import { generarCuentaId, generarMovimientoId } from '@/lib/tesoreria-core'
 import { generarRegistroId, resolverCategoriaSistema } from '@/lib/gastos-core'
 import {
-  LIMITE_LISTADO, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses,
   type FiltroListado as _FiltroListado,
 } from '@/lib/listados'
 
@@ -102,7 +102,7 @@ export async function obtenerTesoreria(
   const desde  = filtro?.desde ?? porDefecto.desde
   const hasta  = filtro?.hasta ?? porDefecto.hasta
   const q      = (filtro?.q ?? '').trim()
-  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const limite = limiteDelFiltro(filtro)
   const patron  = patronBusqueda(q)
   const importe = importeBuscado(q)
 

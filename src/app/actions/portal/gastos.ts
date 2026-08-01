@@ -14,7 +14,7 @@ import {
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 import {
-  LIMITE_LISTADO, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses,
   type FiltroListado as _FiltroListado,
 } from '@/lib/listados'
 
@@ -139,7 +139,7 @@ export async function obtenerGastosCobros(
   const desde  = filtro?.desde ?? porDefecto.desde
   const hasta  = filtro?.hasta ?? porDefecto.hasta
   const q      = (filtro?.q ?? '').trim()
-  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const limite = limiteDelFiltro(filtro)
   const patron  = patronBusqueda(q)
   const importe = importeBuscado(q)
 

@@ -8,7 +8,7 @@ import { obtenerEmpresas }   from './empresas'
 import { traducirErrorInventario } from './_inventario-helpers'
 import { monedaValida, mapaTasas } from '@/lib/tasas'
 import { parseNumeroEs }     from '@/lib/numeros'
-import { LIMITE_LISTADO, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
+import { limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
 import { minimoAplicable } from '@/lib/inventario/stock'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ export async function obtenerCompras(filtro?: FiltroListado): Promise<ComprasPag
   const porDefecto = rangoUltimosMeses(3)
   const desde  = filtro?.desde ?? porDefecto.desde
   const hasta  = filtro?.hasta ?? porDefecto.hasta
-  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const limite = limiteDelFiltro(filtro)
 
   let compQuery = db.from('compras').select('*')
     .eq('client_id', session.client_id)

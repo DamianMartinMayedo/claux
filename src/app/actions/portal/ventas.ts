@@ -16,7 +16,7 @@ import {
 import { aplicarMovimiento } from './_inventario-helpers'
 import { estadoCobro } from '@/lib/cobranza-core'
 import {
-  LIMITE_LISTADO, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses,
   type FiltroListado as _FiltroListado,
 } from '@/lib/listados'
 import {
@@ -262,7 +262,7 @@ export async function obtenerVentasResumen(
   const desde = filtro?.desde ?? porDefecto.desde
   const hasta = filtro?.hasta ?? porDefecto.hasta
   const q     = (filtro?.q ?? '').trim()
-  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const limite = limiteDelFiltro(filtro)
   const rango = { desde, hasta }
 
   if (!empresa_ids.length) {

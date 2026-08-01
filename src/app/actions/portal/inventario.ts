@@ -13,7 +13,7 @@ import {
   type TipoMovimiento,
   type MotivoTipo,
 } from './_inventario-helpers'
-import { LIMITE_LISTADO, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
+import { limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ export async function obtenerMovimientos(
   const porDefecto = rangoUltimosMeses(3)
   const desde  = filtro?.desde ?? porDefecto.desde
   const hasta  = filtro?.hasta ?? porDefecto.hasta
-  const limite = filtro?.limite ?? LIMITE_LISTADO
+  const limite = limiteDelFiltro(filtro)
 
   let movQuery = db.from('movimientos_inventario').select('*')
     .eq('client_id', session.client_id)
