@@ -22,6 +22,8 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 
 | Tu tarea toca… | Lee (además de CONTEXTO.md) |
 |---|---|
+| Un flujo que cruza módulos (venta→cobro, caja→tesorería, importar→libro) | `docs/PROCESOS.md` |
+| Escribir código (cualquiera): antes de darlo por terminado | `docs/OPERACION.md` |
 | Cualquier `.tsx`/JSX o CSS (`src/app/styles/`) | `skills/ui/SKILL.md` (fuente única de UI; valores de tokens en `src/app/styles/01-tokens.css`) |
 | Planes, módulos, precios, gating, admin de clientes | `docs/MODELO-MODULOS.md` |
 | Base de datos / queries / esquema | `skills/supabase-postgres-best-practices` + las migraciones reales en `supabase/migrations/` |
@@ -47,13 +49,15 @@ Lee solo lo que tu tarea necesita.
 
 | Documento | Qué contiene | Cuándo consultarlo |
 |---|---|---|
-| [CONTEXTO.md](docs/CONTEXTO.md) | Visión del producto, estado actual del código, principios de arquitectura, modelo de datos, prioridades de Fase 0 | Siempre antes de empezar cualquier tarea |
+| [CONTEXTO.md](docs/CONTEXTO.md) | Visión del producto, estado actual del código, principios de arquitectura, modelo de datos, prioridades de Fase 0. **§2 va por apartados** (`### <módulo>`, con índice al principio): se lee el del módulo que toques, no los 21 | Siempre antes de empezar cualquier tarea |
+| [PROCESOS.md](docs/PROCESOS.md) | Cómo circula la información ENTRE módulos: los nueve recorridos de punta a punta (una venta hasta el dinero, la caja offline hasta tesorería, la migración hasta el libro…), qué es deuda y qué es deliberado | Al analizar o rediseñar un flujo que cruza módulos, y para cualquier agente que revise procesos **sin tocar código** |
+| [OPERACION.md](docs/OPERACION.md) | Cómo se verifica, se despliega y se toca la BD en este repo, y las trampas que ya costaron tiempo (build de Vercel, RLS, Storage, crons en UTC) | Antes de dar por terminado cualquier cambio de código |
 | [MODELO-MODULOS.md](docs/MODELO-MODULOS.md) | Diseño del modelo comercial v2 (módulos à la carte; la contabilidad es un módulo más, no una base obligatoria): tablas, gating, nomenclatura genérica, IA como módulo, discrepancias y checklist de implementación | Al implementar planes/módulos/precios, gating del portal o el admin de clientes |
 | [skills/ui/SKILL.md](skills/ui/SKILL.md) | Fuente única de UI: reglas, sistema de tablas, tokens, iconos, gotchas. Valores exactos en `src/app/styles/01-tokens.css` | Al tocar cualquier `.tsx` con JSX o CSS de `src/app/styles/` |
 
 ## Política de eficiencia (ahorro de tokens)
 
-- Lee docs/CONTEXTO.md completo UNA vez por sesión. Del resto de docs y skills, lee solo la sección/archivo relevante a la tarea (tabla "qué leer según la tarea" arriba), nunca de más.
+- Lee docs/CONTEXTO.md UNA vez por sesión: las secciones §1 y §3-§8 completas, y de **§2 solo los apartados de tu tarea** (tiene índice al principio y un `### <módulo>` por área; son ~18.000 palabras y leerlas enteras para tocar un botón es tirar la sesión). Del resto de docs y skills, lee solo la sección/archivo relevante (tabla "qué leer según la tarea" arriba), nunca de más.
 - Una sola fuente por tema: prohibido duplicar contenido entre documentos. Si algo cambia, edita el documento en su sitio; no añadas changelogs, resúmenes ni archivos nuevos que repitan lo existente.
 - Prohibido crear archivos .md en la raíz. Documentación nueva solo en docs/, y solo si docs/CONTEXTO.md no puede absorberla; al crearla, regístrala en el índice de este archivo.
 - **Planes de trabajo** (features grandes, migraciones, refactors, recuperación de contexto entre agentes): al elaborar un plan de cierta envergadura, guarda una copia en `docs/planes/<nombre>.md` para que cualquier otro agente pueda leerlo y retomar. Esa carpeta está en `.gitignore` (no se versiona; es local a esta copia del repo); la convención completa vive en [docs/planes/README.md](docs/planes/README.md).
