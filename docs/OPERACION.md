@@ -24,6 +24,17 @@ Obligatorio al añadir o tocar **acciones del portal**. Comprueba que toda escri
 su candado de módulo. Debe salir en verde; si aparece un módulo sin candado, el script lo
 lista y devuelve error.
 
+```bash
+npm run audit:columnas
+```
+
+Centinela de columnas: comprueba contra la BD real que ningún `select` literal pide una
+columna que no existe. **PostgREST no ignora la columna que sobra: falla la consulta
+entera**, y con el `?? []` habitual eso se lee como «no hay nada» — así se apagaron en
+silencio el calendario de cobros, el widget de Servicios (y su insight de IA) y las
+descargas de Suscripciones y de Gastos. Correrlo tras cualquier migración que renombre o
+borre una columna, y al cerrar cualquier fase de trabajo.
+
 `npx eslint <ficheros>` para lo tocado. El build de este proyecto es pesado: si el proceso
 muere con **exit 137** es la máquina quedándose sin memoria, no un fallo del código.
 

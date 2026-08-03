@@ -24,6 +24,8 @@
 // No es 'use server': lo consume la server action `exportarListado`.
 
 import { estadoCobro, type Tramo } from '@/lib/cobranza-core'
+import { calcularCobroAcuerdo, estadoEfectivo, type DescuentoModo, type PeriodicidadSub } from '@/lib/suscripciones'
+import { cobroNaceLiquidado, estadoDeRegistro, type EstadoRegistro } from '@/lib/gastos-core'
 import { MOTIVO_LABEL, type MotivoTipo } from '@/app/actions/portal/_inventario-helpers'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
 import type { ValorCelda } from './csv'
@@ -219,34 +221,63 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // `hijasDe` en GastosView.
       const familia = filtro?.categoria ? await conDescendientes(db, cid, filtro.categoria) : undefined
 
+      // **`estado` NO es una columna** (PENDIENTE/PARCIAL/LIQUIDADO se derivan de lo
+      // liquidado en Tesorería, como en las facturas). Pedirla en el `select` hacía
+      // fallar la consulta entera —PostgREST no ignora la columna que sobra— y `leer()`
+      // lanza, así que el botón «Descargar» de Gastos y cobros reventaba SIEMPRE. Se
+      // deriva aquí con `estadoDeRegistro`, la misma función que usa la pantalla, y por
+      // eso el filtro por estado también se aplica después de calcularlo.
       const [filas, terceros, empresas] = await Promise.all([
         leer(db, 'gastos_cobros', cid,
-          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, categoria_id, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, estado, notas', 'fecha',
+          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, categoria_id, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, notas', 'fecha',
           filtro, 'fecha', ['concepto', 'descripcion', 'notas', 'registro_id'],
           {
             empresa_id: filtro?.empresa_id,
             tipo:       filtro?.tipo,
-            estado:     filtro?.estado,
             tercero_id: filtro?.tercero,
           },
           { categoria_id: familia }),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
-      return filas.map(f => [
-        f.registro_id as string, f.tipo as string, f.fecha as string, f.vencimiento as string,
-        f.tercero_id ? (terceros.get(f.tercero_id as string) ?? '') : '',
-        f.categoria as string,
-        // «Concepto» era `descripcion`, que en un GASTO es la etiqueta de la categoría: el
-        // CSV exportaba el mismo defecto que la tabla (D4). Ahora sale el concepto real
-        // (mig. 152), con el histórico cayendo a la etiqueta, y la etiqueta derivada se
-        // conserva en su propia columna porque es la que usan los informes.
-        (f.concepto as string) || (f.descripcion as string),
-        f.descripcion as string,
-        f.moneda as string, f.monto as number, f.estado as string,
-        empresas.get(f.empresa_id as string) ?? '',
-        (f.origen_tipo as string) ?? 'Manual', f.notas as string,
-      ])
+
+      // Lo liquidado de cada registro: movimientos de Tesorería que lo referencian, en
+      // la moneda del registro (`monto_ref`), igual que `obtenerGastosCobros`.
+      const liquidado = new Map<string, number>()
+      if (filas.length) {
+        const { data: movs } = await db.from('movimientos_tesoreria')
+          .select('referencia_id, monto, monto_ref')
+          .eq('client_id', cid)
+          .in('origen', ['PAGO', 'COBRO'])
+          .in('referencia_id', filas.map(f => f.registro_id as string))
+        for (const m of (movs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+          liquidado.set(m.referencia_id, (liquidado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
+        }
+      }
+      const estadoDe = (f: Record<string, unknown>): EstadoRegistro =>
+        // El resumen de un cierre de caja NACE cobrado: su dinero entró por el movimiento
+        // del cierre, que no referencia esta fila, así que el cálculo daría PENDIENTE
+        // para siempre.
+        cobroNaceLiquidado(f.origen_tipo as string | null)
+          ? 'LIQUIDADO'
+          : estadoDeRegistro(Number(f.monto), liquidado.get(f.registro_id as string) ?? 0)
+
+      return filas
+        .filter(f => !filtro?.estado || estadoDe(f) === filtro.estado)
+        .map(f => [
+          f.registro_id as string, f.tipo as string, f.fecha as string, f.vencimiento as string,
+          f.tercero_id ? (terceros.get(f.tercero_id as string) ?? '') : '',
+          f.categoria as string,
+          // «Concepto» era `descripcion`, que en un GASTO es la etiqueta de la categoría: el
+          // CSV exportaba el mismo defecto que la tabla (D4). Ahora sale el concepto real
+          // (mig. 152), con el histórico cayendo a la etiqueta, y la etiqueta derivada se
+          // conserva en su propia columna porque es la que usan los informes.
+          (f.concepto as string) || (f.descripcion as string),
+          f.descripcion as string,
+          f.moneda as string, f.monto as number, estadoDe(f),
+          empresas.get(f.empresa_id as string) ?? '',
+          (f.origen_tipo as string) ?? 'Manual', f.notas as string,
+        ])
     },
   },
   {
@@ -863,24 +894,61 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     clave: 'suscripciones',
     etiqueta: 'Suscripciones',
     modulos: ['servicios'],
-    cabeceras: ['Cliente', 'Empresa', 'Moneda', 'Precio pactado', 'Periodicidad',
+    // «Servicios» y «Cada cobro» no son adorno: una descarga de acuerdos que no dice qué
+    // tiene contratado el cliente ni cuánto se le cobra no responde a la pregunta que la
+    // motiva. El precio vive en las LÍNEAS desde la mig. 124 (`precio_pactado` se fue con
+    // la 121/124), así que el importe se calcula con `calcularCobroAcuerdo` — la MISMA
+    // función que la pantalla, nunca una copia local.
+    cabeceras: ['Cliente', 'Empresa', 'Servicios', 'Moneda', 'Cada cobro', 'Periodicidad',
       'Inicio', 'Próximo cobro', 'Fin', 'Renovación automática', 'Estado', 'Notas'],
     cargar: async (db, cid, filtro) => {
-      const [filas, terceros, empresas] = await Promise.all([
+      const [filas, terceros, empresas, servicios, { data: lins }] = await Promise.all([
         leer(db, 'suscripciones', cid,
-          'cliente_id, empresa_id, moneda, precio_pactado, periodicidad, fecha_inicio, fecha_proximo_cobro, fecha_fin, renovacion_automatica, estado, notas', 'fecha_proximo_cobro',
+          'suscripcion_id, cliente_id, empresa_id, moneda, periodicidad, fecha_inicio, fecha_proximo_cobro, fecha_fin, renovacion_automatica, estado, notas', 'fecha_proximo_cobro',
           filtro, 'fecha_proximo_cobro', ['notas'],
-          { empresa_id: filtro?.empresa_id, estado: filtro?.estado, cliente_id: filtro?.tercero }),
+          // `estado` NO se filtra en la consulta: la pantalla ofrece «Vencida», que se
+          // DERIVA (mig. 125) y no existe como valor guardado — pedirla a la BD devolvía
+          // un fichero vacío. Se filtra abajo con la misma función que la vista.
+          { empresa_id: filtro?.empresa_id, cliente_id: filtro?.tercero }),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas',      cid, 'empresa_id', 'nombre'),
+        diccionario(db, 'products',      cid, 'producto_id', 'nombre'),
+        db.from('suscripcion_lineas')
+          .select('suscripcion_id, producto_id, precio_mensual, descuento_modo, descuento_valor')
+          .eq('client_id', cid),
       ])
-      return filas.map(f => [
-        terceros.get(f.cliente_id as string) ?? '',
-        empresas.get(f.empresa_id as string) ?? '',
-        f.moneda as string, f.precio_pactado as number, f.periodicidad as string,
-        f.fecha_inicio as string, f.fecha_proximo_cobro as string, f.fecha_fin as string,
-        f.renovacion_automatica as boolean, f.estado as string, f.notas as string,
-      ])
+      const porAcuerdo = new Map<string, {
+        producto_id: string; precio_mensual: number
+        descuento_modo: DescuentoModo; descuento_valor: number
+      }[]>()
+      for (const l of (lins ?? []) as Record<string, unknown>[]) {
+        const sid = l.suscripcion_id as string
+        const arr = porAcuerdo.get(sid) ?? []
+        arr.push({
+          producto_id:     l.producto_id as string,
+          precio_mensual:  Number(l.precio_mensual) || 0,
+          descuento_modo:  (l.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
+          descuento_valor: Number(l.descuento_valor) || 0,
+        })
+        porAcuerdo.set(sid, arr)
+      }
+      const hoy = new Date().toISOString().split('T')[0]
+      return filas.filter(f => !filtro?.estado || estadoEfectivo({
+        estado:                f.estado as 'ACTIVA' | 'PAUSADA' | 'CANCELADA',
+        fecha_fin:             (f.fecha_fin as string | null) ?? null,
+        renovacion_automatica: Boolean(f.renovacion_automatica),
+      }, hoy) === filtro.estado).map(f => {
+        const lineas = porAcuerdo.get(f.suscripcion_id as string) ?? []
+        const { total } = calcularCobroAcuerdo(lineas, f.periodicidad as PeriodicidadSub)
+        return [
+          terceros.get(f.cliente_id as string) ?? '',
+          empresas.get(f.empresa_id as string) ?? '',
+          lineas.map(l => servicios.get(l.producto_id) ?? l.producto_id).join(', '),
+          f.moneda as string, total, f.periodicidad as string,
+          f.fecha_inicio as string, f.fecha_proximo_cobro as string, f.fecha_fin as string,
+          f.renovacion_automatica as boolean, f.estado as string, f.notas as string,
+        ]
+      })
     },
   },
   {

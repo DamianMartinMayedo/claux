@@ -8,8 +8,8 @@ import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
 import {
   cobroNaceLiquidado, etiquetaDeCategoria, generarCategoriaGastoId, generarRegistroId,
-  ORIGEN_CIERRE_CAJA, parsearSubcategorias,
-  type TipoRegistro as _TipoRegistro,
+  ORIGEN_CIERRE_CAJA, parsearSubcategorias, estadoDeRegistro,
+  type TipoRegistro as _TipoRegistro, type EstadoRegistro as _EstadoRegistro,
 } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
@@ -25,7 +25,7 @@ import {
 // `export type { … } from …` rompe el loader de 'use server'.
 export type TipoRegistro   = _TipoRegistro
 export type FiltroListado  = _FiltroListado
-export type EstadoRegistro = 'PENDIENTE' | 'PARCIAL' | 'LIQUIDADO'
+export type EstadoRegistro = _EstadoRegistro
 export type EstadoCategoria = 'ACTIVO' | 'INACTIVO'
 export type RolPL           = _RolPL
 
@@ -112,11 +112,6 @@ const EPS = 0.005
 
 function hoy(): string {
   return new Date().toISOString().split('T')[0]
-}
-function estadoDe(monto: number, liquidado: number): EstadoRegistro {
-  if (liquidado <= EPS)            return 'PENDIENTE'
-  if (liquidado >= monto - EPS)    return 'LIQUIDADO'
-  return 'PARCIAL'
 }
 
 // ── Obtener gastos y cobros ────────────────────────────────────────────────────
@@ -244,7 +239,7 @@ export async function obtenerGastosCobros(
       monto,
       monto_liquidado,
       saldo_pendiente: Math.max(0, monto - monto_liquidado),
-      estado:          estadoDe(monto, monto_liquidado),
+      estado:          estadoDeRegistro(monto, monto_liquidado),
       liquidaciones:   liqs.sort((a, b) => b.fecha.localeCompare(a.fecha)),
     }
   })

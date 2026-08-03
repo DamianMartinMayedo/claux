@@ -12,6 +12,24 @@ type Db = any
 
 export type TipoRegistro = 'GASTO' | 'COBRO'
 
+// ── El estado de un registro se DERIVA, no se guarda ─────────────────────────
+// No existe la columna `gastos_cobros.estado`: PENDIENTE / PARCIAL / LIQUIDADO
+// salen de comparar el importe con lo liquidado en Tesorería, igual que en las
+// facturas. Pedirla en un `select` hace fallar la consulta ENTERA (PostgREST no
+// ignora la columna que sobra) — así estuvo rota la descarga de «Gastos y cobros».
+// Vive aquí porque son dos los consumidores: la pantalla y la exportación.
+
+export type EstadoRegistro = 'PENDIENTE' | 'PARCIAL' | 'LIQUIDADO'
+
+/** Céntimos de tolerancia: un redondeo no puede dejar un gasto eternamente PARCIAL. */
+export const EPS_LIQUIDACION = 0.005
+
+export function estadoDeRegistro(monto: number, liquidado: number): EstadoRegistro {
+  if (liquidado <= EPS_LIQUIDACION)         return 'PENDIENTE'
+  if (liquidado >= monto - EPS_LIQUIDACION) return 'LIQUIDADO'
+  return 'PARCIAL'
+}
+
 // ── El COBRO que NO es ingreso ────────────────────────────────────────────────
 // Casi todo `COBRO` de `gastos_cobros` es ingreso: una venta cobrada directa, sin
 // factura. La excepción es el ANTICIPO que la empresa recupera. El subsidio de la
