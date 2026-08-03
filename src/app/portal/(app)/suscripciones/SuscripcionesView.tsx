@@ -1,26 +1,37 @@
 'use client'
 
-import { useState, useMemo, useEffect, useTransition } from 'react'
+import { Fragment, useState, useMemo, useEffect, useTransition } from 'react'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import BulkBar from '@/components/portal/BulkBar'
+import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import EmpresaPills      from '@/components/portal/EmpresaPills'
 import { useEmpresas }   from '@/components/portal/EmpresaColorContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import RangoBusqueda from '@/components/portal/RangoBusqueda'
 import Tabs from '@/components/Tabs'
-import { Plus, Search, Pencil, Pause, Play, RotateCcw, XCircle, X, Repeat, Receipt, Info, AlertTriangle, ChevronDown, ExternalLink } from 'lucide-react'
+import { Plus, Search, Pencil, Pause, Play, RotateCcw, XCircle, CalendarX, Copy, Users, TrendingUp, X, Repeat, Receipt, Info, AlertTriangle, ChevronDown, ExternalLink } from 'lucide-react'
 import {
   guardarSuscripcion,
   cambiarEstadoSuscripcion,
+  cancelarAlFinalDelPeriodo,
+  crearSuscripcionesEnLote,
+  previsualizarSubidaTarifa,
+  aplicarSubidaTarifa,
+  type LineaSubida,
   renovarSuscripcion,
   obtenerCalendarioFacturacion,
   facturarPeriodo,
 } from '@/app/actions/portal/suscripciones'
-import { calcularCobroAcuerdo, sumarPeriodo } from '@/lib/suscripciones'
+import { cambiarEstadoFacturasEnLote } from '@/app/actions/portal/ventas'
+import { guardarTarifaSiVacia } from '@/app/actions/portal/productos'
+import { calcularCobroAcuerdo, sumarPeriodo, planReanudacion, diaAnterior } from '@/lib/suscripciones'
+import { parseNumeroEs, textoNumeroEs } from '@/lib/numeros'
 import type {
   SuscripcionesPageData, SuscripcionRow, EstadoEfectivo, PeriodicidadSub,
   DescuentoModo, ServicioSuscribible,
@@ -79,38 +90,63 @@ function tarifaEnOtraMoneda(s: ServicioSuscribible | undefined, moneda: string):
   return otra ? { moneda: otra[0], precio: Number(otra[1]) } : null
 }
 
-function SuscripcionModal({ sub, data, onClose, onSaved }: {
-  sub: SuscripcionRow | null; data: SuscripcionesPageData; onClose: () => void; onSaved: () => void
+function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
+  sub: SuscripcionRow | null
+  /**
+   * Acuerdo del que copiar condiciones (Duplicar). Rellena el formulario pero NO es una
+   * edición: el cliente entra en blanco y no se escribe nada hasta guardar. Ojo con la
+   * trampa de PK del repo: las líneas se regeneran con `generarLineaId()` en el
+   * servidor, aquí nunca se copia un `linea_id`.
+   */
+  plantilla?: SuscripcionRow | null
+  /** Alta para VARIOS clientes a la vez. */
+  lote?: boolean
+  data: SuscripcionesPageData; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const hoy = new Date().toISOString().split('T')[0]
 
+  // Editar parte del acuerdo; duplicar y «varios clientes» parten de la plantilla, que
+  // trae las condiciones pero nunca el cliente ni el id.
+  const base = sub ?? plantilla ?? null
+
   const [clienteId,    setClienteId]    = useState(sub?.cliente_id ?? '')
+  /** Modo lote: a quiénes se les da de alta el mismo acuerdo. */
+  const [clientesLote, setClientesLote] = useState<Set<string>>(new Set())
   // Los servicios del acuerdo. Cada uno con SU precio mensual; el resto (moneda,
   // periodicidad, descuento, fechas) se pacta una vez para todo el acuerdo.
   const [lineas,       setLineas]       = useState<LineaForm[]>(() =>
-    sub ? sub.lineas.map(l => ({
-            producto_id: l.producto_id, precio: String(l.precio_mensual),
-            dtoModo: l.descuento_modo, dtoValor: l.descuento_valor > 0 ? String(l.descuento_valor) : '',
+    base ? base.lineas.map(l => ({
+            producto_id: l.producto_id, precio: textoNumeroEs(l.precio_mensual),
+            dtoModo: l.descuento_modo, dtoValor: l.descuento_valor > 0 ? textoNumeroEs(l.descuento_valor) : '',
           }))
         : [{ producto_id: '', precio: '', dtoModo: 'PORCENTAJE', dtoValor: '' }])
-  const [empresaId,    setEmpresaId]    = useState(sub?.empresa_id ?? (data.empresas[0]?.empresa_id ?? ''))
-  const [moneda,       setMoneda]       = useState(sub?.moneda ?? (data.monedas[0] ?? ''))
-  const [periodicidad, setPeriodicidad] = useState<PeriodicidadSub>(sub?.periodicidad ?? 'MENSUAL')
+  const [empresaId,    setEmpresaId]    = useState(base?.empresa_id ?? (data.empresas[0]?.empresa_id ?? ''))
+  const [moneda,       setMoneda]       = useState(base?.moneda ?? (data.monedas[0] ?? ''))
+  const [periodicidad, setPeriodicidad] = useState<PeriodicidadSub>(base?.periodicidad ?? 'MENSUAL')
   const [fechaInicio,  setFechaInicio]  = useState(sub?.fecha_inicio ?? hoy)
   const [proximoCobro, setProximoCobro] = useState(sub?.fecha_proximo_cobro ?? sub?.fecha_inicio ?? hoy)
-  const [fechaFin,     setFechaFin]     = useState(sub?.fecha_fin ?? '')
-  const [renovacion,   setRenovacion]   = useState(sub?.renovacion_automatica ?? true)
-  const [notas,        setNotas]        = useState(sub?.notas ?? '')
+  const [fechaFin,     setFechaFin]     = useState(base?.fecha_fin ?? '')
+  const [renovacion,   setRenovacion]   = useState(base?.renovacion_automatica ?? true)
+  const [notas,        setNotas]        = useState(base?.notas ?? '')
+  const [prorratear,   setProrratear]   = useState(base?.prorratear ?? false)
+  /** «Ya lo tengo cobrado hasta» (YYYY-MM): mueve el próximo cobro, no se guarda. */
+  const [cobradoHasta, setCobradoHasta] = useState('')
+  // Al EDITAR se abre desplegado: quien edita viene justo a cambiar una de esas fechas.
+  const [masOpciones,  setMasOpciones]  = useState(!!sub)
+  /** Previsualización del lote: se enseña ANTES de escribir nada. */
+  const [confirmLote,  setConfirmLote]  = useState<FormData | null>(null)
+  /** Índices de línea cuyo precio se guardará también como tarifa del catálogo. */
+  const [guardarTarifa, setGuardarTarifa] = useState<Set<number>>(new Set())
 
   const isEdit = !!sub
 
   // El importe del cobro NO se teclea: se calcula y se enseña. Cada servicio con su precio
   // y SU descuento (mig. 125); el ciclo hace el resto y el acuerdo suma línea a línea.
   const lineasCobro = lineas.filter(l => l.producto_id).map(l => ({
-    precio_mensual:  parseFloat(l.precio) || 0,
+    precio_mensual:  parseNumeroEs(l.precio),
     descuento_modo:  l.dtoModo,
-    descuento_valor: parseFloat(l.dtoValor) || 0,
+    descuento_valor: parseNumeroEs(l.dtoValor),
   }))
   const mensual = lineasCobro.reduce((t, l) => t + l.precio_mensual, 0)
   const cobro   = calcularCobroAcuerdo(lineasCobro, periodicidad)
@@ -148,7 +184,7 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     // Sin tarifa en esta moneda el precio se deja vacío: arrastrar el anterior es
     // exactamente el error de cobrar 10.000 USD donde eran 10.000 CUP.
     const tarifa = tarifaDe(id, moneda)
-    setLinea(i, { producto_id: id, precio: tarifa == null ? '' : String(tarifa) })
+    setLinea(i, { producto_id: id, precio: tarifa == null ? '' : textoNumeroEs(tarifa) })
   }
 
   /**
@@ -163,14 +199,19 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     setMoneda(m)
     setLineas(prev => prev.map(l => {
       const tarifa = tarifaDe(l.producto_id, m)
-      if (tarifa != null) return { ...l, precio: String(tarifa), origen: undefined }
-      const previo = parseFloat(l.precio) || 0
+      if (tarifa != null) return { ...l, precio: textoNumeroEs(tarifa), origen: undefined }
+      const previo = parseNumeroEs(l.precio)
       // Volver a la moneda de la que se venía restaura el importe TAL CUAL: en un acuerdo
       // cerrado el precio pactado no es el de la lista, y deshacer un cambio de moneda no
       // puede re-tarifar por la espalda.
-      if (l.origen && l.origen.moneda === m) return { ...l, precio: String(l.origen.precio), origen: undefined }
+      if (l.origen && l.origen.moneda === m) return { ...l, precio: textoNumeroEs(l.origen.precio), origen: undefined }
       return { ...l, precio: '', origen: previo > 0 ? { moneda: anterior, precio: previo } : undefined }
     }))
+  }
+
+  /** El servicio no tiene tarifa en la moneda del acuerdo y el dueño ha escrito un precio. */
+  function sinTarifa(l: LineaForm): boolean {
+    return !!l.producto_id && parseNumeroEs(l.precio) > 0 && tarifaDe(l.producto_id, moneda) == null
   }
 
   /** De dónde convertir el precio de una línea vacía: lo que había, o su tarifa en otra moneda. */
@@ -190,9 +231,9 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     fd.set('lineas', JSON.stringify(
       lineas.filter(l => l.producto_id).map(l => ({
         producto_id:     l.producto_id,
-        precio_mensual:  parseFloat(l.precio) || 0,
+        precio_mensual:  l.precio,
         descuento_modo:  l.dtoModo,
-        descuento_valor: parseFloat(l.dtoValor) || 0,
+        descuento_valor: l.dtoValor,
       })),
     ))
     fd.set('periodicidad', periodicidad)
@@ -201,17 +242,50 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     fd.set('fecha_fin', fechaFin)
     fd.set('renovacion_automatica', renovacion ? '1' : '')
     fd.set('notas', notas)
+    fd.set('prorratear', prorratear ? '1' : '')
+    // En lote NO se escribe al enviar: primero la previsualización. `borradorDelPrimerCobro`
+    // corre por acuerdo, así que un clic sin aviso puede dejar 30 facturas borrador.
+    if (lote) { setConfirmLote(fd); return }
+
     const ld = toastLoading(isEdit ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const res = await guardarSuscripcion(fd)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      // Las tarifas van DESPUÉS y aparte: el acuerdo ya está guardado y nada de esto
+      // puede tumbarlo. Cada una escribe solo si esa moneda está vacía.
+      let tarifas = 0
+      for (const i of guardarTarifa) {
+        const l = lineas[i]
+        if (!l?.producto_id) continue
+        const r = await guardarTarifaSiVacia(l.producto_id, moneda, parseNumeroEs(l.precio))
+        if (r.ok && r.escrito) tarifas++
+      }
       toastSuccess(
         isEdit          ? 'Suscripción actualizada.'
         // Sin número: el borrador no lo tiene hasta que se emite.
         : res.factura   ? 'Suscripción creada. Su factura borrador ya está en Ventas.'
         :                 'Suscripción creada.',
       )
+      if (tarifas) toastSuccess(`${tarifas} ${tarifas === 1 ? 'tarifa guardada' : 'tarifas guardadas'} en el catálogo.`)
+      onSaved()
+    })
+  }
+
+  function crearLote() {
+    const fd = confirmLote
+    if (!fd) return
+    setConfirmLote(null)
+    const ld = toastLoading('Creando acuerdos…')
+    startTransition(async () => {
+      const res = await crearSuscripcionesEnLote(fd, [...clientesLote])
+      await ld.dismiss()
+      if (res.error) { toastError(res.error); return }
+      const partes = [`${res.hechas} ${res.hechas === 1 ? 'acuerdo creado' : 'acuerdos creados'}`]
+      if (res.facturas)        partes.push(`${res.facturas} ${res.facturas === 1 ? 'factura borrador' : 'facturas borrador'}`)
+      if (res.omitidas.length) partes.push(`${res.omitidas.length} omitido${res.omitidas.length === 1 ? '' : 's'}`)
+      if (res.hechas > 0) toastSuccess(partes.join(' · '))
+      else                toastError(res.omitidas[0]?.motivo ?? 'No se creó ninguno.')
       onSaved()
     })
   }
@@ -220,7 +294,9 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
     <div className="modal-backdrop open">
       <div className="modal modal-xl" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{isEdit ? 'Editar suscripción' : 'Nueva suscripción'}</h2>
+          <h2 className="modal-title">
+            {isEdit ? 'Editar suscripción' : lote ? 'Añadir a varios clientes' : 'Nueva suscripción'}
+          </h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -228,24 +304,54 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
             <div className="ter-form-section">
               <span className="ter-form-section-title">Acuerdo</span>
               <div className="ter-form-grid">
-                <div className="input-group ter-col-span-3">
-                  <label>Cliente <span className="required">*</span></label>
-                  <select className="input" value={clienteId} onChange={e => setClienteId(e.target.value)} required>
-                    <option value="">— Elige un cliente —</option>
-                    {clientesDeEmpresa.map(c => <option key={c.tercero_id} value={c.tercero_id}>{c.nombre}</option>)}
-                  </select>
-                  {clientesDeEmpresa.length === 0 && (
-                    <span className="input-hint">Esta empresa aún no tiene clientes dados de alta.</span>
-                  )}
-                </div>
+                {/* La EMPRESA va primero porque el cliente depende de ella: los terceros
+                    son por-empresa (`third_parties.empresa_id`), así que la lista de abajo
+                    es la de la empresa elegida. Al contrario, se elige un cliente y
+                    cambiar de empresa lo borra — se rellena un campo para deshacerlo. */}
                 {data.empresas.length > 1 && (
                   <div className="input-group ter-col-span-3">
                     <label>Empresa <span className="required">*</span></label>
                     <select className="input" value={empresaId} onChange={e => onEmpresaChange(e.target.value)} required>
                       {data.empresas.map(em => <option key={em.empresa_id} value={em.empresa_id}>{em.nombre}</option>)}
                     </select>
+                    <span className="input-hint">Los clientes y las facturas son de esta empresa.</span>
                   </div>
                 )}
+                <div className="input-group ter-col-span-3">
+                  <label>{lote ? 'Clientes' : 'Cliente'} <span className="required">*</span></label>
+                  {lote ? (
+                    <>
+                      {/* Un acuerdo POR CLIENTE con las mismas condiciones, no un acuerdo
+                          compartido: cada uno se factura a su ficha. */}
+                      <div className="sus-lote-clientes">
+                        {clientesDeEmpresa.map(c => (
+                          <label key={c.tercero_id} className="checkbox-group">
+                            <input type="checkbox" checked={clientesLote.has(c.tercero_id)}
+                              onChange={() => setClientesLote(prev => {
+                                const n = new Set(prev)
+                                if (n.has(c.tercero_id)) n.delete(c.tercero_id); else n.add(c.tercero_id)
+                                return n
+                              })} />
+                            <span className="checkbox-label">{c.nombre}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <span className="input-hint">
+                        {clientesLote.size === 0
+                          ? 'Marca los clientes que contratan estos servicios.'
+                          : `${clientesLote.size} seleccionado${clientesLote.size === 1 ? '' : 's'}: se creará un acuerdo para cada uno.`}
+                      </span>
+                    </>
+                  ) : (
+                    <select className="input" value={clienteId} onChange={e => setClienteId(e.target.value)} required>
+                      <option value="">— Elige un cliente —</option>
+                      {clientesDeEmpresa.map(c => <option key={c.tercero_id} value={c.tercero_id}>{c.nombre}</option>)}
+                    </select>
+                  )}
+                  {clientesDeEmpresa.length === 0 && (
+                    <span className="input-hint">Esta empresa aún no tiene clientes dados de alta.</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -266,21 +372,34 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                           <select className="input" id={`sus-srv-${i}`} value={l.producto_id}
                             onChange={e => onServicioChange(i, e.target.value)} required>
                             <option value="">— Elige un servicio —</option>
-                            {data.servicios.map(sv => (
-                              <option key={sv.producto_id} value={sv.producto_id}>{sv.nombre}</option>
-                            ))}
+                            {/* Lo archivado (o desmarcado como suscribible) solo se ofrece en
+                                la línea que YA lo tiene: sin esto el select caía en «Elige un
+                                servicio» sobre una línea que sí lo tenía, y guardar lo
+                                borraba. Mismo criterio que `opcionesCon`. */}
+                            {data.servicios
+                              .filter(sv => !sv.archivado || sv.producto_id === l.producto_id)
+                              .map(sv => (
+                                <option key={sv.producto_id} value={sv.producto_id}>
+                                  {sv.archivado ? `${sv.nombre} (archivado)` : sv.nombre}
+                                </option>
+                              ))}
                           </select>
                         </div>
                         <div className="input-group sus-linea-form-precio">
                           <label htmlFor={`sus-precio-${i}`}>Precio al mes <span className="required">*</span></label>
-                          <input className="input" id={`sus-precio-${i}`} type="number" step="any" min="0"
+                          {/* `type="text" inputMode="decimal"`, como los cinco formularios de
+                              Inventario: con `type="number"` en un navegador con locale es,
+                              «0,5» llega vacío y «1.500,50» se corta a 1,5. El campo se queda
+                              en TEXTO (y no pasa a `CampoNumero`) porque aquí el vacío
+                              significa «sin tarifa en esta moneda», que un número no expresa. */}
+                          <input className="input" id={`sus-precio-${i}`} type="text" inputMode="decimal"
                             value={l.precio} onChange={e => setLinea(i, { precio: e.target.value })}
-                            placeholder="0.00" required />
+                            placeholder="0,00" required />
                         </div>
                         <div className="input-group sus-linea-form-dto">
                           <label htmlFor={`sus-dto-${i}`}>Descuento</label>
                           <div className="sus-dto-row">
-                            <input className="input" id={`sus-dto-${i}`} type="number" step="any" min="0"
+                            <input className="input" id={`sus-dto-${i}`} type="text" inputMode="decimal"
                               value={l.dtoValor} onChange={e => setLinea(i, { dtoValor: e.target.value })} placeholder="0" />
                             <select className="input" value={l.dtoModo} aria-label="Tipo de descuento"
                               onChange={e => setLinea(i, { dtoModo: e.target.value as DescuentoModo })}>
@@ -294,18 +413,38 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                             title="Quitar servicio" aria-label="Quitar servicio">×</button>
                         )}
                       </div>
-                      {ref && (
+                      {/* El aviso solo si HAY algo que ofrecer: tarifa en otra moneda Y
+                          tasa para convertirla. Antes imprimía «(no hay tasa CUP → USD)»
+                          en 55 de 63 líneas — ruido sobre un problema que el dueño no ha
+                          creado y que aquí no puede resolver. */}
+                      {ref && factor && (
                         <div className="moneda-cambio-nota">
                           <Info size={14} strokeWidth={2} />
                           <span>
                             Sin precio en {moneda}; cuesta {fmtMoneda(ref.precio, ref.moneda)}. Escríbelo en {moneda}
-                            {factor
-                              ? <> o <button type="button" className="aplicar-tasa-btn"
-                                  onClick={() => setLinea(i, { precio: (ref.precio * factor).toFixed(2) })}>
-                                  usa la tasa ({fmtMoneda(ref.precio * factor, moneda)})</button></>
-                              : <> (no hay tasa {ref.moneda} → {moneda} para convertirlo)</>}.
+                            {' '}o <button type="button" className="aplicar-tasa-btn"
+                              onClick={() => setLinea(i, { precio: textoNumeroEs(Math.round(ref.precio * factor * 100) / 100) })}>
+                              usa la tasa ({fmtMoneda(ref.precio * factor, moneda)})</button>.
                           </span>
                         </div>
+                      )}
+                      {/* El catálogo se rellena SOLO con el uso real: el precio se decide
+                          al pactar, no en la lista. Desmarcada, y escribe únicamente si
+                          esa moneda está vacía — nunca pisa una tarifa. */}
+                      {!isEdit && sinTarifa(l) && (
+                        <label className="checkbox-group sus-linea-tarifa">
+                          <input type="checkbox" checked={guardarTarifa.has(i)}
+                            onChange={() => setGuardarTarifa(prev => {
+                              const n = new Set(prev)
+                              if (n.has(i)) n.delete(i); else n.add(i)
+                              return n
+                            })} />
+                          <span className="checkbox-label">
+                            Guardar también como tarifa de{' '}
+                            {data.servicios.find(x => x.producto_id === l.producto_id)?.nombre ?? 'este servicio'}
+                            {' '}en {moneda}
+                          </span>
+                        </label>
                       )}
                     </div>
                   )
@@ -352,7 +491,22 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
               </div>
             </div>
 
-            <div className="ter-form-section">
+            {/* ── Lo de abajo es lo que casi nunca se toca ──
+                El caso normal es un cliente, un servicio, mensual y desde hoy; el modal
+                pedía diez campos para eso, en móvil y en 3G. Se pliega lo secundario y
+                **el resumen “Se le cobrará” se queda SIEMPRE visible**: es lo único que
+                hay que comprobar antes de guardar. */}
+            <button type="button" className="sus-mas-opciones"
+              onClick={() => setMasOpciones(v => !v)} aria-expanded={masOpciones}>
+              <ChevronDown size={16} strokeWidth={2.5}
+                className={`sus-futuro-chevron${masOpciones ? ' sus-futuro-chevron-open' : ''}`} />
+              {masOpciones ? 'Menos opciones' : 'Más opciones'}
+              {!masOpciones && (
+                <span className="sus-mas-opciones-nota">fechas, fin, renovación y notas</span>
+              )}
+            </button>
+
+            <div className={`ter-form-section${masOpciones ? '' : ' sus-oculto'}`}>
               <span className="ter-form-section-title">Vigencia</span>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-2">
@@ -372,6 +526,23 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                       ? <>Se cobra el {fmtDate(proximoCobro)} y el siguiente caería el {fmtDate(sumarPeriodo(proximoCobro, periodicidad))}.</>
                       : <>Cuándo toca el primer cobro.</>}
                   </span>
+                  {/* Migrar un acuerdo que YA está cobrado hasta agosto obligaba a
+                      entender la fecha y moverla a mano, o se facturaba un mes ya
+                      cobrado. Aquí se dice en las palabras del dueño. */}
+                  {!isEdit && (
+                    <div className="sus-cobrado-hasta">
+                      <label htmlFor="sus-cobrado">Ya lo tengo cobrado hasta</label>
+                      <input className="input input-sm" id="sus-cobrado" type="month"
+                        value={cobradoHasta}
+                        onChange={e => {
+                          setCobradoHasta(e.target.value)
+                          if (!e.target.value) return
+                          // El siguiente cobro es el día 1 del mes que sigue al cubierto.
+                          const [y, m] = e.target.value.split('-').map(Number)
+                          setProximoCobro(new Date(Date.UTC(y, m, 1)).toISOString().split('T')[0])
+                        }} />
+                    </div>
+                  )}
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label htmlFor="sus-fin">Fin (opcional)</label>
@@ -400,12 +571,36 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
                     descubrir un documento que no recuerda haber creado. */}
                 {!isEdit && proximoCobro && proximoCobro <= hoy && (
                   <div className="ter-col-full">
-                    <div className="alert alert-info">
+                    {/* Con la fecha en el PASADO no es información: es una factura
+                        atrasada que va a nacer, y por eso el aviso cambia de tono. */}
+                    <div className={`alert ${proximoCobro < hoy ? 'alert-warning' : 'alert-info'}`}>
                       <span>
-                        Como ya toca cobrar, al guardar se creará la <strong>factura borrador</strong> en
-                        Ventas. No se emite ni se envía: la revisas y la emites tú.
+                        {proximoCobro < hoy
+                          ? <>El primer cobro es del <strong>{fmtDate(proximoCobro)}</strong>, que ya pasó:
+                              al guardar nacerá una <strong>factura borrador atrasada</strong>. Si ya lo
+                              tienes cobrado, dilo arriba en «Ya lo tengo cobrado hasta».</>
+                          : <>El primer cobro corresponde a hoy, así que al guardar se creará su{' '}
+                              <strong>factura borrador</strong> en Ventas. No se emite ni se
+                              envía: la revisas y la emites tú.</>}
                       </span>
                     </div>
+                  </div>
+                )}
+                {/* Prorrateo: solo tiene sentido si el acuerdo empieza DESPUÉS de abrirse
+                    su primer ciclo — si no, la primera factura ya cubre el ciclo entero. */}
+                {!isEdit && fechaInicio && proximoCobro && fechaInicio > proximoCobro && (
+                  <div className="input-group ter-col-full">
+                    <label className="checkbox-group">
+                      <input type="checkbox" checked={prorratear}
+                        onChange={e => setProrratear(e.target.checked)} />
+                      <span className="checkbox-label">
+                        Cobrar solo los días usados en el primer cobro
+                      </span>
+                    </label>
+                    <span className="input-hint">
+                      Empieza el {fmtDate(fechaInicio)} y el ciclo abrió el {fmtDate(proximoCobro)}:
+                      la primera factura cobraría la parte proporcional y lo dirá en su línea.
+                    </span>
                   </div>
                 )}
                 <div className="input-group ter-col-full">
@@ -418,14 +613,48 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending}>
+            <button type="submit" className="btn btn-primary"
+              disabled={isPending || (lote && clientesLote.size === 0)}>
               {isPending
                 ? <><span className="spinner spinner-sm" /> Guardando…</>
-                : isEdit ? 'Guardar cambios' : 'Crear suscripción'}
+                : isEdit ? 'Guardar cambios'
+                : lote   ? `Revisar y crear ${clientesLote.size || ''}`.trim()
+                :          'Crear suscripción'}
             </button>
           </div>
         </form>
       </div>
+
+      {/* Previsualización OBLIGATORIA del lote: dice exactamente qué se va a escribir
+          —acuerdos y facturas borrador— antes de escribir nada. */}
+      {confirmLote && (
+        <ConfirmDialog
+          title="Revisa antes de crear"
+          body={
+            <>
+              <p>
+                Se crearán <strong>{clientesLote.size}</strong>{' '}
+                {clientesLote.size === 1 ? 'acuerdo' : 'acuerdos'} de{' '}
+                <strong>{fmtMoneda(cobro.total, moneda)}</strong> por cobro
+                ({PERIODICIDAD_LABEL[periodicidad].toLowerCase()}), uno por cliente.
+              </p>
+              {proximoCobro <= hoy && (
+                <p className="mt-2">
+                  El primer cobro es del {fmtDate(proximoCobro)}, así que además se generarán{' '}
+                  <strong>{clientesLote.size} {clientesLote.size === 1 ? 'factura borrador' : 'facturas borrador'}</strong>{' '}
+                  en Ventas. Ninguna se emite: revisarlas y emitirlas sigue siendo cosa tuya.
+                </p>
+              )}
+              <p className="mt-2 text-sm-muted">
+                {[...clientesLote].map(id => data.clientes.find(c => c.tercero_id === id)?.nombre ?? id).join(', ')}
+              </p>
+            </>
+          }
+          confirmLabel={`Crear ${clientesLote.size}`}
+          onCancel={() => setConfirmLote(null)}
+          onConfirm={crearLote}
+        />
+      )}
     </div>
   )
 }
@@ -438,25 +667,51 @@ function SuscripcionModal({ sub, data, onClose, onSaved }: {
 //
 // El futuro es informativo y sin acciones: no existe hasta que se genera su borrador.
 
+// El verde solo para lo que TERMINÓ. Con la facturación automática siempre puesta, el mes
+// se ponía verde el día que corría el cron: 55 borradores sin emitir y la pantalla
+// diciendo que estaba hecho.
 const ESTADO_COBRO_LABEL: Record<EstadoCobro, string> = {
-  PENDIENTE: 'Toca cobrar', FACTURADO: 'Facturado', PROYECTADO: 'Próximamente',
+  PENDIENTE:  'Pendiente de facturar',
+  BORRADOR:   'Pendiente de emitir',
+  EMITIDO:    'Pendiente de cobro',
+  COBRADO:    'Cobrado',
+  PROYECTADO: 'Previsto',
 }
 const ESTADO_COBRO_BADGE: Record<EstadoCobro, string> = {
-  PENDIENTE: 'badge-warning', FACTURADO: 'badge-success', PROYECTADO: 'badge-neutral',
+  PENDIENTE:  'badge-warning',
+  BORRADOR:   'badge-info',
+  EMITIDO:    'badge-purple',
+  COBRADO:    'badge-success',
+  PROYECTADO: 'badge-neutral',
 }
 
-function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isPending }: {
+function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGenerar, onEmitir, isPending }: {
   mes:       MesCalendario
   /** Su mes ya pasó y sigue sin factura: se marca, que es justo lo que antes no se veía. */
   atrasado:  boolean
+  /** El mes pendiente MÁS ANTIGUO: el único con botón primario (C8). */
+  primario:  boolean
   tieneBase: boolean
   excluidos: Set<string>
   onToggle:  (key: string) => void
   onGenerar: (periodo: string) => void
+  onEmitir:  (ids: string[], onDone: () => void) => void
   isPending: boolean
 }) {
   const accionable = mes.estado === 'PENDIENTE' && mes.grupos.length > 0
   const incluidos  = mes.grupos.filter(g => !excluidos.has(`${mes.periodo}#${g.cliente_id}#${g.moneda}`))
+
+  // Emitir en lote: la diferencia entre 55 clics y uno. Solo los BORRADOR — es el único
+  // origen válido de la transición, y la acción de servidor omite el resto con su motivo.
+  const borradores = mes.facturas.filter(f => f.estado === 'BORRADOR')
+  const sel = useRowSelection(borradores.map(f => f.factura_id))
+
+  // El importe de lo que se va a generar, por moneda: el botón que mueve dinero dice
+  // cuánto mueve. Nunca sumando monedas distintas.
+  const porGenerar = new Map<string, number>()
+  for (const g of incluidos) porGenerar.set(g.moneda, (porGenerar.get(g.moneda) ?? 0) + g.total)
+  const textoGenerar = `Generar ${incluidos.length} ${incluidos.length === 1 ? 'factura' : 'facturas'}`
+    + (porGenerar.size ? ` · ${[...porGenerar.entries()].map(([m, t]) => fmtMoneda(t, m)).join(' + ')}` : '')
 
   return (
     <div className="card card-table sus-mes">
@@ -464,20 +719,34 @@ function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isP
         <div className="sus-mes-titulo">
           <h2 className="sus-mes-nombre">{fmtPeriodo(mes.periodo)}</h2>
           <span className={`badge ${ESTADO_COBRO_BADGE[mes.estado]}`}>
-            {atrasado ? 'Atrasado' : ESTADO_COBRO_LABEL[mes.estado]}
+            {atrasado ? 'Vencido sin facturar' : ESTADO_COBRO_LABEL[mes.estado]}
           </span>
           <span className="sus-mes-totales">
             {mes.totales.map(t => (
-              <span key={t.moneda} className="sus-mes-total">{fmtMoneda(t.total, t.moneda)}</span>
+              <span key={t.moneda} className="sus-mes-total">
+                {fmtMoneda(t.total, t.moneda)}
+                {/* El total solo no distingue «facturado» de «cobrado», que es justo lo
+                    que hay que saber para trabajar el mes. */}
+                {(t.facturado > 0 || t.pendiente > 0) && (
+                  <span className="sus-mes-desglose">
+                    {[
+                      t.cobrado   > 0 ? `${fmtMoneda(t.cobrado, t.moneda)} cobrado` : null,
+                      t.facturado - t.cobrado > 0.005 ? `${fmtMoneda(t.facturado - t.cobrado, t.moneda)} por cobrar` : null,
+                      t.pendiente > 0 ? `${fmtMoneda(t.pendiente, t.moneda)} sin facturar` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+              </span>
             ))}
           </span>
         </div>
         {accionable && tieneBase && (
-          <button className="btn btn-primary btn-sm" onClick={() => onGenerar(mes.periodo)}
+          <button className={`btn btn-sm ${primario ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => onGenerar(mes.periodo)}
             disabled={isPending || incluidos.length === 0}>
             {isPending
               ? <><span className="spinner spinner-sm" /> Generando…</>
-              : `Generar ${incluidos.length} factura(s)`}
+              : textoGenerar}
           </button>
         )}
         {mes.facturas.length > 0 && !accionable && (
@@ -488,7 +757,7 @@ function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isP
       {atrasado && (
         <div className="sus-mes-aviso">
           <AlertTriangle size={14} strokeWidth={2} />
-          <span>Este cobro venció y sigue sin factura. Genérala aquí para que quede en su mes.</span>
+          <span>Este cobro está vencido y sin facturar. Genera la factura aquí para que quede fechada en su mes.</span>
         </div>
       )}
 
@@ -505,10 +774,18 @@ function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isP
           <table className="table">
             <thead>
               <tr>
+                {borradores.length > 0 && (
+                  <th className="col-center">
+                    <input type="checkbox" checked={sel.allSelected}
+                      ref={el => { if (el) el.indeterminate = sel.someSelected }}
+                      onChange={sel.toggleAll} aria-label="Seleccionar todos los borradores" />
+                  </th>
+                )}
                 <th>Nº</th>
                 <th>Cliente</th>
                 <th className="col-center">Suscripciones</th>
                 <th className="col-num">Total</th>
+                <th className="col-num">Debe</th>
                 <th>Estado</th>
                 <th className="col-actions"></th>
               </tr>
@@ -516,10 +793,24 @@ function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isP
             <tbody>
               {mes.facturas.map(f => (
                 <tr key={f.factura_id}>
+                  {borradores.length > 0 && (
+                    <td data-label="Seleccionar" className="col-center">
+                      {f.estado === 'BORRADOR' && (
+                        <input type="checkbox" checked={sel.isSelected(f.factura_id)}
+                          onChange={() => sel.toggle(f.factura_id)}
+                          aria-label={`Seleccionar la factura ${f.numero}`} />
+                      )}
+                    </td>
+                  )}
                   <td data-label="Nº"><strong className="text-sm-bold">{f.numero}</strong></td>
                   <td data-label="Cliente" className="text-sm-muted">{f.cliente_nombre}</td>
                   <td data-label="Suscripciones" className="col-center text-sm-muted">{f.suscripciones}</td>
                   <td data-label="Total" className="col-num">{fmtMoneda(f.total, f.moneda)}</td>
+                  {/* Vacío ≠ 0: un borrador no debe nada TODAVÍA, y escribir «0» diría
+                      que ya está cobrado, que es la conclusión contraria. */}
+                  <td data-label="Debe" className="col-num">
+                    {f.estado === 'BORRADOR' ? '' : f.saldo > 0.005 ? fmtMoneda(f.saldo, f.moneda) : '—'}
+                  </td>
                   <td data-label="Estado">
                     <span className={`badge ${ESTADO_FACTURA_BADGE[f.estado as EstadoFactura] ?? 'badge-neutral'}`}>
                       {ESTADO_FACTURA_LABEL[f.estado as EstadoFactura] ?? f.estado}
@@ -538,7 +829,7 @@ function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isP
         </div>
       )}
 
-      {/* Lo que toca cobrar: se marca qué entra y se genera */}
+      {/* Lo pendiente de facturar: se marca qué entra y se genera */}
       {accionable && (
         <div className="table-wrapper">
           <table className="table">
@@ -607,19 +898,36 @@ function MesCard({ mes, atrasado, tieneBase, excluidos, onToggle, onGenerar, isP
       {accionable && !tieneBase && (
         <p className="sus-mes-nota">Con Contabilidad se generarían {mes.grupos.length} factura(s) borrador.</p>
       )}
+
+      {/* Emitir es lo que RESERVA el correlativo fiscal, así que se avisa. Si alguna
+          falla, el lote no se aborta: la acción reporta las omitidas con su motivo. */}
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <button className="btn btn-primary btn-sm" disabled={isPending}
+          onClick={() => onEmitir(sel.selectedIds, sel.clear)}>
+          <Receipt size={14} strokeWidth={2} /> Emitir
+        </button>
+      </BulkBar>
     </div>
   )
 }
 
-function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
+function FacturacionPanel({ data, empresaInicial }: {
+  data: SuscripcionesPageData
+  /** La última empresa que se miró (cookie), resuelta en el servidor. */
+  empresaInicial: string
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [empresaId,  setEmpresaId]  = useState(data.empresas[0]?.empresa_id ?? '')
+  // Con varias empresas, volver siempre a la primera obliga a reelegir en cada visita.
+  // Mismo patrón que `rep_ver` en Reportes: cookie, resuelta en servidor para que el
+  // primer pintado ya sea el bueno.
+  const [empresaId,  setEmpresaId]  = useState(empresaInicial || data.empresas[0]?.empresa_id || '')
   const [calendario, setCalendario] = useState<CalendarioFacturacion | null>(null)
   const [excluidos,  setExcluidos]  = useState<Set<string>>(new Set())
   const [verFuturo,  setVerFuturo]  = useState(false)
   const [recarga,    setRecarga]    = useState(0)
+  const [confirmEmitir, setConfirmEmitir] = useState<{ ids: string[]; onDone: () => void } | null>(null)
 
   const { colorOf } = useEmpresas()
   const empresasPills = data.empresas.map(e => ({
@@ -638,6 +946,9 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
   // Hasta el mes en curso es lo que toca (o ya está hecho); a partir de ahí, estimación.
   const ahora     = meses.filter(m => m.periodo <= mesActual)
   const futuro    = meses.filter(m => m.periodo >  mesActual)
+  // Con varios meses atrasados había varios botones primarios compitiendo. Solo lo lleva
+  // el más antiguo pendiente: es el que hay que cerrar primero.
+  const primerPendiente = ahora.find(m => m.estado === 'PENDIENTE' && m.grupos.length > 0)?.periodo ?? ''
 
   useEffect(() => {
     if (!empresaId) return
@@ -651,6 +962,41 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
     })
     return () => { cancelado = true }
   }, [empresaId, recarga])
+
+  function elegirEmpresa(id: string) {
+    document.cookie = `sus_empresa=${id}; path=/; max-age=31536000`
+    setEmpresaId(id)
+  }
+
+  /**
+   * Emitir en lote los borradores marcados de un mes. `cambiarEstadoFacturasEnLote` ya
+   * valida las transiciones y reporta las omitidas con su motivo, así que aquí solo se
+   * confirma (emitir GASTA serie fiscal) y se cuenta lo que pasó.
+   */
+  function emitir(ids: string[], onDone: () => void) {
+    setConfirmEmitir({ ids, onDone })
+  }
+  function emitirConfirmado() {
+    const pend = confirmEmitir
+    if (!pend) return
+    setConfirmEmitir(null)
+    const ld = toastLoading('Emitiendo…')
+    startTransition(async () => {
+      const r = await cambiarEstadoFacturasEnLote(pend.ids, 'EMITIDA')
+      await ld.dismiss()
+      if (r.error) { toastError(r.error); return }
+      const partes: string[] = []
+      if (r.hechas)          partes.push(`${r.hechas} emitida${r.hechas === 1 ? '' : 's'}`)
+      if (r.omitidas.length) partes.push(`${r.omitidas.length} omitida${r.omitidas.length === 1 ? '' : 's'}`)
+      if (r.errores.length)  partes.push(`${r.errores.length} con error`)
+      const msg = partes.join(' · ') || 'Nada que hacer'
+      if (r.hechas > 0 && r.errores.length === 0) toastSuccess(msg)
+      else                                        toastError(msg)
+      pend.onDone()
+      setRecarga(n => n + 1)
+      router.refresh()
+    })
+  }
 
   function toggleExcluir(key: string) {
     setExcluidos(prev => {
@@ -694,7 +1040,7 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
       {/* Sin selector de mes: el calendario los enseña todos. Solo se elige empresa,
           porque cada factura pertenece a UNA. */}
       <div className="ter-toolbar">
-        <EmpresaPills empresas={empresasPills} value={empresaId} onChange={setEmpresaId} sinTodas />
+        <EmpresaPills empresas={empresasPills} value={empresaId} onChange={elegirEmpresa} sinTodas />
       </div>
 
       {data.tieneBase && sinLetra && (
@@ -720,9 +1066,31 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
       {!cargando && ahora.map(m => (
         <MesCard key={m.periodo} mes={m}
           atrasado={m.estado === 'PENDIENTE' && m.periodo < mesActual}
+          primario={m.periodo === primerPendiente}
           tieneBase={data.tieneBase} excluidos={excluidos}
-          onToggle={toggleExcluir} onGenerar={generar} isPending={isPending} />
+          onToggle={toggleExcluir} onGenerar={generar} onEmitir={emitir} isPending={isPending} />
       ))}
+
+      {confirmEmitir && (
+        <ConfirmDialog
+          title={`Emitir ${confirmEmitir.ids.length} ${confirmEmitir.ids.length === 1 ? 'factura' : 'facturas'}`}
+          body={
+            <>
+              <p>
+                Se emitirán <strong>{confirmEmitir.ids.length}</strong>{' '}
+                {confirmEmitir.ids.length === 1 ? 'factura' : 'facturas'} borrador.
+              </p>
+              <p className="mt-2">
+                Al emitir se <strong>asigna el número fiscal</strong> de la serie, y ese
+                número no se devuelve: una emitida se anula, no se borra.
+              </p>
+            </>
+          }
+          confirmLabel="Emitir"
+          onCancel={() => setConfirmEmitir(null)}
+          onConfirm={emitirConfirmado}
+        />
+      )}
 
       {/* Lo que viene, plegado: es una estimación y no se hace nada con ella, así que no
           puede robarle la pantalla a lo que sí toca. */}
@@ -735,13 +1103,13 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
             Próximos cobros ({futuro.length} {futuro.length === 1 ? 'mes' : 'meses'})
           </button>
           <span className="sus-futuro-nota">
-            Estimación de lo que toca si nada cambia. No se puede facturar por adelantado:
+            Previsión con las condiciones actuales. No se puede facturar por adelantado:
             cada mes se genera cuando llega.
           </span>
           {verFuturo && futuro.map(m => (
-            <MesCard key={m.periodo} mes={m} atrasado={false}
+            <MesCard key={m.periodo} mes={m} atrasado={false} primario={false}
               tieneBase={data.tieneBase} excluidos={excluidos}
-              onToggle={toggleExcluir} onGenerar={generar} isPending={isPending} />
+              onToggle={toggleExcluir} onGenerar={generar} onEmitir={emitir} isPending={isPending} />
           ))}
         </div>
       )}
@@ -751,44 +1119,135 @@ function FacturacionPanel({ data }: { data: SuscripcionesPageData }) {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function SuscripcionesView({ data }: { data: SuscripcionesPageData }) {
+export default function SuscripcionesView({ data, empresaInicial = '', etiqueta = 'Suscripciones' }: {
+  data: SuscripcionesPageData
+  /** Última empresa mirada en «Facturación del período» (cookie `sus_empresa`). */
+  empresaInicial?: string
+  /** Cómo llama el negocio a esto: «Membresías», «Bonos»… (mig. 164). */
+  etiqueta?: string
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [modal,     setModal]     = useState(false)
+  const [modal,     setModal]     = useState<null | 'nueva' | 'editar' | 'duplicar' | 'lote'>(null)
   const [editSub,   setEditSub]   = useState<SuscripcionRow | null>(null)
   const [cancelSub, setCancelSub] = useState<SuscripcionRow | null>(null)
+  // Cancelar tiene DOS bajas distintas y cada una dice otra cosa sobre el cobro en curso,
+  // así que son dos entradas del menú con su propio diálogo: «al final del período» (lo
+  // normal en un contrato: el mes ya cobrado se respeta) y «ahora» (corte inmediato).
+  const [finPeriodoSub, setFinPeriodoSub] = useState<SuscripcionRow | null>(null)
+  const [pausarSub, setPausarSub] = useState<SuscripcionRow | null>(null)
+  const [pausarHasta, setPausarHasta] = useState('')
+  const [reanudarSub, setReanudarSub] = useState<SuscripcionRow | null>(null)
+  const [cobrarPausados, setCobrarPausados] = useState(false)
   const [search,    setSearch]    = useState('')
   const [filtro,    setFiltro]    = useState<'TODAS' | EstadoEfectivo>('TODAS')
+  // La empresa existía en Facturación y NO en Acuerdos, con la misma tabla mezclando
+  // acuerdos de dos empresas sin decirlo. '' = todas.
+  const [empresaFil, setEmpresaFil] = useState('')
+  // El único filtro que un gestor de cuotas abre a diario.
+  const [soloDeuda, setSoloDeuda] = useState(false)
+  /** Fila desplegada: su histórico de facturas. Sin página de detalle por acuerdo. */
+  const [abierta, setAbierta] = useState<string | null>(null)
+  // Subida de tarifa en lote: el caso comercial del modelo (30 socios = 30 ediciones).
+  const [subidaAbierta, setSubidaAbierta] = useState(false)
+  const [subidaModo,  setSubidaModo]  = useState<'PORCENTAJE' | 'IMPORTE'>('PORCENTAJE')
+  const [subidaValor, setSubidaValor] = useState('')
+  const [subidaPrev,  setSubidaPrev]  = useState<LineaSubida[] | null>(null)
   const [vista,     setVista]     = useState<'acuerdos' | 'facturacion'>('acuerdos')
+
+  // Solo para PREVISUALIZAR la reanudación en el diálogo. Quien decide es el servidor,
+  // que recalcula con su propio «hoy» y devuelve lo que de verdad aplicó.
+  const hoy = new Date().toISOString().split('T')[0]
+
+  const { colorOf: colorEmpresa } = useEmpresas()
+  const empresasListado = data.empresas.map(e => ({
+    empresa_id: e.empresa_id, nombre: e.nombre, color: colorEmpresa(e.empresa_id),
+  }))
 
   const faltaSetup = data.empresas.length === 0 || data.monedas.length === 0
   const sinClientes = data.clientes.length === 0
-  const sinServicios = data.servicios.length === 0
+  // Solo cuentan los OFRECIBLES: los archivados viajan para no perderlos al editar, pero
+  // un negocio cuyos servicios están todos archivados no puede crear un acuerdo nuevo.
+  const sinServicios = data.servicios.every(s => s.archivado)
   const puedeCrear = !faltaSetup && !sinClientes && !sinServicios
 
   const filtradas = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.suscripciones.filter(s => {
+      if (empresaFil && s.empresa_id !== empresaFil) return false
+      if (soloDeuda && s.debe.length === 0) return false
       if (filtro !== 'TODAS' && s.estado_efectivo !== filtro) return false
       const texto = `${s.cliente_nombre} ${s.lineas.map(l => l.servicio_nombre).join(' ')}`
       if (q && !texto.toLowerCase().includes(q)) return false
       return true
     })
-  }, [data.suscripciones, search, filtro])
+  }, [data.suscripciones, search, filtro, empresaFil, soloDeuda])
 
   const { pageItems, ...pag } = usePagination(filtradas)
+  const sel = useRowSelection(pageItems.map(s => s.suscripcion_id))
 
-  function openCreate()             { setEditSub(null); setModal(true) }
-  function openEdit(s: SuscripcionRow) { setEditSub(s); setModal(true) }
-  function onSaved()                { setModal(false); setEditSub(null); router.refresh() }
+  /** Previsualiza la subida: el antes → después, acuerdo a acuerdo, antes de escribir. */
+  function previsualizarSubida() {
+    const ld = toastLoading('Calculando…')
+    startTransition(async () => {
+      const r = await previsualizarSubidaTarifa(sel.selectedIds, subidaModo, parseNumeroEs(subidaValor))
+      await ld.dismiss()
+      if (!r.ok) { toastError(r.error ?? 'Error'); return }
+      setSubidaPrev(r.lineas ?? [])
+    })
+  }
+  function aplicarSubida() {
+    const ld = toastLoading('Aplicando…')
+    startTransition(async () => {
+      const r = await aplicarSubidaTarifa(sel.selectedIds, subidaModo, parseNumeroEs(subidaValor))
+      await ld.dismiss()
+      if (r.error) { toastError(r.error); return }
+      toastSuccess(`${r.hechas} ${r.hechas === 1 ? 'acuerdo actualizado' : 'acuerdos actualizados'}`
+        + (r.omitidas.length ? ` · ${r.omitidas.length} omitido${r.omitidas.length === 1 ? '' : 's'}` : ''))
+      setSubidaPrev(null); setSubidaAbierta(false); setSubidaValor('')
+      sel.clear(); router.refresh()
+    })
+  }
 
-  function accionEstado(id: string, estado: 'ACTIVA' | 'PAUSADA' | 'CANCELADA', msg: string) {
+  function openCreate()                { setEditSub(null); setModal('nueva') }
+  function openEdit(s: SuscripcionRow)    { setEditSub(s); setModal('editar') }
+  /** Duplicar: mismas condiciones, cliente en blanco. No escribe nada hasta guardar. */
+  function openDuplicar(s: SuscripcionRow) { setEditSub(s); setModal('duplicar') }
+  /** El mismo acuerdo para varios clientes (así crece un negocio de cuotas). */
+  function openLote(s?: SuscripcionRow)    { setEditSub(s ?? null); setModal('lote') }
+  function cerrarModal()               { setModal(null); setEditSub(null) }
+  function onSaved()                   { cerrarModal(); router.refresh() }
+
+  function accionEstado(
+    id: string, estado: 'ACTIVA' | 'PAUSADA' | 'CANCELADA', msg: string,
+    opciones?: { pausada_hasta?: string | null; cobrarPausados?: boolean },
+  ) {
+    // El toast de carga se crea ANTES de la transición: creado dentro, no llega a pintarse.
     const ld = toastLoading(estado === 'PAUSADA' ? 'Pausando…' : estado === 'ACTIVA' ? 'Reanudando…' : 'Cancelando…')
     startTransition(async () => {
-      const res = await cambiarEstadoSuscripcion(id, estado)
+      const res = await cambiarEstadoSuscripcion(id, estado, opciones)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error'); return }
-      toastSuccess(msg); setCancelSub(null); router.refresh()
+      // Lo que se dice es lo que el SERVIDOR aplicó, no lo que el diálogo prometió.
+      toastSuccess(res.ciclosSaltados
+        ? `Reanudada. Los ${res.ciclosSaltados} cobro${res.ciclosSaltados === 1 ? '' : 's'} de la pausa no se cobran; el próximo es el ${fmtDate(res.proximoCobro!)}.`
+        : msg)
+      cerrarDialogos(); router.refresh()
+    })
+  }
+  function cerrarDialogos() {
+    setCancelSub(null); setFinPeriodoSub(null)
+    setPausarSub(null); setPausarHasta('')
+    setReanudarSub(null); setCobrarPausados(false)
+  }
+  function accionFinPeriodo(s: SuscripcionRow) {
+    const ld = toastLoading('Programando la baja…')
+    startTransition(async () => {
+      const res = await cancelarAlFinalDelPeriodo(s.suscripcion_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error'); return }
+      toastSuccess(`Deja de cobrarse el ${fmtDate(res.fecha_fin!)}.`)
+      cerrarDialogos(); router.refresh()
     })
   }
   function accionRenovar(id: string) {
@@ -806,23 +1265,31 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
       <div className="page-header">
         <div>
           <div className="page-title-ia">
-            <h1 className="page-title">Suscripciones</h1>
+            <h1 className="page-title">{etiqueta}</h1>
             <IaTouchpoint tipo="suscripciones" descripcion="un análisis de tus suscripciones" />
           </div>
-          <p className="page-subtitle">Los servicios que tus clientes tienen contratados, con su precio y renovación.</p>
+          <p className="page-subtitle">Lo que tus clientes tienen contratado, con su precio y su renovación.</p>
         </div>
         {vista === 'acuerdos' && (
           <div className="tes-header-actions">
             <ExportarMenu
               clave="suscripciones"
-              filtro={{ q: search, estado: filtro === 'TODAS' ? '' : filtro }}
+              filtro={{
+                q: search, estado: filtro === 'TODAS' ? '' : filtro,
+                empresa_id: empresaFil,
+                desde: data.rango.desde || undefined, hasta: data.rango.hasta || undefined,
+              }}
               resumen={[
                 filtro === 'TODAS' ? 'todas' : filtro.toLowerCase(),
+                empresaFil && (empresasListado.find(e => e.empresa_id === empresaFil)?.nombre ?? ''),
                 search && `«${search}»`,
               ].filter((x): x is string => Boolean(x))}
             />
+            <button className="btn btn-secondary" onClick={() => openLote()} disabled={!puedeCrear}>
+              <Users size={14} strokeWidth={2.5} /> Varios clientes
+            </button>
             <button className="btn btn-primary" onClick={openCreate} disabled={!puedeCrear}>
-              <Plus size={14} strokeWidth={2.5} /> Nueva suscripción
+              <Plus size={14} strokeWidth={2.5} /> Nuevo acuerdo
             </button>
           </div>
         )}
@@ -860,6 +1327,16 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
 
       {vista === 'acuerdos' && (
       <>
+      {/* El rango es sobre el PRÓXIMO COBRO y se aplica en la consulta. Sin buscador
+          aquí: el de abajo filtra lo ya cargado por cliente y servicio. */}
+      <RangoBusqueda desde={data.rango.desde} hasta={data.rango.hasta} sinBuscador />
+
+      {data.empresas.length > 1 && (
+        <div className="ter-toolbar">
+          <EmpresaPills empresas={empresasListado} value={empresaFil} onChange={setEmpresaFil} />
+        </div>
+      )}
+
       <div className="ter-toolbar">
         <div className="ter-search-wrap">
           <Search size={16} strokeWidth={2} />
@@ -874,6 +1351,10 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
           <option value="VENCIDA">Vencidas</option>
           <option value="CANCELADA">Canceladas</option>
         </select>
+        <label className="checkbox-group">
+          <input type="checkbox" checked={soloDeuda} onChange={e => setSoloDeuda(e.target.checked)} />
+          <span className="checkbox-label">Con deuda</span>
+        </label>
       </div>
 
       <div className="card card-table">
@@ -881,6 +1362,14 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
           <h2 className="mon-section-title">Acuerdos</h2>
           <span className="card-count">{filtradas.length} de {data.suscripciones.length}</span>
         </div>
+
+        {/* El techo recorta por fecha de cobro: decir cuántos faltan, no «acota el rango». */}
+        {data.hay_mas && (
+          <p className="listado-tope">
+            Se enseñan {data.suscripciones.length} de {data.total} acuerdos. Acota el rango
+            de próximo cobro para ver el resto.
+          </p>
+        )}
 
         {filtradas.length === 0 ? (
           <div className="mon-empty">
@@ -894,19 +1383,38 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
             <table className="table">
               <thead>
                 <tr>
+                  <th className="col-check">
+                    <input type="checkbox" checked={sel.allSelected}
+                      ref={el => { if (el) el.indeterminate = sel.someSelected }}
+                      onChange={sel.toggleAll} aria-label="Seleccionar todos" />
+                  </th>
                   <th>Cliente</th>
+                  {data.empresas.length > 1 && <th>Empresa</th>}
                   <th>Servicios</th>
                   <th className="col-num">Cada cobro</th>
                   <th>Periodicidad</th>
                   <th>Próximo cobro</th>
+                  <th>Último cobro</th>
+                  <th className="col-num">Debe</th>
                   <th>Estado</th>
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map(s => (
-                  <tr key={s.suscripcion_id}>
+                  <Fragment key={s.suscripcion_id}>
+                  <tr>
+                    <td className="col-check">
+                      <input type="checkbox" className="row-check" checked={sel.isSelected(s.suscripcion_id)}
+                        onChange={() => sel.toggle(s.suscripcion_id)}
+                        aria-label={`Seleccionar el acuerdo de ${s.cliente_nombre}`} />
+                    </td>
                     <td data-label="Cliente"><strong className="text-sm-bold">{s.cliente_nombre}</strong></td>
+                    {data.empresas.length > 1 && (
+                      <td data-label="Empresa" className="text-sm-muted">
+                        {data.empresas.find(e => e.empresa_id === s.empresa_id)?.nombre ?? '—'}
+                      </td>
+                    )}
                     {/* Un acuerdo puede prestar varios servicios: se listan, que es lo
                         que el cliente verá en su factura. */}
                     <td data-label="Servicios" className="text-sm-muted">
@@ -917,21 +1425,63 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
                     </td>
                     <td data-label="Periodicidad" className="text-sm-muted">{PERIODICIDAD_LABEL[s.periodicidad]}</td>
                     <td data-label="Próximo cobro" className="text-sm-muted">{fmtDate(s.fecha_proximo_cobro)}</td>
+                    {/* Último cobro y Debe: vacío ≠ 0. Un acuerdo sin facturar todavía no
+                        debe nada, y escribir «0» diría que está al día. */}
+                    <td data-label="Último cobro" className="text-sm-muted">
+                      {s.historial[0] ? (
+                        <>
+                          {fmtDate(s.historial[0].fecha_emision)}
+                          <div className="table-cell-sub">
+                            {ESTADO_FACTURA_LABEL[s.historial[0].estado as EstadoFactura] ?? s.historial[0].estado}
+                          </div>
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td data-label="Debe" className="col-num">
+                      {s.debe.length === 0
+                        ? (s.historial.length ? '—' : '')
+                        : s.debe.map(d => (
+                            <div key={d.moneda} className="sus-debe">{fmtMoneda(d.total, d.moneda)}</div>
+                          ))}
+                    </td>
                     <td data-label="Estado">
                       <span className={`badge ${ESTADO_BADGE[s.estado_efectivo]}`}>{ESTADO_LABEL[s.estado_efectivo]}</span>
+                      {/* «¿Por qué está vencida y no cancelada?» es la pregunta que se
+                          hace el dueño delante de esta fila: la respuesta es su fecha de
+                          fin. Y una pausa con vuelta programada dice cuándo vuelve, o la
+                          fecha que se tecleó al pausar no se ve en ninguna parte. */}
+                      {s.estado_efectivo === 'VENCIDA' && s.fecha_fin && (
+                        <div className="table-cell-sub">Terminó el {fmtDate(s.fecha_fin)}</div>
+                      )}
+                      {s.estado === 'PAUSADA' && s.pausada_hasta && (
+                        <div className="table-cell-sub">Vuelve el {fmtDate(s.pausada_hasta)}</div>
+                      )}
                     </td>
                     <td className="col-actions">
                       <RowActions>
                         {s.estado !== 'CANCELADA' && (
                           <button className="row-actions-item" onClick={() => openEdit(s)}><Pencil size={15} strokeWidth={2} /> Editar</button>
                         )}
+                        {s.historial.length > 0 && (
+                          <button className="row-actions-item"
+                            onClick={() => setAbierta(a => a === s.suscripcion_id ? null : s.suscripcion_id)}>
+                            <Receipt size={15} strokeWidth={2} />
+                            {abierta === s.suscripcion_id ? 'Ocultar sus facturas' : `Ver sus facturas (${s.historial.length})`}
+                          </button>
+                        )}
+                        <button className="row-actions-item" onClick={() => openDuplicar(s)}>
+                          <Copy size={15} strokeWidth={2} /> Duplicar
+                        </button>
+                        <button className="row-actions-item" onClick={() => openLote(s)}>
+                          <Users size={15} strokeWidth={2} /> Añadir a varios clientes
+                        </button>
                         {s.estado === 'ACTIVA' && (
-                          <button className="row-actions-item" onClick={() => accionEstado(s.suscripcion_id, 'PAUSADA', 'Suscripción pausada.')} disabled={isPending}>
+                          <button className="row-actions-item" onClick={() => setPausarSub(s)} disabled={isPending}>
                             <Pause size={15} strokeWidth={2} /> Pausar
                           </button>
                         )}
                         {s.estado === 'PAUSADA' && (
-                          <button className="row-actions-item" onClick={() => accionEstado(s.suscripcion_id, 'ACTIVA', 'Suscripción reanudada.')} disabled={isPending}>
+                          <button className="row-actions-item" onClick={() => setReanudarSub(s)} disabled={isPending}>
                             <Play size={15} strokeWidth={2} /> Reanudar
                           </button>
                         )}
@@ -940,14 +1490,55 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
                             <RotateCcw size={15} strokeWidth={2} /> Renovar
                           </button>
                         )}
+                        {/* Dos bajas, no una: lo normal en un contrato es terminar al
+                            final del período ya cobrado, y va primero por eso. «Ahora»
+                            corta el mismo día y por eso es la roja. */}
+                        {s.estado !== 'CANCELADA' && s.estado_efectivo !== 'VENCIDA' && (
+                          <button className="row-actions-item" onClick={() => setFinPeriodoSub(s)} disabled={isPending}>
+                            <CalendarX size={15} strokeWidth={2} /> Cancelar al final del período
+                          </button>
+                        )}
                         {s.estado !== 'CANCELADA' && (
                           <button className="row-actions-item row-actions-item-danger" onClick={() => setCancelSub(s)} disabled={isPending}>
-                            <XCircle size={15} strokeWidth={2} /> Cancelar
+                            <XCircle size={15} strokeWidth={2} /> Cancelar ahora
                           </button>
                         )}
                       </RowActions>
                     </td>
                   </tr>
+                  {abierta === s.suscripcion_id && (
+                    <tr className="sus-detalle-fila">
+                      <td colSpan={data.empresas.length > 1 ? 10 : 9}>
+                        <div className="dash-list">
+                          {s.historial.map(f => (
+                            <div key={f.factura_id} className="dash-list-item">
+                              <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="dash-list-main">
+                                <span className="dash-list-title">{f.numero}</span>
+                                <span className="dash-list-meta">
+                                  {fmtDate(f.fecha_emision)}
+                                  {/* El saldo NO se reparte entre acuerdos: se dice a
+                                      cuántos cubre y se atribuye al conjunto. */}
+                                  {f.acuerdos > 1 && ` · cubre ${f.acuerdos} suscripciones`}
+                                </span>
+                              </Link>
+                              <span className="dash-list-aside">
+                                <span className="dash-list-amount">{fmtMoneda(f.total, f.moneda)}</span>
+                                {f.saldo > 0.005 && (
+                                  <span className="dash-list-amount is-neg">
+                                    debe {fmtMoneda(f.saldo, f.moneda)}
+                                  </span>
+                                )}
+                                <span className={`badge ${ESTADO_FACTURA_BADGE[f.estado as EstadoFactura] ?? 'badge-neutral'}`}>
+                                  {ESTADO_FACTURA_LABEL[f.estado as EstadoFactura] ?? f.estado}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -958,17 +1549,200 @@ export default function SuscripcionesView({ data }: { data: SuscripcionesPageDat
       </>
       )}
 
-      {vista === 'facturacion' && <FacturacionPanel data={data} />}
+      {vista === 'facturacion' && <FacturacionPanel data={data} empresaInicial={empresaInicial} />}
 
       {modal && (
-        <SuscripcionModal sub={editSub} data={data} onClose={() => { setModal(false); setEditSub(null) }} onSaved={onSaved} />
+        <SuscripcionModal
+          sub={modal === 'editar' ? editSub : null}
+          plantilla={modal === 'duplicar' || modal === 'lote' ? editSub : null}
+          lote={modal === 'lote'}
+          data={data} onClose={cerrarModal} onSaved={onSaved} />
+      )}
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <button className="btn btn-primary btn-sm" disabled={isPending}
+          onClick={() => setSubidaAbierta(true)}>
+          <TrendingUp size={14} strokeWidth={2} /> Subir tarifa
+        </button>
+      </BulkBar>
+
+      {/* Paso 1: cuánto sube. Mismo vocabulario que el descuento de línea (% o importe). */}
+      {subidaAbierta && !subidaPrev && (
+        <ConfirmDialog
+          title={`Subir la tarifa de ${sel.count} ${sel.count === 1 ? 'acuerdo' : 'acuerdos'}`}
+          body={
+            <>
+              <div className="input-group">
+                <label htmlFor="sus-subida">Cuánto sube</label>
+                <div className="sus-dto-row">
+                  <input className="input" id="sus-subida" type="text" inputMode="decimal"
+                    value={subidaValor} onChange={e => setSubidaValor(e.target.value)} placeholder="0" />
+                  <select className="input" value={subidaModo} aria-label="Tipo de subida"
+                    onChange={e => setSubidaModo(e.target.value as 'PORCENTAJE' | 'IMPORTE')}>
+                    <option value="PORCENTAJE">%</option>
+                    <option value="IMPORTE">importe</option>
+                  </select>
+                </div>
+                <span className="input-hint">
+                  Se aplica al precio mensual de cada servicio. El descuento pactado se
+                  mantiene tal cual.
+                </span>
+              </div>
+              <p className="mt-2 text-sm-muted">
+                No toca los borradores ya generados: la subida vale desde el siguiente
+                cobro. Y no cambia la tarifa del catálogo.
+              </p>
+            </>
+          }
+          confirmLabel="Ver el antes y el después"
+          onCancel={() => { setSubidaAbierta(false); setSubidaValor('') }}
+          onConfirm={previsualizarSubida}
+        />
+      )}
+
+      {/* Paso 2: la previsualización, acuerdo a acuerdo. Obligatoria: esto mueve dinero
+          recurrente de muchos clientes a la vez. */}
+      {subidaPrev && (
+        <ConfirmDialog
+          title="Revisa la subida"
+          body={
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th className="col-num">Antes / mes</th>
+                    <th className="col-num">Después / mes</th>
+                    <th className="col-num">Cada cobro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subidaPrev.map(l => (
+                    <tr key={l.suscripcion_id}>
+                      <td data-label="Cliente">{l.cliente_nombre}</td>
+                      <td data-label="Antes / mes" className="col-num">{fmtMoneda(l.antes, l.moneda)}</td>
+                      <td data-label="Después / mes" className="col-num">{fmtMoneda(l.despues, l.moneda)}</td>
+                      <td data-label="Cada cobro" className="col-num">{fmtMoneda(l.cobroDespues, l.moneda)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          }
+          confirmLabel={`Aplicar a ${subidaPrev.length}`}
+          onCancel={() => setSubidaPrev(null)}
+          onConfirm={aplicarSubida}
+        />
+      )}
+
+      {pausarSub && (
+        <ConfirmDialog
+          title="Pausar suscripción"
+          body={
+            <>
+              <p>
+                La suscripción de <strong>{pausarSub.cliente_nombre}</strong> deja de cobrarse
+                mientras esté pausada. <strong>Los meses de pausa no se cobran</strong>: al
+                reanudarla se salta esos cobros en vez de acumularlos.
+              </p>
+              <div className="input-group mt-3">
+                <label htmlFor="sus-pausa-hasta">¿Hasta cuándo? (opcional)</label>
+                <input className="input" id="sus-pausa-hasta" type="date"
+                  value={pausarHasta} onChange={e => setPausarHasta(e.target.value)} />
+                <span className="input-hint">
+                  {pausarHasta
+                    ? `Se reanudará sola el ${fmtDate(pausarHasta)}.`
+                    : 'En blanco, la pausa es indefinida y la reanudas tú cuando quieras.'}
+                </span>
+              </div>
+            </>
+          }
+          confirmLabel="Pausar"
+          onCancel={cerrarDialogos}
+          onConfirm={() => accionEstado(pausarSub.suscripcion_id, 'PAUSADA', 'Suscripción pausada.',
+            { pausada_hasta: pausarHasta || null })}
+        />
+      )}
+      {reanudarSub && (() => {
+        // La MISMA función que aplica el servidor, para que el diálogo no prometa una
+        // fecha y se guarde otra.
+        const plan = planReanudacion({
+          suscripcion_id:      reanudarSub.suscripcion_id,
+          periodicidad:        reanudarSub.periodicidad,
+          fecha_proximo_cobro: reanudarSub.fecha_proximo_cobro,
+          pausada_desde:       reanudarSub.pausada_desde,
+        }, hoy, cobrarPausados)
+        return (
+          <ConfirmDialog
+            title="Reanudar suscripción"
+            body={
+              <>
+                {plan.ciclos > 0 ? (
+                  <p>
+                    Estuvo pausada desde el <strong>{fmtDate(reanudarSub.pausada_desde!)}</strong>.
+                    El próximo cobro pasa del <strong>{fmtDate(reanudarSub.fecha_proximo_cobro)}</strong> al{' '}
+                    <strong>{fmtDate(plan.proximoCobro)}</strong> — esos {plan.ciclos}{' '}
+                    cobro{plan.ciclos === 1 ? '' : 's'} no se cobran.
+                  </p>
+                ) : (
+                  <p>
+                    Vuelve a cobrarse. El próximo cobro es el{' '}
+                    <strong>{fmtDate(plan.proximoCobro)}</strong>.
+                  </p>
+                )}
+                {/* Se ofrece, no se impone: desmarcada. */}
+                {reanudarSub.pausada_desde && (
+                  <label className="checkbox-group mt-3">
+                    <input type="checkbox" checked={cobrarPausados}
+                      onChange={e => setCobrarPausados(e.target.checked)} />
+                    <span className="checkbox-label">Cobrar también los meses pausados</span>
+                  </label>
+                )}
+              </>
+            }
+            confirmLabel="Reanudar"
+            onCancel={cerrarDialogos}
+            onConfirm={() => accionEstado(reanudarSub.suscripcion_id, 'ACTIVA', 'Suscripción reanudada.',
+              { cobrarPausados })}
+          />
+        )
+      })()}
+      {finPeriodoSub && (
+        <ConfirmDialog
+          title="Cancelar al final del período"
+          body={
+            <>
+              <p>
+                La suscripción de <strong>{finPeriodoSub.cliente_nombre}</strong> deja de
+                cobrarse el <strong>{fmtDate(diaAnterior(finPeriodoSub.fecha_proximo_cobro))}</strong>,
+                el día antes de su siguiente cobro. Lo ya facturado se conserva y no se
+                genera ningún cobro más.
+              </p>
+              <p className="mt-2">Pasará a «Vencida» ese día. Puedes reactivarla con «Renovar».</p>
+            </>
+          }
+          confirmLabel="Programar la baja"
+          onCancel={cerrarDialogos}
+          onConfirm={() => accionFinPeriodo(finPeriodoSub)}
+        />
       )}
       {cancelSub && (
         <ConfirmDialog
-          title="Cancelar suscripción"
-          body={`¿Cancelar la suscripción de ${cancelSub.cliente_nombre} (${cancelSub.lineas.map(l => l.servicio_nombre).join(', ') || 'sin servicios'})? Deja de cobrarse; el histórico se conserva.`}
+          title="Cancelar ahora"
+          body={
+            <>
+              <p>
+                ¿Cancelar hoy mismo la suscripción de <strong>{cancelSub.cliente_nombre}</strong>{' '}
+                ({cancelSub.lineas.map(l => l.servicio_nombre).join(', ') || 'sin servicios'})?
+              </p>
+              <p className="mt-2">
+                Deja de cobrarse desde ahora: el cobro del{' '}
+                {fmtDate(cancelSub.fecha_proximo_cobro)} <strong>no se hará</strong>. Lo ya
+                facturado se conserva.
+              </p>
+            </>
+          }
           confirmLabel="Cancelar suscripción" danger
-          onCancel={() => setCancelSub(null)}
+          onCancel={cerrarDialogos}
           onConfirm={() => accionEstado(cancelSub.suscripcion_id, 'CANCELADA', 'Suscripción cancelada.')}
         />
       )}

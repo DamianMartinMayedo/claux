@@ -4036,8 +4036,75 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 /* «julio de 2026» → «Julio de 2026». `capitalize` no vale: pondría «Julio De 2026». */
 .sus-mes-nombre::first-letter { text-transform: uppercase; }
+/* Pie informativo de una tarjeta de ficha (lo que aporta al mes un servicio, la
+   duración con la que se agenda): dato de contexto, no una alerta. */
+.det-nota {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.det-nota-link { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+/* «Más opciones» del alta de un acuerdo: el caso normal son cuatro campos, y el resto
+   —fechas, fin, renovación, notas— se pliega. El resumen del cobro NO entra aquí: es lo
+   único que hay que comprobar antes de guardar. */
+.sus-mas-opciones {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) 0;
+  background: none; border: none;
+  font-family: var(--font-body);
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-primary-text);
+  cursor: pointer;
+}
+.sus-mas-opciones-nota { font-weight: 400; color: var(--color-text-muted); }
+.sus-oculto { display: none; }
+
+/* «Ya lo tengo cobrado hasta»: un atajo del campo de próximo cobro, no otro campo. */
+.sus-cobrado-hasta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+}
+
+/* La casilla de «guardar también como tarifa», bajo la línea del servicio. */
+.sus-linea-tarifa { margin-top: var(--space-2); }
+
+/* Insignia de servicio suscribible en la fila del catálogo: va bajo el nombre, no en
+   una columna propia, porque solo la lleva una minoría de las filas. */
+.prd-badge-suscribible { display: inline-block; margin-top: 2px; }
+
+/* El histórico de facturas de un acuerdo, desplegado bajo su fila: cinco líneas no
+   justifican una página de detalle por acuerdo. */
+.sus-detalle-fila > td { background: var(--color-surface-2); padding: var(--space-3) var(--space-4); }
+.sus-debe { color: var(--color-error); font-weight: 600; }
+
+/* Lista de clientes del alta en lote: alta pero acotada, para que el resto del
+   formulario (precio, ciclo, fechas) siga a la vista mientras se marca. */
+.sus-lote-clientes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 12rem;
+  overflow-y: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
 .sus-mes-totales { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .sus-mes-total   { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+/* El desglose del mes (cobrado · por cobrar · sin facturar) bajo su total: el total solo
+   no distingue lo hecho de lo que falta, que es lo que hay que ver para trabajar el mes. */
+.sus-mes-desglose {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
 .sus-mes-aviso {
   display: flex; align-items: flex-start; gap: var(--space-2);
   padding: var(--space-2) var(--space-5);
