@@ -6,7 +6,7 @@
 
 // `revisar` comparte el foco de contexto con `inventario` pero es una tarea distinta
 // (narrar descuadres, no recomendar reposición). Precedente exacto: `compras`.
-export type TipoInsight = 'ventas' | 'gastos' | 'proyeccion' | 'general' | 'inventario' | 'rrhh' | 'tesoreria' | 'catalogo' | 'caja' | 'reservas' | 'citas' | 'suscripciones' | 'deudas' | 'compras' | 'revisar'
+export type TipoInsight = 'ventas' | 'gastos' | 'proyeccion' | 'general' | 'inventario' | 'rrhh' | 'tesoreria' | 'catalogo' | 'caja' | 'reservas' | 'citas' | 'suscripciones' | 'servicios' | 'deudas' | 'compras' | 'revisar'
 
 // Prompt de TAREA por sección (lo que se le pide analizar). El contexto del
 // negocio (datos reales) se añade aparte, por código.
@@ -22,7 +22,8 @@ export const PROMPTS_INSIGHT_DEFAULT: Record<TipoInsight, string> = {
   caja:       'Analiza mi PUNTO DE VENTA: ventas de hoy por terminal, puntos sin sincronizar y turnos que sigan abiertos de días anteriores. Señala qué requiere atención. Máximo 5 frases.',
   reservas:   'Analiza mis RESERVAS: ocupación de hoy, próxima reserva y la carga de los próximos 7 días. Señala días flojos o cargados y una recomendación. Máximo 5 frases.',
   citas:      'Analiza mi AGENDA DE CITAS: citas de hoy, próxima cita y la carga de los próximos 7 días, con una recomendación para llenar huecos. Máximo 5 frases.',
-  suscripciones: 'Analiza mis SUSCRIPCIONES: ingreso recurrente por moneda, suscripciones activas y las que se renuevan en los próximos 30 días. Señala el dinero por cobrar y posibles riesgos. Máximo 5 frases.',
+  suscripciones: 'Analiza mis SUSCRIPCIONES: ingreso recurrente por moneda y cómo se mueve (altas y bajas del mes). Di qué hay que hacer HOY con `cobros_atrasados` (desde cuándo), `borradores_sin_emitir` y `deuda_por_cobrar`, y avisa de los acuerdos que vencen sin renovación automática. Máximo 6 frases.',
+  servicios:  'Analiza mi CATÁLOGO DE SERVICIOS a partir de `suscripciones`: qué servicios crecen y cuáles no tiene contratados nadie, y sobre todo QUIÉN ESTÁ EN RIESGO DE BAJA — el que paga tarde de forma sistemática, el que está pausado y el que vence sin renovación automática. Termina con la acción más rentable ahora. Máximo 6 frases.',
   deudas:     'Analiza mis DEUDAS: cuánto me deben (por cobrar) y cuánto debo (por pagar), por moneda, cuánto está vencido y quiénes son los principales. Prioriza a quién reclamar primero. Máximo 5 frases.',
   compras:    'Dime qué conviene REPONER: productos bajo mínimo o agotados, en qué priorizar la próxima compra a proveedores y por qué. Usa la cobertura en días si está. Máximo 5 frases.',
   revisar:    'Explica en lenguaje llano los DESCUADRES de mi inventario a partir de `stock_negativo`: qué producto, en qué almacén y qué significa (se vendió o se sacó mercancía de un almacén donde el sistema no tenía existencias). No es un error del sistema ni una acusación: es que el stock registrado iba por detrás de la realidad. Termina diciendo que se arregla contando ese almacén. Máximo 5 frases.',

@@ -11,6 +11,7 @@ import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
+import { historialPorAcuerdo } from '@/lib/facturacion-suscripciones'
 import { valorarPorMoneda } from '@/lib/inventario/valoracion'
 import { consumoDiario, diasDeCobertura, DIAS_VENTANA, type MovimientoConsumo } from '@/lib/inventario/consumo'
 import { hoyEnTz, ahoraEnTz, sumarDias, TZ_NEGOCIO } from '@/lib/fecha-tz'
@@ -118,6 +119,30 @@ export interface ServiciosResumen {
   proximasRenovaciones: number                              // suscripciones cuyo próximo cobro cae en 30 días
   /** Las próximas, CON NOMBRE: «2 renuevan» no dice a quién hay que cobrar. */
   proximas: { nombre: string; fecha: string; moneda: string; importe: number }[]
+  /**
+   * El ingreso recurrente no dice si SUBE o BAJA, que es la única pregunta que se hace
+   * quien vive de cuotas. Altas = `fecha_inicio` en el mes; bajas = `cancelada_at` en el
+   * mes (mig. 161 — `updated_at` daría bajas inventadas porque lo pisa cualquier edición).
+   */
+  altasMes: number
+  bajasMes: number
+  /**
+   * Lo que el widget NO enseña y el insight de IA necesitaba para aportar algo: el
+   * contexto anterior repetía exactamente las tres cifras de la pantalla, así que ningún
+   * prompt podía sacar una conclusión nueva (mismo diagnóstico que llevó a enriquecer el
+   * `FocoContexto` de Inventario). Se calcula solo cuando hay suscripciones.
+   */
+  cobrosAtrasados: number
+  /** El atraso más viejo, para poder decir «desde mayo». */
+  atrasoDesde: string | null
+  /** Facturas de suscripción sin emitir: el trabajo invisible del mes. */
+  borradoresSinEmitir: number
+  /** Deuda viva de las facturas de suscripción, por moneda. */
+  deuda: { moneda: string; total: number }[]
+  /** Acuerdos que vencen en 60 días SIN renovación automática: riesgo de baja. */
+  vencenSinRenovar: number
+  /** Pausados ahora mismo. */
+  pausadas: number
 }
 
 export interface PuntoVentaResumen {
@@ -945,12 +970,18 @@ async function resumenDossier(db: Db, cid: string): Promise<DossierResumen> {
 }
 
 async function resumenServicios(db: Db, cid: string, hoy: string): Promise<ServiciosResumen> {
-  const [{ data }, { data: lins }, { data: terc }] = await Promise.all([
+  // El mes en curso, para el movimiento del MRR (altas − bajas).
+  const mes = hoy.slice(0, 7)
+  const [{ data }, { data: lins }, { data: terc }, { count: altasMes }, { count: bajasMes }] = await Promise.all([
     db.from('suscripciones')
-      .select('suscripcion_id, tercero_id, moneda, periodicidad, fecha_proximo_cobro, estado, fecha_fin, renovacion_automatica')
+      .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_proximo_cobro, estado, fecha_fin, renovacion_automatica')
       .eq('client_id', cid).eq('estado', 'ACTIVA'),
     db.from('suscripcion_lineas').select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor').eq('client_id', cid),
     db.from('third_parties').select('tercero_id, nombre').eq('client_id', cid),
+    db.from('suscripciones').select('suscripcion_id', { count: 'exact', head: true })
+      .eq('client_id', cid).gte('fecha_inicio', `${mes}-01`).lte('fecha_inicio', hoy),
+    db.from('suscripciones').select('suscripcion_id', { count: 'exact', head: true })
+      .eq('client_id', cid).gte('cancelada_at', `${mes}-01`),
   ])
   const nombreTercero = new Map(
     ((terc ?? []) as { tercero_id: string; nombre: string }[]).map(t => [t.tercero_id, t.nombre]),
@@ -974,7 +1005,7 @@ async function resumenServicios(db: Db, cid: string, hoy: string): Promise<Servi
   // widget la seguía sumando al ingreso recurrente — el mismo negocio con dos cifras
   // distintas, y la del dashboard inflada con dinero que ya no entra.
   const filas = ((data ?? []) as {
-    suscripcion_id: string; tercero_id: string | null
+    suscripcion_id: string; cliente_id: string | null
     moneda: string; periodicidad: string
     fecha_proximo_cobro: string; estado: string; fecha_fin: string | null; renovacion_automatica: boolean
   }[]).filter(f => estadoEfectivo(
@@ -997,7 +1028,7 @@ async function resumenServicios(db: Db, cid: string, hoy: string): Promise<Servi
     porMoneda.set(f.moneda, (porMoneda.get(f.moneda) ?? 0) + equivalenteMensual)
     if (f.fecha_proximo_cobro && f.fecha_proximo_cobro <= en30) {
       proximasLista.push({
-        nombre:  (f.tercero_id && nombreTercero.get(f.tercero_id)) || 'Sin cliente',
+        nombre:  (f.cliente_id && nombreTercero.get(f.cliente_id)) || 'Sin cliente',
         fecha:   f.fecha_proximo_cobro,
         moneda:  f.moneda,
         importe: Math.round(total * 100) / 100,
@@ -1006,11 +1037,50 @@ async function resumenServicios(db: Db, cid: string, hoy: string): Promise<Servi
   }
   proximasLista.sort((a, b) => a.fecha.localeCompare(b.fecha))
 
+  // ── Lo que la pantalla no dice (contexto de la IA) ──
+  const atrasados = filas.filter(f => f.fecha_proximo_cobro && f.fecha_proximo_cobro < hoy)
+  const [y2, m2, d2] = hoy.split('-').map(Number)
+  const en60 = new Date(Date.UTC(y2, m2 - 1, d2 + 60)).toISOString().split('T')[0]
+  const { count: pausadas } = await db.from('suscripciones')
+    .select('suscripcion_id', { count: 'exact', head: true })
+    .eq('client_id', cid).eq('estado', 'PAUSADA')
+
+  // Deuda y borradores: de las facturas que cubren suscripciones, no de todas las ventas.
+  let borradoresSinEmitir = 0
+  const deudaPorMoneda = new Map<string, number>()
+  if (filas.length) {
+    const historial = await historialPorAcuerdo(db, cid, filas.map(f => f.suscripcion_id))
+    const vistas = new Set<string>()
+    for (const arr of historial.values()) {
+      for (const f of arr) {
+        if (vistas.has(f.factura_id)) continue     // una factura puede cubrir varios acuerdos
+        vistas.add(f.factura_id)
+        if (f.estado === 'BORRADOR') borradoresSinEmitir++
+        if (f.saldo > 0.005) deudaPorMoneda.set(f.moneda, (deudaPorMoneda.get(f.moneda) ?? 0) + f.saldo)
+      }
+    }
+  }
+
+  const extra = {
+    cobrosAtrasados: atrasados.length,
+    atrasoDesde: atrasados.reduce<string | null>(
+      (min, f) => (min === null || f.fecha_proximo_cobro < min ? f.fecha_proximo_cobro : min), null),
+    borradoresSinEmitir,
+    deuda: [...deudaPorMoneda.entries()].map(([moneda, total]) => ({
+      moneda, total: Math.round(total * 100) / 100,
+    })),
+    vencenSinRenovar: filas.filter(f => !f.renovacion_automatica && f.fecha_fin && f.fecha_fin <= en60).length,
+    pausadas: pausadas ?? 0,
+  }
+
   return {
     activas: filas.length,
     ingresoRecurrente: [...porMoneda.entries()].map(([moneda, total]) => ({ moneda, total: Math.round(total * 100) / 100 })),
     proximasRenovaciones: proximasLista.length,
     proximas: proximasLista.slice(0, 3),
+    altasMes: altasMes ?? 0,
+    bajasMes: bajasMes ?? 0,
+    ...extra,
   }
 }
 

@@ -153,13 +153,32 @@ export function contextoComoTexto(ctx: ContextoNegocio, foco?: FocoContexto): st
     }
   }
 
-  // Suscripciones: ingreso recurrente y próximas renovaciones.
+  // Suscripciones. En GENERAL van las tres cifras de cabecera; en su FOCO va el dato
+  // real, porque el contexto anterior repetía exactamente lo que ya dice el widget y
+  // ningún prompt puede sacar una conclusión nueva de eso (mismo diagnóstico que llevó a
+  // enriquecer el foco de Inventario: el límite era el contexto, no el prompt). El
+  // recorte por foco se respeta: es crítico con modelos de ventana reducida.
   if ((general || foco === 'suscripciones') && d.servicios) {
-    snap.suscripciones = {
-      activas: d.servicios.activas,
-      ingreso_recurrente_mensual: d.servicios.ingresoRecurrente,
-      renovaciones_30d: d.servicios.proximasRenovaciones,
-    }
+    const sv = d.servicios
+    snap.suscripciones = foco === 'suscripciones'
+      ? {
+          activas: sv.activas,
+          pausadas: sv.pausadas,
+          ingreso_recurrente_mensual: sv.ingresoRecurrente,
+          renovaciones_30d: sv.proximasRenovaciones,
+          altas_mes: sv.altasMes,
+          bajas_mes: sv.bajasMes,
+          cobros_atrasados: sv.cobrosAtrasados,
+          atraso_mas_viejo: sv.atrasoDesde,
+          borradores_sin_emitir: sv.borradoresSinEmitir,
+          deuda_por_cobrar: sv.deuda,
+          vencen_60d_sin_renovacion: sv.vencenSinRenovar,
+        }
+      : {
+          activas: sv.activas,
+          ingreso_recurrente_mensual: sv.ingresoRecurrente,
+          renovaciones_30d: sv.proximasRenovaciones,
+        }
   }
 
   // Inventario: en su foco propio con la lista bajo mínimo; en general, solo conteos.

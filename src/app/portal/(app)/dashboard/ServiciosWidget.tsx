@@ -25,6 +25,17 @@ export default function ServiciosWidget({ data }: { data: ServiciosResumen }) {
         </div>
       </div>
 
+      {/* El ingreso recurrente no dice si SUBE o BAJA, que es la pregunta de quien vive
+          de cuotas. Solo se pinta si hubo movimiento este mes: un «0 altas · 0 bajas»
+          fijo es una línea que nunca aporta. */}
+      {(data.altasMes > 0 || data.bajasMes > 0) && (
+        <p className="dash-muted">
+          Este mes: {data.altasMes} alta{data.altasMes === 1 ? '' : 's'} ·{' '}
+          {data.bajasMes} baja{data.bajasMes === 1 ? '' : 's'}
+          {' '}({data.altasMes - data.bajasMes >= 0 ? '+' : ''}{data.altasMes - data.bajasMes} neto)
+        </p>
+      )}
+
       {/* Con NOMBRE: «2 renuevan» no dice a quién hay que cobrar, que es lo único
           que se puede hacer con ese dato. */}
       {data.proximas.length > 0 ? (

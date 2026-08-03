@@ -28,6 +28,9 @@ const FOCO: Record<TipoInsight, FocoContexto> = {
   ventas: 'ventas', gastos: 'gastos', proyeccion: 'ventas', general: 'general',
   inventario: 'inventario', rrhh: 'rrhh', tesoreria: 'tesoreria', catalogo: 'catalogo',
   caja: 'caja', reservas: 'reservas', citas: 'citas', suscripciones: 'suscripciones',
+  // El catálogo de servicios se analiza con los datos de sus ACUERDOS: quién lo tiene
+  // contratado, quién paga tarde y quién está por vencer. La tarea es otra, los datos no.
+  servicios: 'suscripciones',
   // `compras` y `revisar` comparten el contexto de inventario: la tarea es distinta,
   // los datos son los mismos.
   deudas: 'deudas', compras: 'inventario', revisar: 'inventario',
