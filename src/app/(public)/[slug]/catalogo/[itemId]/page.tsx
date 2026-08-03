@@ -6,6 +6,12 @@ import { ArrowLeft, UtensilsCrossed, Package } from 'lucide-react'
 import { obtenerItemPublico } from '@/app/actions/portal/catalogo'
 import '../catalogo-publica.css'
 
+/** «/mes» y equivalentes: un suscribible anunciado sin sufijo dice otro precio (mig. 162). */
+const SUFIJO_PERIODO: Record<string, string> = {
+  MENSUAL: '/mes', TRIMESTRAL: '/trimestre', SEMESTRAL: '/semestre', ANUAL: '/año',
+}
+
+
 export const revalidate = 60
 
 interface Props {
@@ -51,6 +57,7 @@ export default async function CatalogoItemPublicoPage({ params }: Props) {
                   <span className="cp-precio-antes">{item.precioAntes.toFixed(2)}</span>
                 )}
                 {item.precio.toFixed(2)} {item.moneda ?? ''}
+                {item.periodicidad && (SUFIJO_PERIODO[item.periodicidad] ?? '')}
                 {item.descuentoPct > 0 && <span className="cp-badge-desc-inline">-{item.descuentoPct}%</span>}
               </p>
             )}

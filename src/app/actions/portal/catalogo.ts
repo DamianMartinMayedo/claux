@@ -39,6 +39,10 @@ export interface CatalogoItem {
   activo:         boolean
   producto_id:    string | null
   descuento_pct:  number   // descuento propio del ítem (%); manda sobre el del grupo
+  /** MENSUAL|TRIMESTRAL|… si el artículo se cobra por suscripción (mig. 162). NULL =
+   *  pago único. Sin esto un suscribible se anunciaba «2.000 CUP» a secas, y ante el
+   *  cliente final eso cambia el sentido del precio. */
+  periodicidad:   string | null
   // Campos calculados (no en BD):
   precioMostrado?: number | null   // precio FINAL (con descuento) convertido a la moneda del catálogo
   monedaMostrada?: string | null
@@ -558,7 +562,7 @@ export async function importarDesdeProductos(
   const monedasValidas = new Set((monedasRows ?? []).map(m => m.codigo as string))
 
   let q = db.from('products')
-    .select('producto_id, nombre, descripcion, precios')
+    .select('producto_id, nombre, descripcion, precios, es_suscribible, periodicidad_defecto')
     .eq('client_id', session.client_id).eq('estado', 'ACTIVO')
   if (tipo !== 'AMBOS') q = q.eq('tipo', tipo)
   const { data: productos } = await q
@@ -593,6 +597,9 @@ export async function importarDesdeProductos(
         precio: precio == null ? null : Number(precio),
         moneda: precio == null ? null : moneda,
         producto_id: p.producto_id as string,
+        // Un suscribible se anuncia «/mes»: el dato ya existe en el catálogo interno y
+        // se perdía al copiar al público (mig. 162).
+        periodicidad: p.es_suscribible ? ((p.periodicidad_defecto as string | null) ?? 'MENSUAL') : null,
         orden: orden++,
       }
     })
@@ -615,6 +622,7 @@ export interface CatalogoPublicoItem {
   precioAntes: number | null       // precio original convertido, solo si hay descuento
   descuentoPct: number             // descuento efectivo aplicado (%)
   moneda: string | null            // moneda mostrada (la del catálogo, o la original si falta tasa)
+  periodicidad: string | null      // «/mes» y equivalentes; NULL = pago único
   foto_url: string | null
   foto_thumb_url: string | null
   ingredientes: string | null
@@ -674,7 +682,7 @@ export async function obtenerItemPublico(slug: string, itemId: string): Promise<
   return {
     item_id: c.item_id, nombre: c.nombre, descripcion: c.descripcion,
     precio: c.precioMostrado, precioAntes: c.precioAntes, descuentoPct: c.descuentoPct,
-    moneda: c.monedaMostrada,
+    moneda: c.monedaMostrada, periodicidad: c.periodicidad ?? null,
     foto_url: c.foto_url, foto_thumb_url: c.foto_thumb_url,
     ingredientes: c.ingredientes, alergenos: c.alergenos, calorias: c.calorias,
     disponible: c.disponible,
@@ -718,7 +726,7 @@ export async function obtenerCatalogoPublico(slug: string): Promise<CatalogoPubl
     itemsPorCat.get(key)!.push({
       item_id: i.item_id, nombre: i.nombre, descripcion: i.descripcion,
       precio: i.precioMostrado, precioAntes: i.precioAntes, descuentoPct: i.descuentoPct,
-      moneda: i.monedaMostrada,
+      moneda: i.monedaMostrada, periodicidad: i.periodicidad ?? null,
       foto_url: i.foto_url, foto_thumb_url: i.foto_thumb_url,
       ingredientes: i.ingredientes, alergenos: i.alergenos, calorias: i.calorias,
       disponible: i.disponible,

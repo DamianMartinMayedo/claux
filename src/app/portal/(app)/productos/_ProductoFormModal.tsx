@@ -227,7 +227,13 @@ export function ProductoFormModal({
     if (s.categoria_id && categorias.some(c => c.categoria_id === s.categoria_id)) {
       setCategoriaId(s.categoria_id)
     }
-    if (!s.descripcion && !s.unidad && !s.categoria_id) {
+    // También si se presta por suscripción y con qué ciclo (lista cerrada, verificada al
+    // volver). Es una SUGERENCIA: la casilla se marca y el dueño la revisa como el resto.
+    if (s.es_suscribible) {
+      setEsSuscribible(true)
+      if (s.periodicidad) setPeriodicidad(s.periodicidad)
+    }
+    if (!s.descripcion && !s.unidad && !s.categoria_id && !s.es_suscribible) {
       toastError('No pude sugerir nada con ese nombre. Rellena la ficha a mano.')
     }
   }
@@ -361,7 +367,18 @@ export function ProductoFormModal({
             <div className="ter-form-section">
               <span className="ter-form-section-title">Precios y costos</span>
               <div className="grid-cols-2">
-                <PreciosCostosEditor label="Precios de venta" rows={precios} onChange={setPrecios} monedasDisponibles={monedasDisponibles} />
+                {/* La etiqueta dice lo que ES: en un suscribible, «Precios de venta» oculta
+                    lo único que importa del importe —que se cobra cada mes—. Misma regla
+                    que rotular «Coste de compras del período» cuando no hay Inventario. */}
+                <PreciosCostosEditor
+                  label={esSuscribible ? 'Precio al mes' : 'Precios de venta'}
+                  rows={precios} onChange={setPrecios} monedasDisponibles={monedasDisponibles} />
+                {esSuscribible && (
+                  <span className="input-hint">
+                    Se guarda SIEMPRE por mes: el importe de cada cobro lo calcula la
+                    periodicidad del acuerdo.
+                  </span>
+                )}
                 <PreciosCostosEditor label="Costos"           rows={costos}  onChange={setCostos}  monedasDisponibles={monedasDisponibles} />
               </div>
             </div>

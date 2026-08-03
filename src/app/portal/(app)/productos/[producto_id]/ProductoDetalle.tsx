@@ -19,7 +19,7 @@ import { StockAjusteModal } from '../_StockAjusteModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs, { type TabItem } from '@/components/Tabs'
-import { AlertTriangle, Archive, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Archive, CalendarClock, ExternalLink, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 import { fmtFechaEs } from '@/lib/date-utils'
 
 // ── Config de movimientos ───────────────────────────────────────────────────────
@@ -242,6 +242,9 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
     ...Object.keys(producto.costos),
   ]))
 
+  // Monedas ACTIVAS del negocio que este servicio no tiene tarifadas.
+  const sinTarifa = monedas.filter(m => !(Number(producto.precios[m]) > 0))
+
   return (
     <div className="det-tab-body">
       <div className="det-card">
@@ -285,6 +288,110 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
             </tbody>
           </table>
         </div>
+
+        {/* INFORMACIÓN, nunca bloqueo (el patrón de «Revisar» de Inventario): en un
+            servicio suscribible, la moneda sin tarifa no impide nada —el precio se pacta
+            en el acuerdo— pero saber cuál falta es lo que permite decidir. */}
+        {producto.tipo === 'SERVICIO' && sinTarifa.length > 0 && (
+          <p className="det-nota">
+            Sin tarifa en {sinTarifa.join(', ')}. No hace falta para contratar —el precio
+            se pacta en cada acuerdo—, pero ponerla aquí precarga el alta.
+          </p>
+        )}
+      </div>
+
+      {/* Se agenda: solo lectura y solo si Citas está contratado y hay vínculo. El
+          puente es blando y en UNA dirección (mig. 119): Citas sigue funcionando sola. */}
+      {data.agenda && (
+        <div className="det-card">
+          <div className="det-section-title">En tu agenda</div>
+          <p className="det-nota det-nota-link">
+            <CalendarClock size={15} strokeWidth={2} />
+            Se agenda como «{data.agenda.nombre}»: {data.agenda.duracion_minutos} min.
+            <Link href="/portal/citas" className="table-name-link">Ver en Citas</Link>
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab: Contratado por (solo servicios) ──────────────────────────────────────
+//
+// La pantalla que no existía y sin la cual **subir una tarifa se decide a ciegas**: aquí
+// están los diez precios distintos que el mismo servicio tiene pactados, y por eso se
+// entiende sin explicarlo que el precio del catálogo NO repise los acuerdos vivos.
+
+const PERIODICIDAD_LABEL: Record<string, string> = {
+  MENSUAL: 'Mensual', TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
+}
+const ESTADO_ACUERDO_BADGE: Record<string, string> = {
+  ACTIVA: 'badge-success', PAUSADA: 'badge-info', VENCIDA: 'badge-warning', CANCELADA: 'badge-neutral',
+}
+const ESTADO_ACUERDO_LABEL: Record<string, string> = {
+  ACTIVA: 'Activa', PAUSADA: 'Pausada', VENCIDA: 'Vencida', CANCELADA: 'Cancelada',
+}
+
+function TabContratos({ data }: { data: ProductoDetalleData }) {
+  const { contratos } = data
+  // Lo que aporta al mes, por moneda y SOLO de los vivos: sumar un cancelado sería
+  // contar dinero que ya no entra. Nunca se suman monedas distintas.
+  const porMoneda = new Map<string, number>()
+  for (const c of contratos) {
+    if (c.estado !== 'ACTIVA') continue
+    porMoneda.set(c.moneda, (porMoneda.get(c.moneda) ?? 0) + c.equivalente_mes)
+  }
+
+  return (
+    <div className="det-tab-body">
+      <div className="det-card">
+        <div className="det-section-title">Quién lo tiene contratado</div>
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th className="col-num">Precio pactado / mes</th>
+                <th>Periodicidad</th>
+                <th>Desde</th>
+                <th>Estado</th>
+                <th className="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {contratos.map(c => (
+                <tr key={c.suscripcion_id}>
+                  <td data-label="Cliente"><strong className="text-sm-bold">{c.cliente_nombre}</strong></td>
+                  <td data-label="Precio pactado / mes" className="col-num">
+                    {c.precio_mensual.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda}
+                  </td>
+                  <td data-label="Periodicidad" className="text-sm-muted">
+                    {PERIODICIDAD_LABEL[c.periodicidad] ?? c.periodicidad}
+                  </td>
+                  <td data-label="Desde" className="text-sm-muted">{fmtFechaEs(c.fecha_inicio)}</td>
+                  <td data-label="Estado">
+                    <span className={`badge ${ESTADO_ACUERDO_BADGE[c.estado] ?? 'badge-neutral'}`}>
+                      {ESTADO_ACUERDO_LABEL[c.estado] ?? c.estado}
+                    </span>
+                  </td>
+                  <td className="col-actions">
+                    <Link href="/portal/suscripciones" className="ter-action-btn"
+                      title="Ver en Suscripciones" aria-label="Ver en Suscripciones">
+                      <ExternalLink size={15} strokeWidth={2} />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="det-nota">
+          Aporta al mes{' '}
+          {[...porMoneda.entries()]
+            .map(([m, t]) => `${t.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${m}`)
+            .join(' · ') || '—'}
+          {' '}(solo los acuerdos vivos, con su descuento aplicado).
+        </p>
       </div>
     </div>
   )
@@ -451,7 +558,7 @@ function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-type TabId = 'info' | 'precios' | 'movimientos' | 'historial'
+type TabId = 'info' | 'precios' | 'contratos' | 'movimientos' | 'historial'
 
 export default function ProductoDetalle({ data: initialData }: { data: ProductoDetalleData }) {
   const [data,        setData]        = useState(initialData)
@@ -473,6 +580,11 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
   const tabs: TabItem<TabId>[] = [
     { id: 'info',    label: 'Información' },
     { id: 'precios', label: 'Precios y costos' },
+    // «Contratado por» solo en servicios, y solo si alguien lo tiene: una pestaña vacía
+    // en el 90 % de las fichas es ruido.
+    ...(esServicio && data.contratos.length
+      ? [{ id: 'contratos' as const, label: 'Contratado por', count: data.contratos.length }]
+      : []),
     // Movimientos exige Inventario Y que sea un físico: sin el módulo no hay ledger
     // que enseñar, y un servicio no mueve existencias ni teniéndolo.
     ...(inv && !esServicio ? [{ id: 'movimientos' as const, label: 'Movimientos' }] : []),
@@ -563,6 +675,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
       {/* Contenido del tab */}
       {tab === 'info'        && <TabInfo     data={data} />}
       {tab === 'precios'     && <TabPrecios  data={data} />}
+      {tab === 'contratos'   && <TabContratos data={data} />}
       {tab === 'movimientos' && <TabMovimientos data={data} />}
       {tab === 'historial'   && <TabHistorialPrecios data={data} />}
 

@@ -31,6 +31,7 @@ import { StockAjusteModal } from './_StockAjusteModal'
 import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
 import Tabs from '@/components/Tabs'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 
 const TIPO_CATEGORIA_LABEL: Record<TipoCategoria, string> = {
   PRODUCTO: 'Productos físicos', SERVICIO: 'Servicios', AMBAS: 'Ambos',
@@ -192,6 +193,11 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
+/** Las mismas palabras que Suscripciones: «Mensual», no «MENSUAL». */
+const PERIODICIDAD_LABEL: Record<string, string> = {
+  MENSUAL: 'Mensual', TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
+}
+
 export default function ProductosView({ data }: { data: ProductosPageData }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -218,6 +224,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   // `?stock=bajo` lo pone el pendiente del dashboard: llevaba a Movimientos, que no
   // es donde se ve lo que falta.
   const [soloBajoMinimo, setSoloBajoMinimo] = useState(searchParams.get('stock') === 'bajo')
+  const [soloSuscribibles, setSoloSuscribibles] = useState(false)
 
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<Categoria | null>(null)
@@ -272,6 +279,11 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
   const sinCategoriaCount = productosPorCategoria['__sin_categoria__'] ?? 0
 
+  const suscribiblesCount = useMemo(
+    () => data.productos.filter(p => p.estado === 'ACTIVO' && p.es_suscribible).length,
+    [data.productos],
+  )
+
   const bajoMinimoCount = useMemo(
     () => data.productos.filter(p => p.estado === 'ACTIVO' && tieneAlerta(p)).length,
     [data.productos, tieneAlerta], // eslint-disable-line react-hooks/exhaustive-deps
@@ -282,6 +294,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
     return data.productos.filter(p => {
       if ((p.estado === 'ACTIVO') === verArchivados)       return false
       if (soloBajoMinimo && !tieneAlerta(p))               return false
+      if (soloSuscribibles && !p.es_suscribible)          return false
       if (filtroCat === '__sin_categoria__') {
         if (p.categoria_id) return false
       } else if (filtroCat && p.categoria_id !== filtroCat) return false
@@ -295,7 +308,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       }
       return true
     })
-  }, [data.productos, search, filtroCat, filtroProv, verArchivados, soloBajoMinimo, categoriaMap]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data.productos, search, filtroCat, filtroProv, verArchivados, soloBajoMinimo, soloSuscribibles, categoriaMap]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
@@ -419,7 +432,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {/* ── Cabecera ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">{tituloPagina}</h1>
+          {esProducto ? (
+            <h1 className="page-title">{tituloPagina}</h1>
+          ) : (
+            // Inventario, Ventas, Compras, RRHH y Tesorería tienen su punto de IA;
+            // Servicios era la única pantalla gemela sin él.
+            <div className="page-title-ia">
+              <h1 className="page-title">{tituloPagina}</h1>
+              <IaTouchpoint tipo="servicios" descripcion="un análisis de tu catálogo de servicios" />
+            </div>
+          )}
           <p className="page-subtitle">
             {esProducto
               ? 'Tus productos físicos, con su precio y existencias.'
@@ -524,6 +546,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 <span>Solo bajo mínimo{bajoMinimoCount > 0 && ` (${bajoMinimoCount})`}</span>
               </label>
             )}
+            {/* Para saber qué es contratable había que abrir ficha por ficha — y el aviso
+                de Suscripciones mandaba justo aquí a «marcar un servicio como
+                suscripción». Mismo patrón que «Solo bajo mínimo». */}
+            {!esProducto && (
+              <label className="ter-archivados-toggle">
+                <input type="checkbox" checked={soloSuscribibles}
+                  onChange={e => setSoloSuscribibles(e.target.checked)} />
+                <span>Solo suscribibles{suscribiblesCount > 0 && ` (${suscribiblesCount})`}</span>
+              </label>
+            )}
             <label className="ter-archivados-toggle">
               <input type="checkbox" checked={verArchivados}
                 onChange={e => setVerArchivados(e.target.checked)} />
@@ -588,6 +620,13 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                             >
                               {p.nombre}
                             </Link>
+                            {/* La insignia dice qué es contratable sin abrir la ficha, y
+                                con su periodicidad por defecto: «Suscribible · Mensual». */}
+                            {!esProducto && p.es_suscribible && (
+                              <span className="badge badge-purple prd-badge-suscribible">
+                                Suscribible{p.periodicidad_defecto ? ` · ${PERIODICIDAD_LABEL[p.periodicidad_defecto] ?? p.periodicidad_defecto}` : ''}
+                              </span>
+                            )}
                             {p.descripcion && (
                               <div className="table-cell-sub">{p.descripcion}</div>
                             )}

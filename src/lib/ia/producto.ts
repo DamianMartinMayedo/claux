@@ -20,7 +20,13 @@ export interface SugerenciaProducto {
   descripcion:  string | null
   unidad:       string | null
   categoria_id: string | null
+  /** Solo servicios: si se presta por suscripción y con qué ciclo. */
+  es_suscribible: boolean | null
+  periodicidad:   string | null
 }
+
+/** Lista CERRADA, como la de unidades: el modelo no puede inventarse un ciclo. */
+const PERIODICIDADES_IA = ['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL']
 
 export async function sugerirDatosProducto(
   clientId: string,
@@ -37,12 +43,15 @@ export async function sugerirDatosProducto(
   const sys = [
     `Eres un asistente que ayuda al dueño de un negocio a rellenar la ficha de un ${que} de su catálogo.`,
     contexto,
-    `Dado el NOMBRE, devuelves SOLO un objeto JSON con las claves: descripcion, unidad, categoria_id.`,
+    `Dado el NOMBRE, devuelves SOLO un objeto JSON con las claves: descripcion, unidad, categoria_id${esServicio ? ', es_suscribible, periodicidad' : ''}.`,
     `descripcion: una frase breve, clara y comercial en español (máx. 160 caracteres); null si no puedes.`,
     `unidad: EXACTAMENTE una de esta lista, copiada tal cual, o null si ninguna encaja: ${unidades.join(', ')}.`,
     categorias.length
       ? `categoria_id: EXACTAMENTE uno de los identificadores de esta lista (formato id=nombre), o null si ninguna encaja: ${listaCat}. No inventes identificadores ni categorías nuevas.`
       : `categoria_id: null (este negocio todavía no tiene categorías).`,
+    esServicio
+      ? `es_suscribible: true solo si es un servicio que se cobra de forma RECURRENTE (mantenimiento, soporte, membresía, cuota, alquiler); false si es un trabajo puntual. periodicidad: EXACTAMENTE una de ${PERIODICIDADES_IA.join(', ')} si es_suscribible es true, o null.`
+      : '',
     `Son SUGERENCIAS para que el dueño las revise. No añadas texto fuera del JSON.`,
   ].filter(Boolean).join(' ')
 
@@ -60,10 +69,15 @@ export async function sugerirDatosProducto(
     // categoria_id inventado guardaría una referencia a nada.
     const unidad = s(o.unidad)
     const cat    = s(o.categoria_id)
+    // La periodicidad se verifica igual que la unidad: un valor inventado rompería el
+    // selector y, peor, se guardaría como ciclo de cobro.
+    const per = s(o.periodicidad)
     return {
       descripcion:  s(o.descripcion),
       unidad:       unidad && unidades.includes(unidad) ? unidad : null,
       categoria_id: cat && categorias.some(c => c.categoria_id === cat) ? cat : null,
+      es_suscribible: esServicio && o.es_suscribible === true ? true : esServicio ? false : null,
+      periodicidad:   esServicio && per && PERIODICIDADES_IA.includes(per) ? per : null,
     }
   } catch (e) {
     if (!(e instanceof IaNoConfigurada)) console.error('[ia] sugerirDatosProducto', e)

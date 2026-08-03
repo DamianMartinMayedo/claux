@@ -6,6 +6,15 @@ import Image from 'next/image'
 import { UtensilsCrossed, Package, LayoutGrid, List } from 'lucide-react'
 import type { CatalogoPublico as CatalogoPublicoData } from '@/app/actions/portal/catalogo'
 
+/**
+ * «/mes» y equivalentes. Un servicio por suscripción anunciado a «2.000 CUP» a secas
+ * dice otra cosa que «2.000 CUP/mes», y ante el cliente final eso no es formato: es el
+ * sentido del precio (mig. 162).
+ */
+const SUFIJO_PERIODO: Record<string, string> = {
+  MENSUAL: '/mes', TRIMESTRAL: '/trimestre', SEMESTRAL: '/semestre', ANUAL: '/año',
+}
+
 type Vista = 'card' | 'lista'
 
 // Página pública ligera del catálogo (menú/carta/servicios según sector). Solo
@@ -92,6 +101,8 @@ export default function CatalogoPublico({ data, slug }: { data: CatalogoPublicoD
                           <span className="cp-card-precio">
                             {item.precioAntes != null && <span className="cp-precio-antes">{item.precioAntes.toFixed(2)}</span>}
                             {item.precio.toFixed(2)} {item.moneda ?? ''}
+                          {item.periodicidad && (SUFIJO_PERIODO[item.periodicidad] ?? '')}
+                            {item.periodicidad && (SUFIJO_PERIODO[item.periodicidad] ?? '')}
                           </span>
                         )}
                       </span>

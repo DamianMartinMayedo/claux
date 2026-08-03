@@ -2,11 +2,16 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { monedaValida }      from '@/lib/tasas'
 import { getPortalSession, puedeEditarModulo, puedeEditarAlgunModulo }  from './auth'
 import { obtenerEmpresas }    from './empresas'
 import { MODULOS_CATALOGO, tieneModulo } from '@/lib/modulos'
 import { etiquetasDe }        from '@/lib/sector'
 import { parseNumeroEs }      from '@/lib/numeros'
+import {
+  calcularCobro, estadoEfectivo,
+  type PeriodicidadSub, type DescuentoModo, type EstadoSub,
+} from '@/lib/suscripciones'
 import { aplicarMovimiento, stockEnAlmacen, type TipoMovimiento } from './_inventario-helpers'
 import {
   generarProductoId, generarCategoriaProductoId, siguienteCodigoProducto, construirCamposProducto,
@@ -300,7 +305,7 @@ export async function guardarProducto(
       console.error('[productos] insert error:', error)
       return { ok: false, error: `Error al crear: ${error.message}` }
     }
-    revalidatePath('/portal/productos')
+    revalidarFicha(moduloDelTipo)
     return { ok: true, producto_id }
   }
 
@@ -346,7 +351,7 @@ export async function guardarProducto(
       })
     }
   }
-  revalidatePath('/portal/productos')
+  revalidarFicha(moduloDelTipo)
   return { ok: true, producto_id: producto_id_form }
 }
 
@@ -359,6 +364,21 @@ export async function guardarProducto(
 // El `puedeEditarModulo` va INLINE en cada acción, no aquí: `audit-gating` lee el
 // cuerpo de la acción y un candado escondido en un helper le pasa desapercibido.
 // No se exporta: en un fichero 'use server' todo export es un endpoint HTTP.
+/**
+ * La ficha vive en DOS páginas según su tipo (`/portal/productos` para el físico,
+ * `/portal/servicios` para el servicio), y hasta ahora todas las acciones revalidaban solo
+ * la de Inventario. Hoy es inocuo —las dos páginas son `force-dynamic` y las vistas llaman
+ * a `router.refresh()`—, pero es una trampa dormida: el día que una de las dos se cachee,
+ * guardar un servicio dejaría la lista de Servicios con los datos viejos.
+ *
+ * Sin módulo (un lote puede mezclar tipos) se revalidan las dos: revalidar de más no
+ * rompe nada, revalidar de menos enseña datos viejos.
+ */
+function revalidarFicha(modulo?: 'inventario' | 'servicios' | null) {
+  if (modulo !== 'servicios')  revalidatePath('/portal/productos')
+  if (modulo !== 'inventario') revalidatePath('/portal/servicios')
+}
+
 async function moduloDeProducto(client_id: string, producto_id: string): Promise<'inventario' | 'servicios' | null> {
   const db = createAdminClient()
   const { data: prod } = await db.from('products')
@@ -385,7 +405,7 @@ export async function archivarProducto(
     .eq('client_id', session.client_id)
 
   if (error) return { ok: false, error: 'Error al archivar.' }
-  revalidatePath('/portal/productos')
+  revalidarFicha(modulo)
   return { ok: true }
 }
 
@@ -407,7 +427,7 @@ export async function restaurarProducto(
     .eq('client_id', session.client_id)
 
   if (error) return { ok: false, error: 'Error al restaurar.' }
-  revalidatePath('/portal/productos')
+  revalidarFicha(modulo)
   return { ok: true }
 }
 
@@ -447,6 +467,12 @@ export async function eliminarProducto(
     { tabla: 'movimientos_inventario', etiqueta: 'movimientos de inventario',    conClientId: true  },
     { tabla: 'catalogo_items',         etiqueta: 'tu catálogo público',          conClientId: true  },
     { tabla: 'caja_ticket_lineas',     etiqueta: 'tickets de caja',              conClientId: true  },
+    // Un servicio contratado no se borra: sin esta guarda se archivaba, se eliminaba y el
+    // acuerdo seguía vivo facturando una línea llamada «—».
+    { tabla: 'suscripcion_lineas',     etiqueta: 'suscripciones',                conClientId: true  },
+    // El vínculo con Citas (mig. 119) es BLANDO y en una dirección, pero borrar el
+    // producto deja el enlace colgando y la agenda enseñando un servicio sin catálogo.
+    { tabla: 'servicios',              etiqueta: 'servicios de tu agenda',       conClientId: true  },
   ]
   for (const d of dependencias) {
     let q = db.from(d.tabla).select('*', { count: 'exact', head: true }).eq('producto_id', producto_id)
@@ -468,8 +494,56 @@ export async function eliminarProducto(
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'Error al eliminar.' }
 
-  revalidatePath('/portal/productos')
+  revalidarFicha(modulo)
   return { ok: true }
+}
+
+/**
+ * Escribe la tarifa de un servicio **solo en la moneda que está vacía**.
+ *
+ * El catálogo se rellena con el USO REAL: 55 de 63 líneas de acuerdo apuntan a un
+ * servicio sin precio en la moneda del acuerdo, porque el precio se decide al pactar, no
+ * en el catálogo. Cuando el dueño teclea uno, se le ofrece guardarlo también como tarifa
+ * (casilla desmarcada); a partir del segundo acuerdo de ese servicio en esa moneda, ya
+ * precarga solo.
+ *
+ * **No puede reutilizar `guardarProducto`**, que reescribe `precios` ENTERO desde el
+ * formulario: esta acción fusiona por moneda y **se niega si esa moneda ya tiene
+ * importe**. Nunca pisa una tarifa pactada ni borra las demás — es la misma regla que el
+ * importador llama «ACTUALIZAR no vacía».
+ */
+export async function guardarTarifaSiVacia(
+  producto_id: string, moneda: string, precio: number,
+): Promise<{ ok: boolean; error?: string; escrito?: boolean }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('servicios')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!moneda || !(precio > 0)) return { ok: false, error: 'Precio o moneda no válidos.' }
+
+  const db = createAdminClient()
+  // La moneda, siempre de las del negocio: una que no tiene no cotiza.
+  if (!(await monedaValida(db, session.client_id, moneda)))
+    return { ok: false, error: 'Esa moneda no está activa en tu negocio.' }
+
+  const { data: prod } = await db.from('products')
+    .select('precios, tipo').eq('producto_id', producto_id)
+    .eq('client_id', session.client_id).maybeSingle()
+  if (!prod) return { ok: false, error: 'Servicio no encontrado.' }
+  if (prod.tipo !== 'SERVICIO') return { ok: false, error: 'Solo se tarifan servicios por esta vía.' }
+
+  const actuales = (typeof prod.precios === 'object' && prod.precios !== null)
+    ? prod.precios as Record<string, number> : {}
+  // Ya tiene tarifa ahí: no se toca y se dice. No es un error — el acuerdo se guarda igual.
+  if (Number(actuales[moneda]) > 0) return { ok: true, escrito: false }
+
+  const { error } = await db.from('products')
+    .update({ precios: { ...actuales, [moneda]: precio }, updated_at: new Date().toISOString() })
+    .eq('producto_id', producto_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: 'No se pudo guardar la tarifa.' }
+
+  revalidarFicha('servicios')
+  return { ok: true, escrito: true }
 }
 
 // ── Acciones en lote (Fase 1) ───────────────────────────────────────────────────
@@ -515,7 +589,7 @@ export async function archivarProductosEnLote(
     .eq('client_id', session.client_id).in('producto_id', permitidos.map(p => p.producto_id))
     .select('producto_id')
   if (error) return { ok: false, hechas: 0, omitidas: [], error: error.message }
-  revalidatePath('/portal/productos')
+  revalidarFicha()   // el lote puede mezclar productos y servicios
   return { ok: true, hechas: (data ?? []).length, omitidas }
 }
 
@@ -537,7 +611,7 @@ export async function eliminarProductosEnLote(ids: string[]): Promise<ResultadoL
     if (r.ok) res.hechas++
     else res.omitidas.push({ nombre: nombreDe.get(id) ?? id, motivo: r.error ?? 'No se pudo eliminar' })
   }
-  revalidatePath('/portal/productos')
+  revalidarFicha()   // el lote puede mezclar productos y servicios
   return res
 }
 
@@ -749,7 +823,7 @@ export async function archivarCategoria(
     .eq('client_id', session.client_id)
 
   if (error) return { ok: false, error: 'Error al archivar.' }
-  revalidatePath('/portal/productos')
+  revalidarFicha()   // una categoría puede ser de productos, de servicios o de ambas
   return { ok: true }
 }
 
@@ -768,7 +842,7 @@ export async function restaurarCategoria(
     .eq('client_id', session.client_id)
 
   if (error) return { ok: false, error: 'Error al restaurar.' }
-  revalidatePath('/portal/productos')
+  revalidarFicha()   // una categoría puede ser de productos, de servicios o de ambas
   return { ok: true }
 }
 
@@ -813,6 +887,31 @@ export interface ProductoDetalleData {
    *  `ProductosPageData.tieneInventario`). */
   tieneInventario:   boolean
   etiquetaServicio:  string
+  // ── Solo servicios ──
+  /**
+   * Quién lo tiene contratado y a qué precio PACTADO. Es la pantalla sin la cual subir
+   * una tarifa se decide a ciegas — y deja a la vista, sin explicarlo, por qué el precio
+   * del catálogo no repisa los acuerdos vivos: se ven los diez precios distintos que
+   * tiene el mismo servicio.
+   */
+  contratos:         ContratoDeServicio[]
+  /** Si Citas está contratado y hay vínculo (mig. 119). Solo lectura y solo informativo. */
+  agenda:            { servicio_id: string; nombre: string; duracion_minutos: number } | null
+}
+
+/** Un acuerdo que incluye este servicio, con su precio pactado. */
+export interface ContratoDeServicio {
+  suscripcion_id:  string
+  cliente_nombre:  string
+  moneda:          string
+  /** El precio PACTADO de este servicio en ese acuerdo, por mes. */
+  precio_mensual:  number
+  periodicidad:    string
+  fecha_inicio:    string
+  /** ACTIVA | PAUSADA | VENCIDA | CANCELADA, ya derivado. */
+  estado:          string
+  /** Lo que aporta al mes, con su descuento aplicado. */
+  equivalente_mes: number
 }
 
 export async function obtenerProductoDetalle(
@@ -936,6 +1035,71 @@ export async function obtenerProductoDetalle(
     .filter(s => Math.abs(s.cantidad) > 0.0005 || s.minimo != null)
     .sort((a, b) => b.cantidad - a.cantidad)
 
+  // ── Quién lo tiene contratado (solo servicios) ──
+  const contratos: ContratoDeServicio[] = []
+  let agenda: ProductoDetalleData['agenda'] = null
+  if (producto.tipo === 'SERVICIO') {
+    const { data: lins } = await db.from('suscripcion_lineas')
+      .select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor')
+      .eq('client_id', session.client_id).eq('producto_id', producto_id)
+    const filas = (lins ?? []) as {
+      suscripcion_id: string; precio_mensual: number
+      descuento_modo: string; descuento_valor: number
+    }[]
+    if (filas.length) {
+      const [{ data: subs }, { data: terc }] = await Promise.all([
+        db.from('suscripciones')
+          .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_inicio, fecha_fin, renovacion_automatica, estado')
+          .eq('client_id', session.client_id).in('suscripcion_id', filas.map(f => f.suscripcion_id)),
+        db.from('third_parties').select('tercero_id, nombre').eq('client_id', session.client_id),
+      ])
+      const nombreDe = new Map(((terc ?? []) as { tercero_id: string; nombre: string }[])
+        .map(t => [t.tercero_id, t.nombre]))
+      const hoy = new Date().toISOString().split('T')[0]
+      const subDe = new Map(((subs ?? []) as Record<string, unknown>[]).map(x => [x.suscripcion_id as string, x]))
+      for (const f of filas) {
+        const sub = subDe.get(f.suscripcion_id)
+        if (!sub) continue
+        // El importe con SU descuento: un anual rebajado no aporta el precio de lista.
+        const c = calcularCobro(
+          Number(f.precio_mensual) || 0,
+          sub.periodicidad as PeriodicidadSub,
+          (f.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
+          Number(f.descuento_valor) || 0,
+        )
+        contratos.push({
+          suscripcion_id:  f.suscripcion_id,
+          cliente_nombre:  nombreDe.get(sub.cliente_id as string) ?? '—',
+          moneda:          sub.moneda as string,
+          precio_mensual:  Number(f.precio_mensual) || 0,
+          periodicidad:    sub.periodicidad as string,
+          fecha_inicio:    sub.fecha_inicio as string,
+          estado:          estadoEfectivo({
+            estado:                sub.estado as EstadoSub,
+            fecha_fin:             (sub.fecha_fin as string | null) ?? null,
+            renovacion_automatica: Boolean(sub.renovacion_automatica),
+          }, hoy),
+          equivalente_mes: c.equivalenteMensual,
+        })
+      }
+      contratos.sort((a, b) => a.cliente_nombre.localeCompare(b.cliente_nombre))
+    }
+
+    // El puente con Citas es BLANDO y en una dirección (mig. 119): solo se enseña si el
+    // módulo está contratado y hay vínculo. Sin `agenda` no se pinta nada.
+    if (tieneModulo((await db.from('clients').select('modulos_activos')
+      .eq('client_id', session.client_id).maybeSingle()).data?.modulos_activos, 'agenda')) {
+      const { data: srv } = await db.from('servicios')
+        .select('servicio_id, nombre, duracion_minutos')
+        .eq('client_id', session.client_id).eq('producto_id', producto_id).maybeSingle()
+      if (srv) agenda = {
+        servicio_id: srv.servicio_id as string,
+        nombre: srv.nombre as string,
+        duracion_minutos: Number(srv.duracion_minutos) || 0,
+      }
+    }
+  }
+
   const movimientos = ((movRes.data ?? []) as Record<string, unknown>[]).map(m => ({
     movimiento_id:      m.movimiento_id as string,
     fecha:              m.fecha as string,
@@ -968,6 +1132,8 @@ export async function obtenerProductoDetalle(
     movimientos,
     almacen_nombres,
     historialPrecios,
+    contratos,
+    agenda,
     ...(await contextoCatalogo(session.client_id)),
   }
 }
