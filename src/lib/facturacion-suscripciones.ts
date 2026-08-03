@@ -11,11 +11,13 @@
 // prorrateo en la v1.
 
 import { crearFacturaBorrador } from '@/lib/ventas/factura-core'
+import { estadoCobro, EPS_SALDO } from '@/lib/cobranza-core'
 import {
-  estadoEfectivo, sumarPeriodo, calcularCobro, hoyStr,
+  estadoEfectivo, sumarPeriodo, calcularCobro, hoyStr, cicloVigente, fraccionProrrateo,
   type PeriodicidadSub, type EstadoSub, type DescuentoModo,
   type FacturacionPreview, type FacturacionGrupo, type FacturacionLinea, type FacturaDelPeriodo,
-  type CalendarioFacturacion, type MesCalendario, type EstadoCobro,
+  type CalendarioFacturacion, type MesCalendario, type EstadoCobro, type TotalMes,
+  type FacturaDeAcuerdo,
 } from '@/lib/suscripciones'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +28,9 @@ interface SubFila {
   moneda: string; periodicidad: string
   fecha_fin: string | null; renovacion_automatica: boolean; estado: string
   fecha_proximo_cobro: string
+  /** Para el prorrateo del PRIMER período (mig. 163). */
+  fecha_inicio?: string
+  prorratear?: boolean
 }
 
 interface LineaFila {
@@ -60,19 +65,33 @@ async function lineasDe(db: Db, clientId: string, suscripcionIds: string[]): Pro
 function repartirCobro(
   lineas: LineaFila[], nomProd: Map<string, string>,
   periodicidad: PeriodicidadSub,
+  /** Prorrateo del PRIMER período (mig. 163): 1 = ciclo completo, que es lo normal. */
+  prorrateo?: { fraccion: number; diasCobrados: number; diasCiclo: number },
 ): { lineas: FacturacionLinea[]; total: number } {
   let total = 0
   const out: FacturacionLinea[] = lineas.map(l => {
     // El descuento es de CADA servicio (mig. 125): cada línea calcula el suyo. A la
     // factura viaja como porcentaje efectivo (descuento/bruto), así un descuento en
     // monto fijo también queda a la vista como % en su propia línea.
-    const c   = calcularCobro(Number(l.precio_mensual) || 0, periodicidad,
+    const base = calcularCobro(Number(l.precio_mensual) || 0, periodicidad,
       l.descuento_modo as DescuentoModo, Number(l.descuento_valor) || 0)
+    // El prorrateo escala el ciclo entero (bruto y descuento a la vez): si se aplicara
+    // solo al bruto, la rebaja pactada saldría multiplicada respecto de lo cobrado.
+    const f = prorrateo && prorrateo.fraccion < 1 ? prorrateo.fraccion : 1
+    const c = f === 1 ? base : {
+      ...base,
+      bruto:     redondear2(base.bruto * f),
+      descuento: redondear2(base.descuento * f),
+      total:     redondear2(base.total * f),
+    }
     const pct = c.bruto > 0 ? (c.descuento / c.bruto) * 100 : 0
     total += c.total
     return {
       suscripcion_id: l.suscripcion_id, linea_id: l.linea_id, producto_id: l.producto_id,
-      servicio_nombre: nomProd.get(l.producto_id) ?? '—',
+      // La línea DICE que va prorrateada: un importe raro sin explicación obliga al
+      // cliente a llamar para preguntar.
+      servicio_nombre: (nomProd.get(l.producto_id) ?? '—')
+        + (f === 1 ? '' : ` · ${prorrateo!.diasCobrados} de ${prorrateo!.diasCiclo} días`),
       cantidad: 1, precio: c.total,
       meses: c.meses, bruto: c.bruto, descuento: c.descuento, descuento_pct: pct,
       periodicidad,
@@ -94,6 +113,122 @@ export function rangoPeriodo(periodo: string): { inicio: string; fin: string } {
   }
 }
 
+/** Una factura VIVA de la ventana, con lo mínimo para contarla y enseñarla. */
+export interface FacturaFila {
+  factura_id: string; numero: string; estado: string; moneda: string
+  total: number | string; cliente_id: string; fecha_emision: string
+}
+
+export interface FacturadoPorCiclo {
+  /** Las facturas vivas de la ventana (ANULADAS excluidas). */
+  facturas:   FacturaFila[]
+  /** Saldo pendiente de cada factura (`factura_id` → importe en SU moneda). */
+  saldoDe:    Map<string, number>
+  /** Cuántas suscripciones cubre cada factura (`factura_id` → nº). */
+  porFactura: Map<string, number>
+  /** `${suscripcion_id}@${YYYY-MM}` de todo ciclo que YA tiene factura viva. */
+  porCiclo:   Set<string>
+  /**
+   * Mensaje si la consulta falló. Se DEVUELVE en vez de tragarse: un fallo aquí que pase
+   * por «no hay nada facturado» hace ofrecer un cobro ya hecho (y al revés, en el
+   * escáner, prometer un borrador que no existe).
+   */
+  error?:     string
+}
+
+/**
+ * Qué ciclos de qué acuerdos están ya facturados — la capa (b) de la idempotencia.
+ *
+ * La entidad es la suscripción MÁS SU CICLO, nunca el `suscripcion_id` a secas: con la
+ * facturación automática puesta, todo acuerdo con más de un mes de vida tiene alguna
+ * línea con su id, así que preguntar «¿tiene factura?» devuelve «sí» para siempre. Es
+ * justo el fallo que hacía que el aviso de cobro dijera «factura preparada» desde el segundo mes
+ * y enlazara a una factura que no existía.
+ *
+ * Vive aquí y no copiada en cada consumidor (preview, calendario y el escáner de avisos)
+ * porque con una copia por sitio el aviso y el calendario acaban diciendo cosas
+ * distintas del mismo cobro — la lección de `aplicarConceptos` y `estadoStock`.
+ *
+ * El período de un ciclo es el mes de la `fecha_emision` de su factura: la factura se
+ * fecha DENTRO del período justamente para que este cruce valga.
+ */
+export async function facturadasPorCiclo(db: Db, opciones: {
+  /** Uno o varios tenants: el escáner de avisos barre todos de una vez. */
+  clientIds: string[]
+  empresaId?: string
+  /** Ventana de `fecha_emision` (inclusive). */
+  desde: string
+  hasta: string
+  /**
+   * Acota las líneas a estos acuerdos. Con él, `documento_lineas` se filtra por
+   * `suscripcion_id` (unas decenas) en vez de por la lista de facturas de la ventana, que
+   * barriendo varios tenants son miles de ids en la URL.
+   */
+  suscripcionIds?: string[]
+}): Promise<FacturadoPorCiclo> {
+  const vacio: FacturadoPorCiclo = {
+    facturas: [], saldoDe: new Map(), porFactura: new Map(), porCiclo: new Set(),
+  }
+  if (!opciones.clientIds.length) return vacio
+
+  let q = db.from('facturas')
+    .select('factura_id, numero, estado, moneda, total, cliente_id, fecha_emision')
+    .in('client_id', opciones.clientIds)
+    // Las ANULADAS no cuentan: anular es deshacer, y al anular se retrocede también el
+    // `fecha_proximo_cobro`, así que ese ciclo vuelve a estar por cobrar.
+    .neq('estado', 'ANULADA')
+    .gte('fecha_emision', opciones.desde).lte('fecha_emision', opciones.hasta)
+  if (opciones.empresaId) q = q.eq('empresa_id', opciones.empresaId)
+  const { data: facs, error: errFacs } = await q
+  if (errFacs) return { ...vacio, error: errFacs.message }
+
+  const facturas = (facs ?? []) as FacturaFila[]
+  if (!facturas.length) return vacio
+
+  // Lo cobrado de cada factura, en la moneda del DOCUMENTO (`monto_ref`): pagar 100 USD
+  // desde una caja en CUP baja el saldo en 100 USD. El saldo sale de `cobranza-core`, que
+  // ya lo comparten CxC y el listado de Ventas — una segunda implementación acabaría
+  // diciendo otra cosa que la pantalla de cobros.
+  const { data: movs } = await db.from('movimientos_tesoreria')
+    .select('referencia_id, monto, monto_ref')
+    .in('client_id', opciones.clientIds)
+    .eq('origen', 'COBRO')
+    .in('referencia_id', facturas.map(f => f.factura_id))
+  const cobrado = new Map<string, number>()
+  for (const m of (movs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+    cobrado.set(m.referencia_id, (cobrado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
+  }
+  const saldoDe = new Map<string, number>()
+  for (const f of facturas) {
+    // Un BORRADOR no debe nada todavía: no es una cuenta por cobrar hasta que se emite.
+    saldoDe.set(f.factura_id, f.estado === 'BORRADOR'
+      ? 0
+      : estadoCobro(Number(f.total) || 0, cobrado.get(f.factura_id) ?? 0, null, hoyStr()).saldo)
+  }
+
+  const periodoDe = new Map(facturas.map(f => [f.factura_id, f.fecha_emision.slice(0, 7)]))
+  let lq = db.from('documento_lineas')
+    .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
+    .not('suscripcion_id', 'is', null)
+  lq = opciones.suscripcionIds
+    ? lq.in('suscripcion_id', opciones.suscripcionIds)
+    : lq.in('documento_id', facturas.map(f => f.factura_id))
+  const { data: lins, error: errLins } = await lq
+  if (errLins) return { ...vacio, error: errLins.message }
+
+  const porFactura = new Map<string, number>()
+  const porCiclo   = new Set<string>()
+  for (const l of (lins ?? []) as { documento_id: string; suscripcion_id: string }[]) {
+    const periodo = periodoDe.get(l.documento_id)
+    // Filtrando por `suscripcion_id` entran líneas de facturas fuera de la ventana (o
+    // anuladas): las que no están en el mapa no son de una factura viva de aquí.
+    if (!periodo) continue
+    porFactura.set(l.documento_id, (porFactura.get(l.documento_id) ?? 0) + 1)
+    porCiclo.add(`${l.suscripcion_id}@${periodo}`)
+  }
+  return { facturas, saldoDe, porFactura, porCiclo }
+}
+
 export async function construirPreview(
   db: Db, clientId: string, empresa_id: string, periodo: string,
 ): Promise<{ ok: boolean; error?: string; preview?: FacturacionPreview }> {
@@ -107,47 +242,35 @@ export async function construirPreview(
   // Las dos consultas de partida van juntas: lo que TOCA cobrar y lo que YA se cobró en
   // el período. La segunda ya no se puede saltar cuando no queda nada pendiente — es
   // justo el caso «ya está todo facturado», el que hay que poder enseñar.
-  const [{ data, error: errSubs }, { data: facs, error: errFacs }] = await Promise.all([
+  const [{ data, error: errSubs }, facturado] = await Promise.all([
     // Un período contiene SOLO sus cobros (`gte inicio`), no todo lo vencido hasta su
     // fin. Sin ese suelo, una suscripción atrasada desde mayo se colaba en la factura de
     // julio como si fuera de julio: se cobraba un ciclo, la fecha avanzaba uno, y los
     // otros dos meses de atraso seguían ahí sin que nada lo dijera. Ahora cada ciclo
     // pendiente se factura en SU mes, que es como lo enseña el calendario.
     db.from('suscripciones')
-      .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro')
+      .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro, fecha_inicio, prorratear')
       .eq('client_id', clientId).eq('empresa_id', empresa_id).eq('estado', 'ACTIVA')
       .gte('fecha_proximo_cobro', inicio).lte('fecha_proximo_cobro', fin),
-    db.from('facturas').select('factura_id, numero, estado, moneda, total, cliente_id')
-      .eq('client_id', clientId).eq('empresa_id', empresa_id)
-      .neq('estado', 'ANULADA')
-      .gte('fecha_emision', inicio).lte('fecha_emision', fin),
+    facturadasPorCiclo(db, { clientIds: [clientId], empresaId: empresa_id, desde: inicio, hasta: fin }),
   ])
   // Una consulta rota aquí NO puede pasar por «no hay nada que facturar»: esta es
   // la lista de lo que se va a cobrar, y quedarse callada es perder el cobro.
   if (errSubs) return { ok: false, error: `No se pudieron leer las suscripciones: ${errSubs.message}` }
-  if (errFacs) return { ok: false, error: `No se pudieron leer las facturas del período: ${errFacs.message}` }
+  if (facturado.error) return { ok: false, error: `No se pudieron leer las facturas del período: ${facturado.error}` }
 
-  // Solo ACTIVAS efectivas: una vencida de fin fijo no se cobra.
+  // Solo ACTIVAS efectivas: una vencida de fin fijo no se cobra. Y el CICLO tiene que
+  // caer dentro de la vigencia: un acuerdo que termina el 14 no genera el cobro del 15
+  // aunque hoy siga vivo (es lo que hace «Cancelar al final del período»). El calendario
+  // ya lo comprobaba en su proyección y aquí faltaba, así que las dos pantallas del mismo
+  // mes decían cosas distintas — y la que factura era la que se equivocaba.
   let subs = ((data ?? []) as SubFila[]).filter(s =>
-    estadoEfectivo({ estado: s.estado as EstadoSub, fecha_fin: s.fecha_fin, renovacion_automatica: s.renovacion_automatica }, hoy) === 'ACTIVA')
+    estadoEfectivo({ estado: s.estado as EstadoSub, fecha_fin: s.fecha_fin, renovacion_automatica: s.renovacion_automatica }, hoy) === 'ACTIVA'
+    && cicloVigente(s, s.fecha_proximo_cobro))
 
-  // Idempotencia: excluir las que ya tienen línea en una factura VIVA del período.
-  // Las ANULADAS no cuentan — anular es deshacer, y al anular se retrocede también el
-  // `fecha_proximo_cobro` (ver cambiarEstadoFactura), así el período vuelve a facturarse.
-  type FacFila = { factura_id: string; numero: string; estado: string; moneda: string; total: number | string; cliente_id: string }
-  const facturas = (facs ?? []) as FacFila[]
-  const porFactura = new Map<string, number>()
-  if (facturas.length) {
-    const { data: lins } = await db.from('documento_lineas')
-      .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
-      .in('documento_id', facturas.map(f => f.factura_id)).not('suscripcion_id', 'is', null)
-    const ya = new Set<string>()
-    for (const l of (lins ?? []) as { documento_id: string; suscripcion_id: string }[]) {
-      ya.add(l.suscripcion_id)
-      porFactura.set(l.documento_id, (porFactura.get(l.documento_id) ?? 0) + 1)
-    }
-    subs = subs.filter(s => !ya.has(s.suscripcion_id))
-  }
+  // Idempotencia: excluir las que ya tienen línea en una factura VIVA de ESTE ciclo.
+  const { facturas, porFactura, porCiclo } = facturado
+  subs = subs.filter(s => !porCiclo.has(`${s.suscripcion_id}@${periodo}`))
   // Solo las facturas que cubren suscripciones: una venta suelta del mes no pinta aquí.
   const conSuscripciones = facturas.filter(f => porFactura.has(f.factura_id))
 
@@ -171,6 +294,7 @@ export async function construirPreview(
       total:          Number(f.total) || 0,
       estado:         f.estado,
       suscripciones:  porFactura.get(f.factura_id) ?? 0,
+      saldo:          facturado.saldoDe.get(f.factura_id) ?? 0,
     }))
     .sort((a, b) => a.numero.localeCompare(b.numero))
 
@@ -190,7 +314,15 @@ export async function construirPreview(
       mapa.set(key, g)
     }
     // Una línea de factura por servicio; el descuento del acuerdo se reparte entre ellas.
-    const reparto = repartirCobro(suyas, nomProd, s.periodicidad as PeriodicidadSub)
+    //
+    // **Solo la PRIMERA factura se prorratea** (mig. 163), y se sabe que es la primera
+    // porque el ciclo que se está cobrando es el que contiene la `fecha_inicio`. A partir
+    // del segundo cobro la fecha de inicio ya queda atrás y la fracción vale 1.
+    const per      = s.periodicidad as PeriodicidadSub
+    const prorrata = s.prorratear && s.fecha_inicio
+      ? fraccionProrrateo(s.fecha_inicio, s.fecha_proximo_cobro, per)
+      : undefined
+    const reparto = repartirCobro(suyas, nomProd, per, prorrata)
     g.lineas.push(...reparto.lineas)
     g.total = redondear2(g.total + reparto.total)
     if (!monedasPorCliente.has(s.cliente_id)) monedasPorCliente.set(s.cliente_id, new Set())
@@ -260,29 +392,10 @@ export async function construirCalendario(
   // Facturas VIVAS de la ventana y sus líneas de suscripción. Sirven para dos cosas: para
   // enseñar lo ya facturado y para no volver a ofrecer un ciclo cuya factura existe
   // aunque alguien haya movido la fecha a mano (la idempotencia de dos capas).
-  const { data: facs } = await db.from('facturas')
-    .select('factura_id, numero, estado, moneda, total, cliente_id, fecha_emision')
-    .eq('client_id', clientId).eq('empresa_id', empresa_id)
-    .neq('estado', 'ANULADA')
-    .gte('fecha_emision', inicio).lte('fecha_emision', fin)
+  const { facturas, saldoDe, porFactura, porCiclo: yaFacturado, error: errFacs } = await facturadasPorCiclo(
+    db, { clientIds: [clientId], empresaId: empresa_id, desde: inicio, hasta: fin })
+  if (errFacs) return { ok: false, error: `No se pudieron leer las facturas: ${errFacs}` }
 
-  type FacFila = {
-    factura_id: string; numero: string; estado: string; moneda: string
-    total: number | string; cliente_id: string; fecha_emision: string
-  }
-  const facturas = (facs ?? []) as FacFila[]
-  const porFactura   = new Map<string, number>()
-  const yaFacturado  = new Set<string>()          // `${suscripcion_id}@${periodo}`
-  if (facturas.length) {
-    const periodoDe = new Map(facturas.map(f => [f.factura_id, f.fecha_emision.slice(0, 7)]))
-    const { data: lins } = await db.from('documento_lineas')
-      .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
-      .in('documento_id', facturas.map(f => f.factura_id)).not('suscripcion_id', 'is', null)
-    for (const l of (lins ?? []) as { documento_id: string; suscripcion_id: string }[]) {
-      porFactura.set(l.documento_id, (porFactura.get(l.documento_id) ?? 0) + 1)
-      yaFacturado.add(`${l.suscripcion_id}@${periodoDe.get(l.documento_id)}`)
-    }
-  }
   const conSuscripciones = facturas.filter(f => porFactura.has(f.factura_id))
 
   const porSub  = await lineasDe(db, clientId, subs.map(s => s.suscripcion_id))
@@ -322,7 +435,7 @@ export async function construirCalendario(
     // (periodicidad rara, fecha imposible) no puede colgar el bucle.
     for (let i = 0; i < 200 && fecha <= fin; i++) {
       // Vigencia con fin fijo y sin renovación: no se proyecta más allá del fin.
-      if (s.fecha_fin && !s.renovacion_automatica && fecha > s.fecha_fin) break
+      if (!cicloVigente(s, fecha)) break
 
       const periodo = fecha.slice(0, 7)
       if (!yaFacturado.has(`${s.suscripcion_id}@${periodo}`)) {
@@ -357,6 +470,7 @@ export async function construirCalendario(
       total:          Number(f.total) || 0,
       estado:         f.estado,
       suscripciones:  porFactura.get(f.factura_id) ?? 0,
+      saldo:          saldoDe.get(f.factura_id) ?? 0,
     })
     facturasPorMes.set(periodo, arr)
   }
@@ -368,19 +482,43 @@ export async function construirCalendario(
     const grupos   = [...(b?.grupos.values() ?? [])].sort((x, y) => x.cliente_nombre.localeCompare(y.cliente_nombre))
     const facturas = (facturasPorMes.get(periodo) ?? []).sort((x, y) => x.numero.localeCompare(y.numero))
 
-    // Un total por moneda, contando lo pendiente Y lo ya facturado del mes: la pregunta
-    // que se hace el dueño es «cuánto entra en julio», no «cuánto me queda por generar».
-    const porMoneda = new Map<string, number>()
-    for (const g of grupos)   porMoneda.set(g.moneda, (porMoneda.get(g.moneda) ?? 0) + g.total)
-    for (const f of facturas) porMoneda.set(f.moneda, (porMoneda.get(f.moneda) ?? 0) + f.total)
+    // Un total por moneda, DESGLOSADO. La pregunta del dueño es «cuánto entra en julio»,
+    // pero la que no podía responder era «¿y cuánto de eso ya está cobrado?»: el mes se
+    // ponía verde con 55 borradores sin emitir.
+    const porMoneda = new Map<string, TotalMes>()
+    const de = (moneda: string): TotalMes => {
+      let t = porMoneda.get(moneda)
+      if (!t) { t = { moneda, total: 0, facturado: 0, cobrado: 0, pendiente: 0 }; porMoneda.set(moneda, t) }
+      return t
+    }
+    for (const g of grupos) {
+      const t = de(g.moneda); t.total += g.total; t.pendiente += g.total
+    }
+    for (const f of facturas) {
+      const t = de(f.moneda)
+      t.total += f.total; t.facturado += f.total; t.cobrado += f.total - f.saldo
+    }
 
-    const estado: EstadoCobro = b?.hayPendiente ? 'PENDIENTE'
-      : facturas.length       ? 'FACTURADO'
-      : 'PROYECTADO'
+    // El verde se reserva a lo que TERMINÓ. Mientras quede un borrador, el trabajo que
+    // falta es emitir; con saldo vivo, cobrar.
+    const hayBorrador = facturas.some(f => f.estado === 'BORRADOR')
+    const saldoVivo   = facturas.reduce((s, f) => s + f.saldo, 0)
+    const estado: EstadoCobro =
+        b?.hayPendiente     ? 'PENDIENTE'
+      : !facturas.length    ? 'PROYECTADO'
+      : hayBorrador         ? 'BORRADOR'
+      : saldoVivo > EPS_SALDO ? 'EMITIDO'
+      : 'COBRADO'
 
     return {
       periodo, estado, grupos, facturas,
-      totales: [...porMoneda.entries()].map(([moneda, total]) => ({ moneda, total })),
+      totales: [...porMoneda.values()].map(t => ({
+        ...t,
+        total:     redondear2(t.total),
+        facturado: redondear2(t.facturado),
+        cobrado:   redondear2(t.cobrado),
+        pendiente: redondear2(t.pendiente),
+      })),
       clientesMultimoneda: [...(b?.monedasPorCliente.entries() ?? [])]
         .filter(([, set]) => set.size > 1)
         .map(([id]) => nomCli.get(id) ?? id),
@@ -479,7 +617,7 @@ export async function generarFacturasPeriodo(
 }
 
 /**
- * Facturación AUTOMÁTICA del cron: deja hechos los borradores de lo que toca cobrar
+ * Facturación AUTOMÁTICA del cron: deja hechos los borradores de lo que hay que cobrar
  * hasta hoy, en TODA empresa que pueda numerar facturas.
  *
  * No hay interruptor y no debe haberlo: un cobro pactado que vence no es una decisión,
@@ -519,4 +657,96 @@ export async function facturarAutomatico(
     }
   }
   return generadas
+}
+
+// ── Historial de cobro de un acuerdo ─────────────────────────────────────────
+//
+// Hasta aquí, Suscripciones era un registro de contratos que acababa donde empieza
+// Contabilidad: generaba la factura y se olvidaba. Un negocio de cuotas quiere ver
+// **quién no ha pagado la mensualidad**, y eso vivía en CxC sin ninguna conexión con el
+// acuerdo que lo originó.
+//
+// No hace falta ninguna columna: la cadena ya existe entera —`suscripciones` →
+// `documento_lineas.suscripcion_id` → `facturas` → movimientos con `origen=COBRO`—, que
+// es exactamente lo que deriva `cobranza-core`.
+
+// El tipo `FacturaDeAcuerdo` vive en `lib/suscripciones.ts` (puro, lo consume la vista):
+//  · `saldo` — lo que falta por cobrar; un BORRADOR no debe nada todavía.
+//  · `acuerdos` — cuántos acuerdos cubre la factura. **El saldo NO se reparte entre
+//    ellos**: se atribuye al conjunto y la fila lo dice, porque repartirlo sería inventar
+//    una imputación que nadie ha hecho.
+
+/**
+ * Todas las facturas VIVAS de cada acuerdo, de la más reciente a la más antigua.
+ *
+ * Las ANULADAS no cuentan —ni como facturado ni como deuda—, que ya es la regla del
+ * preview: anular es deshacer, y al anular se retrocede el próximo cobro.
+ */
+export async function historialPorAcuerdo(
+  db: Db, clientId: string, suscripcionIds: string[],
+): Promise<Map<string, FacturaDeAcuerdo[]>> {
+  const out = new Map<string, FacturaDeAcuerdo[]>()
+  if (!suscripcionIds.length) return out
+
+  const { data: lins } = await db.from('documento_lineas')
+    .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
+    .in('suscripcion_id', suscripcionIds)
+  const lineas = (lins ?? []) as { documento_id: string; suscripcion_id: string }[]
+  if (!lineas.length) return out
+
+  const facturaIds = [...new Set(lineas.map(l => l.documento_id))]
+  const { data: facs } = await db.from('facturas')
+    .select('factura_id, numero, estado, moneda, total, fecha_emision')
+    .eq('client_id', clientId)
+    .neq('estado', 'ANULADA')
+    .in('factura_id', facturaIds)
+  const facturas = (facs ?? []) as {
+    factura_id: string; numero: string; estado: string
+    moneda: string; total: number | string; fecha_emision: string
+  }[]
+  if (!facturas.length) return out
+
+  const { data: movs } = await db.from('movimientos_tesoreria')
+    .select('referencia_id, monto, monto_ref')
+    .eq('client_id', clientId).eq('origen', 'COBRO')
+    .in('referencia_id', facturas.map(f => f.factura_id))
+  const cobrado = new Map<string, number>()
+  for (const m of (movs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+    cobrado.set(m.referencia_id, (cobrado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
+  }
+
+  // Cuántos ACUERDOS distintos cubre cada factura: una factura agrupa por cliente+moneda,
+  // así que puede cubrir varios del mismo cliente.
+  const acuerdosDe = new Map<string, Set<string>>()
+  for (const l of lineas) {
+    if (!acuerdosDe.has(l.documento_id)) acuerdosDe.set(l.documento_id, new Set())
+    acuerdosDe.get(l.documento_id)!.add(l.suscripcion_id)
+  }
+
+  const hoy = hoyStr()
+  const ficha = new Map<string, FacturaDeAcuerdo>()
+  for (const f of facturas) {
+    ficha.set(f.factura_id, {
+      factura_id:    f.factura_id,
+      numero:        f.numero,
+      fecha_emision: f.fecha_emision,
+      moneda:        f.moneda,
+      total:         Number(f.total) || 0,
+      estado:        f.estado,
+      saldo:         f.estado === 'BORRADOR'
+        ? 0
+        : estadoCobro(Number(f.total) || 0, cobrado.get(f.factura_id) ?? 0, null, hoy).saldo,
+      acuerdos:      acuerdosDe.get(f.factura_id)?.size ?? 1,
+    })
+  }
+
+  for (const l of lineas) {
+    const f = ficha.get(l.documento_id)
+    if (!f) continue                        // anulada o de otro tenant
+    const arr = out.get(l.suscripcion_id) ?? []
+    if (!arr.some(x => x.factura_id === f.factura_id)) arr.push(f)
+    out.set(l.suscripcion_id, arr)
+  }
+  for (const arr of out.values()) arr.sort((a, b) => b.fecha_emision.localeCompare(a.fecha_emision))
+  return out
 }
