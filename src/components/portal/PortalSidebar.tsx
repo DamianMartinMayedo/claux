@@ -53,10 +53,12 @@ interface Props {
   modulosVisibles: string[]                    // módulos que ESTE usuario puede ver (tenant ∩ permisos)
   catalogo:       CatalogoItem[]
   catalogoEtiqueta?: string                    // etiqueta del catálogo según sector ("Menú"…)
+  /** «Suscripciones» | «Membresías» | «Bonos»… (mig. 164). Nunca «Contratos». */
+  suscripcionEtiqueta?: string
   catalogoIcono?:    'comida' | 'producto'     // icono del navbar: cubiertos vs QR
 }
 
-export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqueta, catalogoIcono }: Props) {
+export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqueta, suscripcionEtiqueta, catalogoIcono }: Props) {
   const pathname     = usePathname()
   const [pending, startTransition] = useTransition()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
@@ -137,6 +139,9 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
         ? <UtensilsCrossed size={18} strokeWidth={2} />
         : <QrCode size={18} strokeWidth={2} />
     }
+    // La etiqueta la nombra el negocio: un gimnasio dice «Membresías» y una peluquería
+    // «Bonos». Nunca «Contratos» — esa entrada ya existe y es de RRHH.
+    if (ruta === '/portal/suscripciones' && suscripcionEtiqueta) label = suscripcionEtiqueta
     const active = ruta === activeRuta
     return (
       <Link key={ruta} href={ruta} className={`nav-item${active ? ' active' : ''}`}>

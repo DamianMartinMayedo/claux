@@ -123,6 +123,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         modulosVisibles={modulosVisibles}
         catalogo={(catalogo ?? []) as CatalogoItem[]}
         catalogoEtiqueta={etiquetas.catalogo}
+        suscripcionEtiqueta={etiquetas.suscripcion}
         catalogoIcono={etiquetas.catalogoIcono}
       />
       <main className="portal-main">
