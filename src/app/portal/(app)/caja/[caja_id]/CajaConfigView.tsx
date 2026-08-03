@@ -264,6 +264,21 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
                   Los servicios no descuentan stock: se cobran y ya.
                 </p>
               )}
+              {/* La MISMA venta contada dos veces: el cierre de caja escribe su fila de
+                  ingreso y la factura de la suscripción cuenta como Ventas. Se avisa, no
+                  se bloquea — cobrar un extra en el mostrador puede ser lo correcto. */}
+              {tiposCatalogo !== 'PRODUCTO' && data.suscribiblesActivos > 0 && (
+                <div className="alert alert-warning mt-2">
+                  <span>
+                    <strong>{data.suscribiblesActivos}</strong>{' '}
+                    {data.suscribiblesActivos === 1
+                      ? 'de tus servicios se factura'
+                      : 'de tus servicios se facturan'}{' '}
+                    por suscripción. Si además {data.suscribiblesActivos === 1 ? 'lo cobras' : 'los cobras'}{' '}
+                    aquí, esa venta se contará <strong>dos veces</strong> en tus informes.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

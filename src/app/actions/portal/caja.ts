@@ -79,6 +79,12 @@ export interface CajaConfigData {
   tieneBase:       boolean
   tieneInventario: boolean
   tieneServicios:  boolean
+  /**
+   * Cuántos servicios suscribibles hay con acuerdos vivos. Si además se cobran en el
+   * mostrador, esa venta entra DOS veces en el estado de resultados: el cierre escribe su
+   * COBRO (mig. 149) y la factura de la suscripción cuenta como Ventas.
+   */
+  suscribiblesActivos: number
   // ¿Hay cierres ya sincronizados? Solo sirve para que el aviso de cambio de
   // empresa no mienta: sin histórico no hay nada que se quede en la empresa vieja.
   tieneHistorico:  boolean
@@ -200,6 +206,22 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
   ])
 
   const modulos = cliRes.data?.modulos_activos
+
+  // Los servicios suscribibles que ALGUIEN tiene contratado: es la condición del doble
+  // conteo. Un suscribible que nadie ha contratado todavía no puede duplicar nada.
+  let suscribibles = 0
+  if (tieneModulo(modulos, 'servicios')) {
+    const { data: lins } = await db.from('suscripcion_lineas')
+      .select('producto_id').eq('client_id', session.client_id)
+    const ids = [...new Set(((lins ?? []) as { producto_id: string }[]).map(l => l.producto_id))]
+    if (ids.length) {
+      const { count } = await db.from('products').select('producto_id', { count: 'exact', head: true })
+        .eq('client_id', session.client_id).eq('es_suscribible', true)
+        .eq('estado', 'ACTIVO').in('producto_id', ids)
+      suscribibles = count ?? 0
+    }
+  }
+
   return {
     caja: caja as Caja,
     empresas:  empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
@@ -210,6 +232,7 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
     tieneBase:       tieneModulo(modulos, 'base'),
     tieneInventario: tieneModulo(modulos, 'inventario'),
     tieneServicios:  tieneModulo(modulos, 'servicios'),
+    suscribiblesActivos: suscribibles,
     tieneHistorico:  (sesRes.count ?? 0) > 0,
   }
 }

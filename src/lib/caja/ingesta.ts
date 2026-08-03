@@ -114,7 +114,7 @@ export async function construirSeed(db: Db, caja: CajaRow) {
   const [prodRes, monRes, tasaRes] = await Promise.all([
     tiposPermitidos.length > 0
       ? db.from('products')
-          .select('producto_id, codigo, nombre, precios, unidad, tipo')
+          .select('producto_id, codigo, nombre, precios, unidad, tipo, es_suscribible')
           .eq('client_id', caja.client_id).eq('estado', 'ACTIVO')
           .in('tipo', tiposPermitidos).order('nombre')
       : Promise.resolve({ data: [] }),
@@ -152,6 +152,12 @@ export async function construirSeed(db: Db, caja: CajaRow) {
       // El dispositivo necesita el tipo para separar mostrador y servicios: mezclados en
       // la misma rejilla, el corte de pelo se pierde entre los champús.
       tipo: p.tipo ?? 'PRODUCTO',
+      // **La misma venta contada dos veces.** Un servicio que ya se factura por
+      // suscripción y además se cobra en el mostrador entra DOS veces en el estado de
+      // resultados: el cierre de caja escribe su fila COBRO (mig. 149) y la factura
+      // emitida cuenta como Ventas. Baja marcado —no se esconde: cobrarlo en caja puede
+      // ser lo correcto (un extra, un cliente sin acuerdo)— para que se pueda avisar.
+      es_suscribible: p.es_suscribible === true,
     })),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     monedas: (monRes.data ?? []).map((m: any) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo })),
