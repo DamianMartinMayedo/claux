@@ -14,6 +14,8 @@ import { obtenerUsoMes } from '@/lib/ia/uso'
 import { umbralParaFecha, type Umbral } from './catalogo'
 import { crearNotificacion, resolverNotificaciones, type ContextoTenant } from './crear'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
+import { facturadasPorCiclo, rangoPeriodo } from '@/lib/facturacion-suscripciones'
+import { reanudarAcuerdo } from '@/lib/suscripciones-core'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 
 type Db = ReturnType<typeof createAdminClient>
@@ -227,7 +229,88 @@ export async function escanearServicios(
   return creadas
 }
 
-// ── Servicios: toca cobrar (próximo cobro de una suscripción) ─────────────────
+// ── Servicios: la pausa con fecha de vuelta se reanuda sola (mig. 161) ────────
+//
+// Pausar admite «¿hasta cuándo?». Sin nadie que lo aplique, esa fecha sería una nota:
+// llegaría el día y la suscripción seguiría parada, sin facturar y sin que nada lo dijera.
+//
+// **Corre ANTES de la facturación automática** (ver el orden en `generador.ts`): al
+// reanudar se avanza `fecha_proximo_cobro` saltando los ciclos de la pausa, y si el cron
+// facturase primero, ese mismo día generaría los borradores de los meses que la pausa
+// acaba de perdonar.
+//
+// Deja UN aviso `info` por reanudación —no uno por cada mes parado—, y la idempotencia
+// la da la propia escritura: al reanudar se borran `pausada_desde`/`pausada_hasta`, así
+// que mañana esta consulta ya no la trae.
+export async function reanudarProgramadas(
+  db: Db, tenants: ContextoTenant[], hoy: string,
+): Promise<number> {
+  const ids = tenants.map(t => t.clientId)
+  if (ids.length === 0) return 0
+
+  const { data, error } = await db
+    .from('suscripciones')
+    .select('suscripcion_id, client_id, empresa_id, cliente_id, periodicidad, fecha_proximo_cobro, pausada_desde, pausada_hasta')
+    .in('client_id', ids)
+    .eq('estado', 'PAUSADA')
+    .not('pausada_hasta', 'is', null)
+    .lte('pausada_hasta', hoy)
+
+  if (error) {
+    console.error('[notificaciones] reanudación programada falló', error.message)
+    return 0
+  }
+  const filas = data ?? []
+  if (!filas.length) return 0
+
+  const nomCli = new Map<string, string>()
+  const [{ data: cli }, servicioDe] = await Promise.all([
+    db.from('third_parties').select('tercero_id, nombre')
+      .in('tercero_id', [...new Set(filas.map(f => f.cliente_id as string))]),
+    serviciosDeAcuerdo(db, filas.map(f => f.suscripcion_id as string)),
+  ])
+  for (const c of (cli ?? []) as { tercero_id: string; nombre: string }[]) nomCli.set(c.tercero_id, c.nombre)
+
+  const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
+  let creadas = 0
+
+  for (const s of filas) {
+    let plan
+    try {
+      plan = await reanudarAcuerdo(db, s.client_id as string, {
+        suscripcion_id:      s.suscripcion_id as string,
+        periodicidad:        s.periodicidad as PeriodicidadSub,
+        fecha_proximo_cobro: s.fecha_proximo_cobro as string,
+        pausada_desde:       (s.pausada_desde as string | null) ?? null,
+      }, hoy)
+    } catch (e) {
+      // Una que falle no puede dejar sin reanudar a las demás.
+      console.error('[notificaciones] no se pudo reanudar', s.suscripcion_id, e)
+      continue
+    }
+
+    const cliente  = nomCli.get(s.cliente_id as string) ?? 'un cliente'
+    const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
+    const ok = await crearNotificacion({
+      clientId:  s.client_id as string,
+      empresaId: s.empresa_id as string | null,
+      tipo:      'servicio_suscripcion_reanudada',
+      titulo:    `Suscripción reanudada — ${cliente}`,
+      cuerpo:    `La suscripción de ${cliente} a «${servicio}» volvió de su pausa. El próximo cobro es el ${fmtFechaEs(plan.proximoCobro)}`
+        + (plan.ciclos > 0
+          ? `; los ${plan.ciclos} cobro${plan.ciclos === 1 ? '' : 's'} de la pausa no se cobran.`
+          : '.'),
+      enlace:      '/portal/suscripciones',
+      entidadTipo: 'servicio_suscripcion_reanudada',
+      entidadId:   `${s.suscripcion_id}@${s.pausada_hasta}`,
+      meta:        { pausada_desde: s.pausada_desde, proximo_cobro: plan.proximoCobro, ciclos: plan.ciclos },
+    }, ctxDe.get(s.client_id as string))
+    if (ok) creadas++
+  }
+  return creadas
+}
+
+// ── Servicios: cobro pendiente (próximo cobro de una suscripción) ─────────────
 //
 // Este aviso es RECURRENTE, y ahí está su diferencia con TODO lo demás de la bandeja.
 // La idempotencia va por (client_id, tipo, entidad_tipo, entidad_id, umbral), así que
@@ -298,14 +381,30 @@ export async function escanearRenovaciones(
     }
   }
 
-  // Qué suscripciones tienen ya su borrador hecho (por la facturación automática, que
+  // Qué suscripciones tienen ya su borrador DE ESTE CICLO (la facturación automática
   // corre antes en el cron). Una sola query para todos los tenants.
-  const conBorrador = new Set<string>()
+  //
+  // La clave es `suscripcion@periodo`, nunca el `suscripcion_id` a secas: el aviso salta
+  // 5 y 1 día ANTES del cobro y el cron factura EL día, así que a partir del segundo mes
+  // cualquier acuerdo tiene líneas con su id y el aviso decía «ya tienes el borrador de
+  // X del 15/09» enlazando a Ventas, donde no había nada. Es la misma lección que ya
+  // aprendió la clave de idempotencia de estos avisos (la entidad es la fila MÁS su
+  // ciclo) y que se había quedado a medias aquí.
+  let conBorrador = new Set<string>()
   if (filas.length) {
-    const { data: lins } = await db.from('documento_lineas')
-      .select('suscripcion_id')
-      .in('suscripcion_id', filas.map(f => f.suscripcion_id as string))
-    for (const l of (lins ?? []) as { suscripcion_id: string }[]) conBorrador.add(l.suscripcion_id)
+    const fechas = filas.map(f => f.fecha_proximo_cobro as string).sort()
+    const { inicio } = rangoPeriodo(fechas[0].slice(0, 7))
+    const { fin }    = rangoPeriodo(fechas[fechas.length - 1].slice(0, 7))
+    const facturado = await facturadasPorCiclo(db, {
+      clientIds:      [...new Set(filas.map(f => f.client_id as string))],
+      desde:          inicio,
+      hasta:          fin,
+      suscripcionIds: filas.map(f => f.suscripcion_id as string),
+    })
+    // Si la lectura falla, el aviso sale como «Cobro pendiente»: mandar a facturar algo ya
+    // facturado hace perder un viaje; callar el aviso pierde el cobro.
+    if (facturado.error) console.error('[notificaciones] facturas de suscripciones', facturado.error)
+    else conBorrador = facturado.porCiclo
   }
 
   const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
@@ -324,7 +423,7 @@ export async function escanearRenovaciones(
     const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
     // Si la facturación automática ya dejó el borrador (corre antes que este escáner),
     // el aviso lo dice: pedirle que facture algo ya facturado es hacerle perder el viaje.
-    const yaFacturada = conBorrador.has(s.suscripcion_id as string)
+    const yaFacturada = conBorrador.has(`${s.suscripcion_id}@${fecha.slice(0, 7)}`)
     // El importe del aviso es el del COBRO (ciclo y descuento incluidos), no la base
     // mensual: si el aviso dice 10.000 y la factura sale por 27.000, el aviso miente.
     const cobro = calcularCobroAcuerdo(
@@ -338,12 +437,17 @@ export async function escanearRenovaciones(
       clientId:  s.client_id as string,
       empresaId: s.empresa_id as string | null,
       tipo:      'servicio_renovacion_proxima',
-      titulo:    yaFacturada ? `Borrador listo — ${cliente}` : `Toca cobrar — ${cliente}`,
+      titulo:    yaFacturada
+        ? `Factura pendiente de emitir — ${cliente}`
+        // «Cobro vencido» ya es el aviso de una factura EMITIDA sin pagar (`cxc_vencida`):
+        // aquí el cobro está vencido pero todavía no hay factura, y decirlo igual haría
+        // creer al dueño que ya reclamó algo que no ha emitido.
+        : dias < 0 ? `Cobro vencido sin facturar — ${cliente}` : `Cobro pendiente — ${cliente}`,
       cuerpo:    yaFacturada
-        ? `Ya tienes el borrador de ${cliente} por «${servicio}» (${importe}) del ${fmtFechaEs(fecha)}. Revísalo y emítelo cuando quieras.`
+        ? `La factura de ${cliente} por «${servicio}» (${importe}) del ${fmtFechaEs(fecha)} ya está preparada como borrador. Revísala y emítela cuando quieras.`
         : dias < 0
-          ? `La suscripción de ${cliente} a «${servicio}» (${importe}) tocaba cobrarla el ${fmtFechaEs(fecha)} y sigue sin facturar.`
-          : `La suscripción de ${cliente} a «${servicio}» (${importe}) se cobra el ${fmtFechaEs(fecha)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
+          ? `El cobro de ${cliente} por «${servicio}» (${importe}) vencía el ${fmtFechaEs(fecha)} y sigue sin facturar.`
+          : `El cobro de ${cliente} por «${servicio}» (${importe}) corresponde al ${fmtFechaEs(fecha)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
       enlace:      yaFacturada ? '/portal/ventas' : '/portal/suscripciones',
       entidadTipo: 'servicio_renovacion',
       entidadId,

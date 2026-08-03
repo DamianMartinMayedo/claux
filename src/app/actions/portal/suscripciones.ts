@@ -3,11 +3,18 @@
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo, accesoModulosSession } from './auth'
-import { construirPreview, construirCalendario, generarFacturasPeriodo } from '@/lib/facturacion-suscripciones'
+import {
+  construirPreview, construirCalendario, generarFacturasPeriodo, historialPorAcuerdo,
+} from '@/lib/facturacion-suscripciones'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
-import { clienteDeEmpresa, serviciosSuscribibles, crearAcuerdoSuscripcion } from '@/lib/suscripciones-core'
+import { parseNumeroEs } from '@/lib/numeros'
+import { limiteDelFiltro, type FiltroListado } from '@/lib/listados'
+import {
+  clienteDeEmpresa, serviciosSuscribibles, crearAcuerdoSuscripcion, reanudarAcuerdo,
+} from '@/lib/suscripciones-core'
 import {
   estadoEfectivo, sumarPeriodo, hoyStr, generarLineaId, PERIODICIDADES,
+  avanzarHasta, diaAnterior, calcularCobroAcuerdo,
   type PeriodicidadSub, type EstadoSub, type Suscripcion, type SuscripcionRow,
   type SuscripcionLineaRow,
   type SuscripcionesPageData, type FacturacionPreview, type CalendarioFacturacion,
@@ -16,16 +23,36 @@ import {
 
 // ── Obtener ───────────────────────────────────────────────────────────────────
 
-export async function obtenerSuscripciones(): Promise<SuscripcionesPageData | null> {
+/**
+ * El listado de acuerdos, filtrado EN LA CONSULTA.
+ *
+ * Tres decisiones propias de este listado, distintas de los de Contabilidad:
+ *
+ *  · El rango es sobre **`fecha_proximo_cobro`**, no sobre `created_at`: la pregunta de
+ *    esta pantalla es «qué cobro viene», no «qué se dio de alta».
+ *  · **Por defecto NO hay rango**, como en CxC/CxP: un acuerdo vivo no puede desaparecer
+ *    del listado por un filtro que nadie ha puesto.
+ *  · El **techo sí se aplica siempre**. Con 53 acuerdos da igual; con 500 socios de
+ *    gimnasio en 3G, no. Cuando se toca, se dice cuántos faltan.
+ */
+export async function obtenerSuscripciones(
+  filtro?: FiltroListado,
+): Promise<SuscripcionesPageData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db = createAdminClient()
+  const limite = limiteDelFiltro(filtro)
+
+  let subQuery = db.from('suscripciones').select('*', { count: 'exact' })
+    .eq('client_id', session.client_id)
+  if (filtro?.desde) subQuery = subQuery.gte('fecha_proximo_cobro', filtro.desde)
+  if (filtro?.hasta) subQuery = subQuery.lte('fecha_proximo_cobro', filtro.hasta)
 
   const [subRes, linRes, terRes, prodRes, monRes, empRes, acceso] = await Promise.all([
-    db.from('suscripciones').select('*')
-      .eq('client_id', session.client_id)
-      .order('created_at', { ascending: false }),   // más reciente primero
+    subQuery
+      .order('fecha_proximo_cobro', { ascending: true })   // lo que toca antes, antes
+      .limit(limite),
     db.from('suscripcion_lineas').select('linea_id, suscripcion_id, producto_id, precio_mensual, descuento_modo, descuento_valor')
       .eq('client_id', session.client_id),
     db.from('third_parties').select('tercero_id, nombre, tipo, activo, empresa_id')
@@ -53,8 +80,11 @@ export async function obtenerSuscripciones(): Promise<SuscripcionesPageData | nu
 
   // Las líneas del acuerdo (mig. 124): un acuerdo puede prestar varios servicios.
   const lineasPorSub = new Map<string, SuscripcionLineaRow[]>()
+  /** Servicios que algún acuerdo tiene contratados, se sigan ofreciendo o no. */
+  const contratados = new Set<string>()
   for (const l of (linRes.data ?? []) as Record<string, unknown>[]) {
     const sid = l.suscripcion_id as string
+    contratados.add(l.producto_id as string)
     const arr = lineasPorSub.get(sid) ?? []
     arr.push({
       linea_id:        l.linea_id as string,
@@ -67,17 +97,38 @@ export async function obtenerSuscripciones(): Promise<SuscripcionesPageData | nu
     lineasPorSub.set(sid, arr)
   }
 
+  const total = (subRes.count as number | null) ?? (subRes.data ?? []).length
+
+  // Sus facturas: lo que convierte el listado en la respuesta a «¿me pagaron?». La cadena
+  // ya existía entera (documento_lineas → facturas → cobros de Tesorería); solo faltaba
+  // traerla a la pantalla del acuerdo.
+  const historialDe = await historialPorAcuerdo(
+    db, session.client_id,
+    ((subRes.data ?? []) as Record<string, unknown>[]).map(s => s.suscripcion_id as string),
+  )
+
   const suscripciones: SuscripcionRow[] = ((subRes.data ?? []) as Record<string, unknown>[]).map(s => {
     const row = {
       ...s,
       renovacion_automatica: Boolean(s.renovacion_automatica),
     } as Suscripcion
+    const historial = historialDe.get(row.suscripcion_id) ?? []
+    // La deuda por moneda. Vacío ≠ 0: sin facturas no se debe nada TODAVÍA, y un 0 diría
+    // «está al día», que es la conclusión contraria (la regla del acta de conteo).
+    const porMoneda = new Map<string, number>()
+    for (const f of historial) {
+      if (f.saldo > 0.005) porMoneda.set(f.moneda, (porMoneda.get(f.moneda) ?? 0) + f.saldo)
+    }
     return {
       ...row,
       cliente_nombre:  nombreTercero.get(row.cliente_id) ?? '—',
       lineas:          (lineasPorSub.get(row.suscripcion_id) ?? [])
         .sort((a, b) => a.servicio_nombre.localeCompare(b.servicio_nombre)),
       estado_efectivo: estadoEfectivo(row, hoy),
+      historial,
+      debe: [...porMoneda.entries()].map(([moneda, total]) => ({
+        moneda, total: Math.round(total * 100) / 100,
+      })),
     }
   })
 
@@ -89,6 +140,10 @@ export async function obtenerSuscripciones(): Promise<SuscripcionesPageData | nu
 
   return {
     suscripciones,
+    rango:   { desde: filtro?.desde ?? '', hasta: filtro?.hasta ?? '' },
+    total,
+    limite,
+    hay_mas: total > suscripciones.length,
     // Los terceros son POR EMPRESA (`third_parties.empresa_id` es NOT NULL): el mismo
     // negocio real puede tener una ficha en cada una. El selector las filtra por la
     // empresa elegida — si no, salen repetidos y se puede atar una suscripción de una
@@ -96,13 +151,16 @@ export async function obtenerSuscripciones(): Promise<SuscripcionesPageData | nu
     clientes: terceros
       .filter(t => t.activo && (t.tipo === 'CLIENTE' || t.tipo === 'AMBOS'))
       .map(t => ({ tercero_id: t.tercero_id, nombre: t.nombre, empresa_id: t.empresa_id })),
+    // Los ofrecibles, MÁS los que algún acuerdo ya tiene contratados aunque hayan dejado
+    // de serlo: el selector no puede borrar en silencio lo que la ficha guarda.
     servicios: productos
-      .filter(p => p.es_suscribible && p.estado === 'ACTIVO')
+      .filter(p => (p.es_suscribible && p.estado === 'ACTIVO') || contratados.has(p.producto_id))
       .map(p => ({
         producto_id:          p.producto_id,
         nombre:               p.nombre,
         precios:              (typeof p.precios === 'object' && p.precios !== null) ? p.precios : {},
         periodicidad_defecto: (p.periodicidad_defecto as PeriodicidadSub | null) ?? null,
+        archivado:            !(p.es_suscribible && p.estado === 'ACTIVO'),
       })),
     monedas,
     empresas: (empRes.data ?? []) as { empresa_id: string; nombre: string; letra_facturacion: string | null }[],
@@ -168,9 +226,17 @@ export async function guardarSuscripcion(
   const fecha_fin    = g('fecha_fin') || null
   const renovacion_automatica = g('renovacion_automatica') === '1'
   const notas = g('notas') || null
+  // Prorrateo del PRIMER período (mig. 163). Opt-in por acuerdo: el default reproduce
+  // exactamente el comportamiento anterior (ciclo completo).
+  const prorratear = g('prorratear') === '1'
 
   // Los servicios del acuerdo viajan como JSON: [{ producto_id, precio_mensual,
   // descuento_modo, descuento_valor }]. El descuento es de CADA servicio (mig. 125).
+  //
+  // `parseNumeroEs` y no `Number()`: los importes llegan **tal como se teclearon**, y en
+  // un teclado español «0,5» con `Number()` es NaN → 0 y «1.500,50» es NaN → 0. El
+  // candado va aquí, en el servidor, no en el input: es la lección literal de la Fase 1
+  // de Inventario — el formulario no es la única vía de escritura.
   let lineas: { producto_id: string; precio_mensual: number; descuento_modo: DescuentoModo; descuento_valor: number }[] = []
   try {
     const raw = JSON.parse(g('lineas') || '[]')
@@ -178,9 +244,9 @@ export async function guardarSuscripcion(
       lineas = raw
         .map((l: Record<string, unknown>) => ({
           producto_id:     String(l?.producto_id ?? '').trim(),
-          precio_mensual:  Number(l?.precio_mensual) || 0,
+          precio_mensual:  parseNumeroEs(l?.precio_mensual as string | number),
           descuento_modo:  (l?.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
-          descuento_valor: Number(l?.descuento_valor) || 0,
+          descuento_valor: parseNumeroEs(l?.descuento_valor as string | number),
         }))
         .filter(l => l.producto_id)
     }
@@ -219,7 +285,7 @@ export async function guardarSuscripcion(
   const campos = {
     empresa_id, cliente_id, moneda, periodicidad,
     fecha_inicio, fecha_proximo_cobro,
-    fecha_fin, renovacion_automatica, notas,
+    fecha_fin, renovacion_automatica, notas, prorratear,
     updated_at: new Date().toISOString(),
   }
 
@@ -287,9 +353,82 @@ export async function guardarSuscripcion(
 
 // ── Cambiar estado (pausar / reanudar / cancelar) ───────────────────────────────
 
+/**
+ * Cambia el estado de un acuerdo **y su calendario de cobro con él** (mig. 161).
+ *
+ * Antes solo tocaba `estado`, y ahí estaba el fallo de fondo del ciclo de vida: pausar
+ * dejaba `fecha_proximo_cobro` quieta, así que al reanudar salía un cobro atrasado por
+ * cada mes de pausa. Cada estado tiene su efecto sobre el calendario:
+ *
+ *   · PAUSADA   → registra desde cuándo (y hasta cuándo, si se programa).
+ *   · ACTIVA    → reanuda: salta los ciclos que cayeron dentro de la pausa.
+ *   · CANCELADA → sella `cancelada_at`, que es lo que cuenta las bajas del mes.
+ */
+/**
+ * El mismo acuerdo para VARIOS clientes de una vez.
+ *
+ * Es cómo crece de verdad un negocio de cuotas: el partner con 53 acuerdos casi idénticos
+ * los metió por el importador porque desde la UI no había forma. Aquí cada cliente
+ * produce un acuerdo propio (precio y condiciones iguales, ficha suya), no un acuerdo
+ * compartido.
+ *
+ * **Reutiliza `guardarSuscripcion` cliente a cliente en vez de reimplementarla**: así
+ * hereda TODAS sus guardias (moneda del negocio, servicio suscribible, cliente de esa
+ * empresa) y su efecto secundario —el borrador del primer cobro— sin poder divergir. Es
+ * también la razón de que la UI exija previsualización: `borradorDelPrimerCobro` corre
+ * por acuerdo, así que un clic sin aviso puede dejar 30 facturas borrador.
+ *
+ * Un fallo no aborta el lote: se reporta con el patrón `ResultadoLote` (hechas / omitidas
+ * con su motivo), como el resto de acciones en lote del portal.
+ */
+export async function crearSuscripcionesEnLote(
+  formData: FormData, clienteIds: string[],
+): Promise<{ ok: boolean; hechas: number; facturas: number; omitidas: { nombre: string; motivo: string }[]; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('servicios')))
+    return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+
+  const ids = [...new Set(clienteIds.filter(Boolean))]
+  if (!ids.length) return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'Elige al menos un cliente.' }
+
+  const db = createAdminClient()
+  const { data: terc } = await db.from('third_parties')
+    .select('tercero_id, nombre').eq('client_id', session.client_id).in('tercero_id', ids)
+  const nombreDe = new Map(((terc ?? []) as { tercero_id: string; nombre: string }[])
+    .map(t => [t.tercero_id, t.nombre]))
+
+  let hechas = 0, facturas = 0
+  const omitidas: { nombre: string; motivo: string }[] = []
+  for (const cliente_id of ids) {
+    // Copia del formulario con SU cliente: nunca se arrastra un `suscripcion_id`, que
+    // convertiría el alta en una edición del mismo acuerdo una y otra vez.
+    const fd = new FormData()
+    for (const [k, v] of formData.entries()) {
+      if (k === 'suscripcion_id' || k === 'cliente_id') continue
+      fd.set(k, v)
+    }
+    fd.set('cliente_id', cliente_id)
+
+    const r = await guardarSuscripcion(fd)
+    if (r.ok) { hechas++; if (r.factura) facturas++ }
+    else omitidas.push({ nombre: nombreDe.get(cliente_id) ?? cliente_id, motivo: r.error ?? 'No se pudo crear' })
+  }
+
+  revalidatePath('/portal/suscripciones')
+  if (facturas) revalidatePath('/portal/ventas')
+  return { ok: true, hechas, facturas, omitidas }
+}
+
 export async function cambiarEstadoSuscripcion(
   suscripcion_id: string, estado: EstadoSub,
-): Promise<{ ok: boolean; error?: string }> {
+  opciones?: {
+    /** PAUSADA: reanudación programada (vacío = indefinida). */
+    pausada_hasta?: string | null
+    /** ACTIVA: la casilla de escape — cobrar también los meses pausados. */
+    cobrarPausados?: boolean
+  },
+): Promise<{ ok: boolean; error?: string; ciclosSaltados?: number; proximoCobro?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
@@ -297,14 +436,199 @@ export async function cambiarEstadoSuscripcion(
   if (!['ACTIVA', 'PAUSADA', 'CANCELADA'].includes(estado))
     return { ok: false, error: 'Estado inválido.' }
 
-  const db = createAdminClient()
+  const db  = createAdminClient()
+  const hoy = hoyStr()
+
+  const { data: s } = await db.from('suscripciones')
+    .select('suscripcion_id, periodicidad, fecha_proximo_cobro, pausada_desde')
+    .eq('suscripcion_id', suscripcion_id).eq('client_id', session.client_id).maybeSingle()
+  if (!s) return { ok: false, error: 'Suscripción no encontrada.' }
+
+  // Reanudar es la única transición con aritmética: va por el núcleo que comparte con el
+  // escáner del cron, para que las dos vías decidan lo mismo.
+  if (estado === 'ACTIVA') {
+    try {
+      // Se devuelve lo que de VERDAD se aplicó (el servidor tiene su propio «hoy»), para
+      // que el aviso al dueño no sea la promesa del diálogo sino el resultado.
+      const plan = await reanudarAcuerdo(db, session.client_id, {
+        suscripcion_id:      s.suscripcion_id as string,
+        periodicidad:        s.periodicidad as PeriodicidadSub,
+        fecha_proximo_cobro: s.fecha_proximo_cobro as string,
+        pausada_desde:       (s.pausada_desde as string | null) ?? null,
+      }, hoy, opciones?.cobrarPausados === true)
+      revalidatePath('/portal/suscripciones')
+      return { ok: true, ciclosSaltados: plan.ciclos, proximoCobro: plan.proximoCobro }
+    } catch {
+      return { ok: false, error: 'No se pudo reanudar.' }
+    }
+  }
+
+  const campos: Record<string, unknown> = { estado, updated_at: new Date().toISOString() }
+  if (estado === 'PAUSADA') {
+    campos.pausada_desde = hoy
+    campos.pausada_hasta = opciones?.pausada_hasta || null
+  }
+  if (estado === 'CANCELADA') campos.cancelada_at = new Date().toISOString()
+
   const { error } = await db.from('suscripciones')
-    .update({ estado, updated_at: new Date().toISOString() })
+    .update(campos)
     .eq('suscripcion_id', suscripcion_id)
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'No se pudo cambiar el estado.' }
   revalidatePath('/portal/suscripciones')
   return { ok: true }
+}
+
+/**
+ * Cancelar **al final del período pagado**, que es como se cancela un contrato normal:
+ * el cobro en curso ya está hecho y el acuerdo deja de renovarse cuando se agote.
+ *
+ * **Cero columnas nuevas**: es `fecha_fin = fecha_proximo_cobro − 1 día` +
+ * `renovacion_automatica = false`. El estado efectivo pasa a VENCIDA solo (se DERIVA),
+ * el preview deja de ofrecerla y el resto del módulo ya lo entiende. Un flag
+ * `cancelar_al_final` sería un segundo sitio donde vive la misma verdad.
+ */
+export async function cancelarAlFinalDelPeriodo(
+  suscripcion_id: string,
+): Promise<{ ok: boolean; error?: string; fecha_fin?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('servicios')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { data: s } = await db.from('suscripciones')
+    .select('fecha_proximo_cobro, estado')
+    .eq('suscripcion_id', suscripcion_id).eq('client_id', session.client_id).maybeSingle()
+  if (!s) return { ok: false, error: 'Suscripción no encontrada.' }
+  if (s.estado === 'CANCELADA') return { ok: false, error: 'Ya está cancelada.' }
+
+  const fecha_fin = diaAnterior(s.fecha_proximo_cobro as string)
+  const { error } = await db.from('suscripciones')
+    .update({ fecha_fin, renovacion_automatica: false, updated_at: new Date().toISOString() })
+    .eq('suscripcion_id', suscripcion_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: 'No se pudo programar la baja.' }
+  revalidatePath('/portal/suscripciones')
+  return { ok: true, fecha_fin }
+}
+
+// ── Subida de tarifa en lote ─────────────────────────────────────────────────
+//
+// El caso comercial del modelo: hoy subirle el precio a 30 socios son 30 ediciones a
+// mano. Cuatro reglas lo hacen seguro, y ninguna es opcional:
+//
+//  1. **No toca los borradores ya generados.** Una factura de julio ya creada se corrige
+//     o se borra desde Ventas; la subida aplica DESDE EL SIGUIENTE CICLO. Aquí solo se
+//     tocan `suscripcion_lineas`, nunca `documento_lineas`.
+//  2. **El descuento se mantiene tal cual.** Es una condición pactada aparte, no un
+//     porcentaje del precio de lista: recalcularlo sería renegociar por la espalda.
+//  3. **No toca `products.precios`.** La tarifa del catálogo y el precio pactado son
+//     cosas distintas — es la invariante que sostiene el módulo entero.
+//  4. Se **previsualiza** antes (`previsualizarSubidaTarifa`), acuerdo a acuerdo, con el
+//     antes → después. Mismo patrón que el recálculo de nómina.
+
+export interface LineaSubida {
+  suscripcion_id: string
+  cliente_nombre: string
+  moneda:         string
+  antes:          number
+  despues:        number
+  /** Lo que se cobrará en su ciclo tras la subida (con su descuento aplicado). */
+  cobroDespues:   number
+  periodicidad:   PeriodicidadSub
+}
+
+/** Aplica la subida a un precio mensual. `%` o importe, el mismo vocabulario del descuento. */
+function precioSubido(actual: number, modo: 'PORCENTAJE' | 'IMPORTE', valor: number): number {
+  const bruto = modo === 'PORCENTAJE' ? actual * (1 + valor / 100) : actual + valor
+  // Nunca negativo: una «subida» de −200 sobre un precio de 100 deja el precio a 0, no
+  // en números rojos.
+  return Math.max(0, Math.round(bruto * 100) / 100)
+}
+
+/** El antes → después, SIN escribir nada. */
+export async function previsualizarSubidaTarifa(
+  suscripcionIds: string[], modo: 'PORCENTAJE' | 'IMPORTE', valor: number,
+): Promise<{ ok: boolean; error?: string; lineas?: LineaSubida[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  const ids = [...new Set(suscripcionIds.filter(Boolean))]
+  if (!ids.length) return { ok: false, error: 'Elige al menos un acuerdo.' }
+  if (!Number.isFinite(valor) || valor === 0) return { ok: false, error: 'Escribe cuánto sube.' }
+
+  const db = createAdminClient()
+  const [{ data: subs }, { data: lins }, { data: terc }] = await Promise.all([
+    db.from('suscripciones').select('suscripcion_id, cliente_id, moneda, periodicidad')
+      .eq('client_id', session.client_id).in('suscripcion_id', ids),
+    db.from('suscripcion_lineas').select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor')
+      .eq('client_id', session.client_id).in('suscripcion_id', ids),
+    db.from('third_parties').select('tercero_id, nombre').eq('client_id', session.client_id),
+  ])
+  const nombreDe = new Map(((terc ?? []) as { tercero_id: string; nombre: string }[]).map(t => [t.tercero_id, t.nombre]))
+  const porSub = new Map<string, { precio_mensual: number; descuento_modo: DescuentoModo; descuento_valor: number }[]>()
+  for (const l of (lins ?? []) as Record<string, unknown>[]) {
+    const sid = l.suscripcion_id as string
+    const arr = porSub.get(sid) ?? []
+    arr.push({
+      precio_mensual:  Number(l.precio_mensual) || 0,
+      descuento_modo:  (l.descuento_modo === 'MONTO_FIJO' ? 'MONTO_FIJO' : 'PORCENTAJE') as DescuentoModo,
+      descuento_valor: Number(l.descuento_valor) || 0,
+    })
+    porSub.set(sid, arr)
+  }
+
+  const lineas: LineaSubida[] = []
+  for (const sub of (subs ?? []) as Record<string, unknown>[]) {
+    const suyas = porSub.get(sub.suscripcion_id as string) ?? []
+    if (!suyas.length) continue
+    const per    = sub.periodicidad as PeriodicidadSub
+    const antes  = suyas.reduce((t, l) => t + l.precio_mensual, 0)
+    // El descuento NO se recalcula: viaja igual a la línea nueva.
+    const nuevas = suyas.map(l => ({ ...l, precio_mensual: precioSubido(l.precio_mensual, modo, valor) }))
+    lineas.push({
+      suscripcion_id: sub.suscripcion_id as string,
+      cliente_nombre: nombreDe.get(sub.cliente_id as string) ?? '—',
+      moneda:         sub.moneda as string,
+      antes:          Math.round(antes * 100) / 100,
+      despues:        Math.round(nuevas.reduce((t, l) => t + l.precio_mensual, 0) * 100) / 100,
+      cobroDespues:   calcularCobroAcuerdo(nuevas, per).total,
+      periodicidad:   per,
+    })
+  }
+  lineas.sort((a, b) => a.cliente_nombre.localeCompare(b.cliente_nombre))
+  return { ok: true, lineas }
+}
+
+/** Aplica la subida. Lo omitido se reporta con su motivo; un fallo no aborta el lote. */
+export async function aplicarSubidaTarifa(
+  suscripcionIds: string[], modo: 'PORCENTAJE' | 'IMPORTE', valor: number,
+): Promise<{ ok: boolean; hechas: number; omitidas: { nombre: string; motivo: string }[]; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('servicios')))
+    return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  const ids = [...new Set(suscripcionIds.filter(Boolean))]
+  if (!ids.length) return { ok: false, hechas: 0, omitidas: [], error: 'Elige al menos un acuerdo.' }
+  if (!Number.isFinite(valor) || valor === 0) return { ok: false, hechas: 0, omitidas: [], error: 'Escribe cuánto sube.' }
+
+  const db = createAdminClient()
+  const { data: lins } = await db.from('suscripcion_lineas')
+    .select('linea_id, suscripcion_id, precio_mensual')
+    .eq('client_id', session.client_id).in('suscripcion_id', ids)
+
+  const tocados = new Set<string>()
+  const omitidas: { nombre: string; motivo: string }[] = []
+  for (const l of (lins ?? []) as { linea_id: string; suscripcion_id: string; precio_mensual: number }[]) {
+    const nuevo = precioSubido(Number(l.precio_mensual) || 0, modo, valor)
+    const { error } = await db.from('suscripcion_lineas')
+      .update({ precio_mensual: nuevo })
+      .eq('linea_id', l.linea_id).eq('client_id', session.client_id)
+    if (error) omitidas.push({ nombre: l.suscripcion_id, motivo: 'No se pudo actualizar' })
+    else tocados.add(l.suscripcion_id)
+  }
+
+  revalidatePath('/portal/suscripciones')
+  return { ok: true, hechas: tocados.size, omitidas }
 }
 
 // ── Renovar (reactivar y empujar el fin un período) ─────────────────────────────
@@ -319,17 +643,28 @@ export async function renovarSuscripcion(
 
   const db = createAdminClient()
   const { data: s } = await db.from('suscripciones')
-    .select('periodicidad, fecha_fin')
+    .select('periodicidad, fecha_fin, fecha_proximo_cobro')
     .eq('suscripcion_id', suscripcion_id).eq('client_id', session.client_id).maybeSingle()
   if (!s) return { ok: false, error: 'Suscripción no encontrada.' }
 
   // Reactivar; si tenía fin, se empuja un período desde el mayor de (fin, hoy).
   const per  = s.periodicidad as PeriodicidadSub
-  const base = s.fecha_fin && (s.fecha_fin as string) > hoyStr() ? (s.fecha_fin as string) : hoyStr()
+  const hoy  = hoyStr()
+  const base = s.fecha_fin && (s.fecha_fin as string) > hoy ? (s.fecha_fin as string) : hoy
   const nuevaFin = s.fecha_fin ? sumarPeriodo(base, per) : null
 
+  // Y el CALENDARIO con ella: resucitar un acuerdo de marzo dejaba `fecha_proximo_cobro`
+  // en marzo, así que el cron facturaba marzo, abril y mayo de golpe el mismo día. Se
+  // avanza al primer ciclo que llegue a hoy — los meses en que el acuerdo estuvo muerto
+  // no se prestó nada, así que no se cobran.
+  const proximo = avanzarHasta(s.fecha_proximo_cobro as string, per, hoy).fecha
+
   const { error } = await db.from('suscripciones')
-    .update({ estado: 'ACTIVA', fecha_fin: nuevaFin, updated_at: new Date().toISOString() })
+    .update({
+      estado: 'ACTIVA', fecha_fin: nuevaFin, fecha_proximo_cobro: proximo,
+      cancelada_at: null, pausada_desde: null, pausada_hasta: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('suscripcion_id', suscripcion_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'No se pudo renovar.' }
   revalidatePath('/portal/suscripciones')

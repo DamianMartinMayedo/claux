@@ -283,9 +283,18 @@ export const CATALOGO = {
   // Ver `escanearRenovaciones` en escaneres.ts.
   servicio_renovacion_proxima: {
     categoria: 'servicios', modulo: 'servicios', severidad: 'info', implementado: true,
-    etiqueta: 'Toca cobrar',
+    etiqueta: 'Cobro pendiente',
     descripcion: 'Una suscripción llega a su próximo cobro.',
     umbrales: ['5d', '1d'],
+  },
+  // Una pausa con fecha de vuelta se reanuda sola (mig. 161). Es un cambio que el dueño
+  // no ha pulsado y que mueve dinero —el acuerdo vuelve a facturar—, así que se cuenta.
+  // UNA sola vez por reanudación (la entidad es la suscripción y la pausa se borra al
+  // reanudar), nunca una por cada mes que estuvo parada.
+  servicio_suscripcion_reanudada: {
+    categoria: 'servicios', modulo: 'servicios', severidad: 'info', implementado: true,
+    etiqueta: 'Suscripción reanudada',
+    descripcion: 'Una suscripción pausada llegó a su fecha de vuelta y se reactivó sola.',
   },
 
   // ── Dossier ────────────────────────────────────────────────────────────────

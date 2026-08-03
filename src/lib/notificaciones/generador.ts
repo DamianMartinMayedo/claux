@@ -17,7 +17,7 @@ import {
   diasHasta,
   escanearBorradoresEstancados, escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
   escanearStock, escanearRrhh, escanearCredito, escanearReservas,
-  escanearIa, escanearDossier, escanearServicios, escanearRenovaciones,
+  escanearIa, escanearDossier, escanearServicios, reanudarProgramadas, escanearRenovaciones,
 } from './escaneres'
 import { facturarAutomatico } from '@/lib/facturacion-suscripciones'
 
@@ -106,8 +106,13 @@ export async function generarNotificacionesInternas(
   creadas += await escanearRrhh(db, con('rrhh'), hoy)
   creadas += await escanearServicios(db, con('servicios'), hoy)
 
+  // La reanudación programada va ANTES de facturar: al reanudar se avanza
+  // `fecha_proximo_cobro` saltando los ciclos de la pausa, y si el cron facturase
+  // primero generaría justo los borradores que la pausa acaba de perdonar.
+  creadas += await reanudarProgramadas(db, con('servicios'), hoy)
+
   // Facturación automática ANTES de avisar: si la empresa la tiene activada, el
-  // borrador ya está hecho cuando se genera el aviso, y así «Toca cobrar» no le pide
+  // borrador ya está hecho cuando se genera el aviso, y así «Cobro pendiente» no le pide
   // al dueño algo que el sistema acaba de dejarle resuelto. Exige las DOS claves:
   // servicios (las suscripciones) y base (facturar de verdad).
   const conServiciosYBase = contextos.filter(c =>
