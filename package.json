@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint",
     "audit:gating": "node scripts/audit-gating.mjs",
-    "audit:columnas": "node scripts/audit-columnas.mjs"
+    "audit:columnas": "node scripts/audit-columnas.mjs",
+    "audit:filtros": "node scripts/audit-filtros.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",
@@ -19,7 +20,7 @@
     "@vercel/analytics": "^2.0.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.21.0",
-    "next": "^16.2.4",
+    "next": "^16.3.0",
     "papaparse": "^5.5.4",
     "puppeteer-core": "^25.3.0",
     "qrcode": "^1.5.4",
@@ -39,7 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "^16.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

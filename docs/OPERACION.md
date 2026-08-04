@@ -35,6 +35,30 @@ silencio el calendario de cobros, el widget de Servicios (y su insight de IA) y 
 descargas de Suscripciones y de Gastos. Correrlo tras cualquier migración que renombre o
 borre una columna, y al cerrar cualquier fase de trabajo.
 
+```bash
+npm run audit:filtros
+```
+
+Centinela de filtros. Obligatorio al tocar un **listado, un filtro o una descarga**. Ninguno
+de los fallos que caza da un error: todos devuelven un resultado creíble que es falso.
+
+- Un `.limit(N)` de listado sin `count: 'exact'` — el listado se recorta y nadie puede decir
+  cuántas filas faltan; el contador acaba diciendo «500 de 500» sobre el conjunto ya
+  recortado. Es lo que se vio en el cliente DEUS: una tabla que no traía nada de años
+  anteriores.
+- Una vista con rango cuya descarga no lo recibe: el desplegable dice «Todo el listado» y el
+  fichero se lleva la historia entera.
+- Un `resumen` con una variable de estado en crudo: el desplegable imprime «PENDIENTE»,
+  «INGRESO» o un UUID en vez de las palabras del dueño.
+- `TABLAS_CON_EMPRESA` desaparecida o sin aplicar en `leer()`: sin ella, un usuario asignado
+  a una empresa se descarga las de todas.
+- `new Date().toISOString()` usado como «hoy»: eso es UTC y La Habana va a UTC−4/−5, así que
+  a partir de las 20:00 «hoy» ya es mañana — el último día del mes, «Este mes» devolvía un
+  listado vacío con la píldora encendida. Fuente única: `hoyEnTz()` de `lib/fecha-tz.ts`.
+- Un centinela propio de «sin categoría» / «sin tercero» en un valor de filtro: había dos, y
+  el de Productos se traducía a cadena vacía al mandarlo, o sea que pedir «Sin categoría»
+  descargaba todo el catálogo. Usa `SIN_CATEGORIA` / `SIN_TERCERO` de `lib/listados.ts`.
+
 `npx eslint <ficheros>` para lo tocado. El build de este proyecto es pesado: si el proceso
 muere con **exit 137** es la máquina quedándose sin memoria, no un fallo del código.
 

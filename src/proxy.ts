@@ -9,7 +9,16 @@ import {
   RENEW_THROTTLE,
 } from '@/lib/portal-auth'
 
-export async function middleware(request: NextRequest) {
+// ────────────────────────────────────────────────────────────────────────────
+// La capa que corre ANTES de que la petición llegue a una ruta: renueva la cookie de sesión
+// del portal y comprueba el usuario de Supabase para `/admin`.
+//
+// Se llamaba `middleware.ts`. Next 16 renombró la convención a `proxy` —mismo `config.matcher`,
+// misma API— porque «middleware» se confundía con el de Express y animaba a meter aquí lógica
+// de aplicación: esto es una capa de RED delante de la app, que puede correr fuera del runtime
+// principal, y Vercel recomienda usarla como último recurso.
+// ────────────────────────────────────────────────────────────────────────────
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
   const { pathname } = request.nextUrl
 
