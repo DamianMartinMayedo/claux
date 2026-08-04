@@ -118,7 +118,7 @@ export default function AmpliacionesView({
                       <span className={`badge ${ESTADO_BADGE[s.estado]}`}>{ESTADO_LABEL[s.estado]}</span>
                     </td>
                     <td data-label="Cliente">
-                      <div className="text-sm-bold">{s.nombre_empresa}</div>
+                      <div className="text-sm-bold cell-clamp">{s.nombre_empresa}</div>
                       {s.contacto && <div className="text-xs-muted">{s.contacto}</div>}
                     </td>
                     <td data-label="Quiere activar"><span className="badge badge-neutral">{s.modulo}</span></td>

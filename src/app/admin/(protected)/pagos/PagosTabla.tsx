@@ -155,7 +155,7 @@ export default function PagosTabla({
                 <tr key={p.pago_id}>
                   <td data-label="ID"><span className="table-code-muted">{p.pago_id}</span></td>
                   <td data-label="Cliente">
-                    <div className="table-empresa">
+                    <div className="table-empresa cell-clamp">
                       {clienteNombre[p.client_id] ?? p.client_id}
                       {idsPrueba.has(p.client_id) && <span className="badge badge-purple">Prueba</span>}
                     </div>

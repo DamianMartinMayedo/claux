@@ -67,7 +67,8 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 **Alineación de columnas** — la MISMA clase modificadora va en el `<th>` y en el `<td>`:
 - Cifras/importes/cantidades → **`col-num`** (derecha + `tabular-nums`). No uses `text-right` ni `*-col-monto`.
 - Centrado → **`col-center`**. Acciones → **`col-actions`** (se ciñe al contenido, derecha).
-- Texto libre largo → **`cell-truncate`** en el `<td>` (elipsis, sin scroll).
+- Texto libre largo → **`cell-truncate`** en el `<td>` (UNA línea + elipsis; para un nombre o un número).
+- Texto libre que necesita dos líneas (conceptos y categorías contables: «Servicios Comprados a Entidades · Servicios Otros de Telecomunicaciones») → **`cell-clamp`** + `title` con el texto completo. Va en el **elemento del texto**, no en el `<td>`: el clamp necesita `display:-webkit-box` y eso le quita el `table-cell` a la celda y descuadra la fila. Sin tope, esas celdas crecían a cinco líneas y la tabla dejaba de poder barrerse con la vista.
 
 **Responsive (obligatorio):** cada `<td>` lleva **`data-label="<Cabecera>"`**. Bajo 640px la tabla se vuelve tarjetas apiladas (`etiqueta: valor`); sin ese atributo la tarjeta sale sin etiquetas. Las celdas `col-actions` no necesitan `data-label`.
 
@@ -91,6 +92,26 @@ Detalles ya resueltos en los componentes, no los reinventes: `blur` con 120 ms d
 ## 3.2 Pestañas internas — un solo componente
 
 Toda pestaña interna usa **`<Tabs>`** (`src/components/Tabs.tsx`) + clases `.tabs`/`.tab`/`.tab-count` de `03-components.css`. Es presentacional y **controlado**: el padre guarda la pestaña activa (`useState`) y pasa `tabs`, `active`, `onChange`. Conteos opcionales con `count` (pill); `countTone: 'warning'` para conteos de alerta (p. ej. sin leer). **No crees familias nuevas** de pestañas: `.usr-/.ven-/.detail-/.prd-/.res-/.rrhh-/.caja-/.pv-` son **legado a converger**, no a imitar. El portal todavía usa algunas; al tocar esas vistas, migra a `<Tabs>`. Desde un Server Component, extrae un envoltorio cliente (patrón: `configuracion/ConfiguracionTabs.tsx`, recibe los paneles ya resueltos como props).
+
+## 3.3 Filtros — un solo sistema, y una sola declaración
+
+Todo listado del portal filtra con **`<Filtros>`** (`src/components/portal/Filtros.tsx`), que recibe una **declaración** (`src/lib/filtros.ts`). De esa única declaración salen **tres cosas** que antes se escribían por separado: la barra, el `FiltroExport` de la descarga y el texto de «lo que vas a descargar». Escribirlas a mano es cómo la pantalla y el fichero acabaron diciendo cosas distintas (un desplegable imprimía un UUID; pedir «Sin categoría» descargaba todo el catálogo). Vista de referencia: `gastos/GastosView.tsx` + su `page.tsx` + `actions/portal/gastos.ts`.
+
+Reglas:
+
+- **El estado vive en la URL, nunca en `useState`.** Refrescar —o que se caiga la conexión, que en Cuba es el caso normal— no puede tirar lo que el dueño acaba de poner, y volver del detalle de un documento tiene que devolverlo a lo que estaba mirando.
+- **Un filtro busca siempre en TODO.** Se declara `donde`: `servidor` (cambia qué se trae, como lo archivado), `escalado` (el navegador mientras el listado quepa entero, la consulta en cuanto haya filas sin traer) o `cliente` (**solo** si el conjunto nunca se trunca). Un filtro que mira las 500 filas más recientes miente sin decirlo.
+- **La etiqueta vive junto al valor** (`opciones: [{ valor, label }]`), en las palabras del dueño: «Pendiente», nunca `PENDIENTE`.
+- Lo que la descarga **no puede** reproducir se marca `sinExportar` y el desplegable lo dice. Un filtro que no se puede aplicar **se dice, no se ignora**.
+- **Una fila**, no dos: rango + buscador + los dos filtros más usados; el resto en «Filtros (N)». Y chips de lo puesto con «×» y «Limpiar» — los pone `<Filtros>` solo.
+- **El rango es UN botón que dice el rango aplicado** (`.rango-boton`), no una fila de píldoras: eran 9 de los 13 controles de la barra, para el filtro que menos se toca. Los presets y las fechas viven en su panel. `.rango-pill` ya no existe.
+- **Las píldoras solo si son POCAS.** `<Filtros>` degrada `widget: 'pastillas'` a `<select>` por encima de **4 opciones** — con seis empresas dejan de ser un atajo y se comen la fila. Lo decide el componente, así que la vista no tiene que saber cuántas empresas tiene el cliente. El `count` de una opción **solo se pinta en píldoras**.
+- Cada filtro declara su **`rotulo`** corto («Categoría», «Proveedor»): es lo que se pinta encima del control en el panel. No se deduce del `label` — singularizar en español es adivinar.
+- Techo de un listado ⇒ **`<AvisoTope>`**, que dice cuántas faltan y las trae. Nunca «acota el rango».
+- Pastilla de filtro: **`.filter-pill`** (con `.filter-pill-count` si el número es información, como los tramos de CxC/CxP). `.rango-pill` es la del rango, dentro de `RangoBusqueda`. **`.cxx-chip`, `.actividad-filter-pills`, `.dgn-chips` y `.soporte-filtros` son legado a converger**, no a imitar.
+- Mismo aspecto ⇒ mismo comportamiento. Una caja de búsqueda no puede exigir Enter en una pantalla y filtrar al teclear en otra.
+- **Todo selector de TERCERO dice de qué empresa es. Sin excepción.** `third_parties` es por empresa, así que el mismo proveedor real tiene una ficha por cada empresa que le compra: una lista plana enseña «CLAUDIA» tres veces, idénticas. Y agrupar por **nombre** para quitar el duplicado es peor — fusiona tres fichas y filtrar por ella enseña las deudas de las tres sin decirlo. En un **filtro**, `opcionesTercero()` de `lib/filtros.ts` (id como valor, empresa como `<optgroup>`); en un **formulario**, se elige la empresa primero y la lista se acota a ella (`_CompraFormModal`, `_ProductoFormModal`). **Nunca** comparar terceros por nombre, ni en pantalla ni en la descarga.
+- Al tocar filtros o descargas: **`npm run audit:filtros`** en verde.
 
 ## 4. Iconos
 
@@ -139,6 +160,7 @@ Todo `<input>` con `<label for>` asociado por `id`. Todo botón de solo icono co
 3. ¿Cero clases utilitarias de Tailwind?
 4. ¿Clases nuevas en el parcial de su dominio (§0), con prefijo de componente?
 5. Si hay tabla: ¿`col-*` en `th`+`td`, `data-label` en cada `td`, `RowActions` si 2+ acciones?
+5b. Si hay filtros: ¿una sola declaración con `<Filtros>` (§3.3), estado en la URL, y `npm run audit:filtros` en verde?
 6. ¿Probado en dark mode y en móvil 360 px?
 7. ¿Estados de carga, doble-submit y feedback cubiertos si hay acciones?
 

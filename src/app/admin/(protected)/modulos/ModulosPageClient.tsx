@@ -154,7 +154,7 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
                   <span className="mod-drag-handle" title="Arrastrar para reordenar">⠿</span>
                 </td>
                 <td data-label="Nombre">
-                  <span className="table-empresa">{m.nombre}</span>
+                  <span className="table-empresa cell-clamp">{m.nombre}</span>
                 </td>
                 <td data-label="Tipo">
                   {/* Familia canónica `.badge`: sin fondo dentro de la tabla. La antigua

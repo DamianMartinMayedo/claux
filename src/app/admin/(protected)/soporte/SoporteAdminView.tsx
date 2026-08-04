@@ -307,7 +307,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                     {msgItems.map(m => (
                       <tr key={m.id} className="table-row-clickable" onClick={() => abrirMsg(m)}>
                         <td data-label="Cliente">
-                          <div className="text-sm-bold">{m.nombre_empresa}</div>
+                          <div className="text-sm-bold cell-clamp">{m.nombre_empresa}</div>
                           <div className="text-xs-muted">{m.email ?? m.client_id}</div>
                         </td>
                         {/* La contratación se ve de un golpe: es venta, no una

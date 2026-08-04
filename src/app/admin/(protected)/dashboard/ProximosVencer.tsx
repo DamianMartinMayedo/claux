@@ -56,7 +56,7 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
           return (
             <tr key={c.client_id}>
               <td data-label="Cliente">
-                <Link href={`/admin/clientes/${c.client_id}`} className="table-empresa-link">
+                <Link href={`/admin/clientes/${c.client_id}`} className="table-empresa-link cell-clamp">
                   {c.nombre_empresa}
                 </Link>
               </td>

@@ -162,7 +162,7 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
               {usuarios.map(u => (
                 <tr key={u.user_id} className={u.estado === 'INACTIVO' ? 'row-inactive' : ''}>
                   <td data-label="Email">{u.email}</td>
-                  <td data-label="Nombre" className="table-muted">{u.nombre || '—'}</td>
+                  <td data-label="Nombre" className="table-muted"><span className="cell-clamp">{u.nombre || '—'}</span></td>
                   <td data-label="Rol">
                     <span className="badge badge-neutral">{ROL_LABEL[u.rol] ?? u.rol}</span>
                   </td>

@@ -120,7 +120,7 @@ export default function SolicitudesView({
                 {pageItems.map((l) => (
                   <tr key={l.id} className="table-row-clickable" onClick={() => setDetalle(l)}>
                     <td data-label="Estado"><EstadoBadge estado={l.estado} /></td>
-                    <td data-label="Nombre">{l.nombre}</td>
+                    <td data-label="Nombre"><span className="cell-clamp">{l.nombre}</span></td>
                     <td data-label="Contacto">
                       <div>{l.telefono}</div>
                       {l.email && <div className="text-xs-muted">{l.email}</div>}

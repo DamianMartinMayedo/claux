@@ -259,7 +259,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                   const pct = c.cupo > 0 ? Math.round((c.conversaciones / c.cupo) * 100) : 0
                   return (
                     <tr key={c.client_id}>
-                      <td data-label="Cliente">{c.nombre}</td>
+                      <td data-label="Cliente"><span className="cell-clamp">{c.nombre}</span></td>
                       <td data-label="Conversaciones" className="col-num">
                         <span className="ia-cell-badges">
                           <span>{c.conversaciones.toLocaleString('es-ES')} / {c.cupo.toLocaleString('es-ES')}</span>
