@@ -81,14 +81,20 @@ const r2 = (n: number): number => Math.round(n * 100) / 100
  * empresa cuesta aunque sea una— y a partir del volumen incluido se suman tramos completos:
  * pasarse por uno ya cuesta el tramo entero, que es como se factura el trabajo de verdad.
  */
-export function horasDeLinea(l: LineaParametro, volumen: number): { horas: number; tramos: number } {
+export function horasDeLinea(
+  // Solo los cuatro números, no la línea entera: así el formulario de Configuración —que
+  // edita esos cuatro y no tiene `modulo` ni `orden`— puede usar ESTA función para su vista
+  // previa en vez de un cast que miente o, peor, una copia de la fórmula que se desviaría.
+  l: Pick<LineaParametro, 'horas_base' | 'incluido' | 'tramo' | 'horas_por_tramo'>,
+  volumen: number,
+): { horas: number; tramos: number } {
   const v = num(volumen)
   const exceso = Math.max(0, v - l.incluido)
   const tramos = l.tramo > 0 ? Math.ceil(exceso / l.tramo) : 0
   return { horas: r2(l.horas_base + tramos * l.horas_por_tramo), tramos }
 }
 
-function detalleLinea(l: LineaParametro, volumen: number, tramos: number): string {
+function detalleLinea(l: Pick<LineaParametro, 'horas_base' | 'horas_por_tramo'>, volumen: number, tramos: number): string {
   const base = `${l.horas_base}h base`
   if (tramos <= 0) return `${num(volumen)} · ${base}`
   return `${num(volumen)} · ${base} + ${tramos} × ${l.horas_por_tramo}h`

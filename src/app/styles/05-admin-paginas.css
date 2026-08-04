@@ -960,10 +960,39 @@ textarea:focus-visible {
   border-top: 1px solid var(--color-divider);
 }
 .pp-bloque { display: flex; flex-direction: column; gap: var(--space-2); }
-/* Tabla de precios: celdas compactas, que son cuatro números por fila y con el padding
-   normal la tabla se va de alto. */
-.pp-tabla td { padding: var(--space-2) var(--space-3); }
-.pp-num { width: 5.5rem; text-align: right; padding: 4px var(--space-2); }
+
+/* ── Una línea de precio, leída como una frase ───────────────────────────────
+   Era una tabla de cuatro columnas con los nombres del modelo de datos («horas base ·
+   incluye hasta · tramo · horas/tramo») y no había forma de entenderla sin la fórmula
+   delante. Ahora los campos van EMBEBIDOS en la frase que describen, con el resultado de un
+   cliente de ejemplo al lado: se lee, no se descifra. */
+.pp-linea {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--color-divider);
+}
+.pp-linea:last-child { border-bottom: 0; }
+.pp-linea-cab {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: var(--space-2);
+}
+.pp-linea-nombre { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+/* El ejemplo es la ayuda de verdad: «si un cliente tiene 4, le cobro 2,5 h». Se recalcula
+   mientras se teclea, así que el efecto de cada número se ve al instante. */
+.pp-linea-ejemplo {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.pp-linea-ejemplo strong { color: var(--color-primary-text); }
+/* `baseline` para que los recuadros no bailen respecto al texto de la frase. */
+.pp-linea-frase {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  margin: 0; font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.pp-num {
+  width: 4.5rem; text-align: right;
+  height: var(--h-filtro); padding: 0 var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Horas reales por encima de las cotizadas: esa instalación costó más de lo que se cobró, y
    es justo la comparación para la que existe la tarjeta de presupuestos del cliente. */
