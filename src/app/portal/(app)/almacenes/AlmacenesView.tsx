@@ -2,7 +2,7 @@
 
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                         from 'next/navigation'
+import { useRouter, useSearchParams }        from 'next/navigation'
 import { Archive, Pencil, Plus, RotateCcw, Warehouse, X } from 'lucide-react'
 import {
   guardarAlmacen,
@@ -17,10 +17,11 @@ import Link                          from 'next/link'
 import { fmtValor }                  from '@/lib/inventario/valoracion'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import PrerequisitoAviso               from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import Filtros                         from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -232,9 +233,40 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
   const [editAlmacen, setEditAlmacen] = useState<Almacen | null>(null)
   const [confirmAlm,  setConfirmAlm]  = useState<Almacen | null>(null)
 
-  const [filtroEmpresa,  setFiltroEmpresa]  = useState('')
-  const [filtroTipo,     setFiltroTipo]     = useState('')
-  const [verArchivados,  setVerArchivados]  = useState(false)
+  const activos    = data.almacenes.filter(a =>  a.activo).length
+  const archivados = data.almacenes.filter(a => !a.activo).length
+
+  // Los filtros viven en la URL, como en el resto del portal: volver de la ficha de un
+  // almacén ya no te devuelve a «todos».
+  const params = useSearchParams()
+  const filtroEmpresa = params.get('empresa') ?? ''
+  const filtroTipo    = params.get('tipo')    ?? ''
+  const verArchivados = params.get('archivadas') === '1'
+
+  /**
+   * LA DECLARACIÓN. Todos en `cliente` y es correcto: los almacenes son una tabla maestra
+   * pequeña que se trae entera, así que filtrar en el navegador no puede quedarse corto.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'cliente',
+      ocultarSi: empresasFiltro.length <= 1,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'tipo', label: 'Todos los tipos', valor: filtroTipo,
+      rotulo: 'Tipo',
+      widget: 'select', donde: 'cliente',
+      opciones: TIPOS.map(t => ({ valor: t, label: TIPO_ALMACEN_LABEL[t] })),
+    },
+    {
+      clave: 'archivadas',
+      label: archivados > 0 ? `Archivados (${archivados})` : 'Archivados',
+      valor: verArchivados ? '1' : '', widget: 'toggle', donde: 'cliente',
+    },
+  ], [filtroEmpresa, filtroTipo, verArchivados, empresasFiltro, archivados])
 
   const almacenesFiltrados = useMemo(() => {
     return data.almacenes.filter(a => {
@@ -244,9 +276,6 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
       return true
     })
   }, [data.almacenes, filtroEmpresa, filtroTipo, verArchivados])
-
-  const activos    = data.almacenes.filter(a =>  a.activo).length
-  const archivados = data.almacenes.filter(a => !a.activo).length
 
   function openCreate()           { setEditAlmacen(null); setModalOpen(true) }
   function openEdit(a: Almacen)   { setEditAlmacen(a);   setModalOpen(true) }
@@ -311,12 +340,8 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
         <div className="tes-header-actions">
           <ExportarMenu
             clave="almacenes"
-            filtro={{ empresa_id: filtroEmpresa, tipo: filtroTipo, archivadas: verArchivados }}
-            resumen={[
-              filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-              filtroTipo,
-              verArchivados ? 'archivados' : '',
-            ].filter((x): x is string => Boolean(x))}
+            filtro={filtroExport(declaracion)}
+            resumen={resumenDe(declaracion)}
           />
           <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nuevo almacén
@@ -358,27 +383,8 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
         </div>
       )}
 
-      {/* ── Toolbar ── */}
-      <div className="ter-toolbar">
-        <EmpresaPills
-          empresas={empresasFiltro}
-          value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
-        />
-        <select className="input ter-filter-select" value={filtroTipo}
-          onChange={e => setFiltroTipo(e.target.value)}>
-          <option value="">Todos los tipos</option>
-          {TIPOS.map(t => (
-            <option key={t} value={t}>{TIPO_ALMACEN_LABEL[t]}</option>
-          ))}
-        </select>
-        <label className="ter-archivados-toggle">
-          <input type="checkbox" checked={verArchivados}
-            onChange={e => setVerArchivados(e.target.checked)} />
-          <span>Archivados{archivados > 0 && ` (${archivados})`}</span>
-        </label>
-      </div>
+      {/* Sin rango ni buscador: los almacenes son un catálogo corto, no un histórico. */}
+      <Filtros filtros={declaracion} />
 
       {/* ── Tabla ── */}
       <div className="card card-table">
@@ -429,7 +435,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                     {/* Se retira el ALM-XXXX: ninguna otra tabla del portal enseña el
                         código interno, y ocupaba el sitio de un dato que sí importa. */}
                     <td data-label="Nombre">
-                      <Link href={`/portal/almacenes/${a.almacen_id}`} className="table-name-link"
+                      <Link href={`/portal/almacenes/${a.almacen_id}`} className="table-name-link cell-clamp"
                         onClick={e => e.stopPropagation()}>
                         {a.nombre}
                       </Link>

@@ -80,7 +80,7 @@ export default function CajaHubView({ cajas, empresas }: Props) {
                   <tr key={c.caja_id} className="table-row-clickable"
                     onClick={() => router.push(`/portal/caja/${c.caja_id}`)}>
                     <td data-label="Nombre">
-                      <Link href={`/portal/caja/${c.caja_id}`} className="link-inherit"
+                      <Link href={`/portal/caja/${c.caja_id}`} className="link-inherit cell-clamp"
                         onClick={e => e.stopPropagation()}>{c.nombre}</Link>
                     </td>
                     {multi && <td data-label="Empresa">{empresaNombre(c.empresa_id)}</td>}

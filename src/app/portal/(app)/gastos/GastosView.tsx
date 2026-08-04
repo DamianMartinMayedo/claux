@@ -2,7 +2,7 @@
 
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                        from 'next/navigation'
+import { useRouter, useSearchParams }        from 'next/navigation'
 import {
   guardarGastoCobro,
   eliminarGastoCobro,
@@ -29,19 +29,21 @@ import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_sh
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
 import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
+import type { Filtro } from '@/lib/filtros'
+import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
-import RangoBusqueda                  from '@/components/portal/RangoBusqueda'
+import Filtros                        from '@/components/portal/Filtros'
+import AvisoTope                      from '@/components/portal/AvisoTope'
 import ExportarMenu                   from '@/components/portal/ExportarMenu'
-import { LIMITE_LISTADO, TOPE_VER_MAS } from '@/lib/listados'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -57,7 +59,10 @@ const ESTADO_BADGE: Record<EstadoRegistro, string> = {
 function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string | null): string {
   if (!f) return '—'
   const [y, m, d] = f.split('T')[0].split('-').map(Number)
@@ -601,13 +606,7 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPageData; puedeEditar: boolean }) {
   const router = useRouter()
 
-  /** Sube el techo en la URL: el servidor vuelve a consultar con más filas. */
-  function verMas() {
-    const url = new URL(window.location.href)
-    url.searchParams.set('limite', String(Math.min(data.limite + LIMITE_LISTADO, TOPE_VER_MAS)))
-    router.replace(`${url.pathname}${url.search}`, { scroll: false })
-  }
-  const { colorOf } = useEmpresas()
+  const { colorOf, nombreOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
   const empresasFiltro = data.empresas.map(e => ({
     empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
@@ -628,10 +627,71 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   // pintarlo antes de tenerlo sería preguntar sin poder decir qué pasa al aceptar.
   const [borrarCat, setBorrarCat] = useState<{ cat: CategoriaGasto; impacto: ImpactoCategoria } | null>(null)
 
-  const [filtroEstado,  setFiltroEstado]  = useState('')
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
-  const [filtroCat,     setFiltroCat]     = useState('')
-  const [filtroTercero, setFiltroTercero] = useState('')
+  // Los filtros viven en la URL, como el rango y la búsqueda: refrescar —o que se caiga la
+  // conexión, que aquí es el caso normal— ya no tira lo que el dueño acababa de poner. Y de
+  // esta única declaración salen la barra, lo que viaja a la descarga y el texto del
+  // desplegable, que antes se escribían tres veces y por eso divergían.
+  const params = useSearchParams()
+  const filtroEstado  = params.get('estado')  ?? ''
+  const filtroEmpresa = params.get('empresa') ?? ''
+  const filtroCat     = params.get('cat')     ?? ''
+  const filtroTercero = params.get('tercero') ?? ''
+
+  // La pestaña activa decide el tipo (Gastos vs Cobros)
+  const tipoActual: TipoRegistro = tab === 'cobros' ? 'COBRO' : 'GASTO'
+
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable: escribir esas tres cosas por separado es lo que hacía que el fichero no se
+   * pareciera a la pantalla.
+   *
+   * `escalado` en todos: mientras el listado quepa entero, el navegador filtra al instante y
+   * da el MISMO resultado que la consulta; en cuanto hay filas sin traer, sube al servidor,
+   * porque un filtro que solo mira las 500 más recientes miente sin decirlo.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    // La pestaña ES el tipo: en Gastos no se baja uno los cobros. Implícito — no se limpia
+    // ni cuenta como filtro puesto, pero sí viaja al fichero.
+    { clave: 'tipo', label: 'Tipo', valor: tipoActual, widget: 'select', donde: 'cliente', implicito: true },
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'escalado',
+      ocultarSi: empresasFiltro.length <= 1,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      // `cliente` y no `escalado` a propósito: PENDIENTE/PARCIAL/LIQUIDADO **no son una
+      // columna**, se derivan de lo liquidado en Tesorería, así que la consulta no puede
+      // filtrarlos. Escalar los OTROS filtros normalmente deshace el truncamiento y con él
+      // el problema; si aun así queda recortado, el aviso del techo lo dice.
+      clave: 'estado', label: 'Todos los estados', valor: filtroEstado,
+      rotulo: 'Estado',
+      widget: 'select', donde: 'cliente',
+      opciones: (Object.keys(ESTADO_LABEL) as EstadoRegistro[])
+        .map(k => ({ valor: k, label: ESTADO_LABEL[k] })),
+    },
+    {
+      // Filtrar por «Suministros» trae sus subcategorías (lo resuelve la consulta y el
+      // registro de exportación con la misma regla). Solo raíces en el desplegable.
+      clave: 'categoria', param: 'cat', label: 'Todas las categorías', valor: filtroCat,
+      rotulo: 'Categoría',
+      widget: 'select', donde: 'escalado', ocultarSi: tab !== 'gastos',
+      opciones: data.categorias_gastos
+        .filter(c => !c.parent_id && c.estado === 'ACTIVO')
+        .map(c => ({ valor: c.categoria_id, label: c.nombre })),
+    },
+    {
+      clave: 'tercero', label: tab === 'gastos' ? 'Todos los proveedores' : 'Todos los clientes',
+      rotulo: tab === 'gastos' ? 'Proveedor' : 'Cliente',
+      valor: filtroTercero, widget: 'select', donde: 'escalado',
+      ocultarSi: data.terceros.length === 0,
+      // Agrupados POR EMPRESA: un tercero tiene una ficha por empresa, así que la lista
+      // plana enseñaba «CLAUDIA» tres veces sin forma de saber cuál era cuál.
+      opciones: opcionesTercero(data.terceros, nombreOf, empresasFiltro.length > 1, filtroEmpresa || undefined),
+    },
+  ], [tipoActual, filtroEmpresa, filtroEstado, filtroCat, filtroTercero, tab, empresasFiltro,
+      data.categorias_gastos, data.terceros, nombreOf])
 
   // Descendientes de una categoría raíz: filtrar por «Suministros» tiene que traer sus
   // subcategorías, o el filtro miente por omisión (los gastos cuelgan de la hija).
@@ -646,8 +706,6 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
     return m
   }, [data.categorias_gastos])
 
-  // La pestaña activa decide el tipo (Gastos vs Cobros)
-  const tipoActual: TipoRegistro = tab === 'cobros' ? 'COBRO' : 'GASTO'
   const registros = useMemo(() => {
     const catsOk = filtroCat
       ? new Set<string>([filtroCat, ...(hijasDe.get(filtroCat) ?? [])])
@@ -877,22 +935,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           ) : (
             <ExportarMenu
               clave="gastos_cobros"
-              filtro={{
-                desde: data.rango.desde, hasta: data.rango.hasta, q: data.q,
-                // La pestaña ES el tipo: en Gastos no se baja uno los cobros.
-                tipo:       tab === 'gastos' ? 'GASTO' : 'COBRO',
-                empresa_id: filtroEmpresa,
-                categoria:  filtroCat,
-                tercero:    filtroTercero,
-                estado:     filtroEstado,
-              }}
-              resumen={[
-                tab === 'gastos' ? 'gastos' : 'cobros',
-                filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-                filtroCat && (data.categorias_gastos.find(c => c.categoria_id === filtroCat)?.nombre ?? ''),
-                filtroTercero && (data.terceros.find(t => t.tercero_id === filtroTercero)?.nombre ?? ''),
-                filtroEstado,
-              ].filter((x): x is string => Boolean(x))}
+              /* GENERADOS de la declaración: no hay un objeto que escribir a mano y que se
+                 pueda quedar corto, ni un resumen que pueda imprimir un código interno. */
+              filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta, q: data.q })}
+              resumen={[tab === 'gastos' ? 'gastos' : 'cobros', ...resumenDe(declaracion)]}
             />
           )}
           {puedeEditar && (
@@ -949,45 +995,17 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
         </div>
       )}
 
-      {/* Rango y búsqueda (en la URL; el rango se aplica en la query del servidor) */}
-      <div className="ter-toolbar">
-        <RangoBusqueda
-          desde={data.rango.desde}
-          hasta={data.rango.hasta}
-          q={data.q}
-          placeholder="Buscar por concepto, notas o importe…"
-        />
-      </div>
-
-      {/* Toolbar */}
-      <div className="ter-toolbar">
-        <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="PENDIENTE">Pendientes</option>
-          <option value="PARCIAL">Parciales</option>
-          <option value="LIQUIDADO">Liquidados</option>
-        </select>
-        {/* Filtro por categoría: es lo que hace que «cuánto llevo en Alquiler» se
-            responda aquí y no solo en Reportes. Solo raíces — incluye sus subcategorías. */}
-        {tab === 'gastos' && (
-          <select className="input ter-filter-select" value={filtroCat} onChange={e => setFiltroCat(e.target.value)}>
-            <option value="">Todas las categorías</option>
-            {data.categorias_gastos
-              .filter(c => !c.parent_id && c.estado === 'ACTIVO')
-              .map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
-          </select>
-        )}
-        <select className="input ter-filter-select" value={filtroTercero} onChange={e => setFiltroTercero(e.target.value)}>
-          <option value="">{tab === 'gastos' ? 'Todos los proveedores' : 'Todos los clientes'}</option>
-          {data.terceros.map(t => <option key={t.tercero_id} value={t.tercero_id}>{t.nombre}</option>)}
-        </select>
-        <EmpresaPills
-          empresas={empresasFiltro}
-          value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
-        />
-      </div>
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={data.q}
+        placeholder="Buscar por concepto, notas o importe…"
+        hayMas={data.hay_mas}
+        /* Solo la empresa se queda en la fila; el estado baja al panel. Con las píldoras de
+           tres empresas MÁS un desplegable, la barra envolvía a dos líneas y «Filtros»
+           acababa suelto al principio de la segunda. */
+        visibles={1}
+      />
 
       {/* El techo recorta por FECHA DESCENDENTE: lo que falta son los registros más
           VIEJOS, no «los siguientes». Decir «los primeros N» era literalmente al revés,
@@ -995,18 +1013,8 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           adivinar unas fechas pasadas a mano. Ahora se dice cuántos faltan y se pueden
           traer. */}
       {data.hay_mas && (
-        <p className="listado-tope">
-          Se enseñan los <strong>{data.registros.length} más recientes</strong> de {data.total}
-          {' '}del rango: faltan los {Math.max(0, data.total - data.registros.length)} más antiguos.
-          {data.limite < TOPE_VER_MAS && (
-            <>
-              {' '}
-              <button type="button" className="btn btn-ghost btn-xs" onClick={verMas}>
-                Traer {Math.min(LIMITE_LISTADO, data.total - data.registros.length)} más
-              </button>
-            </>
-          )}
-        </p>
+        <AvisoTope mostrados={data.registros.length} total={data.total}
+          limite={data.limite} sustantivo="registros" />
       )}
 
       {/* Tabla */}
@@ -1060,12 +1068,19 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                     {/* El histórico (y lo que escriba un módulo sin concepto) cae a
                         `descripcion`, para que no quede ninguna celda en blanco. */}
                     <td data-label="Concepto">
-                      <strong>{r.concepto || r.descripcion}</strong>
+                      {/* A dos líneas: los conceptos que vienen de la norma («Servicios
+                          Comprados a Entidades · …») crecían a cinco y la fila se volvía un
+                          párrafo. El texto completo, en el `title`. */}
+                      <strong className="cell-clamp" title={r.concepto || r.descripcion}>{r.concepto || r.descripcion}</strong>
                       {r.tercero_id && <div className="tes-mov-sub"><span className="tes-mov-cat">{terceroNombre[r.tercero_id] ?? ''}</span></div>}
                     </td>
                     {tab === 'gastos' && (<>
-                      <td data-label="Categoría" className="text-sm-muted">{cs!.cat}</td>
-                      <td data-label="Subcategoría" className="text-sm-muted">{cs!.sub ?? '—'}</td>
+                      <td data-label="Categoría" className="text-sm-muted">
+                        <span className="cell-clamp" title={cs!.cat}>{cs!.cat}</span>
+                      </td>
+                      <td data-label="Subcategoría" className="text-sm-muted">
+                        <span className="cell-clamp" title={cs!.sub ?? undefined}>{cs!.sub ?? '—'}</span>
+                      </td>
                     </>)}
                     {multiempresa && (
                       <td data-label="Empresa">

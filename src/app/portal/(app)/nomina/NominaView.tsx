@@ -2,7 +2,7 @@
 
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }               from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   crearNomina,
   eliminarNomina,
@@ -12,6 +12,7 @@ import {
   alternarReglaDeduccion,
   eliminarReglaDeduccion,
   guardarConfigNomina,
+  guardarMapeoGastoNomina,
   exportarNominaXlsx,
   type NominaConLineas,
   type ReglaDeduccion,
@@ -19,6 +20,7 @@ import {
   type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
 import { Check, Download, Eye, Pencil, Plus, Power, Trash2, Wallet, X } from 'lucide-react'
+import { CONCEPTOS_COSTE, NOMBRE_CONCEPTO_COSTE } from '@/lib/rrhh/conceptos'
 import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
 import Tabs from '@/components/Tabs'
 import { formatMonto, hoyISO, formatPeriodo } from '../_shared/NominaDetalleModal'
@@ -30,7 +32,8 @@ import { ConfirmDialog }               from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import Filtros                         from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 
 // ── Reglas del negocio ───────────────────────────────────────────────────────────
@@ -158,7 +161,9 @@ function ReglasPanel({ data, editando, setEditando }: {
   setEditando: (r: ReglaDeduccion | 'nueva' | null) => void
 }) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
+  // Sin `isPending`: aquí la carga la enseña el toast de `toastLoading`, no un botón
+  // deshabilitado, así que la bandera no se usaba.
+  const [, startTransition] = useTransition()
   const [borrando, setBorrando] = useState<ReglaDeduccion | null>(null)
 
   const nombreEmpresa = (id: string | null) =>
@@ -285,7 +290,7 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
 
   const configDe = (empresa_id: string) =>
     data.config_nomina.find(c => c.empresa_id === empresa_id)
-      ?? { empresa_id, modelo: 'GENERAL' as const, dias_laborables_default: 24 }
+      ?? { empresa_id, modelo: 'GENERAL' as const, dias_laborables_default: 24, dia_pago: null }
 
   const hayCuba = data.empresas.some(e => configDe(e.empresa_id).modelo === 'MIPYME_CUBA')
 
@@ -341,6 +346,7 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
                   <th>Empresa</th>
                   <th>Modelo de cálculo</th>
                   <th className="col-num">Días laborables</th>
+                  <th className="col-num">Día de pago</th>
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -368,6 +374,14 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
                               defaultValue={cfg.dias_laborables_default}
                               aria-label={`Días laborables de ${emp.nombre}`} />
                           </td>
+                          {/* En blanco es válido: las deudas de la nómina nacen sin
+                              vencimiento, como hasta ahora. */}
+                          <td data-label="Día de pago" className="col-num">
+                            <input className="input nom-input" form={`cfg-${emp.empresa_id}`} type="number"
+                              name="dia_pago" min="1" max="31" step="1" placeholder="—"
+                              defaultValue={cfg.dia_pago ?? ''}
+                              aria-label={`Día de pago de la nómina de ${emp.nombre}`} />
+                          </td>
                           <td className="col-actions">
                             <div className="ter-actions">
                               <button type="submit" form={`cfg-${emp.empresa_id}`}
@@ -389,6 +403,9 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
                           <td data-label="Días laborables" className="col-num tes-monto-cell">
                             {cfg.dias_laborables_default}
                           </td>
+                          <td data-label="Día de pago" className="col-num tes-monto-cell">
+                            {cfg.dia_pago ?? <span className="text-xs-muted">Sin fijar</span>}
+                          </td>
                           <td className="col-actions">
                             <button className="ter-action-btn" title="Cambiar"
                               aria-label={`Cambiar la configuración de ${emp.nombre}`}
@@ -407,6 +424,8 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
         )}
       </div>
 
+      <MapeoGastosPanel data={data} />
+
       <div className="info-box mt-3">
         <strong className="info-box-title">Sobre el modelo MIPYME cubana</strong>
         <span className="text-xs-muted">
@@ -420,6 +439,123 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
         </span>
       </div>
     </>
+  )
+}
+
+// ── A qué categoría de gasto va cada concepto de la nómina (mig. 166) ───────────
+//
+// Confirmar una nómina escribe su COSTE repartido por categoría. El reparto estaba fijo
+// en código, así que el dueño no podía ver su coste de personal como lo lleva su propia
+// contabilidad. Mandar dos conceptos a la misma categoría es una decisión suya
+// legítima; en blanco, el concepto usa la categoría que crea el sistema.
+
+function MapeoGastosPanel({ data }: { data: RrhhPageData }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [abierta, setAbierta] = useState<string | null>(null)
+
+  // Solo las categorías raíz y sus hijas, con la etiqueta «Padre · Hija» que usa el
+  // resto de Contabilidad: elegir «Electricidad» sin saber de qué cuelga no dice nada.
+  const opciones = useMemo(() => {
+    const nombreDe = new Map(data.categorias_gasto.map(c => [c.categoria_id, c.nombre]))
+    return data.categorias_gasto.map(c => ({
+      categoria_id: c.categoria_id,
+      etiqueta: c.parent_id
+        ? `${nombreDe.get(c.parent_id) ?? '—'} · ${c.nombre}`
+        : c.nombre,
+    })).sort((a, b) => a.etiqueta.localeCompare(b.etiqueta))
+  }, [data.categorias_gasto])
+
+  const elegidaDe = (empresa_id: string, concepto: string) =>
+    data.mapeo_gasto.find(m => m.empresa_id === empresa_id && m.concepto === concepto)?.categoria_id ?? ''
+
+  function guardar(e: React.FormEvent<HTMLFormElement>, empresa_id: string) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set('empresa_id', empresa_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarMapeoGastoNomina(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Reparto guardado')
+      setAbierta(null); router.refresh()
+    })
+  }
+
+  if (data.empresas.length === 0) return null
+
+  return (
+    <div className="det-card mt-3">
+      <div className="card-header">
+        <h2 className="card-title">Reparto del coste de la nómina</h2>
+      </div>
+      <div className="ter-toolbar">
+        <p className="text-sm-muted">
+          A qué categoría de gasto va cada concepto cuando confirmas una nómina. En blanco,
+          se usa la categoría que crea CLAUX. <strong>Las retenciones no están aquí</strong>:
+          su coste ya va dentro del salario, y contarlas otra vez lo duplicaría — solo
+          generan la deuda con su acreedor.
+        </p>
+      </div>
+
+      {data.empresas.map(emp => {
+        const editando = abierta === emp.empresa_id
+        return (
+          <div key={emp.empresa_id} className="nom-mapeo-empresa">
+            <div className="det-meta-row">
+              <strong>{emp.nombre}</strong>
+              {!editando && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setAbierta(emp.empresa_id)}>
+                  <Pencil size={14} strokeWidth={2} /> Cambiar reparto
+                </button>
+              )}
+            </div>
+
+            {editando ? (
+              <form onSubmit={e => guardar(e, emp.empresa_id)}>
+                <div className="ter-form-grid">
+                  {CONCEPTOS_COSTE.map(concepto => (
+                    <div className="input-group ter-col-full" key={concepto}>
+                      <label htmlFor={`m-${emp.empresa_id}-${concepto}`}>
+                        {NOMBRE_CONCEPTO_COSTE[concepto]}
+                      </label>
+                      <select className="input" id={`m-${emp.empresa_id}-${concepto}`}
+                        name={`cat_${concepto}`} defaultValue={elegidaDe(emp.empresa_id, concepto)}>
+                        <option value="">La que crea CLAUX</option>
+                        {opciones.map(o => (
+                          <option key={o.categoria_id} value={o.categoria_id}>{o.etiqueta}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                <div className="ter-actions">
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={isPending}>
+                    {isPending ? <span className="spinner spinner-sm" /> : 'Guardar reparto'}
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm"
+                    onClick={() => setAbierta(null)} disabled={isPending}>Cancelar</button>
+                </div>
+              </form>
+            ) : (
+              <ul className="nom-mapeo-lista">
+                {CONCEPTOS_COSTE.map(concepto => {
+                  const id = elegidaDe(emp.empresa_id, concepto)
+                  const cat = opciones.find(o => o.categoria_id === id)
+                  return (
+                    <li key={concepto}>
+                      <span className="text-sm-muted">{NOMBRE_CONCEPTO_COSTE[concepto]}</span>
+                      <span>{cat ? cat.etiqueta : <span className="text-xs-muted">La que crea CLAUX</span>}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -630,14 +766,41 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
   const [modalNuevaNomina, setModalNuevaNomina] = useState(false)
   const [delNomina,        setDelNomina]        = useState<NominaConLineas | null>(null)
 
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
-  const [filtroAnio,    setFiltroAnio]    = useState('')
+  // Los filtros viven en la URL, como en el resto del portal: volver del detalle de una
+  // nómina ya no te devuelve a «todas las empresas».
+  const params = useSearchParams()
+  const filtroEmpresa = params.get('empresa') ?? ''
+  const filtroAnio    = params.get('anio')    ?? ''
 
   const aniosDisponibles = useMemo(() => {
     const set = new Set<string>()
     for (const n of data.nominas) if (n.periodo) set.add(n.periodo.slice(0, 4))
     return Array.from(set).sort().reverse()
   }, [data.nominas])
+
+  /**
+   * LA DECLARACIÓN. Ambos en `cliente`: son un puñado de nóminas al año, se traen todas.
+   * El AÑO es la granularidad de esta pantalla —el período de una nómina no son unos días
+   * sueltos— así que aquí no hay presets de rango, y a la descarga viaja traducido.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'cliente',
+      ocultarSi: empresasFiltro.length <= 1,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      // No es clave del contrato de exportación: el año se traduce a `desde`/`hasta` al
+      // generar el filtro de la descarga. Aquí viaja solo en la URL.
+      clave: 'anio', label: 'Todos los años', valor: filtroAnio,
+      rotulo: 'Año',
+      widget: 'select', donde: 'cliente', sinExportar: true,
+      ocultarSi: aniosDisponibles.length <= 1,
+      opciones: aniosDisponibles.map(a => ({ valor: a, label: a })),
+    },
+  ], [filtroEmpresa, filtroAnio, empresasFiltro, aniosDisponibles])
 
   const nominasFiltradas = useMemo(() => {
     return data.nominas.filter(n => {
@@ -705,14 +868,12 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
           {tab === 'nominas' && (
             <ExportarMenu
               clave="nominas"
-              filtro={{
-                empresa_id: filtroEmpresa,
+              /* El año se traduce a rango: la descarga filtra por fecha, no por año. */
+              filtro={filtroExport(declaracion, {
                 desde: filtroAnio ? `${filtroAnio}-01-01` : '',
                 hasta: filtroAnio ? `${filtroAnio}-12-31` : '',
-              }}
-              resumen={[
-                filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-              ].filter((x): x is string => Boolean(x))}
+              })}
+              resumen={resumenDe(declaracion)}
             />
           )}
           {tab === 'nominas' && (
@@ -757,20 +918,9 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
 
       {tab === 'nominas' && (
       <>
-      <div className="ter-toolbar">
-        <EmpresaPills
-          empresas={empresasFiltro}
-          value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
-        />
-        {aniosDisponibles.length > 1 && (
-          <select className="input ter-filter-select" value={filtroAnio} onChange={e => setFiltroAnio(e.target.value)}>
-            <option value="">Todos los años</option>
-            {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        )}
-      </div>
+      {/* Sin rango de fechas ni buscador: el período de una nómina es el AÑO, no unos días
+          sueltos, y el listado son un puñado de filas al año. */}
+      <Filtros filtros={declaracion} />
 
       <div className="card card-table">
         {nominasFiltradas.length === 0 ? (

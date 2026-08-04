@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                         from 'next/navigation'
+import { useRouter, useSearchParams }        from 'next/navigation'
 import Link                                  from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
@@ -25,10 +25,11 @@ import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaM
 import CopiarLoteEmpresaModal          from '@/components/portal/CopiarLoteEmpresaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Search, Users, X } from 'lucide-react'
+import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Users, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import Filtros                         from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -111,10 +112,13 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
   const [confirmTercero, setConfirmTercero] = useState<Tercero | null>(null)
   const [copiarTercero,  setCopiarTercero]  = useState<Tercero | null>(null)
 
-  const [search,        setSearch]        = useState('')
-  const [filtroTipo,    setFiltroTipo]    = useState<'TODOS' | TipoTercero>('TODOS')
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
-  const [verArchivados, setVerArchivados] = useState(false)
+  // Los filtros viven en la URL, como en el resto del portal: refrescar —o volver de la
+  // ficha de un tercero— ya no los tira.
+  const params = useSearchParams()
+  const search        = params.get('q')       ?? ''
+  const filtroTipo    = (params.get('tipo')   ?? '') as '' | TipoTercero
+  const filtroEmpresa = params.get('empresa') ?? ''
+  const verArchivados = params.get('archivadas') === '1'
 
   const empresasLista = useMemo(
     () => data.empresas.map(e => ({ ...e, color: colorOf(e.empresa_id) })),
@@ -123,11 +127,43 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
 
   const multiempresa = empresasLista.length > 1
 
+  const activos    = data.terceros.filter(t =>  t.activo).length
+  const archivados = data.terceros.filter(t => !t.activo).length
+
+  /**
+   * LA DECLARACIÓN. Todos en `cliente`: el catálogo de terceros se trae entero, así que
+   * filtrar en el navegador da el mismo resultado que filtrarlo en la consulta.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'cliente',
+      ocultarSi: !multiempresa,
+      opciones: empresasLista.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'tipo', label: 'Todos los tipos', valor: filtroTipo,
+      rotulo: 'Tipo',
+      widget: 'select', donde: 'cliente',
+      opciones: [
+        { valor: 'CLIENTE',   label: 'Clientes' },
+        { valor: 'PROVEEDOR', label: 'Proveedores' },
+        { valor: 'AMBOS',     label: 'Ambos' },
+      ],
+    },
+    {
+      clave: 'archivadas',
+      label: archivados > 0 ? `Archivados (${archivados})` : 'Archivados',
+      valor: verArchivados ? '1' : '', widget: 'toggle', donde: 'cliente',
+    },
+  ], [filtroEmpresa, filtroTipo, verArchivados, multiempresa, empresasLista, archivados])
+
   const tercerosFiltrados = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.terceros.filter(t => {
       if (t.activo === verArchivados)                          return false
-      if (filtroTipo !== 'TODOS' && t.tipo !== filtroTipo)     return false
+      if (filtroTipo && t.tipo !== filtroTipo)                 return false
       if (filtroEmpresa && t.empresa_id !== filtroEmpresa)     return false
       if (q) {
         const hay = [
@@ -207,9 +243,6 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
     })
   }
 
-  const activos    = data.terceros.filter(t =>  t.activo).length
-  const archivados = data.terceros.filter(t => !t.activo).length
-
   return (
     <div className="view-container">
 
@@ -222,18 +255,8 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
         <div className="tes-header-actions">
           <ExportarMenu
             clave="terceros"
-            filtro={{
-              q:          search,
-              tipo:       filtroTipo === 'TODOS' ? '' : filtroTipo,
-              empresa_id: filtroEmpresa,
-              archivadas: verArchivados,
-            }}
-            resumen={[
-              filtroTipo === 'TODOS' ? 'todos' : TIPO_LABEL[filtroTipo],
-              filtroEmpresa && (empresasLista.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-              verArchivados ? 'archivados' : '',
-              search && `«${search}»`,
-            ].filter((x): x is string => Boolean(x))}
+            filtro={filtroExport(declaracion, { q: search })}
+            resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
           />
           <button className="btn btn-primary" onClick={openCreate} disabled={empresasLista.length === 0}>
             <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
@@ -247,37 +270,12 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
         </PrerequisitoAviso>
       )}
 
-      {/* ── Toolbar ── */}
-      <div className="ter-toolbar">
-        <div className="ter-search-wrap">
-          <Search size={16} strokeWidth={2} />
-          <input
-            type="search"
-            className="ter-search"
-            placeholder="Buscar por nombre, NIT, email, moneda, vía de pago…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <select className="input ter-filter-select" value={filtroTipo}
-          onChange={e => setFiltroTipo(e.target.value as typeof filtroTipo)}>
-          <option value="TODOS">Todos los tipos</option>
-          <option value="CLIENTE">Clientes</option>
-          <option value="PROVEEDOR">Proveedores</option>
-          <option value="AMBOS">Ambos</option>
-        </select>
-        <EmpresaPills
-          empresas={empresasLista}
-          value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
-        />
-        <label className="ter-archivados-toggle">
-          <input type="checkbox" checked={verArchivados}
-            onChange={e => setVerArchivados(e.target.checked)} />
-          <span>Archivados{archivados > 0 && ` (${archivados})`}</span>
-        </label>
-      </div>
+      {/* Sin rango: un catálogo de terceros no es un histórico. Sí buscador. */}
+      <Filtros
+        filtros={declaracion}
+        q={search}
+        placeholder="Buscar por nombre, NIT, email, moneda, vía de pago…"
+      />
 
       {/* ── Tabla ── */}
       <div className="card card-table">
@@ -337,7 +335,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                     <td data-label="Nombre">
                       <Link
                         href={`/portal/terceros/${t.tercero_id}`}
-                        className="ter-nombre link-inherit"
+                        className="ter-nombre link-inherit cell-clamp"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {t.nombre}

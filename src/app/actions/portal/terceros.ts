@@ -736,7 +736,7 @@ async function suscripcionesDeCliente(
   const porSub = new Map<string, typeof lineas>()
   for (const l of lineas) porSub.set(l.suscripcion_id, [...(porSub.get(l.suscripcion_id) ?? []), l])
 
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
   return filas.map(f => {
     const suyas = porSub.get(f.suscripcion_id as string) ?? []
     return {

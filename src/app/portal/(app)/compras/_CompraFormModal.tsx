@@ -31,6 +31,10 @@ import {
 import { CampoNumero } from '@/components/portal/CampoNumero'
 import { DescripcionCatalogo } from '@/components/portal/DescripcionCatalogo'
 import { SelectorProductoCompra } from './_SelectorProductoCompra'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 function fmt(n: number, moneda: string) {
   return new Intl.NumberFormat('es-ES', {
@@ -78,7 +82,7 @@ export function CompraFormModal({
   const [almacenId,   setAlmacenId]   = useState(compra?.almacen_id ?? form.almacenes[0]?.almacen_id ?? '')
   const [proveedorId, setProveedorId] = useState(compra?.proveedor_id ?? '')
   const [moneda,      setMoneda]      = useState(compra?.moneda ?? form.monedas[0] ?? 'USD')
-  const [fecha,       setFecha]       = useState(compra?.fecha ?? new Date().toISOString().split('T')[0])
+  const [fecha,       setFecha]       = useState(compra?.fecha ?? hoyEnTz())
   const [notas,       setNotas]       = useState(compra?.notas ?? '')
   const [selectorAbierto, setSelectorAbierto] = useState(false)
   const [lineas,      setLineas]      = useState<LineaUI[]>(
@@ -277,7 +281,7 @@ export function CompraFormModal({
                 <div className="input-group ter-col-span-2">
                   <label htmlFor="cmp-fecha">Fecha</label>
                   <input id="cmp-fecha" className="input" type="date" value={fecha}
-                    max={new Date().toISOString().split('T')[0]} onChange={e => setFecha(e.target.value)} />
+                    max={hoyEnTz()} onChange={e => setFecha(e.target.value)} />
                 </div>
 
                 {/* El aviso del cambio de moneda, con las dos salidas: la tasa como

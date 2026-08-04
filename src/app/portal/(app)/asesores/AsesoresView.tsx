@@ -138,7 +138,7 @@ export default function AsesoresView({
               <tbody>
                 {lista.map(a => (
                   <tr key={a.asesor_id}>
-                    <td data-label="Nombre"><span className="table-empresa">{a.nombre}</span></td>
+                    <td data-label="Nombre"><span className="table-empresa cell-clamp">{a.nombre}</span></td>
                     <td data-label="Correo" className="cell-truncate">{a.email}</td>
                     <td data-label="Para">
                       <span className="badge badge-neutral">{empresaNombre(a.empresa_id)}</span>

@@ -146,7 +146,7 @@ export function ReposicionModal({
                             onChange={() => alternar(f.producto_id)} />
                         </td>
                         <td data-label="Producto">
-                          <strong>{f.nombre}</strong>
+                          <strong className="cell-clamp">{f.nombre}</strong>
                           {f.unidad && <div className="table-cell-secondary">{f.unidad}</div>}
                         </td>
                         <td data-label="Hay" className={`col-num${f.actual < 0 ? ' mov-cant-neg' : ''}`}>

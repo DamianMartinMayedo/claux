@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { ClipboardList, Layers, Package, Warehouse } from 'lucide-react'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import type { AlmacenDetalleData } from '@/app/actions/portal/almacenes'
-import { abrirConteo, empezarConteoNuevo, type ResumenConteo } from '@/app/actions/portal/conteos'
+import { abrirConteo, empezarConteoNuevo, type ListadoConteos } from '@/app/actions/portal/conteos'
+import AvisoTope from '@/components/portal/AvisoTope'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import ExportarMenu from '@/components/portal/ExportarMenu'
@@ -33,10 +34,11 @@ const TIPO_LABEL: Record<string, string> = {
 type Tab = 'productos' | 'movimientos' | 'conteos'
 
 export default function AlmacenDetalle(
-  { data, conteos }: { data: AlmacenDetalleData; conteos: ResumenConteo[] },
+  { data, conteos: listadoConteos }: { data: AlmacenDetalleData; conteos: ListadoConteos },
 ) {
   const router = useRouter()
   const { almacen, lineas, valor, monedaVista, movimientos, movimientosHayMas } = data
+  const conteos = listadoConteos.conteos
   const [ajuste, setAjuste] = useState<AlmacenDetalleData['lineas'][number] | null>(null)
   const [tab, setTab] = useState<Tab>('productos')
   const [pendingContar, startContar] = useTransition()
@@ -200,6 +202,13 @@ export default function AlmacenDetalle(
           documento que justifica los ajustes que se hicieron ese día. */}
       {tab === 'conteos' && (
       <div className="card card-table">
+        {/* El techo de los conteos no avisaba de nada: un almacén que se cuenta cada semana
+            pasa el techo en unos años y las actas viejas desaparecían en silencio. */}
+        {listadoConteos.hay_mas && (
+          <AvisoTope mostrados={conteos.length} total={listadoConteos.total}
+            limite={listadoConteos.limite} sustantivo="conteos" />
+        )}
+
         {conteos.length === 0 ? (
           <div className="mon-empty">
             <ClipboardList size={40} strokeWidth={1} opacity={0.2} />
@@ -286,7 +295,7 @@ export default function AlmacenDetalle(
                   return (
                     <tr key={l.producto_id}>
                       <td data-label="Producto">
-                        <Link href={`/portal/productos/${l.producto_id}`} className="table-name-link">{l.nombre}</Link>
+                        <Link href={`/portal/productos/${l.producto_id}`} className="table-name-link cell-clamp">{l.nombre}</Link>
                         <div className="table-cell-secondary">{l.codigo}</div>
                       </td>
                       <td data-label="Cantidad" className={`col-num${l.cantidad < 0 ? ' mov-cant-neg' : ''}`}>
@@ -341,11 +350,12 @@ export default function AlmacenDetalle(
 
       {tab === 'movimientos' && (
         <div className="card card-table">
+          {/* Decía «los primeros» y mandaba a otra pantalla a acotar por fecha: el techo
+              recorta por fecha DESCENDENTE, así que lo que falta son los VIEJOS, y para
+              llegar a ellos había que adivinar unas fechas. Ahora se traen desde aquí. */}
           {movimientosHayMas && (
-            <p className="listado-tope">
-              Se enseñan los primeros {movimientos.length} movimientos de este almacén.
-              Para ver el resto, ve a Movimientos y acota por fecha.
-            </p>
+            <AvisoTope mostrados={movimientos.length} total={data.movimientosTotal}
+              limite={data.movimientosLimite} sustantivo="movimientos" />
           )}
 
           {movimientos.length === 0 ? (
@@ -370,9 +380,9 @@ export default function AlmacenDetalle(
                     <tr key={m.movimiento_id}>
                       <td data-label="Fecha" className="text-sm-muted">{fmtFechaEs(m.fecha)}</td>
                       <td data-label="Tipo" className="text-sm-muted">{m.tipo}</td>
-                      <td data-label="Producto">{m.producto}</td>
+                      <td data-label="Producto"><span className="cell-clamp">{m.producto}</span></td>
                       <td data-label="Cantidad" className="col-num">{m.cantidad.toLocaleString('es-ES')}</td>
-                      <td data-label="Motivo" className="text-sm-muted">{m.motivo ?? '—'}</td>
+                      <td data-label="Motivo" className="text-sm-muted"><span className="cell-clamp">{m.motivo ?? '—'}</span></td>
                     </tr>
                   ))}
                 </tbody>

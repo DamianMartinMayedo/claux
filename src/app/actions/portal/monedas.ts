@@ -256,7 +256,7 @@ export async function guardarPar(
   const tasaManual = parseFloat((formData.get('tasa')  as string) ?? '0')
 
   const db  = createAdminClient()
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
 
   const { data: par } = await db
     .from('pares_tasa')

@@ -9,6 +9,11 @@
 //
 // No toca sesión ni revalida: eso es responsabilidad de quien lo llama.
 
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento fechado de noche el último día
+// del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
+
 import type { createAdminClient } from '@/lib/supabase/admin'
 
 type Db = ReturnType<typeof createAdminClient>
@@ -118,7 +123,7 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
   if (!pares?.length) return { actualizadas: 0, sinCambios: 0, errores: [], cambios: [] }
 
   const previas = await ultimasTasas(db, clientId)
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
   const errores: string[] = []
   const cambios: CambioTasa[] = []
   let   actualizadas = 0

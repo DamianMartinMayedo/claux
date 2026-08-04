@@ -7,7 +7,7 @@ import { obtenerEmpresas }   from './empresas'
 import { estadoStock, pideAtencion, minimoAplicable } from '@/lib/inventario/stock'
 import { valorarPorMoneda, type ValorMoneda } from '@/lib/inventario/valoracion'
 import { consumoDiario, diasDeCobertura, DIAS_VENTANA, type MovimientoConsumo } from '@/lib/inventario/consumo'
-import { LIMITE_LISTADO } from '@/lib/listados'
+import { limiteDelFiltro, type FiltroListado } from '@/lib/listados'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -153,8 +153,12 @@ export interface AlmacenDetalleData {
   /** Moneda en la que se enseña el detalle por línea (la primera con costes). */
   monedaVista:  string | null
   movimientos:  { movimiento_id: string; fecha: string; tipo: string; producto: string; cantidad: number; motivo: string | null; origen: string }[]
-  /** Se tocó el techo de LIMITE_LISTADO: hay más movimientos que los que se traen aquí. */
+  /** Se tocó el techo: hay más movimientos que los que se traen aquí. */
   movimientosHayMas: boolean
+  /** Cuántos hay DE VERDAD, y con qué techo se pidió. Sin el total, el aviso podía decir
+   *  que faltaban pero no cuántos, y no había forma de traerlos. */
+  movimientosTotal:  number
+  movimientosLimite: number
   /**
    * Solo para NO pintar «Contar». No es control de acceso —ese lo hacen las acciones—
    * pero contar es una PÁGINA, no una acción: sin esto, quien no puede editar pulsa el
@@ -163,7 +167,9 @@ export interface AlmacenDetalleData {
   puede_editar: boolean
 }
 
-export async function obtenerAlmacenDetalle(almacen_id: string): Promise<AlmacenDetalleData | null> {
+export async function obtenerAlmacenDetalle(
+  almacen_id: string, filtro?: FiltroListado,
+): Promise<AlmacenDetalleData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
@@ -174,8 +180,9 @@ export async function obtenerAlmacenDetalle(almacen_id: string): Promise<Almacen
 
   // Ventana de consumo para la cobertura: 90 días desde hoy.
   const desdeConsumo = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString().split('T')[0]
+  const limiteMovs = limiteDelFiltro(filtro)
 
-  const [{ data: stock }, { data: prods }, { data: cfg }, { data: mon }, { data: movs }, { data: movsConsumo }, empresas] = await Promise.all([
+  const [{ data: stock }, { data: prods }, { data: cfg }, { data: mon }, { data: movs, count: movsCount }, { data: movsConsumo }, empresas] = await Promise.all([
     db.from('stock_almacenes').select('producto_id, cantidad')
       .eq('client_id', session.client_id).eq('almacen_id', almacen_id),
     db.from('products').select('producto_id, nombre, codigo, unidad, stock_minimo, costos, tipo')
@@ -183,12 +190,13 @@ export async function obtenerAlmacenDetalle(almacen_id: string): Promise<Almacen
     db.from('producto_almacen_config').select('producto_id, stock_minimo')
       .eq('client_id', session.client_id).eq('almacen_id', almacen_id),
     db.from('monedas').select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo'),
+    // `count: 'exact'`: el aviso tiene que poder decir CUÁNTOS faltan (y ofrecer traerlos).
     db.from('movimientos_inventario')
-      .select('movimiento_id, fecha, tipo, producto_id, cantidad, motivo, origen')
+      .select('movimiento_id, fecha, tipo, producto_id, cantidad, motivo, origen', { count: 'exact' })
       .eq('client_id', session.client_id)
       .or(`almacen_id.eq.${almacen_id},almacen_destino_id.eq.${almacen_id}`)
       .order('created_at', { ascending: false })
-      .limit(LIMITE_LISTADO),
+      .limit(limiteMovs),
     // Solo las SALIDA/TRANSFERENCIA de este almacén en la ventana: es lo único que
     // `consumoDiario` cuenta, así que no se trae el ledger entero.
     db.from('movimientos_inventario')
@@ -258,7 +266,9 @@ export async function obtenerAlmacenDetalle(almacen_id: string): Promise<Almacen
       motivo:        (m.motivo as string) ?? null,
       origen:        m.origen as string,
     })),
-    movimientosHayMas: (movs ?? []).length >= LIMITE_LISTADO,
+    movimientosHayMas: (movs ?? []).length >= limiteMovs,
+    movimientosTotal:  movsCount ?? (movs ?? []).length,
+    movimientosLimite: limiteMovs,
     puede_editar: await puedeEditarModulo('inventario'),
   }
 }

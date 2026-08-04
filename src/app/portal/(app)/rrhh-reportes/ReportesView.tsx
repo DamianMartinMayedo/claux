@@ -178,7 +178,7 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
           empresas={empresasFiltro}
           value={filtroEmpresa}
           onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
+          todasLabel="Todas"
         />
         <select className="input ter-filter-select" value={anio} onChange={e => setAnio(e.target.value)}>
           {anios.map(a => <option key={a} value={a}>Año {a}</option>)}

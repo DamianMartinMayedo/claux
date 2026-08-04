@@ -3,6 +3,11 @@
 // «Vencida» NO se guarda en BD: se DERIVA aquí (estadoEfectivo), como CLAUX deriva
 // los estados de las facturas. Ver docs/planes/modulo-servicios.md.
 
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento fechado de noche el último día
+// del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
+
 export type PeriodicidadSub = 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL'
 export type EstadoSub       = 'ACTIVA' | 'PAUSADA' | 'CANCELADA'
 /** El estado que se muestra: los almacenados + «VENCIDA», derivada. */
@@ -324,7 +329,7 @@ export interface TerceroSuscripcion {
 }
 
 export function hoyStr(): string {
-  return new Date().toISOString().split('T')[0]
+  return hoyEnTz()
 }
 
 /** Suma una periodicidad a una fecha 'YYYY-MM-DD' (en UTC, sin tocar la zona). */

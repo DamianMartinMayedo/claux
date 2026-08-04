@@ -18,7 +18,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { LIMITE_LISTADO } from '@/lib/listados'
+import { limiteDelFiltro, type FiltroListado } from '@/lib/listados'
 import { leerArchivo, type ArchivoLeido, type FormatoArchivo } from '@/lib/importador/archivo'
 import { norm } from '@/lib/importador/util'
 import { parseNumeroEsOpcional } from '@/lib/numeros'
@@ -27,6 +27,10 @@ import {
   aplicarMovimiento, stockEnAlmacen,
   esMotivoValido, motivoValidoParaDiferencia, MOTIVO_LABEL, type MotivoTipo,
 } from './_inventario-helpers'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 export type EstadoConteo = 'BORRADOR' | 'APLICADO' | 'ANULADO'
 
@@ -136,7 +140,7 @@ export async function abrirConteo(
     conteo_id, client_id: session.client_id,
     almacen_id, empresa_id: alm.empresa_id,
     estado: 'BORRADOR',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: hoyEnTz(),
     updated_at: new Date().toISOString(),
   })
   if (eC) {
@@ -322,6 +326,14 @@ export async function obtenerConteo(conteo_id: string): Promise<ConteoDetalle | 
 
 // ── Listado: el acta tiene que poder encontrarse ───────────────────────────────
 
+/** El listado con su techo: sin `total` no se puede avisar de cuántos faltan. */
+export interface ListadoConteos {
+  conteos: ResumenConteo[]
+  hay_mas: boolean
+  total:   number
+  limite:  number
+}
+
 export interface ResumenConteo {
   conteo_id:   string
   fecha:       string
@@ -342,18 +354,26 @@ export interface ResumenConteo {
  * Sin esto el acta existía en la base y era **inalcanzable**: se aplicaba el conteo y
  * desaparecía de la vista, cuando es justo el documento que hay que poder enseñar.
  */
-export async function obtenerConteosDeAlmacen(almacen_id: string): Promise<ResumenConteo[]> {
+export async function obtenerConteosDeAlmacen(
+  almacen_id: string, filtro?: FiltroListado,
+): Promise<ListadoConteos> {
   const session = await getPortalSession()
-  if (!session) return []
+  const limite = limiteDelFiltro(filtro)
+  const vacio: ListadoConteos = { conteos: [], hay_mas: false, total: 0, limite }
+  if (!session) return vacio
 
   const db = createAdminClient()
-  const { data: conteos } = await db.from('conteos')
-    .select('conteo_id, fecha, estado, contado_por, notas, created_at, aplicado_at')
+  // `count: 'exact'`: recortaba en el techo **sin calcular si faltaban**, o sea que no podía
+  // avisar. Un almacén que se cuenta cada semana pasa el techo en unos años y los conteos
+  // viejos —que son actas que hay que poder enseñar— desaparecían sin decir nada.
+  const { data: conteos, count } = await db.from('conteos')
+    .select('conteo_id, fecha, estado, contado_por, notas, created_at, aplicado_at', { count: 'exact' })
     .eq('client_id', session.client_id).eq('almacen_id', almacen_id)
     .order('fecha', { ascending: false }).order('created_at', { ascending: false })
-    .limit(LIMITE_LISTADO)
+    .limit(limite)
   const ids = ((conteos ?? []) as { conteo_id: string }[]).map(c => c.conteo_id)
-  if (ids.length === 0) return []
+  const meta = { hay_mas: ids.length >= limite, total: count ?? ids.length, limite }
+  if (ids.length === 0) return vacio
 
   const { data: lineas } = await db.from('conteo_lineas')
     .select('conteo_id, contado, motivo_tipo')
@@ -370,17 +390,20 @@ export async function obtenerConteosDeAlmacen(almacen_id: string): Promise<Resum
     if (l.motivo_tipo) difs.set(l.conteo_id, (difs.get(l.conteo_id) ?? 0) + 1)
   }
 
-  return ((conteos ?? []) as Record<string, unknown>[]).map(c => ({
-    conteo_id:   c.conteo_id as string,
-    fecha:       c.fecha as string,
-    estado:      c.estado as EstadoConteo,
-    contado_por: (c.contado_por as string) ?? null,
-    notas:       (c.notas as string) ?? null,
-    created_at:  c.created_at as string,
-    aplicado_at: (c.aplicado_at as string) ?? null,
-    contadas:    contadas.get(c.conteo_id as string) ?? 0,
-    diferencias: difs.get(c.conteo_id as string) ?? 0,
-  }))
+  return {
+    ...meta,
+    conteos: ((conteos ?? []) as Record<string, unknown>[]).map(c => ({
+      conteo_id:   c.conteo_id as string,
+      fecha:       c.fecha as string,
+      estado:      c.estado as EstadoConteo,
+      contado_por: (c.contado_por as string) ?? null,
+      notas:       (c.notas as string) ?? null,
+      created_at:  c.created_at as string,
+      aplicado_at: (c.aplicado_at as string) ?? null,
+      contadas:    contadas.get(c.conteo_id as string) ?? 0,
+      diferencias: difs.get(c.conteo_id as string) ?? 0,
+    })),
+  }
 }
 
 // ── Cabecera: quién contó y las notas del acta ─────────────────────────────────
@@ -698,7 +721,7 @@ export async function aplicarConteo(conteo_id: string): Promise<ResultadoConteo>
   // Se recorre TODO antes de tocar una sola existencia: hay que saber si el acta está
   // completa. Aplicar la mitad y fallar en la sexta línea dejaría un stock que ya no
   // coincide con lo contado y un conteo imposible de retomar.
-  const fecha = new Date().toISOString().split('T')[0]
+  const fecha = hoyEnTz()
   const aplicar: { l: Pendiente; delta: number; motivo: MotivoTipo }[] = []
   const sinCausa: { producto_id: string; nombre: string; diferencia: number }[] = []
   let cambiadas = 0

@@ -25,13 +25,21 @@
 
 import { estadoCobro, type Tramo } from '@/lib/cobranza-core'
 import { calcularCobroAcuerdo, estadoEfectivo, type DescuentoModo, type PeriodicidadSub } from '@/lib/suscripciones'
-import { cobroNaceLiquidado, estadoDeRegistro, type EstadoRegistro } from '@/lib/gastos-core'
+import {
+  cobroNaceLiquidado, estadoDeRegistro, generaSaldo, type EstadoRegistro,
+} from '@/lib/gastos-core'
 import { MOTIVO_LABEL, type MotivoTipo } from '@/app/actions/portal/_inventario-helpers'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
+import { SIN_CATEGORIA, SIN_TERCERO, importeBuscado } from '@/lib/listados'
+// «Hoy» en la zona del NEGOCIO (America/Havana). Con `toISOString()` (UTC), a partir de las
+// 20:00 la fecha ya es la de mañana: el tramo de antigüedad de una deuda y el estado
+// efectivo de un acuerdo salían distintos en el fichero y en la pantalla.
+import { hoyEnTz } from '@/lib/fecha-tz'
 import type { ValorCelda } from './csv'
 
-/** Valor del selector de tercero que significa «los que no tienen» (CxC/CxP). */
-export const SIN_TERCERO = '__sin__'
+// Los centinelas de «los que no tienen» viven en `lib/listados.ts`: los necesitan las
+// vistas, y este fichero no se puede importar desde el navegador (arrastra acciones de
+// servidor). Aquí solo se consumen.
 
 const TRAMO_ETIQUETA: Record<Tramo, string> = {
   AL_DIA: 'Al día', V_1_30: '1–30 días', V_31_60: '31–60 días', V_60: '+60 días',
@@ -65,6 +73,8 @@ export interface FiltroExport {
   categoria?:  string
   cuenta_id?:  string
   almacen_id?: string
+  /** Movimientos de inventario: el motivo del ajuste (`motivo_tipo`). */
+  motivo?:     string
   /** Acta de un conteo físico concreto (mig. 159). */
   conteo_id?:  string
   /** CxC/CxP: tramo de antigüedad de la deuda (`AL_DIA`, `V_1_30`…). */
@@ -73,6 +83,57 @@ export interface FiltroExport {
   archivadas?: boolean
   /** CxC/CxP: solo lo que queda por cobrar/pagar. */
   con_saldo?:  boolean
+  /** Catálogo: solo lo que está en o por debajo de su mínimo de stock. */
+  bajo_minimo?: boolean
+  /** Catálogo de servicios: solo los que se pueden contratar como suscripción. */
+  suscribibles?: boolean
+
+  // ── Alcance (NO es un filtro de pantalla) ───────────────────────────────────
+  /**
+   * Empresas que este usuario tiene DERECHO a ver.
+   *
+   * **Lo pone el servidor**: `exportarListado` lo sobrescribe siempre, así que lo que
+   * llegue del navegador se descarta. No es una preferencia como `empresa_id` —que es
+   * «enséñame solo esta»— sino el permiso: un `rol='usuario'` solo ve las empresas de
+   * `empresa_usuario` (`obtenerEmpresas`), y cada listado del portal lo aplica con un
+   * `.in('empresa_id', …)`.
+   *
+   * La exportación NO lo hacía: filtraba solo por `client_id`, de modo que un usuario
+   * restringido a una empresa pulsaba «Descargar» y se llevaba las de todo el tenant. Que
+   * la píldora de empresa no esté marcada no es permiso para traerlo todo.
+   *
+   * Se consume en `leer()` a partir del NOMBRE DE LA TABLA (`TABLAS_CON_EMPRESA`), no
+   * entrada por entrada: una entrada nueva queda acotada sin que nadie se acuerde de
+   * acotarla, que es justo el olvido que causó la fuga.
+   */
+  empresas_visibles?: string[]
+}
+
+/**
+ * Tablas del tenant que llevan `empresa_id` y por tanto se acotan al alcance del usuario.
+ *
+ * Es una lista a mano, o sea que deriva sola con cada tabla nueva —el mismo problema que
+ * `eliminar_cliente` y las políticas RLS—. Por eso `npm run audit:filtros` la compara
+ * contra `information_schema`: si aparece una tabla con `empresa_id` que no esté aquí, lo
+ * canta. Verificada contra la BD de producción el 2026-08-03.
+ */
+const TABLAS_CON_EMPRESA = new Set([
+  'almacenes', 'caja_sesiones', 'caja_tickets', 'compras', 'conteos', 'cuentas',
+  'empleados', 'facturas', 'gastos_cobros', 'movimientos_inventario',
+  'movimientos_tesoreria', 'nominas', 'ofertas', 'suscripciones', 'third_parties',
+  'turnos',
+])
+
+/**
+ * El alcance, listo para un `.in()`.
+ *
+ * Sin empresas visibles se devuelve el centinela `__none__` y no un array vacío: un
+ * `.in('empresa_id', [])` en PostgREST no filtra a cero, revienta la consulta entera.
+ * Misma convención que `idsFiltro` en las acciones del portal.
+ */
+function alcance(filtro?: FiltroExport): string[] {
+  const ids = filtro?.empresas_visibles ?? []
+  return ids.length ? ids : ['__none__']
 }
 
 export interface TablaExportable {
@@ -112,10 +173,29 @@ async function leer(
    * descarga las entradas por traspaso que la pantalla sí enseña. Se ignora lo vacío.
    */
   algunoIgual?: Record<string, string | undefined>,
+  /**
+   * Columnas que tienen que venir VACÍAS. Existe por «Sin categoría», que en la pantalla es
+   * una opción del desplegable como cualquier otra: sin esto, el filtro se traducía a una
+   * igualdad contra el centinela `__sin__` (cero filas) o se mandaba vacío (todas), y en los
+   * dos casos el fichero no era lo que se estaba viendo.
+   */
+  esNulo?: string[],
+  /**
+   * Columna de importe que también casa cuando lo buscado es un NÚMERO.
+   *
+   * Los listados de Ventas, Gastos y Tesorería buscan por importe exacto además de por
+   * texto (`importeBuscado`), así que teclear «150» encuentra el gasto de 150. La descarga
+   * solo miraba los campos de texto: mismo filtro, menos filas en el fichero.
+   */
+  campoImporte?: string,
 ): Promise<Record<string, unknown>[]> {
   let query = db.from(tabla)
     .select(columnas)
     .eq('client_id', client_id)
+  // El ALCANCE antes que cualquier filtro de pantalla: `client_id` dice de qué negocio son
+  // las filas, pero no cuáles de sus empresas puede ver ESTE usuario. Va por nombre de
+  // tabla para que no dependa de que cada entrada se acuerde (ver `empresas_visibles`).
+  if (TABLAS_CON_EMPRESA.has(tabla)) query = query.in('empresa_id', alcance(filtro))
   for (const [campo, valor] of Object.entries(iguales ?? {})) {
     if (valor === undefined || valor === '') continue
     query = query.eq(campo, valor)
@@ -124,6 +204,7 @@ async function leer(
     if (!valores?.length) continue
     query = query.in(campo, valores)
   }
+  for (const campo of esNulo ?? []) query = query.is(campo, null)
   // Un `.or()` por bloque: PostgREST los combina con AND entre sí, que es lo que se
   // quiere (este OR acota, no ensancha lo que ya filtran los demás).
   const alguno = Object.entries(algunoIgual ?? {}).filter(([, v]) => v !== undefined && v !== '')
@@ -138,7 +219,11 @@ async function leer(
   if (t && camposTexto?.length) {
     // Se escapan los comodines del patrón: buscar «50%» no puede devolver media tabla.
     const patron = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`
-    query = query.or(camposTexto.map(c => `${c}.ilike.${patron}`).join(','))
+    const partes = camposTexto.map(c => `${c}.ilike.${patron}`)
+    // Y por importe exacto si lo buscado es un número, igual que el listado.
+    const importe = importeBuscado(t)
+    if (campoImporte && importe != null) partes.push(`${campoImporte}.eq.${importe}`)
+    query = query.or(partes.join(','))
   }
   const { data, error } = await query.order(orden, { ascending: true })
   if (error) throw new Error(error.message)
@@ -151,6 +236,30 @@ async function conDescendientes(db: Db, client_id: string, categoria_id: string)
     .select('categoria_id, parent_id').eq('client_id', client_id)
   const filas = (data ?? []) as { categoria_id: string; parent_id: string | null }[]
   return [categoria_id, ...filas.filter(c => c.parent_id === categoria_id).map(c => c.categoria_id)]
+}
+
+/**
+ * Almacenes que el usuario puede ver, para acotar lo que cuelga de ellos.
+ *
+ * `stock_almacenes`, `conteo_lineas` y compañía **no tienen `empresa_id`**: su empresa es la
+ * de su almacén. Sin esto, «Existencias» y la «Hoja de conteo» se bajaban el stock de todos
+ * los almacenes del tenant —con el nombre de la empresa ajena en su columna— aunque la
+ * pantalla solo enseñara los de una.
+ *
+ * Si el filtro de pantalla pide un almacén concreto, se cruza con el alcance: pedir uno que
+ * no te toca devuelve cero filas, no el almacén.
+ */
+async function almacenesVisibles(
+  db: Db, client_id: string, filtro?: FiltroExport,
+): Promise<string[]> {
+  const { data } = await db.from('almacenes')
+    .select('almacen_id')
+    .eq('client_id', client_id)
+    .in('empresa_id', alcance(filtro))
+  const ids = ((data ?? []) as { almacen_id: string }[]).map(a => a.almacen_id)
+  const pedido = filtro?.almacen_id
+  const visibles = pedido ? ids.filter(id => id === pedido) : ids
+  return visibles.length ? visibles : ['__none__']
 }
 
 /** Mapa id → nombre, para que el CSV diga «Bar Manolo» y no «TER-9F2A11C4». */
@@ -229,14 +338,14 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // eso el filtro por estado también se aplica después de calcularlo.
       const [filas, terceros, empresas] = await Promise.all([
         leer(db, 'gastos_cobros', cid,
-          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, categoria_id, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, notas', 'fecha',
+          'registro_id, tipo, fecha, vencimiento, tercero_id, categoria, categoria_id, concepto, descripcion, moneda, monto, empresa_id, origen_tipo, naturaleza, notas', 'fecha',
           filtro, 'fecha', ['concepto', 'descripcion', 'notas', 'registro_id'],
           {
             empresa_id: filtro?.empresa_id,
             tipo:       filtro?.tipo,
             tercero_id: filtro?.tercero,
           },
-          { categoria_id: familia }),
+          { categoria_id: familia }, undefined, undefined, 'monto'),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -255,10 +364,14 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         }
       }
       const estadoDe = (f: Record<string, unknown>): EstadoRegistro =>
-        // El resumen de un cierre de caja NACE cobrado: su dinero entró por el movimiento
-        // del cierre, que no referencia esta fila, así que el cálculo daría PENDIENTE
-        // para siempre.
+        // Dos filas que nadie liquida nunca y que, sin excepción, saldrían PENDIENTE
+        // para siempre. Mismas dos que en la pantalla (`obtenerGastosCobros`), para que
+        // la descarga y el listado no digan estados distintos de la misma fila:
+        //  · el resumen de un cierre de caja NACE cobrado (su dinero entró por el
+        //    movimiento del cierre, que no referencia esta fila);
+        //  · una fila de solo COSTE (mig. 166) no se le debe a nadie.
         cobroNaceLiquidado(f.origen_tipo as string | null)
+          || !generaSaldo(f.naturaleza as string | null)
           ? 'LIQUIDADO'
           : estadoDeRegistro(Number(f.monto), liquidado.get(f.registro_id as string) ?? 0)
 
@@ -300,7 +413,8 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
             cliente_id: filtro?.tercero,
             // El listado esconde lo archivado salvo que se pida verlo; el fichero igual.
             ...(filtro?.archivadas ? {} : { archivado: false }),
-          }),
+          },
+          undefined, undefined, undefined, 'total'),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -318,7 +432,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
           cobrado.set(m.referencia_id, (cobrado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
         }
       }
-      const hoy = new Date().toISOString().slice(0, 10)
+      const hoy = hoyEnTz()
 
       return filas
         .map(f => {
@@ -359,7 +473,8 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
             estado:     filtro?.estado,
             cliente_id: filtro?.tercero,
             ...(filtro?.archivadas ? {} : { archivado: false }),
-          }),
+          },
+          undefined, undefined, undefined, 'total'),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -393,9 +508,11 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         .filter(d => {
           if (filtro?.tramo      && d.tramo      !== filtro.tramo)      return false
           if (filtro?.empresa_id && d.empresa_id !== filtro.empresa_id) return false
-          if (filtro?.tercero === SIN_TERCERO && d.tercero_nombre)      return false
+          // Por FICHA, no por nombre: con una ficha por empresa, comparar nombres metía en
+          // el fichero las deudas de los tres terceros homónimos.
+          if (filtro?.tercero === SIN_TERCERO && d.tercero_id)          return false
           if (filtro?.tercero && filtro.tercero !== SIN_TERCERO
-              && d.tercero_nombre !== filtro.tercero)                   return false
+              && d.tercero_id !== filtro.tercero)                       return false
           if (t && !(
             d.numero.toLowerCase().includes(t)
             || (d.tercero_nombre ?? '').toLowerCase().includes(t)
@@ -418,6 +535,14 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     cabeceras: ['Fecha', 'Tipo', 'Cuenta', 'Concepto', 'Categoría', 'Moneda', 'Importe',
       'Empresa', 'Origen', 'Notas'],
     cargar: async (db, cid, filtro) => {
+      // La categoría se filtra por `categoria_id` CON SUS SUBCATEGORÍAS, igual que la
+      // pantalla. Se filtraba por la columna `categoria`, que es la ETIQUETA de texto,
+      // contra el id que manda el selector: no casaba nunca, así que filtrar por categoría
+      // en Tesorería devolvía un fichero VACÍO — y «Sin categoría» también.
+      const sinCategoria = filtro?.categoria === SIN_CATEGORIA
+      const familia = filtro?.categoria && !sinCategoria
+        ? await conDescendientes(db, cid, filtro.categoria)
+        : undefined
       const [filas, cuentas, empresas] = await Promise.all([
         leer(db, 'movimientos_tesoreria', cid,
           'fecha, tipo, cuenta_id, concepto, categoria, moneda, monto, empresa_id, origen, notas', 'fecha',
@@ -426,8 +551,11 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
             empresa_id: filtro?.empresa_id,
             cuenta_id:  filtro?.cuenta_id,
             tipo:       filtro?.tipo,
-            categoria:  filtro?.categoria,
-          }),
+          },
+          { categoria_id: familia },
+          undefined,
+          sinCategoria ? ['categoria_id'] : undefined,
+          'monto'),
         diccionario(db, 'cuentas', cid, 'cuenta_id', 'nombre'),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
@@ -453,19 +581,33 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     cargar: async (db, cid, filtro) => {
       const [filas, categorias, terceros] = await Promise.all([
         leer(db, 'products', cid,
-          'codigo, tipo, nombre, descripcion, categoria_id, proveedor_id, unidad, stock_actual, stock_minimo, estado', 'nombre',
+          'codigo, tipo, nombre, descripcion, categoria_id, proveedor_id, unidad, stock_actual, stock_minimo, estado, es_suscribible', 'nombre',
           filtro, undefined, ['nombre', 'codigo', 'descripcion'],
           {
             tipo:         filtro?.tipo,
-            categoria_id: filtro?.categoria,
+            // «Solo suscribibles» SÍ es columna, así que va a la consulta.
+            es_suscribible: filtro?.suscribibles ? true : undefined,
+            // «Sin categoría» es una opción del desplegable como las demás: antes se
+            // traducía a cadena vacía antes de mandarse, o sea que pedirla descargaba TODO
+            // el catálogo.
+            categoria_id: filtro?.categoria === SIN_CATEGORIA ? undefined : filtro?.categoria,
             proveedor_id: filtro?.tercero,
             // La lista enseña activos XOR archivados.
             estado:       filtro?.archivadas ? 'INACTIVO' : 'ACTIVO',
-          }),
+          },
+          undefined, undefined,
+          filtro?.categoria === SIN_CATEGORIA ? ['categoria_id'] : undefined),
         diccionario(db, 'product_categories', cid, 'categoria_id', 'nombre'),
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
       ])
-      return filas.map(f => [
+      // «Solo bajo mínimo» compara DOS columnas entre sí, y eso PostgREST no lo expresa:
+      // se aplica aquí, sobre las filas ya traídas. Un catálogo es corto —no es un
+      // histórico— así que el coste es nulo, y sin esto marcar el filtro y descargar te
+      // daba el catálogo entero.
+      const visibles = filtro?.bajo_minimo
+        ? filas.filter(f => Number(f.stock_minimo) > 0 && Number(f.stock_actual) <= Number(f.stock_minimo))
+        : filas
+      return visibles.map(f => [
         f.codigo as string, f.tipo as string, f.nombre as string, f.descripcion as string,
         f.categoria_id ? (categorias.get(f.categoria_id as string) ?? '') : '',
         f.proveedor_id ? (terceros.get(f.proveedor_id as string) ?? '') : '',
@@ -510,6 +652,9 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
             empresa_id: filtro?.empresa_id,
             tipo:       filtro?.tipo,
             producto_id: filtro?.categoria,
+            // El motivo del ajuste: el desplegable de la pantalla no viajaba, así que
+            // filtrar «Rotura» y descargar traía también las ventas y las compras.
+            motivo_tipo: filtro?.motivo,
           },
           undefined,
           // El almacén cuenta como ORIGEN o como DESTINO, igual que en la pantalla
@@ -541,10 +686,13 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     cabeceras: ['Código', 'Producto', 'Almacén', 'Empresa', 'Unidad', 'Cantidad',
       'Mínimo', 'Coste unitario', 'Moneda', 'Valor'],
     cargar: async (db, cid, filtro) => {
+      // El stock no tiene empresa: la hereda de su almacén, así que el alcance se aplica
+      // por almacén visible (y eso ya incluye el almacén pedido en el filtro).
+      const almOk = await almacenesVisibles(db, cid, filtro)
       const [filas, prodRes, almRes, cfgRes, empresas, monRes] = await Promise.all([
         leer(db, 'stock_almacenes', cid, 'producto_id, almacen_id, cantidad', 'producto_id',
-          filtro, undefined, undefined,
-          { almacen_id: filtro?.almacen_id }),
+          filtro, undefined, undefined, undefined,
+          { almacen_id: almOk }),
         db.from('products')
           .select('producto_id, codigo, nombre, unidad, stock_minimo, costos, tipo, estado')
           .eq('client_id', cid),
@@ -602,10 +750,11 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     modulos: ['inventario'],
     cabeceras: ['Código', 'Producto', 'Almacén', 'Unidad', 'Contado'],
     cargar: async (db, cid, filtro) => {
+      const almOk = await almacenesVisibles(db, cid, filtro)
       const [filas, prodRes, almRes] = await Promise.all([
         leer(db, 'stock_almacenes', cid, 'producto_id, almacen_id, cantidad', 'producto_id',
-          filtro, undefined, undefined,
-          { almacen_id: filtro?.almacen_id }),
+          filtro, undefined, undefined, undefined,
+          { almacen_id: almOk }),
         db.from('products').select('producto_id, codigo, nombre, unidad, tipo, estado').eq('client_id', cid),
         db.from('almacenes').select('almacen_id, nombre').eq('client_id', cid),
       ])
@@ -655,8 +804,13 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       const conteo_id = filtro?.conteo_id
       if (!conteo_id) return []
 
+      // El `conteo_id` llega del navegador, así que el acta se pide por id: hay que
+      // comprobar que ese conteo es de una empresa que este usuario puede ver, o el id de
+      // otra empresa bastaría para bajarse su acta.
       const { data: cab } = await db.from('conteos').select('almacen_id, estado')
-        .eq('client_id', cid).eq('conteo_id', conteo_id).maybeSingle()
+        .eq('client_id', cid).eq('conteo_id', conteo_id)
+        .in('empresa_id', alcance(filtro))
+        .maybeSingle()
       if (!cab) return []
 
       const [lineasRes, prodRes, stockRes, movRes, monRes] = await Promise.all([
@@ -932,7 +1086,10 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         })
         porAcuerdo.set(sid, arr)
       }
-      const hoy = new Date().toISOString().split('T')[0]
+      // «Hoy» en la zona del NEGOCIO, no en UTC: con `toISOString()` el 31 por la noche ya
+      // era el 1, y el estado efectivo de un acuerdo que vence ese día salía distinto en el
+      // fichero y en la pantalla.
+      const hoy = hoyEnTz()
       return filas.filter(f => !filtro?.estado || estadoEfectivo({
         estado:                f.estado as 'ACTIVA' | 'PAUSADA' | 'CANCELADA',
         fecha_fin:             (f.fecha_fin as string | null) ?? null,
@@ -1079,12 +1236,24 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     modulos: ['reservas_citas'],
     cabeceras: ['Fecha', 'Hora', 'Cliente', 'Teléfono', 'Personas', 'Canal', 'Estado', 'Notas'],
     cargar: async (db, cid, filtro) => {
-      const filas = await leer(db, 'reservas', cid,
-        'fecha, hora, nombre_cliente, telefono, personas, canal, estado, notas, recurso_id', 'fecha',
-        filtro, 'fecha', ['nombre_cliente', 'telefono', 'notas'],
-        { estado: filtro?.estado, canal: filtro?.tipo })
+      // La búsqueda NO se delega a `leer`: en la pantalla el texto busca también en el
+      // nombre del TURNO, que vive en otra tabla. Delegándola, el fichero traía MENOS filas
+      // que la pantalla al buscar por turno — y una descarga que se queda corta es peor que
+      // una que no filtra. Mismo patrón que `lineas_caja`.
+      const [filas, franjas] = await Promise.all([
+        leer(db, 'reservas', cid,
+          'fecha, hora, nombre_cliente, telefono, personas, canal, estado, notas, recurso_id, franja_id', 'fecha',
+          filtro, 'fecha', undefined,
+          { estado: filtro?.estado, canal: filtro?.tipo, franja_id: filtro?.categoria }),
+        diccionario(db, 'reserva_franjas', cid, 'franja_id', 'nombre'),
+      ])
+      const q = (filtro?.q ?? '').trim().toLowerCase()
       return filas
         .filter(f => !f.recurso_id)   // las que llevan recurso son citas, no reservas
+        .filter(f => !q || [
+          f.nombre_cliente, f.telefono, f.notas,
+          f.franja_id ? franjas.get(f.franja_id as string) : '',
+        ].filter(Boolean).join(' ').toLowerCase().includes(q))
         .map(f => [
           f.fecha as string, f.hora as string, f.nombre_cliente as string,
           f.telefono as string, f.personas as number, f.canal as string,
@@ -1099,21 +1268,32 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     cabeceras: ['Fecha', 'Hora', 'Hasta', 'Cliente', 'Teléfono', 'Profesional',
       'Servicio', 'Canal', 'Estado', 'Notas'],
     cargar: async (db, cid, filtro) => {
+      // La búsqueda se aplica ABAJO y no en `leer`: en la agenda el texto busca también por
+      // servicio y profesional, que son nombres de otras tablas. Delegándola, buscar «corte»
+      // devolvía un fichero con menos citas de las que enseña la pantalla.
       const [filas, recursos, servicios] = await Promise.all([
         leer(db, 'reservas', cid,
           'fecha, hora, hora_fin, nombre_cliente, telefono, recurso_id, servicio_id, canal, estado, notas', 'fecha',
-          filtro, 'fecha', ['nombre_cliente', 'telefono', 'notas'],
+          filtro, 'fecha', undefined,
           { estado: filtro?.estado, recurso_id: filtro?.categoria, servicio_id: filtro?.tipo }),
         diccionario(db, 'recursos',  cid, 'recurso_id',  'nombre'),
         diccionario(db, 'servicios', cid, 'servicio_id', 'nombre'),
       ])
+      const q = (filtro?.q ?? '').trim().toLowerCase()
       return filas
         .filter(f => !!f.recurso_id)
-        .map(f => [
+        .map(f => ({
+          f,
+          recurso:  recursos.get(f.recurso_id as string) ?? '',
+          servicio: f.servicio_id ? (servicios.get(f.servicio_id as string) ?? '') : '',
+        }))
+        .filter(({ f, recurso, servicio }) => !q || [
+          f.nombre_cliente, f.telefono, f.notas, servicio, recurso,
+        ].filter(Boolean).join(' ').toLowerCase().includes(q))
+        .map(({ f, recurso, servicio }) => [
           f.fecha as string, f.hora as string, f.hora_fin as string,
           f.nombre_cliente as string, f.telefono as string,
-          recursos.get(f.recurso_id as string) ?? '',
-          f.servicio_id ? (servicios.get(f.servicio_id as string) ?? '') : '',
+          recurso, servicio,
           f.canal as string, f.estado as string, f.notas as string,
         ])
     },

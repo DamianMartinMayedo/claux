@@ -98,7 +98,7 @@ export function SelectorProductoCompra({
                             aria-label={`Añadir ${p.nombre}`} />
                         </td>
                         <td data-label="Código">{p.codigo}</td>
-                        <td data-label="Producto">{p.nombre}</td>
+                        <td data-label="Producto"><span className="cell-clamp">{p.nombre}</span></td>
                         <td data-label="Último coste" className="col-num">
                           {coste != null
                             ? coste.toLocaleString('es-ES', { maximumFractionDigits: 2 })

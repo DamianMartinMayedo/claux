@@ -3,6 +3,10 @@
 import { useState, useTransition } from 'react'
 import { cancelarReservaPublica, type ReservaPublicaToken } from '@/app/actions/portal/reservas'
 import { Check, Loader2, X } from 'lucide-react'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 const ESTADO_LABEL: Record<string, string> = {
   PENDIENTE: 'Pendiente de confirmar', CONFIRMADA: 'Confirmada', RECHAZADA: 'Rechazada',
@@ -82,7 +86,7 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
           <p className="rp-hint">
             {estado === 'CANCELADA' ? 'Esta reserva está cancelada.'
               : estado === 'RECHAZADA' ? 'Esta reserva no fue aceptada.'
-              : data.fecha < new Date().toISOString().split('T')[0] ? 'Esta reserva ya pasó.'
+              : data.fecha < hoyEnTz() ? 'Esta reserva ya pasó.'
               : 'Esta reserva ya no se puede cancelar en línea. Contacta con el negocio.'}
           </p>
         )}

@@ -10,6 +10,10 @@ import { monedaValida, mapaTasas } from '@/lib/tasas'
 import { parseNumeroEs }     from '@/lib/numeros'
 import { limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
 import { minimoAplicable } from '@/lib/inventario/stock'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -74,6 +78,9 @@ export interface ComprasPageData extends FormCompra {
   rango:           { desde: string; hasta: string }
   /** Se tocó el techo de filas: hay más de las que se enseñan. */
   hay_mas:         boolean
+  /** Cuántas compras hay DE VERDAD en el rango (sin techo). */
+  total:           number
+  limite:          number
 }
 
 export interface CompraDetalleData {
@@ -99,7 +106,7 @@ function generarCompraId(): string {
   return `CMP-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 function hoy(): string {
-  return new Date().toISOString().split('T')[0]
+  return hoyEnTz()
 }
 // Redondeo a 2 decimales evitando drift de coma flotante en importes.
 function round2(n: number): number {
@@ -165,11 +172,15 @@ export async function obtenerCompras(filtro?: FiltroListado): Promise<ComprasPag
   const hasta  = filtro?.hasta ?? porDefecto.hasta
   const limite = limiteDelFiltro(filtro)
 
-  let compQuery = db.from('compras').select('*')
+  // `count: 'exact'`: el aviso del techo tiene que decir CUÁNTAS faltan, no solo que
+  // faltan. Sin el total, «acota el rango» era el único consejo posible.
+  let compQuery = db.from('compras').select('*', { count: 'exact' })
     .eq('client_id', session.client_id)
     .in('empresa_id', idsFiltro)
   if (desde) compQuery = compQuery.gte('fecha', desde)
   if (hasta) compQuery = compQuery.lte('fecha', hasta)
+  // El filtro de la barra, cuando la vista lo ESCALA porque el listado está recortado.
+  if (filtro?.estado) compQuery = compQuery.eq('estado', filtro.estado)
   compQuery = compQuery
     .order('fecha', { ascending: false })
     .order('created_at', { ascending: false })
@@ -185,6 +196,8 @@ export async function obtenerCompras(filtro?: FiltroListado): Promise<ComprasPag
     compras,
     rango: { desde, hasta },
     hay_mas: compras.length >= limite,
+    total:   compRes.count ?? compras.length,
+    limite,
     ...form,
   }
 }
@@ -443,7 +456,7 @@ export async function duplicarCompra(
     .eq('compra_id', compra_id).eq('client_id', session.client_id).order('orden')
 
   const nuevo = generarCompraId()
-  const hoy   = new Date().toISOString().split('T')[0]
+  const hoy   = hoyEnTz()
 
   // `compras.numero` es NOT NULL desde la mig. 036 y el borrador ya nace numerado:
   // se pide el siguiente del consecutivo, igual que al crear a mano. Copiar el número

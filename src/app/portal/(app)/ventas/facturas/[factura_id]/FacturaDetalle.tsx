@@ -31,6 +31,10 @@ import {
   esNumeroProvisional,
   type EstadoFactura,
 } from '../../_ventas-helpers'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 interface Props {
   data:    FacturaDetalleData
@@ -527,7 +531,7 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
                     />
                     <div className="input-group ter-col-span-3">
                       <label>Fecha <span className="required">*</span></label>
-                      <input className="input" name="fecha" type="date" required defaultValue={new Date().toISOString().split('T')[0]} />
+                      <input className="input" name="fecha" type="date" required defaultValue={hoyEnTz()} />
                     </div>
                     <div className="input-group ter-col-full">
                       <label>Notas</label>

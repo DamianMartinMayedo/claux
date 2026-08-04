@@ -7,7 +7,7 @@ import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter, useSearchParams }        from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link                                  from 'next/link'
 import {
   archivarProducto,
@@ -28,9 +28,12 @@ import {
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { ProductoFormModal } from './_ProductoFormModal'
 import { StockAjusteModal } from './_StockAjusteModal'
-import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Archive, Eye, Layers, Package, Pencil, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react'
 import Tabs from '@/components/Tabs'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import { SIN_CATEGORIA } from '@/lib/listados'
+import Filtros from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, opcionesTercero, type Filtro } from '@/lib/filtros'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 
 const TIPO_CATEGORIA_LABEL: Record<TipoCategoria, string> = {
@@ -201,6 +204,7 @@ const PERIODICIDAD_LABEL: Record<string, string> = {
 export default function ProductosView({ data }: { data: ProductosPageData }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const ruta         = usePathname()
   const [isPending, startTransition] = useTransition()
 
   // Inventario y Servicios comparten esta vista pero cada uno cataloga UN tipo
@@ -217,14 +221,16 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const [stockProducto, setStockProducto] = useState<Producto | null>(null)
   const [confirmProd,   setConfirmProd]   = useState<Producto | null>(null)
   const [eliminarProd,  setEliminarProd]  = useState<Producto | null>(null)
-  const [search,        setSearch]        = useState('')
-  const [filtroCat,     setFiltroCat]     = useState('')
-  const [filtroProv,    setFiltroProv]    = useState('')
-  const [verArchivados, setVerArchivados] = useState(false)
-  // `?stock=bajo` lo pone el pendiente del dashboard: llevaba a Movimientos, que no
-  // es donde se ve lo que falta.
-  const [soloBajoMinimo, setSoloBajoMinimo] = useState(searchParams.get('stock') === 'bajo')
-  const [soloSuscribibles, setSoloSuscribibles] = useState(false)
+  // Los filtros viven en la URL, como en el resto del portal. Aquí importa doblemente: el
+  // pendiente del dashboard entra con `?bajo_minimo=1` y el aviso de Suscripciones con
+  // `?suscribibles=1`, así que un enlace puede dejar la pantalla ya filtrada.
+  const search         = searchParams.get('q')       ?? ''
+  const filtroCat      = searchParams.get('cat')     ?? ''
+  const filtroProv     = searchParams.get('prov')    ?? ''
+  const verArchivados  = searchParams.get('archivadas') === '1'
+  // `stock=bajo` se sigue entendiendo: es el enlace que ya reparte el dashboard.
+  const soloBajoMinimo = searchParams.get('bajo_minimo') === '1' || searchParams.get('stock') === 'bajo'
+  const soloSuscribibles = searchParams.get('suscribibles') === '1'
 
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<Categoria | null>(null)
@@ -256,7 +262,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       : []
   }, [repartoDe])
 
-  const tieneAlerta  = (p: Producto) => alertasDe(p).length > 0
+  // Memoizado como `alertasDe`, no una función suelta: dos `useMemo` dependen de él, y
+  // recreándolo en cada render el React Compiler no podía conservar esa memoización y se
+  // saltaba la optimización del componente ENTERO (era el error de `preserve-manual-memoization`).
+  const tieneAlerta  = useMemo(() => (p: Producto) => alertasDe(p).length > 0, [alertasDe])
   const tituloAlerta = (p: Producto) => alertasDe(p)
     .map(a => a.almacen ? `${a.almacen}: ${a.cantidad} (mínimo ${a.minimo})` : `Mínimo: ${a.minimo}`)
     .join(' · ')
@@ -286,7 +295,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
   const bajoMinimoCount = useMemo(
     () => data.productos.filter(p => p.estado === 'ACTIVO' && tieneAlerta(p)).length,
-    [data.productos, tieneAlerta], // eslint-disable-line react-hooks/exhaustive-deps
+    [data.productos, tieneAlerta],
   )
 
   const productosFiltrados = useMemo(() => {
@@ -295,7 +304,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       if ((p.estado === 'ACTIVO') === verArchivados)       return false
       if (soloBajoMinimo && !tieneAlerta(p))               return false
       if (soloSuscribibles && !p.es_suscribible)          return false
-      if (filtroCat === '__sin_categoria__') {
+      if (filtroCat === SIN_CATEGORIA) {
         if (p.categoria_id) return false
       } else if (filtroCat && p.categoria_id !== filtroCat) return false
       if (filtroProv && p.proveedor_id !== filtroProv)     return false
@@ -308,7 +317,8 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       }
       return true
     })
-  }, [data.productos, search, filtroCat, filtroProv, verArchivados, soloBajoMinimo, soloSuscribibles, categoriaMap]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data.productos, search, filtroCat, filtroProv, verArchivados, soloBajoMinimo,
+      soloSuscribibles, categoriaMap, tieneAlerta])
 
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
@@ -347,13 +357,77 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
   const activos           = data.productos.filter(p => p.estado === 'ACTIVO').length
   const archivados        = data.productos.filter(p => p.estado === 'INACTIVO').length
   const categoriasActivas = data.categorias.filter(c => c.estado === 'ACTIVO')
-  // Mismo criterio que en ProductoFormModal: agrupar por empresa solo si hay más de
-  // una, o un proveedor con ficha en dos empresas sale como duplicado sin explicación.
-  const proveedoresPorEmpresa = data.empresas.length > 1
-    ? data.empresas
-        .map(e => ({ empresa: e, items: data.proveedores.filter(p => p.empresa_id === e.empresa_id) }))
-        .filter(g => g.items.length > 0)
-    : null
+  // Nombre de empresa para agrupar el desplegable de proveedores. Mismo criterio que en
+  // ProductoFormModal: solo con más de una empresa, o el grupo no distingue nada.
+  const nombreOf = useMemo(() => {
+    const m = new Map(data.empresas.map(e => [e.empresa_id, e.nombre]))
+    return (id: string) => m.get(id) ?? id
+  }, [data.empresas])
+
+  /**
+   * LA DECLARACIÓN. Todos en `cliente`: el catálogo se trae entero, así que filtrar en el
+   * navegador da el mismo resultado que filtrarlo en la consulta.
+   *
+   * Los dos últimos («bajo mínimo», «suscribibles») antes no viajaban a la descarga: se
+   * marcaba el filtro y el fichero traía el catálogo completo. Ahora salen de aquí como los
+   * demás, y el registro de exportación los aplica.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    // La página ES el tipo: Inventario cataloga PRODUCTO y Servicios SERVICIO. Implícito.
+    { clave: 'tipo', label: 'Tipo', valor: data.modo, widget: 'select', donde: 'cliente', implicito: true },
+    {
+      clave: 'categoria', param: 'cat', label: 'Todas las categorías', valor: filtroCat,
+      rotulo: 'Categoría',
+      widget: 'select', donde: 'cliente',
+      ocultarSi: categoriasActivas.length === 0 && sinCategoriaCount === 0,
+      opciones: [
+        ...categoriasActivas.map(c => ({ valor: c.categoria_id, label: c.nombre })),
+        // El centinela es el COMPARTIDO: tenía uno propio y el registro de exportación lo
+        // traducía a cadena vacía, o sea que pedir «Sin categoría» descargaba todo.
+        ...(sinCategoriaCount > 0
+          ? [{ valor: SIN_CATEGORIA, label: `Sin categoría (${sinCategoriaCount})` }]
+          : []),
+      ],
+    },
+    {
+      clave: 'tercero', param: 'prov', label: 'Todos los proveedores', valor: filtroProv,
+      rotulo: 'Proveedor',
+      widget: 'select', donde: 'cliente',
+      ocultarSi: data.proveedores.length === 0,
+      // Agrupados POR EMPRESA, con el mismo helper que el resto del portal: un proveedor con
+      // ficha en dos empresas salía duplicado sin explicación.
+      opciones: opcionesTercero(data.proveedores, nombreOf, data.empresas.length > 1),
+    },
+    {
+      clave: 'bajo_minimo',
+      label: bajoMinimoCount > 0 ? `Solo bajo mínimo (${bajoMinimoCount})` : 'Solo bajo mínimo',
+      valor: soloBajoMinimo ? '1' : '', widget: 'toggle', donde: 'cliente',
+      ocultarSi: !esProducto,
+    },
+    {
+      clave: 'suscribibles',
+      label: suscribiblesCount > 0 ? `Solo suscribibles (${suscribiblesCount})` : 'Solo suscribibles',
+      valor: soloSuscribibles ? '1' : '', widget: 'toggle', donde: 'cliente',
+      ocultarSi: esProducto,
+    },
+    {
+      clave: 'archivadas',
+      label: archivados > 0 ? `Archivados (${archivados})` : 'Archivados',
+      valor: verArchivados ? '1' : '', widget: 'toggle', donde: 'cliente',
+    },
+  ], [data.modo, data.proveedores, filtroCat, filtroProv, soloBajoMinimo, soloSuscribibles,
+      verArchivados, categoriasActivas, sinCategoriaCount, nombreOf, data.empresas.length,
+      bajoMinimoCount, suscribiblesCount, archivados, esProducto])
+
+  // «Ver los artículos de esta categoría» desde la pestaña de Categorías. El filtro vive en
+  // la URL, así que esto es una navegación, no un `setState`.
+  function verCategoria(categoria: string) {
+    setTab('productos')
+    const next = new URLSearchParams(searchParams.toString())
+    next.set('cat', categoria)
+    router.replace(`${ruta}?${next.toString()}`, { scroll: false })
+  }
+  const verSinCategoria = () => verCategoria(SIN_CATEGORIA)
 
   function openCreate()           { setEditProducto(null); setProductoModal(true) }
   function openEdit(p: Producto)  { setEditProducto(p);    setProductoModal(true) }
@@ -460,21 +534,12 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
           ) : (
             <ExportarMenu
               clave="productos"
-              filtro={{
-                q:          search,
-                tipo:       data.modo,
-                categoria:  filtroCat === '__sin_categoria__' ? '' : filtroCat,
-                tercero:    filtroProv,
-                archivadas: verArchivados,
-              }}
+              filtro={filtroExport(declaracion, { q: search })}
               resumen={[
                 esProducto ? 'productos' : 'servicios',
-                filtroCat && filtroCat !== '__sin_categoria__'
-                  && (data.categorias.find(c => c.categoria_id === filtroCat)?.nombre ?? ''),
-                filtroProv && (data.proveedores.find(p => p.tercero_id === filtroProv)?.nombre ?? ''),
-                verArchivados ? 'archivados' : '',
-                search && `«${search}»`,
-              ].filter((x): x is string => Boolean(x))}
+                ...resumenDe(declaracion),
+                ...(search ? [`«${search}»`] : []),
+              ]}
             />
           )}
           {tab === 'productos'
@@ -498,70 +563,12 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
       {/* ══ TAB PRODUCTOS ══ */}
       {tab === 'productos' && (
         <>
-          {/* Toolbar */}
-          <div className="ter-toolbar">
-            <div className="ter-search-wrap">
-              <Search size={16} strokeWidth={2} />
-              <input type="search" className="ter-search"
-                placeholder="Buscar por nombre, código, categoría…"
-                value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-            {(categoriasActivas.length > 0 || sinCategoriaCount > 0) && (
-              <select className="input ter-filter-select" value={filtroCat}
-                onChange={e => setFiltroCat(e.target.value)}>
-                <option value="">Todas las categorías</option>
-                {categoriasActivas.map(c => (
-                  <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
-                ))}
-                {sinCategoriaCount > 0 && (
-                  <option value="__sin_categoria__">Sin categoría ({sinCategoriaCount})</option>
-                )}
-              </select>
-            )}
-            {data.proveedores.length > 0 && (
-              <select className="input ter-filter-select" value={filtroProv}
-                onChange={e => setFiltroProv(e.target.value)}>
-                <option value="">Todos los proveedores</option>
-                {proveedoresPorEmpresa ? (
-                  proveedoresPorEmpresa.map(({ empresa, items }) => (
-                    <optgroup key={empresa.empresa_id} label={empresa.nombre}>
-                      {items.map(p => (
-                        <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
-                      ))}
-                    </optgroup>
-                  ))
-                ) : (
-                  data.proveedores.map(p => (
-                    <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
-                  ))
-                )}
-              </select>
-            )}
-            {/* El triángulo de alerta se pintaba sin forma de filtrar por él, y el
-                dashboard llevaba a Movimientos en vez de a lo que falta. */}
-            {esProducto && (
-              <label className="ter-archivados-toggle">
-                <input type="checkbox" checked={soloBajoMinimo}
-                  onChange={e => setSoloBajoMinimo(e.target.checked)} />
-                <span>Solo bajo mínimo{bajoMinimoCount > 0 && ` (${bajoMinimoCount})`}</span>
-              </label>
-            )}
-            {/* Para saber qué es contratable había que abrir ficha por ficha — y el aviso
-                de Suscripciones mandaba justo aquí a «marcar un servicio como
-                suscripción». Mismo patrón que «Solo bajo mínimo». */}
-            {!esProducto && (
-              <label className="ter-archivados-toggle">
-                <input type="checkbox" checked={soloSuscribibles}
-                  onChange={e => setSoloSuscribibles(e.target.checked)} />
-                <span>Solo suscribibles{suscribiblesCount > 0 && ` (${suscribiblesCount})`}</span>
-              </label>
-            )}
-            <label className="ter-archivados-toggle">
-              <input type="checkbox" checked={verArchivados}
-                onChange={e => setVerArchivados(e.target.checked)} />
-              <span>Archivados{archivados > 0 && ` (${archivados})`}</span>
-            </label>
-          </div>
+          {/* Sin rango: un catálogo no es un histórico. Sí buscador. */}
+          <Filtros
+            filtros={declaracion}
+            q={search}
+            placeholder="Buscar por nombre, código, categoría…"
+          />
 
           {/* Tabla */}
           <div className="card card-table">
@@ -615,7 +622,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           <td data-label="Nombre">
                             <Link
                               href={`${basePath}/${p.producto_id}`}
-                              className="table-name-link"
+                              className="table-name-link cell-clamp"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {p.nombre}
@@ -623,7 +630,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                             {/* La insignia dice qué es contratable sin abrir la ficha, y
                                 con su periodicidad por defecto: «Suscribible · Mensual». */}
                             {!esProducto && p.es_suscribible && (
-                              <span className="badge badge-purple prd-badge-suscribible">
+                              <span className="badge badge-neutral prd-badge-suscribible">
                                 Suscribible{p.periodicidad_defecto ? ` · ${PERIODICIDAD_LABEL[p.periodicidad_defecto] ?? p.periodicidad_defecto}` : ''}
                               </span>
                             )}
@@ -642,7 +649,9 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
 
                           {/* Categoría */}
                           <td data-label="Categoría" className="text-sm-muted">
-                            {p.categoria_id ? (categoriaMap[p.categoria_id] ?? '—') : '—'}
+                            <span className="cell-clamp" title={p.categoria_id ? categoriaMap[p.categoria_id] : undefined}>
+                              {p.categoria_id ? (categoriaMap[p.categoria_id] ?? '—') : '—'}
+                            </span>
                           </td>
 
                           {/* Precios */}
@@ -781,14 +790,14 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                     const count = productosPorCategoria[c.categoria_id] ?? 0
                     return (
                       <tr key={c.categoria_id} className={c.estado === 'INACTIVO' ? 'ter-row-archivada' : ''}>
-                        <td data-label="Nombre"><strong className="text-sm-bold">{c.nombre}</strong></td>
+                        <td data-label="Nombre"><strong className="text-sm-bold cell-clamp">{c.nombre}</strong></td>
                         <td data-label="Se usa en" className="text-sm-muted">{TIPO_CATEGORIA_LABEL[c.tipo] ?? '—'}</td>
                         <td data-label="Descripción" className="text-sm-muted cell-truncate">{c.descripcion ?? '—'}</td>
                         <td data-label="Artículos" className="col-center">
                           {count > 0 ? (
                             <button
                               className="prd-cat-count-btn"
-                              onClick={() => { setTab('productos'); setFiltroCat(c.categoria_id) }}
+                              onClick={() => verCategoria(c.categoria_id)}
                               title="Ver artículos de esta categoría"
                             >
                               {count}
@@ -831,7 +840,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                       <td data-label="Artículos" className="col-center">
                         <button
                           className="prd-cat-count-btn prd-cat-count-warn"
-                          onClick={() => { setTab('productos'); setFiltroCat('__sin_categoria__') }}
+                          onClick={verSinCategoria}
                           title="Ver artículos sin categoría"
                         >
                           {sinCategoriaCount}

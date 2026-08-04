@@ -12,6 +12,7 @@ import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { ingestarLote, type LotePayload, type CajaRow } from '@/lib/caja/ingesta'
 import { tieneModulo }      from '@/lib/modulos'
+import { LIMITE_LISTADO, limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -343,18 +344,44 @@ export async function setActivaCaja(caja_id: string, activa: boolean): Promise<{
 
 // ── Operaciones (detalle: Ventas + Movimientos de stock) ─────────────────────────
 
-export async function listarOperaciones(): Promise<{ tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string> }> {
+/**
+ * Ventas del TPV y sus movimientos de stock.
+ *
+ * Traía `.limit(1000)` **sin rango, sin aviso y sin forma de traer más**, y la vista encima
+ * filtra en el navegador por punto de venta y búsqueda: un negocio de mostrador con más de
+ * 1.000 tickets no veía los viejos y no había ni una pista de que faltaran. Es el mismo fallo
+ * que ya se corrigió en Gastos y cobros (`lib/listados.ts`), aquí con más volumen todavía —un
+ * TPV escribe un ticket por venta—. Ahora: rango por defecto de 3 meses aplicado EN LA
+ * CONSULTA, `count: 'exact'` para poder decir cuántos faltan, y techo que sube con «Traer más».
+ */
+export async function listarOperaciones(
+  filtro?: FiltroListado,
+): Promise<{
+  tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string>
+  rango: { desde: string; hasta: string }; hay_mas: boolean; total: number; limite: number
+}> {
   const session = await getPortalSession()
-  if (!session) return { tickets: [], stock: [], cajaNombres: {} }
+  const vacio = { desde: '', hasta: '' }
+  if (!session) return { tickets: [], stock: [], cajaNombres: {}, rango: vacio, hay_mas: false, total: 0, limite: LIMITE_LISTADO }
   const db  = createAdminClient()
   const ids = await empresaIds()
   const scope = ids.length ? ids : ['__none__']
 
+  const porDefecto = rangoUltimosMeses(3)
+  const desde  = filtro?.desde ?? porDefecto.desde
+  const hasta  = filtro?.hasta ?? porDefecto.hasta
+  const limite = limiteDelFiltro(filtro)
+
+  let tkQuery = db.from('caja_tickets')
+    .select('ticket_uuid, caja_id, fecha, moneda, total, medio_pago, sesion_uuid, estado', { count: 'exact' })
+    .eq('client_id', session.client_id).in('empresa_id', scope)
+  // `fecha` es un timestamp: el «hasta» incluye el día entero, o las ventas de hoy se
+  // quedarían fuera de un rango que dice llegar hasta hoy.
+  if (desde) tkQuery = tkQuery.gte('fecha', desde)
+  if (hasta) tkQuery = tkQuery.lte('fecha', `${hasta}T23:59:59.999`)
+
   const [tkRes, cajasRes] = await Promise.all([
-    db.from('caja_tickets')
-      .select('ticket_uuid, caja_id, fecha, moneda, total, medio_pago, sesion_uuid, estado')
-      .eq('client_id', session.client_id).in('empresa_id', scope)
-      .order('fecha', { ascending: false }).limit(1000),
+    tkQuery.order('fecha', { ascending: false }).limit(limite),
     db.from('cajas').select('caja_id, nombre').eq('client_id', session.client_id),
   ])
 
@@ -380,29 +407,49 @@ export async function listarOperaciones(): Promise<{ tickets: Ticket[]; stock: M
       .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
   }
 
-  return { tickets, stock, cajaNombres }
+  return {
+    tickets, stock, cajaNombres,
+    rango: { desde, hasta },
+    hay_mas: tickets.length >= limite,
+    total:   tkRes.count ?? tickets.length,
+    limite,
+  }
 }
 
 // ── Cierres ─────────────────────────────────────────────────────────────────────
 
-export async function listarCierres(): Promise<{ cierres: Cierre[]; cajaNombres: Record<string, string> }> {
+/** Cierres de caja. Mismo contrato que Operaciones: `.limit(500)` sin aviso escondía los
+ *  cierres viejos —y con ellos la serie de números Z, que es lo que se audita—. */
+export async function listarCierres(
+  filtro?: FiltroListado,
+): Promise<{
+  cierres: Cierre[]; cajaNombres: Record<string, string>
+  hay_mas: boolean; total: number; limite: number
+}> {
   const session = await getPortalSession()
-  if (!session) return { cierres: [], cajaNombres: {} }
+  if (!session) return { cierres: [], cajaNombres: {}, hay_mas: false, total: 0, limite: LIMITE_LISTADO }
   const db  = createAdminClient()
   const ids = await empresaIds()
   const scope = ids.length ? ids : ['__none__']
+  const limite = limiteDelFiltro(filtro)
 
   const [seRes, cajasRes] = await Promise.all([
     db.from('caja_sesiones')
-      .select('sesion_uuid, caja_id, abierta_at, cerrada_at, estado, total_por_moneda, efectivo_contado, posted_at, tesoreria_movs, stock_movs')
+      .select('sesion_uuid, caja_id, abierta_at, cerrada_at, estado, total_por_moneda, efectivo_contado, posted_at, tesoreria_movs, stock_movs', { count: 'exact' })
       .eq('client_id', session.client_id).in('empresa_id', scope)
-      .order('cerrada_at', { ascending: false, nullsFirst: false }).limit(500),
+      .order('cerrada_at', { ascending: false, nullsFirst: false }).limit(limite),
     db.from('cajas').select('caja_id, nombre').eq('client_id', session.client_id),
   ])
 
   const cajaNombres: Record<string, string> = {}
   for (const c of (cajasRes.data ?? []) as { caja_id: string; nombre: string }[]) cajaNombres[c.caja_id] = c.nombre
-  return { cierres: (seRes.data ?? []) as Cierre[], cajaNombres }
+  const cierres = (seRes.data ?? []) as Cierre[]
+  return {
+    cierres, cajaNombres,
+    hay_mas: cierres.length >= limite,
+    total:   seRes.count ?? cierres.length,
+    limite,
+  }
 }
 
 // ── Subir archivo para sincronizar (fallback sin conexión) ──────────────────────

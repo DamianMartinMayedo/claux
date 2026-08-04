@@ -12,7 +12,7 @@ import Tabs from '@/components/Tabs'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas } from '@/components/portal/EmpresaColorContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                        from 'next/navigation'
+import { useRouter, useSearchParams }       from 'next/navigation'
 import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
 import {
   guardarCuenta,
@@ -35,9 +35,12 @@ import {
 } from '@/app/actions/portal/tesoreria'
 import type { CategoriaGasto } from '@/app/actions/portal/gastos'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
-import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import Filtros                        from '@/components/portal/Filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
-import { LIMITE_LISTADO } from '@/lib/listados'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import { SIN_CATEGORIA }             from '@/lib/listados'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // Pendientes por saldar (CxC / CxP) que se pueden liquidar desde un movimiento
 interface Pendientes {
@@ -67,9 +70,10 @@ const TIPO_CUENTA_BADGE: Record<TipoCuenta, string> = {
 function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function hoyISO(): string {
-  return new Date().toISOString().split('T')[0]
-}
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -963,11 +967,15 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
   const [editMov,        setEditMov]        = useState<Movimiento | null>(null)
 
   const [verArchivadas,  setVerArchivadas]  = useState(false)
-  const [filtroCuenta,   setFiltroCuenta]   = useState('')
-  const [filtroTipo,     setFiltroTipo]     = useState('')
-  const [filtroEmpresaMov, setFiltroEmpresaMov] = useState('')
-  const [filtroCatMov,   setFiltroCatMov]   = useState('')
   const [tab,            setTab]            = useState<'cuentas' | 'movimientos'>('cuentas')
+
+  // Los filtros de movimientos viven en la URL, como el rango y la búsqueda: refrescar —o
+  // que se caiga la conexión— ya no tira lo que el dueño acababa de poner.
+  const params = useSearchParams()
+  const filtroCuenta      = params.get('cuenta')  ?? ''
+  const filtroTipo        = params.get('tipo')    ?? ''
+  const filtroEmpresaMov  = params.get('empresa') ?? ''
+  const filtroCatMov      = params.get('cat')     ?? ''
 
   const cuentasActivas = useMemo(() => data.cuentas.filter(c => c.activa), [data.cuentas])
   const cuentasVista   = useMemo(
@@ -1018,15 +1026,57 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
     return m
   }, [data.categorias_gastos])
 
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable. La empresa era el único `<select>` de empresa del portal —en el resto son
+   * píldoras de color— y ahora es la misma píldora que en las demás pantallas.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresaMov, widget: 'pastillas', donde: 'escalado',
+      ocultarSi: !multiempresa,
+      opciones: data.empresas.map(e => ({ valor: e.empresa_id, label: e.nombre, color: colorOf(e.empresa_id) })),
+    },
+    {
+      clave: 'cuenta_id', param: 'cuenta', label: 'Todas las cuentas',
+      rotulo: 'Cuenta',
+      valor: filtroCuenta, widget: 'select', donde: 'escalado',
+      opciones: data.cuentas.map(c => ({ valor: c.cuenta_id, label: c.nombre })),
+    },
+    {
+      clave: 'tipo', label: 'Ingresos y egresos', valor: filtroTipo,
+      rotulo: 'Tipo de movimiento',
+      widget: 'select', donde: 'escalado',
+      opciones: [
+        { valor: 'INGRESO', label: 'Solo ingresos' },
+        { valor: 'EGRESO',  label: 'Solo egresos'  },
+      ],
+    },
+    {
+      // Filtrar por «Suministros» trae sus subcategorías, con la misma regla en la consulta
+      // y en el registro de exportación. Solo raíces en el desplegable.
+      clave: 'categoria', param: 'cat', label: 'Todas las categorías', valor: filtroCatMov,
+      rotulo: 'Categoría',
+      widget: 'select', donde: 'escalado',
+      opciones: [
+        { valor: SIN_CATEGORIA, label: 'Sin categoría' },
+        ...data.categorias_gastos.filter(c => !c.parent_id)
+          .map(c => ({ valor: c.categoria_id, label: c.nombre })),
+      ],
+    },
+  ], [filtroEmpresaMov, filtroCuenta, filtroTipo, filtroCatMov, multiempresa, data.empresas, data.cuentas, data.categorias_gastos, colorOf])
+
   const movimientosFiltrados = useMemo(() => {
-    const catsOk = filtroCatMov && filtroCatMov !== '__sin__'
+    const catsOk = filtroCatMov && filtroCatMov !== SIN_CATEGORIA
       ? new Set<string>([filtroCatMov, ...(hijasDeCat.get(filtroCatMov) ?? [])])
       : null
     return data.movimientos.filter(m => {
       if (filtroCuenta && m.cuenta_id !== filtroCuenta) return false
       if (filtroTipo   && m.tipo      !== filtroTipo)   return false
       if (filtroEmpresaMov && m.empresa_id !== filtroEmpresaMov) return false
-      if (filtroCatMov === '__sin__' && m.categoria_id) return false
+      if (filtroCatMov === SIN_CATEGORIA && m.categoria_id) return false
       if (catsOk && !(m.categoria_id && catsOk.has(m.categoria_id))) return false
       return true
     })
@@ -1106,16 +1156,11 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           {tab === 'movimientos' ? (
             <ExportarMenu
               clave="movimientos_tesoreria"
-              filtro={{
-                desde: data.rango.desde, hasta: data.rango.hasta, q: data.q,
-                empresa_id: filtroEmpresaMov, cuenta_id: filtroCuenta,
-                tipo: filtroTipo, categoria: filtroCatMov,
-              }}
-              resumen={[
-                filtroEmpresaMov && (data.empresas.find(e => e.empresa_id === filtroEmpresaMov)?.nombre ?? ''),
-                filtroCuenta && (data.cuentas.find(c => c.cuenta_id === filtroCuenta)?.nombre ?? ''),
-                filtroTipo, filtroCatMov,
-              ].filter((x): x is string => Boolean(x))}
+              /* GENERADOS de la declaración. El resumen va en PALABRAS del dueño: pasaba
+                 `filtroTipo` y `filtroCatMov` en crudo, así que el desplegable de «lo que
+                 vas a descargar» decía «INGRESO» y, en la categoría, un UUID. */
+              filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta, q: data.q })}
+              resumen={resumenDe(declaracion)}
             />
           ) : (
             <ExportarMenu
@@ -1225,7 +1270,7 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
                         onChange={() => selCuentas.toggle(c.cuenta_id)}
                         aria-label={`Seleccionar ${c.nombre}`} />
                     </td>
-                    <td data-label="Cuenta"><strong>{c.nombre}</strong></td>
+                    <td data-label="Cuenta"><strong className="cell-clamp">{c.nombre}</strong></td>
                     <td data-label="Tipo" className="col-center">
                       <span className={`badge ${TIPO_CUENTA_BADGE[c.tipo]}`}>{TIPO_CUENTA_LABEL[c.tipo]}</span>
                     </td>
@@ -1271,49 +1316,19 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       </>)}
 
       {tab === 'movimientos' && (<>
-      {/* Rango y búsqueda (en la URL; el rango se aplica en la query) */}
-      <div className="ter-toolbar">
-        <RangoBusqueda
-          desde={data.rango.desde}
-          hasta={data.rango.hasta}
-          q={data.q}
-          placeholder="Buscar por concepto, código o importe…"
-        />
-      </div>
-
-      {/* Movimientos */}
-      <div className="ter-toolbar">
-        <select className="input ter-filter-select" value={filtroCuenta} onChange={e => setFiltroCuenta(e.target.value)}>
-          <option value="">Todas las cuentas</option>
-          {data.cuentas.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
-        </select>
-        <select className="input ter-filter-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
-          <option value="">Ingresos y egresos</option>
-          <option value="INGRESO">Solo ingresos</option>
-          <option value="EGRESO">Solo egresos</option>
-        </select>
-        {/* Empresa y categoría: sin ellos, un negocio con dos empresas no podía mirar el
-            movimiento de una sola, y «cuánto salió en Alquiler» no se respondía aquí. */}
-        {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={filtroEmpresaMov} onChange={e => setFiltroEmpresaMov(e.target.value)}>
-            <option value="">Todas las empresas</option>
-            {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
-          </select>
-        )}
-        <select className="input ter-filter-select" value={filtroCatMov} onChange={e => setFiltroCatMov(e.target.value)}>
-          <option value="">Todas las categorías</option>
-          <option value="__sin__">Sin categoría</option>
-          {data.categorias_gastos.filter(c => !c.parent_id).map(c => (
-            <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
-          ))}
-        </select>
-      </div>
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={data.q}
+        placeholder="Buscar por concepto, código o importe…"
+        hayMas={data.hay_mas}
+      />
 
       {data.hay_mas && (
-        <p className="listado-tope">
-          Se enseñan los primeros {LIMITE_LISTADO} movimientos del rango. Los saldos de arriba
-          son de toda la historia, no del rango.
-        </p>
+        <AvisoTope mostrados={data.movimientos.length} total={data.total}
+          limite={data.limite} sustantivo="movimientos">
+          Los saldos de arriba son de toda la historia, no del rango.
+        </AvisoTope>
       )}
 
       <div className="card card-table">
@@ -1348,13 +1363,16 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
                     </td>
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(m.fecha)}</td>
                     <td data-label="Concepto">
-                      <strong>{m.concepto}</strong>
+                      {/* Dos líneas y elipsis: el concepto y la categoría vienen del catálogo
+                          contable y hay nombres que crecen a cuatro líneas, con lo que la
+                          altura de fila deja de ser constante. Completo en el `title`. */}
+                      <strong className="cell-clamp" title={m.concepto}>{m.concepto}</strong>
                       <div className="tes-mov-sub">
-                        {m.categoria && <span className="tes-mov-cat">{m.categoria}</span>}
+                        {m.categoria && <span className="tes-mov-cat cell-clamp" title={m.categoria}>{m.categoria}</span>}
                         {m.origen !== 'MANUAL' && <span className="badge badge-neutral tes-origen-badge">{m.origen}</span>}
                       </div>
                     </td>
-                    <td data-label="Cuenta" className="text-sm-muted">{cuentaNombre[m.cuenta_id] ?? m.cuenta_id}</td>
+                    <td data-label="Cuenta" className="text-sm-muted"><span className="cell-clamp">{cuentaNombre[m.cuenta_id] ?? m.cuenta_id}</span></td>
                     <td data-label="Monto" className={`col-num tes-monto-cell ${m.tipo === 'INGRESO' ? 'tes-monto-in' : 'tes-monto-out'}`}>
                       {m.tipo === 'INGRESO' ? '+' : '−'}{formatMonto(Number(m.monto))} {m.moneda}
                     </td>

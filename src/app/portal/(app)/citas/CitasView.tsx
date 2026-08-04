@@ -27,6 +27,7 @@ import { type EstadoReserva } from '@/lib/reservas/estado'
 import { opcionesCon } from '@/components/portal/form-helpers'
 import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,10 @@ const MEDIAS_HORAS = Array.from({ length: 48 }, (_, i) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+function hoyISO(): string { return hoyEnTz() }
 function mananaISO(): string { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
 function fechaChip(f: string): string {
   if (f === hoyISO())    return 'Hoy'
@@ -323,7 +327,7 @@ function ImportarServiciosModal({ catalogo, etiquetaPlural, onClose, onSaved }: 
                           aria-label={`Importar ${c.nombre}`} />
                       </td>
                       <td data-label="Servicio">
-                        <strong className="text-sm-bold">{c.nombre}</strong>
+                        <strong className="text-sm-bold cell-clamp">{c.nombre}</strong>
                         <div className="table-cell-secondary">
                           {c.codigo}{c.ya_importado && ' · ya importado'}
                         </div>
@@ -1000,10 +1004,14 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               filtro={{
                 desde: filtroDesde, hasta: filtroHasta,
                 estado: filtroEstado, categoria: filtroRecurso,
+                // La búsqueda VIAJA: el registro ya sabe buscar por cliente y teléfono, y
+                // sin esto se filtraba en pantalla y el fichero salía con todo.
+                q: search,
               }}
               resumen={[
-                filtroEstado,
+                filtroEstado && (ESTADO_LABEL[filtroEstado as EstadoReserva] ?? filtroEstado),
                 filtroRecurso && (data.recursos.find(r => r.recurso_id === filtroRecurso)?.nombre ?? ''),
+                search && `«${search}»`,
               ].filter((x): x is string => Boolean(x))}
             />
           )}
@@ -1110,7 +1118,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                     <td data-label={servicioNombre}>{c.servicio_nombre}</td>
                     <td data-label={et.recurso}>{c.recurso_nombre}</td>
                     <td data-label="Cliente">
-                      <strong>{c.nombre_cliente}</strong>
+                      <strong className="cell-clamp">{c.nombre_cliente}</strong>
                       {c.telefono && <div className="text-sm-muted">{c.telefono}</div>}
                     </td>
                     <td data-label="Estado">
@@ -1166,7 +1174,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <tbody>
                 {data.recursos.map(r => (
                   <tr key={r.recurso_id} className="table-row-clickable" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}>
-                    <td data-label="Nombre"><strong>{r.nombre}</strong></td>
+                    <td data-label="Nombre"><strong className="cell-clamp">{r.nombre}</strong></td>
                     <td data-label="Tipo" className="text-sm-muted">{r.tipo ?? '—'}</td>
                     <td data-label={servicioPlural} className="text-sm-muted">{r.servicio_ids.length === 0 ? 'Todos' : `${r.servicio_ids.length}`}</td>
                     <td data-label="Horario" className="text-sm-muted">
@@ -1211,7 +1219,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <tbody>
                 {data.servicios.map(s => (
                   <tr key={s.servicio_id} className="table-row-clickable" onClick={() => { setEditServicio(s); setShowServicio(true) }}>
-                    <td data-label="Nombre"><strong>{s.nombre}</strong></td>
+                    <td data-label="Nombre"><strong className="cell-clamp">{s.nombre}</strong></td>
                     <td data-label="Duración" className="col-num tes-monto-cell">{s.duracion_minutos} min</td>
                     <td data-label="Precio" className="col-num tes-monto-cell cita-precio">{formatPrecio(s.precio, s.moneda)}</td>
                     <td data-label="Estado"><span className={`badge ${s.activo ? 'badge-success' : 'badge-neutral'}`}>{s.activo ? 'Activo' : 'Inactivo'}</span></td>

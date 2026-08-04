@@ -393,7 +393,7 @@ function ItemRow({ item, tieneInventario, selected, onToggle, onEdit, onDelete, 
             : <Package size={18} strokeWidth={1.5} />}
         </span>
       </td>
-      <td data-label="Producto"><strong>{item.nombre}</strong></td>
+      <td data-label="Producto"><strong className="cell-clamp">{item.nombre}</strong></td>
       <td data-label="Precio" className="col-num">
         <Precio item={item} antesClassName="cat-precio-antes" />
       </td>
@@ -464,7 +464,7 @@ function CategoriasTab({ categorias, items, onNueva, onEditar, onEliminar }: {
           <tbody>
             {categorias.map(c => (
               <tr key={c.categoria_id} className="table-row-clickable" onClick={() => onEditar(c)}>
-                <td data-label="Categoría"><strong>{c.nombre}</strong></td>
+                <td data-label="Categoría"><strong className="cell-clamp">{c.nombre}</strong></td>
                 <td data-label="Productos" className="col-num">{conteo.get(c.categoria_id) ?? 0}</td>
                 <td data-label="Descuento" className="col-num">{c.descuento_pct > 0 ? `-${c.descuento_pct}%` : '—'}</td>
                 <td className="col-actions">

@@ -3,9 +3,9 @@
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo } from 'react'
-import { useRouter }                        from 'next/navigation'
+import { useRouter, useSearchParams }       from 'next/navigation'
 import Link                                 from 'next/link'
-import { Check, DollarSign, ExternalLink, Search, Trash2, X } from 'lucide-react'
+import { Check, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
 import {
   registrarPagoDoc,
   anularPagoDoc,
@@ -18,10 +18,15 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import ExportarMenu                    from '@/components/portal/ExportarMenu'
-import { SIN_TERCERO }                 from '@/lib/exportar/tablas'
+import Filtros                         from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, opcionesTercero, type Filtro } from '@/lib/filtros'
+import { SIN_TERCERO }                 from '@/lib/listados'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -38,7 +43,7 @@ const TRAMOS: Tramo[] = ['AL_DIA', 'V_1_30', 'V_31_60', 'V_60']
 function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string | null): string {
   if (!f) return '—'
   const [y, m, d] = f.split('T')[0].split('-').map(Number)
@@ -193,10 +198,14 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
   }))
 
   const [pagoDoc,      setPagoDoc]      = useState<DocumentoPendiente | null>(null)
-  const [filtroTramo,  setFiltroTramo]  = useState<Tramo | ''>('')
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
-  const [filtroTercero, setFiltroTercero] = useState('')
-  const [busca,        setBusca]        = useState('')
+
+  // Los filtros viven en la URL, como en el resto del portal: volver de la ficha de una
+  // factura, o refrescar en una conexión que se cae, ya no pierde lo que estabas mirando.
+  const params = useSearchParams()
+  const filtroTramo   = (params.get('tramo') ?? '') as Tramo | ''
+  const filtroEmpresa = params.get('empresa') ?? ''
+  const filtroTercero = params.get('tercero') ?? ''
+  const busca         = params.get('q') ?? ''
 
   // Terceros que APARECEN en esta lista. Se derivan de los documentos y no del catálogo
   // completo: ofrecer 200 proveedores para filtrar 3 deudas no es un filtro, es un
@@ -204,21 +213,32 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
   // nómina entra en CxC sin `tercero_id` porque el deudor es la Seguridad Social, que no
   // es una ficha. De ahí la opción explícita «Sin {cliente}», para que se pueda ver y
   // reclamar en vez de quedar escondido por no tener con quién agruparlo.
+  //
+  // Se agrupan por FICHA (`tercero_id`), no por nombre. Agrupar por nombre parecía más
+  // limpio —quitaba el duplicado del desplegable— y era el fallo: un tercero tiene una ficha
+  // por empresa, así que las tres «CLAUDIA» de un negocio con tres empresas se fusionaban en
+  // una opción y filtrar por ella enseñaba las deudas de las tres, sin decirlo. Ahora cada
+  // ficha es su opción y la EMPRESA es el grupo del desplegable.
   const tercerosEnLista = useMemo(() => {
-    const s = new Set<string>()
-    for (const d of data.documentos) if (d.tercero_nombre) s.add(d.tercero_nombre)
-    return [...s].sort((a, b) => a.localeCompare(b))
+    const m = new Map<string, { tercero_id: string; nombre: string; empresa_id: string }>()
+    for (const d of data.documentos) {
+      if (!d.tercero_id || !d.tercero_nombre) continue
+      if (!m.has(d.tercero_id)) {
+        m.set(d.tercero_id, { tercero_id: d.tercero_id, nombre: d.tercero_nombre, empresa_id: d.empresa_id })
+      }
+    }
+    return [...m.values()]
   }, [data.documentos])
   const haySinTercero = useMemo(
-    () => data.documentos.some(d => !d.tercero_nombre), [data.documentos])
+    () => data.documentos.some(d => !d.tercero_id), [data.documentos])
 
   const documentos = useMemo(() => {
     const t = busca.trim().toLowerCase()
     return data.documentos.filter(d => {
       if (filtroTramo   && d.tramo      !== filtroTramo)   return false
       if (filtroEmpresa && d.empresa_id !== filtroEmpresa) return false
-      if (filtroTercero === SIN_TERCERO && d.tercero_nombre) return false
-      if (filtroTercero && filtroTercero !== SIN_TERCERO && d.tercero_nombre !== filtroTercero) return false
+      if (filtroTercero === SIN_TERCERO && d.tercero_id) return false
+      if (filtroTercero && filtroTercero !== SIN_TERCERO && d.tercero_id !== filtroTercero) return false
       if (t && !(
         d.numero.toLowerCase().includes(t)
         || (d.tercero_nombre ?? '').toLowerCase().includes(t)
@@ -244,6 +264,44 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
     for (const d of data.documentos) m[d.tramo] = (m[d.tramo] ?? 0) + 1
     return m
   }, [data.documentos])
+
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable.
+   *
+   * Todos en `cliente` y es correcto: CxC/CxP **no tienen techo**, se traen la deuda entera.
+   * Filtrar en el navegador da aquí exactamente lo mismo que filtrar en la consulta.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      // Los tramos eran `.cxx-chip`, una tercera familia de píldora solo para esta pantalla.
+      // Son la misma píldora que las demás; lo que sí conservan es el CONTADOR, que aquí es
+      // la información principal: se lee «cuánto tengo vencido a +60» antes de filtrar nada.
+      clave: 'tramo', label: 'Todos', valor: filtroTramo, widget: 'pastillas', donde: 'cliente',
+      rotulo: 'Antigüedad',
+      todasCount: data.documentos.length,
+      opciones: TRAMOS.filter(t => (conteoTramo[t] ?? 0) > 0)
+        .map(t => ({ valor: t, label: TRAMO_LABEL[t], count: conteoTramo[t] })),
+    },
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'cliente',
+      ocultarSi: !multiempresa,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'tercero', label: esCobro ? 'Todos los clientes' : 'Todos los proveedores',
+      rotulo: esCobro ? 'Cliente' : 'Proveedor',
+      valor: filtroTercero, widget: 'select', donde: 'cliente',
+      ocultarSi: data.documentos.length === 0,
+      opciones: [
+        ...(haySinTercero ? [{ valor: SIN_TERCERO, label: esCobro ? 'Sin cliente' : 'Sin proveedor' }] : []),
+        ...opcionesTercero(tercerosEnLista, nombreOf, multiempresa, filtroEmpresa || undefined),
+      ],
+    },
+  ], [filtroTramo, filtroEmpresa, filtroTercero, conteoTramo, empresasFiltro, multiempresa,
+      esCobro, haySinTercero, tercerosEnLista, data.documentos.length, nombreOf])
 
   // Re-sincroniza el doc abierto tras refresh
   const pagoVivo = pagoDoc
@@ -271,16 +329,10 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
         <div className="tes-header-actions">
           <ExportarMenu
             clave={esCobro ? 'cuentas_cobrar' : 'cuentas_pagar'}
-            filtro={{
-              q: busca, tramo: filtroTramo,
-              empresa_id: filtroEmpresa, tercero: filtroTercero,
-            }}
-            resumen={[
-              filtroTramo && TRAMO_LABEL[filtroTramo],
-              filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-              filtroTercero === SIN_TERCERO ? 'sin tercero' : filtroTercero,
-              busca && `«${busca}»`,
-            ].filter((x): x is string => Boolean(x))}
+            /* GENERADOS de la declaración: el fichero no puede quedarse corto respecto a la
+               pantalla, ni el resumen imprimir un código interno. */
+            filtro={filtroExport(declaracion, { q: busca })}
+            resumen={[...resumenDe(declaracion), ...(busca ? [`«${busca}»`] : [])]}
           />
         </div>
       </div>
@@ -298,47 +350,16 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
         </div>
       )}
 
-      {/* Chips de antigüedad */}
+      {/* CxC/CxP NO llevan rango de fechas a propósito: una deuda vieja no puede desaparecer
+          del listado por un filtro que el dueño no ha puesto. Sí buscan por texto, así que
+          la barra sale sin píldoras de fecha y con buscador. */}
       {data.documentos.length > 0 && (
-        <div className="cxx-chips">
-          <button className={`cxx-chip${filtroTramo === '' ? ' active' : ''}`} onClick={() => setFiltroTramo('')}>
-            Todos <span className="cxx-chip-count">{data.documentos.length}</span>
-          </button>
-          {TRAMOS.map(t => (
-            (conteoTramo[t] ?? 0) > 0 && (
-              <button key={t} className={`cxx-chip${filtroTramo === t ? ' active' : ''}`} onClick={() => setFiltroTramo(t)}>
-                {TRAMO_LABEL[t]} <span className="cxx-chip-count">{conteoTramo[t]}</span>
-              </button>
-            )
-          ))}
-          <EmpresaPills
-            empresas={empresasFiltro}
-            value={filtroEmpresa}
-            onChange={setFiltroEmpresa}
-            todasLabel="Todas las empresas"
-          />
-        </div>
-      )}
-
-      {/* Filtro por tercero + buscador. CxC/CxP NO llevan rango de fechas: una deuda vieja
-          no puede desaparecer del listado por un filtro que el dueño no ha puesto. */}
-      {data.documentos.length > 0 && (
-        <div className="ter-toolbar">
-          <select className="input ter-filter-select" value={filtroTercero} onChange={e => setFiltroTercero(e.target.value)}>
-            <option value="">{esCobro ? 'Todos los clientes' : 'Todos los proveedores'}</option>
-            {haySinTercero && <option value="__sin__">{esCobro ? 'Sin cliente' : 'Sin proveedor'}</option>}
-            {tercerosEnLista.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <div className="ter-search-wrap">
-            <Search size={14} strokeWidth={2} />
-            <input
-              className="ter-search" type="search" value={busca}
-              aria-label="Buscar por documento, tercero o importe"
-              placeholder="Buscar por documento, tercero o importe…"
-              onChange={e => setBusca(e.target.value)}
-            />
-          </div>
-        </div>
+        <Filtros
+          filtros={declaracion}
+          q={busca}
+          placeholder="Buscar por documento, tercero o importe…"
+          visibles={3}
+        />
       )}
 
       {/* Tabla */}

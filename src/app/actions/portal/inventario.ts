@@ -14,6 +14,10 @@ import {
   type MotivoTipo,
 } from './_inventario-helpers'
 import { limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +65,9 @@ export interface MovimientosPageData {
   rango:            { desde: string; hasta: string }
   /** Se tocó el techo de filas: hay más de las que se enseñan. */
   hay_mas:          boolean
+  /** Cuántos movimientos hay DE VERDAD en el rango (sin techo). */
+  total:            number
+  limite:           number
   /** Salidas por motivo tipificado en el rango. Es la mitad del valor de los motivos. */
   salidasPorMotivo: { motivo: MotivoTipo; unidades: number; movimientos: number }[]
 }
@@ -87,10 +94,26 @@ export async function obtenerMovimientos(
   const hasta  = filtro?.hasta ?? porDefecto.hasta
   const limite = limiteDelFiltro(filtro)
 
-  let movQuery = db.from('movimientos_inventario').select('*')
+  // `count: 'exact'`: el aviso del techo tiene que decir CUÁNTAS faltan, no solo que
+  // faltan. Sin el total, «acota el rango» era el único consejo posible.
+  //
+  // `.in('empresa_id', …)`: el listado se acotaba SOLO por `client_id`, así que un usuario
+  // asignado a una empresa veía los movimientos de todas las del negocio —la misma fuga que
+  // tenía la descarga—. El resto de listados ya lo hacía; este se había quedado fuera.
+  let movQuery = db.from('movimientos_inventario').select('*', { count: 'exact' })
     .eq('client_id', session.client_id)
+    .in('empresa_id', idsFiltro)
   if (desde) movQuery = movQuery.gte('fecha', desde)
   if (hasta) movQuery = movQuery.lte('fecha', hasta)
+  // Los filtros de la barra, cuando la vista los ESCALA porque el listado está recortado.
+  if (filtro?.empresa_id) movQuery = movQuery.eq('empresa_id', filtro.empresa_id)
+  if (filtro?.tipo)       movQuery = movQuery.eq('tipo', filtro.tipo)
+  if (filtro?.motivo)     movQuery = movQuery.eq('motivo_tipo', filtro.motivo)
+  // Un almacén cuenta como origen O destino: una transferencia sale de uno y entra en otro,
+  // y filtrando solo por origen desaparecería la mitad del movimiento.
+  if (filtro?.almacen_id) {
+    movQuery = movQuery.or(`almacen_id.eq.${filtro.almacen_id},almacen_destino_id.eq.${filtro.almacen_id}`)
+  }
   movQuery = movQuery
     .order('fecha', { ascending: false })
     .order('created_at', { ascending: false })
@@ -159,6 +182,8 @@ export async function obtenerMovimientos(
     empresa_nombres,
     rango: { desde, hasta },
     hay_mas: movimientos.length >= limite,
+    total:   movRes.count ?? movimientos.length,
+    limite,
     salidasPorMotivo: [...porMotivo]
       .map(([motivo, v]) => ({ motivo, ...v }))
       .sort((a, b) => b.unidades - a.unidades),
@@ -181,7 +206,7 @@ export async function registrarMovimiento(
   const motivo      = ((formData.get('motivo')      as string) ?? '').trim() || null
   const motivoTipoR = ((formData.get('motivo_tipo') as string) ?? '').trim()
   const motivo_tipo: MotivoTipo | null = esMotivoValido(motivoTipoR) ? motivoTipoR : null
-  const fecha       = ((formData.get('fecha')       as string) ?? '').trim() || new Date().toISOString().split('T')[0]
+  const fecha       = ((formData.get('fecha')       as string) ?? '').trim() || hoyEnTz()
   const cantidadRaw = parseNumeroEs((formData.get('cantidad') as string) ?? '')
   // Opcional: sin escribir nada es NULL, que no es lo mismo que un coste de 0.
   const costo       = parseNumeroEsOpcional(formData.get('costo_unitario') as string)
@@ -198,7 +223,7 @@ export async function registrarMovimiento(
   if ((tipo === 'SALIDA' || tipo === 'AJUSTE') && !motivo_tipo)
     return { ok: false, error: 'Elige el motivo del movimiento.' }
   // Fechar en el futuro no es un movimiento, es una intención: no hay stock que mover.
-  if (fecha > new Date().toISOString().split('T')[0])
+  if (fecha > hoyEnTz())
     return { ok: false, error: 'La fecha no puede ser futura.' }
 
   // AJUSTE admite signo (delta); el resto trabaja con magnitud positiva.
@@ -300,7 +325,7 @@ export async function revertirMovimiento(
     await aplicarMovimiento(db, {
       client_id:  session.client_id,
       empresa_id: mov.empresa_id,
-      fecha:      new Date().toISOString().split('T')[0],
+      fecha:      hoyEnTz(),
       tipo:       inverso[mov.tipo],
       producto_id: mov.producto_id,
       almacen_id:  mov.tipo === 'TRANSFERENCIA' ? (mov.almacen_destino_id ?? mov.almacen_id) : mov.almacen_id,
@@ -451,12 +476,19 @@ export async function obtenerRevision(): Promise<AvisoRevision[]> {
   const negativos = filas.filter(f => f.cantidad < -0.0005)
   const causaDe = new Map<string, string>()
   if (negativos.length > 0) {
+    // Sin techo global: era `.limit(300)` sobre el ledger de TODOS los productos en
+    // negativo, así que con muchos negativos los últimos se quedaban **sin causa** y la
+    // pantalla no decía por qué. Se acota a las combinaciones que se preguntan (los
+    // productos negativos, que son pocos por definición) y se ordena para quedarse con el
+    // más reciente de cada una — que es lo único que se usa.
+    const idsNegativos = [...new Set(negativos.map(n => n.producto_id))]
     const { data: movs } = await db.from('movimientos_inventario')
       .select('producto_id, almacen_id, fecha, tipo, origen, motivo')
       .eq('client_id', session.client_id)
-      .in('producto_id', [...new Set(negativos.map(n => n.producto_id))])
+      .in('producto_id', idsNegativos)
+      .in('almacen_id', [...new Set(negativos.map(n => n.almacen_id))])
       .order('created_at', { ascending: false })
-      .limit(300)
+      .limit(Math.min(20 * idsNegativos.length, 2_000))
     for (const m of (movs ?? []) as { producto_id: string; almacen_id: string; fecha: string; origen: string; motivo: string | null }[]) {
       const clave = `${m.producto_id}@${m.almacen_id}`
       if (causaDe.has(clave)) continue                  // ya tenemos el más reciente

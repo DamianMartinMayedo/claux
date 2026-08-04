@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
-import { Download, ChevronDown, BarChart3, Send } from 'lucide-react'
+import { Download, ChevronDown, BarChart3, Check, Send } from 'lucide-react'
+import { hoyEnTz } from '@/lib/fecha-tz'
 import { generarXlsxReportes, type ReportesData } from '@/app/actions/portal/reportes'
 import type { Asesor }             from '@/app/actions/portal/asesores'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
@@ -37,6 +38,10 @@ function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 // Normaliza un nombre para usarlo en el nombre de archivo (sin acentos ni símbolos).
+/** Nombres de mes para las píldoras de período. En minúscula no: encabezan la píldora. */
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
 function slug(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'reporte'
@@ -302,15 +307,40 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
   // semestre ya cerrados), no al que está en curso: un trimestre recién empezado
   // está casi vacío y el informe abría en un tramo sin datos. El año sí es el
   // corriente (el ejercicio en marcha es lo que se mira).
+  //
+  // «Hoy» sale de la zona del NEGOCIO. Con la hora local del servidor (UTC en Vercel), la
+  // noche del último día de un mes el «mes cerrado» se corría al siguiente.
   function rangoPreset(tipo: RangoPreset): { d: string; h: string } {
-    const now = new Date()
-    const y = now.getFullYear(), m = now.getMonth()
+    const [y, m] = hoyEnTz().split('-').map(Number)   // m: 1-12
+    const mi = m - 1                                   // índice 0-11, como `Date`
     let d: Date, h: Date
-    if (tipo === 'mes')            { d = new Date(y, m - 1, 1);       h = new Date(y, m, 0) }
-    else if (tipo === 'trimestre') { const q = Math.floor(m / 3) * 3 - 3; d = new Date(y, q, 1); h = new Date(y, q + 3, 0) }
-    else if (tipo === 'semestre')  { const s = (m < 6 ? 0 : 6) - 6;   d = new Date(y, s, 1); h = new Date(y, s + 6, 0) }
-    else                           { d = new Date(y, 0, 1);           h = new Date(y, 11, 31) }
+    if (tipo === 'mes')            { d = new Date(Date.UTC(y, mi - 1, 1)); h = new Date(Date.UTC(y, mi, 0)) }
+    else if (tipo === 'trimestre') { const q = Math.floor(mi / 3) * 3 - 3; d = new Date(Date.UTC(y, q, 1)); h = new Date(Date.UTC(y, q + 3, 0)) }
+    else if (tipo === 'semestre')  { const s = (mi < 6 ? 0 : 6) - 6;       d = new Date(Date.UTC(y, s, 1)); h = new Date(Date.UTC(y, s + 6, 0)) }
+    else                           { d = new Date(Date.UTC(y, 0, 1));      h = new Date(Date.UTC(y, 11, 31)) }
     return { d: fmt(d), h: fmt(h) }
+  }
+
+  /**
+   * El nombre del período que aplica cada preset, no su duración relativa.
+   *
+   * Decía «Último mes / Último trimestre / Último semestre / Este año», y dos comentarios del
+   * repo afirmaban que ese vocabulario era el mismo que el de los listados. No lo era ni
+   * podía serlo: aquí un preset es un tramo CERRADO («Último mes» = el mes anterior completo)
+   * y en un listado es una ventana abierta hasta hoy («Este mes» = del día 1 a hoy). Con dos
+   * juegos de palabras parecidas para dos cosas distintas, las cifras de Reportes y de Gastos
+   * no cuadraban y no había forma de saber por qué.
+   *
+   * Con el nombre concreto —«Julio», «2.º trimestre», «2026»— no hay nada que interpretar, y
+   * de paso desaparece la trampa del «Este año» que llegaba al 31 de diciembre.
+   */
+  function etiquetaPreset(tipo: RangoPreset): string {
+    const { d } = rangoPreset(tipo)
+    const [y, m] = d.split('-').map(Number)
+    if (tipo === 'mes')       return `${MESES[m - 1]}${y !== Number(hoyEnTz().slice(0, 4)) ? ` ${y}` : ''}`
+    if (tipo === 'trimestre') return `${Math.floor((m - 1) / 3) + 1}.º trimestre`
+    if (tipo === 'semestre')  return m <= 6 ? '1.er semestre' : '2.º semestre'
+    return String(y)
   }
 
   function preset(tipo: RangoPreset) {
@@ -322,6 +352,18 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
   const presetActivo = (tipo: RangoPreset) => {
     const { d, h } = rangoPreset(tipo)
     return data.desde === d && data.hasta === h
+  }
+
+  // Hay rango escrito sin aplicar: el botón «Aplicar» solo se enciende entonces.
+  const rangoSinAplicar = desde !== data.desde || hasta !== data.hasta
+
+  // El borrador se pone al día cuando el servidor aplica otro período (una píldora, volver
+  // atrás), DURANTE EL RENDER: con un efecto se pinta un fotograma con las fechas viejas.
+  const [rangoVisto, setRangoVisto] = useState({ desde: data.desde, hasta: data.hasta })
+  if (rangoVisto.desde !== data.desde || rangoVisto.hasta !== data.hasta) {
+    setRangoVisto({ desde: data.desde, hasta: data.hasta })
+    setDesde(data.desde)
+    setHasta(data.hasta)
   }
 
   const sinDatos = data.resultado.length === 0 && data.flujo.length === 0
@@ -379,29 +421,46 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
       <div className="rep-barra">
         <div className="rep-periodo">
           <div className="rep-barra-presets">
-            <button className={`cxx-chip${presetActivo('mes') ? ' active' : ''}`} onClick={() => preset('mes')} disabled={isPending}>Último mes</button>
-            <button className={`cxx-chip${presetActivo('trimestre') ? ' active' : ''}`} onClick={() => preset('trimestre')} disabled={isPending}>Último trimestre</button>
-            <button className={`cxx-chip${presetActivo('semestre') ? ' active' : ''}`} onClick={() => preset('semestre')} disabled={isPending}>Último semestre</button>
-            <button className={`cxx-chip${presetActivo('anio') ? ' active' : ''}`} onClick={() => preset('anio')} disabled={isPending}>Este año</button>
+            {/* El período por su NOMBRE, no por su duración: ver `etiquetaPreset`. */}
+            {(['mes', 'trimestre', 'semestre', 'anio'] as RangoPreset[]).map(t => (
+              <button key={t} className={`cxx-chip${presetActivo(t) ? ' active' : ''}`}
+                onClick={() => preset(t)} disabled={isPending}>
+                {etiquetaPreset(t)}
+              </button>
+            ))}
           </div>
-          <div className="rep-barra-fechas">
+          {/* El rango a mano se APLICA con el botón, no en cada `change`.
+              Navegaba por tecla: el navegador dispara el evento con la fecha a medio
+              escribir —«0002-01-01» incluido—, así que teclear un rango lanzaba varios
+              informes completos (estado de resultados + flujo, la consulta más cara del
+              portal) con períodos absurdos antes de llegar al que se quería. Mismo patrón
+              que `RangoBusqueda`, y con `min`/`max` cruzados para que no se pueda pedir un
+              «hasta» anterior al «desde» —que devolvía un informe vacío sin explicar nada—. */}
+          <form className="rep-barra-fechas"
+            onSubmit={e => { e.preventDefault(); if (desde && hasta) navegar(desde, hasta, empresa) }}>
             <input
               className="input ter-filter-select" type="date" value={desde} aria-label="Desde"
-              onChange={e => { const v = e.target.value; setDesde(v); if (v && hasta) navegar(v, hasta, empresa) }}
+              max={hasta || undefined}
+              onChange={e => setDesde(e.target.value)}
             />
             <span className="rep-rango-sep">–</span>
             <input
               className="input ter-filter-select" type="date" value={hasta} aria-label="Hasta"
-              onChange={e => { const v = e.target.value; setHasta(v); if (desde && v) navegar(desde, v, empresa) }}
+              min={desde || undefined}
+              onChange={e => setHasta(e.target.value)}
             />
-          </div>
+            <button type="submit" className={`btn btn-sm ${rangoSinAplicar ? 'btn-primary' : 'btn-secondary'}`}
+              disabled={!rangoSinAplicar || isPending}>
+              <Check size={13} strokeWidth={2.5} /> Aplicar
+            </button>
+          </form>
         </div>
         <div className="rep-barra-fin">
           <EmpresaPills
             empresas={empresasFiltro}
             value={empresa}
             onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
-            todasLabel="Todas las empresas"
+            todasLabel="Todas"
           />
           {isPending && <span className="spinner spinner-sm" aria-label="Actualizando" />}
         </div>

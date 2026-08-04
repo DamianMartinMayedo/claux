@@ -20,6 +20,10 @@ import { NotificacionesProvider } from '@/components/portal/notificaciones/Notif
 import NotificacionesPopups  from '@/components/portal/notificaciones/NotificacionesPopups'
 import { contarNoLeidas, listarNotificaciones, popupsPendientes } from '@/app/actions/portal/notificaciones'
 import { configAgente }      from '@/lib/ia/contexto'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -82,7 +86,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
   // · VENCIDO    → siempre bloqueado (estado legado; ya no se genera automáticamente)
   // · Fecha expirada → bloqueado, salvo que estén en GRACIA con fecha_fin_gracia vigente
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
   const enGraciaActiva =
     cliente.estado === 'GRACIA' &&
     !!cliente.fecha_fin_gracia &&

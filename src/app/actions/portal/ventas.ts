@@ -34,6 +34,10 @@ import {
   type EstadoOferta,
   type LineaInput,
 } from '@/app/portal/(app)/ventas/_ventas-helpers'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // El tipo se re-declara (no `export type { … } from`, que rompe el loader de
 // 'use server'): las vistas necesitan nombrarlo para pasar los filtros.
@@ -159,6 +163,10 @@ export interface VentasResumenData {
   /** Se alcanzó el techo de filas: hay más documentos fuera de la vista. */
   hay_mas_ofertas:   boolean
   hay_mas_facturas:  boolean
+  /** Cuántos hay DE VERDAD en el rango (sin techo), para que el «N de M» no mienta. */
+  total_ofertas:     number
+  total_facturas:    number
+  limite:            number
 }
 
 /**
@@ -246,6 +254,11 @@ async function clientesFacturables(
   return (data ?? []) as FilaCliente[]
 }
 
+// Los dos juegos de estados, para saber a qué tabla aplica el filtro de la barra. No se
+// solapan: es lo que permite que un solo parámetro sirva a las dos pestañas.
+const ESTADOS_OFERTA:  string[] = ['BORRADOR', 'ENVIADA', 'APROBADA', 'RECHAZADA', 'CADUCADA']
+const ESTADOS_FACTURA: string[] = ['BORRADOR', 'EMITIDA', 'COBRADA', 'ANULADA']
+
 export async function obtenerVentasResumen(
   filtro?: FiltroListado,
 ): Promise<VentasResumenData | null> {
@@ -271,6 +284,7 @@ export async function obtenerVentasResumen(
       empresas: [], empresa_nombres: {},
       clientes: [], cliente_nombres: {},
       monedas: [], rango, q, hay_mas_ofertas: false, hay_mas_facturas: false,
+      total_ofertas: 0, total_facturas: 0, limite,
     }
   }
 
@@ -286,10 +300,19 @@ export async function obtenerVentasResumen(
     : []
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const conFiltros = (query: any, campoFecha: string, campoNumero: string) => {
+  const conFiltros = (query: any, campoFecha: string, campoNumero: string, estados: string[]) => {
     let out = query.eq('client_id', session.client_id).in('empresa_id', empresa_ids)
+    // Lo archivado fuera salvo que se pida: se traía y se escondía en el navegador, o sea
+    // que ocupaba sitio del techo de 500 y desplazaba documentos vivos sin decirlo.
+    if (!filtro?.archivadas) out = out.eq('archivado', false)
     if (desde) out = out.gte(campoFecha, desde)
     if (hasta) out = out.lte(campoFecha, hasta)
+    // Los filtros de la barra, cuando la vista los escala porque el listado está recortado.
+    // El estado se aplica solo a la tabla a la que pertenece: los dos juegos no se solapan,
+    // así que filtrar por «Aprobada» no puede vaciar el contador de Facturas.
+    if (filtro?.empresa_id) out = out.eq('empresa_id', filtro.empresa_id)
+    if (filtro?.tercero)    out = out.eq('cliente_id', filtro.tercero)
+    if (filtro?.estado && estados.includes(filtro.estado)) out = out.eq('estado', filtro.estado)
     if (patron) {
       const partes = [`${campoNumero}.ilike.${patron}`]
       if (idsClienteQ.length) partes.push(`cliente_id.in.(${idsClienteQ.join(',')})`)
@@ -300,8 +323,10 @@ export async function obtenerVentasResumen(
   }
 
   const [ofRes, faRes, monRes] = await Promise.all([
-    conFiltros(db.from('ofertas').select('*'),  'fecha_emision', 'numero'),
-    conFiltros(db.from('facturas').select('*'), 'fecha_emision', 'numero'),
+    // `count: 'exact'`: el aviso del techo dice CUÁNTAS faltan, y el contador de la tabla
+    // deja de decir «N de N» sobre el conjunto ya recortado.
+    conFiltros(db.from('ofertas').select('*',  { count: 'exact' }), 'fecha_emision', 'numero', ESTADOS_OFERTA),
+    conFiltros(db.from('facturas').select('*', { count: 'exact' }), 'fecha_emision', 'numero', ESTADOS_FACTURA),
     db.from('monedas')
       .select('codigo')
       .eq('client_id', session.client_id)
@@ -331,7 +356,7 @@ export async function obtenerVentasResumen(
       liquidado.set(m.referencia_id, (liquidado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
     }
   }
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
   const facturas: FacturaListado[] = facturasRaw.map(f => {
     // Una anulada no debe nada: su saldo no es deuda, es un documento invalidado.
     if (f.estado === 'ANULADA' || f.estado === 'BORRADOR') {
@@ -357,6 +382,9 @@ export async function obtenerVentasResumen(
     q,
     hay_mas_ofertas:  (ofRes.data ?? []).length >= limite,
     hay_mas_facturas: facturasRaw.length >= limite,
+    total_ofertas:    ofRes.count ?? (ofRes.data ?? []).length,
+    total_facturas:   faRes.count ?? facturasRaw.length,
+    limite,
   }
 }
 

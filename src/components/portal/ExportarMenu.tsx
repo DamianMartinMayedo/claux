@@ -23,12 +23,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Download } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { exportarListado } from '@/app/actions/portal/exportar'
 import { descargarBase64, descargarBlob, CSV_MIME, XLSX_MIME } from '@/lib/exportar/descargar'
 import { fmtFechaEs } from '@/lib/date-utils'
-import { presetDeFechas, PRESETS_RANGO } from '@/lib/listados'
+import { presetDeFechas, PRESETS_RANGO, type PresetRango } from '@/lib/listados'
 import type { FiltroExport } from '@/lib/exportar/tablas'
 
 interface Props {
@@ -109,10 +110,13 @@ interface Props {
  * en `RangoBusqueda`: así el desplegable y la barra de filtros no pueden decir cosas
  * distintas.
  */
-function chipPeriodo(filtro?: FiltroExport): string {
+function chipPeriodo(filtro?: FiltroExport, presetUrl?: string | null): string {
   const desde = filtro?.desde ?? ''
   const hasta = filtro?.hasta ?? ''
-  const preset = presetDeFechas(desde, hasta)
+  // El preset ELEGIDO manda sobre el deducido, igual que en la píldora: sin esto, un rango
+  // escrito a mano que coincidía con un preset se anunciaba como el preset, y el 1 de enero
+  // «Este año» se anunciaba como «Este mes».
+  const preset = (presetUrl as PresetRango | null) ?? presetDeFechas(desde, hasta)
   // Sirve para las dos formas de «sin fecha»: un listado al que le han quitado el rango
   // y una tabla maestra (clientes, productos) que no filtra por fecha.
   if (preset === 'todo') return 'Todo el listado'
@@ -130,6 +134,9 @@ export default function ExportarMenu({
   const [abierto, setAbierto] = useState(false)
   const [isPending, startTransition] = useTransition()
   const wrapRef = useRef<HTMLDivElement>(null)
+  // El preset del rango, cuando la pantalla lo tiene en la URL (los listados con
+  // `RangoBusqueda`). En las que no, `null` y se sigue deduciendo de las fechas.
+  const presetUrl = useSearchParams().get('rango')
 
   // Una sola forma interna: la lista. El caso de siempre (una clave suelta) es esa
   // lista con un elemento, así que no hay dos caminos que mantener.
@@ -187,7 +194,7 @@ export default function ExportarMenu({
                   dos descargas de la misma pantalla se distinguían por el nombre del
                   botón, o sea adivinando. */}
               <div className="ven-dropdown-ctx">
-                {[varias ? t.etiqueta : '', sinPeriodo ? '' : chipPeriodo(t.filtro), ...(t.resumen ?? [])]
+                {[varias ? t.etiqueta : '', sinPeriodo ? '' : chipPeriodo(t.filtro, presetUrl), ...(t.resumen ?? [])]
                   .filter(Boolean).join(' · ')}
                 {t.detalle && <span className="ven-dropdown-detalle">{t.detalle}</span>}
               </div>

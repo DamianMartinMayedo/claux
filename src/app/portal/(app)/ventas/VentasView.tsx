@@ -35,7 +35,6 @@ import {
 } from '@/app/actions/portal/ventas'
 import { fmtFechaEs }                  from '@/lib/date-utils'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -45,9 +44,10 @@ import { useConfigurador }             from '@/components/portal/ConfiguradorCon
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
-import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import Filtros                          from '@/components/portal/Filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
-import { LIMITE_LISTADO } from '@/lib/listados'
+import { filtroExport, resumenDe, opcionesTercero, type Filtro } from '@/lib/filtros'
 
 interface Props { data: VentasResumenData; initialTab?: Tab }
 
@@ -81,11 +81,17 @@ export default function VentasView({ data, initialTab }: Props) {
     next.set('t', t)
     router.replace(`/portal/ventas?${next.toString()}`, { scroll: false })
   }
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
-  const [filtroCliente, setFiltroCliente] = useState('')
-  const [filtroEstado,  setFiltroEstado]  = useState('')
-  const [verArchivadas, setVerArchivadas] = useState(false)
-  const [soloConSaldo,  setSoloConSaldo]  = useState(false)
+  // Los filtros viven en la URL, igual que el rango y la búsqueda: refrescar —o que se caiga
+  // la conexión— ya no tira lo que el dueño acababa de poner, y de esta única declaración
+  // salen la barra, lo que viaja a la descarga y el texto del desplegable.
+  const filtroEmpresa = params.get('empresa') ?? ''
+  const filtroCliente = params.get('cliente') ?? ''
+  const filtroEstado  = params.get('estado')  ?? ''
+  const soloConSaldo  = params.get('saldo') === '1'
+  // «Ver archivadas» lo aplica el SERVIDOR: es lo único de esta barra que cambia QUÉ se trae
+  // y no cómo se pinta, y traerlas para esconderlas gastaba cupo del techo de 500 filas
+  // —desplazando documentos vivos— sin que nada lo dijera.
+  const verArchivadas = params.get('archivadas') === '1'
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -97,8 +103,12 @@ export default function VentasView({ data, initialTab }: Props) {
             .filter(f => !soloConSaldo || f.saldo > 0.005),
     [data.facturas, filtroEmpresa, filtroCliente, filtroEstado, verArchivadas, soloConSaldo])
 
-  const conteoOfertas  = data.ofertas.length
-  const conteoFacturas = data.facturas.length
+  // El «de M» es el total REAL del rango, no las filas traídas: decía «12 de 500» cuando en
+  // el rango había 900, y esa cifra es justo la que el dueño usa para saber si está viéndolo
+  // todo. Las pestañas siguen contando lo traído —es lo que hay cargado para filtrar— pero
+  // el «N de M» de la tabla ya no miente.
+  const conteoOfertas  = data.total_ofertas
+  const conteoFacturas = data.total_facturas
 
   // Pendiente de cobro POR MONEDA de lo que se está viendo. Sin sumar monedas distintas
   // (no cotizan aquí) y sobre las filas filtradas, no sobre toda la historia.
@@ -118,10 +128,56 @@ export default function VentasView({ data, initialTab }: Props) {
   // Al cambiar de pestaña, limpiar selección para no arrastrar contexto.
   useEffect(() => { selOfertas.clear(); selFacturas.clear() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { colorOf } = useEmpresas()
+  const { colorOf, nombreOf } = useEmpresas()
   const empresasFiltro = data.empresas.map(e => ({
     empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
   }))
+
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable, que antes se escribían tres veces por separado.
+   *
+   * `escalado` en los que SON columna: mientras el listado quepa entero el navegador filtra
+   * al instante y da el mismo resultado; en cuanto hay filas sin traer sube a la consulta,
+   * porque un filtro que solo mira las 500 más recientes miente sin decirlo.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'escalado',
+      ocultarSi: empresasFiltro.length <= 1,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'tercero', param: 'cliente', label: 'Todos los clientes',
+      rotulo: 'Cliente',
+      valor: filtroCliente, widget: 'select', donde: 'escalado',
+      ocultarSi: data.clientes.length === 0,
+      // Agrupados POR EMPRESA: un cliente tiene una ficha por empresa, y la lista plana
+      // repetía el mismo nombre tantas veces como fichas, indistinguibles.
+      opciones: opcionesTercero(data.clientes, nombreOf, empresasFiltro.length > 1, filtroEmpresa || undefined),
+    },
+    {
+      // Los dos juegos de estados no se solapan, así que el servidor sabe a qué tabla
+      // aplicarlo sin que haga falta mandarle la pestaña.
+      clave: 'estado', label: 'Todos los estados', valor: filtroEstado,
+      rotulo: 'Estado',
+      widget: 'select', donde: 'escalado',
+      opciones: Object.entries(tab === 'ofertas' ? ESTADO_OFERTA_LABEL : ESTADO_FACTURA_LABEL)
+        .map(([k, v]) => ({ valor: k, label: v })),
+    },
+    {
+      clave: 'archivadas', label: 'Ver archivadas', valor: verArchivadas ? '1' : '',
+      widget: 'toggle', donde: 'servidor',
+    },
+    {
+      // Derivado del saldo, que se calcula sobre los cobros: no es columna, no puede subir.
+      clave: 'con_saldo', label: 'Solo con saldo', valor: soloConSaldo ? '1' : '',
+      widget: 'toggle', donde: 'cliente', ocultarSi: tab !== 'facturas',
+    },
+  ], [filtroEmpresa, filtroCliente, filtroEstado, verArchivadas, soloConSaldo, tab,
+      empresasFiltro, data.clientes, nombreOf])
 
   const empresasConLetra = data.empresas.filter(e => !!e.letra_facturacion)
   const sinSetupEmpresas = data.empresas.length === 0
@@ -171,21 +227,10 @@ export default function VentasView({ data, initialTab }: Props) {
             todas era la queja. Y el desplegable dice qué se lleva antes de clicar. */}
         <ExportarMenu
           clave={tab === 'ofertas' ? 'ofertas' : 'facturas'}
-          filtro={{
-            desde: data.rango.desde, hasta: data.rango.hasta, q: data.q,
-            empresa_id: filtroEmpresa, estado: filtroEstado, tercero: filtroCliente,
-            archivadas: verArchivadas,
-            con_saldo:  tab === 'facturas' && soloConSaldo,
-          }}
-          resumen={[
-            filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-            filtroCliente && (data.clientes.find(c => c.tercero_id === filtroCliente)?.nombre ?? ''),
-            filtroEstado && (tab === 'ofertas'
-              ? ESTADO_OFERTA_LABEL[filtroEstado as EstadoOferta]
-              : ESTADO_FACTURA_LABEL[filtroEstado as EstadoFactura]),
-            verArchivadas && 'con archivadas',
-            tab === 'facturas' && soloConSaldo && 'solo con saldo',
-          ].filter((x): x is string => Boolean(x))}
+          /* GENERADOS de la declaración: no hay un objeto que escribir a mano y que se pueda
+             quedar corto, ni un resumen que pueda imprimir un código interno. */
+          filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta, q: data.q })}
+          resumen={resumenDe(declaracion)}
         />
         {tab === 'ofertas' ? (
           sinSetupEmpresas || sinLetra ? (
@@ -241,50 +286,18 @@ export default function VentasView({ data, initialTab }: Props) {
         ]}
       />
 
-      {/* ── Rango y búsqueda (en la URL, aplicados en la query del servidor) ── */}
-      <div className="ter-toolbar">
-        <RangoBusqueda
-          desde={data.rango.desde}
-          hasta={data.rango.hasta}
-          q={data.q}
-          placeholder="Buscar por número, cliente o importe…"
-        />
-      </div>
-
-      {/* ── Toolbar de filtros ── */}
-      <div className="ter-toolbar">
-        <EmpresaPills
-          empresas={empresasFiltro}
-          value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
-        />
-        <select className="input ter-filter-select" value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}>
-          <option value="">Todos los clientes</option>
-          {data.clientes.map(c => (
-            <option key={c.tercero_id} value={c.tercero_id}>{c.nombre}</option>
-          ))}
-        </select>
-        <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          {tab === 'ofertas'
-            ? Object.entries(ESTADO_OFERTA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)
-            : Object.entries(ESTADO_FACTURA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)
-          }
-        </select>
-        <label className="filtro-toggle">
-          <input type="checkbox" className="row-check" checked={verArchivadas}
-            onChange={e => setVerArchivadas(e.target.checked)} />
-          Ver archivadas
-        </label>
-        {tab === 'facturas' && (
-          <label className="filtro-toggle">
-            <input type="checkbox" className="row-check" checked={soloConSaldo}
-              onChange={e => setSoloConSaldo(e.target.checked)} />
-            Solo con saldo
-          </label>
-        )}
-      </div>
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={data.q}
+        placeholder="Buscar por número, cliente o importe…"
+        hayMas={data.hay_mas_ofertas || data.hay_mas_facturas}
+        /* Solo la empresa se queda en la fila; el cliente baja al panel. Con las píldoras de
+           tres empresas MÁS un desplegable de clientes, la barra envolvía a dos líneas y
+           «Filtros» acababa suelto al principio de la segunda. Y el cliente ya se busca por
+           nombre en la caja de al lado, que es como se llega a él la mayoría de las veces. */
+        visibles={1}
+      />
 
       {/* ── Tabla ── */}
       <div className="card card-table">
@@ -305,10 +318,13 @@ export default function VentasView({ data, initialTab }: Props) {
         </div>
 
         {((tab === 'ofertas' && data.hay_mas_ofertas) || (tab === 'facturas' && data.hay_mas_facturas)) && (
-          <p className="listado-tope">
-            Se enseñan los primeros {LIMITE_LISTADO} documentos del rango. Acota el rango o
-            busca para ver el resto.
-          </p>
+          <AvisoTope
+            mostrados={tab === 'ofertas' ? data.ofertas.length : data.facturas.length}
+            total={tab === 'ofertas' ? data.total_ofertas : data.total_facturas}
+            limite={data.limite}
+            sustantivo={tab === 'ofertas' ? 'ofertas' : 'facturas'}
+            femenino
+          />
         )}
 
         {tab === 'ofertas' ? (
@@ -630,7 +646,7 @@ function TablaOfertas({
                   <EmpresaTag color={colorOf(o.empresa_id)} nombre={empresaNombres[o.empresa_id] ?? o.empresa_id} />
                 </td>
               )}
-              <td data-label="Cliente">{clienteNombres[o.cliente_id] ?? o.cliente_id}</td>
+              <td data-label="Cliente"><span className="cell-clamp">{clienteNombres[o.cliente_id] ?? o.cliente_id}</span></td>
               <td data-label="Estado">
                 <BadgeOferta estado={o.estado} />
                 {o.archivado && <span className="badge badge-neutral ven-badge-archivada">Archivada</span>}
@@ -712,7 +728,7 @@ function TablaFacturas({
                   <EmpresaTag color={colorOf(f.empresa_id)} nombre={empresaNombres[f.empresa_id] ?? f.empresa_id} />
                 </td>
               )}
-              <td data-label="Cliente">{clienteNombres[f.cliente_id] ?? f.cliente_id}</td>
+              <td data-label="Cliente"><span className="cell-clamp">{clienteNombres[f.cliente_id] ?? f.cliente_id}</span></td>
               <td data-label="Vencimiento" className="text-sm-muted">
                 {f.fecha_vencimiento ? fmtFechaEs(f.fecha_vencimiento) : '—'}
               </td>

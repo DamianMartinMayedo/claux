@@ -17,11 +17,16 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, requireAlgunModulo } from './auth'
+import { obtenerEmpresas } from './empresas'
 import { construirCsv, type ValorCelda } from '@/lib/exportar/csv'
 import {
   construirXlsxBase64, texto, numero, fecha, esFechaIso, anchosPorColumna, MARCA,
 } from '@/lib/exportar/excel'
 import { tablaPorClave, type TablaExportable, type FiltroExport } from '@/lib/exportar/tablas'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 /**
  * Nombre de hoja que Excel acepta: máximo 31 caracteres y sin `: \ / ? * [ ]`, que
@@ -58,9 +63,23 @@ export async function exportarListado(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
 
+  // El ALCANCE, resuelto aquí y NUNCA aceptado del navegador: `obtenerEmpresas` devuelve
+  // todas las del tenant a un `admin_empresa` y solo las de `empresa_usuario` a un
+  // `rol='usuario'`. Es el mismo `.in('empresa_id', …)` que aplica cada listado del portal
+  // y que a la descarga le faltaba: filtraba solo por `client_id`, así que un usuario
+  // restringido a una empresa se bajaba las de todo el negocio.
+  //
+  // Se SOBRESCRIBE el campo en vez de leerlo: si el cliente manda `empresas_visibles`, se
+  // descarta. Un permiso que viaja en el payload no es un permiso.
+  const empresas = await obtenerEmpresas()
+  const filtroConAlcance: FiltroExport = {
+    ...filtro,
+    empresas_visibles: empresas.map(e => e.empresa_id),
+  }
+
   let filas: ValorCelda[][]
   try {
-    filas = await tabla.cargar(createAdminClient(), session.client_id, filtro)
+    filas = await tabla.cargar(createAdminClient(), session.client_id, filtroConAlcance)
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudieron leer los datos.' }
   }
@@ -70,7 +89,7 @@ export async function exportarListado(
   // rango va la fecha de hoy, por lo mismo: «todo» no distingue dos descargas de dos días.
   const sufijo = filtro.desde || filtro.hasta
     ? `${filtro.desde || 'inicio'}_${filtro.hasta || 'hoy'}`
-    : new Date().toISOString().slice(0, 10)
+    : hoyEnTz()
   const base = `${tabla.archivo?.(filtro) ?? tabla.clave}-${sufijo}`
 
   if (formato === 'csv') {

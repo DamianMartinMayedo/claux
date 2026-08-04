@@ -17,6 +17,19 @@ import {
   generarProductoId, generarCategoriaProductoId, siguienteCodigoProducto, construirCamposProducto,
   type TipoProducto as _TipoProducto,
 } from '@/lib/productos-core'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
+
+/**
+ * Techo del historial de movimientos de la FICHA de un producto.
+ *
+ * No es un listado con rango: es la última actividad del artículo, para responder «¿qué le ha
+ * pasado a esto?». El techo protege la ficha (un producto de mostrador tiene miles de
+ * movimientos) pero la vista dice cuántos hay en total, o el techo mentiría por omisión.
+ */
+const LIMITE_HISTORIAL_PRODUCTO = 100
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -527,7 +540,7 @@ export async function guardarTarifaSiVacia(
     return { ok: false, error: 'Esa moneda no está activa en tu negocio.' }
 
   const { data: prod } = await db.from('products')
-    .select('precios, tipo').eq('producto_id', producto_id)
+    .select('precios, costos, tipo').eq('producto_id', producto_id)
     .eq('client_id', session.client_id).maybeSingle()
   if (!prod) return { ok: false, error: 'Servicio no encontrado.' }
   if (prod.tipo !== 'SERVICIO') return { ok: false, error: 'Solo se tarifan servicios por esta vía.' }
@@ -541,6 +554,23 @@ export async function guardarTarifaSiVacia(
     .update({ precios: { ...actuales, [moneda]: precio }, updated_at: new Date().toISOString() })
     .eq('producto_id', producto_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'No se pudo guardar la tarifa.' }
+
+  // Y su apunte en el historial, como hacen las OTRAS dos vías que escriben un precio
+  // (`guardarProducto` y la confirmación de una compra, mig. 155). Sin esto la pestaña
+  // «Historial de precios» de un servicio se saltaría justo la tarifa que nació de un
+  // acuerdo: aparecería un precio sin fecha ni origen, y el historial dejaría de contar
+  // la historia completa —que es lo único que hace. Va con el COSTE vigente en esa
+  // moneda para que el apunte pueda enseñar el margen, igual que el de la compra.
+  const costos = (typeof prod.costos === 'object' && prod.costos !== null)
+    ? prod.costos as Record<string, number> : {}
+  await db.from('producto_precios_historial').insert({
+    historial_id: `HIS-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`,
+    client_id:    session.client_id,
+    producto_id,
+    moneda,
+    precio,
+    costo:        costos[moneda] ?? null,
+  })
 
   revalidarFicha('servicios')
   return { ok: true, escrito: true }
@@ -728,7 +758,7 @@ export async function ajustarStock(
     const res = await aplicarMovimiento(db, {
       client_id:  session.client_id,
       empresa_id: alm.empresa_id,
-      fecha:      new Date().toISOString().split('T')[0],
+      fecha:      hoyEnTz(),
       tipo:       'AJUSTE',
       producto_id,
       almacen_id,
@@ -881,6 +911,8 @@ export interface ProductoDetalleData {
   /** `minimo` es el de ESE almacén (mig. 153); `null` = se rige por el global. */
   stock_por_almacen: { almacen_id: string; nombre: string; cantidad: number; minimo: number | null }[]
   movimientos:       MovimientoProducto[]
+  /** Cuántos movimientos tiene DE VERDAD: el historial de la ficha lleva techo. */
+  movimientosTotal:  number
   almacen_nombres:   Record<string, string>
   historialPrecios:  HistorialPrecio[]
   /** Sin `inventario` la ficha no enseña existencias ni movimientos (ver
@@ -965,12 +997,15 @@ export async function obtenerProductoDetalle(
       .select('almacen_id, stock_minimo')
       .eq('client_id', session.client_id)
       .eq('producto_id', producto_id),
+    // El historial de UN producto, con techo y con `count`: `.limit(100)` mudo escondía la
+    // historia de cualquier artículo con rotación —un producto de mostrador pasa de 100
+    // movimientos en semanas— y la ficha no decía que faltara nada.
     db.from('movimientos_inventario')
-      .select('movimiento_id, fecha, tipo, almacen_id, almacen_destino_id, cantidad, motivo, origen')
+      .select('movimiento_id, fecha, tipo, almacen_id, almacen_destino_id, cantidad, motivo, origen', { count: 'exact' })
       .eq('client_id', session.client_id)
       .eq('producto_id', producto_id)
       .order('created_at', { ascending: false })
-      .limit(100),
+      .limit(LIMITE_HISTORIAL_PRODUCTO),
     db.from('producto_precios_historial')
       .select('historial_id, moneda, precio, costo, created_at')
       .eq('client_id', session.client_id)
@@ -1055,7 +1090,7 @@ export async function obtenerProductoDetalle(
       ])
       const nombreDe = new Map(((terc ?? []) as { tercero_id: string; nombre: string }[])
         .map(t => [t.tercero_id, t.nombre]))
-      const hoy = new Date().toISOString().split('T')[0]
+      const hoy = hoyEnTz()
       const subDe = new Map(((subs ?? []) as Record<string, unknown>[]).map(x => [x.suscripcion_id as string, x]))
       for (const f of filas) {
         const sub = subDe.get(f.suscripcion_id)
@@ -1130,6 +1165,7 @@ export async function obtenerProductoDetalle(
     almacenes,
     stock_por_almacen,
     movimientos,
+    movimientosTotal: movRes.count ?? movimientos.length,
     almacen_nombres,
     historialPrecios,
     contratos,

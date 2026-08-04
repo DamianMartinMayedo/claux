@@ -2,7 +2,11 @@
 
 import { Fragment, useState, useMemo, useEffect, useTransition } from 'react'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+// «Hoy» en la zona del NEGOCIO (America/Havana). Con `toISOString()` (UTC) a partir de las
+// 20:00 ya es la fecha de mañana, así que el defecto de un `type=date` y la previsualización
+// de la reanudación se adelantaban un día cada noche.
+import { hoyEnTz } from '@/lib/fecha-tz'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
@@ -13,9 +17,12 @@ import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import EmpresaPills      from '@/components/portal/EmpresaPills'
 import { useEmpresas }   from '@/components/portal/EmpresaColorContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
-import RangoBusqueda from '@/components/portal/RangoBusqueda'
+import Filtros from '@/components/portal/Filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import { PRESETS_FUTURO } from '@/lib/listados'
 import Tabs from '@/components/Tabs'
-import { Plus, Search, Pencil, Pause, Play, RotateCcw, XCircle, CalendarX, Copy, Users, TrendingUp, X, Repeat, Receipt, Info, AlertTriangle, ChevronDown, ExternalLink } from 'lucide-react'
+import { Plus, Pencil, Pause, Play, RotateCcw, XCircle, CalendarX, Copy, Users, TrendingUp, X, Repeat, Receipt, Info, AlertTriangle, ChevronDown, ExternalLink } from 'lucide-react'
 import {
   guardarSuscripcion,
   cambiarEstadoSuscripcion,
@@ -90,7 +97,7 @@ function tarifaEnOtraMoneda(s: ServicioSuscribible | undefined, moneda: string):
   return otra ? { moneda: otra[0], precio: Number(otra[1]) } : null
 }
 
-function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
+function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, onSaved }: {
   sub: SuscripcionRow | null
   /**
    * Acuerdo del que copiar condiciones (Duplicar). Rellena el formulario pero NO es una
@@ -99,12 +106,12 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
    * servidor, aquí nunca se copia un `linea_id`.
    */
   plantilla?: SuscripcionRow | null
-  /** Alta para VARIOS clientes a la vez. */
+  /** Arranca en modo «varios clientes» (lo pide la acción de fila del acuerdo). */
   lote?: boolean
   data: SuscripcionesPageData; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
 
   // Editar parte del acuerdo; duplicar y «varios clientes» parten de la plantilla, que
   // trae las condiciones pero nunca el cliente ni el id.
@@ -134,6 +141,18 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
   const [cobradoHasta, setCobradoHasta] = useState('')
   // Al EDITAR se abre desplegado: quien edita viene justo a cambiar una de esas fechas.
   const [masOpciones,  setMasOpciones]  = useState(!!sub)
+  /**
+   * «Varios clientes» era un botón aparte en la cabecera, y eso lo convertía en otra
+   * pantalla que hay que descubrir. Es la MISMA alta con una casilla: se decide dentro,
+   * con el formulario ya delante.
+   */
+  const [lote, setLote] = useState(!!loteInicial)
+  /**
+   * Generar ya las facturas del primer cobro. Marcada, que es el comportamiento de
+   * siempre. **Es un «ahora o mañana», no un «sí o no»**: la facturación automática es
+   * permanente, así que el cron las genera igual en su mes.
+   */
+  const [conBorrador, setConBorrador] = useState(true)
   /** Previsualización del lote: se enseña ANTES de escribir nada. */
   const [confirmLote,  setConfirmLote]  = useState<FormData | null>(null)
   /** Índices de línea cuyo precio se guardará también como tarifa del catálogo. */
@@ -243,6 +262,7 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
     fd.set('renovacion_automatica', renovacion ? '1' : '')
     fd.set('notas', notas)
     fd.set('prorratear', prorratear ? '1' : '')
+    if (!conBorrador) fd.set('sin_borrador', '1')
     // En lote NO se escribe al enviar: primero la previsualización. `borradorDelPrimerCobro`
     // corre por acuerdo, así que un clic sin aviso puede dejar 30 facturas borrador.
     if (lote) { setConfirmLote(fd); return }
@@ -303,6 +323,19 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
           <div className="modal-body">
             <div className="ter-form-section">
               <span className="ter-form-section-title">Acuerdo</span>
+              {/* La casilla va FUERA de la rejilla, en su propia línea: dentro ocupaba una
+                  celda de seis y, con su nota debajo, descuadraba la fila de campos. Es el
+                  mismo sitio que la casilla de «Suscripción» en la ficha del servicio. */}
+              {!isEdit && (
+                <label className="checkbox-group sus-lote-toggle">
+                  <input type="checkbox" checked={lote}
+                    onChange={e => { setLote(e.target.checked); setClientesLote(new Set()) }} />
+                  <span className="checkbox-label">
+                    Dar de alta a varios clientes a la vez
+                    <em className="sus-lote-nota">mismos servicios y condiciones, un acuerdo para cada uno</em>
+                  </span>
+                </label>
+              )}
               <div className="ter-form-grid">
                 {/* La EMPRESA va primero porque el cliente depende de ella: los terceros
                     son por-empresa (`third_parties.empresa_id`), así que la lista de abajo
@@ -317,7 +350,9 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
                     <span className="input-hint">Los clientes y las facturas son de esta empresa.</span>
                   </div>
                 )}
-                <div className="input-group ter-col-span-3">
+                {/* Con la lista de clientes marcables, media fila no da: la caja alta al
+                    lado de un `select` bajo es justo lo que se veía torcido. */}
+                <div className={`input-group ${lote ? 'ter-col-full' : 'ter-col-span-3'}`}>
                   <label>{lote ? 'Clientes' : 'Cliente'} <span className="required">*</span></label>
                   {lote ? (
                     <>
@@ -569,21 +604,41 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
                 )}
                 {/* Se avisa ANTES de guardar: la factura aparece sola y nadie debería
                     descubrir un documento que no recuerda haber creado. */}
-                {!isEdit && proximoCobro && proximoCobro <= hoy && (
+                {/* Con la fecha en el PASADO no es información: es una factura atrasada que
+                    va a nacer, y ahí sí hace falta un aviso —la casilla de arriba solo dice
+                    qué se va a generar, no que llega tarde. */}
+                {!isEdit && conBorrador && proximoCobro && proximoCobro < hoy && (
                   <div className="ter-col-full">
-                    {/* Con la fecha en el PASADO no es información: es una factura
-                        atrasada que va a nacer, y por eso el aviso cambia de tono. */}
-                    <div className={`alert ${proximoCobro < hoy ? 'alert-warning' : 'alert-info'}`}>
+                    <div className="alert alert-warning">
                       <span>
-                        {proximoCobro < hoy
-                          ? <>El primer cobro es del <strong>{fmtDate(proximoCobro)}</strong>, que ya pasó:
-                              al guardar nacerá una <strong>factura borrador atrasada</strong>. Si ya lo
-                              tienes cobrado, dilo arriba en «Ya lo tengo cobrado hasta».</>
-                          : <>El primer cobro corresponde a hoy, así que al guardar se creará su{' '}
-                              <strong>factura borrador</strong> en Ventas. No se emite ni se
-                              envía: la revisas y la emites tú.</>}
+                        El primer cobro es del <strong>{fmtDate(proximoCobro)}</strong>, que ya
+                        pasó: {lote ? 'las facturas nacerán atrasadas' : 'la factura nacerá atrasada'}.
+                        Si ya lo tienes cobrado, dilo arriba en «Ya lo tengo cobrado hasta».
                       </span>
                     </div>
+                  </div>
+                )}
+                {/* **UNA FACTURA POR CLIENTE, y eso no se elige**: una factura pertenece a un
+                    cliente, así que con diez clientes son diez facturas —agrupar dos
+                    clientes en un documento sería facturarle a uno el servicio de otro—.
+                    Lo que SÍ se elige es cuándo nacen. */}
+                {!isEdit && proximoCobro && proximoCobro <= hoy && (
+                  <div className="input-group ter-col-full">
+                    <label className="checkbox-group">
+                      <input type="checkbox" checked={conBorrador}
+                        onChange={e => setConBorrador(e.target.checked)} />
+                      <span className="checkbox-label">
+                        Generar ya {lote ? 'sus facturas borrador' : 'su factura borrador'}
+                        {lote && clientesLote.size > 0 && ` (${clientesLote.size})`}
+                      </span>
+                    </label>
+                    <span className="input-hint">
+                      {conBorrador
+                        ? lote
+                          ? 'Una por cliente: una factura pertenece a un cliente, así que no se pueden juntar.'
+                          : 'Queda en Ventas como borrador; emitirla sigue siendo cosa tuya.'
+                        : 'Sin generarlas ahora. No se pierde nada: la facturación automática las deja hechas en su mes.'}
+                    </span>
                   </div>
                 )}
                 {/* Prorrateo: solo tiene sentido si el acuerdo empieza DESPUÉS de abrirse
@@ -640,9 +695,13 @@ function SuscripcionModal({ sub, plantilla, lote, data, onClose, onSaved }: {
               </p>
               {proximoCobro <= hoy && (
                 <p className="mt-2">
-                  El primer cobro es del {fmtDate(proximoCobro)}, así que además se generarán{' '}
-                  <strong>{clientesLote.size} {clientesLote.size === 1 ? 'factura borrador' : 'facturas borrador'}</strong>{' '}
-                  en Ventas. Ninguna se emite: revisarlas y emitirlas sigue siendo cosa tuya.
+                  {conBorrador
+                    ? <>El primer cobro es del {fmtDate(proximoCobro)}, así que además se generarán{' '}
+                        <strong>{clientesLote.size} {clientesLote.size === 1 ? 'factura borrador' : 'facturas borrador'}</strong>{' '}
+                        —una por cliente— en Ventas. Ninguna se emite: revisarlas y emitirlas
+                        sigue siendo cosa tuya.</>
+                    : <>No se generará ninguna factura ahora. La facturación automática las
+                        dejará hechas en su mes.</>}
                 </p>
               )}
               <p className="mt-2 text-sm-muted">
@@ -677,10 +736,18 @@ const ESTADO_COBRO_LABEL: Record<EstadoCobro, string> = {
   COBRADO:    'Cobrado',
   PROYECTADO: 'Previsto',
 }
+// El color dice LO MISMO que en Ventas y en CxC, porque es el mismo hecho visto desde
+// otra pantalla: emitida y esperando al cliente = `info`; cobrada = `success`; vencida =
+// `error`. Lo que queda en el tejado del dueño va en ámbar, y da igual si el paso que le
+// falta es facturar o emitir: eso lo dice la etiqueta, no el color.
+//
+// Y el morado NO se usa aquí. Los tonos `purple/indigo/rose` son para etiquetas
+// CATEGÓRICAS (lo que algo ES: «Suscribible · Mensual»), no para estados: pintar «Pendiente
+// de cobro» del mismo morado que «Suscribible» hace creer que tienen algo que ver.
 const ESTADO_COBRO_BADGE: Record<EstadoCobro, string> = {
   PENDIENTE:  'badge-warning',
-  BORRADOR:   'badge-info',
-  EMITIDO:    'badge-purple',
+  BORRADOR:   'badge-warning',
+  EMITIDO:    'badge-info',
   COBRADO:    'badge-success',
   PROYECTADO: 'badge-neutral',
 }
@@ -718,7 +785,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
       <div className="mon-card-header sus-mes-header">
         <div className="sus-mes-titulo">
           <h2 className="sus-mes-nombre">{fmtPeriodo(mes.periodo)}</h2>
-          <span className={`badge ${ESTADO_COBRO_BADGE[mes.estado]}`}>
+          <span className={`badge ${atrasado ? 'badge-error' : ESTADO_COBRO_BADGE[mes.estado]}`}>
             {atrasado ? 'Vencido sin facturar' : ESTADO_COBRO_LABEL[mes.estado]}
           </span>
           <span className="sus-mes-totales">
@@ -803,7 +870,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
                     </td>
                   )}
                   <td data-label="Nº"><strong className="text-sm-bold">{f.numero}</strong></td>
-                  <td data-label="Cliente" className="text-sm-muted">{f.cliente_nombre}</td>
+                  <td data-label="Cliente" className="text-sm-muted"><span className="cell-clamp">{f.cliente_nombre}</span></td>
                   <td data-label="Suscripciones" className="col-center text-sm-muted">{f.suscripciones}</td>
                   <td data-label="Total" className="col-num">{fmtMoneda(f.total, f.moneda)}</td>
                   {/* Vacío ≠ 0: un borrador no debe nada TODAVÍA, y escribir «0» diría
@@ -851,7 +918,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
                       <input type="checkbox" checked={incluido} onChange={() => onToggle(key)}
                         aria-label={`Incluir a ${g.cliente_nombre} en ${g.moneda}`} />
                     </td>
-                    <td data-label="Cliente"><strong className="text-sm-bold">{g.cliente_nombre}</strong></td>
+                    <td data-label="Cliente"><strong className="text-sm-bold cell-clamp">{g.cliente_nombre}</strong></td>
                     <td data-label="Qué se le factura">
                       <ul className="sus-lineas">
                         {g.lineas.map(l => (
@@ -1139,13 +1206,15 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
   const [pausarHasta, setPausarHasta] = useState('')
   const [reanudarSub, setReanudarSub] = useState<SuscripcionRow | null>(null)
   const [cobrarPausados, setCobrarPausados] = useState(false)
-  const [search,    setSearch]    = useState('')
-  const [filtro,    setFiltro]    = useState<'TODAS' | EstadoEfectivo>('TODAS')
+  // Los filtros viven en la URL, como el rango: refrescar ya no los tira.
   // La empresa existía en Facturación y NO en Acuerdos, con la misma tabla mezclando
   // acuerdos de dos empresas sin decirlo. '' = todas.
-  const [empresaFil, setEmpresaFil] = useState('')
+  const params = useSearchParams()
+  const search     = params.get('q')       ?? ''
+  const filtro     = (params.get('estado') ?? '') as '' | EstadoEfectivo
+  const empresaFil = params.get('empresa') ?? ''
   // El único filtro que un gestor de cuotas abre a diario.
-  const [soloDeuda, setSoloDeuda] = useState(false)
+  const soloDeuda  = params.get('deuda') === '1'
   /** Fila desplegada: su histórico de facturas. Sin página de detalle por acuerdo. */
   const [abierta, setAbierta] = useState<string | null>(null)
   // Subida de tarifa en lote: el caso comercial del modelo (30 socios = 30 ediciones).
@@ -1157,7 +1226,11 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
 
   // Solo para PREVISUALIZAR la reanudación en el diálogo. Quien decide es el servidor,
   // que recalcula con su propio «hoy» y devuelve lo que de verdad aplicó.
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
+
+  // El conteo va en la etiqueta, como «Solo bajo mínimo» de Inventario: un filtro que no
+  // dice cuántos hay obliga a marcarlo para averiguarlo.
+  const conDeudaCount = data.suscripciones.filter(s => s.debe.length > 0).length
 
   const { colorOf: colorEmpresa } = useEmpresas()
   const empresasListado = data.empresas.map(e => ({
@@ -1171,12 +1244,48 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
   const sinServicios = data.servicios.every(s => s.archivado)
   const puedeCrear = !faltaSetup && !sinClientes && !sinServicios
 
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el filtro de la descarga y su resumen.
+   *
+   * Todos en `cliente`: el estado efectivo (Vencida) se DERIVA (mig. 125) y la deuda se
+   * calcula sobre las facturas, así que ninguno es una columna que la consulta pueda filtrar.
+   * Cuando el listado está recortado lo dice el aviso del techo.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: empresaFil, widget: 'pastillas', donde: 'cliente',
+      ocultarSi: data.empresas.length <= 1,
+      opciones: empresasListado.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'estado', label: 'Todos los estados', valor: filtro,
+      rotulo: 'Estado',
+      widget: 'select', donde: 'cliente',
+      opciones: [
+        { valor: 'ACTIVA',    label: 'Activas' },
+        { valor: 'PAUSADA',   label: 'Pausadas' },
+        { valor: 'VENCIDA',   label: 'Vencidas' },
+        { valor: 'CANCELADA', label: 'Canceladas' },
+      ],
+    },
+    {
+      // El conteo va en la etiqueta: un filtro que no dice cuántos hay obliga a marcarlo
+      // para averiguarlo. Y `sinExportar` porque la deuda no es columna: el fichero no
+      // puede reproducirla, así que se dice en vez de prometerlo.
+      clave: 'con_saldo', param: 'deuda',
+      label: conDeudaCount > 0 ? `Con deuda (${conDeudaCount})` : 'Con deuda',
+      valor: soloDeuda ? '1' : '', widget: 'toggle', donde: 'cliente', sinExportar: true,
+    },
+  ], [empresaFil, filtro, soloDeuda, conDeudaCount, data.empresas.length, empresasListado])
+
   const filtradas = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.suscripciones.filter(s => {
       if (empresaFil && s.empresa_id !== empresaFil) return false
       if (soloDeuda && s.debe.length === 0) return false
-      if (filtro !== 'TODAS' && s.estado_efectivo !== filtro) return false
+      if (filtro && s.estado_efectivo !== filtro) return false
       const texto = `${s.cliente_nombre} ${s.lineas.map(l => l.servicio_nombre).join(' ')}`
       if (q && !texto.toLowerCase().includes(q)) return false
       return true
@@ -1274,22 +1383,16 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
           <div className="tes-header-actions">
             <ExportarMenu
               clave="suscripciones"
-              filtro={{
-                q: search, estado: filtro === 'TODAS' ? '' : filtro,
-                empresa_id: empresaFil,
+              filtro={filtroExport(declaracion, {
+                q: search,
                 desde: data.rango.desde || undefined, hasta: data.rango.hasta || undefined,
-              }}
-              resumen={[
-                filtro === 'TODAS' ? 'todas' : filtro.toLowerCase(),
-                empresaFil && (empresasListado.find(e => e.empresa_id === empresaFil)?.nombre ?? ''),
-                search && `«${search}»`,
-              ].filter((x): x is string => Boolean(x))}
+              })}
+              resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
             />
-            <button className="btn btn-secondary" onClick={() => openLote()} disabled={!puedeCrear}>
-              <Users size={14} strokeWidth={2.5} /> Varios clientes
-            </button>
+            {/* Una sola entrada al alta: «varios clientes» es una casilla DENTRO del
+                modal, no otra pantalla que haya que descubrir en la cabecera. */}
             <button className="btn btn-primary" onClick={openCreate} disabled={!puedeCrear}>
-              <Plus size={14} strokeWidth={2.5} /> Nuevo acuerdo
+              <Plus size={14} strokeWidth={2.5} /> Nueva suscripción
             </button>
           </div>
         )}
@@ -1327,35 +1430,17 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
 
       {vista === 'acuerdos' && (
       <>
-      {/* El rango es sobre el PRÓXIMO COBRO y se aplica en la consulta. Sin buscador
-          aquí: el de abajo filtra lo ya cargado por cliente y servicio. */}
-      <RangoBusqueda desde={data.rango.desde} hasta={data.rango.hasta} sinBuscador />
-
-      {data.empresas.length > 1 && (
-        <div className="ter-toolbar">
-          <EmpresaPills empresas={empresasListado} value={empresaFil} onChange={setEmpresaFil} />
-        </div>
-      )}
-
-      <div className="ter-toolbar">
-        <div className="ter-search-wrap">
-          <Search size={16} strokeWidth={2} />
-          <input type="search" className="ter-search" placeholder="Buscar por cliente o servicio…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <select className="input ter-filter-select" aria-label="Estado" value={filtro}
-          onChange={e => setFiltro(e.target.value as typeof filtro)}>
-          <option value="TODAS">Todos los estados</option>
-          <option value="ACTIVA">Activas</option>
-          <option value="PAUSADA">Pausadas</option>
-          <option value="VENCIDA">Vencidas</option>
-          <option value="CANCELADA">Canceladas</option>
-        </select>
-        <label className="checkbox-group">
-          <input type="checkbox" checked={soloDeuda} onChange={e => setSoloDeuda(e.target.checked)} />
-          <span className="checkbox-label">Con deuda</span>
-        </label>
-      </div>
+      {/* Una sola fila. Presets de FUTURO: el rango se aplica a `fecha_proximo_cobro`, o sea
+          a lo que viene. Ofrecía los de un listado histórico («Mes pasado», «Últimos 3
+          meses»), que sobre cobros futuros no significan nada. */}
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={search}
+        placeholder="Buscar por cliente o servicio…"
+        presets={PRESETS_FUTURO}
+        hayMas={data.hay_mas}
+      />
 
       <div className="card card-table">
         <div className="mon-card-header">
@@ -1363,12 +1448,11 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
           <span className="card-count">{filtradas.length} de {data.suscripciones.length}</span>
         </div>
 
-        {/* El techo recorta por fecha de cobro: decir cuántos faltan, no «acota el rango». */}
+        {/* El techo recorta por fecha de cobro: decir cuántos faltan y poder traerlos, no
+            «acota el rango» —que obligaba a adivinar unas fechas a mano—. */}
         {data.hay_mas && (
-          <p className="listado-tope">
-            Se enseñan {data.suscripciones.length} de {data.total} acuerdos. Acota el rango
-            de próximo cobro para ver el resto.
-          </p>
+          <AvisoTope mostrados={data.suscripciones.length} total={data.total}
+            limite={data.limite} sustantivo="acuerdos" />
         )}
 
         {filtradas.length === 0 ? (
@@ -1409,7 +1493,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                         onChange={() => sel.toggle(s.suscripcion_id)}
                         aria-label={`Seleccionar el acuerdo de ${s.cliente_nombre}`} />
                     </td>
-                    <td data-label="Cliente"><strong className="text-sm-bold">{s.cliente_nombre}</strong></td>
+                    <td data-label="Cliente"><strong className="text-sm-bold cell-clamp">{s.cliente_nombre}</strong></td>
                     {data.empresas.length > 1 && (
                       <td data-label="Empresa" className="text-sm-muted">
                         {data.empresas.find(e => e.empresa_id === s.empresa_id)?.nombre ?? '—'}
@@ -1618,7 +1702,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                 <tbody>
                   {subidaPrev.map(l => (
                     <tr key={l.suscripcion_id}>
-                      <td data-label="Cliente">{l.cliente_nombre}</td>
+                      <td data-label="Cliente"><span className="cell-clamp">{l.cliente_nombre}</span></td>
                       <td data-label="Antes / mes" className="col-num">{fmtMoneda(l.antes, l.moneda)}</td>
                       <td data-label="Después / mes" className="col-num">{fmtMoneda(l.despues, l.moneda)}</td>
                       <td data-label="Cada cobro" className="col-num">{fmtMoneda(l.cobroDespues, l.moneda)}</td>

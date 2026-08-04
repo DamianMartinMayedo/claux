@@ -928,7 +928,7 @@ export default function ConteoView({ data }: { data: ConteoDetalle }) {
                 return (
                   <tr key={l.producto_id}>
                     <td data-label="Producto">
-                      <strong>{l.nombre}</strong>
+                      <strong className="cell-clamp">{l.nombre}</strong>
                       <div className="table-cell-secondary">{l.codigo}{l.unidad && ` · ${l.unidad}`}</div>
                     </td>
                     <td data-label="Contado" className="col-num">

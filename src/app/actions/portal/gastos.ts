@@ -8,8 +8,9 @@ import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
 import {
   cobroNaceLiquidado, etiquetaDeCategoria, generarCategoriaGastoId, generarRegistroId,
-  ORIGEN_CIERRE_CAJA, parsearSubcategorias, estadoDeRegistro,
+  ORIGEN_CIERRE_CAJA, parsearSubcategorias, estadoDeRegistro, generaSaldo,
   type TipoRegistro as _TipoRegistro, type EstadoRegistro as _EstadoRegistro,
+  type NaturalezaRegistro as _NaturalezaRegistro,
 } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
@@ -17,6 +18,10 @@ import {
   limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses,
   type FiltroListado as _FiltroListado,
 } from '@/lib/listados'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +31,7 @@ import {
 export type TipoRegistro   = _TipoRegistro
 export type FiltroListado  = _FiltroListado
 export type EstadoRegistro = _EstadoRegistro
+export type NaturalezaRegistro = _NaturalezaRegistro
 export type EstadoCategoria = 'ACTIVO' | 'INACTIVO'
 export type RolPL           = _RolPL
 
@@ -68,6 +74,9 @@ export interface GastoCobro {
    *  IMPORTACION · CIERRE_CAJA. Null = lo escribió el dueño a mano. */
   origen_tipo:  string | null
   origen_id:    string | null
+  /** Qué papel cumple la fila (mig. 166): COSTE (solo P&L) · DEUDA (solo CxP/CxC) ·
+   *  AMBAS (las dos cosas — el defecto y el comportamiento de todo lo anterior). */
+  naturaleza:   NaturalezaRegistro
   created_at:   string
   updated_at:   string
 }
@@ -111,7 +120,7 @@ export interface GastosCobrosPageData {
 const EPS = 0.005
 
 function hoy(): string {
-  return new Date().toISOString().split('T')[0]
+  return hoyEnTz()
 }
 
 // ── Obtener gastos y cobros ────────────────────────────────────────────────────
@@ -145,6 +154,22 @@ export async function obtenerGastosCobros(
   let regQuery = db.from('gastos_cobros').select('*', { count: 'exact' })
     .eq('client_id', session.client_id)
     .in('empresa_id', idsFiltro)
+  // Los filtros de la barra, cuando la vista los ESCALA (`?srv=1`): mientras el listado cabe
+  // entero el navegador los aplica al instante y da el mismo resultado; en cuanto hay filas
+  // sin traer tienen que aplicarse aquí, o filtrar por empresa solo miraría las 500 más
+  // recientes del conjunto sin decirlo. `estado` no está: se deriva, no es columna.
+  if (filtro?.empresa_id) regQuery = regQuery.eq('empresa_id', filtro.empresa_id)
+  if (filtro?.tercero)    regQuery = regQuery.eq('tercero_id', filtro.tercero)
+  if (filtro?.categoria) {
+    // Con sus subcategorías: los gastos cuelgan de la hija, y una igualdad simple dejaría
+    // el listado casi vacío. Misma regla que la pantalla y que la descarga. Se pregunta
+    // aparte porque hace falta ANTES de consultar, y solo cuando hay filtro de categoría.
+    const { data: cats } = await db.from('categorias_gastos')
+      .select('categoria_id, parent_id').eq('client_id', session.client_id)
+    const familia = [filtro.categoria, ...((cats ?? []) as { categoria_id: string; parent_id: string | null }[])
+      .filter(c => c.parent_id === filtro.categoria).map(c => c.categoria_id)]
+    regQuery = regQuery.in('categoria_id', familia)
+  }
   if (desde) regQuery = regQuery.gte('fecha', desde)
   if (hasta) regQuery = regQuery.lte('fecha', hasta)
   if (patron) {
@@ -232,6 +257,15 @@ export async function obtenerGastosCobros(
     // y documenta). Se corrige aquí, en la lectura, que es donde no hay nada que romper.
     if (cobroNaceLiquidado(r.origen_tipo)) {
       return { ...r, monto, monto_liquidado: monto, saldo_pendiente: 0, estado: 'LIQUIDADO', liquidaciones: [] }
+    }
+
+    // Una fila de solo COSTE (mig. 166) no tiene saldo: no se le debe a nadie. Nadie la
+    // liquida nunca, así que el estado derivado la dejaría PENDIENTE para siempre y el
+    // listado enseñaría el coste de cada nómina como una deuda por pagar — encima de la
+    // deuda de verdad, que va en sus propias filas. Se resuelve aquí, en la LECTURA,
+    // igual que el cierre de caja: es donde no hay nada que romper.
+    if (!generaSaldo(r.naturaleza)) {
+      return { ...r, monto, monto_liquidado: 0, saldo_pendiente: 0, estado: 'LIQUIDADO', liquidaciones: [] }
     }
 
     return {

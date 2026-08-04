@@ -2,7 +2,9 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
-import { cobroEsIngreso, cobroNaceLiquidado, fuenteDeCobro } from '@/lib/gastos-core'
+import {
+  cobroEsIngreso, cobroNaceLiquidado, fuenteDeCobro, computaEnResultados, generaSaldo,
+} from '@/lib/gastos-core'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { tieneModulo }       from '@/lib/modulos'
@@ -164,7 +166,7 @@ export async function obtenerReportes(
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desdeQ).lte('fecha_emision', hastaQ),
-    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo')
+    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .gte('fecha', desdeQ).lte('fecha', hastaQ),
     db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha, cuenta_id')
@@ -195,7 +197,7 @@ export async function obtenerReportes(
   }))
 
   type FilaFactura = { factura_id: string; moneda: string; total: number; fecha_emision: string }
-  type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null }
+  type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null }
 
   const facturas = (facRes.data ?? []) as FilaFactura[]
   const gastosCobros = (gcRes.data ?? []) as FilaGC[]
@@ -214,18 +216,23 @@ export async function obtenerReportes(
       if (!enRango(g.fecha, d, h)) continue
       if (g.tipo === 'COBRO') {
         // Dos preguntas distintas sobre la misma fila, y conviene no mezclarlas:
-        //  · `cobroEsIngreso` decide SI SUMA. Un COBRO de anticipo (el subsidio de la
-        //    nómina) no es ingreso; sin este filtro infla ingresos y resultado neto.
+        //  · `cobroEsIngreso` decide SI SUMA. Una fila que es solo DEUDA (mig. 166) no
+        //    es ingreso —el subsidio recupera un anticipo—; sin este filtro infla
+        //    ingresos y resultado neto.
         //  · `fuenteDeCobro` decide EN QUÉ RENGLÓN. El cierre del punto de venta es una
         //    venta de mostrador, así que va a «Ventas» junto a las facturas: sin esto el
         //    importe cae en «cobros directos» y un negocio que solo vende por TPV ve su
         //    renglón de Ventas en blanco.
-        if (!cobroEsIngreso(g.origen_tipo)) continue
+        if (!cobroEsIngreso(g.naturaleza)) continue
         ingresos.push({
           moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
           fuente: fuenteDeCobro(g.origen_tipo),
         })
       } else {
+        // Un GASTO que es solo DEUDA no es coste: el salario neto y las retenciones de
+        // una nómina ya están contados en las filas de COSTE de esa misma nómina, y
+        // sumarlos otra vez duplicaría el renglón de Personal.
+        if (!computaEnResultados(g.naturaleza)) continue
         gastos.push({
           moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
           categoria_id: g.categoria_id, categoria: g.categoria,
@@ -394,8 +401,14 @@ export async function obtenerReportes(
     // Mismo criterio que `apuntesDe`: el anticipo no es ingreso devengado, así que
     // no entra en el puente. Si entrara, el puente enseñaría un ingreso que el
     // estado de resultados no tiene.
-    const cobrosPer   = gastosCobros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.origen_tipo) && enRango(g.fecha, desde, hasta))
-    const gastosPer   = gastosCobros.filter(g => g.tipo === 'GASTO' && enRango(g.fecha, desde, hasta))
+    const cobrosPer   = gastosCobros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.naturaleza) && enRango(g.fecha, desde, hasta))
+    // Los dos lados usan predicados DISTINTOS a propósito, porque responden a
+    // preguntas distintas (mig. 166). Lo pendiente de PAGO es deuda: `generaSaldo`. Si
+    // aquí se filtrara por «computa en resultados», las filas de COSTE de una nómina
+    // —que no las liquida nadie, la deuda va en sus propias filas— se quedarían
+    // eternamente pendientes por su importe completo, y el puente enseñaría una deuda
+    // fantasma que no se puede pagar desde ninguna pantalla.
+    const gastosPer   = gastosCobros.filter(g => g.tipo === 'GASTO' && generaSaldo(g.naturaleza) && enRango(g.fecha, desde, hasta))
     const refs = [
       ...facturasPer.map(f => f.factura_id),
       ...cobrosPer.map(g => g.registro_id),

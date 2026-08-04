@@ -35,6 +35,7 @@ import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,10 @@ function horasEnRango(inicio: string | null, fin: string | null, fecha?: string)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
@@ -768,8 +772,18 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           {activeTab === 'reservas' && (
             <ExportarMenu
               clave="reservas"
-              filtro={{ desde: filtroDesde, hasta: filtroHasta, estado: filtroEstado }}
-              resumen={[filtroEstado].filter((x): x is string => Boolean(x))}
+              /* La búsqueda y el turno VIAJAN: se filtraban en pantalla y el fichero salía
+                 con todas las reservas. `tipo` es el canal en la tabla, y la franja es lo
+                 que el registro aplica ahí (`reserva_franjas`). */
+              filtro={{
+                desde: filtroDesde, hasta: filtroHasta, estado: filtroEstado,
+                q: search, categoria: filtroFranja,
+              }}
+              resumen={[
+                filtroEstado && (ESTADO_LABEL[filtroEstado as EstadoReserva] ?? filtroEstado),
+                filtroFranja && (data.franjas.find(f => f.franja_id === filtroFranja)?.nombre ?? ''),
+                search && `«${search}»`,
+              ].filter((x): x is string => Boolean(x))}
             />
           )}
           {activeTab === 'reservas' && (
@@ -863,7 +877,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                       {r.franja_hora_inicio && <div className="text-sm-muted">{formatHora(r.franja_hora_inicio)} – {formatHora(r.franja_hora_fin)}</div>}
                     </td>
                     <td data-label="Cliente">
-                      <strong>{r.nombre_cliente}</strong>
+                      <strong className="cell-clamp">{r.nombre_cliente}</strong>
                       {r.telefono && <div className="text-sm-muted">{r.telefono}</div>}
                       {r.notas && <div className="text-sm-muted">{r.notas}</div>}
                     </td>
@@ -931,7 +945,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <tbody>
                 {data.franjas.map(f => (
                   <tr key={f.franja_id}>
-                    <td data-label="Nombre"><strong>{f.nombre}</strong></td>
+                    <td data-label="Nombre"><strong className="cell-clamp">{f.nombre}</strong></td>
                     <td data-label="Horario" className="text-sm-muted">
                       {f.hora_inicio ? `${formatHora(f.hora_inicio)} – ${formatHora(f.hora_fin)}` : 'Sin hora'}
                       {f.dias_semana && f.dias_semana.length > 0 && f.dias_semana.length < 7 && (

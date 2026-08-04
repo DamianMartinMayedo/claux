@@ -1,15 +1,21 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Search, ReceiptText, Boxes } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import Tabs from '@/components/Tabs'
-import FilterPills from '@/components/portal/FilterPills'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import Filtros from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
 
 interface Props {
-  data: { tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string> }
+  data: {
+    tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string>
+    rango: { desde: string; hasta: string }; hay_mas: boolean; total: number; limite: number
+  }
 }
 
 const money = (n: number) => Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -26,14 +32,28 @@ function estadoBadge(estado: string) {
 }
 
 export default function OperacionesView({ data }: Props) {
-  const [tab, setTab]       = useState<'ventas' | 'stock'>('ventas')
-  const [search, setSearch] = useState('')
-  const [punto, setPunto]   = useState('')   // '' = todos
+  const [tab, setTab] = useState<'ventas' | 'stock'>('ventas')
+  // Los filtros viven en la URL, como el rango: refrescar ya no los tira.
+  const params = useSearchParams()
+  const search = params.get('q')     ?? ''
+  const punto  = params.get('punto') ?? ''   // '' = todos
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
 
-  // Las pastillas solo salen con más de un punto de venta: con uno no hay nada que
-  // filtrar y sería una fila de cromo que no hace nada.
-  const puntos = Object.entries(data.cajaNombres).map(([id, nombre]) => ({ id, label: nombre }))
+  /**
+   * LA DECLARACIÓN. El punto de venta sale de las mismas pastillas que la empresa en el
+   * resto del portal. `cliente` porque la búsqueda de esta pantalla mira nombres que vienen
+   * de otra tabla; cuando el listado queda recortado lo dice el aviso del techo.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'cuenta_id', param: 'punto', label: 'Todos', valor: punto,
+      rotulo: 'Punto de venta',
+      widget: 'pastillas', donde: 'cliente',
+      // Con un solo punto no hay nada que filtrar: sería una fila de cromo.
+      ocultarSi: Object.keys(data.cajaNombres).length <= 1,
+      opciones: Object.entries(data.cajaNombres).map(([id, nombre]) => ({ valor: id, label: nombre })),
+    },
+  ], [punto, data.cajaNombres])
 
   const ventas = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -64,12 +84,13 @@ export default function OperacionesView({ data }: Props) {
         <div className="tes-header-actions">
           <ExportarMenu
             clave={tab === 'ventas' ? 'operaciones_caja' : 'lineas_caja'}
-            filtro={{ q: search, cuenta_id: punto }}
+            /* El rango VIAJA al fichero: la pantalla ya no se trae la historia entera. */
+            filtro={filtroExport(declaracion, { q: search, desde: data.rango.desde, hasta: data.rango.hasta })}
             resumen={[
               tab === 'ventas' ? 'Ventas' : 'Movimientos de stock',
-              punto && cajaNombre(punto),
-              search && `«${search}»`,
-            ].filter((x): x is string => Boolean(x))}
+              ...resumenDe(declaracion),
+              ...(search ? [`«${search}»`] : []),
+            ]}
           />
         </div>
       </div>
@@ -84,22 +105,23 @@ export default function OperacionesView({ data }: Props) {
         ]}
       />
 
-      {/* Las pastillas van DENTRO de la toolbar, junto al buscador, como en el resto
-          del portal (Ventas, Gastos, Terceros…), no en una fila aparte. */}
-      <div className="ter-toolbar">
-        <FilterPills
-          items={puntos}
-          value={punto}
-          onChange={setPunto}
-          todasLabel="Todos los puntos"
-          ariaLabel="Filtrar por punto de venta"
-        />
-        <div className="ter-search-wrap">
-          <Search size={16} strokeWidth={2} />
-          <input type="search" className="ter-search" placeholder="Buscar por punto de venta, producto…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-      </div>
+      {/* El rango se aplica EN LA CONSULTA. Esta pantalla se traía 1.000 tickets sin rango
+          y sin avisar, y encima filtraba en el navegador: en un mostrador con historia, las
+          ventas viejas no estaban y nada lo decía. */}
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={search}
+        placeholder="Buscar por punto de venta, producto…"
+        hayMas={data.hay_mas}
+      />
+
+      {data.hay_mas && (
+        <AvisoTope mostrados={data.tickets.length} total={data.total}
+          limite={data.limite} sustantivo="ventas" femenino>
+          Los movimientos de stock son las líneas de esas mismas ventas.
+        </AvisoTope>
+      )}
 
       {tab === 'ventas'
         ? <VentasTabla items={ventas} cajaNombre={cajaNombre} />

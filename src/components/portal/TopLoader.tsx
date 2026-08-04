@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 // Barra de progreso global de navegación. Presupuesto Cuba (conexión mala): ante
 // CUALQUIER navegación el usuario ve al instante que "algo está pasando", sin
@@ -29,6 +29,10 @@ export function avisarNavegacion(): void {
 }
 export default function TopLoader() {
   const pathname = usePathname()
+  // Un filtro de listado navega con `router.replace()`: MISMA ruta, otros parámetros. Si
+  // solo se mirara el pathname, la barra arrancaría y no se cerraría nunca (hasta el tope
+  // de 10 s), que es peor que no tenerla.
+  const search   = useSearchParams().toString()
   const [progress, setProgress] = useState(0)
   const [visible, setVisible]   = useState(false)
   const finishRef = useRef<() => void>(() => {})
@@ -104,10 +108,25 @@ export default function TopLoader() {
       }
     }
 
+    // Sin `this`: el React Compiler no compila una función que lo use y se saltaba este
+    // efecto entero. `history` es el mismo objeto al que se le está parcheando el método,
+    // así que aplicarlo sobre él es exactamente lo que hacía el `this`.
     const origPush = history.pushState
-    history.pushState = function (this: History, ...args: Parameters<History['pushState']>) {
+    history.pushState = function (...args: Parameters<History['pushState']>) {
       begin()
-      return origPush.apply(this, args)
+      return origPush.apply(history, args)
+    }
+    // `replaceState` TAMBIÉN, que es por donde pasa `router.replace()`: es lo que usan todos
+    // los filtros de listado (rango, búsqueda, «Traer más»), o sea las navegaciones que más
+    // se repiten en un día de trabajo. Sin esto, cambiar de rango en Gastos no encendía nada
+    // y el dueño se quedaba mirando la pantalla vieja varios segundos en 3G — y volvía a
+    // pulsar. `finish` se dispara ahora también al cambiar los searchParams (ver abajo),
+    // porque en un `replace` la ruta no cambia y la barra se habría quedado colgada hasta el
+    // tope de seguridad.
+    const origReplace = history.replaceState
+    history.replaceState = function (...args: Parameters<History['replaceState']>) {
+      begin()
+      return origReplace.apply(history, args)
     }
     window.addEventListener('popstate', begin)
     window.addEventListener(EVENTO_NAV, begin)
@@ -115,6 +134,7 @@ export default function TopLoader() {
 
     return () => {
       history.pushState = origPush
+      history.replaceState = origReplace
       window.removeEventListener('popstate', begin)
       window.removeEventListener(EVENTO_NAV, begin)
       document.removeEventListener('click', onClick, true)
@@ -123,8 +143,8 @@ export default function TopLoader() {
     }
   }, [])
 
-  // Completa al cambiar de ruta (la página nueva ya está lista).
-  useEffect(() => { finishRef.current() }, [pathname])
+  // Completa al cambiar de ruta O de parámetros (la página nueva ya está lista).
+  useEffect(() => { finishRef.current() }, [pathname, search])
 
   return (
     <div

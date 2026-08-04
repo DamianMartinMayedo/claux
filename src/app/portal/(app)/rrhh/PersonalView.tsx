@@ -2,7 +2,7 @@
 
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                        from 'next/navigation'
+import { useRouter, useSearchParams }       from 'next/navigation'
 import {
   guardarEmpleado,
   darBajaEmpleado,
@@ -20,7 +20,7 @@ import {
   type RrhhPageData,
   type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
-import { Copy, Eye, Info, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, Search, X } from 'lucide-react'
+import { Copy, Eye, Info, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import BulkBar                         from '@/components/portal/BulkBar'
@@ -30,11 +30,13 @@ import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaM
 import CopiarLoteEmpresaModal          from '@/components/portal/CopiarLoteEmpresaModal'
 import { opcionesCon }                 from '@/components/portal/form-helpers'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import EmpresaPills                    from '@/components/portal/EmpresaPills'
+import Filtros                         from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -52,7 +54,10 @@ const PERIODICIDADES:  Periodicidad[] = ['MENSUAL', 'QUINCENAL', 'SEMANAL', 'POR
 function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string | null): string {
   if (!f) return '—'
   const [y, m, d] = f.split('T')[0].split('-').map(Number)
@@ -406,9 +411,35 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
   const [confirmDel,    setConfirmDel]    = useState<EmpleadoConEstado | null>(null)
   const [copiarEmpleado, setCopiarEmpleado] = useState<EmpleadoConEstado | null>(null)
 
-  const [search,        setSearch]        = useState('')
-  const [filtroEstado,  setFiltroEstado]  = useState('')
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
+  // Los filtros viven en la URL, como en el resto del portal: volver de la ficha de un
+  // empleado ya no te devuelve a «todos».
+  const params = useSearchParams()
+  const search        = params.get('q')       ?? ''
+  const filtroEstado  = params.get('estado')  ?? ''
+  const filtroEmpresa = params.get('empresa') ?? ''
+
+  /**
+   * LA DECLARACIÓN. Todos en `cliente`: la plantilla se trae entera, así que filtrar en el
+   * navegador da el mismo resultado que filtrarlo en la consulta.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'cliente',
+      ocultarSi: empresasFiltro.length <= 1,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'estado', label: 'Activos y bajas', valor: filtroEstado,
+      rotulo: 'Situación',
+      widget: 'select', donde: 'cliente',
+      opciones: [
+        { valor: 'ACTIVO', label: 'Solo activos' },
+        { valor: 'BAJA',   label: 'Solo bajas' },
+      ],
+    },
+  ], [filtroEmpresa, filtroEstado, empresasFiltro])
 
   const empleados = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -507,12 +538,8 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
         <div className="tes-header-actions">
           <ExportarMenu
             clave="empleados"
-            filtro={{ q: search, estado: filtroEstado, empresa_id: filtroEmpresa }}
-            resumen={[
-              filtroEstado === 'BAJA' ? 'bajas' : filtroEstado === 'ACTIVO' ? 'activos' : '',
-              filtroEmpresa && (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? ''),
-              search && `«${search}»`,
-            ].filter((x): x is string => Boolean(x))}
+            filtro={filtroExport(declaracion, { q: search })}
+            resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
           />
           <button className="btn btn-primary" onClick={openNuevo} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
         </div>
@@ -528,24 +555,12 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
         </PrerequisitoAviso>
       )}
 
-      <div className="ter-toolbar">
-        <div className="ter-search-wrap">
-          <Search size={16} strokeWidth={2} />
-          <input type="search" className="ter-search" placeholder="Buscar por nombre, documento, cargo…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Activos y bajas</option>
-          <option value="ACTIVO">Solo activos</option>
-          <option value="BAJA">Solo bajas</option>
-        </select>
-        <EmpresaPills
-          empresas={empresasFiltro}
-          value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
-          todasLabel="Todas las empresas"
-        />
-      </div>
+      {/* Sin rango: la plantilla no es un histórico. Sí buscador. */}
+      <Filtros
+        filtros={declaracion}
+        q={search}
+        placeholder="Buscar por nombre, documento, cargo…"
+      />
 
       <div className="card card-table">
         {empleados.length === 0 ? (
@@ -585,7 +600,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
                         aria-label={`Seleccionar ${nombreCompleto(e)}`} />
                     </td>
                     <td data-label="Empleado">
-                      <strong>{nombreCompleto(e)}</strong>
+                      <strong className="cell-clamp">{nombreCompleto(e)}</strong>
                       <div className="tes-mov-sub">
                         {e.documento && <span className="tes-mov-cat">{e.documento}</span>}
                       </div>
@@ -723,7 +738,7 @@ export default function PersonalView({ data }: { data: RrhhPageData }) {
 function BajaLoteModal({ count, onClose, onConfirm }: {
   count: number; onClose: () => void; onConfirm: (fecha: string, motivo: string) => void
 }) {
-  const [fecha, setFecha]   = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]   = useState(hoyEnTz())
   const [motivo, setMotivo] = useState('')
   return (
     <div className="modal-backdrop open">

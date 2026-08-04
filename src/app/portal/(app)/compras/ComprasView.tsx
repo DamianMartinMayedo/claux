@@ -2,7 +2,7 @@
 
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useMemo, useEffect, useTransition } from 'react'
-import { useRouter }                    from 'next/navigation'
+import { useRouter, useSearchParams }   from 'next/navigation'
 import IaTouchpoint                     from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import { Eye, Plus, ShoppingCart, Ban, Trash2, Copy, PackageSearch } from 'lucide-react'
@@ -14,8 +14,9 @@ import {
   type ComprasPageData,
   type EstadoCompra,
 } from '@/app/actions/portal/compras'
-import RangoBusqueda from '@/components/portal/RangoBusqueda'
-import { LIMITE_LISTADO } from '@/lib/listados'
+import Filtros                          from '@/components/portal/Filtros'
+import AvisoTope                        from '@/components/portal/AvisoTope'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { CompraFormModal }              from './_CompraFormModal'
 import { ReposicionModal }              from './_ReposicionModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -48,9 +49,23 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
   const router = useRouter()
   const [modalOpen,    setModalOpen]    = useState(false)
   const [reponiendo,   setReponiendo]   = useState(false)
-  const [filtroEstado, setFiltroEstado] = useState('')
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // El filtro vive en la URL, como el rango: refrescar ya no lo tira.
+  const params = useSearchParams()
+  const filtroEstado = params.get('estado') ?? ''
+
+  /** LA DECLARACIÓN: de aquí salen la barra, el filtro de la descarga y su resumen. */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'estado', label: 'Todos los estados', valor: filtroEstado,
+      rotulo: 'Estado',
+      widget: 'select', donde: 'escalado',
+      opciones: (Object.keys(ESTADO_LABEL) as EstadoCompra[])
+        .map(k => ({ valor: k, label: ESTADO_LABEL[k] })),
+    },
+  ], [filtroEstado])
 
   const filtradas = useMemo(
     () => data.compras.filter(c => !filtroEstado || c.estado === filtroEstado),
@@ -123,8 +138,10 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
         <div className="tes-header-actions">
           <ExportarMenu
             clave="compras"
-            filtro={{ estado: filtroEstado }}
-            resumen={[filtroEstado].filter((x): x is string => Boolean(x))}
+            /* El rango VIAJA: sin él el chip decía «Todo el listado» con la pantalla
+               acotada a tres meses, y el fichero traía el histórico entero. */
+            filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta })}
+            resumen={resumenDe(declaracion)}
           />
           {/* Cierra la cadena del módulo: el mínimo detecta la falta, la cobertura la
               ordena y esto la convierte en la compra. Nada se confirma solo. */}
@@ -143,23 +160,14 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
         </PrerequisitoAviso>
       )}
 
-      <div className="ter-toolbar">
-        {/* El rango va en la URL y se aplica en la consulta: antes se traían todas las
-            compras de la historia del cliente y el contador «X de Y» mentía. */}
-        <RangoBusqueda desde={data.rango.desde} hasta={data.rango.hasta} sinBuscador />
-        <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="BORRADOR">Borrador</option>
-          <option value="CONFIRMADA">Confirmada</option>
-          <option value="ANULADA">Anulada</option>
-        </select>
-      </div>
+      {/* Sin buscador: el servidor de este listado no busca por texto. */}
+      <Filtros filtros={declaracion} rango={data.rango} hayMas={data.hay_mas} />
 
       {data.hay_mas && (
-        <p className="listado-tope">
-          Se enseñan las primeras {LIMITE_LISTADO} compras del rango. Acota el rango para
-          ver el resto — la descarga sí se lleva el rango completo.
-        </p>
+        <AvisoTope mostrados={data.compras.length} total={data.total}
+          limite={data.limite} sustantivo="compras" femenino>
+          La descarga sí se lleva el rango completo.
+        </AvisoTope>
       )}
 
       <div className="card card-table">
@@ -206,8 +214,8 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                     </td>
                     <td data-label="Número"><code className="text-mono">{c.numero}</code></td>
                     <td data-label="Fecha" className="text-sm-muted">{fmtDate(c.fecha)}</td>
-                    <td data-label="Proveedor">{c.proveedor_id ? (data.proveedor_nombres[c.proveedor_id] ?? c.proveedor_id) : <span className="text-faint">—</span>}</td>
-                    <td data-label="Almacén" className="text-sm-muted">{data.almacen_nombres[c.almacen_id] ?? c.almacen_id}</td>
+                    <td data-label="Proveedor"><span className="cell-clamp">{c.proveedor_id ? (data.proveedor_nombres[c.proveedor_id] ?? c.proveedor_id) : <span className="text-faint">—</span>}</span></td>
+                    <td data-label="Almacén" className="text-sm-muted"><span className="cell-clamp">{data.almacen_nombres[c.almacen_id] ?? c.almacen_id}</span></td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span></td>
                     <td data-label="Total" className="col-num">{fmt(c.total, c.moneda)}</td>
                     <td className="col-actions">

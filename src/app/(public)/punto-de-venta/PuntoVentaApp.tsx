@@ -6,6 +6,10 @@ import {
   metaGet, metaSet, saveProductos, getProductos, putTicket, getTickets, putSesion, getSesiones,
   markTicketsSynced, markSesionesSynced,
 } from './punto-venta-db'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 type Vista = 'vender' | 'ventas' | 'turno' | 'sync'
 interface CartLine { key: string; producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number }
@@ -241,7 +245,7 @@ export default function PuntoVentaApp() {
     if (!tks.length && !sess.length) { setMsg({ t: 'ok', x: 'No hay nada pendiente de exportar.' }); return }
     const payload = { caja: config?.caja.caja_id ?? null, exportado_at: new Date().toISOString(), tickets: tks.map(stripTicket), cierres: sess.map(stripSesion) }
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
-    const a = document.createElement('a'); a.href = url; a.download = `caja-${config?.caja.caja_id ?? 'export'}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(url)
+    const a = document.createElement('a'); a.href = url; a.download = `caja-${config?.caja.caja_id ?? 'export'}-${hoyEnTz()}.json`; a.click(); URL.revokeObjectURL(url)
     setMsg({ t: 'ok', x: 'Archivo exportado. Súbelo en Claux → Punto de venta → Sincronizar.' })
   }
   async function actualizarProductos() {
@@ -326,7 +330,7 @@ export default function PuntoVentaApp() {
   const enApp = standalone || installDismissed
 
   // Ventas del día (recientes primero) y qué ticket ya tiene rectificación.
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = hoyEnTz()
   const rectificados = new Set(tickets.filter(t => t.rectifica_a).map(t => t.rectifica_a))
   const ventasDia = tickets.filter(t => t.fecha.slice(0, 10) === hoy).sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
 

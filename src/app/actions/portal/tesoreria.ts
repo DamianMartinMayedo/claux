@@ -10,9 +10,13 @@ import { monedaValida }      from '@/lib/tasas'
 import { generarCuentaId, generarMovimientoId } from '@/lib/tesoreria-core'
 import { generarRegistroId, resolverCategoriaSistema } from '@/lib/gastos-core'
 import {
-  limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses,
+  limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses, SIN_CATEGORIA,
   type FiltroListado as _FiltroListado,
 } from '@/lib/listados'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -74,6 +78,9 @@ export interface TesoreriaPageData {
   rango:             { desde: string; hasta: string }
   q:                 string
   hay_mas:           boolean
+  /** Cuántos movimientos hay DE VERDAD en el rango (sin techo). */
+  total:             number
+  limite:            number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -110,7 +117,10 @@ export async function obtenerTesoreria(
   // toda la historia de la cuenta— así que van en su propia consulta, con tres columnas en
   // vez de `select('*')`. Antes esto era una sola query que se traía todas las columnas de
   // todos los movimientos de siempre para pintar una tabla y calcular tres números.
-  let listaQuery = db.from('movimientos_tesoreria').select('*')
+  // `count: 'exact'` en la MISMA consulta: devuelve las filas del techo y, aparte, el
+  // total que cumple el filtro. Sin él el aviso no podía decir cuántas faltan, y el
+  // contador de la tabla decía «N de N» sobre el conjunto ya recortado.
+  let listaQuery = db.from('movimientos_tesoreria').select('*', { count: 'exact' })
     .eq('client_id', session.client_id)
     .in('empresa_id', idsFiltro)
   if (desde) listaQuery = listaQuery.gte('fecha', desde)
@@ -119,6 +129,23 @@ export async function obtenerTesoreria(
     const partes = [`concepto.ilike.${patron}`, `movimiento_id.ilike.${patron}`, `notas.ilike.${patron}`]
     if (importe != null) partes.push(`monto.eq.${importe}`)
     listaQuery = listaQuery.or(partes.join(','))
+  }
+  // Los filtros de la barra, cuando la vista los ESCALA (`?srv=1`) porque el listado está
+  // recortado por el techo y filtrar en el navegador solo miraría las filas traídas.
+  if (filtro?.empresa_id) listaQuery = listaQuery.eq('empresa_id', filtro.empresa_id)
+  if (filtro?.cuenta_id)  listaQuery = listaQuery.eq('cuenta_id',  filtro.cuenta_id)
+  if (filtro?.tipo)       listaQuery = listaQuery.eq('tipo',       filtro.tipo)
+  if (filtro?.categoria === SIN_CATEGORIA) {
+    listaQuery = listaQuery.is('categoria_id', null)
+  } else if (filtro?.categoria) {
+    // Filtrar por «Suministros» trae sus subcategorías: los movimientos cuelgan de la hija,
+    // así que sin esto el filtro miente por omisión.
+    const { data: hijas } = await db.from('categorias_gastos')
+      .select('categoria_id')
+      .eq('client_id', session.client_id)
+      .eq('parent_id', filtro.categoria)
+    const ids = [filtro.categoria, ...(hijas ?? []).map((h: { categoria_id: string }) => h.categoria_id)]
+    listaQuery = listaQuery.in('categoria_id', ids)
   }
   listaQuery = listaQuery
     .order('fecha', { ascending: false })
@@ -200,6 +227,8 @@ export async function obtenerTesoreria(
     rango:             { desde, hasta },
     q,
     hay_mas:           listaCruda.length >= limite,
+    total:             movRes.count ?? listaCruda.length,
+    limite,
   }
 }
 
@@ -375,7 +404,7 @@ export async function registrarMovimiento(
   }
 
   let gastoId: string | null = null
-  const fechaFinal = fecha || new Date().toISOString().split('T')[0]
+  const fechaFinal = fecha || hoyEnTz()
 
   if (registrarGasto) {
     const esGasto = tipo === 'EGRESO'
@@ -445,7 +474,7 @@ export async function obtenerTasaTransferencia(
   if (!session) return { ok: false, error: 'Sesión inválida.' }
 
   if (moneda_origen === moneda_destino) {
-    return { ok: true, tasa: 1, tasaDisplay: 1, fecha: new Date().toISOString().split('T')[0] }
+    return { ok: true, tasa: 1, tasaDisplay: 1, fecha: hoyEnTz() }
   }
 
   const db = createAdminClient()
@@ -548,7 +577,7 @@ export async function registrarTransferencia(
   const comisionesNombre = catComisiones?.nombre ?? 'Comisiones bancarias'
 
   const grupo      = `TRF-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
-  const fechaFinal = fecha || new Date().toISOString().split('T')[0]
+  const fechaFinal = fecha || hoyEnTz()
 
   const movimientos: Record<string, unknown>[] = [
     {

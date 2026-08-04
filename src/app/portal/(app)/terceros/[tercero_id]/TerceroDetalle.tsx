@@ -264,7 +264,7 @@ function TabProductos({ productos }: { productos: TerceroProducto[] }) {
               {productos.map(p => (
                 <tr key={p.producto_id} className={p.estado === 'INACTIVO' ? 'row-inactive' : ''}>
                   <td data-label="Código" className="text-sm-muted">{p.codigo || '—'}</td>
-                  <td data-label="Producto"><span className="table-empresa">{p.nombre}</span></td>
+                  <td data-label="Producto"><span className="table-empresa cell-clamp">{p.nombre}</span></td>
                   <td data-label="Stock" className="col-num">{p.stock.toLocaleString('es-ES')} {p.unidad}</td>
                   <td data-label="Estado">
                     <span className={`badge ${p.estado === 'ACTIVO' ? 'badge-success' : 'badge-neutral'}`}>
@@ -532,7 +532,7 @@ function TabSuscripciones({ suscripciones }: { suscripciones: TerceroSuscripcion
                 <tr key={s.suscripcion_id}>
                   {/* Un acuerdo presta varios servicios: se listan todos, que es lo que
                       el cliente verá en su factura. */}
-                  <td data-label="Servicio"><span className="table-empresa">{s.servicios.join(', ') || '—'}</span></td>
+                  <td data-label="Servicio"><span className="table-empresa cell-clamp">{s.servicios.join(', ') || '—'}</span></td>
                   <td data-label="Precio" className="col-num">
                     {s.importe_cobro.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {s.moneda}
                   </td>

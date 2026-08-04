@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react'
 import type { Cierre } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import AvisoTope from '@/components/portal/AvisoTope'
 
 const money = (n: number) => Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fecha = (s: string | null) => s ? new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—'
@@ -12,7 +13,12 @@ function totales(t: Record<string, number>): string {
   return e.length ? e.map(([m, v]) => `${money(v)} ${m}`).join(' · ') : '—'
 }
 
-export default function CierresView({ data }: { data: { cierres: Cierre[]; cajaNombres: Record<string, string> } }) {
+export default function CierresView({ data }: {
+  data: {
+    cierres: Cierre[]; cajaNombres: Record<string, string>
+    hay_mas: boolean; total: number; limite: number
+  }
+}) {
   const { pageItems, ...pag } = usePagination(data.cierres)
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
 
@@ -29,6 +35,11 @@ export default function CierresView({ data }: { data: { cierres: Cierre[]; cajaN
       </div>
 
       <div className="card card-table">
+        {data.hay_mas && (
+          <AvisoTope mostrados={data.cierres.length} total={data.total}
+            limite={data.limite} sustantivo="cierres" />
+        )}
+
         {data.cierres.length === 0 ? (
           <div className="mon-empty">
             <Lock size={36} strokeWidth={1} opacity={0.25} />

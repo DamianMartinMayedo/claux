@@ -367,19 +367,24 @@ export function ProductoFormModal({
             <div className="ter-form-section">
               <span className="ter-form-section-title">Precios y costos</span>
               <div className="grid-cols-2">
-                {/* La etiqueta dice lo que ES: en un suscribible, «Precios de venta» oculta
-                    lo único que importa del importe —que se cobra cada mes—. Misma regla
-                    que rotular «Coste de compras del período» cuando no hay Inventario. */}
-                <PreciosCostosEditor
-                  label={esSuscribible ? 'Precio al mes' : 'Precios de venta'}
-                  rows={precios} onChange={setPrecios} monedasDisponibles={monedasDisponibles} />
-                {esSuscribible && (
-                  <span className="input-hint">
-                    Se guarda SIEMPRE por mes: el importe de cada cobro lo calcula la
-                    periodicidad del acuerdo.
-                  </span>
-                )}
-                <PreciosCostosEditor label="Costos"           rows={costos}  onChange={setCostos}  monedasDisponibles={monedasDisponibles} />
+                {/* La nota va DENTRO de la columna del editor, no como celda propia de la
+                    rejilla: suelta ocupaba el segundo hueco y empujaba «Costos» a la fila
+                    de abajo, descuadrando las dos columnas. */}
+                <div>
+                  {/* La etiqueta dice lo que ES: en un suscribible, «Precios de venta»
+                      oculta lo único que importa del importe —que se cobra cada mes—.
+                      Misma regla que rotular «Coste de compras del período» sin Inventario. */}
+                  <PreciosCostosEditor
+                    label={esSuscribible ? 'Precio al mes' : 'Precios de venta'}
+                    rows={precios} onChange={setPrecios} monedasDisponibles={monedasDisponibles} />
+                  {esSuscribible && (
+                    <span className="input-hint">
+                      Se guarda siempre por mes: el importe de cada cobro lo calcula la
+                      periodicidad del acuerdo.
+                    </span>
+                  )}
+                </div>
+                <PreciosCostosEditor label="Costos" rows={costos} onChange={setCostos} monedasDisponibles={monedasDisponibles} />
               </div>
             </div>
 

@@ -361,7 +361,7 @@ function TabContratos({ data }: { data: ProductoDetalleData }) {
             <tbody>
               {contratos.map(c => (
                 <tr key={c.suscripcion_id}>
-                  <td data-label="Cliente"><strong className="text-sm-bold">{c.cliente_nombre}</strong></td>
+                  <td data-label="Cliente"><strong className="text-sm-bold cell-clamp">{c.cliente_nombre}</strong></td>
                   <td data-label="Precio pactado / mes" className="col-num">
                     {c.precio_mensual.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda}
                   </td>
@@ -417,6 +417,16 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
     <div className="det-tab-body">
       <div className="det-card">
         <div className="det-section-title">Movimientos</div>
+        {/* El historial de la ficha lleva techo (los últimos 100). Recortaba sin decirlo, así
+            que en un producto con rotación la ficha parecía tener toda su historia y no la
+            tenía. Aquí no hay «traer más» a propósito: para el ledger completo está la
+            pantalla de Movimientos, que sí filtra por rango. */}
+        {data.movimientosTotal > movimientos.length && (
+          <p className="listado-tope">
+            Se enseñan los <strong>{movimientos.length} más recientes</strong> de {data.movimientosTotal}.
+            {' '}El historial completo está en Movimientos, filtrando por rango.
+          </p>
+        )}
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -442,7 +452,7 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
                         : (almacen_nombres[m.almacen_id] ?? m.almacen_id)}
                     </td>
                     <td data-label="Cantidad" className={`col-num ${s.cls}`}>{s.txt} {producto.unidad}</td>
-                    <td data-label="Motivo" className="text-sm-muted">{m.motivo ?? '—'}</td>
+                    <td data-label="Motivo" className="text-sm-muted"><span className="cell-clamp">{m.motivo ?? '—'}</span></td>
                     <td data-label="Origen">
                       {m.origen === 'MANUAL'
                         ? <span className="text-xs-muted">Manual</span>

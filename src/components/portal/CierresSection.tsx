@@ -6,8 +6,12 @@ import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastCont
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { guardarCierre, eliminarCierre, type Cierre } from '@/app/actions/portal/reservas'
 import { Plus, Trash2 } from 'lucide-react'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+function hoyISO(): string { return hoyEnTz() }
 function fmt(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })

@@ -229,6 +229,14 @@ export async function guardarSuscripcion(
   // Prorrateo del PRIMER período (mig. 163). Opt-in por acuerdo: el default reproduce
   // exactamente el comportamiento anterior (ciclo completo).
   const prorratear = g('prorratear') === '1'
+  /**
+   * «No generes la factura todavía». El borrador del primer cobro es lo normal —el
+   * acuerdo nace ya vencido en el caso por defecto—, pero un alta que migra un histórico,
+   * o un alta de veinte clientes de golpe, puede no querer veinte documentos el mismo
+   * día. **No es una fuga de dinero**: la facturación automática es permanente, así que
+   * el cron lo genera igual mañana en su mes.
+   */
+  const sinBorrador = g('sin_borrador') === '1'
 
   // Los servicios del acuerdo viajan como JSON: [{ producto_id, precio_mensual,
   // descuento_modo, descuento_valor }]. El descuento es de CADA servicio (mig. 125).
@@ -326,7 +334,7 @@ export async function guardarSuscripcion(
     // El acuerdo ya existe y está bien: lo que venga de aquí no puede tumbarlo.
     let factura: string | null = null
     try {
-      factura = await borradorDelPrimerCobro(
+      if (!sinBorrador) factura = await borradorDelPrimerCobro(
         db, session.client_id, empresa_id, cliente_id, moneda, fecha_proximo_cobro,
       )
     } catch (e) {

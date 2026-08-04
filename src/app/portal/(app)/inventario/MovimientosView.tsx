@@ -6,7 +6,7 @@ import ExportarMenu from '@/components/portal/ExportarMenu'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { useState, useMemo, useTransition } from 'react'
-import { useRouter }                        from 'next/navigation'
+import { useRouter, useSearchParams }       from 'next/navigation'
 import {
   Plus, X, Package, RefreshCw, RotateCcw, ClipboardList,
   ArrowDownToLine, ArrowUpFromLine, Settings2, ArrowRightLeft,
@@ -27,13 +27,17 @@ import { fmtFechaEs } from '@/lib/date-utils'
 import Tabs from '@/components/Tabs'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
-import RangoBusqueda from '@/components/portal/RangoBusqueda'
-import EmpresaPills from '@/components/portal/EmpresaPills'
+import Filtros from '@/components/portal/Filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas } from '@/components/portal/EmpresaColorContext'
-import { LIMITE_LISTADO } from '@/lib/listados'
 import { etiquetaCobertura } from '@/lib/inventario/consumo'
 import { StockAjusteModal } from '../productos/_StockAjusteModal'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Configuración de tipos ──────────────────────────────────────────────────────
 
@@ -79,7 +83,7 @@ function MovimientoModal({
   const [destinoId, setDestinoId]  = useState('')
   const [cantidad,  setCantidad]   = useState('')
   const [motivoTipo, setMotivoTipo] = useState('')
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = hoyEnTz()
 
   const producto = data.productos.find(p => p.producto_id === productoId)
   const esTransfer = tipo === 'TRANSFERENCIA'
@@ -332,8 +336,8 @@ function PanelRevisar({
                   <span className={`badge ${REVISION_BADGE[a.tipo]}`}>{REVISION_TITULO[a.tipo]}</span>
                   <div className="table-cell-sub">{a.causa ?? REVISION_EXPLICA[a.tipo]}</div>
                 </td>
-                <td data-label="Producto"><strong>{a.producto}</strong></td>
-                <td data-label="Almacén" className="text-sm-muted">{a.almacen ?? '—'}</td>
+                <td data-label="Producto"><strong className="cell-clamp">{a.producto}</strong></td>
+                <td data-label="Almacén" className="text-sm-muted"><span className="cell-clamp">{a.almacen ?? '—'}</span></td>
                 <td data-label="Cantidad" className={`col-num ${a.cantidad < 0 ? 'mov-cant-neg' : ''}`}>
                   {a.cantidad.toLocaleString('es-ES')} {a.unidad}
                 </td>
@@ -389,10 +393,12 @@ export default function MovimientosView({
   const [tab,         setTab]         = useState<'movimientos' | 'revisar'>('movimientos')
   const [modalOpen,   setModalOpen]   = useState(false)
   const [showRecalc,  setShowRecalc]  = useState(false)
-  const [filtroTipo,  setFiltroTipo]  = useState('')
-  const [filtroAlm,   setFiltroAlm]   = useState('')
-  const [filtroMotivo,  setFiltroMotivo]  = useState('')
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
+  // Los filtros viven en la URL, como el rango: refrescar ya no los tira.
+  const params = useSearchParams()
+  const filtroTipo    = params.get('tipo')    ?? ''
+  const filtroAlm     = params.get('almacen') ?? ''
+  const filtroMotivo  = params.get('motivo')  ?? ''
+  const filtroEmpresa = params.get('empresa') ?? ''
   const [ajuste,      setAjuste]      = useState<AvisoRevision | null>(null)
   const [revertir,    setRevertir]    = useState<Movimiento | null>(null)
   const { colorOf }   = useEmpresas()
@@ -426,6 +432,40 @@ export default function MovimientosView({
       router.refresh()
     })
   }
+
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable — que aquí ni siquiera se llevaba el rango: el chip decía «Todo el listado»
+   * y el fichero traía la historia entera de todas las empresas.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'empresa_id', param: 'empresa', label: 'Todas',
+      rotulo: 'Empresa',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'escalado',
+      ocultarSi: !multiempresa,
+      opciones: empresasFiltro.map(e => ({ valor: e.empresa_id, label: e.nombre, color: e.color })),
+    },
+    {
+      clave: 'tipo', label: 'Todos los tipos', valor: filtroTipo,
+      rotulo: 'Tipo',
+      widget: 'select', donde: 'escalado',
+      opciones: TIPOS.map(t => ({ valor: t, label: TIPO_LABEL[t] })),
+    },
+    {
+      clave: 'almacen_id', param: 'almacen', label: 'Todos los almacenes',
+      rotulo: 'Almacén',
+      valor: filtroAlm, widget: 'select', donde: 'escalado',
+      ocultarSi: data.almacenes.length <= 1,
+      opciones: data.almacenes.map(a => ({ valor: a.almacen_id, label: a.nombre })),
+    },
+    {
+      clave: 'motivo', label: 'Todos los motivos', valor: filtroMotivo,
+      rotulo: 'Motivo',
+      widget: 'select', donde: 'escalado',
+      opciones: MOTIVOS_MOVIMIENTO.map(m => ({ valor: m, label: MOTIVO_LABEL[m] })),
+    },
+  ], [filtroEmpresa, filtroTipo, filtroAlm, filtroMotivo, multiempresa, empresasFiltro, data.almacenes])
 
   const filtrados = useMemo(() => {
     return data.movimientos.filter(m => {
@@ -462,11 +502,11 @@ export default function MovimientosView({
         <div className="det-actions">
           <ExportarMenu
             clave="movimientos_inventario"
-            filtro={{ tipo: filtroTipo, almacen_id: filtroAlm }}
-            resumen={[
-              filtroTipo,
-              filtroAlm && (data.almacenes.find(a => a.almacen_id === filtroAlm)?.nombre ?? ''),
-            ].filter((x): x is string => Boolean(x))}
+            /* El rango y la empresa VIAJAN: sin ellos el chip decía «Todo el listado» y el
+               fichero traía toda la historia de todas las empresas mientras la pantalla
+               enseñaba tres meses de una. */
+            filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta })}
+            resumen={resumenDe(declaracion)}
           />
           <button className="btn btn-secondary" onClick={() => setShowRecalc(true)} disabled={recalcPending}
             title="Recalcula las existencias desde su historial de entradas y salidas">
@@ -503,43 +543,19 @@ export default function MovimientosView({
 
       {tab === 'movimientos' && (
       <>
-      <div className="ter-toolbar">
-        <RangoBusqueda desde={data.rango.desde} hasta={data.rango.hasta} sinBuscador presets={['mes', 'mes_pasado', 'trimestre', 'anio', 'todo']} />
-      </div>
-
-      {/* Toolbar */}
-      <div className="ter-toolbar">
-        <select className="input ter-filter-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
-          <option value="">Todos los tipos</option>
-          {TIPOS.map(t => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
-        </select>
-        {data.almacenes.length > 1 && (
-          <select className="input ter-filter-select" value={filtroAlm} onChange={e => setFiltroAlm(e.target.value)}>
-            <option value="">Todos los almacenes</option>
-            {data.almacenes.map(a => <option key={a.almacen_id} value={a.almacen_id}>{a.nombre}</option>)}
-          </select>
-        )}
-        <select className="input ter-filter-select" value={filtroMotivo} onChange={e => setFiltroMotivo(e.target.value)}>
-          <option value="">Todos los motivos</option>
-          {MOTIVOS_MOVIMIENTO.map(m => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
-        </select>
-        {/* La empresa ya se cargaba en el servidor y la vista no la renderizaba: con
-            tres empresas la tabla las mezclaba sin columna ni filtro. */}
-        {empresasFiltro.length > 1 && (
-          <EmpresaPills
-            empresas={empresasFiltro}
-            value={filtroEmpresa}
-            onChange={setFiltroEmpresa}
-            todasLabel="Todas las empresas"
-          />
-        )}
-      </div>
+      {/* Sin buscador: el servidor de este listado no busca por texto, y una caja que no
+          hace nada es peor que no tenerla. */}
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        hayMas={data.hay_mas}
+      />
 
       {data.hay_mas && (
-        <p className="listado-tope">
-          Se enseñan los primeros {LIMITE_LISTADO} movimientos del rango. Acota el rango
-          para ver el resto — la descarga sí se lleva el rango completo.
-        </p>
+        <AvisoTope mostrados={data.movimientos.length} total={data.total}
+          limite={data.limite} sustantivo="movimientos">
+          La descarga sí se lleva el rango completo.
+        </AvisoTope>
       )}
 
       {/* Salidas por motivo: es la mitad del valor de tipificar el porqué. La merma era
@@ -608,7 +624,7 @@ export default function MovimientosView({
                           <TipoIcon tipo={m.tipo} size={12} /> {TIPO_LABEL[m.tipo]}
                         </span>
                       </td>
-                      <td data-label="Producto"><strong>{data.producto_nombres[m.producto_id] ?? m.producto_id}</strong></td>
+                      <td data-label="Producto"><strong className="cell-clamp">{data.producto_nombres[m.producto_id] ?? m.producto_id}</strong></td>
                       <td data-label="Almacén" className="text-sm-muted">
                         {m.tipo === 'TRANSFERENCIA' && m.almacen_destino_id
                           ? <>{data.almacen_nombres[m.almacen_id] ?? m.almacen_id} <ArrowRightLeft size={11} strokeWidth={2} /> {data.almacen_nombres[m.almacen_destino_id] ?? m.almacen_destino_id}</>
@@ -626,7 +642,11 @@ export default function MovimientosView({
                       </td>
                       <td data-label="Motivo" className="text-sm-muted">
                         {m.motivo_tipo ? MOTIVO_LABEL[m.motivo_tipo] : (m.motivo ?? '—')}
-                        {m.motivo_tipo && m.motivo && <div className="table-cell-secondary">{m.motivo}</div>}
+                        {/* El motivo escrito a mano es texto libre: dos líneas y elipsis, que
+                            si no una explicación larga estira la fila entera. */}
+                        {m.motivo_tipo && m.motivo && (
+                          <div className="table-cell-secondary cell-clamp" title={m.motivo}>{m.motivo}</div>
+                        )}
                       </td>
                       <td data-label="Origen">
                         {m.origen === 'MANUAL'
