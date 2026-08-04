@@ -2,6 +2,7 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
+import { cargarParametros } from '@/lib/presupuesto/parametros'
 import NuevoClienteModal from './NuevoClienteModal'
 import ClientesTabla     from './ClientesTabla'
 
@@ -24,6 +25,9 @@ export default async function ClientesPage() {
   ])
 
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  // Los mismos precios que usa el presupuesto: el alta manual estima con ellos en vez de
+  // pedir un importe inventado.
+  const parametros = await cargarParametros()
   const total = clientes?.length ?? 0
 
   return (
@@ -39,6 +43,7 @@ export default async function ClientesPage() {
           catalogo={catalogo ?? []}
           plantillas={plantillas ?? []}
           descuentoAnualPct={descuentoAnual}
+          parametros={parametros}
         />
       </div>
 

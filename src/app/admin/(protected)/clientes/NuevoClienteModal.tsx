@@ -3,11 +3,13 @@
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import ClienteFormModal, { type ModuloCatalogo, type PlantillaSector } from './ClienteFormModal'
+import type { ParametrosPresupuesto } from '@/lib/presupuesto/config'
 
 type Props = {
   catalogo:          ModuloCatalogo[]
   plantillas:        PlantillaSector[]
   descuentoAnualPct: number
+  parametros:        ParametrosPresupuesto
 }
 
 // Alta manual de cliente: botón + modal en blanco. La lógica del formulario vive

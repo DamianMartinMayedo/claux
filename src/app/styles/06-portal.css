@@ -657,12 +657,9 @@
 .modal-footer-split    { flex-wrap: wrap; }
 .modal-footer-actions  { display: flex; gap: var(--space-3); margin-left: auto; }
 
-/* btn-xs */
-.btn-xs {
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--text-xs);
-  min-height: 26px;
-}
+/* `.btn-xs` vive ahora en `03-components.css`, con el resto de la familia de botones: lo usa
+   también el admin (la estimación del alta de cliente) y una variante compartida no puede
+   estar clavada en el parcial del portal. */
 
 /* Dot de fuente en tabla de pares */
 .mon-fuente-dot {

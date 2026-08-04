@@ -30,7 +30,9 @@ export default async function NuevoPresupuestoPage({
   let prefill = {
     diagnosticoId: null as number | null,
     clientId: null as string | null,
-    nombreNegocio: '', contacto: '', modulos: [] as string[],
+    nombreNegocio: '', nombreResponsable: '', contacto: '',
+    modulos: [] as string[],
+    tarifa: null as 'fundador' | 'estandar' | null,
   }
 
   // Presupuesto para un cliente en marcha: es el caso de la ampliación —contrata inventario
@@ -45,13 +47,20 @@ export default async function NuevoPresupuestoPage({
       .maybeSingle()
     if (data) {
       prefill = {
-        diagnosticoId: null,
-        clientId:      data.client_id,
-        nombreNegocio: data.nombre_empresa ?? '',
-        contacto:      data.telefono || data.email_admin || '',
-        modulos:       Array.isArray(data.modulos_activos)
+        diagnosticoId:     null,
+        clientId:          data.client_id,
+        nombreNegocio:     data.nombre_empresa ?? '',
+        // Se traen TODOS los datos que ya tenemos: volver a teclear el responsable y el
+        // contacto de un cliente que lleva meses con nosotros es pedirle al comercial que
+        // copie a mano lo que está en la ficha de al lado.
+        nombreResponsable: data.nombre_contacto ?? '',
+        contacto:          data.telefono || data.email_admin || '',
+        modulos:           Array.isArray(data.modulos_activos)
           ? data.modulos_activos.filter((c: string) => modulos.some(m => m.clave === c))
           : [],
+        // Y su tarifa comercial, que es la que decide el precio de los módulos: si el cliente
+        // es fundador, su ampliación se cotiza como fundador.
+        tarifa: data.tarifa === 'fundador' ? 'fundador' : 'estandar',
       }
     }
   }
@@ -67,11 +76,13 @@ export default async function NuevoPresupuestoPage({
       if (data) {
         const rec = (data.modulos_rec ?? []).filter((c: string) => modulos.some(m => m.clave === c))
         prefill = {
-          diagnosticoId: data.id,
-          clientId:      null,
-          nombreNegocio: data.nombre ?? '',
-          contacto:      data.telefono || data.email || '',
-          modulos:       rec,
+          diagnosticoId:     data.id,
+          clientId:          null,
+          nombreNegocio:     data.nombre ?? '',
+          nombreResponsable: '',
+          contacto:          data.telefono || data.email || '',
+          modulos:           rec,
+          tarifa:            null,
         }
       }
     }
@@ -79,7 +90,9 @@ export default async function NuevoPresupuestoPage({
 
   // Sugerencia de tarifa: fundador si aún estamos dentro de los primeros N clientes.
   const { count } = await db.from('clients').select('*', { count: 'exact', head: true })
-  const tarifaSugerida: 'fundador' | 'estandar' = (count ?? 0) < LIMITE_FUNDADOR ? 'fundador' : 'estandar'
+  // La del cliente manda cuando lo hay; si no, la sugerencia por antigüedad.
+  const tarifaSugerida: 'fundador' | 'estandar' =
+    prefill.tarifa ?? ((count ?? 0) < LIMITE_FUNDADOR ? 'fundador' : 'estandar')
 
   return (
     <PresupuestoCalculadora

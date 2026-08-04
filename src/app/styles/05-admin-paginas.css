@@ -998,6 +998,17 @@ textarea:focus-visible {
    es justo la comparación para la que existe la tarjeta de presupuestos del cliente. */
 .pres-horas-exceso { color: var(--color-error); font-weight: 700; }
 
+/* La estimación del pago de configuración en el alta manual: la cuenta del presupuesto con
+   los módulos ya marcados, para que el importe no salga de la nada. */
+.cli-estimacion {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-2); margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-offset); border-radius: var(--radius-md);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+}
+.cli-estimacion strong { color: var(--color-text); font-variant-numeric: tabular-nums; }
+
 @media (min-width: 900px) {
   .pres-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 }

@@ -37,6 +37,7 @@
 .btn-aviso     { background: var(--color-surface); color: var(--color-text); border-color: var(--color-warning); }
 .btn-aviso:hover:not(:disabled)     { background: var(--color-surface-2); border-color: var(--color-warning); color: var(--color-text); }
 .btn-sm   { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
+.btn-xs   { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); min-height: 26px; }
 .btn-lg   { padding: var(--space-4) var(--space-8); font-size: var(--text-base); }
 .btn-full { width: 100%; }
 

@@ -2,7 +2,9 @@
 
 import { Check, X } from 'lucide-react'
 import { toastError } from '@/app/contexts/ToastContext'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { calcularInstalacion } from '@/lib/presupuesto/calculo'
+import type { ParametrosPresupuesto } from '@/lib/presupuesto/config'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearCliente } from '@/app/actions/clientes'
@@ -45,6 +47,8 @@ type Props = {
   catalogo:          ModuloCatalogo[]
   plantillas:        PlantillaSector[]
   descuentoAnualPct: number
+  /** Precios del presupuesto de instalación, para estimar el pago de configuración. */
+  parametros?:       ParametrosPresupuesto
   initial?:          InitialCliente
   presupuestoId?:    number
 }
@@ -56,7 +60,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
 ]
 
 export default function ClienteFormModal({
-  open, onClose, catalogo, plantillas, descuentoAnualPct, initial, presupuestoId,
+  open, onClose, catalogo, plantillas, descuentoAnualPct, parametros, initial, presupuestoId,
 }: Props) {
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string; estado: string; email?: string } | null>(null)
@@ -73,6 +77,9 @@ export default function ClienteFormModal({
   // ciclo, precio y pago de configuración no pintan nada y solo son campos que
   // rellenar. Los ocultos no se envían, y `crearCliente` los ignora igualmente.
   const [esPrueba, setEsPrueba] = useState(false)
+  // Controlado porque el botón de estimar lo rellena: con `defaultValue` no había forma de
+  // escribir en él desde fuera.
+  const [pagoSetup, setPagoSetup] = useState('')
 
   // Al abrir, (re)inicializa el formulario con los valores de precarga. Si no hay
   // precarga, arranca en los valores por defecto del alta manual.
@@ -84,7 +91,24 @@ export default function ClienteFormModal({
     setTarifa(initial?.tarifa ?? 'estandar')
     setCiclo(initial?.ciclo ?? 'mensual')
     setEsPrueba(false)
+    setPagoSetup(initial?.pago_setup_usd != null ? String(initial.pago_setup_usd) : '')
   }, [open, initial])
+
+  /**
+   * Estimación del pago de configuración con los módulos que se están marcando.
+   *
+   * El alta manual pedía el importe a pelo —antes con un defecto de $1.000 que no salía de
+   * ningún cálculo—. Aquí se usa el MISMO motor que el presupuesto, con volúmenes en blanco:
+   * da el suelo por módulos, que es lo que necesita un alta rápida. Para cotizar con volúmenes
+   * y descuento está la calculadora entera, enlazada al lado.
+   */
+  const estimacion = useMemo(() => {
+    if (!parametros || seleccionados.length === 0) return null
+    return calcularInstalacion(
+      { modulos: seleccionados, volumenes: {}, formato: 'cero' },
+      parametros,
+    )
+  }, [parametros, seleccionados])
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
   const precioMensual = catalogo
@@ -336,13 +360,28 @@ export default function ClienteFormModal({
                     min="0"
                     step="any"
                     className="input"
-                    defaultValue={initial?.pago_setup_usd ?? ''}
+                    value={pagoSetup}
+                    onChange={e => setPagoSetup(e.target.value)}
                     placeholder="0"
                   />
+                  {/* El camino para no inventarse el importe: la misma cuenta del presupuesto
+                      con los módulos ya marcados. Un clic y queda escrito. */}
+                  {!presupuestoId && estimacion && (
+                    <p className="cli-estimacion">
+                      <span>
+                        Por sus módulos: <strong>{estimacion.horasTotal}h</strong> ·{' '}
+                        <strong>${estimacion.costeInstalacionUsd.toFixed(2)}</strong>
+                      </span>
+                      <button type="button" className="btn btn-secondary btn-xs"
+                        onClick={() => setPagoSetup(estimacion.costeInstalacionUsd.toFixed(2))}>
+                        Usar este importe
+                      </button>
+                    </p>
+                  )}
                   <span className="input-hint">
                     {presupuestoId
                       ? 'Viene del presupuesto aprobado. Cambiarlo aquí lo separa de las horas cotizadas.'
-                      : 'Pago único inicial. Déjalo vacío para omitirlo. Sin presupuesto detrás, no hay horas con las que compararlo.'}
+                      : 'Pago único inicial. Déjalo vacío para omitirlo. La estimación no cuenta volúmenes ni descuentos: para eso, un presupuesto — se le puede hacer luego desde su ficha y queda enlazado.'}
                   </span>
                 </div>
 

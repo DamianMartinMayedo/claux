@@ -28,8 +28,10 @@ type Prefill = {
   /** Presupuesto para un cliente que YA existe (ampliación). */
   clientId: string | null
   nombreNegocio: string
+  nombreResponsable: string
   contacto: string
   modulos: string[]
+  tarifa: TarifaTipo | null
 }
 
 export default function PresupuestoCalculadora({
@@ -51,7 +53,7 @@ export default function PresupuestoCalculadora({
   const { error: toastError } = useToast()
 
   const [nombreNegocio, setNombreNegocio]         = useState(prefill.nombreNegocio)
-  const [nombreResponsable, setNombreResponsable] = useState('')
+  const [nombreResponsable, setNombreResponsable] = useState(prefill.nombreResponsable)
   const [contacto, setContacto]                   = useState(prefill.contacto)
   const [comercialEmail, setComercialEmail]       = useState(comercialEmailDefault)
   const [tarifa, setTarifa]                       = useState<TarifaTipo>(tarifaSugerida)
