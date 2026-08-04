@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { listarModulosParaPresupuesto, listarComerciales } from '@/app/actions/presupuestos'
 import { LIMITE_FUNDADOR } from '@/lib/presupuesto/config'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
+import { getSetting } from '@/app/actions/settings'
 import PresupuestoCalculadora from './PresupuestoCalculadora'
 
 export const dynamic = 'force-dynamic'
@@ -10,10 +11,10 @@ export const dynamic = 'force-dynamic'
 export default async function NuevoPresupuestoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string; cliente?: string }>
+  searchParams: Promise<{ lead?: string; cliente?: string; negocio?: string; responsable?: string; contacto?: string; modulos?: string; tarifa?: string }>
 }) {
   const ctx = await requireAccesoPagina('presupuestos')
-  const { lead, cliente } = await searchParams
+  const { lead, cliente, negocio, responsable, contacto: contactoQs, modulos: modulosQs, tarifa: tarifaQs } = await searchParams
 
   // Los precios se cargan AQUÍ y viajan enteros a la calculadora, que se los pasa al
   // cálculo. La misma tanda llega luego a la acción de guardar, para que la vista previa y
@@ -65,6 +66,22 @@ export default async function NuevoPresupuestoPage({
     }
   }
 
+  // Viene del alta manual de cliente: el cliente aún NO existe (se está creando), así que no
+  // hay `client_id` que traer — viajan los datos ya tecleados para no volver a escribirlos.
+  // Al aprobar este presupuesto se crea el cliente desde él y el enlace queda hecho.
+  if (!cliente && (negocio || modulosQs)) {
+    prefill = {
+      diagnosticoId:     null,
+      clientId:          null,
+      nombreNegocio:     negocio ?? '',
+      nombreResponsable: responsable ?? '',
+      contacto:          contactoQs ?? '',
+      modulos: (modulosQs ?? '').split(',').map(c => c.trim())
+        .filter(c => c && modulos.some(m => m.clave === c)),
+      tarifa: tarifaQs === 'fundador' ? 'fundador' : tarifaQs === 'estandar' ? 'estandar' : null,
+    }
+  }
+
   if (lead) {
     const id = parseInt(lead, 10)
     if (!Number.isNaN(id)) {
@@ -91,6 +108,10 @@ export default async function NuevoPresupuestoPage({
   // Sugerencia de tarifa: fundador si aún estamos dentro de los primeros N clientes.
   const { count } = await db.from('clients').select('*', { count: 'exact', head: true })
   // La del cliente manda cuando lo hay; si no, la sugerencia por antigüedad.
+  // El ciclo anual es la palanca de venta del bloque recurrente, y su descuento es un ajuste
+  // global: sin él, el comercial tenía que calcularlo a mano.
+  const descuentoAnualPct = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+
   const tarifaSugerida: 'fundador' | 'estandar' =
     prefill.tarifa ?? ((count ?? 0) < LIMITE_FUNDADOR ? 'fundador' : 'estandar')
 
@@ -101,6 +122,7 @@ export default async function NuevoPresupuestoPage({
       comercialEmailDefault={ctx.email}
       tarifaSugerida={tarifaSugerida}
       parametros={parametros}
+      descuentoAnualPct={descuentoAnualPct}
       prefill={prefill}
     />
   )

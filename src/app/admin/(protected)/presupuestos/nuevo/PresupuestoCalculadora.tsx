@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useToast } from '@/app/contexts/ToastContext'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
+import { importeCiclo } from '@/lib/billing'
 import {
   FORMATOS,
   type FormatoDatos, type TarifaTipo, type ParametrosPresupuesto,
@@ -40,6 +41,7 @@ export default function PresupuestoCalculadora({
   comercialEmailDefault,
   tarifaSugerida,
   parametros,
+  descuentoAnualPct,
   prefill,
 }: {
   modulos: ModuloPresupuesto[]
@@ -48,6 +50,7 @@ export default function PresupuestoCalculadora({
   tarifaSugerida: TarifaTipo
   /** Precios vigentes, cargados en el servidor. */
   parametros: ParametrosPresupuesto
+  descuentoAnualPct: number
   prefill: Prefill
 }) {
   const { error: toastError } = useToast()
@@ -78,9 +81,10 @@ export default function PresupuestoCalculadora({
   const [creado, setCreado]   = useState<{ id: number } | null>(null)
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
-  const cuotaMensual = modulos
-    .filter(m => modulosSel.includes(m.clave))
-    .reduce((s, m) => s + Number(m[precioField] ?? 0), 0)
+  const modulosElegidos = modulos.filter(m => modulosSel.includes(m.clave))
+  const cuotaMensual = modulosElegidos.reduce((s, m) => s + Number(m[precioField] ?? 0), 0)
+  const cuotaAnual   = importeCiclo(cuotaMensual, 'anual', descuentoAnualPct)
+  const ahorroAnual  = Math.max(0, cuotaMensual * 12 - cuotaAnual)
 
   const volNum = useMemo(
     () => Object.fromEntries(Object.entries(vol).map(([k, v]) => [k, Number(v) || 0])),
@@ -408,25 +412,48 @@ export default function PresupuestoCalculadora({
               )}
             </div>
 
+            {/* DOS PRECIOS, DOS BLOQUES. La instalación se paga una vez y la suscripción cada
+                mes: juntarlas en una lista hacía que se sumaran dos cifras que nunca se pagan
+                a la vez, y la pregunta del cliente pasaba a ser «¿esto es hoy o al mes?». */}
             <div className="pres-totales">
+              <p className="pres-bloque-titulo">Pago único · Instalación</p>
               <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{resultado.horasTotal}h</span></div>
               <div>
                 <span className="pres-total-label">Coste instalación</span>
                 <span className="pres-total-valor">{usd(resultado.costeInstalacionUsd)}</span>
               </div>
               {resultado.descuentoUsd > 0 && (
+                <div className="pres-total-dto">
+                  <span className="pres-total-label">Descuento ({Number(descuento)}%)</span>
+                  <span className="pres-total-valor">−{usd(resultado.descuentoUsd)}</span>
+                </div>
+              )}
+              <div className="pres-total-final">
+                <span className="pres-total-label">Total a pagar una vez</span>
+                <span className="pres-total-valor">{usd(resultado.totalFinalUsd)}</span>
+              </div>
+            </div>
+
+            <div className="pres-totales">
+              <p className="pres-bloque-titulo">Suscripción · {modulosElegidos.length} contratado{modulosElegidos.length !== 1 ? 's' : ''}</p>
+              <div className="pres-total-final">
+                <span className="pres-total-label">Cada mes</span>
+                <span className="pres-total-valor">{usd(cuotaMensual)}</span>
+              </div>
+              {cuotaMensual > 0 && (
                 <>
-                  <div className="pres-total-dto">
-                    <span className="pres-total-label">Descuento ({Number(descuento)}%)</span>
-                    <span className="pres-total-valor">−{usd(resultado.descuentoUsd)}</span>
+                  <div>
+                    <span className="pres-total-label">Pagando por año (−{descuentoAnualPct}%)</span>
+                    <span className="pres-total-valor">{usd(cuotaAnual)}</span>
                   </div>
-                  <div className="pres-total-final">
-                    <span className="pres-total-label">Total a cobrar</span>
-                    <span className="pres-total-valor">{usd(resultado.totalFinalUsd)}</span>
-                  </div>
+                  {ahorroAnual > 0 && (
+                    <div>
+                      <span className="pres-total-label">Ahorro anual</span>
+                      <span className="pres-total-valor">{usd(ahorroAnual)}</span>
+                    </div>
+                  )}
                 </>
               )}
-              <div><span className="pres-total-label">Cuota mensual</span><span className="pres-total-valor">{usd(cuotaMensual)}</span></div>
             </div>
 
             <button className="btn btn-primary btn-full" disabled={loading} onClick={handleGuardar}>

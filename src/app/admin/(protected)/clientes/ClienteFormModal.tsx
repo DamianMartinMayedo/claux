@@ -144,6 +144,26 @@ export default function ClienteFormModal({
 
   useModalKeyboard(open, handleClose)
 
+  /**
+   * Lleva a la calculadora con lo que ya está escrito en este formulario.
+   *
+   * El cliente todavía no existe —estamos creándolo—, así que no hay `client_id` que pasar:
+   * viajan los datos tecleados. Al aprobar ese presupuesto se crea el cliente desde él, que
+   * es el camino normal, y el enlace queda hecho por `client_id` como en cualquier otro.
+   */
+  function urlPresupuesto(): string {
+    const q = new URLSearchParams()
+    const nombre = (formRef.current?.querySelector('[name="nombre_empresa"]') as HTMLInputElement | null)?.value?.trim()
+    const contacto = (formRef.current?.querySelector('[name="nombre_contacto"]') as HTMLInputElement | null)?.value?.trim()
+    const email = (formRef.current?.querySelector('[name="email_admin"]') as HTMLInputElement | null)?.value?.trim()
+    if (nombre)   q.set('negocio', nombre)
+    if (contacto) q.set('responsable', contacto)
+    if (email)    q.set('contacto', email)
+    if (seleccionados.length > 0) q.set('modulos', seleccionados.join(','))
+    q.set('tarifa', tarifa)
+    return `/admin/presupuestos/nuevo?${q.toString()}`
+  }
+
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault()
     setLoading(true)
@@ -364,18 +384,32 @@ export default function ClienteFormModal({
                     onChange={e => setPagoSetup(e.target.value)}
                     placeholder="0"
                   />
-                  {/* El camino para no inventarse el importe: la misma cuenta del presupuesto
-                      con los módulos ya marcados. Un clic y queda escrito. */}
+                  {/* Dos caminos, y ninguno es inventarse la cifra:
+                      · la cuenta rápida con los módulos ya marcados, para un alta sin más;
+                      · o irse a cotizarlo en serio —volúmenes, tarifa pactada, descuento—
+                        llevándose lo que ya se ha tecleado aquí. Es el camino inverso al
+                        habitual (presupuesto → cliente) y es igual de legítimo: a veces el
+                        cliente aparece primero y el presupuesto se hace después. */}
                   {!presupuestoId && estimacion && (
                     <p className="cli-estimacion">
                       <span>
                         Por sus módulos: <strong>{estimacion.horasTotal}h</strong> ·{' '}
                         <strong>${estimacion.costeInstalacionUsd.toFixed(2)}</strong>
                       </span>
-                      <button type="button" className="btn btn-secondary btn-xs"
-                        onClick={() => setPagoSetup(estimacion.costeInstalacionUsd.toFixed(2))}>
-                        Usar este importe
-                      </button>
+                      <span className="cli-estimacion-acciones">
+                        <button type="button" className="btn btn-secondary btn-xs"
+                          onClick={() => setPagoSetup(estimacion.costeInstalacionUsd.toFixed(2))}>
+                          Usar este importe
+                        </button>
+                        {/* Botón y no enlace: la URL se arma AL PULSAR, leyendo el
+                            formulario en ese momento. Calculándola en el render salía con lo
+                            que hubiera antes de teclear —los campos son no controlados— y el
+                            comercial llegaba a la calculadora con el negocio en blanco. */}
+                        <button type="button" className="btn btn-ghost btn-xs"
+                          onClick={() => router.push(urlPresupuesto())}>
+                          Hacer presupuesto
+                        </button>
+                      </span>
                     </p>
                   )}
                   <span className="input-hint">

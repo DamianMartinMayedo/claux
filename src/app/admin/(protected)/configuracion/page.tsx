@@ -122,7 +122,9 @@ export default async function ConfiguracionPage() {
           </section>
         }
         presupuesto={
-          <section className="card card-lg config-section">
+          /* `config-section-ancha`: la rejilla de precios son seis columnas y el tope de
+             760px de una sección sola la estrangulaba. */
+          <section className="card card-lg config-section config-section-ancha">
             <div className="config-section-header">
               <div className="config-section-icon">
                 <Calculator size={20} />

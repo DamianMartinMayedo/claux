@@ -42,6 +42,28 @@ function volumenEjemplo(l: LineaEdit): number {
  * cada render, desmonta el subárbol y el input pierde el foco a la primera tecla — con cuatro
  * campos numéricos por línea, imposible de usar.
  */
+/** Cabecera de columnas del bloque: se pinta UNA vez y explica qué es cada celda, que es
+ *  justo lo que no se entendía. Palabra en negrita + qué significa, en pequeño. */
+function CabeceraColumnas() {
+  return (
+    <div className="pp-fila pp-fila-cab" aria-hidden="true">
+      <span />
+      <span className="pp-col"><strong>Horas base</strong><em>lo que cuesta de salida</em></span>
+      <span className="pp-col"><strong>Incluye</strong><em>cantidad sin coste extra</em></span>
+      <span className="pp-col"><strong>Suma</strong><em>horas de cada tramo</em></span>
+      <span className="pp-col"><strong>Por cada</strong><em>tamaño del tramo</em></span>
+      <span className="pp-col pp-col-ej"><strong>Ejemplo</strong><em>coste real</em></span>
+    </div>
+  )
+}
+
+/**
+ * Una línea de precio.
+ *
+ * DEFINIDA FUERA del formulario a propósito: dentro, React crea un tipo de componente nuevo en
+ * cada render, desmonta el subárbol y el input pierde el foco a la primera tecla — con cuatro
+ * campos numéricos por línea, imposible de usar.
+ */
 function LineaPrecio({
   l, tarifa, onCampo,
 }: {
@@ -53,36 +75,31 @@ function LineaPrecio({
   // La misma función que usa el presupuesto de verdad: la vista previa no puede desviarse de
   // lo que luego se le cobra al cliente.
   const { horas } = horasDeLinea(l, ejemplo)
+  const campo = (
+    k: 'horas_base' | 'incluido' | 'horas_por_tramo' | 'tramo',
+    etiqueta: string, paso: string, min: string,
+  ) => (
+    <span className="pp-col">
+      {/* La etiqueta se repite en cada fila SOLO para lectores de pantalla: en pantalla la
+          dice la cabecera del bloque, y repetirla catorce veces sería ruido. */}
+      <input type="number" min={min} step={paso} className="input pp-num"
+        aria-label={`${etiqueta} · ${l.etiqueta}`}
+        value={l[k]} onChange={e => onCampo(l.clave, k, e.target.value)} />
+    </span>
+  )
   return (
-    <div className="pp-linea">
-      <div className="pp-linea-cab">
-        <span className="pp-linea-nombre">{l.etiqueta}</span>
-        {/* Lo que de verdad quiere saber quien configura: «si un cliente tiene N, ¿cuánto le
-            cobro?». Se recalcula mientras se teclea. */}
-        <span className="pp-linea-ejemplo">
-          Con <strong>{ejemplo}</strong> → <strong>{hs(horas)}</strong>
-          {tarifa > 0 && <> · {usd(horas * tarifa)}</>}
-        </span>
-      </div>
-
-      <p className="pp-linea-frase">
-        <input type="number" min="0" step="0.25" className="input pp-num"
-          aria-label={`Horas mínimas de ${l.etiqueta}`}
-          value={l.horas_base} onChange={e => onCampo(l.clave, 'horas_base', e.target.value)} />
-        <span>horas cubren hasta</span>
-        <input type="number" min="0" step="1" className="input pp-num"
-          aria-label={`Cantidad incluida en ${l.etiqueta}`}
-          value={l.incluido} onChange={e => onCampo(l.clave, 'incluido', e.target.value)} />
-        <span>. Después, sumar</span>
-        <input type="number" min="0" step="0.25" className="input pp-num"
-          aria-label={`Horas por tramo de ${l.etiqueta}`}
-          value={l.horas_por_tramo} onChange={e => onCampo(l.clave, 'horas_por_tramo', e.target.value)} />
-        <span>horas por cada</span>
-        <input type="number" min="1" step="1" className="input pp-num"
-          aria-label={`Tamaño de tramo de ${l.etiqueta}`}
-          value={l.tramo} onChange={e => onCampo(l.clave, 'tramo', e.target.value)} />
-        <span>más.</span>
-      </p>
+    <div className="pp-fila">
+      <span className="pp-fila-nombre">{l.etiqueta}</span>
+      {campo('horas_base', 'Horas base', '0.25', '0')}
+      {campo('incluido', 'Incluye', '1', '0')}
+      {campo('horas_por_tramo', 'Suma', '0.25', '0')}
+      {campo('tramo', 'Por cada', '1', '1')}
+      {/* Lo que de verdad quiere saber quien configura: «si un cliente tiene N, ¿cuánto le
+          cobro?». Se recalcula mientras se teclea. */}
+      <span className="pp-col pp-col-ej pp-fila-ejemplo">
+        {ejemplo} → <strong>{hs(horas)}</strong>
+        {tarifa > 0 && <> · {usd(horas * tarifa)}</>}
+      </span>
     </div>
   )
 }
@@ -145,14 +162,18 @@ export default function PresupuestoForm({
       </div>
 
       {/* La explicación va ARRIBA y con un caso concreto: la regla en abstracto no se entiende
-          hasta que se ve aplicada a un número. */}
+          hasta verla aplicada a un número.
+          UN SOLO HIJO dentro del aviso: `.alert` es `display: flex`, así que cada elemento
+          suelto —cada `<strong>`, cada `<br>`— se convertía en una columna y la explicación
+          salía descuartizada en cinco tiras verticales. */}
       <div className="alert alert-info">
-        <strong>Cómo se cobra cada línea.</strong> Unas horas mínimas cubren cierta cantidad, y
-        a partir de ahí se suman horas por cada tanto más. Un tramo empezado cuenta entero, que
-        es como se factura el trabajo.
-        <br />
-        Ejemplo: si «Empresas» son <strong>1 h hasta 1</strong> y <strong>+0,5 h por cada 1</strong>,
-        un cliente con 4 empresas paga 1 + 3 × 0,5 = <strong>2,5 h</strong>.
+        <div>
+          <strong>Empresas: 1 h base, incluye 1, suma 0,5 h por cada 1.</strong>
+          <span className="pp-ejemplo-regla">
+            Un cliente con 4 empresas paga 1 h + 3 tramos × 0,5 h = 2,5 h. Un tramo empezado
+            cuenta entero.
+          </span>
+        </div>
       </div>
 
       {([1, 2] as const).map(fase => (
@@ -160,6 +181,7 @@ export default function PresupuestoForm({
           <p className="mod-list-label">
             {fase === 1 ? 'Configuración inicial' : 'Migración de datos'}
           </p>
+          <CabeceraColumnas />
           {lineas.filter(l => l.fase === fase).map(l => (
             <LineaPrecio key={l.clave} l={l} tarifa={tarifa} onCampo={setLinea} />
           ))}

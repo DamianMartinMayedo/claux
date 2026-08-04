@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Eye, FileText, Plus, UserPlus, X } from 'lucide-react'
+import { Check, Eye, FileText, Plus, UserPlus, X, Download } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -14,6 +14,8 @@ import ClienteFormModal, {
   type InitialCliente,
 } from '../clientes/ClienteFormModal'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
+import { descargarPresupuesto } from '@/lib/pdf/presupuesto'
+import { importeCiclo } from '@/lib/billing'
 import {
   obtenerPresupuesto,
   actualizarHorasReales,
@@ -78,6 +80,45 @@ export default function PresupuestosView({
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
   const [filtro, setFiltro] = useState<Filtro>('todos')
+
+  /**
+   * El presupuesto en PDF, con la misma plantilla de marca que la factura.
+   *
+   * Se arma desde el SNAPSHOT guardado (`desglose`, `tarifa_hora_usd`, `descuento_*`), no
+   * recalculando: un presupuesto enseñado al cliente hace tres meses tiene que imprimirse tal
+   * como se le enseñó, aunque la tarifa base haya subido desde entonces.
+   */
+  async function descargarPdf(d: Detalle) {
+    const claves: string[] = Array.isArray(d.modulos) ? d.modulos : []
+    const campo = d.tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
+    const mods = catalogo
+      .filter(m => claves.includes(m.clave))
+      .map(m => ({ nombre: m.nombre, precio: Number((m as unknown as Record<string, unknown>)[campo] ?? 0) }))
+    const mensual = Number(d.cuota_mensual_usd ?? 0)
+    try {
+      await descargarPresupuesto({
+        numero:  `PRE-${String(d.id).padStart(4, '0')}`,
+        fecha:   fmtFecha(d.created_at),
+        negocio: d.nombre_negocio ?? '',
+        responsable: d.nombre_responsable,
+        contacto:    d.contacto,
+        comercial:   d.comercial_nombre,
+        desglose:    Array.isArray(d.desglose) ? d.desglose : [],
+        horasTotal:  Number(d.horas_total ?? 0),
+        tarifaHora:  Number(d.tarifa_hora_usd ?? 0),
+        costeInstalacion: Number(d.coste_instalacion_usd ?? 0),
+        descuentoPct:     Number(d.descuento_pct ?? 0),
+        descuentoMotivo:  d.descuento_motivo,
+        totalInstalacion: Number(d.total_final_usd ?? d.coste_instalacion_usd ?? 0),
+        modulos:      mods,
+        cuotaMensual: mensual,
+        cuotaAnual:   importeCiclo(mensual, 'anual', descuentoAnualPct),
+        descuentoAnualPct,
+      })
+    } catch {
+      toastError('No se pudo generar el PDF.')
+    }
+  }
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [cargando, setCargando] = useState(false)
   const [horasReales, setHorasReales] = useState('')
@@ -292,7 +333,9 @@ export default function PresupuestosView({
                     </div>
                   )}
 
+                  {/* Dos precios, dos bloques: el pago único y lo recurrente no se suman. */}
                   <div className="pres-totales">
+                    <p className="pres-bloque-titulo">Pago único · Instalación</p>
                     <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{detalle.horas_total}h</span></div>
                     {/* La tarifa que se aplicó, no la vigente: un presupuesto de hace tres
                         meses tiene que seguir explicando su propio número. */}
@@ -311,14 +354,36 @@ export default function PresupuestosView({
                             −{usd(Number(detalle.coste_instalacion_usd) - Number(detalle.total_final_usd))}
                           </span>
                         </div>
-                        <div className="pres-total-final">
-                          <span className="pres-total-label">Total a cobrar</span>
-                          <span className="pres-total-valor">{usd(detalle.total_final_usd)}</span>
-                        </div>
                       </>
                     )}
-                    <div><span className="pres-total-label">Cuota mensual</span><span className="pres-total-valor">{usd(detalle.cuota_mensual_usd)}</span></div>
+                    <div className="pres-total-final">
+                      <span className="pres-total-label">Total a pagar una vez</span>
+                      <span className="pres-total-valor">{usd(detalle.total_final_usd ?? detalle.coste_instalacion_usd)}</span>
+                    </div>
                   </div>
+
+                  <div className="pres-totales">
+                    <p className="pres-bloque-titulo">Suscripción</p>
+                    <div className="pres-total-final">
+                      <span className="pres-total-label">Cada mes</span>
+                      <span className="pres-total-valor">{usd(detalle.cuota_mensual_usd)}</span>
+                    </div>
+                    {Number(detalle.cuota_mensual_usd) > 0 && (
+                      <div>
+                        <span className="pres-total-label">Pagando por año (−{descuentoAnualPct}%)</span>
+                        <span className="pres-total-valor">
+                          {usd(importeCiclo(Number(detalle.cuota_mensual_usd), 'anual', descuentoAnualPct))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Descarga directa, sin abrir pestaña ni recargar: el comercial lo manda
+                      por WhatsApp desde el móvil y la conexión es la que es. */}
+                  <button type="button" className="btn btn-secondary btn-sm pres-descargar"
+                    onClick={() => descargarPdf(detalle)}>
+                    <Download size={14} strokeWidth={2} /> Descargar PDF
+                  </button>
 
                   {/* Acciones de venta: aprobar y convertir en cliente (no aplica si ya está instalado) */}
                   {detalle.estado !== 'instalado' && (

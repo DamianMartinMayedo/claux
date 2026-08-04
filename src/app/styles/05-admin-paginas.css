@@ -325,8 +325,15 @@ textarea:focus-visible {
   gap: var(--space-6);
   align-items: start;
 }
+/* Una sola sección se lee mejor acotada: un formulario de cuatro campos a 1200px es una
+   línea de ojo imposible. Pero la de precios del presupuesto es una rejilla de seis columnas
+   y ahí el tope la estrangulaba —los campos envolvían y la fila se partía en tres—, así que
+   puede renunciar a él. */
 .config-panel > .config-section:only-child {
   max-width: 760px;
+}
+.config-panel > .config-section-ancha:only-child {
+  max-width: none;
 }
 .config-section {
   display: flex;
@@ -939,6 +946,15 @@ textarea:focus-visible {
 .pres-totales > div { display: flex; justify-content: space-between; align-items: baseline; }
 .pres-total-label { color: var(--color-text-muted); font-size: var(--text-sm); }
 .pres-total-valor { font-weight: 700; font-family: var(--font-display); }
+/* Título de cada bloque de precio. Son DOS cosas —un pago único y una cuota recurrente— y
+   listadas seguidas se leían como una suma: el cliente juntaba dos cifras que no se pagan a
+   la vez. Cada una con su encabezado y su total. */
+.pres-bloque-titulo {
+  margin: 0 0 var(--space-1); font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-faint);
+}
+.pres-totales + .pres-totales { margin-top: var(--space-4); }
+.pres-descargar { margin-top: var(--space-4); }
 /* La concesión, en el color de una resta; el total a cobrar, destacado — es la cifra que se
    le dice al cliente y la que se cobra, no el coste bruto de encima. */
 .pres-total-dto .pres-total-valor { color: var(--color-success); }
@@ -961,33 +977,51 @@ textarea:focus-visible {
 }
 .pp-bloque { display: flex; flex-direction: column; gap: var(--space-2); }
 
-/* ── Una línea de precio, leída como una frase ───────────────────────────────
-   Era una tabla de cuatro columnas con los nombres del modelo de datos («horas base ·
-   incluye hasta · tramo · horas/tramo») y no había forma de entenderla sin la fórmula
-   delante. Ahora los campos van EMBEBIDOS en la frase que describen, con el resultado de un
-   cliente de ejemplo al lado: se lee, no se descifra. */
-.pp-linea {
-  display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--space-3) 0; border-bottom: 1px solid var(--color-divider);
+/* ── Rejilla de precios ──────────────────────────────────────────────────────
+   Las mismas seis columnas en la cabecera y en cada fila, para que los números se lean en
+   vertical. La cabecera se pinta una vez por bloque y dice QUÉ ES cada celda: la versión
+   anterior tenía los campos sueltos dentro de una frase y no había forma de saber cuál era
+   cuál sin leerla entera, catorce veces. */
+.pp-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(4, 5rem) minmax(0, 12rem);
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-divider);
 }
-.pp-linea:last-child { border-bottom: 0; }
-.pp-linea-cab {
-  display: flex; flex-wrap: wrap; align-items: baseline;
-  justify-content: space-between; gap: var(--space-2);
+.pp-fila:last-child { border-bottom: 0; }
+.pp-fila-cab {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-2);
 }
-.pp-linea-nombre { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
-/* El ejemplo es la ayuda de verdad: «si un cliente tiene 4, le cobro 2,5 h». Se recalcula
-   mientras se teclea, así que el efecto de cada número se ve al instante. */
-.pp-linea-ejemplo {
+.pp-fila-cab .pp-col { display: flex; flex-direction: column; gap: 1px; }
+.pp-fila-cab strong {
+  font-size: var(--text-xs); font-weight: 700; color: var(--color-text);
+}
+.pp-fila-cab em {
+  font-style: normal; font-size: var(--text-xs); color: var(--color-text-faint);
+  line-height: 1.3;
+}
+.pp-fila-nombre { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.pp-col-ej { text-align: right; }
+.pp-fila-ejemplo {
   font-size: var(--text-xs); color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
-.pp-linea-ejemplo strong { color: var(--color-primary-text); }
-/* `baseline` para que los recuadros no bailen respecto al texto de la frase. */
-.pp-linea-frase {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
-  margin: 0; font-size: var(--text-sm); color: var(--color-text-muted);
+.pp-fila-ejemplo strong { color: var(--color-primary-text); }
+/* El ejemplo de la explicación, en su propia línea dentro del aviso. */
+.pp-ejemplo-regla { display: block; margin-top: var(--space-1); opacity: 0.85; }
+
+/* En estrecho la rejilla no cabe: cada fila pasa a bloque y los campos se reparten en dos
+   columnas, con la cabecera fuera —ahí sí manda el `aria-label` de cada campo—. */
+@media (max-width: 900px) {
+  .pp-fila { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-fila-nombre, .pp-col-ej { grid-column: 1 / -1; }
+  .pp-col-ej { text-align: left; }
+  .pp-fila-cab { display: none; }
 }
+
 .pp-num {
   width: 4.5rem; text-align: right;
   height: var(--h-filtro); padding: 0 var(--space-2);
@@ -1008,6 +1042,7 @@ textarea:focus-visible {
   font-size: var(--text-xs); color: var(--color-text-muted);
 }
 .cli-estimacion strong { color: var(--color-text); font-variant-numeric: tabular-nums; }
+.cli-estimacion-acciones { display: inline-flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 
 @media (min-width: 900px) {
   .pres-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
