@@ -1,20 +1,44 @@
-// ── Cálculo puro del presupuesto de instalación (Formulario §2) ──
-// Determinista, sin efectos, isomórfico (cliente + servidor). El coste de la
-// suscripción mensual NO se calcula aquí: sale de modulos_catalogo (en vivo).
+// ── Cálculo puro del presupuesto de instalación ──
+//
+// Determinista, sin efectos, isomórfico (cliente + servidor). El coste de la suscripción
+// mensual NO se calcula aquí: sale de `modulos_catalogo` (en vivo).
+//
+// ── LOS PRECIOS ENTRAN POR PARÁMETRO, NO POR IMPORT ──────────────────────────
+// Antes las tarifas eran constantes importadas. Ahora vienen de la BD (mig. 168) y se pasan
+// como argumento a propósito: esta función corre en el navegador para la vista previa en vivo
+// y en el servidor para el recálculo autoritativo al guardar. Si cada lado leyera los precios
+// por su cuenta, un cambio de tarifa a media sesión haría que la pantalla y lo guardado
+// dijeran cifras distintas del mismo presupuesto.
+//
+// ── EL VOLUMEN MUEVE EL PRECIO ───────────────────────────────────────────────
+// Antes no lo movía: las horas dependían solo de qué módulos se marcaban, así que declarar 20
+// productos o 5.000 costaba lo mismo y el volumen solo encendía una nota de «revisar». Ahora
+// cada línea escala por tramos, y el recargo suelto en dólares ($15 por tramo excedido)
+// desaparece: mezclar horas × tarifa con un recargo en dólares hacía el desglose imposible de
+// explicarle al cliente. Ahora todo son horas, y una sola tarifa las convierte en dinero.
 
 import {
-  CAMPOS_FASE1, LINEAS_FASE2, CLAVE_BASE,
-  FASE1_FIJAS, FASE3_BASE, FASE4_FIJAS, FORMACION_POR_MODULO, FORMACION_CAJA,
-  TARIFA_HORA, TARIFA_HISTORICO, EXTRA_TRAMO_USD,
-  type TarifaTipo, type FormatoDatos,
+  CLAVE_BASE, CLAVE_CAJA,
+  type FormatoDatos, type LineaParametro, type ParametrosPresupuesto,
 } from './config'
 
 export interface InstalacionInput {
-  tarifa:    TarifaTipo
   modulos:   string[]                    // claves contratadas (incluye 'base' si aplica)
-  volumenes: Record<string, number>      // valores de §1.3
+  volumenes: Record<string, number>
   formato:   FormatoDatos
-  historicoHorasManual?: number          // horas de migración de histórico cargadas por el comercial
+  /** Horas de migración de histórico cargadas por el comercial. */
+  historicoHorasManual?: number
+  /** Tarifa pactada con ESTE cliente. Si falta, la base de configuración. */
+  tarifaHoraOverride?: number
+  /** Descuento comercial sobre el total, 0-100. */
+  descuentoPct?: number
+}
+
+/** Una línea dentro de una fase, con su cuenta a la vista: «4 empresas · 1h + 3 × 0,5h». */
+export interface LineaDesglose {
+  etiqueta: string
+  horas:    number
+  detalle:  string
 }
 
 export interface DesgloseFase {
@@ -22,6 +46,7 @@ export interface DesgloseFase {
   horas:       number
   subtotalUsd: number
   detalle?:    string
+  lineas?:     LineaDesglose[]
 }
 
 export interface Revision {
@@ -32,10 +57,12 @@ export interface Revision {
 export interface InstalacionResultado {
   desglose:            DesgloseFase[]
   revisiones:          Revision[]
-  fase1ExtraUsd:       number
-  fase1Disparadores:   string[]
   horasTotal:          number
+  /** Antes del descuento. */
   costeInstalacionUsd: number
+  descuentoUsd:        number
+  /** Lo que se cobra de verdad. */
+  totalFinalUsd:       number
   tarifaHora:          number
 }
 
@@ -44,106 +71,135 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) && n > 0 ? n : 0
 }
 
-/** Nº de incrementos de $15 según cuánto excede un valor su límite (tramo). */
-function tramosExcedidos(valor: number, limite: number): number {
-  if (limite <= 0 || valor <= limite) return 0
-  return Math.ceil(valor / limite) - 1   // 2x→1, 3x→2, 4x→3…
+/** Redondeo a 2 decimales: las horas por tramo pueden ser 0,25 y los flotantes arrastran cola. */
+const r2 = (n: number): number => Math.round(n * 100) / 100
+
+/**
+ * Horas de una línea para un volumen dado.
+ *
+ * Las horas base se cobran siempre que el módulo esté contratado —configurar la primera
+ * empresa cuesta aunque sea una— y a partir del volumen incluido se suman tramos completos:
+ * pasarse por uno ya cuesta el tramo entero, que es como se factura el trabajo de verdad.
+ */
+export function horasDeLinea(l: LineaParametro, volumen: number): { horas: number; tramos: number } {
+  const v = num(volumen)
+  const exceso = Math.max(0, v - l.incluido)
+  const tramos = l.tramo > 0 ? Math.ceil(exceso / l.tramo) : 0
+  return { horas: r2(l.horas_base + tramos * l.horas_por_tramo), tramos }
 }
 
-export function calcularInstalacion(input: InstalacionInput): InstalacionResultado {
-  const tarifaHora = TARIFA_HORA[input.tarifa] ?? TARIFA_HORA.estandar
+function detalleLinea(l: LineaParametro, volumen: number, tramos: number): string {
+  const base = `${l.horas_base}h base`
+  if (tramos <= 0) return `${num(volumen)} · ${base}`
+  return `${num(volumen)} · ${base} + ${tramos} × ${l.horas_por_tramo}h`
+}
+
+export function calcularInstalacion(
+  input: InstalacionInput,
+  params: ParametrosPresupuesto,
+): InstalacionResultado {
+  const tarifaHora = num(input.tarifaHoraOverride) || num(params.tarifaHora)
   const modulos = new Set(input.modulos)
   const vol = input.volumenes ?? {}
   const revisiones: Revision[] = []
 
-  // ── Fase 1: alta y configuración base (4h fijas + extras en $) ──
-  let maxTramos = 0
-  const disparadores: string[] = []
-  for (const c of CAMPOS_FASE1) {
-    if (c.modulo && !modulos.has(c.modulo)) continue
-    const t = tramosExcedidos(num(vol[c.key]), c.limite)
-    if (t > 0) {
-      disparadores.push(c.label)
-      if (t > maxTramos) maxTramos = t
+  const activas = (fase: 1 | 2) => params.lineas
+    .filter(l => l.fase === fase && (!l.modulo || modulos.has(l.modulo)))
+    .sort((a, b) => a.orden - b.orden)
+
+  function acumular(fase: 1 | 2): { horas: number; lineas: LineaDesglose[] } {
+    let horas = 0
+    const lineas: LineaDesglose[] = []
+    for (const l of activas(fase)) {
+      const v = num(vol[l.clave])
+      const { horas: h, tramos } = horasDeLinea(l, v)
+      horas += h
+      lineas.push({ etiqueta: l.etiqueta, horas: h, detalle: detalleLinea(l, v, tramos) })
+      // Lo único que el cálculo NO puede poner en precio es el estado en que llegan los
+      // datos: la misma cantidad de fichas en papel o en una hoja bien montada no es el
+      // mismo trabajo. El volumen ya se cobra; esto se avisa para que lo mire una persona.
+      if (fase === 2 && v > 0 && input.formato === 'papel') {
+        revisiones.push({
+          linea: l.etiqueta,
+          motivo: 'Los datos vienen en papel o dispersos: las horas estimadas pueden quedarse cortas. Confírmalo antes de cerrar.',
+        })
+      }
     }
+    return { horas: r2(horas), lineas }
   }
-  const fase1ExtraUsd = maxTramos * EXTRA_TRAMO_USD
+
+  // ── Fase 1: alta y configuración base ──
+  const f1 = acumular(1)
+  const horasFase1 = r2(params.horasAlta + f1.horas)
 
   // ── Fase 2: migración de datos (solo módulos activos) ──
-  let horasFase2 = 0
-  for (const l of LINEAS_FASE2) {
-    if (!modulos.has(l.modulo)) continue
-    const v = num(vol[l.campo])
-    horasFase2 += l.horas   // las horas base siempre se cuentan
-    if (v > l.limite) {
-      revisiones.push({
-        linea: l.label,
-        motivo: input.formato === 'excel'
-          ? 'Alto volumen con plantilla — confirmar horas manualmente con el comercial (las plantillas de importación masiva aún no existen).'
-          : 'Excede volumen manual — cotizar horas extra a $40/h (requiere valoración del comercial).',
-      })
-    }
-  }
+  const f2 = acumular(2)
 
-  // ── Fase 3: formación (2h + adicionales por módulo; caja +2h) ──
-  let horasFase3 = FASE3_BASE
+  // ── Fase 3: formación (base + por módulo; el punto de venta cuesta lo suyo) ──
+  let horasFase3 = params.horasFormacionBase
   for (const clave of modulos) {
     if (clave === CLAVE_BASE) continue
-    horasFase3 += clave === 'caja' ? FORMACION_CAJA : FORMACION_POR_MODULO
+    horasFase3 += clave === CLAVE_CAJA ? params.horasFormacionCaja : params.horasFormacionModulo
   }
+  horasFase3 = r2(horasFase3)
 
-  // ── Fase 4: validación y cierre (2h fijas) ──
-  const horasFase4 = FASE4_FIJAS
-
-  const horasTotal = FASE1_FIJAS + horasFase2 + horasFase3 + horasFase4
+  // ── Fase 4: validación y cierre ──
+  const horasFase4 = params.horasCierre
 
   const desglose: DesgloseFase[] = [
     {
       fase: 'Fase 1 · Alta y configuración base',
-      horas: FASE1_FIJAS,
-      subtotalUsd: FASE1_FIJAS * tarifaHora + fase1ExtraUsd,
-      detalle: fase1ExtraUsd > 0 ? `Incluye +$${fase1ExtraUsd} por exceder límites (${disparadores.join(', ')}).` : undefined,
+      horas: horasFase1,
+      subtotalUsd: r2(horasFase1 * tarifaHora),
+      detalle: `${params.horasAlta}h de alta + lo que sume la configuración.`,
+      lineas: f1.lineas,
     },
     {
       fase: 'Fase 2 · Migración de datos',
-      horas: horasFase2,
-      subtotalUsd: horasFase2 * tarifaHora,
-      detalle: revisiones.length > 0 ? `${revisiones.length} línea(s) marcada(s) para revisar.` : undefined,
+      horas: f2.horas,
+      subtotalUsd: r2(f2.horas * tarifaHora),
+      lineas: f2.lineas,
     },
     {
       fase: 'Fase 3 · Formación',
       horas: horasFase3,
-      subtotalUsd: horasFase3 * tarifaHora,
+      subtotalUsd: r2(horasFase3 * tarifaHora),
     },
     {
       fase: 'Fase 4 · Validación y cierre',
       horas: horasFase4,
-      subtotalUsd: horasFase4 * tarifaHora,
+      subtotalUsd: r2(horasFase4 * tarifaHora),
     },
   ]
 
-  let costeInstalacionUsd = horasTotal * tarifaHora + fase1ExtraUsd
+  let horasTotal = r2(horasFase1 + f2.horas + horasFase3 + horasFase4)
 
-  // ── Migración de histórico (§1.5): horas manuales del comercial a $40/h ──
+  // ── Migración de histórico: horas que valora el comercial, a la misma tarifa ──
+  // Tenía tarifa propia ($40/h) y, sobre todo, sus horas NO entraban en `horasTotal`: la
+  // tarjeta decía «19h» mientras sus propias filas sumaban 29h, y el `horas_total` que se
+  // guarda —el que luego se compara con `horas_reales`— se dejaba fuera las horas más caras.
   const histHoras = num(input.historicoHorasManual)
   if (histHoras > 0) {
-    const subtotalHist = histHoras * TARIFA_HISTORICO
     desglose.push({
       fase: 'Migración de histórico (cotización manual)',
       horas: histHoras,
-      subtotalUsd: subtotalHist,
-      detalle: `${histHoras}h × $${TARIFA_HISTORICO}/h (valoración del comercial).`,
+      subtotalUsd: r2(histHoras * tarifaHora),
+      detalle: `${histHoras}h × $${tarifaHora}/h (valoración del comercial).`,
     })
-    costeInstalacionUsd += subtotalHist
+    horasTotal = r2(horasTotal + histHoras)
   }
+
+  const costeInstalacionUsd = r2(horasTotal * tarifaHora)
+  const pct = Math.min(100, Math.max(0, num(input.descuentoPct)))
+  const descuentoUsd = r2(costeInstalacionUsd * (pct / 100))
 
   return {
     desglose,
     revisiones,
-    fase1ExtraUsd,
-    fase1Disparadores: disparadores,
     horasTotal,
     costeInstalacionUsd,
+    descuentoUsd,
+    totalFinalUsd: r2(costeInstalacionUsd - descuentoUsd),
     tarifaHora,
   }
 }

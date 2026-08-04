@@ -7,7 +7,6 @@ import ClienteFormModal, { type ModuloCatalogo, type PlantillaSector } from './C
 type Props = {
   catalogo:          ModuloCatalogo[]
   plantillas:        PlantillaSector[]
-  setupDefault:      number
   descuentoAnualPct: number
 }
 

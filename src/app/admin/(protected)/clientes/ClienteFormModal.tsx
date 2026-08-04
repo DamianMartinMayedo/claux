@@ -44,7 +44,6 @@ type Props = {
   onClose:           () => void
   catalogo:          ModuloCatalogo[]
   plantillas:        PlantillaSector[]
-  setupDefault:      number
   descuentoAnualPct: number
   initial?:          InitialCliente
   presupuestoId?:    number
@@ -57,7 +56,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
 ]
 
 export default function ClienteFormModal({
-  open, onClose, catalogo, plantillas, setupDefault, descuentoAnualPct, initial, presupuestoId,
+  open, onClose, catalogo, plantillas, descuentoAnualPct, initial, presupuestoId,
 }: Props) {
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string; estado: string; email?: string } | null>(null)
@@ -324,6 +323,11 @@ export default function ClienteFormModal({
                 </div>
 
                 {/* Pago único de configuración */}
+                {/* Sin importe por defecto. Había un ajuste global de $1.000 que se
+                    prerellenaba aquí, y para el mismo cliente el presupuesto calculaba otra
+                    cifra: dos precios para el mismo concepto. Viniendo de un presupuesto
+                    llega su total; en un alta manual se escribe, y se dice que ese importe
+                    no tiene horas detrás con las que contrastarlo. */}
                 <div className="input-group">
                   <label>Pago de configuración (USD)</label>
                   <input
@@ -332,9 +336,14 @@ export default function ClienteFormModal({
                     min="0"
                     step="any"
                     className="input"
-                    defaultValue={initial?.pago_setup_usd ?? setupDefault}
+                    defaultValue={initial?.pago_setup_usd ?? ''}
+                    placeholder="0"
                   />
-                  <span className="input-hint">Pago único inicial. Pon 0 para omitirlo. Se registra aparte de la suscripción.</span>
+                  <span className="input-hint">
+                    {presupuestoId
+                      ? 'Viene del presupuesto aprobado. Cambiarlo aquí lo separa de las horas cotizadas.'
+                      : 'Pago único inicial. Déjalo vacío para omitirlo. Sin presupuesto detrás, no hay horas con las que compararlo.'}
+                  </span>
                 </div>
 
                 {/* Marcada por defecto: el alta normal empieza con prueba gratuita.

@@ -1,10 +1,19 @@
-// ── Parámetros del presupuesto de instalación (fuente única, editable) ──
-// Números de Formulario_Instalacion_Especificacion.md §2. Aislados aquí para
-// afinarlos fácil; promoverlos a /admin/configuracion es un follow-up trivial.
-// Es lógica pura (isomórfica): la usa el cálculo en cliente (vista previa en
-// vivo) y en servidor (recálculo autoritativo al guardar).
+// ── Estructura del presupuesto de instalación ──
+//
+// Aquí vive lo que NO es un precio: los tipos, el catálogo de formatos y la clave del módulo
+// base. Los NÚMEROS —tarifa/hora, horas fijas y el coste de cada línea— ya no están aquí:
+// viven en la tabla `presupuesto_parametros` y en `settings` (mig. 168), y se editan en
+// /admin/configuracion → Facturación sin tocar código ni desplegar.
+//
+// Lo que sigue en el código es la ESTRUCTURA, porque está atada a las claves reales de
+// `modulos_catalogo` (`base`, `catalogo_qr`, `inventario`, `rrhh`, `caja`, `agenda`,
+// `reservas_citas`): qué línea existe y a qué módulo pertenece no es una cifra que el dueño
+// ajuste, es una consecuencia de qué módulos vende el producto.
 
+/** Tarifa comercial del cliente. Ya NO afecta a la hora de instalación —esa es única y
+ *  configurable—: solo elige el precio de los módulos en la cuota mensual. */
 export type TarifaTipo = 'fundador' | 'estandar'
+
 export type FormatoDatos = 'excel' | 'papel' | 'sistema' | 'cero'
 
 export const FORMATOS: { key: FormatoDatos; label: string }[] = [
@@ -14,61 +23,63 @@ export const FORMATOS: { key: FormatoDatos; label: string }[] = [
   { key: 'cero',    label: 'No aplica / empieza desde cero' },
 ]
 
-// Horas fijas por fase.
-export const FASE1_FIJAS = 4   // alta y configuración base
-export const FASE3_BASE  = 2   // formación (navegación general + módulo principal)
-export const FASE4_FIJAS = 2   // validación y cierre
-export const FORMACION_POR_MODULO = 1
-export const FORMACION_CAJA       = 2   // el POS suma +2h en vez de +1h
-
-// Tarifas ($/hora).
-export const TARIFA_HORA: Record<TarifaTipo, number> = { fundador: 25, estandar: 35 }
-export const TARIFA_HISTORICO = 40   // migración de histórico (cotización manual)
-export const EXTRA_TRAMO_USD  = 15   // +$15 por tramo excedido en Fase 1
-
-// Umbral orientativo para sugerir tarifa "fundador" (primeros N clientes).
+/** Umbral orientativo para sugerir tarifa "fundador" (primeros N clientes). */
 export const LIMITE_FUNDADOR = 20
 
-// ── Fase 1: campos de configuración con límite estándar ──
-// Si el valor supera el límite se cobra un extra en $ (no en horas). El extra
-// se calcula sobre el tramo del PEOR campo (no se acumula por campo).
-export interface CampoFase1 {
-  key:    string
-  label:  string
-  limite: number
-  modulo?: string   // si falta, el campo es siempre visible (depende de la base)
-}
-
-export const CAMPOS_FASE1: CampoFase1[] = [
-  { key: 'empresas',          label: 'Empresas a configurar',                 limite: 3 },
-  { key: 'monedas',           label: 'Monedas a gestionar',                   limite: 3 },
-  { key: 'cuentas_tesoreria', label: 'Cuentas de tesorería (bancos/cajas)',   limite: 5 },
-  { key: 'turnos_reservas',   label: 'Turnos de reservas',                    limite: 2, modulo: 'reservas_citas' },
-  { key: 'servicios_citas',   label: 'Servicios/especialistas de citas',      limite: 5, modulo: 'agenda' },
-  { key: 'categorias_catalogo', label: 'Categorías de catálogo/menú',         limite: 10, modulo: 'catalogo_qr' },
-  { key: 'puntos_venta',      label: 'Puntos de venta a crear',               limite: 2, modulo: 'caja' },
-]
-
-// ── Fase 2: líneas de migración por módulo ──
-export interface LineaFase2 {
-  key:    string
-  label:  string
-  horas:  number
-  limite: number
-  modulo: string   // módulo que activa la línea
-  campo:  string   // clave del volumen en `volumenes`
-}
-
-export const LINEAS_FASE2: LineaFase2[] = [
-  { key: 'terceros',      label: 'Contabilidad · Clientes y proveedores', horas: 2, limite: 20, modulo: 'base',        campo: 'terceros' },
-  { key: 'catalogo',      label: 'Catálogo · Productos/servicios',        horas: 2, limite: 20, modulo: 'catalogo_qr', campo: 'productos_catalogo' },
-  { key: 'inv_productos', label: 'Inventario · Productos',                horas: 5, limite: 50, modulo: 'inventario',  campo: 'productos_inventario' },
-  { key: 'inv_almacenes', label: 'Inventario · Almacenes',               horas: 1, limite: 5,  modulo: 'inventario',  campo: 'almacenes' },
-  { key: 'rrhh_personal', label: 'RRHH · Personal',                      horas: 2, limite: 20, modulo: 'rrhh',        campo: 'empleados' },
-  { key: 'rrhh_turnos',   label: 'RRHH · Turnos',                        horas: 1, limite: 3,  modulo: 'rrhh',        campo: 'turnos_trabajo' },
-  { key: 'rrhh_nomina',   label: 'RRHH · Configuraciones de nómina',     horas: 1, limite: 2,  modulo: 'rrhh',        campo: 'config_nomina' },
-]
-
-// Clave del módulo base de contabilidad (no obligatorio; se usa para excluirlo
-// de las horas extra de formación en Fase 3, que ya tiene sus 2h base fijas).
+/** Clave del módulo base de contabilidad: se excluye de las horas extra de formación,
+ *  que ya tiene sus horas base. */
 export const CLAVE_BASE = 'base'
+
+/** Clave del punto de venta: su formación cuesta distinto que la de un módulo normal. */
+export const CLAVE_CAJA = 'caja'
+
+// ── Los parámetros que vienen de la BD ──────────────────────────────────────
+
+/**
+ * Una línea presupuestable, con su coste en horas.
+ *
+ * El precio escala con el volumen, que es lo que antes no pasaba: teclear 20 productos o
+ * 5.000 daba exactamente el mismo presupuesto.
+ *
+ *   horas = horas_base + ceil( max(0, volumen − incluido) / tramo ) × horas_por_tramo
+ */
+export interface LineaParametro {
+  clave:           string
+  /** 1 = configuración inicial · 2 = migración de datos. */
+  fase:            1 | 2
+  etiqueta:        string
+  /** Clave de `modulos_catalogo` que activa la línea; `null` = siempre. */
+  modulo:          string | null
+  horas_base:      number
+  incluido:        number
+  tramo:           number
+  horas_por_tramo: number
+  orden:           number
+}
+
+/** Todo lo que el cálculo necesita saber de precios. Se carga en el servidor y se pasa
+ *  ENTERO al cálculo, que es isomórfico: la vista previa del navegador y el recálculo
+ *  autoritativo del servidor tienen que partir de los mismos números. */
+export interface ParametrosPresupuesto {
+  /** $/h base. En el presupuesto se puede ajustar para ese cliente. */
+  tarifaHora:           number
+  horasAlta:            number
+  horasFormacionBase:   number
+  horasFormacionModulo: number
+  horasFormacionCaja:   number
+  horasCierre:          number
+  lineas:               LineaParametro[]
+}
+
+/** Claves de `settings` con los escalares. Una sola lista para leerlos y para el formulario
+ *  de Configuración, que si no se desincronizan. */
+export const AJUSTES_PRESUPUESTO = {
+  tarifaHora:           { key: 'tarifa_hora_usd',                    def: '20', label: 'Tarifa por hora (USD)' },
+  horasAlta:            { key: 'presupuesto_horas_alta',             def: '4',  label: 'Horas de alta y configuración base' },
+  horasFormacionBase:   { key: 'presupuesto_horas_formacion_base',   def: '2',  label: 'Horas de formación (base)' },
+  horasFormacionModulo: { key: 'presupuesto_horas_formacion_modulo', def: '1',  label: 'Horas de formación por módulo' },
+  horasFormacionCaja:   { key: 'presupuesto_horas_formacion_caja',   def: '2',  label: 'Horas de formación del punto de venta' },
+  horasCierre:          { key: 'presupuesto_horas_cierre',           def: '2',  label: 'Horas de validación y cierre' },
+} as const
+
+export type ClaveAjustePresupuesto = keyof typeof AJUSTES_PRESUPUESTO

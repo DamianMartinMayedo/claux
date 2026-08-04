@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { useToast } from '@/app/contexts/ToastContext'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import {
-  CAMPOS_FASE1, LINEAS_FASE2, FORMATOS,
-  type FormatoDatos, type TarifaTipo,
+  FORMATOS,
+  type FormatoDatos, type TarifaTipo, type ParametrosPresupuesto,
 } from '@/lib/presupuesto/config'
 import {
   crearPresupuesto,
@@ -30,12 +30,15 @@ export default function PresupuestoCalculadora({
   comerciales,
   comercialEmailDefault,
   tarifaSugerida,
+  parametros,
   prefill,
 }: {
   modulos: ModuloPresupuesto[]
   comerciales: Comercial[]
   comercialEmailDefault: string
   tarifaSugerida: TarifaTipo
+  /** Precios vigentes, cargados en el servidor. */
+  parametros: ParametrosPresupuesto
   prefill: Prefill
 }) {
   const { error: toastError } = useToast()
@@ -49,6 +52,12 @@ export default function PresupuestoCalculadora({
 
   const [modulosSel, setModulosSel] = useState<string[]>(prefill.modulos)
   const [vol, setVol] = useState<Record<string, string>>({ empresas: '1', monedas: '1', cuentas_tesoreria: '1' })
+
+  // La palanca comercial: la tarifa arranca en la base configurada y se puede pactar para
+  // ESTE cliente. Antes solo se podía saltar de estándar a fundador, $10/h de golpe.
+  const [tarifaHora, setTarifaHora] = useState(String(parametros.tarifaHora))
+  const [descuento, setDescuento]   = useState('')
+  const [dtoMotivo, setDtoMotivo]   = useState('')
 
   const [migDesea, setMigDesea]     = useState(false)
   const [migDesde, setMigDesde]     = useState('')
@@ -70,15 +79,21 @@ export default function PresupuestoCalculadora({
   )
 
   const resultado = useMemo(() => calcularInstalacion({
-    tarifa,
     modulos: modulosSel,
     volumenes: volNum,
     formato,
     historicoHorasManual: migDesea ? Number(migHoras) || 0 : 0,
-  }), [tarifa, modulosSel, volNum, formato, migDesea, migHoras])
+    tarifaHoraOverride: Number(tarifaHora) || 0,
+    descuentoPct: Number(descuento) || 0,
+  }, parametros), [modulosSel, volNum, formato, migDesea, migHoras, tarifaHora, descuento, parametros])
 
-  const camposFase1 = CAMPOS_FASE1.filter(c => !c.modulo || modulosSel.includes(c.modulo))
-  const lineasFase2 = LINEAS_FASE2.filter(l => modulosSel.includes(l.modulo))
+  // Los campos de volumen salen de los propios parámetros: al añadir una línea en
+  // Configuración aparece su campo, sin tocar esta pantalla.
+  const lineasVisibles = parametros.lineas
+    .filter(l => !l.modulo || modulosSel.includes(l.modulo))
+    .sort((a, b) => a.orden - b.orden)
+  const camposFase1 = lineasVisibles.filter(l => l.fase === 1)
+  const lineasFase2 = lineasVisibles.filter(l => l.fase === 2)
 
   function toggleModulo(clave: string) {
     setModulosSel(prev =>
@@ -105,6 +120,9 @@ export default function PresupuestoCalculadora({
       modulos: modulosSel,
       volumenes: volNum,
       formato,
+      tarifaHora: Number(tarifaHora) || 0,
+      descuentoPct: Number(descuento) || 0,
+      descuentoMotivo: dtoMotivo,
       migracion: {
         desea:       migDesea,
         desde:       migDesde || null,
@@ -125,7 +143,7 @@ export default function PresupuestoCalculadora({
           <div className="success-icon-circle"><Check size={28} strokeWidth={2.5} /></div>
           <h1 className="modal-title modal-success-title">Presupuesto guardado</h1>
           <p className="modal-success-description">
-            {nombreNegocio} · {resultado.horasTotal}h · {usd(resultado.costeInstalacionUsd)} de instalación · {usd(cuotaMensual)}/mes.
+            {nombreNegocio} · {resultado.horasTotal}h · {usd(resultado.totalFinalUsd)} de instalación · {usd(cuotaMensual)}/mes.
           </p>
           <div className="pres-acciones-cierre">
             <Link href="/admin/presupuestos" className="btn btn-primary">Ver presupuestos</Link>
@@ -239,18 +257,16 @@ export default function PresupuestoCalculadora({
           <div className="card">
             <p className="mod-list-label">Datos de volumen</p>
             <div className="grid-cols-2">
-              {camposFase1.map(c => (
-                <div key={c.key} className="input-group">
-                  <label htmlFor={`v-${c.key}`}>{c.label}</label>
-                  <input id={`v-${c.key}`} type="number" min="0" className="input"
-                    value={vol[c.key] ?? ''} onChange={e => setVolCampo(c.key, e.target.value)} />
-                </div>
-              ))}
-              {lineasFase2.map(l => (
-                <div key={l.campo} className="input-group">
-                  <label htmlFor={`v-${l.campo}`}>{l.label}</label>
-                  <input id={`v-${l.campo}`} type="number" min="0" className="input"
-                    value={vol[l.campo] ?? ''} onChange={e => setVolCampo(l.campo, e.target.value)} />
+              {[...camposFase1, ...lineasFase2].map(l => (
+                <div key={l.clave} className="input-group">
+                  <label htmlFor={`v-${l.clave}`}>{l.etiqueta}</label>
+                  <input id={`v-${l.clave}`} type="number" min="0" className="input"
+                    value={vol[l.clave] ?? ''} onChange={e => setVolCampo(l.clave, e.target.value)} />
+                  {/* Lo que cuesta pasarse: el comercial ve el efecto ANTES de teclear, en vez
+                      de descubrir que el precio saltó y no saber por qué. */}
+                  <span className="input-hint">
+                    {l.horas_base}h hasta {l.incluido} · +{l.horas_por_tramo}h por cada {l.tramo}
+                  </span>
                 </div>
               ))}
             </div>
@@ -265,7 +281,7 @@ export default function PresupuestoCalculadora({
             {migDesea && (
               <>
                 <div className="alert alert-info">
-                  Pendiente de cotización a medida: valóralo manualmente según estructura y volumen (a $40/h).
+                  Pendiente de cotización a medida: valóralo manualmente según estructura y volumen. Se cobra a la misma tarifa que el resto.
                 </div>
                 <div className="grid-cols-2">
                   <div className="input-group">
@@ -281,7 +297,7 @@ export default function PresupuestoCalculadora({
                     <input id="m-vol" type="number" min="0" className="input" value={migVolumen} onChange={e => setMigVolumen(e.target.value)} />
                   </div>
                   <div className="input-group">
-                    <label htmlFor="m-horas">Horas estimadas (a $40/h)</label>
+                    <label htmlFor="m-horas">Horas estimadas</label>
                     <input id="m-horas" type="number" min="0" step="0.5" className="input" value={migHoras} onChange={e => setMigHoras(e.target.value)} />
                   </div>
                 </div>
@@ -293,7 +309,7 @@ export default function PresupuestoCalculadora({
           <div className="alert alert-warning">
             <strong>Recordatorio:</strong> si los datos entregados no cumplen lo declarado (más volumen, peor
             estructura), se informa del extra antes de continuar y se cotiza a medida. Si el comercial avanza
-            sin validar y luego no cumplen, las horas extra corren por su cuenta (a $40/h).
+            sin validar y luego no cumplen, las horas extra corren por su cuenta.
           </div>
         </div>
 
@@ -301,12 +317,43 @@ export default function PresupuestoCalculadora({
         <div className="pres-resultado">
           <div className="card">
             <p className="mod-list-label">Resultado estimado</p>
+
+            {/* LA TARIFA, A LA VISTA Y NEGOCIABLE. Antes el desglose enseñaba «8h · $280» y
+                en ninguna parte decía a cuánto iba la hora: se negociaba sin ver el propio
+                precio unitario. Arranca en la base de Configuración. */}
+            <div className="pres-tarifa">
+              <label htmlFor="p-tarifa">Tarifa por hora</label>
+              <div className="pres-tarifa-campo">
+                <span className="pres-tarifa-moneda">$</span>
+                <input id="p-tarifa" type="number" min="0" step="any" className="input"
+                  value={tarifaHora} onChange={e => setTarifaHora(e.target.value)} />
+              </div>
+              {Number(tarifaHora) !== parametros.tarifaHora && (
+                <span className="input-hint">Base: {usd(parametros.tarifaHora)}/h</span>
+              )}
+            </div>
+
             <div className="pres-desglose">
               {resultado.desglose.map((d, i) => (
-                <div key={i} className="pres-fase-row">
-                  <span className="pres-fase-nombre">{d.fase}</span>
-                  <span className="pres-fase-horas">{d.horas}h</span>
-                  <span className="pres-fase-sub col-num">{usd(d.subtotalUsd)}</span>
+                <div key={i} className="pres-fase-bloque">
+                  <div className="pres-fase-row">
+                    <span className="pres-fase-nombre">{d.fase}</span>
+                    <span className="pres-fase-horas">{d.horas}h</span>
+                    <span className="pres-fase-sub col-num">{usd(d.subtotalUsd)}</span>
+                  </div>
+                  {/* Cada línea con su cuenta: «4 · 1h base + 3 × 0,5h». Es lo que se le lee
+                      en voz alta al cliente cuando pregunta de dónde sale el número. */}
+                  {d.lineas && d.lineas.length > 0 && (
+                    <ul className="pres-fase-lineas">
+                      {d.lineas.map(l => (
+                        <li key={l.etiqueta}>
+                          <span className="pres-linea-nombre">{l.etiqueta}</span>
+                          <span className="pres-linea-detalle">{l.detalle}</span>
+                          <span className="pres-linea-horas col-num">{l.horas}h</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ))}
             </div>
@@ -320,9 +367,45 @@ export default function PresupuestoCalculadora({
               </div>
             )}
 
+            {/* EL DESCUENTO, CON MOTIVO. La otra palanca: la tarifa explica el coste, el
+                descuento explica la concesión sin falsear las horas —que son las que luego
+                se comparan con `horas_reales` para saber si la instalación salió a cuenta—.
+                El motivo es obligatorio: sin él, dentro de tres meses nadie sabe por qué
+                este cliente pagó $700 y no $1.000. */}
+            <div className="pres-descuento">
+              <div className="input-group">
+                <label htmlFor="p-dto">Descuento (%)</label>
+                <input id="p-dto" type="number" min="0" max="100" step="any" className="input"
+                  value={descuento} onChange={e => setDescuento(e.target.value)} placeholder="0" />
+              </div>
+              {Number(descuento) > 0 && (
+                <div className="input-group">
+                  <label htmlFor="p-dto-motivo">Motivo <span className="required">*</span></label>
+                  <input id="p-dto-motivo" className="input" value={dtoMotivo}
+                    onChange={e => setDtoMotivo(e.target.value)}
+                    placeholder="Cliente de referencia, pago por adelantado…" />
+                </div>
+              )}
+            </div>
+
             <div className="pres-totales">
               <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{resultado.horasTotal}h</span></div>
-              <div><span className="pres-total-label">Coste instalación</span><span className="pres-total-valor">{usd(resultado.costeInstalacionUsd)}</span></div>
+              <div>
+                <span className="pres-total-label">Coste instalación</span>
+                <span className="pres-total-valor">{usd(resultado.costeInstalacionUsd)}</span>
+              </div>
+              {resultado.descuentoUsd > 0 && (
+                <>
+                  <div className="pres-total-dto">
+                    <span className="pres-total-label">Descuento ({Number(descuento)}%)</span>
+                    <span className="pres-total-valor">−{usd(resultado.descuentoUsd)}</span>
+                  </div>
+                  <div className="pres-total-final">
+                    <span className="pres-total-label">Total a cobrar</span>
+                    <span className="pres-total-valor">{usd(resultado.totalFinalUsd)}</span>
+                  </div>
+                </>
+              )}
               <div><span className="pres-total-label">Cuota mensual</span><span className="pres-total-valor">{usd(cuotaMensual)}</span></div>
             </div>
 

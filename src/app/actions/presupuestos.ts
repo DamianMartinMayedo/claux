@@ -5,6 +5,7 @@ import { requirePermiso } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
 import { revalidatePath } from 'next/cache'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
+import { cargarParametros } from '@/lib/presupuesto/parametros'
 import type { FormatoDatos, TarifaTipo } from '@/lib/presupuesto/config'
 
 export interface ModuloPresupuesto {
@@ -37,11 +38,17 @@ export interface CrearPresupuestoInput {
   nombreNegocio:      string
   nombreResponsable?: string
   contacto?:          string
+  /** Solo elige el precio de los MÓDULOS (cuota mensual). La hora de instalación tiene
+   *  tarifa única, configurable y negociable por cliente. */
   tarifa:             TarifaTipo
   modulos:            string[]
   volumenes:          Record<string, number>
   formato:            FormatoDatos
   migracion:          MigracionInput
+  /** Tarifa/hora pactada con este cliente; si falta, la base de configuración. */
+  tarifaHora?:        number
+  descuentoPct?:      number
+  descuentoMotivo?:   string
 }
 
 export interface PresupuestoRow {
@@ -57,6 +64,9 @@ export interface PresupuestoRow {
   horas_reales:          number | null
   estado:                string
   client_id:             string | null
+  tarifa_hora_usd:       number
+  descuento_pct:         number
+  total_final_usd:       number
 }
 
 // ── Catálogo de módulos activos (en vivo) para el formulario ──
@@ -117,7 +127,7 @@ export async function listarPresupuestos(): Promise<PresupuestoRow[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('presupuestos_instalacion')
-    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, tarifa, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id')
+    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, tarifa, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
     .order('created_at', { ascending: false })
   return (data ?? []) as PresupuestoRow[]
 }
@@ -150,13 +160,26 @@ export async function crearPresupuesto(
 
   const historicoHorasManual = input.migracion?.desea ? Number(input.migracion?.horasManual ?? 0) || 0 : 0
 
+  // Un descuento sin motivo es un descuento que dentro de tres meses nadie sabe explicar:
+  // por qué ESTE cliente pagó $700 y no $1.000 es justo lo que hay que poder mirar después.
+  const descuentoPct = Math.min(100, Math.max(0, Number(input.descuentoPct) || 0))
+  const descuentoMotivo = (input.descuentoMotivo || '').trim()
+  if (descuentoPct > 0 && !descuentoMotivo) {
+    return { ok: false, error: 'Un descuento necesita su motivo.' }
+  }
+
+  // RECÁLCULO AUTORITATIVO con los parámetros del servidor: lo que llegue del navegador es
+  // una propuesta, no el precio. La tarifa pactada sí se respeta —es la palanca comercial—,
+  // pero las horas se vuelven a calcular aquí.
+  const parametros = await cargarParametros()
   const resultado = calcularInstalacion({
-    tarifa,
     modulos:   input.modulos ?? [],
     volumenes: input.volumenes ?? {},
     formato:   input.formato,
     historicoHorasManual,
-  })
+    tarifaHoraOverride: Number(input.tarifaHora) || 0,
+    descuentoPct,
+  }, parametros)
 
   const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], tarifa)
 
@@ -180,6 +203,12 @@ export async function crearPresupuesto(
       horas_total:           resultado.horasTotal,
       coste_instalacion_usd: resultado.costeInstalacionUsd,
       cuota_mensual_usd:     cuotaMensual,
+      // Snapshot de lo negociado: un presupuesto de hace tres meses tiene que seguir
+      // explicando su propio número cuando cambie la tarifa base.
+      tarifa_hora_usd:       resultado.tarifaHora,
+      descuento_pct:         descuentoPct,
+      descuento_motivo:      descuentoMotivo || null,
+      total_final_usd:       resultado.totalFinalUsd,
     })
     .select('id')
     .single()
@@ -191,7 +220,7 @@ export async function crearPresupuesto(
     entity:      'presupuesto',
     entity_id:   String(data.id),
     action:      'crear',
-    description: `Guardó presupuesto de ${nombre_negocio} — ${resultado.horasTotal}h · $${resultado.costeInstalacionUsd.toFixed(2)} instalación · $${cuotaMensual.toFixed(2)}/mes`,
+    description: `Guardó presupuesto de ${nombre_negocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
   })
 
   revalidatePath('/admin/presupuestos')

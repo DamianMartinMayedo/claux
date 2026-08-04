@@ -1,10 +1,13 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
-import { CreditCard, Lock, Scale, User } from 'lucide-react'
+import { Calculator, CreditCard, Lock, Scale, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
 import { PAGINAS_LEGALES } from '@/lib/publico/legal'
+import { cargarParametros } from '@/lib/presupuesto/parametros'
+import { AJUSTES_PRESUPUESTO } from '@/lib/presupuesto/config'
 import PerfilForm from './PerfilForm'
 import FacturacionForm from './FacturacionForm'
+import PresupuestoForm from './PresupuestoForm'
 import LegalForm from './LegalForm'
 import ConfiguracionTabs from './ConfiguracionTabs'
 
@@ -17,9 +20,15 @@ export default async function ConfiguracionPage() {
     (user?.user_metadata?.full_name as string | undefined) ||
     (user?.email?.split('@')[0] ?? 'Admin')
 
-  const setupDefault   = parseFloat(await getSetting('pago_setup_usd_default', '1000')) || 0
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const diasTrial      = parseInt(await getSetting('dias_trial_default', '15'), 10) || 0
+
+  // Los precios del presupuesto de instalación (mig. 168): antes eran constantes del código.
+  const parametros = await cargarParametros()
+  const escalaresPresupuesto = Object.fromEntries(
+    (Object.keys(AJUSTES_PRESUPUESTO) as (keyof typeof AJUSTES_PRESUPUESTO)[])
+      .map(k => [k, parametros[k]]),
+  )
 
   const slugsLegales = Object.keys(PAGINAS_LEGALES)
   const textosLegales = Object.fromEntries(
@@ -102,14 +111,31 @@ export default async function ConfiguracionPage() {
               </div>
               <div>
                 <h2 className="config-section-title">Facturación</h2>
-                <p className="config-section-sub">Pago de configuración, descuento anual y días de prueba</p>
+                <p className="config-section-sub">Descuento anual, días de prueba y precios del presupuesto</p>
               </div>
             </div>
 
             <FacturacionForm
-              setupDefault={setupDefault}
               descuentoAnual={descuentoAnual}
               diasTrial={diasTrial}
+            />
+
+            {/* Card propio: el precio de la instalación es otra cosa que la facturación
+                recurrente —pago único, cotizado por horas— y tiene su propia tabla. */}
+            <div className="config-section-header config-section-header-sub">
+              <div className="config-section-icon">
+                <Calculator size={20} />
+              </div>
+              <div>
+                <h2 className="config-section-title">Presupuesto de instalación</h2>
+                <p className="config-section-sub">
+                  Tarifa por hora y lo que cuesta cada línea según el volumen
+                </p>
+              </div>
+            </div>
+            <PresupuestoForm
+              escalares={escalaresPresupuesto}
+              lineas={parametros.lineas}
             />
           </section>
         }

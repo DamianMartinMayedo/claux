@@ -54,7 +54,9 @@ function initialDesde(d: Detalle): InitialCliente {
     sector:          diag?.sector ?? '',
     tarifa:          d.tarifa === 'fundador' ? 'fundador' : 'estandar',
     modulos:         Array.isArray(d.modulos) ? d.modulos : [],
-    pago_setup_usd:  Number(d.coste_instalacion_usd ?? 0),
+    // Lo que se cobra es el total tras el descuento, no el coste bruto: cobrar el bruto
+    // sería no aplicar lo que se le prometió al cliente.
+    pago_setup_usd:  Number(d.total_final_usd ?? d.coste_instalacion_usd ?? 0),
   }
 }
 
@@ -64,7 +66,6 @@ export default function PresupuestosView({
   permisos,
   catalogo,
   plantillas,
-  setupDefault,
   descuentoAnualPct,
 }: {
   presupuestos: PresupuestoRow[]
@@ -72,7 +73,6 @@ export default function PresupuestosView({
   permisos: SeccionKey[]
   catalogo: ModuloCatalogo[]
   plantillas: PlantillaSector[]
-  setupDefault: number
   descuentoAnualPct: number
 }) {
   const router = useRouter()
@@ -208,7 +208,7 @@ export default function PresupuestosView({
                     <td data-label="Negocio">{p.nombre_negocio}</td>
                     <td data-label="Comercial" className="table-muted">{p.comercial_nombre ?? '—'}</td>
                     <td data-label="Horas est." className="col-center">{p.horas_total}</td>
-                    <td data-label="Instalación" className="col-num">{usd(p.coste_instalacion_usd)}</td>
+                    <td data-label="Instalación" className="col-num">{usd(p.total_final_usd ?? p.coste_instalacion_usd)}</td>
                     <td data-label="Cuota/mes" className="col-num">{usd(p.cuota_mensual_usd)}</td>
                     <td data-label="Reales" className="col-center">{p.horas_reales ?? '—'}</td>
                     <td className="col-actions">
@@ -294,7 +294,29 @@ export default function PresupuestosView({
 
                   <div className="pres-totales">
                     <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{detalle.horas_total}h</span></div>
+                    {/* La tarifa que se aplicó, no la vigente: un presupuesto de hace tres
+                        meses tiene que seguir explicando su propio número. */}
+                    {Number(detalle.tarifa_hora_usd) > 0 && (
+                      <div><span className="pres-total-label">Tarifa aplicada</span><span className="pres-total-valor">{usd(detalle.tarifa_hora_usd)}/h</span></div>
+                    )}
                     <div><span className="pres-total-label">Coste instalación</span><span className="pres-total-valor">{usd(detalle.coste_instalacion_usd)}</span></div>
+                    {Number(detalle.descuento_pct) > 0 && (
+                      <>
+                        <div className="pres-total-dto">
+                          <span className="pres-total-label">
+                            Descuento ({Number(detalle.descuento_pct)}%)
+                            {detalle.descuento_motivo && <em className="pres-dto-motivo"> · {detalle.descuento_motivo}</em>}
+                          </span>
+                          <span className="pres-total-valor">
+                            −{usd(Number(detalle.coste_instalacion_usd) - Number(detalle.total_final_usd))}
+                          </span>
+                        </div>
+                        <div className="pres-total-final">
+                          <span className="pres-total-label">Total a cobrar</span>
+                          <span className="pres-total-valor">{usd(detalle.total_final_usd)}</span>
+                        </div>
+                      </>
+                    )}
                     <div><span className="pres-total-label">Cuota mensual</span><span className="pres-total-valor">{usd(detalle.cuota_mensual_usd)}</span></div>
                   </div>
 
@@ -349,7 +371,6 @@ export default function PresupuestosView({
         onClose={() => setClienteOpen(false)}
         catalogo={catalogo}
         plantillas={plantillas}
-        setupDefault={setupDefault}
         descuentoAnualPct={descuentoAnualPct}
         initial={clienteInitial}
         presupuestoId={clientePresupuestoId}

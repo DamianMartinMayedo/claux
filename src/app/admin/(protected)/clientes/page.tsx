@@ -23,7 +23,6 @@ export default async function ClientesPage() {
       .order('orden'),
   ])
 
-  const setupDefault = parseFloat(await getSetting('pago_setup_usd_default', '1000')) || 0
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const total = clientes?.length ?? 0
 
@@ -39,7 +38,6 @@ export default async function ClientesPage() {
         <NuevoClienteModal
           catalogo={catalogo ?? []}
           plantillas={plantillas ?? []}
-          setupDefault={setupDefault}
           descuentoAnualPct={descuentoAnual}
         />
       </div>

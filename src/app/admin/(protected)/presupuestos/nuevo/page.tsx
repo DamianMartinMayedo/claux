@@ -2,6 +2,7 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listarModulosParaPresupuesto, listarComerciales } from '@/app/actions/presupuestos'
 import { LIMITE_FUNDADOR } from '@/lib/presupuesto/config'
+import { cargarParametros } from '@/lib/presupuesto/parametros'
 import PresupuestoCalculadora from './PresupuestoCalculadora'
 
 export const dynamic = 'force-dynamic'
@@ -14,9 +15,13 @@ export default async function NuevoPresupuestoPage({
   const ctx = await requireAccesoPagina('presupuestos')
   const { lead } = await searchParams
 
-  const [modulos, comerciales] = await Promise.all([
+  // Los precios se cargan AQUÍ y viajan enteros a la calculadora, que se los pasa al
+  // cálculo. La misma tanda llega luego a la acción de guardar, para que la vista previa y
+  // el recálculo autoritativo no puedan partir de números distintos.
+  const [modulos, comerciales, parametros] = await Promise.all([
     listarModulosParaPresupuesto(),
     listarComerciales(),
+    cargarParametros(),
   ])
 
   const db = createAdminClient()
@@ -53,6 +58,7 @@ export default async function NuevoPresupuestoPage({
       comerciales={comerciales}
       comercialEmailDefault={ctx.email}
       tarifaSugerida={tarifaSugerida}
+      parametros={parametros}
       prefill={prefill}
     />
   )

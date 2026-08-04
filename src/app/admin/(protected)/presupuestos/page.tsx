@@ -24,7 +24,6 @@ export default async function PresupuestosPage() {
       .order('orden'),
   ])
 
-  const setupDefault   = parseFloat(await getSetting('pago_setup_usd_default', '1000')) || 0
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
 
   return (
@@ -34,7 +33,6 @@ export default async function PresupuestosPage() {
       permisos={ctx.permisos}
       catalogo={catalogo ?? []}
       plantillas={plantillas ?? []}
-      setupDefault={setupDefault}
       descuentoAnualPct={descuentoAnual}
     />
   )

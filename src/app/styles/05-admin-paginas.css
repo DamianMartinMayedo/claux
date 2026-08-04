@@ -872,9 +872,51 @@ textarea:focus-visible {
 .pres-form { display: flex; flex-direction: column; gap: var(--space-4); align-self: start; }
 .pres-form .card { display: flex; flex-direction: column; gap: var(--space-3); }
 .pres-resultado { align-self: stretch; }
-.pres-resultado > .card { position: sticky; top: var(--space-6); z-index: 10; }
+/* La tarjeta acompaña al scroll. El `sticky` ya estaba, pero no se veía: con cinco fases,
+   avisos, totales y botón la tarjeta pasa de alto de ventana, y un elemento sticky más alto
+   que su scrollport no tiene dónde pegarse — se limita a bajar con el contenido. Se le pone
+   techo y el desglose scrollea por dentro. (`.admin-main` es el contenedor de scroll, de ahí
+   el descuento de la cabecera.) */
+.pres-resultado > .card {
+  position: sticky; top: var(--space-6); z-index: 10;
+  max-height: calc(100dvh - var(--space-16));
+  overflow-y: auto;
+}
 .pres-resultado > .card > .btn { margin-top: var(--space-4); }
+/* La tarifa aplicada, arriba del desglose y editable: es el precio unitario que se está
+   negociando y no se enseñaba en ninguna parte. */
+.pres-tarifa {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  padding-bottom: var(--space-3); margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.pres-tarifa label { font-weight: 600; color: var(--color-text); }
+.pres-tarifa-campo { position: relative; display: inline-flex; align-items: center; }
+.pres-tarifa-campo .input { width: 6.5rem; padding-left: 1.4rem; text-align: right; }
+.pres-tarifa-moneda {
+  position: absolute; left: 10px; color: var(--color-text-muted); pointer-events: none;
+}
 .pres-desglose { display: flex; flex-direction: column; gap: var(--space-2); }
+.pres-fase-bloque { display: flex; flex-direction: column; gap: var(--space-1); }
+/* El detalle de cada línea: «4 · 1h base + 3 × 0,5h». Se lee en voz alta cuando el cliente
+   pregunta de dónde sale el número. */
+.pres-fase-lineas {
+  list-style: none; margin: 0; padding: 0 0 0 var(--space-3);
+  display: flex; flex-direction: column; gap: 2px;
+  border-left: 2px solid var(--color-divider);
+}
+.pres-fase-lineas li {
+  display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-2);
+  align-items: baseline; font-size: var(--text-xs); color: var(--color-text-muted);
+}
+.pres-linea-detalle { font-variant-numeric: tabular-nums; color: var(--color-text-faint); }
+.pres-linea-horas { font-variant-numeric: tabular-nums; }
+.pres-descuento {
+  display: grid; grid-template-columns: 1fr; gap: var(--space-2);
+  padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+}
+.pres-descuento .input-group { margin: 0; }
 .pres-fase-row {
   display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-3);
   align-items: baseline; font-size: var(--text-sm);
@@ -893,7 +935,31 @@ textarea:focus-visible {
 .pres-totales > div { display: flex; justify-content: space-between; align-items: baseline; }
 .pres-total-label { color: var(--color-text-muted); font-size: var(--text-sm); }
 .pres-total-valor { font-weight: 700; font-family: var(--font-display); }
+/* La concesión, en el color de una resta; el total a cobrar, destacado — es la cifra que se
+   le dice al cliente y la que se cobra, no el coste bruto de encima. */
+.pres-total-dto .pres-total-valor { color: var(--color-success); }
+.pres-total-final {
+  padding-top: var(--space-2); border-top: 1px solid var(--color-divider);
+}
+.pres-total-final .pres-total-label { color: var(--color-text); font-weight: 600; }
+.pres-total-final .pres-total-valor { font-size: var(--text-lg); color: var(--color-primary-text); }
 .pres-acciones-cierre { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+/* El motivo del descuento, pegado a su cifra: es lo que hace que dentro de tres meses se
+   entienda por qué ese cliente pagó menos. */
+.pres-dto-motivo { font-style: normal; color: var(--color-text-faint); }
+
+/* ── Precios del presupuesto en Configuración ────────────────────────────────
+   Cabecera secundaria: el precio de la instalación es un pago único cotizado por horas, otra
+   cosa que la facturación recurrente, así que va en su propio bloque dentro de la pestaña. */
+.config-section-header-sub {
+  margin-top: var(--space-6); padding-top: var(--space-5);
+  border-top: 1px solid var(--color-divider);
+}
+.pp-bloque { display: flex; flex-direction: column; gap: var(--space-2); }
+/* Tabla de precios: celdas compactas, que son cuatro números por fila y con el padding
+   normal la tabla se va de alto. */
+.pp-tabla td { padding: var(--space-2) var(--space-3); }
+.pp-num { width: 5.5rem; text-align: right; padding: 4px var(--space-2); }
 
 @media (min-width: 900px) {
   .pres-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
