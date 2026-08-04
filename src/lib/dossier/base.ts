@@ -21,7 +21,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
-import { cobroEsIngreso, fuenteDeCobro } from '@/lib/gastos-core'
+import { computaEnResultados, fuenteDeCobro } from '@/lib/gastos-core'
 import { construirConversor, type DetalleTasa } from '@/lib/tasas'
 import { indexarCategorias, type CategoriaPL } from '@/lib/pl/estado'
 import type { FilaSerie } from './snapshot'
@@ -71,7 +71,7 @@ export async function construirSnapshotDesdeBase(
       .eq('client_id', clientId).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desde).lte('fecha_emision', hasta),
-    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo')
+    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
       .eq('client_id', clientId).in('empresa_id', ids)
       .gte('fecha', desde).lte('fecha', hasta),
   ])
@@ -111,17 +111,18 @@ export async function construirSnapshotDesdeBase(
   // raíz, que es la que tiene el `rol_pl` y la que da nombre a la línea del
   // desglose. Sin subir, «Suministros · Electricidad» saldría suelta al lado de
   // «Suministros» como si fueran dos gastos distintos del mismo nivel.
-  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null }[]) {
+  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null }[]) {
     const v = conv(g.monto, g.moneda)
     if (v == null || !g.fecha) continue
+    // Una fila que es solo DEUDA (mig. 166) no entra en el documento por ninguno de
+    // los dos lados. Aquí importa el doble que en cualquier otro informe: además de
+    // descuadrar las cifras, se pintaría como una LÍNEA del desglose («Subsidios por
+    // cobrar», «Nómina · salario neto») en el documento que se le enseña a un asesor o
+    // a un inversor.
+    if (!computaEnResultados(g.naturaleza)) continue
     const mes = getMes(g.fecha.slice(0, 7))
 
     if (g.tipo === 'COBRO') {
-      // El COBRO de un anticipo no es ingreso (`cobroEsIngreso`). Aquí importaba el
-      // doble: además de inflar los ingresos, el subsidio se pintaba como una LÍNEA
-      // del desglose («Subsidios por cobrar») en el documento que se le enseña a un
-      // asesor o a un inversor.
-      if (!cobroEsIngreso(g.origen_tipo)) continue
       mes.ingresos += v
       // El cierre del punto de venta va a la línea «Ventas», la misma que las facturas:
       // es una venta de mostrador, no un ingreso suelto. En el documento que se le enseña

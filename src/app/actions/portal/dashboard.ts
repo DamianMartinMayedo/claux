@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
-import { cobroEsIngreso }     from '@/lib/gastos-core'
+import { cobroEsIngreso, computaEnResultados } from '@/lib/gastos-core'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
@@ -452,7 +452,7 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     // facturas, así que un negocio que cobra sin facturar —mostrador, TPV— veía «Ventas
     // del mes: 0» y un neto igual a sus gastos en negativo, mientras Reportes le decía
     // otra cosa. Y la IA lee este mismo resumen: le llegaba el cero como un hecho.
-    db.from('gastos_cobros').select('tipo, fecha, monto, moneda, categoria_id, origen_tipo')
+    db.from('gastos_cobros').select('tipo, fecha, monto, moneda, categoria_id, origen_tipo, naturaleza')
       .eq('client_id', cid).in('empresa_id', empresaIds).gte('fecha', desde6),
     db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
     db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true).eq('es_apertura', false),
@@ -464,14 +464,15 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     db.from('categorias_gastos').select('categoria_id, nombre').eq('client_id', cid),
   ])
 
-  // Se parten los registros en los dos lados del informe. El COBRO del subsidio de la
-  // nómina NO es ingreso (`cobroEsIngreso`): recupera un anticipo, así que se queda
-  // fuera de los dos lados — el mismo predicado que usan Reportes y el dossier, para
-  // que las tres pantallas no digan tres cifras.
-  type FilaGC = { tipo: string; fecha: string; monto: number; moneda: string; categoria_id: string | null; origen_tipo: string | null }
+  // Se parten los registros en los dos lados del informe, y las filas que son SOLO
+  // DEUDA se quedan fuera de los dos (mig. 166): el subsidio por cobrar, que recupera
+  // un anticipo, y las deudas de una nómina —salario neto y retenciones—, cuyo coste
+  // ya está en las filas de coste de esa misma nómina. Es el mismo predicado que usan
+  // Reportes y el dossier, para que las tres pantallas no digan tres cifras.
+  type FilaGC = { tipo: string; fecha: string; monto: number; moneda: string; categoria_id: string | null; origen_tipo: string | null; naturaleza: string | null }
   const registros = (registros6.data ?? []) as FilaGC[]
-  const gastosGC   = registros.filter(g => g.tipo === 'GASTO')
-  const ingresosGC = registros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.origen_tipo))
+  const gastosGC   = registros.filter(g => g.tipo === 'GASTO' && computaEnResultados(g.naturaleza))
+  const ingresosGC = registros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.naturaleza))
 
   // Serie mensual y totales del mes SEPARADOS POR MONEDA (no se suman entre sí).
   const monedasSet = new Set<string>()

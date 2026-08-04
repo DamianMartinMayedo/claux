@@ -10,8 +10,9 @@ import {
   type NominaDetalleData, type NominaLinea, type ItemLinea,
 } from '@/app/actions/portal/rrhh'
 import {
-  ConfirmarNominaModal, PagarNominaModal, actualizarConceptosNominas, formatMonto, formatPeriodo,
+  ConfirmarNominaModal, actualizarConceptosNominas, formatMonto, formatPeriodo,
 } from '../../_shared/NominaDetalleModal'
+import { etiquetaEnTabla } from '@/lib/rrhh/conceptos'
 import { useConfigurador } from '@/components/portal/ConfiguradorContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
@@ -71,6 +72,10 @@ function num(v: string): number {
 // desplegar, para que la tabla quepa con 50 filas. El coste de empresa
 // (APORTE_EMPRESA) va aparte: no resta del neto del trabajador, mezclarlo con
 // las retenciones en el mismo signo sería decir que sí.
+//
+// Los cinco tributos se abrevian AQUÍ y solo aquí (`etiquetaEnTabla`, por clave y no
+// por nombre): en el desglose de una plantilla entera no caben cinco nombres fiscales
+// completos. El recibo en PDF y el Excel siguen con el nombre entero.
 
 function DesgloseFila({ items, colSpan }: { items: ItemLinea[]; colSpan: number }) {
   const propios  = items.filter(i => i.tipo !== 'APORTE_EMPRESA' && i.monto > 0.005)
@@ -87,13 +92,13 @@ function DesgloseFila({ items, colSpan }: { items: ItemLinea[]; colSpan: number 
               <span className={`nom-desglose-monto ${it.tipo === 'DEVENGO' ? 'nom-desglose-mas' : 'nom-desglose-menos'}`}>
                 {it.tipo === 'DEVENGO' ? '+' : '−'}{formatMonto(it.monto)}
               </span>
-              <span>{it.nombre}</span>
+              <span>{etiquetaEnTabla(it.clave, it.nombre)}</span>
             </span>
           ))}
           {empresa.map((it, i) => (
             <span key={it.item_id ?? `ae-${i}`} className="nom-desglose-item">
               <span className="nom-desglose-monto text-xs-muted">+{formatMonto(it.monto)}</span>
-              <span className="text-xs-muted">{it.nombre} (coste de empresa, no reduce su neto)</span>
+              <span className="text-xs-muted">{etiquetaEnTabla(it.clave, it.nombre)} (coste de empresa, no reduce su neto)</span>
             </span>
           ))}
         </div>
@@ -198,7 +203,6 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
   const [expandido, setExpandido] = useState<string | null>(null)
   const [modalAgregar, setModalAgregar] = useState(false)
   const [confirmarNom, setConfirmarNom] = useState(false)
-  const [pagarNom, setPagarNom] = useState(false)
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [exportando, setExportando] = useState(false)
 
@@ -330,9 +334,13 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
           <div className="det-meta-row">
             <span>{data.empresa_nombres[nomina.empresa_id] ?? '—'}</span>
             <span>{nomina.moneda}</span>
-            {!esBorrador && nomina.saldo_pendiente > 0.005 && (
-              <span>Pendiente de pago: <strong>{formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong></span>
-            )}
+            {/* Confirmar ya generó todas las deudas de esta nómina, así que el pago se
+                hace desde Tesorería como cualquier otra: aquí solo se informa de si el
+                salario neto está pagado, y se enlaza a donde se paga. «Pagada» mira solo
+                el salario neto a propósito — los impuestos tienen otro calendario. */}
+            {!esBorrador && (nomina.saldo_pendiente > 0.005
+              ? <span>Salario pendiente de pago: <strong>{formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong></span>
+              : <span>Salario pagado</span>)}
           </div>
         </div>
         <div className="det-actions">
@@ -344,10 +352,14 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
               <CircleCheck size={15} strokeWidth={2} /> Confirmar nómina
             </button>
           )}
-          {!esBorrador && nomina.gasto_id && nomina.saldo_pendiente > 0.005 && (
-            <button className="btn btn-primary" onClick={() => setPagarNom(true)}>
-              <DollarSign size={15} strokeWidth={2} /> Pagar
-            </button>
+          {/* Fuera el botón «Pagar» (mig. 166): una nómina confirmada genera VARIAS
+              deudas —el salario neto y cada retención, cada una con su acreedor y su
+              vencimiento— y un solo botón solo podía pagar una de ellas, dando por
+              liquidada la nómina entera. Se paga en Tesorería, con el resto. */}
+          {!esBorrador && nomina.saldo_pendiente > 0.005 && (
+            <Link className="btn btn-primary" href="/portal/cxp">
+              <DollarSign size={15} strokeWidth={2} /> Ver en Cuentas por pagar
+            </Link>
           )}
           <RowActions>
             <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarEliminar(true)}>
@@ -422,7 +434,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
                   <Fragment key={l.linea_id}>
                     <tr>
                       <td data-label="Empleado">
-                        <strong>{l.empleado_nombre}</strong>
+                        <strong className="cell-clamp">{l.empleado_nombre}</strong>
                         {l.cargo && <div className="text-sm-muted">{l.cargo}</div>}
                       </td>
                       <td data-label="Salario base" className="col-num tes-monto-cell">{formatMonto(l.salario_base)}</td>
@@ -495,10 +507,6 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
       {confirmarNom && (
         <ConfirmarNominaModal nomina={nomina} onConfirm={doConfirmar}
           onClose={() => setConfirmarNom(false)} isPending={isPending} />
-      )}
-      {pagarNom && (
-        <PagarNominaModal nomina={nomina} cuentas={data.cuentas}
-          onClose={() => setPagarNom(false)} onPaid={() => { setPagarNom(false); router.refresh() }} />
       )}
       {confirmarEliminar && (
         <ConfirmDialog

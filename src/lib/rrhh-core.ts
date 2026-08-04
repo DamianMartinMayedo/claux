@@ -7,6 +7,11 @@
 // `monedaValida` / `obtenerEmpresas`). El estado ACTIVO/BAJA no se guarda: se
 // deriva de `fecha_baja` (migración 027).
 
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento fechado de noche el último día
+// del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
+
 export type TipoContrato = 'INDEFINIDO' | 'TEMPORAL' | 'POR_OBRA' | 'PRACTICAS'
 export type Periodicidad = 'MENSUAL' | 'QUINCENAL' | 'SEMANAL' | 'POR_HORA'
 
@@ -27,7 +32,7 @@ export function validarPeriodicidad(v: string): Periodicidad {
 
 /** Fecha de hoy en formato ISO corto (por defecto del alta). */
 export function hoyIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return hoyEnTz()
 }
 
 /**

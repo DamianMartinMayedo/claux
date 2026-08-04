@@ -9,8 +9,8 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import {
-  MARCA, MARGEN, RESERVA_PIE, texto, trazo, relleno, hexToRgb,
-  crearDoc, sellarPie, type JsPdfDoc,
+  MARCA, MARGEN, RESERVA_PIE, texto, trazo,
+  crearDoc, sellarPie, cabeceraEmpresa, type JsPdfDoc,
 } from './documento'
 import {
   AJUSTE_TIPO_LABEL, CONDICION_PAGO_LABEL, formatearMoneda,
@@ -63,50 +63,6 @@ export interface DocumentoVentaPdf {
   notas:            string | null
 }
 
-// ── Utilidades ──────────────────────────────────────────────────────────────
-
-
-/**
- * Descarga una imagen y la re-codifica a PNG (vía canvas) con sus dimensiones,
- * para que jsPDF la incruste sin importar el formato de origen (png/jpg/webp…).
- * Nunca lanza: cualquier fallo (red, CORS, decodificación) resuelve `null` y el
- * documento se genera igual sin logo.
- */
-async function cargarLogoPng(
-  url: string,
-): Promise<{ dataUrl: string; w: number; h: number } | null> {
-  try {
-    const res = await fetch(url, { mode: 'cors' })
-    if (!res.ok) return null
-    const blob = await res.blob()
-    const srcUrl = await new Promise<string | null>(resolve => {
-      const fr = new FileReader()
-      fr.onload  = () => resolve(typeof fr.result === 'string' ? fr.result : null)
-      fr.onerror = () => resolve(null)
-      fr.readAsDataURL(blob)
-    })
-    if (!srcUrl) return null
-    return await new Promise(resolve => {
-      const img = new Image()
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas')
-          canvas.width  = img.naturalWidth
-          canvas.height = img.naturalHeight
-          const ctx = canvas.getContext('2d')
-          if (!ctx || !canvas.width || !canvas.height) { resolve(null); return }
-          ctx.drawImage(img, 0, 0)
-          resolve({ dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height })
-        } catch { resolve(null) }
-      }
-      img.onerror = () => resolve(null)
-      img.src = srcUrl
-    })
-  } catch {
-    return null
-  }
-}
-
 // ── Constructor ───────────────────────────────────────────────────────────────
 
 /**
@@ -124,45 +80,7 @@ export async function construirDocumentoVenta(
   let y = M
 
   // ── Cabecera: empresa (izq) · documento (der) ─────────────────────────────
-  const logoBox = 16
-  const logo = d.empresa.logo_url && d.empresa.mostrar_logo !== false
-    ? await cargarLogoPng(d.empresa.logo_url)
-    : null
-
-  let logoDibujado = false
-  if (logo) {
-    try {
-      const escala = Math.min(logoBox / logo.w, logoBox / logo.h)
-      const w = logo.w * escala
-      const h = logo.h * escala
-      doc.addImage(logo.dataUrl, 'PNG', M + (logoBox - w) / 2, y + (logoBox - h) / 2, w, h)
-      logoDibujado = true
-    } catch { logoDibujado = false }
-  }
-  if (!logoDibujado) {
-    const color = hexToRgb(d.empresa.color) ?? MARCA.muted
-    relleno(doc, color)
-    doc.roundedRect(M, y, logoBox, logoBox, 2, 2, 'F')
-    const inicial = (d.empresa.letra_facturacion ?? d.empresa.nombre.charAt(0)).toUpperCase()
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(18)
-    texto(doc, MARCA.white)
-    doc.text(inicial, M + logoBox / 2, y + logoBox / 2 + 2.4, { align: 'center' })
-  }
-
-  const infoX = M + logoBox + 5
-  let ey = y + 4
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
-  texto(doc, MARCA.dark)
-  doc.text(d.empresa.nombre_fiscal ?? d.empresa.nombre, infoX, ey)
-  ey += 5
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
-  texto(doc, MARCA.faint)
-  const empresaLineas = [
-    d.empresa.rif_nit ? `NIF/NIT: ${d.empresa.rif_nit}` : null,
-    [d.empresa.direccion, d.empresa.ciudad, d.empresa.pais].filter(Boolean).join(', ') || null,
-    [d.empresa.telefono, d.empresa.email].filter(Boolean).join('  ·  ') || null,
-  ].filter(Boolean) as string[]
-  for (const linea of empresaLineas) { doc.text(linea, infoX, ey); ey += 4 }
+  const ey = await cabeceraEmpresa(doc, d.empresa, y)
 
   // Bloque de documento (derecha)
   let dy = y + 3

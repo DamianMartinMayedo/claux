@@ -484,8 +484,12 @@ export async function escanearCuentas(
       .in('client_id', ids).in('origen', ['PAGO', 'COBRO']).not('referencia_id', 'is', null),
     db.from('facturas').select('factura_id, client_id, empresa_id, numero, cliente_id, fecha_vencimiento, moneda, total')
       .in('client_id', ids).eq('estado', 'EMITIDA').not('fecha_vencimiento', 'is', null),
+    // `naturaleza != 'COSTE'` (mig. 166): una fila de solo coste no se le debe a nadie,
+    // así que avisar de que «vence» sería mandarle al dueño una deuda que no existe y
+    // que además no puede liquidar desde ninguna pantalla. Va en la QUERY y no al
+    // filtrar en memoria porque este escáner recorre todos los tenants a la vez.
     db.from('gastos_cobros').select('registro_id, client_id, empresa_id, tipo, descripcion, concepto, tercero_id, vencimiento, moneda, monto')
-      .in('client_id', ids).not('vencimiento', 'is', null),
+      .in('client_id', ids).not('vencimiento', 'is', null).neq('naturaleza', 'COSTE'),
     db.from('third_parties').select('tercero_id, client_id, nombre').in('client_id', ids),
   ])
 
@@ -1032,7 +1036,7 @@ export async function escanearCredito(db: Db, tenants: ContextoTenant[]): Promis
     db.from('facturas').select('factura_id, client_id, cliente_id, total')
       .in('client_id', ids).eq('estado', 'EMITIDA'),
     db.from('gastos_cobros').select('registro_id, client_id, tercero_id, monto')
-      .in('client_id', ids).eq('tipo', 'COBRO'),
+      .in('client_id', ids).eq('tipo', 'COBRO').neq('naturaleza', 'COSTE'),
   ])
 
   const liquidado = new Map<string, number>()

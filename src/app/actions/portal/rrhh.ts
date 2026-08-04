@@ -6,10 +6,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import {
   calcularNominaCuba,
-  NOMBRE_CONCEPTO_FISCAL,
   type ConceptoFiscal,
   type ParametroFiscal,
 } from '@/lib/rrhh/nomina-cuba'
+import {
+  NOMBRE_CONCEPTO, claveDeNombre, esConceptoFiscal, type ConceptoClave,
+  CONCEPTOS_COSTE, NOMBRE_CONCEPTO_COSTE, CATEGORIA_DEFECTO_COSTE, type ConceptoCoste,
+} from '@/lib/rrhh/conceptos'
 import { obtenerEmpresas }   from './empresas'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
 import type { MonedaOpcion } from './monedas'
@@ -18,6 +21,10 @@ import {
   type TipoContrato as _TipoContrato, type Periodicidad as _Periodicidad,
 } from '@/lib/rrhh-core'
 import { resolverCategoriaSistema } from '@/lib/gastos-core'
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
+// las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
+// día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +58,13 @@ export interface Empleado {
   fecha_baja:    string | null
   motivo_baja:   string | null
   notas:         string | null
+  /**
+   * Vacaciones ya acumuladas ANTES de usar CLAUX (mig. 167), para negocios que migran
+   * a mitad de año. Punto de partida inmutable de la derivación del saldo, **no** un
+   * total editable: solo lo escribe el importador de Personal. El formulario de la
+   * ficha no lo toca — si lo tocara, guardar los datos de contacto pondría el saldo a 0.
+   */
+  vacaciones_apertura: number
   created_at:    string
   updated_at:    string
 }
@@ -202,6 +216,10 @@ export interface RrhhPageData {
   reglas:          ReglaDeduccion[]
   /** Modelo de nómina de cada empresa. Sin fila, GENERAL con 24 días. */
   config_nomina:   ConfigNominaEmpresa[]
+  /** Categorías de gasto ACTIVAS del cliente, para el selector del mapeo (mig. 166). */
+  categorias_gasto: { categoria_id: string; nombre: string; parent_id: string | null }[]
+  /** Mapeo concepto de coste → categoría, por empresa. Sin fila, el defecto del sistema. */
+  mapeo_gasto:     { empresa_id: string; concepto: string; categoria_id: string }[]
   /** Tributos cubanos aún sembrados con tipos de relleno. Vacío = todo verificado. */
   fiscales_provisionales: string[]
   turnos_catalogo: Turno[]
@@ -275,6 +293,13 @@ export interface ItemLinea {
   origen:    OrigenItemLinea
   origen_id: string | null
   destino:   DestinoItemLinea | null
+  /**
+   * Identidad del concepto cuando es del catálogo del sistema (mig. 165). El
+   * `nombre` es el snapshot que se imprime y puede cambiar; ESTO es lo que compara
+   * el código. NULL en lo que define el cliente (REGLA/CONCEPTO/PUNTUAL/LEGADO),
+   * donde su nombre sí es la identidad.
+   */
+  clave?:    ConceptoClave | null
 }
 
 /**
@@ -353,19 +378,21 @@ export interface IncidenciaMes {
  *  gente. */
 function itemsDeIncidencia(inc: IncidenciaMes): ItemLinea[] {
   const out: ItemLinea[] = []
-  const add = (nombre: string, tipo: TipoItemLinea, monto: number) => {
+  // El nombre NO se teclea aquí: se pide por su clave al catálogo (mig. 165), que es
+  // lo que impide que la etiqueta y la identidad se separen.
+  const add = (clave: ConceptoClave, tipo: TipoItemLinea, monto: number) => {
     if (!monto || monto <= EPS) return
     out.push({
-      nombre, tipo, monto: redondear2(monto),
+      nombre: NOMBRE_CONCEPTO[clave], tipo, monto: redondear2(monto), clave,
       origen: 'INCIDENCIA', origen_id: inc.incidencia_id ?? null,
       destino: tipo === 'RETENCION' ? 'TERCERO_FISCAL' : null,
     })
   }
-  add('Pago extra',       'DEVENGO',   inc.pago_extra)
-  add('Nocturnidad',      'DEVENGO',   inc.pago_nocturnidad)
-  add('Feriados',         'DEVENGO',   inc.feriados)
-  add('Penalización',     'RETENCION', inc.penalizacion)
-  add('Otros descuentos', 'RETENCION', inc.otros_descuentos)
+  add('PAGO_EXTRA',       'DEVENGO',   inc.pago_extra)
+  add('NOCTURNIDAD',      'DEVENGO',   inc.pago_nocturnidad)
+  add('FERIADOS',         'DEVENGO',   inc.feriados)
+  add('PENALIZACION',     'RETENCION', inc.penalizacion)
+  add('OTROS_DESCUENTOS', 'RETENCION', inc.otros_descuentos)
   return out
 }
 
@@ -567,13 +594,15 @@ function componerLinea(opts: {
     const ajusteDias = redondear2(legal.salario_devengado - salario_base)
     if (Math.abs(ajusteDias) > EPS) {
       items.push({
-        nombre: 'Días no trabajados', tipo: 'DEVENGO', monto: ajusteDias,
+        nombre: NOMBRE_CONCEPTO.DIAS_NO_TRABAJADOS, tipo: 'DEVENGO', monto: ajusteDias,
+        clave: 'DIAS_NO_TRABAJADOS',
         origen: 'LEY', origen_id: null, destino: null,
       })
     }
     if (legal.vacaciones_pagar > EPS) {
       items.push({
-        nombre: 'Vacaciones pagadas', tipo: 'DEVENGO', monto: legal.vacaciones_pagar,
+        nombre: NOMBRE_CONCEPTO.VACACIONES_PAGADAS, tipo: 'DEVENGO', monto: legal.vacaciones_pagar,
+        clave: 'VACACIONES_PAGADAS',
         origen: 'LEY', origen_id: null, destino: null,
       })
     }
@@ -589,13 +618,15 @@ function componerLinea(opts: {
   if (legal) {
     for (const r of legal.retenciones) {
       items.push({
-        nombre: NOMBRE_CONCEPTO_FISCAL[r.concepto], tipo: 'RETENCION', monto: r.monto,
+        nombre: NOMBRE_CONCEPTO[r.concepto], tipo: 'RETENCION', monto: r.monto,
+        clave: r.concepto,
         origen: 'LEY', origen_id: r.parametro_id, destino: 'TERCERO_FISCAL',
       })
     }
     for (const a of legal.aportes) {
       items.push({
-        nombre: NOMBRE_CONCEPTO_FISCAL[a.concepto], tipo: 'APORTE_EMPRESA', monto: a.monto,
+        nombre: NOMBRE_CONCEPTO[a.concepto], tipo: 'APORTE_EMPRESA', monto: a.monto,
+        clave: a.concepto,
         origen: 'LEY', origen_id: a.parametro_id, destino: null,
       })
     }
@@ -675,6 +706,12 @@ export interface ConfigNominaEmpresa {
   empresa_id:              string
   modelo:                  ModeloNomina
   dias_laborables_default: number
+  /**
+   * Día del mes en que esta empresa paga su nómina (mig. 166). Alimenta el
+   * `vencimiento` de las CxP que genera confirmar. NULL = sin fijar, y entonces nacen
+   * sin vencimiento, o sea fuera del aging de CxP.
+   */
+  dia_pago:                number | null
 }
 
 /**
@@ -686,19 +723,84 @@ async function leerConfigNomina(
   db: DbAdmin, client_id: string,
 ): Promise<Map<string, ConfigNominaEmpresa>> {
   const { data } = await db.from('empresa_config_nomina')
-    .select('empresa_id, modelo, dias_laborables_default')
+    .select('empresa_id, modelo, dias_laborables_default, dia_pago')
     .eq('client_id', client_id)
   const m = new Map<string, ConfigNominaEmpresa>()
   for (const r of (data ?? []) as ConfigNominaEmpresa[]) {
-    m.set(r.empresa_id, { ...r, dias_laborables_default: Number(r.dias_laborables_default) })
+    m.set(r.empresa_id, {
+      ...r,
+      dias_laborables_default: Number(r.dias_laborables_default),
+      dia_pago: r.dia_pago === null ? null : Number(r.dia_pago),
+    })
   }
   return m
 }
 
 function configDe(mapa: Map<string, ConfigNominaEmpresa>, empresa_id: string): ConfigNominaEmpresa {
   return mapa.get(empresa_id) ?? {
-    empresa_id, modelo: 'GENERAL', dias_laborables_default: 24,
+    empresa_id, modelo: 'GENERAL', dias_laborables_default: 24, dia_pago: null,
   }
+}
+
+/**
+ * Fecha de vencimiento de las CxP de una nómina: el día de pago de la empresa, en el
+ * mes del período. Un 31 configurado en un mes de 30 se ajusta al último día del mes
+ * —no se rechaza ni se desborda al mes siguiente—, que es lo que espera quien escribió
+ * «pago el último día».
+ */
+function vencimientoNomina(periodo: string, dia_pago: number | null): string | null {
+  if (!dia_pago) return null
+  const [a, m] = periodo.split('-').map(Number)
+  if (!a || !m) return null
+  const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate()
+  const dia    = Math.min(dia_pago, ultimo)
+  return `${a}-${String(m).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+}
+
+/**
+ * Mapeo concepto de coste → categoría de gasto de una empresa. Sin fila configurada,
+ * el concepto usa su categoría de sistema por defecto (`CATEGORIA_DEFECTO_COSTE`), que
+ * se resuelve-o-crea por CLAVE — nunca por nombre, o renombrarla crearía un duplicado
+ * a espaldas del dueño en la siguiente nómina.
+ */
+async function resolverMapeoCoste(
+  db: DbAdmin, client_id: string, empresa_id: string,
+): Promise<Map<ConceptoCoste, { categoria_id: string; nombre: string }>> {
+  const { data } = await db.from('nomina_gasto_mapeo')
+    .select('concepto, categoria_id')
+    .eq('client_id', client_id).eq('empresa_id', empresa_id)
+  const elegidas = new Map<string, string>()
+  for (const r of (data ?? []) as { concepto: string; categoria_id: string }[]) {
+    elegidas.set(r.concepto, r.categoria_id)
+  }
+
+  // Los nombres de las categorías elegidas a mano, en UNA consulta: se desnormalizan en
+  // `gastos_cobros.categoria` y pedirlos fila a fila serían cinco viajes por nómina.
+  const ids = Array.from(new Set(elegidas.values()))
+  const nombreDe = new Map<string, string>()
+  if (ids.length) {
+    const { data: cats } = await db.from('categorias_gastos')
+      .select('categoria_id, nombre, estado')
+      .eq('client_id', client_id).in('categoria_id', ids)
+    for (const c of (cats ?? []) as { categoria_id: string; nombre: string; estado: string }[]) {
+      // Una categoría archivada después de configurarla no bloquea la nómina: cae al
+      // defecto del concepto. Negarse a confirmar por eso sería castigar al dueño por
+      // ordenar sus categorías.
+      if (c.estado === 'ACTIVO') nombreDe.set(c.categoria_id, c.nombre)
+    }
+  }
+
+  const out = new Map<ConceptoCoste, { categoria_id: string; nombre: string }>()
+  for (const concepto of CONCEPTOS_COSTE) {
+    const elegida = elegidas.get(concepto)
+    if (elegida && nombreDe.has(elegida)) {
+      out.set(concepto, { categoria_id: elegida, nombre: nombreDe.get(elegida)! })
+      continue
+    }
+    const sistema = await resolverCategoriaSistema(db, client_id, CATEGORIA_DEFECTO_COSTE[concepto])
+    if (sistema) out.set(concepto, sistema)
+  }
+  return out
 }
 
 /**
@@ -740,23 +842,38 @@ function parametrosVigentes(todos: ParametroConVigencia[], fecha: string): Param
 }
 
 /**
- * Saldo de vacaciones ACUMULADO menos PAGADO de un empleado, derivado de las
- * nóminas CONFIRMADA (mig. 142/143: no se guarda en ninguna parte — un total
- * mutable se rompía al reabrir o borrar una nómina). Una sola fuente para las
- * dos vistas que lo necesitan: la ficha del empleado (`obtenerEmpleadoDetalle`)
- * y el aviso de tope al guardar una incidencia (`guardarIncidencia`).
+ * Saldo de vacaciones de un empleado:
+ *
+ *     apertura + Σ (acumulado − pagado) de sus nóminas CONFIRMADAS
+ *
+ * Se DERIVA y no se guarda (mig. 142/143): un total mutable se rompía al reabrir o
+ * borrar una nómina. La **apertura** (mig. 167) es lo que ya traía acumulado el
+ * trabajador antes de usar CLAUX —un negocio que migra a mitad de año arrancaba
+ * inevitablemente en cero— y es un punto de partida inmutable, no un total editable:
+ * todo lo que se mueve después lo siguen diciendo las nóminas, así que la derivación
+ * sigue autocorrigiéndose ante cualquier reversión.
+ *
+ * Una sola fuente para las dos vistas que lo necesitan: la ficha del empleado
+ * (`obtenerEmpleadoDetalle`) y el aviso de tope al guardar una incidencia
+ * (`guardarIncidencia`).
  */
 async function saldoVacacionesAcumulado(
   db: DbAdmin, client_id: string, empleado_id: string,
 ): Promise<number> {
-  const { data: confirmadas } = await db.from('nominas')
-    .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA')
+  const [{ data: ficha }, { data: confirmadas }] = await Promise.all([
+    db.from('empleados').select('vacaciones_apertura')
+      .eq('client_id', client_id).eq('empleado_id', empleado_id).maybeSingle(),
+    db.from('nominas')
+      .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA'),
+  ])
+  const apertura = Number((ficha as { vacaciones_apertura: number | null } | null)?.vacaciones_apertura ?? 0)
+
   const ids = ((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id)
-  if (!ids.length) return 0
+  if (!ids.length) return redondear2(apertura)
   const { data: lineas } = await db.from('nomina_lineas')
     .select('vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
     .eq('client_id', client_id).eq('empleado_id', empleado_id).in('nomina_id', ids)
-  return redondear2(((lineas ?? []) as {
+  return redondear2(apertura + ((lineas ?? []) as {
     vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
   }[]).reduce((s, l) => s + (l.vacaciones_acumuladas_periodo ?? 0) - (l.vacaciones_pagadas_periodo ?? 0), 0))
 }
@@ -786,6 +903,7 @@ function filaItem(item: ItemLinea, linea_id: string, nomina_id: string, client_i
     origen:    item.origen,
     origen_id: item.origen_id,
     destino:   item.destino,
+    concepto_clave: item.clave ?? null,
   }
 }
 
@@ -932,7 +1050,7 @@ export async function copiarEmpleadosAEmpresaEnLote(
 }
 
 function hoy(): string {
-  return new Date().toISOString().split('T')[0]
+  return hoyEnTz()
 }
 function estadoDe(fecha_baja: string | null): EstadoEmpleado {
   return fecha_baja ? 'BAJA' : 'ACTIVO'
@@ -961,7 +1079,8 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes, cuRes, cptRes, itmRes] = await Promise.all([
+  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes, cuRes, cptRes, itmRes,
+         catRes, mapRes] = await Promise.all([
     db.from('empleados').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
@@ -1006,9 +1125,19 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     // desfasada SIEMPRE (el recálculo los conserva, así que nunca «llegaría» a
     // cuadrar) y el aviso de actualizar no se apagaría jamás.
     db.from('nomina_linea_conceptos')
-      .select('item_id, linea_id, nombre, tipo, monto, origen, origen_id, destino')
+      .select('item_id, linea_id, nombre, tipo, monto, origen, origen_id, destino, concepto_clave')
       .eq('client_id', session.client_id)
       .order('created_at'),
+    // Para el selector del mapeo de gastos (mig. 166) y para pintar qué categoría tiene
+    // configurada cada concepto. Van aquí, con el resto, en vez de en su propia acción:
+    // la pestaña de configuración se abre desde esta misma página.
+    db.from('categorias_gastos')
+      .select('categoria_id, nombre, parent_id')
+      .eq('client_id', session.client_id).eq('estado', 'ACTIVO')
+      .order('nombre'),
+    db.from('nomina_gasto_mapeo')
+      .select('empresa_id, concepto, categoria_id')
+      .eq('client_id', session.client_id),
   ])
 
   const empleados = ((empRes.data ?? []) as Empleado[]).map(e => ({
@@ -1068,7 +1197,8 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
   // los que el recálculo conservará y por tanto deben contar al medir el desfase.
   const itemsPorLinea      = new Map<string, ItemLinea[]>()
   const preservadosPorLinea = new Map<string, ItemLinea[]>()
-  for (const r of (itmRes.data ?? []) as ({ linea_id: string } & ItemLinea)[]) {
+  for (const r of (itmRes.data ?? []) as
+    ({ linea_id: string; concepto_clave: ConceptoClave | null } & ItemLinea)[]) {
     const it: ItemLinea = {
       item_id:   r.item_id,
       nombre:    r.nombre,
@@ -1077,6 +1207,9 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       origen:    r.origen,
       origen_id: r.origen_id,
       destino:   r.destino,
+      // La vista abrevia por clave, nunca por nombre (Fase 1). El respaldo por nombre
+      // es solo para lo escrito antes de la mig. 165.
+      clave:     r.concepto_clave ?? claveDeNombre(r.nombre),
     }
     const todos = itemsPorLinea.get(r.linea_id) ?? []
     todos.push(it)
@@ -1143,30 +1276,52 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     lineasPorNomina.set(l.nomina_id, arr)
   }
 
-  // Pagos del gasto enlazado (liquidación unificada en Tesorería)
+  // ── «Pagada» se DERIVA, nunca se guarda (mig. 166) ──────────────────────────
+  // Mirando si la CxP del **salario neto** de esa nómina está liquidada en Tesorería
+  // (`gasto_id` apunta a ella). Es deliberado que dependa SOLO del salario neto: los
+  // impuestos tienen su propio calendario y se pagan días después, y lo que el dueño
+  // necesita ver en esta pantalla es si su plantilla ya cobró. Una nómina puede salir
+  // «Pagada» con impuestos aún vivos en CxP, y es lo correcto.
+  //
+  // El importe de referencia es el de LA DEUDA, no `nominas.total`: son distintos —el
+  // total es la suma de netos y la deuda del salario incluye lo que no va a un tercero—
+  // y comparar el pago contra el total dejaría un saldo residual permanente.
   const gastoIds = nominasRaw.map(n => n.gasto_id).filter((g): g is string => !!g)
   const pagadoPorGasto = new Map<string, number>()
+  const deudaPorGasto  = new Map<string, number>()
   if (gastoIds.length) {
-    const { data: movs } = await db.from('movimientos_tesoreria')
-      .select('monto, monto_ref, referencia_id')
-      .eq('client_id', session.client_id)
-      .in('referencia_id', gastoIds)
+    const [{ data: movs }, { data: deudas }] = await Promise.all([
+      db.from('movimientos_tesoreria')
+        .select('monto, monto_ref, referencia_id')
+        .eq('client_id', session.client_id)
+        .in('referencia_id', gastoIds),
+      db.from('gastos_cobros')
+        .select('registro_id, monto')
+        .eq('client_id', session.client_id)
+        .in('registro_id', gastoIds),
+    ])
     // Saldo de la nómina en su moneda → se suma monto_ref (importe aplicado)
     for (const m of (movs ?? []) as { monto: number; monto_ref: number | null; referencia_id: string }[]) {
       pagadoPorGasto.set(m.referencia_id, (pagadoPorGasto.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
+    }
+    for (const g of (deudas ?? []) as { registro_id: string; monto: number }[]) {
+      deudaPorGasto.set(g.registro_id, Number(g.monto))
     }
   }
 
   const nominas: NominaConLineas[] = nominasRaw.map(n => {
     const total  = Number(n.total)
     const pagado = n.gasto_id ? (pagadoPorGasto.get(n.gasto_id) ?? 0) : 0
+    // Sin fila de deuda (histórico anterior a la mig. 166, donde `gasto_id` apuntaba al
+    // gasto de Salarios) se cae al total: así una nómina vieja se sigue viendo igual.
+    const deuda  = n.gasto_id ? (deudaPorGasto.get(n.gasto_id) ?? total) : total
     const lineas = lineasPorNomina.get(n.nomina_id) ?? []
     return {
       ...n,
       total,
       lineas,
       pagado,
-      saldo_pendiente: Math.max(0, total - pagado),
+      saldo_pendiente: Math.max(0, redondear2(deuda - pagado)),
       desactualizada:  lineas.some(l => l.desfasada),
     }
   })
@@ -1188,6 +1343,8 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     nominas,
     reglas:        reglasTodas,
     config_nomina: Array.from(configNomina.values()),
+    categorias_gasto: (catRes.data ?? []) as RrhhPageData['categorias_gasto'],
+    mapeo_gasto:      (mapRes.data ?? []) as RrhhPageData['mapeo_gasto'],
     // Los que siguen a la espera del valor real (vigencia abierta). En el modelo
     // general estos tributos no se aplican, pero avisar solo cuesta una línea aquí:
     // la tabla ya está leída para medir el desfase.
@@ -1606,7 +1763,16 @@ export interface EmpleadoDetalleData {
    * ninguna parte. Un total mutable en la ficha se rompía al reabrir o borrar una
    * nómina: nada lo decrementaba y al reconfirmar se acumulaba dos veces.
    */
-  vacaciones: { importe: number; moneda: string }
+  vacaciones: {
+    importe: number
+    moneda:  string
+    /**
+     * Lo que ya traía acumulado al empezar a usar CLAUX (mig. 167). Se enseña aparte
+     * cuando no es cero: si no, un saldo que arranca en 1.363,50 sin ninguna nómina
+     * detrás parece un error del sistema.
+     */
+    apertura: number
+  }
 }
 
 export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<EmpleadoDetalleData | null> {
@@ -1661,7 +1827,163 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   // (`NominaLinea.desfasada`): la vista filtra por ahí, sin consultas extra.
   return {
     data, empleado, contratos, conceptos, incidencias,
-    vacaciones: { importe: redondear2(acumuladas), moneda: empleado.moneda },
+    vacaciones: {
+      importe:  redondear2(acumuladas),
+      moneda:   empleado.moneda,
+      apertura: redondear2(Number((empleado as { vacaciones_apertura?: number | null }).vacaciones_apertura ?? 0)),
+    },
+  }
+}
+
+// ── Recibo de nómina de un trabajador ───────────────────────────────────────────
+//
+// Devuelve solo DATOS: el PDF lo dibuja `lib/pdf/recibo-nomina.ts` en el navegador,
+// igual que la factura, la oferta y el dossier. Generarlo en servidor sería una
+// segunda tecnología de PDF para un único documento, y obligaría a navegar para
+// descargarlo —justo lo que la conexión de Cuba no perdona—.
+//
+// Es una LECTURA: no lleva `puedeEditarModulo`. El candado del módulo lo pone la
+// página (`requireModulo('rrhh')`), y quien tiene solo-lectura debe poder imprimir
+// el recibo de su plantilla.
+//
+// Los datos fiscales de la empresa (NIT, dirección, logo) NO viajan en
+// `RrhhPageData.empresas` a propósito: se piden aquí, al pulsar, en vez de cargarlos
+// en cada visita a la página de Personal.
+
+export interface ReciboNominaData {
+  periodo:         string
+  moneda:          string
+  esBorrador:      boolean
+  esCuba:          boolean
+  empresa: {
+    nombre: string; nombre_fiscal: string | null; rif_nit: string | null
+    direccion: string | null; ciudad: string | null; pais: string | null
+    telefono: string | null; email: string | null
+    logo_url: string | null; mostrar_logo: boolean | null
+    letra_facturacion: string | null; color: string
+  }
+  trabajador: {
+    nombre: string; documento: string | null; cargo: string | null
+    departamento: string | null; email: string | null; fecha_alta: string | null
+  }
+  dias_laborables: number
+  dias_trabajados: number | null
+  dias_vacaciones: number
+  salario_base:    number
+  devengos:        { nombre: string; monto: number }[]
+  retenciones:     { nombre: string; monto: number }[]
+  aportes:         { nombre: string; monto: number }[]
+  devengado:       number
+  deducciones:     number
+  subsidios:       number
+  neto:            number
+  vacaciones_acumuladas: number
+  vacaciones_pagadas:    number
+}
+
+export async function obtenerReciboNomina(
+  nomina_id: string, empleado_id: string,
+): Promise<{ ok: true; recibo: ReciboNominaData } | { ok: false; error: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  const db = createAdminClient()
+
+  const { data: nomina } = await db.from('nominas')
+    .select('nomina_id, empresa_id, periodo, moneda, estado')
+    .eq('nomina_id', nomina_id).eq('client_id', session.client_id).maybeSingle()
+  if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
+
+  // La empresa se resuelve contra las ACCESIBLES para este usuario, no contra la
+  // tabla: sin esto, un usuario con una sola empresa asignada podría imprimir el
+  // recibo de la nómina de otra con solo su id.
+  const empresas = await obtenerEmpresas()
+  const empresa  = empresas.find(e => e.empresa_id === nomina.empresa_id)
+  if (!empresa) return { ok: false, error: 'No tienes acceso a esta empresa.' }
+
+  const [{ data: linea }, { data: empleado }, configs] = await Promise.all([
+    db.from('nomina_lineas')
+      .select('linea_id, salario_base, devengado, deducciones, neto, subsidios, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+      .eq('nomina_id', nomina_id).eq('empleado_id', empleado_id)
+      .eq('client_id', session.client_id).maybeSingle(),
+    db.from('empleados')
+      .select('nombre, apellidos, documento, cargo, departamento, email, fecha_alta, dias_laborables')
+      .eq('empleado_id', empleado_id).eq('client_id', session.client_id).maybeSingle(),
+    leerConfigNomina(db, session.client_id),
+  ])
+  if (!linea)    return { ok: false, error: 'Este trabajador no está en esa nómina.' }
+  if (!empleado) return { ok: false, error: 'Trabajador no encontrado.' }
+
+  const l = linea as {
+    linea_id: string; salario_base: number; devengado: number; deducciones: number
+    neto: number; subsidios: number | null
+    vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+  }
+  const e = empleado as {
+    nombre: string; apellidos: string | null; documento: string | null
+    cargo: string | null; departamento: string | null; email: string | null
+    fecha_alta: string | null; dias_laborables: number | null
+  }
+
+  const { data: items } = await db.from('nomina_linea_conceptos')
+    .select('nombre, tipo, monto')
+    .eq('linea_id', l.linea_id).eq('client_id', session.client_id)
+    .order('created_at')
+
+  // Solo lo que tiene valor (la regla del recibo). El nombre va COMPLETO: las siglas
+  // son de la tabla en pantalla, no de un documento que lee el trabajador.
+  const conValor = ((items ?? []) as { nombre: string; tipo: TipoItemLinea; monto: number }[])
+    .filter(i => Math.abs(Number(i.monto)) > EPS)
+  const de = (tipo: TipoItemLinea) => conValor
+    .filter(i => i.tipo === tipo)
+    .map(i => ({ nombre: i.nombre, monto: Number(i.monto) }))
+
+  const config = configDe(configs, nomina.empresa_id)
+  const inc    = (await leerIncidencias(db, session.client_id, nomina.periodo)).get(empleado_id)
+
+  return {
+    ok: true,
+    recibo: {
+      periodo:    nomina.periodo,
+      moneda:     nomina.moneda,
+      esBorrador: nomina.estado === 'BORRADOR',
+      esCuba:     config.modelo === 'MIPYME_CUBA' && nomina.moneda === MONEDA_CUBA,
+      empresa: {
+        nombre:            empresa.nombre,
+        nombre_fiscal:     empresa.nombre_fiscal,
+        rif_nit:           empresa.rif_nit,
+        direccion:         empresa.direccion,
+        ciudad:            empresa.ciudad,
+        pais:              empresa.pais,
+        telefono:          empresa.telefono,
+        email:             empresa.email,
+        logo_url:          empresa.logo_url,
+        mostrar_logo:      empresa.mostrar_logo,
+        letra_facturacion: empresa.letra_facturacion,
+        color:             empresa.color,
+      },
+      trabajador: {
+        nombre:       [e.nombre, e.apellidos].filter(Boolean).join(' '),
+        documento:    e.documento,
+        cargo:        e.cargo,
+        departamento: e.departamento,
+        email:        e.email,
+        fecha_alta:   e.fecha_alta,
+      },
+      dias_laborables: Number(e.dias_laborables ?? config.dias_laborables_default),
+      dias_trabajados: inc?.dias_trabajados ?? null,
+      dias_vacaciones: inc?.dias_vacaciones ?? 0,
+      salario_base:    Number(l.salario_base),
+      devengos:        de('DEVENGO'),
+      retenciones:     de('RETENCION'),
+      aportes:         de('APORTE_EMPRESA'),
+      devengado:       Number(l.devengado),
+      deducciones:     Number(l.deducciones),
+      subsidios:       Number(l.subsidios ?? 0),
+      neto:            Number(l.neto),
+      vacaciones_acumuladas: Number(l.vacaciones_acumuladas_periodo ?? 0),
+      vacaciones_pagadas:    Number(l.vacaciones_pagadas_periodo ?? 0),
+    },
   }
 }
 
@@ -1811,7 +2133,7 @@ export async function exportarNominaXlsx(
       .eq('nomina_id', nomina_id).eq('client_id', session.client_id)
       .order('empleado_nombre'),
     db.from('nomina_linea_conceptos')
-      .select('linea_id, nombre, tipo, monto, origen')
+      .select('linea_id, nombre, tipo, monto, origen, concepto_clave')
       .eq('nomina_id', nomina_id).eq('client_id', session.client_id),
     leerConfigNomina(db, session.client_id),
     leerIncidencias(db, session.client_id, nomina.periodo),
@@ -1826,14 +2148,19 @@ export async function exportarNominaXlsx(
     { empleado_id: string; documento: string | null; dias_laborables: number | null }[])
     .map(f => [f.empleado_id, f]))
 
-  // El importe de cada tributo se reconstruye desde los ítems `LEY`, buscándolos por
-  // su nombre canónico: es lo que quedó congelado en la línea, no un recálculo.
+  // El importe de cada tributo se reconstruye desde los ítems `LEY` por su CLAVE
+  // (mig. 165): es lo que quedó congelado en la línea, no un recálculo. Antes se
+  // buscaba por nombre, así que una tilde de más dejaba la columna fiscal en blanco.
   const porLinea = new Map<string, Partial<Record<ConceptoFiscal, number>>>()
-  for (const it of (items ?? []) as { linea_id: string; nombre: string; origen: string; monto: number }[]) {
+  for (const it of (items ?? []) as {
+    linea_id: string; nombre: string; origen: string; monto: number
+    concepto_clave: ConceptoClave | null
+  }[]) {
     if (it.origen !== 'LEY') continue
-    const clave = (Object.keys(NOMBRE_CONCEPTO_FISCAL) as ConceptoFiscal[])
-      .find(k => NOMBRE_CONCEPTO_FISCAL[k] === it.nombre)
-    if (!clave) continue
+    const clave = it.concepto_clave ?? claveDeNombre(it.nombre)
+    // Solo los tributos tienen columna propia en la hoja; el prorrateo y las
+    // vacaciones pagadas ya están dentro del devengado.
+    if (!esConceptoFiscal(clave)) continue
     const m = porLinea.get(it.linea_id) ?? {}
     m[clave] = redondear2((m[clave] ?? 0) + Number(it.monto))
     porLinea.set(it.linea_id, m)
@@ -2146,6 +2473,16 @@ export async function guardarConfigNomina(
     return { ok: false, error: 'Los días laborables deben estar entre 1 y 31.' }
   }
 
+  // Día de pago (mig. 166). En blanco es válido y significa «sin fijar»: las CxP de la
+  // nómina nacen sin vencimiento, como hasta ahora. No se rechaza un 31 en un mes de
+  // 30: al calcular el vencimiento se ajusta al último día del mes, que es lo que
+  // espera quien escribió «pago el último día».
+  const diaPagoRaw = (formData.get('dia_pago') as string ?? '').trim()
+  const dia_pago   = diaPagoRaw === '' ? null : parseInt(diaPagoRaw, 10)
+  if (dia_pago !== null && (isNaN(dia_pago) || dia_pago < 1 || dia_pago > 31)) {
+    return { ok: false, error: 'El día de pago debe estar entre 1 y 31, o quedar en blanco.' }
+  }
+
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_id)) return { ok: false, error: 'Empresa no válida.' }
 
@@ -2158,9 +2495,66 @@ export async function guardarConfigNomina(
     client_id:               session.client_id,
     modelo,
     dias_laborables_default: diasRaw,
+    dia_pago,
     updated_at:              new Date().toISOString(),
   }, { onConflict: 'empresa_id' })
   if (error) return { ok: false, error: error.message }
+
+  revalidarNomina()
+  return { ok: true }
+}
+
+// ── Mapeo concepto de coste → categoría de gasto (mig. 166) ─────────────────────
+//
+// Qué categoría recibe cada concepto de coste de la nómina, por empresa. Antes el
+// reparto estaba fijo en código («Salarios» y «Retenciones de nómina») y el dueño no
+// podía ver su coste de personal como lo lleva su contabilidad.
+//
+// Mandar dos conceptos a la MISMA categoría es legítimo —un estado de resultados más
+// agregado— y aun así se escribe **una fila de gasto por concepto**: agrupar en el
+// informe es reversible, fusionar las filas no. Vaciar el selector borra la fila y el
+// concepto vuelve a su categoría de sistema por defecto.
+
+export async function guardarMapeoGastoNomina(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const empresa_id = (formData.get('empresa_id') as string)?.trim()
+  if (!empresa_id) return { ok: false, error: 'Empresa no válida.' }
+  const empresas = await obtenerEmpresas()
+  if (!empresas.some(e => e.empresa_id === empresa_id)) return { ok: false, error: 'Empresa no válida.' }
+
+  const db = createAdminClient()
+  // Las categorías ACTIVAS del cliente: una elección tiene que ser una categoría suya
+  // y viva, o el mapeo apuntaría a una fila archivada que la nómina ignoraría después
+  // en silencio.
+  const { data: cats } = await db.from('categorias_gastos')
+    .select('categoria_id').eq('client_id', session.client_id).eq('estado', 'ACTIVO')
+  const validas = new Set(((cats ?? []) as { categoria_id: string }[]).map(c => c.categoria_id))
+
+  for (const concepto of CONCEPTOS_COSTE) {
+    const elegida = ((formData.get(`cat_${concepto}`) as string) ?? '').trim()
+    if (!elegida) {
+      await db.from('nomina_gasto_mapeo').delete()
+        .eq('client_id', session.client_id).eq('empresa_id', empresa_id).eq('concepto', concepto)
+      continue
+    }
+    if (!validas.has(elegida)) {
+      return { ok: false, error: `La categoría elegida para «${NOMBRE_CONCEPTO_COSTE[concepto]}» no existe o está archivada.` }
+    }
+    const { error } = await db.from('nomina_gasto_mapeo').upsert({
+      mapeo_id:     `NGM-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`,
+      client_id:    session.client_id,
+      empresa_id,
+      concepto,
+      categoria_id: elegida,
+      updated_at:   new Date().toISOString(),
+    }, { onConflict: 'client_id,empresa_id,concepto' })
+    if (error) return { ok: false, error: error.message }
+  }
 
   revalidarNomina()
   return { ok: true }
@@ -3146,8 +3540,37 @@ export async function reabrirYActualizarNomina(
 }
 
 // ── Confirmar nómina ────────────────────────────────────────────────────────────
-// Crea un GASTO "Salarios" en gastos_cobros (fluye a CxP / Tesorería / Reportes)
-// y enlaza su id. La nómina queda CONFIRMADA y deja de ser editable.
+//
+// Escribe en `gastos_cobros`, en UNA operación, los DOS repartos del mismo dinero
+// (mig. 166) —que no son el mismo número, y no por un detalle técnico sino porque el
+// coste de las vacaciones se reconoce cuando se ACUMULAN y el pago sale cuando se
+// DISFRUTAN—:
+//
+//   COSTE (`naturaleza='COSTE'`, va al estado de resultados, no genera deuda)
+//     · Salario devengado − vacaciones disfrutadas   → categoría configurable
+//     · Acumulación de vacaciones del mes            → categoría configurable
+//     · UFT · SS 12,5 % · SS 1,5 %                   → una fila cada uno
+//
+//   DEUDA (`naturaleza='DEUDA'`, va a CxP/Tesorería, no cuenta como coste)
+//     · Salario neto a pagar (incluye las vacaciones disfrutadas)
+//     · Cada retención, en su propia fila y con su propio nombre
+//
+// Los TRES APORTES no se desdoblan: son coste y deuda por el mismo importe y con un
+// acreedor real, igual que comprar mercancía a un proveedor, así que van con
+// `naturaleza='AMBAS'` y una sola fila hace las dos funciones. Solo el bloque salarial
+// se parte, y no por diseño sino porque sus dos importes son distintos.
+//
+// Las RETENCIONES son deuda SIN coste, y el motivo importa: su coste ya está dentro
+// del salario devengado. Llevarlas también a Gastos duplicaría el coste de personal —
+// el agujero de la mig. 139, por la puerta contraria.
+//
+// Invariantes que valida el guardia de abajo:
+//   COSTE = (devengado − vac. disfrutadas) + acumulación + aportes
+//   DEUDA = neto + retenciones a terceros + aportes
+//   COSTE − DEUDA = acumulación − vac. disfrutadas
+//
+// `nominas.gasto_id` apunta a la CxP del **salario neto**: es la que gobierna el estado
+// «Pagada», que se DERIVA de si está liquidada y no se guarda en ninguna parte.
 
 export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -3165,14 +3588,25 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   if (nomina.estado !== 'BORRADOR')  return { ok: false, error: 'La nómina ya está confirmada.' }
 
   const { data: lineas } = await db.from('nomina_lineas')
-    .select('devengado, deducciones, neto, subsidios')
+    .select('devengado, deducciones, neto, subsidios, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
     .eq('nomina_id', nomina_id)
     .eq('client_id', session.client_id)
-  const filas       = (lineas ?? []) as { devengado: number; deducciones: number; neto: number; subsidios: number }[]
-  const devengado   = redondear2(filas.reduce((s, l) => s + Number(l.devengado), 0))
-  const retenido    = redondear2(filas.reduce((s, l) => s + Number(l.deducciones), 0))
-  const total       = redondear2(filas.reduce((s, l) => s + Number(l.neto), 0))
-  const subsidios   = redondear2(filas.reduce((s, l) => s + Number(l.subsidios ?? 0), 0))
+  const filas = (lineas ?? []) as {
+    devengado: number; deducciones: number; neto: number; subsidios: number
+    vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+  }[]
+  // Las columnas de vacaciones son nullables en el histórico, así que el extractor
+  // devuelve `number | null` y el `?? 0` va DENTRO del reduce, no en cada llamada.
+  const suma = (f: (l: typeof filas[number]) => number | null) =>
+    redondear2(filas.reduce((s, l) => s + Number(f(l) ?? 0), 0))
+  const devengado   = suma(l => l.devengado)
+  const retenido    = suma(l => l.deducciones)
+  const total       = suma(l => l.neto)
+  const subsidios   = suma(l => l.subsidios)
+  // Las dos piezas que separan el coste de la deuda (mig. 166): lo que se acumula este
+  // mes es coste sin pago, y lo que se disfruta es pago cuyo coste ya se reconoció.
+  const vacAcumuladas = suma(l => l.vacaciones_acumuladas_periodo)
+  const vacPagadas    = suma(l => l.vacaciones_pagadas_periodo)
   // El guardia mira el DEVENGADO, no el neto: una nómina en la que se retuvo todo
   // tiene coste (y una deuda con la agencia tributaria) aunque no salga efectivo
   // hacia el trabajador — con el neto, esa nómina no se podía confirmar.
@@ -3185,13 +3619,18 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   // adelantó) no genera deuda con nadie y por tanto se queda dentro del gasto de
   // Salarios — si se restara del coste, volvería el agujero que cerró la mig. 139.
   const { data: itemsNom } = await db.from('nomina_linea_conceptos')
-    .select('tipo, monto, destino, origen, origen_id, nombre')
+    .select('tipo, monto, destino, origen, origen_id, nombre, concepto_clave')
     .eq('nomina_id', nomina_id)
     .eq('client_id', session.client_id)
-  const itemsFilas = (itemsNom ?? []) as {
+  const itemsFilas = ((itemsNom ?? []) as {
     tipo: TipoItemLinea; monto: number; destino: DestinoItemLinea | null
     origen: OrigenItemLinea; origen_id: string | null; nombre: string
-  }[]
+    concepto_clave: ConceptoClave | null
+  }[]).map(i => ({
+    // La clave manda; el nombre solo se consulta en lo escrito antes de la mig. 165
+    // que el backfill no alcanzara. Es la red de seguridad, no el camino normal.
+    ...i, clave: i.concepto_clave ?? claveDeNombre(i.nombre),
+  }))
 
   // ── Guardia de provisionalidad ────────────────────────────────────────────────
   // Mientras un tributo esté sembrado con un tipo de RELLENO, confirmar crearía una
@@ -3228,39 +3667,30 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     }
   }
 
-  const retenidoTercero = redondear2(itemsFilas
-    .filter(i => i.tipo === 'RETENCION' && i.destino === 'TERCERO_FISCAL')
+  // Una retención que la empresa YA adelantó (`destino='EMPRESA'`, un anticipo) reduce
+  // el neto pero no se le debe a nadie: no genera CxP. El modelo lo distingue desde la
+  // mig. 140 y hay que seguir distinguiéndolo, no volver a asumir que toda retención
+  // tiene un acreedor detrás.
+  const retencionesTerceros = itemsFilas
+    .filter(i => i.tipo === 'RETENCION' && i.destino === 'TERCERO_FISCAL' && Number(i.monto) > EPS)
+  const retenidoTercero = redondear2(
+    retencionesTerceros.reduce((s, i) => s + Number(i.monto), 0))
+
+  // Lo que paga la EMPRESA por encima del bruto (mig. 142): coste Y deuda por el mismo
+  // importe, así que una sola fila hace las dos funciones. Por CLAVE, nunca por nombre
+  // (mig. 165): comparando el texto visible, renombrar un tributo dejaba estos importes
+  // a cero y la deuda con ONAT fuera de los libros, sin que nada fallara.
+  const aportePorClave = (clave: ConceptoFiscal) => redondear2(itemsFilas
+    .filter(i => i.tipo === 'APORTE_EMPRESA' && i.clave === clave)
     .reduce((s, i) => s + Number(i.monto), 0))
-  const importeSalarios = redondear2(devengado - retenidoTercero)
 
-  // Lo que paga la EMPRESA por encima del bruto (mig. 142). No reduce el neto de
-  // nadie, pero es coste de personal: son el tercer y el cuarto acreedor.
-  const sumaAporte = (conceptos: string[]) => redondear2(itemsFilas
-    .filter(i => i.tipo === 'APORTE_EMPRESA'
-      && conceptos.some(c => i.nombre === NOMBRE_CONCEPTO_FISCAL[c as ConceptoFiscal]))
-    .reduce((s, i) => s + Number(i.monto), 0))
-  const importeIuft  = sumaAporte(['IUFT'])
-  const importeSsEmp = sumaAporte(['SS_EMPRESA_125', 'SS_EMPRESA_15'])
+  // ── Los dos repartos ─────────────────────────────────────────────────────────
+  const costeSalario = redondear2(devengado - vacPagadas)
+  const mapeo        = await resolverMapeoCoste(db, session.client_id, nomina.empresa_id as string)
+  const vencimiento  = vencimientoNomina(
+    nomina.periodo as string,
+    configDe(await leerConfigNomina(db, session.client_id), nomina.empresa_id as string).dia_pago)
 
-  // Categorías del sistema. Se RESUELVEN-O-CREAN (mig. 133): buscarlas por nombre
-  // dejaba sin `categoria_id` a todo cliente dado de alta después de la mig. 074,
-  // que nunca tuvo las categorías sembradas. El `rol_pl` lo pone la RPC (mig. 139).
-  const [catSalarios, catRetenciones, catIuft, catSsEmp] = await Promise.all([
-    resolverCategoriaSistema(db, session.client_id, 'salarios'),
-    retenidoTercero > EPS
-      ? resolverCategoriaSistema(db, session.client_id, 'retenciones_nomina')
-      : Promise.resolve(null),
-    importeIuft > EPS
-      ? resolverCategoriaSistema(db, session.client_id, 'impuestos_salario')
-      : Promise.resolve(null),
-    importeSsEmp > EPS
-      ? resolverCategoriaSistema(db, session.client_id, 'contribucion_ss_empresa')
-      : Promise.resolve(null),
-  ])
-
-  // DOS gastos que suman el devengado (mig. 139): el coste de personal es el bruto,
-  // y lo retenido no se evapora — sigue debiéndose, pero a otro acreedor y con otro
-  // vencimiento, así que va en su propia fila de Cuentas por pagar.
   const base = {
     client_id:   session.client_id,
     empresa_id:  nomina.empresa_id,
@@ -3271,54 +3701,82 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     origen_id:   nomina_id,
     updated_at:  new Date().toISOString(),
   }
-  const gasto_id = generarGastoId()
-  const aInsertar: Record<string, unknown>[] = [{
-    ...base,
-    registro_id:  gasto_id,
-    categoria:    catSalarios?.nombre ?? 'Salarios',
-    categoria_id: catSalarios?.categoria_id ?? null,
-    descripcion:  `Nómina ${nomina.periodo}`,
-    monto:        importeSalarios,
-    notas:        `Nómina ${nomina_id}`,
-  }]
-  const retencion_id = retenidoTercero > EPS ? generarGastoId() : null
-  if (retencion_id) {
+  const aInsertar: Record<string, unknown>[] = []
+
+  /** Fila de COSTE: va al estado de resultados y no genera deuda con nadie. */
+  const filaCoste = (concepto: ConceptoCoste, monto: number, etiqueta: string, nota: string) => {
+    if (monto <= EPS) return
+    const cat = mapeo.get(concepto)
     aInsertar.push({
       ...base,
-      registro_id:  retencion_id,
-      categoria:    catRetenciones?.nombre ?? 'Retenciones de nómina',
-      categoria_id: catRetenciones?.categoria_id ?? null,
-      descripcion:  `Retenciones nómina ${nomina.periodo}`,
-      monto:        retenidoTercero,
-      notas:        `Nómina ${nomina_id} · retenido del salario, a ingresar a la agencia tributaria`,
+      registro_id:  generarGastoId(),
+      naturaleza:   'COSTE',
+      categoria:    cat?.nombre ?? NOMBRE_CONCEPTO_COSTE[concepto],
+      categoria_id: cat?.categoria_id ?? null,
+      descripcion:  `${etiqueta} ${nomina.periodo}`,
+      monto,
+      notas:        `Nómina ${nomina_id} · ${nota}`,
     })
   }
 
-  // Tercer y cuarto acreedor (mig. 142), solo si el modelo cubano los generó. Van
-  // en filas SEPARADAS y no sumados a las retenciones porque cada uno se liquida
-  // ante un organismo distinto y con su propio vencimiento — y porque pagarle a
-  // ONAT no puede pagar de paso a la Seguridad Social.
-  if (importeIuft > EPS) {
+  /**
+   * Fila de DEUDA: se paga desde Tesorería y NO cuenta como coste. Sin `categoria_id`
+   * a propósito —no es una línea del P&L— y con `vencimiento`, que es lo que la mete
+   * en el aging de CxP.
+   */
+  const filaDeuda = (monto: number, etiqueta: string, nota: string): string | null => {
+    if (monto <= EPS) return null
+    const id = generarGastoId()
     aInsertar.push({
       ...base,
-      registro_id:  generarGastoId(),
-      categoria:    catIuft?.nombre ?? 'Impuestos de salario',
-      categoria_id: catIuft?.categoria_id ?? null,
-      descripcion:  `Impuestos de salario ${nomina.periodo}`,
-      monto:        importeIuft,
-      notas:        `Nómina ${nomina_id} · a cargo de la empresa, a ingresar a ONAT`,
+      registro_id:  id,
+      naturaleza:   'DEUDA',
+      categoria:    etiqueta,
+      categoria_id: null,
+      descripcion:  `${etiqueta} ${nomina.periodo}`,
+      monto,
+      vencimiento,
+      notas:        `Nómina ${nomina_id} · ${nota}`,
     })
+    return id
   }
-  if (importeSsEmp > EPS) {
+
+  // COSTE. El salario excluye las vacaciones disfrutadas porque su coste ya se
+  // reconoció el mes en que se acumularon; contarlas otra vez las duplicaría.
+  filaCoste('SALARIO', costeSalario, 'Nómina',
+    'salario devengado del período, sin las vacaciones disfrutadas')
+  filaCoste('VACACIONES', vacAcumuladas, 'Vacaciones acumuladas',
+    'provisión del período; se paga cuando se disfruten')
+  // Los tres aportes en filas SEPARADAS aunque el mapeo los mande a la misma categoría:
+  // agrupar en el informe es reversible, fusionar las filas destruiría la separación de
+  // la deuda — y cada uno se liquida ante un organismo distinto.
+  for (const clave of ['IUFT', 'SS_EMPRESA_125', 'SS_EMPRESA_15'] as const) {
+    const monto = aportePorClave(clave)
+    if (monto <= EPS) continue
+    const cat = mapeo.get(clave)
     aInsertar.push({
       ...base,
       registro_id:  generarGastoId(),
-      categoria:    catSsEmp?.nombre ?? 'Contribución a la Seguridad Social',
-      categoria_id: catSsEmp?.categoria_id ?? null,
-      descripcion:  `Contribución a la Seguridad Social ${nomina.periodo}`,
-      monto:        importeSsEmp,
+      // AMBAS: es coste y es deuda por el mismo importe, con un acreedor real.
+      naturaleza:   'AMBAS',
+      categoria:    cat?.nombre ?? NOMBRE_CONCEPTO[clave],
+      categoria_id: cat?.categoria_id ?? null,
+      descripcion:  `${NOMBRE_CONCEPTO[clave]} ${nomina.periodo}`,
+      monto,
+      vencimiento,
       notas:        `Nómina ${nomina_id} · a cargo de la empresa`,
     })
+  }
+
+  // DEUDA. El salario neto incluye las vacaciones disfrutadas: es dinero que el
+  // trabajador cobra ahora, aunque su coste sea de otro mes.
+  const gasto_id = filaDeuda(redondear2(devengado - retenidoTercero), 'Salario neto a pagar',
+    'a pagar a la plantilla')
+  // Cada retención en SU fila y con SU nombre: el objetivo es que en el desplegable de
+  // Tesorería cada línea se identifique y se concilie por sí misma, no que se agrupen
+  // por a quién se le paga (varias van al mismo organismo y aun así van separadas).
+  for (const r of retencionesTerceros) {
+    filaDeuda(redondear2(Number(r.monto)), r.nombre, 'retenido del salario, a ingresar')
   }
 
   // ── El subsidio NO es un gasto: es un ACTIVO (mig. 144) ──────────────────────
@@ -3331,23 +3789,45 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   //
   // Va SIN `categoria_id` porque no es una línea del P&L sino un saldo por cobrar.
   //
-  // OJO — eso NO es lo que lo mantiene fuera del estado de resultados, y creerlo fue
-  // un error real: la categoría solo se consulta en las filas de tipo GASTO (para su
+  // OJO — eso NO es lo que lo mantiene fuera del estado de resultados, y creerlo fue un
+  // error real: la categoría solo se consulta en las filas de tipo GASTO (para su
   // `rol_pl`); un COBRO entraba en ingresos por su importe, con categoría o sin ella.
-  // Lo que lo mantiene fuera es `cobroEsIngreso()` (`lib/gastos-core.ts`), aplicado en
-  // los tres sitios que suman ingresos. Si algún día se añade un cuarto consumidor de
-  // `gastos_cobros` que sume ingresos, tiene que usar ese predicado.
+  // Desde la mig. 166 lo que lo mantiene fuera es su `naturaleza='DEUDA'`, y con eso el
+  // subsidio deja de ser una excepción escrita a mano —una lista de orígenes que todo
+  // consumidor nuevo tenía que recordar— y pasa a ser el primer caso normal de la regla
+  // general que aplican `computaEnResultados`/`generaSaldo`.
   if (subsidios > EPS) {
     aInsertar.push({
       ...base,
       tipo:         'COBRO',
       registro_id:  generarGastoId(),
+      naturaleza:   'DEUDA',
       categoria:    'Subsidios por cobrar',
       categoria_id: null,
       descripcion:  `Subsidios adelantados ${nomina.periodo}`,
       monto:        subsidios,
       notas:        `Nómina ${nomina_id} · adelantado a la plantilla, a recuperar de la Seguridad Social`,
     })
+  }
+
+  // ── Guardia de las invariantes del reparto (mig. 166) ────────────────────────
+  // Confirmar es lo único irreversible de este flujo, y ahora escribe DOS repartos del
+  // mismo dinero. Si alguno no cuadra con lo que dicen las líneas, no se postea NADA:
+  // un descuadre aquí sale como coste de personal duplicado o como una deuda que no se
+  // corresponde con ningún salario, y las dos cosas se descubren semanas después.
+  const sumaPor = (n: string) => redondear2(aInsertar
+    .filter(g => g.tipo === 'GASTO' && (g.naturaleza === n || g.naturaleza === 'AMBAS'))
+    .reduce((s, g) => s + Number(g.monto), 0))
+  const totalAportes = redondear2(
+    aportePorClave('IUFT') + aportePorClave('SS_EMPRESA_125') + aportePorClave('SS_EMPRESA_15'))
+  const costeEsperado = redondear2(devengado - vacPagadas + vacAcumuladas + totalAportes)
+  const deudaEsperada = redondear2(devengado - retenidoTercero + retenidoTercero + totalAportes)
+  if (Math.abs(sumaPor('COSTE') - costeEsperado) > EPS
+      || Math.abs(sumaPor('DEUDA') - deudaEsperada) > EPS) {
+    return {
+      ok: false,
+      error: 'El reparto de esta nómina entre coste y deuda no cuadra con sus totales. No se ha registrado nada; avisa al soporte de CLAUX.',
+    }
   }
 
   // El `concepto` (mig. 152) es la etiqueta que cada fila ya lleva: «Nómina 2026-03»,
@@ -3360,8 +3840,11 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     .insert(aInsertar.map(g => ({ ...g, concepto: g.descripcion })))
   if (gErr) return { ok: false, error: gErr.message }
 
-  // `gasto_id` sigue apuntando al de Salarios: es el que gobierna el saldo con la
-  // plantilla, y de él salen `pagado`/`saldo_pendiente` y el botón «Pagar».
+  // `gasto_id` apunta a la CxP del **salario neto** (mig. 166), no al gasto de coste:
+  // es la deuda con la plantilla, la única que se liquida en Tesorería a nombre de la
+  // nómina, y de ella se DERIVA el estado «Pagada». Apuntar al coste dejaría «Pagada»
+  // mirando una fila que nadie liquida nunca, así que jamás lo estaría. El resto de las
+  // filas se resuelven por `origen_tipo`+`origen_id`, como ya hace `eliminarNomina`.
   const { error: nErr } = await db.from('nominas')
     .update({ estado: 'CONFIRMADA', gasto_id, total, updated_at: new Date().toISOString() })
     .eq('nomina_id', nomina_id)

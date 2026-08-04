@@ -110,6 +110,111 @@ export function hexToRgb(hex: string | null | undefined): RGB | null {
 }
 
 /**
+ * Descarga una imagen y la re-codifica a PNG (vía canvas) con sus dimensiones,
+ * para que jsPDF la incruste sin importar el formato de origen (png/jpg/webp…).
+ * Nunca lanza: cualquier fallo (red, CORS, decodificación) resuelve `null` y el
+ * documento se genera igual sin logo.
+ *
+ * Vive aquí, con el resto de la plantilla de marca, porque la usan TODOS los
+ * documentos con cabecera de empresa (factura, oferta, recibo de nómina). Nació
+ * dentro de `venta.ts` y se movió al aparecer el segundo consumidor: copiarla
+ * habría dejado dos cargadores que se degradan distinto ante el mismo fallo de red.
+ */
+export async function cargarLogoPng(
+  url: string,
+): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    const srcUrl = await new Promise<string | null>(resolve => {
+      const fr = new FileReader()
+      fr.onload  = () => resolve(typeof fr.result === 'string' ? fr.result : null)
+      fr.onerror = () => resolve(null)
+      fr.readAsDataURL(blob)
+    })
+    if (!srcUrl) return null
+    return await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width  = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')
+          if (!ctx || !canvas.width || !canvas.height) { resolve(null); return }
+          ctx.drawImage(img, 0, 0)
+          resolve({ dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height })
+        } catch { resolve(null) }
+      }
+      img.onerror = () => resolve(null)
+      img.src = srcUrl
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Cabecera de empresa compartida por los documentos de negocio (factura, oferta,
+ * recibo de nómina): logo —o recuadro con la inicial si no hay o falla— y los datos
+ * fiscales a su derecha. Devuelve la Y donde acaba el bloque.
+ *
+ * El recuadro con la inicial NO es un caso de error: es el aspecto normal de una
+ * empresa que no ha subido logo, y es lo que garantiza que la descarga nunca se
+ * rompa por una imagen inalcanzable (decisivo con la conexión de Cuba).
+ */
+export async function cabeceraEmpresa(
+  doc: JsPdfDoc,
+  e: {
+    nombre: string; nombre_fiscal?: string | null; rif_nit?: string | null
+    direccion?: string | null; ciudad?: string | null; pais?: string | null
+    telefono?: string | null; email?: string | null
+    logo_url?: string | null; mostrar_logo?: boolean | null
+    letra_facturacion?: string | null; color: string
+  },
+  y: number,
+): Promise<number> {
+  const logoBox = 16
+  const logo = e.logo_url && e.mostrar_logo !== false ? await cargarLogoPng(e.logo_url) : null
+
+  let logoDibujado = false
+  if (logo) {
+    try {
+      const escala = Math.min(logoBox / logo.w, logoBox / logo.h)
+      const w = logo.w * escala
+      const h = logo.h * escala
+      doc.addImage(logo.dataUrl, 'PNG', MARGEN + (logoBox - w) / 2, y + (logoBox - h) / 2, w, h)
+      logoDibujado = true
+    } catch { logoDibujado = false }
+  }
+  if (!logoDibujado) {
+    relleno(doc, hexToRgb(e.color) ?? MARCA.muted)
+    doc.roundedRect(MARGEN, y, logoBox, logoBox, 2, 2, 'F')
+    const inicial = (e.letra_facturacion ?? e.nombre.charAt(0)).toUpperCase()
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18)
+    texto(doc, MARCA.white)
+    doc.text(inicial, MARGEN + logoBox / 2, y + logoBox / 2 + 2.4, { align: 'center' })
+  }
+
+  const infoX = MARGEN + logoBox + 5
+  let ey = y + 4
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
+  texto(doc, MARCA.dark)
+  doc.text(e.nombre_fiscal ?? e.nombre, infoX, ey)
+  ey += 5
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
+  texto(doc, MARCA.faint)
+  const lineas = [
+    e.rif_nit ? `NIF/NIT: ${e.rif_nit}` : null,
+    [e.direccion, e.ciudad, e.pais].filter(Boolean).join(', ') || null,
+    [e.telefono, e.email].filter(Boolean).join('  ·  ') || null,
+  ].filter(Boolean) as string[]
+  for (const linea of lineas) { doc.text(linea, infoX, ey); ey += 4 }
+  return ey
+}
+
+/**
  * Cabecera de marca para documentos de reporte: acento teal + título grande y
  * un subtítulo con dato a izquierda y a derecha, cerrado por una divisoria.
  * Devuelve la coordenada Y donde continúa el contenido.

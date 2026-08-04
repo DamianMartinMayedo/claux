@@ -10,13 +10,17 @@ import {
 import { registrarLiquidacion } from '@/app/actions/portal/gastos'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { X } from 'lucide-react'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 type CuentaInfo = { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }
 
 export function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-export function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+export function hoyISO(): string { return hoyEnTz() }
 export function formatPeriodo(periodo: string): string {
   const [y, m] = periodo.split('-').map(Number)
   if (!y || !m) return periodo

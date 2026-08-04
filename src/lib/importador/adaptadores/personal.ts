@@ -42,6 +42,14 @@ export const adaptadorPersonal: Adaptador = {
     { campo: 'salario_base', etiqueta: 'Salario',       obligatorio: false, alias: ['salario', 'sueldo', 'salario base', 'remuneracion', 'remuneración'], ejemplo: '18000' },
     { campo: 'periodicidad', etiqueta: 'Periodicidad',  obligatorio: false, alias: ['periodicidad', 'frecuencia pago'], ayuda: PERIODICIDADES.join(', '), ejemplo: PERIODICIDADES[0] },
     { campo: 'moneda',       etiqueta: 'Moneda',        obligatorio: false, alias: ['moneda', 'divisa'], ejemplo: 'CUP' },
+    // Vacaciones ya acumuladas ANTES de usar CLAUX (mig. 167). Es un IMPORTE, no días:
+    // el sistema deriva y muestra el importe (9,09 % del salario percibido), y convertir
+    // días exigiría un valor-día del pasado que nadie conoce. Entra como punto de
+    // partida de la derivación, no como un total editable.
+    { campo: 'vacaciones_apertura', etiqueta: 'Vacaciones acumuladas', obligatorio: false,
+      alias: ['vacaciones acumuladas', 'vacaciones', 'saldo vacaciones', 'vacaciones pendientes'],
+      ayuda: 'Importe ya acumulado antes de usar CLAUX. Si el trabajador empieza de cero, déjalo vacío.',
+      ejemplo: '1363.50' },
     { campo: 'notas',        etiqueta: 'Notas',         obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
   ],
 
@@ -67,6 +75,12 @@ export const adaptadorPersonal: Adaptador = {
     const salario = parseNumero(valores.salario_base)
     if (salario === undefined) return { ok: false, motivo: 'El salario no es un número.' }
 
+    const vacaciones = parseNumero(valores.vacaciones_apertura)
+    if (vacaciones === undefined) return { ok: false, motivo: 'Las vacaciones acumuladas no son un número.' }
+    if (vacaciones !== null && vacaciones < 0) {
+      return { ok: false, motivo: 'Las vacaciones acumuladas no pueden ser negativas.' }
+    }
+
     const campos = construirCamposEmpleado({
       nombre,
       apellidos:        valores.apellidos,
@@ -85,7 +99,13 @@ export const adaptadorPersonal: Adaptador = {
       notas:            valores.notas,
     })
 
-    const datos = { ...campos, empresa_id, moneda }
+    // `vacaciones_apertura` se añade AQUÍ y no en `construirCamposEmpleado`, que lo
+    // comparte el formulario de Personal: si viviera ahí, guardar la ficha a mano
+    // mandaría un 0 y borraría en silencio el saldo que trajo el archivo.
+    const datos = {
+      ...campos, empresa_id, moneda,
+      vacaciones_apertura: vacaciones ?? 0,
+    }
     const documento = campos.documento
     return {
       ok: true,
@@ -113,6 +133,10 @@ export const adaptadorPersonal: Adaptador = {
         periodicidad:     'periodicidad',
         notas:            'notas',
         moneda:           'moneda',
+        // Sin esta entrada, reimportar Personal con solo el nombre y el cargo pondría a
+        // 0 el saldo de apertura de toda la plantilla: es la regla «ACTUALIZAR no vacía
+        // — solo se escriben las columnas que trae el archivo».
+        vacaciones_apertura: 'vacaciones_apertura',
       }),
     }
   },

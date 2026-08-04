@@ -5,8 +5,9 @@ import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
-import { ORIGEN_CIERRE_CAJA } from '@/lib/gastos-core'
+import { ORIGEN_CIERRE_CAJA, generaSaldo } from '@/lib/gastos-core'
 import { tramoDe, EPS_SALDO, type Tramo as TramoCore } from '@/lib/cobranza-core'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,14 @@ export interface DocumentoPendiente {
   doc_tipo:       DocTipo
   doc_id:         string
   numero:         string            // nº de factura o descripción del registro
+  /**
+   * FICHA del tercero, no su nombre. El filtro de la pantalla y el de la descarga van por
+   * aquí: un tercero tiene una ficha por empresa, así que filtrar por NOMBRE fusionaba tres
+   * fichas distintas en una y enseñaba las deudas de las tres sin decirlo.
+   * `null` cuando el deudor no es una ficha (el COBRO de subsidios de la nómina: debe la
+   * Seguridad Social).
+   */
+  tercero_id:     string | null
   tercero_nombre: string | null
   empresa_id:     string
   fecha:          string
@@ -57,7 +66,10 @@ const EPS = EPS_SALDO
 function generarMovimientoId(): string {
   return `MOV-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
-function hoyISO(): string { return new Date().toISOString().split('T')[0] }
+// «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
+// `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
+// adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
+function hoyISO(): string { return hoyEnTz() }
 
 // ── Cargar documentos pendientes (compartido por CxC y CxP) ─────────────────────
 
@@ -121,6 +133,7 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
       const { dias, tramo } = tramoDe(f.fecha_vencimiento as string | null, hoy)
       documentos.push({
         doc_tipo: 'FACTURA', doc_id: f.factura_id as string, numero: f.numero as string,
+        tercero_id: (f.cliente_id as string | null) ?? null,
         tercero_nombre: terceroNombre[f.cliente_id as string] ?? null,
         empresa_id: f.empresa_id as string, fecha: f.fecha_emision as string,
         vencimiento: (f.fecha_vencimiento as string | null) ?? null,
@@ -144,12 +157,17 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
   // significan lo contrario — uno ya está cobrado, el otro está por cobrar.
   const tipoRegistro = modo === 'COBRAR' ? 'COBRO' : 'GASTO'
   const { data: registros } = await db.from('gastos_cobros')
-    .select('registro_id, descripcion, empresa_id, tercero_id, fecha, vencimiento, moneda, monto')
+    .select('registro_id, descripcion, empresa_id, tercero_id, fecha, vencimiento, moneda, monto, naturaleza')
     .eq('client_id', session.client_id)
     .in('empresa_id', idsFiltro)
     .eq('tipo', tipoRegistro)
     .or(`origen_tipo.is.null,origen_tipo.neq.${ORIGEN_CIERRE_CAJA}`)
   for (const r of (registros ?? []) as Record<string, unknown>[]) {
+    // Una fila de solo COSTE no se le debe a nadie (mig. 166): el coste de una nómina
+    // se reparte por categoría y su deuda va en filas aparte. Dejarla entrar aquí
+    // duplicaría la deuda de cada nómina y pondría a pagar en Tesorería una fila que
+    // nadie puede liquidar, porque no representa una obligación con nadie.
+    if (!generaSaldo(r.naturaleza as string | null)) continue
     const monto     = Number(r.monto)
     const liquidado = liquidadoPorDoc.get(r.registro_id as string) ?? 0
     const saldo     = monto - liquidado
@@ -157,6 +175,7 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
     const { dias, tramo } = tramoDe(r.vencimiento as string | null, hoy)
     documentos.push({
       doc_tipo: 'REGISTRO', doc_id: r.registro_id as string, numero: r.descripcion as string,
+      tercero_id: (r.tercero_id as string | null) ?? null,
       tercero_nombre: r.tercero_id ? (terceroNombre[r.tercero_id as string] ?? null) : null,
       empresa_id: r.empresa_id as string, fecha: r.fecha as string,
       vencimiento: (r.vencimiento as string | null) ?? null,

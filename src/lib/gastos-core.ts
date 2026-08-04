@@ -30,28 +30,69 @@ export function estadoDeRegistro(monto: number, liquidado: number): EstadoRegist
   return 'PARCIAL'
 }
 
-// ── El COBRO que NO es ingreso ────────────────────────────────────────────────
-// Casi todo `COBRO` de `gastos_cobros` es ingreso: una venta cobrada directa, sin
-// factura. La excepción es el ANTICIPO que la empresa recupera. El subsidio de la
-// nómina (mig. 144) lo adelanta la empresa dentro del neto del trabajador y luego
-// se lo cobra a la Seguridad Social: es una cuenta por COBRAR, no un ingreso. No
-// aumenta el resultado — recupera un dinero que ya salió.
+// ── COSTE y DEUDA dejan de ser el mismo número (mig. 166) ────────────────────
 //
-// **No basta con dejar la fila sin `categoria_id`.** La categoría solo se consulta
-// en las filas de tipo GASTO (para su `rol_pl`); un COBRO entra en ingresos por su
-// importe, tenga categoría o no. Ese era el error: sin este filtro un subsidio
-// inflaba los ingresos y el resultado neto por su importe completo, en Reportes y
-// en el dossier que el dueño le enseña a su asesor.
+// Una fila de `gastos_cobros` cumplía DOS papeles a la vez: línea de coste del estado
+// de resultados y deuda en Cuentas por pagar. Se sostenía porque en toda fila los dos
+// papeles valían lo mismo. Dejó de ser cierto dos veces:
 //
-// Vive aquí, y no en cada consumidor, porque son TRES los que suman ingresos —el
-// estado de resultados (`apuntesDe`), el puente devengado↔caja y el dossier—: con
-// una copia por sitio, el informe del dueño y el documento del asesor acabarían
-// diciendo cifras distintas.
-const ORIGENES_COBRO_ANTICIPO = new Set(['NOMINA'])
+//  1. El subsidio de la nómina (mig. 144): el trabajador lo cobra, pero a la empresa
+//     no le cuesta —se lo reembolsa la Seguridad Social—. Se parcheó a mano con una
+//     lista de orígenes, más un aviso de que todo consumidor nuevo debía recordarla.
+//  2. La nómina entera (mig. 166), y por una razón de NEGOCIO: el coste de las
+//     vacaciones se reconoce cuando se ACUMULAN y el pago sale cuando se DISFRUTAN,
+//     así que el reparto por acreedor y el reparto por categoría de coste son dos
+//     listas distintas del mismo dinero.
+//
+// Ahora lo dice la propia fila, con tres valores. `AMBAS` es el defecto y el
+// comportamiento de todo lo anterior, así que nada del histórico cambia.
+//
+// Los predicados viven AQUÍ y no en cada consumidor porque son muchos y de los dos
+// lados —el estado de resultados, el dossier, el dashboard y el puente devengado↔caja
+// suman coste; CxC/CxP, Tesorería y el escáner de avisos miran deuda—: con una copia
+// por sitio, el informe del dueño y el documento de su asesor acabarían discrepando.
+// Eso ya pasó una vez, con el subsidio, en tres consumidores a la vez.
 
-/** ¿Este COBRO es ingreso del período, o la recuperación de un anticipo? */
-export function cobroEsIngreso(origen_tipo: string | null | undefined): boolean {
-  return !origen_tipo || !ORIGENES_COBRO_ANTICIPO.has(origen_tipo)
+export type NaturalezaRegistro = 'COSTE' | 'DEUDA' | 'AMBAS'
+
+/** Fila sin la columna leída (o anterior a la mig. 166) ⇒ `AMBAS`, como siempre fue. */
+function naturalezaDe(n: string | null | undefined): NaturalezaRegistro {
+  return n === 'COSTE' || n === 'DEUDA' ? n : 'AMBAS'
+}
+
+/**
+ * ¿Esta fila cuenta en el estado de resultados (coste si es GASTO, ingreso si es COBRO)?
+ *
+ * Excluye lo que es **solo deuda**: el salario neto y las retenciones de una nómina
+ * —su coste ya está dentro del devengado, y contarlo otra vez es el agujero de la
+ * mig. 139 por la puerta contraria— y el subsidio por cobrar.
+ */
+export function computaEnResultados(naturaleza: string | null | undefined): boolean {
+  return naturalezaDe(naturaleza) !== 'DEUDA'
+}
+
+/**
+ * ¿Esta fila genera saldo en CxC/CxP y puede liquidarse en Tesorería?
+ *
+ * Excluye lo que es **solo coste**: las filas de coste de la nómina (el salario
+ * devengado, la acumulación de vacaciones) no se le deben a nadie por sí mismas —la
+ * deuda va en sus propias filas—, así que aparecer en Cuentas por pagar las contaría
+ * dos veces y generaría avisos de deuda vencida que nadie puede pagar.
+ */
+export function generaSaldo(naturaleza: string | null | undefined): boolean {
+  return naturalezaDe(naturaleza) !== 'COSTE'
+}
+
+/**
+ * ¿Este COBRO es ingreso del período, o la recuperación de un anticipo?
+ *
+ * Se conserva el nombre porque es el vocabulario de los tres consumidores que suman
+ * ingresos, pero ya **no** es una lista de orígenes: lee la naturaleza de la fila. El
+ * subsidio dejó de ser una excepción escrita a mano y es el primer caso normal de la
+ * regla general.
+ */
+export function cobroEsIngreso(naturaleza: string | null | undefined): boolean {
+  return computaEnResultados(naturaleza)
 }
 
 // ── El COBRO del cierre de caja ───────────────────────────────────────────────
@@ -167,8 +208,9 @@ export async function etiquetaDeCategoria(
 export type ClaveCategoriaSistema =
   | 'compras'                 // entrada de mercancía (inv_confirmar_compra)
   | 'servicios_terceros'      // CxP al proveedor de un servicio (srv_cxp_generar)
-  | 'salarios'                // nómina confirmada: los netos que van a la plantilla
+  | 'salarios'                // nómina confirmada: el salario devengado (coste)
   | 'retenciones_nomina'      // nómina confirmada: lo retenido, a la agencia tributaria
+  | 'vacaciones_acumuladas'   // nómina MIPYME_CUBA: la provisión del mes (mig. 166)
   | 'impuestos_salario'       // nómina MIPYME_CUBA: IUFT, a cargo de la empresa
   | 'contribucion_ss_empresa' // nómina MIPYME_CUBA: SS de empresa (12,5 % + 1,5 %)
   | 'comisiones_bancarias'    // fees de transferencia
@@ -178,6 +220,7 @@ const NOMBRE_DEFECTO: Record<ClaveCategoriaSistema, string> = {
   servicios_terceros:      'Servicios de terceros',
   salarios:                'Salarios',
   retenciones_nomina:      'Retenciones de nómina',
+  vacaciones_acumuladas:   'Vacaciones acumuladas',
   // Nomenclatura tal y como se usa en Cuba: nada de «aportes patronales».
   impuestos_salario:       'Impuestos de salario',
   contribucion_ss_empresa: 'Contribución a la Seguridad Social',

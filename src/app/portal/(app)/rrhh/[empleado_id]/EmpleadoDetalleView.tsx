@@ -16,6 +16,7 @@ import {
   alternarConceptoEmpleado,
   guardarIncidencia,
   eliminarIncidencia,
+  obtenerReciboNomina,
   type IncidenciaMes,
   type EmpleadoDetalleData,
   type Contrato,
@@ -28,7 +29,7 @@ import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
-import { Copy, FileText, Eye, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { Copy, Download, FileText, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
   actualizarConceptosNominas,
@@ -312,7 +313,7 @@ function IncidenciasSection({
   moneda:      string
   incidencias: IncidenciaConId[]
   esCuba:      boolean
-  vacaciones:  { importe: number; moneda: string }
+  vacaciones:  { importe: number; moneda: string; apertura: number }
   onChanged:   () => void
 }) {
   const [isPending, startTransition] = useTransition()
@@ -364,6 +365,10 @@ function IncidenciasSection({
           </strong>
           <span className="text-xs-muted">
             Lo acumulado en las nóminas ya confirmadas, menos lo que se le haya pagado.
+            {vacaciones.apertura > 0.005 && (
+              <> Incluye <strong>{formatMonto(vacaciones.apertura)} {vacaciones.moneda}</strong> que
+              ya traía acumulados al empezar a usar CLAUX.</>
+            )}
           </span>
         </div>
       )}
@@ -744,6 +749,8 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const [showNuevo,     setShowNuevo]     = useState(false)
   const [editContrato,  setEditContrato]  = useState<Contrato | null>(null)
   const [delContrato,   setDelContrato]   = useState<Contrato | null>(null)
+  /** Nómina cuyo recibo se está generando, para no lanzar dos veces el mismo. */
+  const [reciboDe,      setReciboDe]      = useState<string | null>(null)
 
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
@@ -775,6 +782,29 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       router.refresh()
     })
+  }
+
+  // Recibo de nómina: el servidor da los datos y el PDF se dibuja y se descarga aquí,
+  // sin abrir otra página ni recargar (igual que la factura y la oferta). VA FUERA de
+  // `startTransition` a propósito: dentro, el toast de carga no llega a pintarse, y en
+  // 3G este paso puede tardar lo suficiente para que el usuario crea que no hizo nada.
+  async function descargarRecibo(nomina: NominaConLineas) {
+    if (reciboDe) return
+    setReciboDe(nomina.nomina_id)
+    const ld = toastLoading('Generando recibo…')
+    try {
+      const res = await obtenerReciboNomina(nomina.nomina_id, empleado.empleado_id)
+      if (!res.ok) { toastError(res.error); return }
+      const { descargarReciboNomina } = await import('@/lib/pdf/recibo-nomina')
+      const apellido = (empleado.apellidos ?? '').split(' ')[0] ?? ''
+      const quien = [empleado.nombre, apellido].filter(Boolean).join('-').toLowerCase()
+      await descargarReciboNomina(res.recibo, `recibo-${quien}-${nomina.periodo}.pdf`)
+    } catch {
+      toastError('No se pudo generar el recibo.')
+    } finally {
+      await ld.dismiss()
+      setReciboDe(null)
+    }
   }
 
   function confirmarEliminar() {
@@ -950,10 +980,17 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                         {nomina.estado === 'BORRADOR' ? 'Borrador' : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
                     </td>
+                    {/* Descarga directa, no un desplegable de un solo elemento: la fila
+                        entera ya lleva a la hoja de nómina al pulsarla, así que «Ver
+                        detalle» era el menú repitiendo lo que hace el clic. */}
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => router.push(`/portal/nomina/${nomina.nomina_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalle</button>
-                      </RowActions>
+                      <button className="btn btn-ghost btn-sm"
+                        onClick={e => { e.stopPropagation(); descargarRecibo(nomina) }}
+                        disabled={reciboDe !== null}
+                        title="Descargar el recibo de este período en PDF">
+                        <Download size={15} strokeWidth={2} />
+                        {reciboDe === nomina.nomina_id ? 'Generando…' : 'Recibo'}
+                      </button>
                     </td>
                   </tr>
                 ))}

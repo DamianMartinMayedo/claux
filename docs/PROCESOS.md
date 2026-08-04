@@ -103,14 +103,48 @@ cuentan**. Sin prorrateo en esta versión.
 
 `CONTEXTO §2 › RRHH`
 
-Confirmar una nómina escribe **hasta cinco filas** en `gastos_cobros`: es el listado que
-más crece del sistema (un negocio con dos empresas y nómina mensual añade ~120 filas al
-año solo por ahí).
+Confirmar una nómina escribe **hasta ocho filas** en `gastos_cobros`, y son **dos repartos
+del mismo dinero, no uno**: es el listado que más crece del sistema (un negocio con dos
+empresas y nómina mensual añade ~190 filas al año solo por ahí).
 
-> **Punto abierto que un análisis debería mirar.** Las deducciones de nómina son
-> **retenciones**: dinero que se le quita al trabajador para ingresarlo a la agencia
-> tributaria, no un ahorro de la empresa. El coste real es el **devengado**, no el neto
-> pagado. El tratamiento contable de esa diferencia está pendiente de cerrar.
+**Por qué dos repartos.** No es un detalle técnico: el coste de las vacaciones se reconoce
+el mes en que se **acumulan** y el pago sale el mes en que se **disfrutan**. Así que lo que
+cuesta y lo que se debe son cifras distintas, y cada fila declara en su columna
+`naturaleza` qué papel cumple:
+
+| `naturaleza` | Filas | Cuenta en el estado de resultados | Genera deuda en CxP/CxC |
+|---|---|---|---|
+| `COSTE` | Salario devengado (sin las vacaciones disfrutadas) · Acumulación de vacaciones del mes | ✔ | — |
+| `AMBAS` | UFT 5 % · SS 12,5 % · SS 1,5 % | ✔ | ✔ |
+| `DEUDA` | Salario neto a pagar · una fila por retención · el subsidio por cobrar | — | ✔ |
+
+Los tres aportes **no se desdoblan**: son coste y deuda por el mismo importe y con un
+acreedor real, igual que comprarle mercancía a un proveedor. Solo el bloque salarial se
+parte, y no por diseño sino porque sus dos importes son distintos. Las retenciones son
+**deuda sin coste**: su coste ya está dentro del salario devengado, y llevarlas también a
+Gastos duplicaría el coste de personal.
+
+Las invariantes que valida la propia confirmación (si no cuadran, no escribe nada):
+
+```
+COSTE = (devengado − vacaciones disfrutadas) + acumulación del mes + aportes
+DEUDA = neto a percibir + retenciones + aportes
+COSTE − DEUDA = acumulación − vacaciones disfrutadas
+```
+
+**Dos efectos contraintuitivos que NO son fallos:** el mes que alguien coge vacaciones el
+coste de personal **baja** aunque se pague más (a lo largo del año se compensa); y la
+provisión de vacaciones **no genera pasivo visible** —se registra el coste, pero como
+todavía no se le debe a nadie no aparece en Tesorería ni en CxP; el saldo solo se ve en la
+ficha del trabajador—.
+
+**La nómina ya no se paga desde Nómina.** No hay botón «Pagar»: cada deuda se liquida en
+Tesorería con el resto, y el estado «Pagada» se **deriva** de si la CxP del salario neto
+está liquidada. Depende solo del salario neto a propósito — los impuestos tienen su propio
+calendario, y lo que el dueño necesita saber ahí es si su plantilla cobró.
+
+> Esto **cierra** el punto abierto que este apartado arrastraba sobre el tratamiento
+> contable de las retenciones (el coste real es el devengado, no el neto pagado).
 
 ## 6. Las tasas sostienen todos los totales
 
