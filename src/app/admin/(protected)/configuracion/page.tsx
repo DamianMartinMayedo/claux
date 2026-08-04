@@ -111,7 +111,7 @@ export default async function ConfiguracionPage() {
               </div>
               <div>
                 <h2 className="config-section-title">Facturación</h2>
-                <p className="config-section-sub">Descuento anual, días de prueba y precios del presupuesto</p>
+                <p className="config-section-sub">Descuento anual y días de prueba</p>
               </div>
             </div>
 
@@ -119,10 +119,11 @@ export default async function ConfiguracionPage() {
               descuentoAnual={descuentoAnual}
               diasTrial={diasTrial}
             />
-
-            {/* Card propio: el precio de la instalación es otra cosa que la facturación
-                recurrente —pago único, cotizado por horas— y tiene su propia tabla. */}
-            <div className="config-section-header config-section-header-sub">
+          </section>
+        }
+        presupuesto={
+          <section className="card card-lg config-section">
+            <div className="config-section-header">
               <div className="config-section-icon">
                 <Calculator size={20} />
               </div>
@@ -133,6 +134,7 @@ export default async function ConfiguracionPage() {
                 </p>
               </div>
             </div>
+
             <PresupuestoForm
               escalares={escalaresPresupuesto}
               lineas={parametros.lineas}

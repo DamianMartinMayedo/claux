@@ -132,6 +132,24 @@ export async function listarPresupuestos(): Promise<PresupuestoRow[]> {
   return (data ?? []) as PresupuestoRow[]
 }
 
+/**
+ * Presupuestos de UN cliente, para su ficha.
+ *
+ * El enlace `presupuestos_instalacion.client_id` existía y se escribía desde el alta, pero no
+ * se veía desde el cliente: se podía ir del presupuesto a la ficha y no al revés. Y sin la
+ * vuelta no hay forma de contrastar lo cotizado con lo que costó de verdad.
+ */
+export async function listarPresupuestosDeCliente(clientId: string): Promise<PresupuestoRow[]> {
+  await requirePermiso('presupuestos')
+  const db = createAdminClient()
+  const { data } = await db
+    .from('presupuestos_instalacion')
+    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, tarifa, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+  return (data ?? []) as PresupuestoRow[]
+}
+
 // ── Detalle completo de un presupuesto ──
 export async function obtenerPresupuesto(id: number) {
   await requirePermiso('presupuestos')

@@ -8,6 +8,7 @@ import AccesoUsuariosCard from './AccesoUsuariosCard'
 import ModulosCard from './ModulosCard'
 import IaClienteCard from './IaClienteCard'
 import UsoClienteCard from './UsoClienteCard'
+import PresupuestosClienteCard from './PresupuestosClienteCard'
 import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { getSetting } from '@/app/actions/settings'
@@ -225,6 +226,13 @@ export default async function ClienteDetallePage({
 
       {/* ── Uso y actividad del cliente ── */}
       <UsoClienteCard clientId={client_id} />
+
+      {/* ── Presupuestos de este cliente (y la puerta para hacerle uno nuevo) ── */}
+      <PresupuestosClienteCard
+        clientId={client_id}
+        nombreEmpresa={cliente.nombre_empresa ?? client_id}
+        tienePagoConfiguracion={(pagos ?? []).some(p => p.concepto === 'configuracion')}
+      />
 
       {/* ── Módulos contratados ── */}
       {catalogo && catalogo.length > 0 && (

@@ -23,7 +23,14 @@ const GRUPOS: { label: string; tipo: string }[] = [
 
 const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
 
-type Prefill = { diagnosticoId: number | null; nombreNegocio: string; contacto: string; modulos: string[] }
+type Prefill = {
+  diagnosticoId: number | null
+  /** Presupuesto para un cliente que YA existe (ampliación). */
+  clientId: string | null
+  nombreNegocio: string
+  contacto: string
+  modulos: string[]
+}
 
 export default function PresupuestoCalculadora({
   modulos,
@@ -111,6 +118,7 @@ export default function PresupuestoCalculadora({
     const comercialNombre = comerciales.find(c => c.email === comercialEmail)?.nombre
     const r = await crearPresupuesto({
       diagnosticoId:     prefill.diagnosticoId,
+      clientId:          prefill.clientId,
       comercialEmail,
       comercialNombre,
       nombreNegocio,
@@ -174,6 +182,16 @@ export default function PresupuestoCalculadora({
           {/* Datos del prospecto */}
           <div className="card">
             <p className="mod-list-label">Datos del prospecto</p>
+            {/* Que quede claro a quién se le está cotizando: en una ampliación los módulos
+                que salen marcados son los que YA tiene, no los que se le van a cobrar de
+                nuevo — marcarlos «otra vez» sería cobrar dos veces su configuración. */}
+            {prefill.clientId && (
+              <div className="alert alert-info">
+                Presupuesto para un cliente en marcha (<strong>{prefill.clientId}</strong>).
+                Vienen marcados sus módulos actuales: deja solo los que entran en esta
+                instalación.
+              </div>
+            )}
             <div className="input-group">
               <label htmlFor="p-negocio">Nombre del negocio <span className="required">*</span></label>
               <input id="p-negocio" className="input" value={nombreNegocio} onChange={e => setNombreNegocio(e.target.value)} />

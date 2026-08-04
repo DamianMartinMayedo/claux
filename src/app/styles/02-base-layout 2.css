@@ -250,16 +250,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .nav-item-danger:hover { background-color: var(--color-error-bg) !important; color: var(--color-error) !important; }
 
 /* ── Contenido principal ── */
-/* SIN `overflow-y: auto`. Lo tenía, y era lo que rompía en silencio TODO `position: sticky`
-   dentro del admin: `.admin-shell` usa `min-height: 100vh` (no `height`), así que quien
-   scrollea es la ventana y este bloque solo crece con su contenido — pero un `overflow`
-   distinto de `visible` lo convierte igualmente en contenedor de scroll a efectos de sticky,
-   y un elemento pegado a una caja que nunca se mueve no se pega a nada. La cabecera sí
-   funcionaba porque cuelga del shell, no de aquí. Las tablas anchas ya scrollean en su
-   `.table-wrapper`, así que aquí no hacía falta. */
 .admin-main {
   grid-row: 2;
   grid-column: 2;
+  overflow-y: auto;
   background-color: var(--color-bg);
 }
 .view-container {

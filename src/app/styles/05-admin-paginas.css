@@ -872,14 +872,18 @@ textarea:focus-visible {
 .pres-form { display: flex; flex-direction: column; gap: var(--space-4); align-self: start; }
 .pres-form .card { display: flex; flex-direction: column; gap: var(--space-3); }
 .pres-resultado { align-self: stretch; }
-/* La tarjeta acompaña al scroll. El `sticky` ya estaba, pero no se veía: con cinco fases,
-   avisos, totales y botón la tarjeta pasa de alto de ventana, y un elemento sticky más alto
-   que su scrollport no tiene dónde pegarse — se limita a bajar con el contenido. Se le pone
-   techo y el desglose scrollea por dentro. (`.admin-main` es el contenedor de scroll, de ahí
-   el descuento de la cabecera.) */
+/* La tarjeta acompaña al scroll y se para justo debajo de la cabecera.
+   El `sticky` llevaba tiempo escrito y no hacía nada: `.admin-main` tenía `overflow-y: auto`
+   y eso lo convertía en el contenedor de scroll de referencia, un contenedor que nunca se
+   mueve porque quien scrollea es la ventana (`02-base-layout.css`, ya corregido).
+   `top` descuenta la cabecera —que es sticky a 0 y taparía la tarjeta— más un margen. Y el
+   techo de altura es necesario: con cinco fases, avisos, totales y botón la tarjeta pasa del
+   alto de la ventana, y un sticky más alto que su scrollport tampoco tiene dónde pegarse. */
 .pres-resultado > .card {
-  position: sticky; top: var(--space-6); z-index: 10;
-  max-height: calc(100dvh - var(--space-16));
+  position: sticky;
+  top: calc(var(--header-h) + var(--space-4));
+  z-index: 10;
+  max-height: calc(100dvh - var(--header-h) - var(--space-8));
   overflow-y: auto;
 }
 .pres-resultado > .card > .btn { margin-top: var(--space-4); }
@@ -960,6 +964,10 @@ textarea:focus-visible {
    normal la tabla se va de alto. */
 .pp-tabla td { padding: var(--space-2) var(--space-3); }
 .pp-num { width: 5.5rem; text-align: right; padding: 4px var(--space-2); }
+
+/* Horas reales por encima de las cotizadas: esa instalación costó más de lo que se cobró, y
+   es justo la comparación para la que existe la tarjeta de presupuestos del cliente. */
+.pres-horas-exceso { color: var(--color-error); font-weight: 700; }
 
 @media (min-width: 900px) {
   .pres-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
