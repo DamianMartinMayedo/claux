@@ -3,7 +3,7 @@
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   guardarServicio, eliminarServicio,
   guardarRecurso, eliminarRecurso, importarPersonalRRHH, importarServiciosCatalogo,
@@ -25,8 +25,12 @@ import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import { type EstadoReserva } from '@/lib/reservas/estado'
 import { opcionesCon } from '@/components/portal/form-helpers'
-import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Trash2, UserX, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import Filtros from '@/components/portal/Filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import { type PresetRango } from '@/lib/listados'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -35,6 +39,14 @@ const ESTADO_LABEL: Record<EstadoReserva, string> = {
   PENDIENTE: 'Pendiente', CONFIRMADA: 'Confirmada', RECHAZADA: 'Rechazada',
   NO_SHOW: 'No asistió', CANCELADA: 'Cancelada',
 }
+/**
+ * Presets del rango de la agenda: miran al FUTURO.
+ *
+ * Una cita es un compromiso pendiente, no un histórico, así que el juego de los listados de
+ * Contabilidad («Últimos 3 meses») no sirve. «Mes pasado» se queda para repasar no-shows.
+ */
+const PRESETS_CITAS: PresetRango[] = ['prox_30', 'prox_3_meses', 'mes', 'mes_pasado', 'todo']
+
 const ESTADO_BADGE: Record<EstadoReserva, string> = {
   PENDIENTE: 'badge-warning', CONFIRMADA: 'badge-success', RECHAZADA: 'badge-neutral',
   NO_SHOW: 'badge-danger', CANCELADA: 'badge-neutral',
@@ -776,11 +788,12 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   const [editRecurso, setEditRecurso] = useState<Recurso | null>(null)
   const [delRecurso,  setDelRecurso]  = useState<Recurso | null>(null)
 
-  const [search,       setSearch]       = useState('')
-  const [filtroDesde,  setFiltroDesde]  = useState(hoyISO())
-  const [filtroHasta,  setFiltroHasta]  = useState('')
-  const [filtroRecurso, setFiltroRecurso] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
+  // Los filtros viven en la URL, como en el resto del portal (`skills/ui/SKILL.md` §3.3).
+  // El rango y la búsqueda los aplica LA CONSULTA; el servidor devuelve cuál usó.
+  const params = useSearchParams()
+  const search = data.q
+  const filtroRecurso = params.get('recurso') ?? ''
+  const filtroEstado  = params.get('estado')  ?? ''
 
   const [slugForm, setSlugForm] = useState(data.slug ?? '')
   const [editandoSlug, setEditandoSlug] = useState(false)
@@ -817,20 +830,37 @@ export default function CitasView({ data }: { data: CitasPageData }) {
 
   const hoy = hoyISO()
 
-  const citas = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return data.citas.filter(c => {
-      if (filtroDesde && c.fecha < filtroDesde) return false
-      if (c.fecha > (filtroHasta || filtroDesde)) return false
-      if (filtroRecurso && c.recurso_id !== filtroRecurso) return false
-      if (filtroEstado && c.estado !== filtroEstado) return false
-      if (q) {
-        const hay = [c.nombre_cliente, c.telefono, c.notas, c.servicio_nombre, c.recurso_nombre].filter(Boolean).join(' ').toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-  }, [data.citas, search, filtroDesde, filtroHasta, filtroRecurso, filtroEstado])
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable. `escalado` en los dos: mientras la agenda quepa entera, el navegador filtra
+   * al instante y da el MISMO resultado; en cuanto hay filas sin traer, sube al servidor.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'estado', label: 'Todos los estados', valor: filtroEstado,
+      rotulo: 'Estado',
+      widget: 'select', donde: 'escalado',
+      opciones: (Object.keys(ESTADO_LABEL) as EstadoReserva[])
+        .map(k => ({ valor: k, label: ESTADO_LABEL[k] })),
+    },
+    {
+      // El «recurso» es quien atiende (`recursos`). Viaja a la descarga como `categoria`,
+      // que es la clave con la que el registro de exportación filtra esa columna.
+      clave: 'categoria', param: 'recurso', label: `Todos los ${et.recurso_pl.toLowerCase()}`,
+      valor: filtroRecurso,
+      rotulo: et.recurso,
+      widget: 'select', donde: 'escalado',
+      ocultarSi: data.recursos.length === 0,
+      opciones: data.recursos.map(r => ({ valor: r.recurso_id, label: r.nombre })),
+    },
+  ], [filtroEstado, filtroRecurso, data.recursos, et])
+
+  // El rango y la búsqueda ya los aplicó la CONSULTA: aquí solo quedan los dos escalados.
+  const citas = useMemo(() => data.citas.filter(c => {
+    if (filtroRecurso && c.recurso_id !== filtroRecurso) return false
+    if (filtroEstado  && c.estado     !== filtroEstado)  return false
+    return true
+  }), [data.citas, filtroRecurso, filtroEstado])
 
   const { pageItems: citaItems, ...citaPag } = usePagination(citas)
 
@@ -838,7 +868,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   const citaIds = useMemo(() => citas.map(c => c.reserva_id), [citas])
   const sel = useRowSelection(citaIds)
   const [loteAccion, setLoteAccion] = useState<{ estado: EstadoReserva; label: string } | null>(null)
-  useEffect(() => { sel.clear() }, [activeTab, search, filtroDesde, filtroHasta, filtroRecurso, filtroEstado]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { sel.clear() }, [activeTab, search, data.rango.desde, data.rango.hasta, filtroRecurso, filtroEstado]) // eslint-disable-line react-hooks/exhaustive-deps
   const plural = (n: number) => n === 1 ? '' : 's'
 
   function ejecutarLote(estado: EstadoReserva) {
@@ -1001,18 +1031,12 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           {activeTab === 'agenda' && (
             <ExportarMenu
               clave="citas"
-              filtro={{
-                desde: filtroDesde, hasta: filtroHasta,
-                estado: filtroEstado, categoria: filtroRecurso,
-                // La búsqueda VIAJA: el registro ya sabe buscar por cliente y teléfono, y
-                // sin esto se filtraba en pantalla y el fichero salía con todo.
-                q: search,
-              }}
-              resumen={[
-                filtroEstado && (ESTADO_LABEL[filtroEstado as EstadoReserva] ?? filtroEstado),
-                filtroRecurso && (data.recursos.find(r => r.recurso_id === filtroRecurso)?.nombre ?? ''),
-                search && `«${search}»`,
-              ].filter((x): x is string => Boolean(x))}
+              /* La búsqueda VIAJA: el registro ya sabe buscar por cliente y teléfono, y
+                 sin esto se filtraba en pantalla y el fichero salía con todo. */
+              filtro={filtroExport(declaracion, {
+                desde: data.rango.desde, hasta: data.rango.hasta, q: search,
+              })}
+              resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
             />
           )}
           {activeTab === 'agenda' && (
@@ -1060,27 +1084,22 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       {/* ── Tab: Agenda ──────────────────────────────────────────────────── */}
       {activeTab === 'agenda' && (
       <>
-      <div className="ter-toolbar">
-        <div className="ter-search-wrap">
-          <Search size={16} strokeWidth={2} />
-          <input type="search" className="ter-search" placeholder="Buscar por cliente, servicio…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <input type="date" className="input ter-filter-select" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} />
-        <input type="date" className="input ter-filter-select" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} />
-        <select className="input ter-filter-select" value={filtroRecurso} onChange={e => setFiltroRecurso(e.target.value)}>
-          <option value="">Todos</option>
-          {data.recursos.map(r => <option key={r.recurso_id} value={r.recurso_id}>{r.nombre}</option>)}
-        </select>
-        <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="PENDIENTE">Pendientes</option>
-          <option value="CONFIRMADA">Confirmadas</option>
-          <option value="RECHAZADA">Rechazadas</option>
-          <option value="NO_SHOW">No asistieron</option>
-          <option value="CANCELADA">Canceladas</option>
-        </select>
-      </div>
+      {/* Antes eran dos `<input type=date>` sin rótulo y con una trampa: al dejar «hasta»
+          vacío el filtro caía a `filtroHasta || filtroDesde`, así que pedir «desde el 1 de
+          agosto» enseñaba SOLO el 1 de agosto. */}
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={search}
+        placeholder="Buscar por cliente, teléfono o notas…"
+        presets={PRESETS_CITAS}
+        hayMas={data.hay_mas}
+      />
+
+      {data.hay_mas && (
+        <AvisoTope mostrados={data.citas.length} total={data.total}
+          limite={data.limite} sustantivo="citas" femenino />
+      )}
 
       <div className="card card-table">
         {citas.length === 0 ? (

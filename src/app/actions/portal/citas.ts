@@ -12,6 +12,10 @@ import { mapaTasas, monedaValida } from '@/lib/tasas'
 import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
 import { type Cierre, type ReglasReserva } from './reservas'
 import { getPortalSession, puedeEditarModulo }  from './auth'
+import {
+  limiteDelFiltro, patronBusqueda, type FiltroListado,
+} from '@/lib/listados'
+import { sumarDias } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -104,6 +108,16 @@ export interface CitasPageData {
    * justo el primero. Sin módulo no se pinta nada y Citas sigue funcionando sola.
    */
   catalogo_activo: boolean
+  /** Rango aplicado EN LA CONSULTA. Viaja a la vista para pintar el botón de rango. */
+  rango:      { desde: string; hasta: string }
+  /** Texto buscado, aplicado en la consulta. */
+  q:          string
+  /** El techo recortó: hay citas del rango que no se han traído. */
+  hay_mas:    boolean
+  /** Cuántas cumplen el filtro DE VERDAD (`count: 'exact'`). */
+  total:      number
+  /** Techo con el que se consultó, para que «Ver más» sepa desde dónde subir. */
+  limite:     number
 }
 
 function reglasDe(c: Record<string, unknown> | null | undefined): ReglasReserva {
@@ -148,20 +162,69 @@ async function etiquetasDeSector(db: ReturnType<typeof createAdminClient>, secto
 
 // ── Datos del portal ───────────────────────────────────────────────────────────
 
-export async function obtenerCitasData(): Promise<CitasPageData | null> {
+/**
+ * Rango por defecto de Citas: **los próximos 30 días**.
+ *
+ * Una cita es un compromiso de FUTURO, así que el defecto histórico de los listados de
+ * Contabilidad no vale aquí. Y tiene que ser un rango de verdad: la pantalla se traía la
+ * agenda ENTERA y escondía en el navegador todo salvo el día de hoy.
+ */
+function rangoPorDefecto(): { desde: string; hasta: string } {
+  const hoyIso = hoyEnTz()
+  return { desde: hoyIso, hasta: sumarDias(hoyIso, 30) }
+}
+
+export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPageData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db = createAdminClient()
   const cid = session.client_id
 
-  const [recRes, srvRes, rsRes, rhRes, citasRes, cliRes] = await Promise.all([
-    db.from('recursos').select('*').eq('client_id', cid).order('nombre'),
+  const porDefecto = rangoPorDefecto()
+  const desde  = filtro?.desde ?? porDefecto.desde
+  const hasta  = filtro?.hasta ?? porDefecto.hasta
+  const q      = (filtro?.q ?? '').trim()
+  const limite = limiteDelFiltro(filtro)
+  const patron = patronBusqueda(q)
+
+  // `count: 'exact'` en la MISMA consulta: las filas del techo y, aparte, cuántas cumplen
+  // el filtro. Sin él el aviso del techo diría «500 de 500» sobre el conjunto ya recortado.
+  let citasQuery = db.from('reservas').select('*', { count: 'exact' })
+    .eq('client_id', cid).not('recurso_id', 'is', null)
+  // Los filtros de la barra cuando la vista los ESCALA (`?srv=1`): mientras el listado cabe
+  // entero el navegador da el mismo resultado sin gastar un viaje.
+  if (filtro?.estado)    citasQuery = citasQuery.eq('estado', filtro.estado)
+  if (filtro?.categoria) citasQuery = citasQuery.eq('recurso_id', filtro.categoria)
+  if (desde) citasQuery = citasQuery.gte('fecha', desde)
+  if (hasta) citasQuery = citasQuery.lte('fecha', hasta)
+  if (patron) {
+    citasQuery = citasQuery.or([
+      `nombre_cliente.ilike.${patron}`,
+      `telefono.ilike.${patron}`,
+      `notas.ilike.${patron}`,
+    ].join(','))
+  }
+  citasQuery = citasQuery
+    .order('fecha', { ascending: false })
+    .order('hora', { ascending: true })
+    .limit(limite)
+
+  // `recurso_servicios` NO tiene columna `client_id` (es una tabla puente pura), así que
+  // una consulta sin filtro barría la tabla de TODOS los inquilinos para luego descartar
+  // lo ajeno al indexar por recurso. No era una fuga —el mapa solo se consulta con los
+  // recursos de este cliente— pero sí una lectura que crece con el negocio de los demás,
+  // y el aislamiento por `client_id` aquí lo hace la aplicación, no RLS (CONTEXTO §2 ›
+  // Esquema y datos). Se acota por los recursos propios, que hay que leer igualmente.
+  const { data: recData } = await db.from('recursos').select('*').eq('client_id', cid).order('nombre')
+  const recursoIds = ((recData ?? []) as { recurso_id: string }[]).map(r => r.recurso_id)
+
+  const [srvRes, rsRes, rhRes, citasRes, cliRes] = await Promise.all([
     db.from('servicios').select('*').eq('client_id', cid).order('nombre'),
-    db.from('recurso_servicios').select('recurso_id, servicio_id'),
+    db.from('recurso_servicios').select('recurso_id, servicio_id')
+      .in('recurso_id', recursoIds.length ? recursoIds : ['__none__']),
     db.from('recurso_horarios').select('recurso_id, dia_semana, hora_inicio, hora_fin').eq('client_id', cid),
-    db.from('reservas').select('*').eq('client_id', cid).not('recurso_id', 'is', null)
-      .order('fecha', { ascending: false }).order('hora', { ascending: true }),
+    citasQuery,
     db.from('clients').select('slug, sector, bot_config_citas, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas').eq('client_id', cid).single(),
   ])
 
@@ -185,7 +248,7 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     horPorRecurso.set(row.recurso_id, arr)
   }
 
-  const recursos: Recurso[] = ((recRes.data ?? []) as { recurso_id: string; nombre: string; tipo: string | null; activo: boolean; empleado_id: string | null }[]).map(r => ({
+  const recursos: Recurso[] = ((recData ?? []) as { recurso_id: string; nombre: string; tipo: string | null; activo: boolean; empleado_id: string | null }[]).map(r => ({
     recurso_id:   r.recurso_id,
     nombre:       r.nombre,
     tipo:         r.tipo,
@@ -267,6 +330,11 @@ export async function obtenerCitasData(): Promise<CitasPageData | null> {
     tasas:       await mapaTasas(db, cid, monedas),
     catalogo,
     catalogo_activo,
+    rango:   { desde, hasta },
+    q,
+    hay_mas: citas.length >= limite,
+    total:   citasRes.count ?? citas.length,
+    limite,
   }
 }
 
@@ -765,11 +833,18 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
     return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null, reglas: reglasDe(null) }
   }
 
-  const [srvRes, recRes, rsRes] = await Promise.all([
+  const [srvRes, recRes] = await Promise.all([
     db.from('servicios').select('servicio_id, nombre, duracion_minutos, precio, moneda').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
     db.from('recursos').select('recurso_id, nombre').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
-    db.from('recurso_servicios').select('recurso_id, servicio_id'),
   ])
+  // `recurso_servicios` no tiene `client_id` (tabla puente pura), así que sin acotar se
+  // leía la de TODOS los inquilinos — y esta es una ruta PÚBLICA, la frontera dura de
+  // rendimiento de Cuba (CONTEXTO §3). Se acota por los recursos de este negocio, que ya
+  // están leídos. Va en un segundo viaje a propósito: un viaje acotado es más barato que
+  // uno paralelo que crece con el negocio de los demás.
+  const recIds = ((recRes.data ?? []) as { recurso_id: string }[]).map(r => r.recurso_id)
+  const rsRes = await db.from('recurso_servicios').select('recurso_id, servicio_id')
+    .in('recurso_id', recIds.length ? recIds : ['__none__'])
 
   const linkPorRecurso = new Map<string, string[]>()
   for (const row of (rsRes.data ?? []) as { recurso_id: string; servicio_id: string }[]) {

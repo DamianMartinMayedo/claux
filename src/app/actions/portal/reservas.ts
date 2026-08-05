@@ -11,6 +11,10 @@ import { enviarMensaje } from '@/lib/telegram/enviar'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
+import {
+  limiteDelFiltro, patronBusqueda, type FiltroListado,
+} from '@/lib/listados'
+import { sumarDias } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -75,6 +79,16 @@ export interface ReservaPageData {
   cierres:    Cierre[]
   reglas:     ReglasReserva
   tieneIa:    boolean   // addon asistente_ia contratado → se ofrece el toggle de IA del bot
+  /** Rango aplicado EN LA CONSULTA. Viaja a la vista para pintar el botón de rango. */
+  rango:      { desde: string; hasta: string }
+  /** Texto buscado, aplicado en la consulta. */
+  q:          string
+  /** El techo recortó: hay reservas del rango que no se han traído. */
+  hay_mas:    boolean
+  /** Cuántas cumplen el filtro DE VERDAD (`count: 'exact'`). */
+  total:      number
+  /** Techo con el que se consultó, para que «Ver más» sepa desde dónde subir. */
+  limite:     number
 }
 
 const REGLAS_DEFAULT: ReglasReserva = { antelacion_min_horas: 0, ventana_max_dias: 0, max_personas: 0 }
@@ -120,23 +134,67 @@ function horaAhora(): string { return ahoraEnTz() }
 
 // ── Obtener datos de Reservas ─────────────────────────────────────────────────
 
-export async function obtenerReservas(): Promise<ReservaPageData | null> {
+/**
+ * Rango por defecto de Reservas: **los próximos 30 días**.
+ *
+ * Una reserva es un documento de FUTURO —lo que hay que atender—, así que el defecto no
+ * puede ser «los últimos 3 meses» como en los listados de Contabilidad. Y tiene que ser un
+ * rango de verdad: la pantalla traía la historia ENTERA de reservas y luego escondía todo
+ * salvo el día de hoy en el navegador, así que un negocio con dos años de reservas pagaba
+ * miles de filas en 3G para enseñar ocho.
+ */
+function rangoPorDefecto(): { desde: string; hasta: string } {
+  const hoyIso = hoyEnTz()
+  return { desde: hoyIso, hasta: sumarDias(hoyIso, 30) }
+}
+
+export async function obtenerReservas(filtro?: FiltroListado): Promise<ReservaPageData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
   const db = createAdminClient()
 
+  const porDefecto = rangoPorDefecto()
+  const desde  = filtro?.desde ?? porDefecto.desde
+  const hasta  = filtro?.hasta ?? porDefecto.hasta
+  const q      = (filtro?.q ?? '').trim()
+  const limite = limiteDelFiltro(filtro)
+  const patron = patronBusqueda(q)
+
+  // `count: 'exact'` en la MISMA consulta: devuelve las filas del techo y, aparte, cuántas
+  // cumplen el filtro. Sin él no hay forma de decir cuántas faltan, y el aviso del techo
+  // acabaría diciendo «500 de 500» sobre el conjunto ya recortado.
+  //
+  // Solo reservas (franja); las citas viven en la misma tabla con recurso_id — se excluyen
+  // aquí para que no aparezcan en la lista de Reservas.
+  let resQuery = db.from('reservas').select('*', { count: 'exact' })
+    .eq('client_id', session.client_id)
+    .is('recurso_id', null)
+  // Los filtros de la barra, cuando la vista los ESCALA (`?srv=1`): mientras el listado cabe
+  // entero el navegador los aplica al instante y da el mismo resultado; en cuanto hay filas
+  // sin traer tienen que aplicarse aquí, o filtrar por estado solo miraría las 500 más
+  // recientes del conjunto sin decirlo.
+  if (filtro?.estado)    resQuery = resQuery.eq('estado', filtro.estado)
+  if (filtro?.categoria) resQuery = resQuery.eq('franja_id', filtro.categoria)
+  if (desde) resQuery = resQuery.gte('fecha', desde)
+  if (hasta) resQuery = resQuery.lte('fecha', hasta)
+  if (patron) {
+    resQuery = resQuery.or([
+      `nombre_cliente.ilike.${patron}`,
+      `telefono.ilike.${patron}`,
+      `notas.ilike.${patron}`,
+    ].join(','))
+  }
+  resQuery = resQuery
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limite)
+
   const [franRes, resRes, cliRes] = await Promise.all([
     db.from('reserva_franjas').select('*')
       .eq('client_id', session.client_id)
       .order('hora_inicio', { ascending: true, nullsFirst: true }),
-    // Solo reservas (franja); las citas viven en la misma tabla con recurso_id
-    // — se excluyen aquí para que no aparezcan en la lista de Reservas.
-    db.from('reservas').select('*')
-      .eq('client_id', session.client_id)
-      .is('recurso_id', null)
-      .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false }),
+    resQuery,
     db.from('clients').select('bot_config, slug, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
       .eq('client_id', session.client_id)
       .single(),
@@ -164,7 +222,16 @@ export async function obtenerReservas(): Promise<ReservaPageData | null> {
   const reglas     = parseReglas(cliRes.data as Record<string, unknown> | null)
   const tieneIa    = tieneModulo(cliRes.data?.modulos_activos, 'asistente_ia')
 
-  return { reservas, franjas, bot_config, slug, empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })), cierres, reglas, tieneIa }
+  return {
+    reservas, franjas, bot_config, slug,
+    empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
+    cierres, reglas, tieneIa,
+    rango:   { desde, hasta },
+    q,
+    hay_mas: reservas.length >= limite,
+    total:   resRes.count ?? reservas.length,
+    limite,
+  }
 }
 
 // ── Crear reserva (manual, desde el panel) ────────────────────────────────────

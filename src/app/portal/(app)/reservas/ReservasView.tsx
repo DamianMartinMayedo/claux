@@ -3,7 +3,7 @@
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useMemo, useEffect } from 'react'
-import { useRouter }                        from 'next/navigation'
+import { useRouter, useSearchParams }       from 'next/navigation'
 import {
   crearReserva,
   modificarReserva,
@@ -33,8 +33,12 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
-import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserX, X } from 'lucide-react'
+import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Trash2, UserX, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
+import Filtros from '@/components/portal/Filtros'
+import AvisoTope from '@/components/portal/AvisoTope'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import { type PresetRango } from '@/lib/listados'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -48,6 +52,15 @@ const ESTADO_BADGE: Record<EstadoReserva, string> = {
   NO_SHOW: 'badge-danger', CANCELADA: 'badge-neutral',
 }
 const CANAL_LABEL: Record<string, string> = { web: 'Web', bot: 'Bot', manual: 'Manual' }
+
+/**
+ * Presets del rango de Reservas: miran al FUTURO.
+ *
+ * Una reserva es lo que hay que atender, no lo que ya pasó, así que el juego histórico de
+ * los listados de Contabilidad («Últimos 3 meses») no sirve aquí. «Mes pasado» se queda para
+ * repasar no-shows, y «Todo» para buscar una reserva antigua por nombre.
+ */
+const PRESETS_RESERVAS: PresetRango[] = ['prox_30', 'prox_3_meses', 'mes', 'mes_pasado', 'todo']
 const DIA_LABEL: Record<number, string> = {
   1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom',
 }
@@ -566,11 +579,14 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   // deriva de NEXT_PUBLIC_SITE_URL. La copia del enlace usa el origin real.
   const host = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '')
 
-  const [search,         setSearch]         = useState('')
-  const [filtroDesde,   setFiltroDesde]   = useState(hoyISO())
-  const [filtroHasta,   setFiltroHasta]   = useState('')
-  const [filtroFranja,  setFiltroFranja]   = useState('')
-  const [filtroEstado,  setFiltroEstado]   = useState('')
+  // Los filtros viven en la URL, como en el resto del portal (`skills/ui/SKILL.md` §3.3):
+  // refrescar —o que se caiga la conexión, que en Cuba es el caso normal— ya no tira lo que
+  // el dueño acaba de poner, y volver del detalle lo devuelve a lo que estaba mirando.
+  // El rango y la búsqueda los aplica LA CONSULTA; el servidor devuelve cuál usó.
+  const params = useSearchParams()
+  const search       = data.q
+  const filtroFranja = params.get('franja') ?? ''
+  const filtroEstado = params.get('estado') ?? ''
 
   const [slugForm, setSlugForm] = useState(data.slug ?? '')
   const [editandoSlug, setEditandoSlug] = useState(false)
@@ -580,33 +596,64 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   })
   const [confirmAuto, setConfirmAuto] = useState(data.bot_config.confirmacion_automatica)
 
-  // Sincronizar botForm cuando data cambia (ej: tras eliminar bot)
-  useEffect(() => {
-    setBotForm({
-      token:  data.bot_config.token ?? '',
-      nombre: data.bot_config.nombre ?? '',
-    })
+  // Estos dos formularios se resincronizan cuando el servidor manda datos nuevos (tras
+  // guardar + router.refresh()). Se ajusta DURANTE el render comparando con lo último
+  // visto — el patrón de React para estado derivado de props. Con `useEffect` + setState
+  // se pinta primero un fotograma con el valor viejo y luego se re-renderiza en cascada.
+  // Y la comparación va por VALOR, no por identidad del objeto: un `[data.bot_config]` se
+  // dispara en cada refresco del servidor y puede pisar lo que el dueño esté escribiendo
+  // en el campo del token. Mismo patrón que `CitasView`, que ya lo tenía resuelto.
+  const slugServidor = data.slug ?? ''
+  const [slugVisto, setSlugVisto] = useState(slugServidor)
+  if (slugVisto !== slugServidor) {
+    setSlugVisto(slugServidor)
+    setSlugForm(slugServidor)
+  }
+
+  const botKey = `${data.bot_config.token ?? ''}|${data.bot_config.nombre ?? ''}|${data.bot_config.confirmacion_automatica}`
+  const [botVisto, setBotVisto] = useState(botKey)
+  if (botVisto !== botKey) {
+    setBotVisto(botKey)
+    setBotForm({ token: data.bot_config.token ?? '', nombre: data.bot_config.nombre ?? '' })
     setConfirmAuto(data.bot_config.confirmacion_automatica)
-    setSlugForm(data.slug ?? '')
-  }, [data.bot_config, data.slug])
+  }
 
   const hoy = hoyISO()
 
-  const reservas = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return data.reservas.filter(r => {
-      if (filtroDesde  && r.fecha   < filtroDesde)   return false
-      if (r.fecha > (filtroHasta || filtroDesde))       return false
-      if (filtroFranja && r.franja_id !== filtroFranja) return false
-      if (filtroEstado && r.estado  !== filtroEstado) return false
-      if (q) {
-        const hay = [r.nombre_cliente, r.telefono, r.notas, r.franja_nombre]
-          .filter(Boolean).join(' ').toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-  }, [data.reservas, search, filtroDesde, filtroHasta, filtroFranja, filtroEstado])
+  /**
+   * LA DECLARACIÓN. De aquí salen la barra, el `FiltroExport` de la descarga y el texto del
+   * desplegable — antes se escribían por separado y el fichero no se parecía a la pantalla.
+   *
+   * `escalado` en los dos: mientras el listado quepa entero, el navegador filtra al instante
+   * y da el MISMO resultado que la consulta; en cuanto hay filas sin traer, sube al servidor,
+   * porque un filtro que solo mira las 500 más recientes miente sin decirlo.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'estado', label: 'Todos los estados', valor: filtroEstado,
+      rotulo: 'Estado',
+      widget: 'select', donde: 'escalado',
+      opciones: (Object.keys(ESTADO_LABEL) as EstadoReserva[])
+        .map(k => ({ valor: k, label: ESTADO_LABEL[k] })),
+    },
+    {
+      // La franja es «el turno» en el que cae la reserva (`reserva_franjas`). Viaja a la
+      // descarga como `categoria`, que es la clave que el registro aplica sobre esa columna.
+      clave: 'categoria', param: 'franja', label: 'Todos los turnos', valor: filtroFranja,
+      rotulo: 'Turno',
+      widget: 'select', donde: 'escalado',
+      ocultarSi: data.franjas.length === 0,
+      opciones: data.franjas.map(f => ({ valor: f.franja_id, label: f.nombre })),
+    },
+  ], [filtroEstado, filtroFranja, data.franjas])
+
+  // El rango y la búsqueda ya los aplicó la CONSULTA: aquí solo quedan los dos filtros
+  // escalados, que mientras no haya truncamiento dan el mismo resultado sin gastar un viaje.
+  const reservas = useMemo(() => data.reservas.filter(r => {
+    if (filtroFranja && r.franja_id !== filtroFranja) return false
+    if (filtroEstado && r.estado    !== filtroEstado) return false
+    return true
+  }), [data.reservas, filtroFranja, filtroEstado])
 
   const { pageItems: reservaItems, ...reservaPag } = usePagination(reservas)
 
@@ -614,7 +661,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
   const reservaIds = useMemo(() => reservas.map(r => r.reserva_id), [reservas])
   const sel = useRowSelection(reservaIds)
   const [loteAccion, setLoteAccion] = useState<{ estado: EstadoReserva; label: string } | null>(null)
-  useEffect(() => { sel.clear() }, [activeTab, search, filtroDesde, filtroHasta, filtroFranja, filtroEstado]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { sel.clear() }, [activeTab, search, data.rango.desde, data.rango.hasta, filtroFranja, filtroEstado]) // eslint-disable-line react-hooks/exhaustive-deps
   const plural = (n: number) => n === 1 ? '' : 's'
 
   function ejecutarLote(estado: EstadoReserva) {
@@ -775,15 +822,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               /* La búsqueda y el turno VIAJAN: se filtraban en pantalla y el fichero salía
                  con todas las reservas. `tipo` es el canal en la tabla, y la franja es lo
                  que el registro aplica ahí (`reserva_franjas`). */
-              filtro={{
-                desde: filtroDesde, hasta: filtroHasta, estado: filtroEstado,
-                q: search, categoria: filtroFranja,
-              }}
-              resumen={[
-                filtroEstado && (ESTADO_LABEL[filtroEstado as EstadoReserva] ?? filtroEstado),
-                filtroFranja && (data.franjas.find(f => f.franja_id === filtroFranja)?.nombre ?? ''),
-                search && `«${search}»`,
-              ].filter((x): x is string => Boolean(x))}
+              filtro={filtroExport(declaracion, {
+                desde: data.rango.desde, hasta: data.rango.hasta, q: search,
+              })}
+              resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
             />
           )}
           {activeTab === 'reservas' && (
@@ -799,7 +841,9 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
         active={activeTab}
         onChange={setActiveTab}
         tabs={[
-          { id: 'reservas', label: 'Reservas', count: data.reservas.length },
+          // El conteo es el TOTAL del rango (`count: 'exact'`), no las filas traídas: con el
+          // techo puesto, contar lo cargado diría «500» sobre un conjunto mayor.
+          { id: 'reservas', label: 'Reservas', count: data.total },
           { id: 'turnos', label: 'Turnos', count: data.franjas.length },
           { id: 'configuracion', label: 'Configuración' },
         ]}
@@ -809,29 +853,23 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
       {activeTab === 'reservas' && (
       <>
 
-      <div className="ter-toolbar">
-        <div className="ter-search-wrap">
-          <Search size={16} strokeWidth={2} />
-          <input type="search" className="ter-search" placeholder="Buscar por cliente, teléfono, notas…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <input type="date" className="input ter-filter-select" value={filtroDesde}
-          onChange={e => setFiltroDesde(e.target.value)} />
-        <input type="date" className="input ter-filter-select" value={filtroHasta}
-          onChange={e => setFiltroHasta(e.target.value)} placeholder="hasta" />
-        <select className="input ter-filter-select" value={filtroFranja} onChange={e => setFiltroFranja(e.target.value)}>
-          <option value="">Todos los turnos</option>
-          {data.franjas.map(f => <option key={f.franja_id} value={f.franja_id}>{f.nombre}</option>)}
-        </select>
-        <select className="input ter-filter-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="PENDIENTE">Pendientes</option>
-          <option value="CONFIRMADA">Confirmadas</option>
-          <option value="RECHAZADA">Rechazadas</option>
-          <option value="NO_SHOW">No asistieron</option>
-          <option value="CANCELADA">Canceladas</option>
-        </select>
-      </div>
+      {/* Antes eran dos `<input type=date>` sin rótulo y con una trampa: al dejar «hasta»
+          vacío, el filtro caía a `filtroHasta || filtroDesde`, así que pedir «desde el 1 de
+          agosto» enseñaba SOLO el 1 de agosto. El rango del portal dice el rango que aplica
+          y sus presets viven en su panel. */}
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={search}
+        placeholder="Buscar por cliente, teléfono o notas…"
+        presets={PRESETS_RESERVAS}
+        hayMas={data.hay_mas}
+      />
+
+      {data.hay_mas && (
+        <AvisoTope mostrados={data.reservas.length} total={data.total}
+          limite={data.limite} sustantivo="reservas" femenino />
+      )}
 
       <div className="card card-table">
         {reservas.length === 0 ? (
