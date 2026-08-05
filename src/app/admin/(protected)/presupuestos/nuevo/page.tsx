@@ -41,9 +41,17 @@ export default async function NuevoPresupuestoPage({
   // aunque la acción ya aceptara el `clientId`. Se precargan sus módulos actuales para que el
   // comercial marque solo lo que se añade.
   if (cliente) {
+    // `clients` NO tiene columna de teléfono, y pedirla aquí no fallaba en voz alta:
+    // PostgREST rechaza la consulta ENTERA por una columna inexistente, así que `data`
+    // salía null, el `if` no entraba y **todo el prefill se perdía en silencio** — el
+    // comercial reteclea negocio, responsable y contacto, la ampliación pierde sus
+    // módulos actuales y, peor, se queda sin `clientId` (o sea, deja de ser una
+    // ampliación) y sin su tarifa de fundador. El contacto de un cliente es su
+    // `email_admin`, que además es NOT NULL. Ver CONTEXTO §2 › Fundaciones: un cliente
+    // no es un lead del embudo, no hay teléfono que traer.
     const { data } = await db
       .from('clients')
-      .select('client_id, nombre_empresa, nombre_contacto, email_admin, telefono, modulos_activos, tarifa')
+      .select('client_id, nombre_empresa, nombre_contacto, email_admin, modulos_activos, tarifa')
       .eq('client_id', cliente)
       .maybeSingle()
     if (data) {
@@ -55,7 +63,7 @@ export default async function NuevoPresupuestoPage({
         // contacto de un cliente que lleva meses con nosotros es pedirle al comercial que
         // copie a mano lo que está en la ficha de al lado.
         nombreResponsable: data.nombre_contacto ?? '',
-        contacto:          data.telefono || data.email_admin || '',
+        contacto:          data.email_admin ?? '',
         modulos:           Array.isArray(data.modulos_activos)
           ? data.modulos_activos.filter((c: string) => modulos.some(m => m.clave === c))
           : [],
