@@ -13,11 +13,12 @@ import {
   reactivarEmpleadosEnLote,
   eliminarEmpleadosEnLote,
   copiarEmpleadosAEmpresaEnLote,
+  contarNominasDeEmpleado,
   type Empleado,
   type EmpleadoConEstado,
   type TipoContrato,
   type Periodicidad,
-  type RrhhPageData,
+  type PersonalPageData,
   type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
 import { Copy, Eye, Info, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, X } from 'lucide-react'
@@ -73,7 +74,7 @@ export function EmpleadoModal({
   empleado, data, onClose, onSaved,
 }: {
   empleado: Empleado | null
-  data:     RrhhPageData
+  data:     PersonalPageData
   onClose:  () => void
   onSaved:  () => void
 }) {
@@ -107,11 +108,24 @@ export function EmpleadoModal({
     if (factor) setSalario((salarioOrigen * factor).toFixed(2))
   }
 
-  // Empresa del empleado (o la única, al crear): su moneda funcional es la
-  // referencia para detectar una ficha que quedó en la moneda de otra empresa.
-  const empresa       = data.empresas.find(e => e.empresa_id === (empleado?.empresa_id ?? data.empresas[0]?.empresa_id))
+  // Empresa del empleado (o la elegida, al crear): su moneda funcional es la
+  // referencia para detectar una ficha que quedó en la moneda de otra empresa, y su
+  // modelo de nómina decide si se preguntan los campos cubanos. Va en estado y no
+  // fijo, porque al crear el selector puede cambiarla y con ella las dos cosas.
+  const [empresaId, setEmpresaId] = useState(
+    empleado?.empresa_id ?? data.empresas[0]?.empresa_id ?? '')
+  const empresa       = data.empresas.find(e => e.empresa_id === empresaId)
   const monedaEmpresa = empresa?.moneda_funcional ?? null
   const nombreEmpresa = empresa?.nombre ?? 'Esta empresa'
+
+  // El modelo cubano no es del cliente, es de la EMPRESA: un negocio con varias puede
+  // tener una en MIPYME y el resto en General. Preguntar «¿es socio?» en una empresa
+  // que no aplica la ley cubana sería pedir un dato que ahí no se usa.
+  const cfgEmpresa  = data.config_nomina.find(c => c.empresa_id === empresaId)
+  const esCuba      = cfgEmpresa?.modelo === 'MIPYME_CUBA'
+  // Lo que vale un mes completo en esa empresa: es el número que hereda quien deje el
+  // campo en blanco, así que se enseña en vez de un «por defecto» que no dice cuánto.
+  const diasEmpresa = cfgEmpresa?.dias_laborables_default ?? 24
 
   // La moneda que ya tiene el empleado se ofrece aunque esté desactivada: si no,
   // desactivar una moneda dejaría sus fichas sin poder guardarse.
@@ -119,10 +133,19 @@ export function EmpleadoModal({
 
   // Nóminas donde ya aparece: conservan su moneda pase lo que pase (cada nómina
   // guarda la suya y sus líneas son un snapshot), pero conviene avisar.
-  const nominasEmpleado = empleado
-    ? data.nominas.filter(n => n.lineas.some(l => l.empleado_id === empleado.empleado_id))
-    : []
-  const nominasBorrador = nominasEmpleado.filter(n => n.estado === 'BORRADOR').length
+  //
+  // Se pide A DEMANDA, solo cuando alguien toca el selector de moneda. Era la ÚNICA
+  // razón por la que esta pantalla cargaba la historia completa de nómina —con sus
+  // líneas y sus ítems— para pintar una frase que casi nadie llega a ver.
+  const [conteo, setConteo] = useState<{ total: number; borradores: number } | null>(null)
+  useEffect(() => {
+    if (!cambiaMoneda || !empleado) return
+    let vivo = true
+    contarNominasDeEmpleado(empleado.empleado_id)
+      .then(r => { if (vivo) setConteo(r) })
+      .catch(() => { /* el aviso es informativo: sin él se sigue pudiendo guardar */ })
+    return () => { vivo = false }
+  }, [cambiaMoneda, empleado])
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -191,7 +214,8 @@ export function EmpleadoModal({
                     <input type="hidden" name="empresa_id" value={data.empresas[0].empresa_id} />
                   </>
                 ) : (
-                  <select className="input" name="empresa_id" defaultValue={empleado?.empresa_id ?? ''} required>
+                  <select className="input" name="empresa_id" value={empresaId} required
+                    onChange={e => setEmpresaId(e.target.value)}>
                     <option value="">Selecciona…</option>
                     {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
                   </select>
@@ -206,6 +230,18 @@ export function EmpleadoModal({
                 <label>Departamento</label>
                 <input className="input" name="departamento" list="rrhh-deptos" defaultValue={empleado?.departamento ?? ''} placeholder="Cocina, sala…" />
                 <datalist id="rrhh-deptos">{data.departamentos.map(c => <option key={c} value={c} />)}</datalist>
+              </div>
+
+              {/* La etiqueta libre que el negocio ya usaba en su hoja de cálculo. La
+                  escribía el importador y NINGUNA pantalla la enseñaba, así que el dato
+                  entraba y desaparecía. No es la rejilla: eso se dice aquí para que no
+                  se confundan dos cosas que se llaman igual. */}
+              <div className="input-group ter-col-span-2">
+                <label>Turno habitual</label>
+                <input className="input" name="turno" list="rrhh-turnos"
+                  defaultValue={empleado?.turno ?? ''} placeholder="Mañana, tarde…" />
+                <datalist id="rrhh-turnos">{data.turnos.map(t => <option key={t} value={t} />)}</datalist>
+                <span className="input-hint">Etiqueta suya. La semana se planifica en Turnos.</span>
               </div>
 
               <div className="input-group ter-col-span-2">
@@ -254,6 +290,39 @@ export function EmpleadoModal({
                 )}
               </div>
 
+              {/* Los dos campos del modelo cubano. Solo si SU empresa lo usa: en el
+                  General no significan nada y preguntarlos sería pedir un dato que no
+                  se aplica. La columna existe desde la mig. 142 y el motor la usa
+                  (`nomina-cuba.ts`), pero no había dónde escribirla — así que todo el
+                  mundo nacía y moría con `es_socio = false` y a los socios se les
+                  retenía una CESS que por norma no les toca. */}
+              {esCuba && (
+                <>
+                  <div className="input-group ter-col-span-3">
+                    <label htmlFor="emp-dias">Días laborables</label>
+                    <input className="input" id="emp-dias" name="dias_laborables" type="number"
+                      min="1" max="31" step="any"
+                      defaultValue={empleado?.dias_laborables ?? ''}
+                      placeholder={String(diasEmpresa)} />
+                    <span className="input-hint">En blanco, los {diasEmpresa} de {nombreEmpresa}.</span>
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label htmlFor="emp-socio">Relación con la empresa</label>
+                    {/* El hidden gemelo es lo que permite distinguir «desmarcado» de
+                        «no estaba en pantalla»: un checkbox sin marcar no se envía. */}
+                    <input type="hidden" name="es_socio" value="0" />
+                    <label className="filtro-toggle">
+                      <input type="checkbox" className="row-check" id="emp-socio"
+                        name="es_socio" value="1" defaultChecked={!!empleado?.es_socio} />
+                      Es socio de la empresa
+                    </label>
+                    <span className="input-hint">
+                      Los socios no pagan la Contribución Especial (CESS). El resto se le calcula igual.
+                    </span>
+                  </div>
+                </>
+              )}
+
               {cambiaMoneda && (
                 <div className="moneda-cambio">
                   {salarioOrigen > 0 && (
@@ -266,13 +335,13 @@ export function EmpleadoModal({
                       </span>
                     </div>
                   )}
-                  {nominasEmpleado.length > 0 && (
+                  {conteo && conteo.total > 0 && (
                     <div className="moneda-cambio-nota">
                       <Info size={14} strokeWidth={2} />
                       <span>
-                        Aparece en {nominasEmpleado.length} nómina{nominasEmpleado.length !== 1 ? 's' : ''} en {monedaOrigen}:
+                        Aparece en {conteo.total} nómina{conteo.total !== 1 ? 's' : ''} en {monedaOrigen}:
                         se conservan tal cual y las nuevas se harán en {moneda}.
-                        {nominasBorrador > 0 && ` Revisa ${nominasBorrador === 1 ? 'la que está en borrador' : `las ${nominasBorrador} en borrador`}.`}
+                        {conteo.borradores > 0 && ` Revisa ${conteo.borradores === 1 ? 'la que está en borrador' : `las ${conteo.borradores} en borrador`}.`}
                       </span>
                     </div>
                   )}
@@ -396,7 +465,7 @@ export function ConfirmEliminar({
 
 // ── Página: Personal ─────────────────────────────────────────────────────────────
 
-export default function PersonalView({ data }: { data: RrhhPageData }) {
+export default function PersonalView({ data }: { data: PersonalPageData }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1

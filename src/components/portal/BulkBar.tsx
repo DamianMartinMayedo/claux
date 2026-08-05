@@ -11,10 +11,16 @@ import type { ReactNode } from 'react'
 // filas) vive en quien la usa. Estilos en `.bulk-bar` (03-components.css).
 
 export default function BulkBar({
-  count, onClear, children,
+  count, onClear, etiqueta, limpiarLabel, children,
 }: {
   count:    number
   onClear:  () => void
+  /** Sustituye al «N seleccionadas» por defecto. Lo usa el cuadrante de Turnos, donde
+   *  lo que se acumula no son filas marcadas sino cambios sin guardar: la barra es la
+   *  misma pieza, pero decir «seleccionadas» ahí sería mentir. */
+  etiqueta?: ReactNode
+  /** Por defecto «Deseleccionar»; en Turnos es «Descartar». */
+  limpiarLabel?: string
   children: ReactNode
 }) {
   if (count === 0) return null
@@ -22,9 +28,9 @@ export default function BulkBar({
     <div className="bulk-bar" role="region" aria-label="Acciones en lote">
       <div className="bulk-bar-inner">
         <div className="bulk-bar-count">
-          <span><strong>{count}</strong> seleccionada{count === 1 ? '' : 's'}</span>
+          {etiqueta ?? <span><strong>{count}</strong> seleccionada{count === 1 ? '' : 's'}</span>}
           <button type="button" className="bulk-bar-clear" onClick={onClear}>
-            <X size={14} strokeWidth={2} /> Deseleccionar
+            <X size={14} strokeWidth={2} /> {limpiarLabel ?? 'Deseleccionar'}
           </button>
         </div>
         <div className="bulk-bar-actions">

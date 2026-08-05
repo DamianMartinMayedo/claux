@@ -35,6 +35,7 @@ import { SIN_CATEGORIA, SIN_TERCERO, importeBuscado } from '@/lib/listados'
 // 20:00 la fecha ya es la de mañana: el tramo de antigüedad de una deuda y el estado
 // efectivo de un acuerdo salían distintos en el fichero y en la pantalla.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { horasDeTurno } from '@/lib/rrhh/turnos'
 import type { ValorCelda } from './csv'
 
 // Los centinelas de «los que no tienen» viven en `lib/listados.ts`: los necesitan las
@@ -979,13 +980,18 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     clave: 'empleados',
     etiqueta: 'Personal',
     modulos: ['rrhh'],
+    // Lleva lo que el IMPORTADOR sabe leer, que es lo que convierte esta descarga en
+    // una copia de seguridad utilizable. Faltaban `vacaciones_apertura`, `es_socio` y
+    // `dias_laborables`: se podían importar y no exportar, así que un ciclo
+    // exportar → reimportar perdía el saldo de vacaciones de toda la plantilla.
     cabeceras: ['Código', 'Nombre', 'Apellidos', 'Documento', 'Cargo', 'Departamento',
-      'Tipo de contrato', 'Fecha de alta', 'Salario base', 'Moneda', 'Periodicidad',
-      'Empresa', 'Fecha de baja', 'Email', 'Teléfono'],
+      'Turno habitual', 'Tipo de contrato', 'Fecha de alta', 'Salario base', 'Moneda',
+      'Periodicidad', 'Empresa', 'Fecha de baja', 'Email', 'Teléfono',
+      'Vacaciones acumuladas', 'Es socio', 'Días laborables'],
     cargar: async (db, cid, filtro) => {
       const [filas, empresas] = await Promise.all([
         leer(db, 'empleados', cid,
-          'empleado_id, nombre, apellidos, documento, cargo, departamento, tipo_contrato, fecha_alta, salario_base, moneda, periodicidad, empresa_id, fecha_baja, email, telefono', 'nombre',
+          'empleado_id, nombre, apellidos, documento, cargo, departamento, turno, tipo_contrato, fecha_alta, salario_base, moneda, periodicidad, empresa_id, fecha_baja, email, telefono, vacaciones_apertura, es_socio, dias_laborables', 'nombre',
           filtro, undefined, ['nombre', 'apellidos', 'documento', 'cargo', 'empleado_id'],
           { empresa_id: filtro?.empresa_id, departamento: filtro?.categoria }),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
@@ -998,10 +1004,16 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         .map(f => [
         f.empleado_id as string, f.nombre as string, f.apellidos as string,
         f.documento as string, f.cargo as string, f.departamento as string,
+        f.turno as string,
         f.tipo_contrato as string, f.fecha_alta as string, f.salario_base as number,
         f.moneda as string, f.periodicidad as string,
         empresas.get(f.empresa_id as string) ?? '', f.fecha_baja as string,
         f.email as string, f.telefono as string,
+        Number(f.vacaciones_apertura ?? 0),
+        // «Sí»/«No» y no un booleano: es lo que el importador vuelve a entender y lo
+        // que un dueño reconoce en su hoja de cálculo.
+        f.es_socio ? 'Sí' : 'No',
+        f.dias_laborables == null ? '' : Number(f.dias_laborables),
       ])
     },
   },
@@ -1030,18 +1042,71 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     clave: 'turnos',
     etiqueta: 'Turnos',
     modulos: ['rrhh'],
-    cabeceras: ['Turno', 'Hora de inicio', 'Hora de fin', 'Empresa', 'Activo'],
+    cabeceras: ['Turno', 'Hora de inicio', 'Hora de fin', 'Es descanso', 'Empresa', 'Activo'],
     cargar: async (db, cid, filtro) => {
       const [filas, empresas] = await Promise.all([
-        leer(db, 'turnos', cid, 'nombre, hora_inicio, hora_fin, empresa_id, activo', 'nombre',
+        leer(db, 'turnos', cid, 'nombre, hora_inicio, hora_fin, es_descanso, empresa_id, activo', 'nombre',
           filtro, undefined, ['nombre'],
           { empresa_id: filtro?.empresa_id, activo: !filtro?.archivadas }),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
       return filas.map(f => [
         f.nombre as string, f.hora_inicio as string, f.hora_fin as string,
+        f.es_descanso ? 'Sí' : 'No',
         empresas.get(f.empresa_id as string) ?? '', f.activo as boolean,
       ])
+    },
+  },
+  {
+    // EL CUADRANTE, que es lo que la pantalla de Turnos está enseñando y lo único de
+    // ahí que un negocio quiere en papel. El botón «Descargar» bajaba el CATÁLOGO de
+    // turnos —tres filas: nombre, horas, empresa— mientras el dueño miraba la rejilla:
+    // la descarga prometía una cosa y traía otra, que es justo lo que el sistema de
+    // filtros vino a eliminar del portal.
+    clave: 'turnos_cuadrante',
+    etiqueta: 'Cuadrante semanal',
+    modulos: ['rrhh'],
+    cabeceras: ['Empleado', 'Cargo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes',
+      'Sábado', 'Domingo', 'Horas'],
+    cargar: async (db, cid, filtro) => {
+      // La plantilla se acota por empresa como el resto (`TABLAS_CON_EMPRESA` cubre
+      // `empleados` y `turnos`); solo se pinta a quien está de alta: un cuadrante con
+      // las bajas dentro no es el cuadrante de esta semana.
+      const [empleados, turnos, asigns] = await Promise.all([
+        leer(db, 'empleados', cid, 'empleado_id, nombre, apellidos, cargo, fecha_baja', 'nombre',
+          filtro, undefined, ['nombre', 'apellidos', 'cargo'],
+          { empresa_id: filtro?.empresa_id }),
+        leer(db, 'turnos', cid, 'turno_id, nombre, hora_inicio, hora_fin, es_descanso', 'nombre',
+          filtro, undefined, ['nombre'], { empresa_id: filtro?.empresa_id }),
+        db.from('turno_asignaciones').select('empleado_id, dia_semana, turno_id').eq('client_id', cid),
+      ])
+
+      const turnoDe = new Map((turnos as unknown as {
+        turno_id: string; nombre: string; hora_inicio: string | null
+        hora_fin: string | null; es_descanso: boolean
+      }[]).map(t => [t.turno_id, t]))
+      const celda = new Map<string, string>()
+      for (const a of (asigns.data ?? []) as { empleado_id: string; dia_semana: number; turno_id: string }[]) {
+        celda.set(`${a.empleado_id}-${a.dia_semana}`, a.turno_id)
+      }
+
+      return empleados
+        .filter(e => !e.fecha_baja)
+        .map(e => {
+          const dias = [1, 2, 3, 4, 5, 6, 7].map(d => turnoDe.get(celda.get(`${e.empleado_id as string}-${d}`) ?? ''))
+          const horas = dias.reduce((s, t) => s + horasDeTurno(t ?? null), 0)
+          return [
+            [e.nombre as string, e.apellidos as string].filter(Boolean).join(' '),
+            (e.cargo as string) ?? '',
+            // El horario va en la celda: un cuadrante que solo dice «Mañana» obliga a
+            // mirar otra hoja para saber a qué hora es «Mañana».
+            ...dias.map(t => !t ? '' : t.es_descanso ? 'Libre'
+              : [t.nombre, t.hora_inicio && t.hora_fin
+                  ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : '']
+                .filter(Boolean).join(' ')),
+            horas > 0 ? Math.round(horas * 10) / 10 : '',
+          ]
+        })
     },
   },
   {

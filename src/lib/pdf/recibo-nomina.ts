@@ -26,6 +26,7 @@ import {
 } from './documento'
 import { formatearMoneda } from '@/app/portal/(app)/ventas/_ventas-helpers'
 import { fmtFechaLargaEs } from '@/lib/date-utils'
+import { costeEmpresa }    from '@/lib/rrhh/coste'
 
 export interface EmpresaReciboPdf {
   nombre:             string
@@ -296,15 +297,15 @@ export async function construirReciboNomina(
       ['Vacaciones disfrutadas pagadas',   d.vacaciones_pagadas],
     ])
 
-    // COSTE EMPRESARIAL — la fórmula del modelo de coste/deuda:
-    //   (devengado - vacaciones disfrutadas) + acumulación del mes + aportes
-    // Las vacaciones disfrutadas se restan porque su coste ya se reconoció el mes en
-    // que se acumularon; sumarlas otra vez las contaría dos veces. Y NO es
-    // «neto + aportes»: eso deja fuera las retenciones, que son el mismo coste con
-    // otro acreedor — el error que ya se corrigió una vez en la contabilidad.
-    const sumaAportes = d.aportes.reduce((s, a) => s + a.monto, 0)
-    const coste = Math.round(
-      (d.devengado - d.vacaciones_pagadas + d.vacaciones_acumuladas + sumaAportes) * 100) / 100
+    // COSTE EMPRESARIAL. La fórmula vive en `lib/rrhh/coste.ts` desde que la hoja de
+    // nómina también la enseña: el recibo y la pantalla tienen que decir el mismo
+    // número, y con una copia en cada sitio no hay quien lo garantice.
+    const coste = costeEmpresa({
+      devengado:             d.devengado,
+      vacaciones_pagadas:    d.vacaciones_pagadas,
+      vacaciones_acumuladas: d.vacaciones_acumuladas,
+      aportes:               d.aportes.reduce((s, a) => s + a.monto, 0),
+    })
     if (y + 12 > limiteInferior) { doc.addPage(); y = M }
     trazo(doc, MARCA.border); doc.setLineWidth(0.2)
     doc.line(M, y, right, y)

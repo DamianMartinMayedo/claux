@@ -8,6 +8,13 @@ import { generarInsight, responderChat, type TipoInsight, type TurnoChat } from 
 import { sugerirDatosItem, type SugerenciaItem } from '@/lib/ia/catalogo'
 import { sugerirDatosProducto, type SugerenciaProducto } from '@/lib/ia/producto'
 import { interpretarConteoDictado, emparejarConteo } from '@/lib/ia/conteo'
+import {
+  revisarNomina, explicarRecibo,
+  type LineaRevision, type EntradaRecibo,
+} from '@/lib/ia/nomina'
+// El MISMO cargador que dibuja el recibo en PDF: es lo que garantiza que la explicación
+// de la IA y el papel digan las mismas cifras.
+import { obtenerReciboNomina } from './rrhh'
 import { sugerirSeccionDossier } from '@/lib/ia/dossier'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { estadoDeResultados } from '@/lib/dossier/estado'
@@ -80,6 +87,171 @@ export async function chatAgenteIa(historial: TurnoChat[], mensaje: string): Pro
     console.error('[ia] chatAgente', e)
     return { ok: false, error: mensajeError(e) }
   }
+}
+
+// ── Nómina: revisar el borrador y explicar el recibo (IA de cara al dueño) ──
+//
+// Las dos son tareas sobre datos CONCRETOS, no «insights» de sección: por eso van como
+// acción propia con sus datos, igual que el autocompletado del catálogo o el conteo
+// dictado. La IA **solo propone** y **no puede confirmar una nómina** — confirmar es lo
+// único irreversible del módulo y sigue siendo un clic del dueño.
+//
+// LECTURA: el candado del módulo lo pone la página de Nómina (`requireModulo('rrhh')`);
+// aquí solo se comprueba el addon de IA.
+
+export type IaTextoOpcional = { ok: true; texto: string } | { ok: false; error: string }
+
+/** R8.1 · Repasa un borrador y señala lo que se sale de lo normal, antes de confirmar. */
+export async function revisarNominaIa(nomina_id: string): Promise<IaTextoOpcional> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  const db = createAdminClient()
+  const { data: nomina } = await db.from('nominas')
+    .select('nomina_id, empresa_id, periodo, moneda, estado')
+    .eq('nomina_id', nomina_id).eq('client_id', guard.clientId).maybeSingle()
+  if (!nomina) return { ok: false, error: 'Nómina no encontrada.' }
+
+  const { data: lineas } = await db.from('nomina_lineas')
+    .select('empleado_id, empleado_nombre, cargo, devengado, deducciones')
+    .eq('nomina_id', nomina_id).eq('client_id', guard.clientId).order('empleado_nombre')
+  const filas = (lineas ?? []) as {
+    empleado_id: string; empleado_nombre: string; cargo: string | null
+    devengado: number; deducciones: number
+  }[]
+  if (!filas.length) return { ok: false, error: 'Esa nómina no tiene líneas.' }
+
+  const empIds = filas.map(f => f.empleado_id)
+
+  // El histórico: los 6 períodos anteriores de la MISMA empresa y moneda, que es contra
+  // lo que tiene sentido comparar. Sin esto la IA no puede decir «cobra más de lo suyo».
+  const { data: previas } = await db.from('nominas')
+    .select('nomina_id, periodo')
+    .eq('client_id', guard.clientId).eq('empresa_id', nomina.empresa_id)
+    .eq('moneda', nomina.moneda).eq('estado', 'CONFIRMADA')
+    .lt('periodo', nomina.periodo)
+    .order('periodo', { ascending: false }).limit(6)
+  const idsPrevias = ((previas ?? []) as { nomina_id: string; periodo: string }[])
+
+  const histPorEmpleado = new Map<string, number[]>()
+  if (idsPrevias.length) {
+    const { data: hist } = await db.from('nomina_lineas')
+      .select('nomina_id, empleado_id, devengado')
+      .eq('client_id', guard.clientId)
+      .in('nomina_id', idsPrevias.map(n => n.nomina_id))
+      .in('empleado_id', empIds)
+    const ordenDe = new Map(idsPrevias.map((n, i) => [n.nomina_id, i]))
+    const bruto = new Map<string, { orden: number; monto: number }[]>()
+    for (const l of (hist ?? []) as { nomina_id: string; empleado_id: string; devengado: number }[]) {
+      const arr = bruto.get(l.empleado_id) ?? []
+      arr.push({ orden: ordenDe.get(l.nomina_id) ?? 99, monto: Number(l.devengado) })
+      bruto.set(l.empleado_id, arr)
+    }
+    for (const [id, arr] of bruto) {
+      histPorEmpleado.set(id, arr.sort((a, b) => a.orden - b.orden).map(x => x.monto))
+    }
+  }
+
+  // Alta o baja DENTRO del período: es el caso que cobra el mes completo sin haberlo
+  // trabajado entero, y el que más dinero mueve de todos los que la IA puede señalar.
+  const [yy, mm] = nomina.periodo.split('-').map(Number)
+  const inicio = `${nomina.periodo}-01`
+  const fin    = `${nomina.periodo}-${String(new Date(yy, mm, 0).getDate()).padStart(2, '0')}`
+  const { data: fichas } = await db.from('empleados')
+    .select('empleado_id, fecha_alta, fecha_baja')
+    .eq('client_id', guard.clientId).in('empleado_id', empIds)
+  const fichaDe = new Map(((fichas ?? []) as {
+    empleado_id: string; fecha_alta: string | null; fecha_baja: string | null
+  }[]).map(f => [f.empleado_id, f]))
+
+  // Los días cargados del mes y el modelo de la empresa: bajo MIPYME_CUBA unas
+  // retenciones a cero SÍ son raras, y en el General no significan nada.
+  const [{ data: incs }, { data: cfg }] = await Promise.all([
+    db.from('incidencias_nomina').select('empleado_id, dias_trabajados')
+      .eq('client_id', guard.clientId).eq('periodo', nomina.periodo).in('empleado_id', empIds),
+    db.from('empresa_config_nomina').select('modelo')
+      .eq('client_id', guard.clientId).eq('empresa_id', nomina.empresa_id).maybeSingle(),
+  ])
+  const diasDe = new Map(((incs ?? []) as { empleado_id: string; dias_trabajados: number | null }[])
+    .map(i => [i.empleado_id, i.dias_trabajados === null ? null : Number(i.dias_trabajados)]))
+  const modelo = (cfg?.modelo as string) ?? 'GENERAL'
+
+  const filasIa: LineaRevision[] = filas.map(f => {
+    const ficha = fichaDe.get(f.empleado_id)
+    const alta = ficha?.fecha_alta?.slice(0, 10)
+    const baja = ficha?.fecha_baja?.slice(0, 10)
+    return {
+      nombre:      f.empleado_nombre,
+      cargo:       f.cargo,
+      devengado:   Number(f.devengado),
+      retenciones: Number(f.deducciones),
+      dias:        diasDe.get(f.empleado_id) ?? null,
+      historico:   histPorEmpleado.get(f.empleado_id) ?? [],
+      alta_en_periodo: !!alta && alta >= inicio && alta <= fin,
+      baja_en_periodo: !!baja && baja >= inicio && baja <= fin,
+    }
+  })
+
+  const texto = await revisarNomina(guard.clientId, {
+    periodo: nomina.periodo, moneda: nomina.moneda, modelo, lineas: filasIa,
+  })
+  if (!texto) return { ok: false, error: 'No pude revisar la nómina ahora mismo. Inténtalo de nuevo.' }
+  return { ok: true, texto }
+}
+
+/** R8.2 · Explica un recibo en lenguaje llano, para leérselo al trabajador. */
+export async function explicarReciboIa(
+  nomina_id: string, empleado_id: string,
+): Promise<IaTextoOpcional> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  // Se reusa el MISMO cargador que dibuja el recibo en PDF: es lo que garantiza que la
+  // explicación y el papel digan las mismas cifras.
+  const r = await obtenerReciboNomina(nomina_id, empleado_id)
+  if (!r.ok) return { ok: false, error: r.error }
+  const rec = r.recibo
+
+  const db = createAdminClient()
+  // Neto del mes anterior, para poder responder «¿por qué cobro menos que el mes pasado?»,
+  // que es la pregunta real. Sin él la explicación se queda en describir el recibo.
+  // La empresa sale de la nómina, no del recibo (que lleva sus datos fiscales, no su id).
+  const { data: estaNomina } = await db.from('nominas').select('empresa_id')
+    .eq('nomina_id', nomina_id).eq('client_id', guard.clientId).maybeSingle()
+  const { data: previa } = await db.from('nominas')
+    .select('nomina_id')
+    .eq('client_id', guard.clientId).eq('empresa_id', estaNomina?.empresa_id ?? '__none__')
+    .eq('estado', 'CONFIRMADA').lt('periodo', rec.periodo)
+    .order('periodo', { ascending: false }).limit(1).maybeSingle()
+  let neto_anterior: number | null = null
+  if (previa?.nomina_id) {
+    const { data: ln } = await db.from('nomina_lineas').select('neto')
+      .eq('client_id', guard.clientId).eq('nomina_id', previa.nomina_id)
+      .eq('empleado_id', empleado_id).maybeSingle()
+    if (ln) neto_anterior = Number(ln.neto)
+  }
+
+  const entrada: EntradaRecibo = {
+    trabajador:   rec.trabajador.nombre,
+    periodo:      rec.periodo,
+    moneda:       rec.moneda,
+    salario_base: rec.salario_base,
+    devengado:    rec.devengado,
+    neto:         rec.neto,
+    // Solo lo que afecta a SU neto: los `aportes` son coste de la EMPRESA por encima del
+    // bruto, y meterlos aquí haría creer al trabajador que le descuentan algo que no le
+    // descuentan. Es la misma separación que hace el recibo en papel.
+    conceptos: [
+      ...rec.devengos.map(c    => ({ nombre: c.nombre, tipo: 'DEVENGO',   monto: c.monto })),
+      ...rec.retenciones.map(c => ({ nombre: c.nombre, tipo: 'RETENCION', monto: c.monto })),
+    ],
+    neto_anterior,
+    dias: rec.dias_trabajados,
+  }
+
+  const texto = await explicarRecibo(guard.clientId, entrada)
+  if (!texto) return { ok: false, error: 'No pude preparar la explicación ahora mismo. Inténtalo de nuevo.' }
+  return { ok: true, texto }
 }
 
 // ── Autocompletar ficha de un ítem del Catálogo (IA de cara al dueño) ──

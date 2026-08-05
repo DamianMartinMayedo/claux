@@ -1,158 +1,184 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { type RrhhPageData } from '@/app/actions/portal/rrhh'
+import { useState, useTransition } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import {
+  exportarReportesRrhhXlsx,
+  type ReportesRrhhData,
+} from '@/app/actions/portal/rrhh'
 import { BarChart3, Download, ChevronDown } from 'lucide-react'
 import { EmpresaTag }   from '@/components/portal/EmpresaTag'
 import EmpresaPills     from '@/components/portal/EmpresaPills'
 import { useEmpresas }  from '@/components/portal/EmpresaColorContext'
-import { crearDoc, cabeceraReporte, sellarPie, MARCA, RESERVA_PIE } from '@/lib/pdf/documento'
-import { aniosDisponibles, construirReportesRrhh } from '@/lib/rrhh/reportes'
+import IaTouchpoint     from '@/components/portal/ia/IaTouchpoint'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
+import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
+import { crearDoc, cabeceraReporte, sellarPie } from '@/lib/pdf/documento'
+import { crearCursor } from '@/lib/pdf/reporte'
+import { formatMesRrhh } from '@/lib/rrhh/reportes'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function formatMes(periodo: string): string {
-  const [y, m] = periodo.split('-').map(Number)
-  if (!y || !m) return periodo
-  const s = new Date(y, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-  return s.charAt(0).toUpperCase() + s.slice(1)
+/** «120.000,00 CUP · 900,00 USD» — dos monedas NO se suman en un número. */
+function lineaMoneda(ms: { moneda: string; monto: number }[]): string {
+  return ms.length ? ms.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ') : '—'
 }
 
 // ── Página: Reportes de RRHH ─────────────────────────────────────────────────────
 
-export default function ReportesView({ data }: { data: RrhhPageData }) {
-  const anioActual = String(new Date().getFullYear())
-  const [filtroEmpresa, setFiltroEmpresa] = useState('')
-  const [anio, setAnio] = useState(anioActual)
+export default function ReportesView({ data, anio }: { data: ReportesRrhhData; anio: string }) {
+  const router = useRouter()
+  const params = useSearchParams()
+  const filtroEmpresa = params.get('empresa') ?? ''
+
+  // El estado vive en la URL como en el resto del portal: refrescar —o que se caiga la
+  // conexión— ya no devuelve el informe al año en curso y a «todas las empresas».
+  function navegar(cambios: Record<string, string>) {
+    const url = new URLSearchParams(params.toString())
+    for (const [k, v] of Object.entries(cambios)) { if (v) url.set(k, v); else url.delete(k) }
+    router.replace(`?${url.toString()}`, { scroll: false })
+  }
 
   const { colorOf } = useEmpresas()
   const empresasFiltro = data.empresas.map(e => ({
     empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
   }))
 
-  const anios = useMemo(() => aniosDisponibles(data.nominas, anioActual), [data.nominas, anioActual])
-
-  // TODA la agregación sale de `src/lib/rrhh/reportes.ts`. Antes esta vista tenía su
-  // propia copia en `useMemo`s y el módulo compartido no lo importaba NADIE, así que
-  // había dos implementaciones del mismo número y solo una se enseñaba — la que
-  // sumaba NETOS y por tanto rebajaba el coste de personal con cada retención.
-  const { plantilla, altas, bajas, costeAnual, costePorMes, porDepto, porEmpresa } = useMemo(
-    () => construirReportesRrhh(
-      data.empleados,
-      data.nominas,
-      data.empresas,
-      { empresaId: filtroEmpresa, anio },
-    ),
-    [data.empleados, data.nominas, data.empresas, filtroEmpresa, anio],
-  )
-
-  const sinDatos = data.empleados.length === 0
-
-  // ── Descarga ──────────────────────────────────────────────────────────────
-  const [menuOpen,    setMenuOpen]    = useState(false)
-  const [descargando, setDescargando] = useState(false)
+  // La agregación llega YA HECHA desde el servidor (`obtenerReportesRrhh`), con el mismo
+  // `construirReportesRrhh` que usa el Excel. Antes esta vista recibía la historia
+  // completa de nómina —con su desglose y su desfase recalculado— para sumarla en el
+  // navegador: la pantalla que menos filas necesitaba era la que más traía.
+  const { plantilla, altas, bajas, costeAnual, costePorMes, porDepto, porEmpresa,
+          vacaciones, onat, costeMedio, rotacion, antiguedad, porCargo } = data.reportes
+  const sinDatos = data.sinDatos
 
   const empresaNombre = filtroEmpresa
     ? (data.empresas.find(e => e.empresa_id === filtroEmpresa)?.nombre ?? '')
     : 'Todas las empresas'
-  const nombreArchivo = `reportes_rrhh_${anio}`
-  const lineaMoneda = (ms: { moneda: string; monto: number }[]) =>
-    ms.length ? ms.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ') : '—'
 
+  // ── Descarga ──────────────────────────────────────────────────────────────
+  const [menuOpen,    setMenuOpen]    = useState(false)
+  const [descargando, setDescargando] = useState(false)
+  const [, startTransition] = useTransition()
+
+  /** El PDF se dibuja con el CURSOR común (`lib/pdf/reporte.ts`), no a mano. Ahí vive
+   *  `textoPdfSeguro`, la protección contra el gotcha WinAnsi del signo menos: una
+   *  segunda implementación del cursor era una segunda forma de tropezar con él. */
   async function descargarPDF() {
     setMenuOpen(false)
     if (descargando) return
     setDescargando(true)
     try {
-      const doc   = await crearDoc()
-      const pageH = doc.internal.pageSize.getHeight()
-      const M = 16, right = doc.internal.pageSize.getWidth() - M
-      let y = M
-      const TEAL = MARCA.teal
-      const DARK = MARCA.dark
-      const GRAY = MARCA.muted
-
-      const ensure = (s: number) => { if (y + s > pageH - RESERVA_PIE - 2) { doc.addPage(); y = M } }
-      const row = (label: string, amount: string, opts: { bold?: boolean; color?: [number, number, number]; indent?: boolean } = {}) => {
-        ensure(7)
-        doc.setFont('helvetica', opts.bold ? 'bold' : 'normal'); doc.setFontSize(10)
-        const c = opts.color ?? DARK; doc.setTextColor(c[0], c[1], c[2])
-        doc.text(label, opts.indent ? M + 4 : M, y)
-        if (amount) doc.text(amount, right, y, { align: 'right' })
-        y += 6
-      }
-      const heading = (text: string) => {
-        ensure(12); doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
-        doc.setTextColor(DARK[0], DARK[1], DARK[2]); doc.text(text, M, y); y += 7
-      }
-
-      y = cabeceraReporte(doc, {
+      const doc = await crearDoc()
+      const cur = crearCursor(doc)
+      cur.y = cabeceraReporte(doc, {
         titulo:    'Reportes de personal',
         izquierda: empresaNombre,
-        derecha:   `Año ${anio}`,
+        derecha:   `Año ${anio}${data.ver ? ` · en ${data.ver}` : ''}`,
       })
 
-      heading('Resumen')
-      row('Plantilla activa', String(plantilla))
-      row(`Altas en ${anio}`, String(altas))
-      row(`Bajas en ${anio}`, String(bajas))
-      for (const c of costeAnual) row(`Coste de personal (${c.moneda})`, formatMonto(c.monto), { bold: true, color: TEAL })
+      cur.titulo('Resumen')
+      cur.fila('Plantilla activa', String(plantilla))
+      cur.fila(`Altas en ${anio}`, String(altas))
+      cur.fila(`Bajas en ${anio}`, String(bajas))
+      for (const c of costeAnual) cur.filaTotal(`Coste de personal (${c.moneda})`, formatMonto(c.monto))
+      for (const c of costeMedio) cur.fila(`Coste medio por persona (${c.moneda})`, formatMonto(c.monto))
 
-      y += 2; heading(`Coste de personal por mes · ${anio}`)
-      if (costePorMes.length === 0) row('Sin nóminas confirmadas en el período.', '', { color: GRAY })
-      for (const r of costePorMes) row(formatMes(r.periodo), lineaMoneda(r.monedas))
+      cur.salto(2); cur.titulo(`Cómo se movió la plantilla · ${anio}`)
+      cur.fila(`Al empezar ${anio}`, String(rotacion.plantillaInicio))
+      cur.fila(`Al acabar ${anio}`,  String(rotacion.plantillaFin))
+      cur.fila('Plantilla media',    String(rotacion.plantillaMedia))
+      if (rotacion.indice !== null) cur.fila('Rotación (bajas ÷ plantilla media)', `${rotacion.indice} %`)
+      if (antiguedad.mediaAnios !== null) cur.fila('Antigüedad media', `${antiguedad.mediaAnios} años`)
+      if (antiguedad.veterano) {
+        cur.fila('Más antiguo', `${antiguedad.veterano.nombre} (${antiguedad.veterano.anios} años)`)
+      }
 
-      y += 2; heading('Plantilla por departamento')
-      for (const d of porDepto) row(`${d.departamento} (${d.activos})`, lineaMoneda(d.coste))
+      cur.salto(2); cur.titulo(`Coste de personal por mes · ${anio}`)
+      if (costePorMes.length === 0) cur.nota('Sin nóminas confirmadas en el período.')
+      else {
+        cur.cabeceraTabla('Mes', 'Coste')
+        for (const r of costePorMes) cur.fila(formatMesRrhh(r.periodo), lineaMoneda(r.monedas))
+      }
+
+      cur.salto(2); cur.titulo('Plantilla por departamento')
+      cur.cabeceraTabla('Departamento', `Coste ${anio}`)
+      for (const d of porDepto) cur.fila(`${d.departamento} (${d.activos})`, lineaMoneda(d.coste))
+
+      cur.salto(2); cur.titulo('Plantilla por cargo')
+      cur.cabeceraTabla('Cargo', `Coste ${anio}`)
+      for (const c of porCargo) cur.fila(`${c.cargo} (${c.activos})`, lineaMoneda(c.coste))
+
+      if (vacaciones.porTrabajador.length) {
+        cur.salto(2); cur.titulo('Deuda de vacaciones')
+        cur.nota('Se reconoce al acumularse y se paga cuando se disfruta: es un pasivo del negocio.')
+        cur.cabeceraTabla('Trabajador', 'Saldo')
+        for (const v of vacaciones.porTrabajador) cur.fila(v.nombre, `${formatMonto(v.saldo)} ${v.moneda}`)
+        for (const t of vacaciones.total) cur.filaTotal(`Total (${t.moneda})`, formatMonto(t.monto))
+      }
+
+      if (onat.length) {
+        cur.salto(2); cur.titulo(`Tributos de nómina · ${anio}`)
+        cur.cabeceraTabla('Concepto', 'Importe')
+        for (const o of onat) cur.fila(o.concepto, lineaMoneda(o.monedas))
+      }
+
+      if (data.convertido) {
+        cur.salto(2)
+        cur.nota(`Hay importes convertidos a ${data.ver} con la tasa vigente.`)
+      }
 
       sellarPie(doc)
-      doc.save(`${nombreArchivo}.pdf`)
+      doc.save(`reportes_rrhh_${anio}.pdf`)
     } finally {
       setDescargando(false)
     }
   }
 
-  function descargarCSV() {
+  /** El .xlsx se genera en SERVIDOR. Sustituye al CSV que se armaba en el navegador:
+   *  al asesor le llegaban los importes como texto, sin poder sumarlos. */
+  function descargarExcel() {
     setMenuOpen(false)
-    const num = (n: number) => n.toFixed(2).replace('.', ',')
-    const rows: string[] = []
-    rows.push('Reportes de personal')
-    rows.push(`Empresa;${empresaNombre}`)
-    rows.push(`Año;${anio}`)
-    rows.push('')
-    rows.push('RESUMEN')
-    rows.push(`Plantilla activa;${plantilla}`)
-    rows.push(`Altas;${altas}`)
-    rows.push(`Bajas;${bajas}`)
-    for (const c of costeAnual) rows.push(`Coste de personal (${c.moneda});${num(c.monto)}`)
-    rows.push('')
-    rows.push('COSTE POR MES')
-    rows.push('Mes;Moneda;Importe')
-    for (const r of costePorMes) for (const m of r.monedas) rows.push(`${formatMes(r.periodo)};${m.moneda};${num(m.monto)}`)
-    rows.push('')
-    rows.push('POR DEPARTAMENTO')
-    rows.push('Departamento;Activos;Moneda;Coste')
-    for (const d of porDepto) {
-      if (d.coste.length === 0) rows.push(`${d.departamento};${d.activos};;`)
-      for (const m of d.coste) rows.push(`${d.departamento};${d.activos};${m.moneda};${num(m.monto)}`)
-    }
-    const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = `${nombreArchivo}.csv`
-    document.body.appendChild(a); a.click(); a.remove()
-    URL.revokeObjectURL(url)
+    if (descargando) return
+    setDescargando(true)
+    const ld = toastLoading('Preparando el Excel…')
+    startTransition(async () => {
+      const res = await exportarReportesRrhhXlsx(anio, filtroEmpresa, data.ver)
+      await ld.dismiss()
+      setDescargando(false)
+      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo exportar.'); return }
+      descargarBase64(res.nombre ?? 'reportes-personal.xlsx', res.base64, XLSX_MIME)
+      toastSuccess('Excel descargado')
+    })
   }
+
+  // Serie del gráfico: de más antiguo a más reciente (la tabla va al revés, que es como
+  // se consulta «lo último»; un gráfico al revés no se lee).
+  const serie = [...costePorMes].reverse().map(r => ({
+    mes:   formatMesRrhh(r.periodo).split(' ')[0].slice(0, 3),
+    coste: r.monedas.reduce((s, m) => s + m.monto, 0),
+  }))
+  // Con varias monedas sin convertir, sumar las barras sería inventar un total: el
+  // gráfico solo aparece cuando hay UNA moneda en juego (nativa o de vista).
+  const monedasEnJuego = new Set(costePorMes.flatMap(r => r.monedas.map(m => m.moneda)))
+  const hayGrafico = serie.length > 1 && monedasEnJuego.size === 1
+  const monedaGrafico = Array.from(monedasEnJuego)[0] ?? ''
 
   return (
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Reportes de personal</h1>
-          <p className="page-subtitle">Plantilla, altas y bajas, y coste de personal por período.</p>
+          <div className="page-title-ia">
+            <h1 className="page-title">Reportes de personal</h1>
+            <IaTouchpoint tipo="rrhh" descripcion="un análisis de tu coste de personal" />
+          </div>
+          <p className="page-subtitle">Plantilla, altas y bajas, coste de personal y lo que debes por tu nómina.</p>
         </div>
         {!sinDatos && (
           <div className="rep-dl">
@@ -165,7 +191,7 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
                 <div className="rep-dl-overlay" onClick={() => setMenuOpen(false)} />
                 <div className="rep-dl-menu">
                   <button className="dropdown-item" onClick={descargarPDF}>Descargar PDF</button>
-                  <button className="dropdown-item" onClick={descargarCSV}>Descargar Excel (CSV)</button>
+                  <button className="dropdown-item" onClick={descargarExcel}>Descargar Excel</button>
                 </div>
               </>
             )}
@@ -177,12 +203,26 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
         <EmpresaPills
           empresas={empresasFiltro}
           value={filtroEmpresa}
-          onChange={setFiltroEmpresa}
+          onChange={v => navegar({ empresa: v })}
           todasLabel="Todas"
         />
-        <select className="input ter-filter-select" value={anio} onChange={e => setAnio(e.target.value)}>
-          {anios.map(a => <option key={a} value={a}>Año {a}</option>)}
+        <select className="input ter-filter-select" value={anio}
+          aria-label="Año del informe"
+          onChange={e => navegar({ anio: e.target.value })}>
+          {data.anios.map(a => <option key={a} value={a}>Año {a}</option>)}
         </select>
+        {/* «Ver en [moneda]», el mismo contrato que Reportes financieros: por defecto
+            CADA MONEDA (informe nativo, sin convertir) y convertir es opt-in. Un negocio
+            que paga en CUP y en USD veía las dos cifras concatenadas y no tenía forma de
+            obtener un total. */}
+        {data.monedas.length > 1 && (
+          <select className="input ter-filter-select" value={data.ver}
+            aria-label="Moneda en la que ver el informe"
+            onChange={e => navegar({ ver: e.target.value })}>
+            <option value="">Cada moneda</option>
+            {data.monedas.map(m => <option key={m.codigo} value={m.codigo}>Ver en {m.codigo}</option>)}
+          </select>
+        )}
       </div>
 
       {sinDatos ? (
@@ -194,6 +234,13 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
         </div>
       ) : (
         <>
+          {data.convertido && (
+            <div className="alert alert-info alert-intro">
+              Hay importes <strong>convertidos a {data.ver}</strong> con la tasa vigente. Las
+              cifras que ya estaban en {data.ver} no se han tocado.
+            </div>
+          )}
+
           {/* KPIs */}
           <div className="gc-stats">
             <div className="gc-stat-card">
@@ -216,11 +263,166 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
                     <div key={c.moneda} className="gc-stat-line"><span>{c.moneda}</span><strong>{formatMonto(c.monto)}</strong></div>
                   ))}
             </div>
+            {/* La deuda de vacaciones: un pasivo real que se derivaba persona a persona
+                y no se agregaba en ninguna parte. */}
+            {vacaciones.total.length > 0 && (
+              <div className="gc-stat-card gc-stat-pagar">
+                <div className="gc-stat-label">Vacaciones acumuladas (deuda)</div>
+                {vacaciones.total.map(c => (
+                  <div key={c.moneda} className="gc-stat-line"><span>{c.moneda}</span><strong>{formatMonto(c.monto)}</strong></div>
+                ))}
+              </div>
+            )}
+            {/* El coste medio se divide por la plantilla MEDIA del año, no por la de hoy:
+                un negocio que empezó con 4 y acabó con 12 no reparte el coste entre 12. */}
+            {costeMedio.length > 0 && (
+              <div className="gc-stat-card">
+                <div className="gc-stat-label">Coste medio por persona</div>
+                {costeMedio.map(c => (
+                  <div key={c.moneda} className="gc-stat-line"><span>{c.moneda}</span><strong>{formatMonto(c.monto)}</strong></div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="info-box">
             <span className="text-xs-muted">El coste de personal son las nóminas <strong>confirmadas</strong> del período; coincide con los gastos de categoría <strong>«Salarios»</strong> de Reportes financieros (Tesorería refleja lo realmente pagado).</span>
           </div>
+
+          {/* ── Cómo se movió la plantilla ──────────────────────────────────────
+              La rotación va con las piezas del cálculo DELANTE, no como índice suelto:
+              un 66 % asusta hasta que se ve que el negocio tiene tres personas. */}
+          <div className="card card-table rrhh-card-gap">
+            <div className="ter-card-head"><span className="ter-form-section-title">Cómo se movió la plantilla · {anio}</span></div>
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr><th>Indicador</th><th className="col-num">Valor</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td data-label="Indicador">Al empezar {anio}</td>
+                    <td data-label="Valor" className="col-num tes-monto-cell">{rotacion.plantillaInicio}</td>
+                  </tr>
+                  <tr>
+                    <td data-label="Indicador">Al acabar {anio}</td>
+                    <td data-label="Valor" className="col-num tes-monto-cell">{rotacion.plantillaFin}</td>
+                  </tr>
+                  <tr>
+                    <td data-label="Indicador">
+                      <strong>Plantilla media</strong>
+                      <div className="text-sm-muted">La base con la que se calculan el coste medio y la rotación.</div>
+                    </td>
+                    <td data-label="Valor" className="col-num tes-monto-cell">{rotacion.plantillaMedia}</td>
+                  </tr>
+                  <tr>
+                    <td data-label="Indicador">
+                      Rotación
+                      <div className="text-sm-muted">Bajas del año sobre la plantilla media.</div>
+                    </td>
+                    <td data-label="Valor" className="col-num tes-monto-cell">
+                      {rotacion.indice === null ? '—' : `${rotacion.indice} %`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td data-label="Indicador">
+                      Antigüedad media
+                      {antiguedad.veterano && (
+                        <div className="text-sm-muted">
+                          El más antiguo: {antiguedad.veterano.nombre} ({antiguedad.veterano.anios} años).
+                        </div>
+                      )}
+                    </td>
+                    <td data-label="Valor" className="col-num tes-monto-cell">
+                      {antiguedad.mediaAnios === null ? '—' : `${antiguedad.mediaAnios} años`}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Coste por mes — gráfico + tabla */}
+          <div className="card card-table rrhh-card-gap">
+            <div className="ter-card-head"><span className="ter-form-section-title">Coste de personal por mes · {anio}</span></div>
+            {costePorMes.length === 0 ? (
+              <div className="mon-empty"><BarChart3 size={32} strokeWidth={1} opacity={0.2} /><p>Sin nóminas confirmadas en {anio}.</p></div>
+            ) : (
+              <>
+                {hayGrafico && (
+                  <div className="dash-chart">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} width={56} />
+                        <Tooltip formatter={(v) => `${formatMonto(Number(v ?? 0))} ${monedaGrafico}`}
+                          contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 12 }} />
+                        <Bar dataKey="coste" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                <div className="table-wrapper">
+                  <table className="table">
+                    <thead><tr><th>Mes</th><th className="col-num">Coste</th></tr></thead>
+                    <tbody>
+                      {costePorMes.map(r => (
+                        <tr key={r.periodo}>
+                          <td data-label="Mes"><strong>{formatMesRrhh(r.periodo)}</strong></td>
+                          <td data-label="Coste" className="col-num tes-monto-cell">{lineaMoneda(r.monedas)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Lo que se le debe a ONAT: el dato estaba entero en los ítems y había que ir
+              a rebuscarlo a Cuentas por pagar fila por fila. */}
+          {data.hayCuba && onat.length > 0 && (
+            <div className="card card-table rrhh-card-gap">
+              <div className="ter-card-head"><span className="ter-form-section-title">Tributos de nómina · {anio}</span></div>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead><tr><th>Concepto</th><th className="col-num">Importe</th></tr></thead>
+                  <tbody>
+                    {onat.map(o => (
+                      <tr key={o.concepto}>
+                        <td data-label="Concepto"><strong>{o.concepto}</strong></td>
+                        <td data-label="Importe" className="col-num tes-monto-cell">{lineaMoneda(o.monedas)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="info-box">
+                <span className="text-xs-muted">Lo retenido al trabajador y lo aportado por la empresa en las nóminas <strong>confirmadas</strong>. Cada uno tiene su propia deuda en <strong>Cuentas por pagar</strong>, con su vencimiento.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Deuda de vacaciones por trabajador */}
+          {vacaciones.porTrabajador.length > 0 && (
+            <div className="card card-table rrhh-card-gap">
+              <div className="ter-card-head"><span className="ter-form-section-title">Vacaciones acumuladas por trabajador</span></div>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead><tr><th>Trabajador</th><th className="col-num">Saldo</th></tr></thead>
+                  <tbody>
+                    {vacaciones.porTrabajador.map(v => (
+                      <tr key={v.nombre}>
+                        <td data-label="Trabajador"><strong>{v.nombre}</strong></td>
+                        <td data-label="Saldo" className="col-num tes-monto-cell">{formatMonto(v.saldo)} {v.moneda}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Desglose por empresa (vista consolidada) */}
           {porEmpresa.length > 0 && (
@@ -234,9 +436,7 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
                       <tr key={e.empresa_id}>
                         <td data-label="Empresa"><EmpresaTag color={colorOf(e.empresa_id)} nombre={e.nombre} /></td>
                         <td data-label="Activos" className="text-sm-muted">{e.activos}</td>
-                        <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">
-                          {e.coste.length === 0 ? '—' : e.coste.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
-                        </td>
+                        <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">{lineaMoneda(e.coste)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -244,30 +444,6 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
               </div>
             </div>
           )}
-
-          {/* Coste por mes */}
-          <div className="card card-table rrhh-card-gap">
-            <div className="ter-card-head"><span className="ter-form-section-title">Coste de personal por mes · {anio}</span></div>
-            {costePorMes.length === 0 ? (
-              <div className="mon-empty"><BarChart3 size={32} strokeWidth={1} opacity={0.2} /><p>Sin nóminas confirmadas en {anio}.</p></div>
-            ) : (
-              <div className="table-wrapper">
-                <table className="table">
-                  <thead><tr><th>Mes</th><th className="col-num">Coste</th></tr></thead>
-                  <tbody>
-                    {costePorMes.map(r => (
-                      <tr key={r.periodo}>
-                        <td data-label="Mes"><strong>{formatMes(r.periodo)}</strong></td>
-                        <td data-label="Coste" className="col-num tes-monto-cell">
-                          {r.monedas.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
 
           {/* Plantilla y coste por departamento */}
           <div className="card card-table">
@@ -280,9 +456,27 @@ export default function ReportesView({ data }: { data: RrhhPageData }) {
                     <tr key={d.departamento}>
                       <td data-label="Departamento"><strong>{d.departamento}</strong></td>
                       <td data-label="Activos" className="text-sm-muted">{d.activos}</td>
-                      <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">
-                        {d.coste.length === 0 ? '—' : d.coste.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ')}
-                      </td>
+                      <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">{lineaMoneda(d.coste)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Por CARGO responde otra pregunta que por departamento: «Cocina» no dice
+              cuánto cuesta tener tres cocineros y un friegaplatos. */}
+          <div className="card card-table rrhh-card-gap">
+            <div className="ter-card-head"><span className="ter-form-section-title">Plantilla por cargo</span></div>
+            <div className="table-wrapper">
+              <table className="table">
+                <thead><tr><th>Cargo</th><th>Activos</th><th className="col-num">Coste {anio}</th></tr></thead>
+                <tbody>
+                  {porCargo.map(c => (
+                    <tr key={c.cargo}>
+                      <td data-label="Cargo"><strong>{c.cargo}</strong></td>
+                      <td data-label="Activos" className="text-sm-muted">{c.activos}</td>
+                      <td data-label={`Coste ${anio}`} className="col-num tes-monto-cell">{lineaMoneda(c.coste)}</td>
                     </tr>
                   ))}
                 </tbody>

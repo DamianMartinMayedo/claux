@@ -13,6 +13,16 @@ import {
   NOMBRE_CONCEPTO, claveDeNombre, esConceptoFiscal, type ConceptoClave,
   CONCEPTOS_COSTE, NOMBRE_CONCEPTO_COSTE, CATEGORIA_DEFECTO_COSTE, type ConceptoCoste,
 } from '@/lib/rrhh/conceptos'
+import {
+  construirReportesRrhh,
+  type ReportesRrhh, type EmpleadoRrhh, type NominaRrhh,
+  type ItemFiscalRrhh, type SaldoVacaciones, type MontoMoneda,
+} from '@/lib/rrhh/reportes'
+// El techo de filas de un listado se decide con el MISMO helper que el resto del
+// portal: RRHH era el único módulo fuera de este contrato y por eso su carga no
+// tenía ni rango ni límite.
+import { limiteDelFiltro }   from '@/lib/listados'
+import { sugerirDiasTrabajados, type SugerenciaDias } from '@/lib/rrhh/dias-trabajados'
 import { obtenerEmpresas }   from './empresas'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
 import type { MonedaOpcion } from './monedas'
@@ -21,6 +31,7 @@ import {
   type TipoContrato as _TipoContrato, type Periodicidad as _Periodicidad,
 } from '@/lib/rrhh-core'
 import { resolverCategoriaSistema } from '@/lib/gastos-core'
+import { tieneModulo }         from '@/lib/modulos'
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
@@ -65,6 +76,16 @@ export interface Empleado {
    * ficha no lo toca — si lo tocara, guardar los datos de contacto pondría el saldo a 0.
    */
   vacaciones_apertura: number
+  /**
+   * Los dos del modelo cubano (mig. 142). Estaban FUERA de este tipo a propósito
+   * mientras solo los leía el cálculo — y esa fue la razón de que nunca llegaran a
+   * tener formulario: `es_socio` decide si se le retiene la CESS y `dias_laborables`
+   * es la jornada sobre la que se prorratea, los dos usados por el motor y por nadie
+   * escribibles. Ahora la ficha los pinta (solo bajo `MIPYME_CUBA`), así que viajan.
+   * `dias_laborables` NULL = hereda el de su empresa.
+   */
+  es_socio:        boolean
+  dias_laborables: number | null
   created_at:    string
   updated_at:    string
 }
@@ -200,6 +221,14 @@ export interface Turno {
   hora_fin:    string | null
   color:       string | null
   activo:      boolean
+  /**
+   * Turno de DESCANSO (mig. 169): no suma horas ni cuenta como día trabajado. Existe
+   * porque la celda vacía significaba a la vez «libra» y «no se le ha asignado nada», y
+   * con una sola forma de decirlo ni el total de horas ni la sugerencia de días de la
+   * nómina podían distinguir un descanso planificado de un olvido. No se deduce de
+   * «no tiene horario»: eso también lo cumple un turno a medio rellenar.
+   */
+  es_descanso: boolean
 }
 
 export interface TurnoAsignacion {
@@ -209,8 +238,58 @@ export interface TurnoAsignacion {
   turno_id:      string
 }
 
-export interface RrhhPageData {
+/**
+ * Lo que comparten las cuatro pantallas del módulo: quién es el negocio y quién
+ * trabaja en él. Es barato (una plantilla son decenas de filas, no miles) y no
+ * incluye NADA de nómina.
+ *
+ * Antes existía un único `RrhhPageData` con la historia completa de nómina dentro
+ * —todas las líneas, todos sus ítems, las incidencias de todos los períodos— y lo
+ * pedían las SEIS entradas del módulo, incluidas Turnos y Reportes, que no usan ni
+ * una de esas filas. Peor: se recomponía `componerLinea` (motor fiscal cubano
+ * incluido) para cada línea de cada nómina solo para decidir si salía un aviso, y
+ * cada `router.refresh()` de una celda de turnos o de nómina lo repetía entero.
+ * Con 39 trabajadores eso son ~940 líneas y ~4.700 ítems a los dos años.
+ */
+export interface RrhhBase {
   empleados:       EmpleadoConEstado[]
+  empresas:        { empresa_id: string; nombre: string; moneda_funcional: string | null }[]
+  monedas:         MonedaOpcion[]
+  /** Factores entre las monedas del cliente ("ORIGEN__DESTINO" → factor). */
+  tasas:           Record<string, number>
+  cargos:          string[]
+  departamentos:   string[]
+  turnos:          string[]
+  empresa_nombres: Record<string, string>
+  /**
+   * ¿El cliente tiene el módulo de Contabilidad?
+   *
+   * RRHH **no** lo exige y eso es correcto (regla de independencia): confirmar escribe
+   * sus apuntes igual y aparecen el día que lo contrate. Lo que estaba roto era la
+   * interfaz — el botón primario del detalle llevaba a `/portal/cxp`, una página que
+   * ese cliente no tiene, y el estado decía «Pendiente de pago» para siempre porque
+   * solo se apaga liquidando en Tesorería, que tampoco tiene.
+   */
+  tieneContabilidad: boolean
+}
+
+/** Personal (`/portal/rrhh`) y la ficha del trabajador. Sin nóminas: el aviso de
+ *  «aparece en N nóminas» al cambiar la moneda se pide a demanda
+ *  (`contarNominasDeEmpleado`), que era la única razón por la que esta pantalla las
+ *  traía todas. */
+export interface PersonalPageData extends RrhhBase {
+  /** Modelo de nómina de cada empresa: decide si la ficha pregunta lo cubano. */
+  config_nomina: ConfigNominaEmpresa[]
+}
+
+/** Turnos (`/portal/turnos`). Ni una fila de nómina. */
+export interface TurnosPageData extends RrhhBase {
+  turnos_catalogo: Turno[]
+  asignaciones:    TurnoAsignacion[]
+}
+
+/** Nómina (`/portal/nomina`) y el detalle de una nómina. */
+export interface NominaPageData extends RrhhBase {
   nominas:         NominaConLineas[]
   /** Reglas del negocio, activas o no: la pantalla que las gestiona necesita ambas. */
   reglas:          ReglaDeduccion[]
@@ -222,17 +301,15 @@ export interface RrhhPageData {
   mapeo_gasto:     { empresa_id: string; concepto: string; categoria_id: string }[]
   /** Tributos cubanos aún sembrados con tipos de relleno. Vacío = todo verificado. */
   fiscales_provisionales: string[]
-  turnos_catalogo: Turno[]
-  asignaciones:    TurnoAsignacion[]
   cuentas:         { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }[]
-  empresas:        { empresa_id: string; nombre: string; moneda_funcional: string | null }[]
-  monedas:         MonedaOpcion[]
-  /** Factores entre las monedas del cliente ("ORIGEN__DESTINO" → factor). */
-  tasas:           Record<string, number>
-  cargos:          string[]
-  departamentos:   string[]
-  turnos:          string[]
-  empresa_nombres: Record<string, string>
+  /** Años con nóminas, para el filtro. Sale de una consulta propia, no de recorrer
+   *  las traídas: con rango aplicado, el listado ya no las tiene todas. */
+  anios:           string[]
+  /** Cuántas hay en total con el filtro puesto, y cuántas caben. Alimenta `<AvisoTope>`. */
+  total:           number
+  limite:          number
+  /** El techo recortó. Lo dice el servidor porque es quien contó, no la vista. */
+  hay_mas:         boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -860,22 +937,34 @@ function parametrosVigentes(todos: ParametroConVigencia[], fecha: string): Param
 async function saldoVacacionesAcumulado(
   db: DbAdmin, client_id: string, empleado_id: string,
 ): Promise<number> {
-  const [{ data: ficha }, { data: confirmadas }] = await Promise.all([
+  // Se parte de SUS líneas, no de todas las nóminas confirmadas del negocio: la
+  // pregunta es de una persona, así que el conjunto lo acota ella (unas dos docenas de
+  // filas) y no la historia entera del tenant, que crece sin tope con cada mes.
+  const [{ data: ficha }, { data: misLineas }] = await Promise.all([
     db.from('empleados').select('vacaciones_apertura')
       .eq('client_id', client_id).eq('empleado_id', empleado_id).maybeSingle(),
-    db.from('nominas')
-      .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA'),
+    db.from('nomina_lineas')
+      .select('nomina_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+      .eq('client_id', client_id).eq('empleado_id', empleado_id),
   ])
   const apertura = Number((ficha as { vacaciones_apertura: number | null } | null)?.vacaciones_apertura ?? 0)
 
-  const ids = ((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id)
-  if (!ids.length) return redondear2(apertura)
-  const { data: lineas } = await db.from('nomina_lineas')
-    .select('vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
-    .eq('client_id', client_id).eq('empleado_id', empleado_id).in('nomina_id', ids)
-  return redondear2(apertura + ((lineas ?? []) as {
+  const lineas = (misLineas ?? []) as {
+    nomina_id: string
     vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
-  }[]).reduce((s, l) => s + (l.vacaciones_acumuladas_periodo ?? 0) - (l.vacaciones_pagadas_periodo ?? 0), 0))
+  }[]
+  if (!lineas.length) return redondear2(apertura)
+
+  // Solo cuentan las CONFIRMADAS: un borrador aún puede cambiar o borrarse, y el saldo
+  // se autocorrige justo porque se deriva de lo cerrado.
+  const { data: confirmadas } = await db.from('nominas')
+    .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA')
+    .in('nomina_id', Array.from(new Set(lineas.map(l => l.nomina_id))))
+  const cerradas = new Set(((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id))
+
+  return redondear2(apertura + lineas
+    .filter(l => cerradas.has(l.nomina_id))
+    .reduce((s, l) => s + Number(l.vacaciones_acumuladas_periodo ?? 0) - Number(l.vacaciones_pagadas_periodo ?? 0), 0))
 }
 
 /** El modelo cubano SOLO actúa sobre nóminas en CUP. Ver `crearNomina`. */
@@ -1068,136 +1157,184 @@ export interface ResultadoLote {
 }
 const loteVacio = (error?: string): ResultadoLote => ({ hechas: 0, omitidas: [], errores: [], error })
 
-// ── Obtener datos de RRHH ───────────────────────────────────────────────────────
+// ── Cargadores de página ────────────────────────────────────────────────────────
+//
+// UNO POR PANTALLA, en vez de uno para todo. El monolito anterior (`obtenerRrhh`)
+// era la única carga del portal sin rango ni techo: traía la historia completa de
+// nómina —todas las líneas, todos sus ítems, las incidencias de todos los períodos—
+// y la pedían las SEIS entradas del módulo, incluidas Turnos y Reportes, que no
+// pintan ni una de esas filas. Encima recomponía `componerLinea` (motor fiscal
+// cubano incluido) para cada línea de cada nómina, y cada `router.refresh()` de una
+// celda de turnos o de la hoja de nómina lo repetía entero.
+//
+// Todos comparten `cargarBase`, que es la parte barata (una plantilla son decenas de
+// filas). Lo caro solo lo pide quien lo enseña.
 
-export async function obtenerRrhh(): Promise<RrhhPageData | null> {
-  const session = await getPortalSession()
-  if (!session) return null
+/** Lo común a las cuatro pantallas, más lo que el cálculo necesita de la ficha. */
+interface BaseCargada {
+  base: RrhhBase
+  /**
+   * `es_socio` y `dias_laborables` viven en `empleados` (mig. 142) pero NO están en
+   * el tipo `Empleado` que consume la pantalla: aquí solo hacen falta para el cálculo.
+   */
+  fichaCuba: Map<string, { es_socio: boolean | null; dias_laborables: number | null }>
+  /** Empresas accesibles, listas para un `.in()`. Nunca vacío. */
+  idsFiltro: string[]
+}
 
-  const db          = createAdminClient()
+async function cargarBase(db: DbAdmin, client_id: string): Promise<BaseCargada> {
   const empresas    = await obtenerEmpresas()
   const empresa_ids = empresas.map(e => e.empresa_id)
   const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
 
-  const [empRes, monRes, nomRes, nlnRes, turRes, tasRes, cuRes, cptRes, itmRes,
-         catRes, mapRes] = await Promise.all([
+  const [empRes, monRes, cliRes] = await Promise.all([
     db.from('empleados').select('*')
-      .eq('client_id', session.client_id)
+      .eq('client_id', client_id)
       .in('empresa_id', idsFiltro)
       .order('fecha_baja', { ascending: true, nullsFirst: true })
       .order('nombre', { ascending: true }),
     db.from('monedas').select('codigo, nombre')
-      .eq('client_id', session.client_id)
+      .eq('client_id', client_id)
       .eq('activa', true)
       .order('es_consolidacion', { ascending: false })
       .order('codigo'),
-    db.from('nominas').select('*')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .order('periodo', { ascending: false })
-      .order('created_at', { ascending: false }),
-    db.from('nomina_lineas').select('*')
-      .eq('client_id', session.client_id)
-      .order('empleado_nombre', { ascending: true }),
-    db.from('turnos').select('*')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .order('nombre', { ascending: true }),
-    db.from('turno_asignaciones').select('*')
-      .eq('client_id', session.client_id),
-    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .eq('activa', true)
-      .eq('es_apertura', false)   // técnica de la migración (mig. 130): no se paga desde ella
-      .order('nombre'),
-    // Conceptos activos de TODO el cliente en una sola consulta: con ellos se marca
-    // el desfase de cada línea sin pedir nada por nómina (eran 3 consultas por
-    // borrador, y esta pantalla se abre en 3G).
-    db.from('conceptos_empleado')
-      .select('concepto_id, empleado_id, nombre, tipo, modo, valor, base, destino, regla_id, excluida, recurrencia, periodo_aplicable')
-      .eq('client_id', session.client_id)
-      .eq('activo', true)
-      .order('created_at'),
-    // Ítems de las líneas, también en UNA consulta para toda la página, por lo mismo.
-    // Hacen dos cosas: dar el desglose que la pantalla enseña, y —los PUNTUAL— entrar
-    // en el cálculo del desfase. Sin ellos, una línea con un ajuste a mano se marcaría
-    // desfasada SIEMPRE (el recálculo los conserva, así que nunca «llegaría» a
-    // cuadrar) y el aviso de actualizar no se apagaría jamás.
-    db.from('nomina_linea_conceptos')
-      .select('item_id, linea_id, nombre, tipo, monto, origen, origen_id, destino, concepto_clave')
-      .eq('client_id', session.client_id)
-      .order('created_at'),
-    // Para el selector del mapeo de gastos (mig. 166) y para pintar qué categoría tiene
-    // configurada cada concepto. Van aquí, con el resto, en vez de en su propia acción:
-    // la pestaña de configuración se abre desde esta misma página.
-    db.from('categorias_gastos')
-      .select('categoria_id, nombre, parent_id')
-      .eq('client_id', session.client_id).eq('estado', 'ACTIVO')
-      .order('nombre'),
-    db.from('nomina_gasto_mapeo')
-      .select('empresa_id, concepto, categoria_id')
-      .eq('client_id', session.client_id),
+    db.from('clients').select('modulos_activos').eq('client_id', client_id).maybeSingle(),
   ])
 
   const empleados = ((empRes.data ?? []) as Empleado[]).map(e => ({
     ...e,
-    salario_base: Number(e.salario_base),
-    estado:       estadoDe(e.fecha_baja),
+    salario_base:    Number(e.salario_base),
+    es_socio:        !!e.es_socio,
+    // `numeric` llega como texto: sin esto el `defaultValue` del formulario sería una
+    // cadena y el cálculo sumaría concatenando.
+    dias_laborables: e.dias_laborables == null ? null : Number(e.dias_laborables),
+    estado:          estadoDe(e.fecha_baja),
   }))
-  const empleadoIds = new Set(empleados.map(e => e.empleado_id))
 
-  // Turnos (catálogo) y asignaciones de los empleados accesibles
-  const turnos_catalogo = (turRes.data ?? []) as Turno[]
-  const asignaciones = ((tasRes.data ?? []) as TurnoAsignacion[])
-    .filter(a => empleadoIds.has(a.empleado_id))
-
-  // Nóminas con sus líneas y el estado de pago del gasto enlazado
-  const nominasRaw = (nomRes.data ?? []) as Nomina[]
-  const lineasRaw  = (nlnRes.data ?? []) as (NominaLinea & { client_id: string })[]
-
-  // Conceptos vigentes por trabajador → sirven para marcar qué línea de borrador
-  // NO los refleja (el aviso de «actualizar» solo aparece si hay desfase real).
-  const conceptosPorEmpleado = new Map<string, ConceptoAplicable[]>()
-  for (const c of (cptRes.data ?? []) as ({ empleado_id: string } & ConceptoAplicable)[]) {
-    const arr = conceptosPorEmpleado.get(c.empleado_id) ?? []
-    arr.push({ ...c, valor: Number(c.valor) })
-    conceptosPorEmpleado.set(c.empleado_id, arr)
-  }
-  // La nómina da la empresa (qué reglas le tocan), el período (qué conceptos
-  // PUNTUAL y qué incidencias cuentan) y la fecha (qué ley fiscal regía): sin los
-  // tres, el desfase se mediría contra otra cosa.
-  const nominaPorId = new Map(nominasRaw.map(n => [n.nomina_id, n]))
-  const periodos    = Array.from(new Set(nominasRaw.map(n => n.periodo)))
-
-  const [reglasDe, reglasTodas, configNomina, incidenciasTodas, paramsRes] = await Promise.all([
-    leerReglas(db, session.client_id),
-    leerTodasLasReglas(db, session.client_id),
-    leerConfigNomina(db, session.client_id),
-    leerIncidenciasDeVarios(db, session.client_id, periodos),
-    db.from('parametros_fiscales_cuba').select(SELECT_PARAMETROS),
-  ])
-  const parametrosTodos = (paramsRes.data ?? []) as ParametroConVigencia[]
-  // Una nómina por mes son muchas fechas repetidas: se resuelve la ley una vez por
-  // fecha distinta, no una por línea.
-  const paramsPorFecha = new Map<string, ParametroFiscal[]>()
-  const parametrosEn = (fecha: string) => {
-    let p = paramsPorFecha.get(fecha)
-    if (!p) { p = parametrosVigentes(parametrosTodos, fecha); paramsPorFecha.set(fecha, p) }
-    return p
-  }
-  // `dias_laborables`/`es_socio` viven en `empleados` (mig. 143) pero no están en el
-  // tipo `Empleado` que consume la pantalla: aquí solo hacen falta para el cálculo.
   const fichaCuba = new Map(
     ((empRes.data ?? []) as unknown as
       { empleado_id: string; es_socio: boolean | null; dias_laborables: number | null }[])
-      .map(e => [e.empleado_id, e]))
+      .map(e => [e.empleado_id, { es_socio: e.es_socio, dias_laborables: e.dias_laborables }]))
 
-  // Ítems por línea: los del desglose que se pinta, y aparte los PUNTUAL, que son
-  // los que el recálculo conservará y por tanto deben contar al medir el desfase.
-  const itemsPorLinea      = new Map<string, ItemLinea[]>()
+  const empresa_nombres: Record<string, string> = {}
+  for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
+
+  const monedas = (monRes.data ?? []) as MonedaOpcion[]
+  const tasas   = await mapaTasas(db, client_id, monedas.map(m => m.codigo))
+
+  const datalist = (vals: (string | null)[]) =>
+    Array.from(new Set(vals.filter((v): v is string => !!v))).sort()
+
+  return {
+    base: {
+      empleados,
+      empresas: empresas.map(e => ({
+        empresa_id: e.empresa_id, nombre: e.nombre, moneda_funcional: e.moneda_funcional,
+      })),
+      monedas,
+      tasas,
+      cargos:        datalist(empleados.map(e => e.cargo)),
+      departamentos: datalist(empleados.map(e => e.departamento)),
+      turnos:        datalist(empleados.map(e => e.turno)),
+      empresa_nombres,
+      tieneContabilidad: tieneModulo(cliRes.data?.modulos_activos, 'base'),
+    },
+    fichaCuba,
+    idsFiltro,
+  }
+}
+
+/**
+ * Monta las nóminas con sus líneas, su desglose y su estado de pago.
+ *
+ * **El desfase se calcula SOLO donde la pantalla ofrece arreglarlo**: BORRADOR, o
+ * CONFIRMADA sin pagos (es la condición exacta que miran las dos vistas que enseñan
+ * el aviso). En una confirmada y pagada, actualizar exige anular los pagos primero,
+ * así que el aviso no se ofrece nunca — y recomponer su línea entera, con el motor
+ * cubano dentro, era trabajo para pintar un botón que no aparece.
+ */
+async function construirNominas(
+  db: DbAdmin,
+  client_id: string,
+  nominasRaw: Nomina[],
+  fichaCuba: BaseCargada['fichaCuba'],
+  /** Acota las líneas a un trabajador (su ficha) en vez de traer la plantilla entera. */
+  soloEmpleado?: string,
+): Promise<NominaConLineas[]> {
+  if (!nominasRaw.length) return []
+
+  const nominaIds  = nominasRaw.map(n => n.nomina_id)
+  const nominaPorId = new Map(nominasRaw.map(n => [n.nomina_id, n]))
+
+  // ── «Pagada» se DERIVA, nunca se guarda (mig. 166) ──────────────────────────
+  // Mirando si la CxP del **salario neto** de esa nómina está liquidada en Tesorería
+  // (`gasto_id` apunta a ella). Es deliberado que dependa SOLO del salario neto: los
+  // impuestos tienen su propio calendario y se pagan días después, y lo que el dueño
+  // necesita ver en esta pantalla es si su plantilla ya cobró. Una nómina puede salir
+  // «Pagada» con impuestos aún vivos en CxP, y es lo correcto.
+  //
+  // El importe de referencia es el de LA DEUDA, no `nominas.total`: son distintos —el
+  // total es la suma de netos y la deuda del salario incluye lo que no va a un tercero—
+  // y comparar el pago contra el total dejaría un saldo residual permanente.
+  const gastoIds = nominasRaw.map(n => n.gasto_id).filter((g): g is string => !!g)
+  const pagadoPorGasto = new Map<string, number>()
+  const deudaPorGasto  = new Map<string, number>()
+
+  let lineasQ = db.from('nomina_lineas').select('*')
+    .eq('client_id', client_id)
+    // Por las nóminas TRAÍDAS, no por `client_id` a secas: antes venían también las
+    // líneas de nóminas de empresas que el usuario no puede ver, para descartarlas
+    // después.
+    .in('nomina_id', nominaIds)
+  if (soloEmpleado) lineasQ = lineasQ.eq('empleado_id', soloEmpleado)
+
+  const [lineasRes, pagosRes] = await Promise.all([
+    lineasQ.order('empleado_nombre', { ascending: true }),
+    gastoIds.length
+      ? Promise.all([
+          db.from('movimientos_tesoreria')
+            .select('monto, monto_ref, referencia_id')
+            .eq('client_id', client_id)
+            .in('referencia_id', gastoIds),
+          db.from('gastos_cobros')
+            .select('registro_id, monto')
+            .eq('client_id', client_id)
+            .in('registro_id', gastoIds),
+        ])
+      : Promise.resolve(null),
+  ])
+
+  if (pagosRes) {
+    const [{ data: movs }, { data: deudas }] = pagosRes
+    // Saldo de la nómina en su moneda → se suma monto_ref (importe aplicado)
+    for (const m of (movs ?? []) as { monto: number; monto_ref: number | null; referencia_id: string }[]) {
+      pagadoPorGasto.set(m.referencia_id, (pagadoPorGasto.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
+    }
+    for (const g of (deudas ?? []) as { registro_id: string; monto: number }[]) {
+      deudaPorGasto.set(g.registro_id, Number(g.monto))
+    }
+  }
+
+  const pagadoDe = (n: Nomina) => n.gasto_id ? (pagadoPorGasto.get(n.gasto_id) ?? 0) : 0
+
+  const lineasRaw = (lineasRes.data ?? []) as (NominaLinea & { client_id: string })[]
+  const lineaIds  = lineasRaw.map(l => l.linea_id)
+
+  // Los ítems hacen dos cosas: dar el desglose que la pantalla enseña, y —los
+  // PUNTUAL— entrar en el cálculo del desfase. Sin ellos, una línea con un ajuste a
+  // mano se marcaría desfasada SIEMPRE (el recálculo los conserva, así que nunca
+  // «llegaría» a cuadrar) y el aviso de actualizar no se apagaría jamás.
+  const itemsRes = lineaIds.length
+    ? await db.from('nomina_linea_conceptos')
+        .select('item_id, linea_id, nombre, tipo, monto, origen, origen_id, destino, concepto_clave')
+        .eq('client_id', client_id)
+        .in('linea_id', lineaIds)
+        .order('created_at')
+    : { data: [] }
+
+  const itemsPorLinea       = new Map<string, ItemLinea[]>()
   const preservadosPorLinea = new Map<string, ItemLinea[]>()
-  for (const r of (itmRes.data ?? []) as
+  for (const r of (itemsRes.data ?? []) as
     ({ linea_id: string; concepto_clave: ConceptoClave | null } & ItemLinea)[]) {
     const it: ItemLinea = {
       item_id:   r.item_id,
@@ -1221,24 +1358,70 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     }
   }
 
+  // ── Qué nóminas merecen que se les mida el desfase ───────────────────────────
+  // Solo aquellas donde el botón de «Actualizar» se pinta. Con esto, un histórico de
+  // dos años de nóminas confirmadas y pagadas deja de recalcularse en cada visita.
+  const midoDesfase = new Set(nominasRaw
+    .filter(n => n.estado === 'BORRADOR' || pagadoDe(n) <= EPS)
+    .map(n => n.nomina_id))
+
+  const lineasDeInteres = lineasRaw.filter(l => midoDesfase.has(l.nomina_id))
+  const periodos = Array.from(new Set(
+    lineasDeInteres.map(l => nominaPorId.get(l.nomina_id)?.periodo).filter((p): p is string => !!p)))
+
+  // Lo que alimenta el cálculo del desfase: solo se pide si hay algo que medir.
+  const empleadosDeInteres = Array.from(new Set(lineasDeInteres.map(l => l.empleado_id)))
+  const [reglasDe, configNomina, incidenciasTodas, cptRes, paramsRes] = lineasDeInteres.length
+    ? await Promise.all([
+        leerReglas(db, client_id),
+        leerConfigNomina(db, client_id),
+        leerIncidenciasDeVarios(db, client_id, periodos),
+        db.from('conceptos_empleado')
+          .select('concepto_id, empleado_id, nombre, tipo, modo, valor, base, destino, regla_id, excluida, recurrencia, periodo_aplicable')
+          .eq('client_id', client_id)
+          .in('empleado_id', empleadosDeInteres)
+          .eq('activo', true)
+          .order('created_at'),
+        db.from('parametros_fiscales_cuba').select(SELECT_PARAMETROS),
+      ])
+    : [null, null, null, null, null] as const
+
+  const conceptosPorEmpleado = new Map<string, ConceptoAplicable[]>()
+  for (const c of (cptRes?.data ?? []) as ({ empleado_id: string } & ConceptoAplicable)[]) {
+    const arr = conceptosPorEmpleado.get(c.empleado_id) ?? []
+    arr.push({ ...c, valor: Number(c.valor) })
+    conceptosPorEmpleado.set(c.empleado_id, arr)
+  }
+
+  const parametrosTodos = (paramsRes?.data ?? []) as ParametroConVigencia[]
+  // Una nómina por mes son muchas fechas repetidas: se resuelve la ley una vez por
+  // fecha distinta, no una por línea.
+  const paramsPorFecha = new Map<string, ParametroFiscal[]>()
+  const parametrosEn = (fecha: string) => {
+    let p = paramsPorFecha.get(fecha)
+    if (!p) { p = parametrosVigentes(parametrosTodos, fecha); paramsPorFecha.set(fecha, p) }
+    return p
+  }
+
   const lineasPorNomina = new Map<string, NominaLinea[]>()
   for (const l of lineasRaw) {
     const arr = lineasPorNomina.get(l.nomina_id) ?? []
     const devengado   = Number(l.devengado)
     const deducciones = Number(l.deducciones)
-    // También en las CONFIRMADAS: reabrirlas para meter una retención olvidada es
-    // el caso real (la nómina del mes ya está cerrada cuando uno se acuerda), así
-    // que ocultar el desfase ahí obligaba a borrar la nómina y regenerarla.
-    const nom  = nominaPorId.get(l.nomina_id)
+    // También en las CONFIRMADAS sin pagos: reabrirlas para meter una retención
+    // olvidada es el caso real (la nómina del mes ya está cerrada cuando uno se
+    // acuerda), así que ocultar el desfase ahí obligaba a borrar la nómina y
+    // regenerarla.
+    const nom = nominaPorId.get(l.nomina_id)
     // Se compone con EXACTAMENTE lo mismo que usará el recálculo —incidencias del
     // mes y ley cubana incluidas—. Cuando faltaban, toda línea con una incidencia
     // (o cualquiera bajo MIPYME_CUBA) salía «desfasada» para siempre y actualizar
     // no encontraba nada que cambiar: el aviso mentía.
-    const cfg = nom ? configDe(configNomina, nom.empresa_id) : null
-    const inc = nom ? incidenciasTodas.get(`${nom.periodo}|${l.empleado_id}`) : undefined
+    const cfg = nom && configNomina ? configDe(configNomina, nom.empresa_id) : null
+    const inc = nom && incidenciasTodas ? incidenciasTodas.get(`${nom.periodo}|${l.empleado_id}`) : undefined
     const aplicaCuba = !!nom && !!cfg && cfg.modelo === 'MIPYME_CUBA' && nom.moneda === MONEDA_CUBA
     const ficha = fichaCuba.get(l.empleado_id)
-    const calc = nom
+    const calc = nom && reglasDe && midoDesfase.has(l.nomina_id)
       ? componerLinea({
           salario_base: Number(l.salario_base),
           reglas:       reglasDe(nom.empresa_id),
@@ -1276,42 +1459,9 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
     lineasPorNomina.set(l.nomina_id, arr)
   }
 
-  // ── «Pagada» se DERIVA, nunca se guarda (mig. 166) ──────────────────────────
-  // Mirando si la CxP del **salario neto** de esa nómina está liquidada en Tesorería
-  // (`gasto_id` apunta a ella). Es deliberado que dependa SOLO del salario neto: los
-  // impuestos tienen su propio calendario y se pagan días después, y lo que el dueño
-  // necesita ver en esta pantalla es si su plantilla ya cobró. Una nómina puede salir
-  // «Pagada» con impuestos aún vivos en CxP, y es lo correcto.
-  //
-  // El importe de referencia es el de LA DEUDA, no `nominas.total`: son distintos —el
-  // total es la suma de netos y la deuda del salario incluye lo que no va a un tercero—
-  // y comparar el pago contra el total dejaría un saldo residual permanente.
-  const gastoIds = nominasRaw.map(n => n.gasto_id).filter((g): g is string => !!g)
-  const pagadoPorGasto = new Map<string, number>()
-  const deudaPorGasto  = new Map<string, number>()
-  if (gastoIds.length) {
-    const [{ data: movs }, { data: deudas }] = await Promise.all([
-      db.from('movimientos_tesoreria')
-        .select('monto, monto_ref, referencia_id')
-        .eq('client_id', session.client_id)
-        .in('referencia_id', gastoIds),
-      db.from('gastos_cobros')
-        .select('registro_id, monto')
-        .eq('client_id', session.client_id)
-        .in('registro_id', gastoIds),
-    ])
-    // Saldo de la nómina en su moneda → se suma monto_ref (importe aplicado)
-    for (const m of (movs ?? []) as { monto: number; monto_ref: number | null; referencia_id: string }[]) {
-      pagadoPorGasto.set(m.referencia_id, (pagadoPorGasto.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
-    }
-    for (const g of (deudas ?? []) as { registro_id: string; monto: number }[]) {
-      deudaPorGasto.set(g.registro_id, Number(g.monto))
-    }
-  }
-
-  const nominas: NominaConLineas[] = nominasRaw.map(n => {
+  return nominasRaw.map(n => {
     const total  = Number(n.total)
-    const pagado = n.gasto_id ? (pagadoPorGasto.get(n.gasto_id) ?? 0) : 0
+    const pagado = pagadoDe(n)
     // Sin fila de deuda (histórico anterior a la mig. 166, donde `gasto_id` apuntaba al
     // gasto de Salarios) se cae al total: así una nómina vieja se sigue viendo igual.
     const deuda  = n.gasto_id ? (deudaPorGasto.get(n.gasto_id) ?? total) : total
@@ -1325,44 +1475,430 @@ export async function obtenerRrhh(): Promise<RrhhPageData | null> {
       desactualizada:  lineas.some(l => l.desfasada),
     }
   })
+}
 
-  const datalist = (vals: (string | null)[]) =>
-    Array.from(new Set(vals.filter((v): v is string => !!v))).sort()
+/** Años con nóminas, para el filtro. Consulta propia y no un recorrido de las
+ *  traídas: con rango aplicado, el listado ya no las tiene todas y el desplegable
+ *  se quedaría sin los años que precisamente hay que poder elegir. */
+async function aniosConNomina(db: DbAdmin, client_id: string, idsFiltro: string[]): Promise<string[]> {
+  const { data } = await db.from('nominas').select('periodo')
+    .eq('client_id', client_id).in('empresa_id', idsFiltro)
+  const set = new Set<string>()
+  for (const n of (data ?? []) as { periodo: string }[]) if (n.periodo) set.add(n.periodo.slice(0, 4))
+  return Array.from(set).sort().reverse()
+}
 
-  const empresa_nombres: Record<string, string> = {}
-  for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
+// ── Personal (`/portal/rrhh`) y la ficha del trabajador ─────────────────────────
+
+export async function obtenerPersonal(): Promise<PersonalPageData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const db = createAdminClient()
+  const [{ base }, config] = await Promise.all([
+    cargarBase(db, session.client_id),
+    leerConfigNomina(db, session.client_id),
+  ])
+  return { ...base, config_nomina: Array.from(config.values()) }
+}
+
+/**
+ * Cuántas nóminas tiene un trabajador. Se pide A DEMANDA, al cambiarle la moneda en
+ * el modal, y era la ÚNICA razón por la que Personal cargaba la historia entera de
+ * nómina: un aviso que solo se pinta cuando alguien toca ese selector.
+ */
+export async function contarNominasDeEmpleado(
+  empleado_id: string,
+): Promise<{ total: number; borradores: number }> {
+  const session = await getPortalSession()
+  if (!session) return { total: 0, borradores: 0 }
+
+  const db = createAdminClient()
+  const { data } = await db.from('nomina_lineas')
+    .select('nomina_id')
+    .eq('client_id', session.client_id)
+    .eq('empleado_id', empleado_id)
+  const ids = Array.from(new Set((data ?? []).map(l => l.nomina_id as string)))
+  if (!ids.length) return { total: 0, borradores: 0 }
+
+  const { count } = await db.from('nominas')
+    .select('nomina_id', { count: 'exact', head: true })
+    .eq('client_id', session.client_id)
+    .in('nomina_id', ids)
+    .eq('estado', 'BORRADOR')
+  return { total: ids.length, borradores: count ?? 0 }
+}
+
+// ── Turnos (`/portal/turnos`) ───────────────────────────────────────────────────
+
+export async function obtenerTurnos(): Promise<TurnosPageData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const db = createAdminClient()
+  const { base, idsFiltro } = await cargarBase(db, session.client_id)
+
+  const [turRes, tasRes] = await Promise.all([
+    db.from('turnos').select('*')
+      .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
+      .order('nombre', { ascending: true }),
+    db.from('turno_asignaciones').select('*')
+      .eq('client_id', session.client_id),
+  ])
+
+  const empleadoIds = new Set(base.empleados.map(e => e.empleado_id))
+  return {
+    ...base,
+    turnos_catalogo: (turRes.data ?? []) as Turno[],
+    asignaciones:    ((tasRes.data ?? []) as TurnoAsignacion[])
+      .filter(a => empleadoIds.has(a.empleado_id)),
+  }
+}
+
+// ── Nómina (`/portal/nomina`) ───────────────────────────────────────────────────
+
+export interface FiltroNominas {
+  /** 'YYYY', o vacío = todos los años. */
+  anio?:   string
+  /** Techo pedido desde `<AvisoTope>` («Traer más»). */
+  limite?: number
+}
+
+export async function obtenerNominas(filtro?: FiltroNominas): Promise<NominaPageData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const db = createAdminClient()
+  const { base, fichaCuba, idsFiltro } = await cargarBase(db, session.client_id)
+
+  const anio = (filtro?.anio ?? '').trim()
+  // El techo depende de lo que se pida (`limiteDelFiltro`, el mismo del resto del
+  // portal): un año concreto es el primer pintado —el que se paga en 3G—; «todos los
+  // años» sube el tope pero no lo quita, porque recortar por fecha descendente se come
+  // los registros más VIEJOS y un filtro que se llama «todos» y omite filas miente.
+  const limite = limiteDelFiltro({
+    limite: filtro?.limite,
+    desde:  anio ? `${anio}-01-01` : '',
+    hasta:  anio ? `${anio}-12-31` : '',
+  })
+
+  let q = db.from('nominas').select('*', { count: 'exact' })
+    .eq('client_id', session.client_id)
+    .in('empresa_id', idsFiltro)
+  if (anio) q = q.gte('periodo', `${anio}-01`).lte('periodo', `${anio}-12`)
+
+  const [nomRes, anios, cuRes, catRes, mapRes, reglasTodas, configNomina, paramsRes] = await Promise.all([
+    q.order('periodo', { ascending: false })
+     .order('created_at', { ascending: false })
+     .limit(limite),
+    aniosConNomina(db, session.client_id, idsFiltro),
+    db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa')
+      .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
+      .eq('activa', true)
+      .eq('es_apertura', false)   // técnica de la migración (mig. 130): no se paga desde ella
+      .order('nombre'),
+    // Para el selector del mapeo de gastos (mig. 166) y para pintar qué categoría tiene
+    // configurada cada concepto. Van aquí, con el resto: la pestaña de configuración se
+    // abre desde esta misma página.
+    db.from('categorias_gastos')
+      .select('categoria_id, nombre, parent_id')
+      .eq('client_id', session.client_id).eq('estado', 'ACTIVO')
+      .order('nombre'),
+    db.from('nomina_gasto_mapeo')
+      .select('empresa_id, concepto, categoria_id')
+      .eq('client_id', session.client_id),
+    leerTodasLasReglas(db, session.client_id),
+    leerConfigNomina(db, session.client_id),
+    db.from('parametros_fiscales_cuba').select(SELECT_PARAMETROS),
+  ])
+
+  const nominas = await construirNominas(
+    db, session.client_id, (nomRes.data ?? []) as Nomina[], fichaCuba)
 
   const cuentas = ((cuRes.data ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean }[])
     .map(c => ({ cuenta_id: c.cuenta_id, nombre: c.nombre, empresa_id: c.empresa_id, moneda: c.moneda }))
 
-  const monedas = (monRes.data ?? []) as MonedaOpcion[]
-  const tasas   = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
+  const parametrosTodos = (paramsRes.data ?? []) as ParametroConVigencia[]
 
   return {
-    empleados,
+    ...base,
     nominas,
-    reglas:        reglasTodas,
-    config_nomina: Array.from(configNomina.values()),
-    categorias_gasto: (catRes.data ?? []) as RrhhPageData['categorias_gasto'],
-    mapeo_gasto:      (mapRes.data ?? []) as RrhhPageData['mapeo_gasto'],
+    reglas:           reglasTodas,
+    config_nomina:    Array.from(configNomina.values()),
+    categorias_gasto: (catRes.data ?? []) as NominaPageData['categorias_gasto'],
+    mapeo_gasto:      (mapRes.data ?? []) as NominaPageData['mapeo_gasto'],
     // Los que siguen a la espera del valor real (vigencia abierta). En el modelo
-    // general estos tributos no se aplican, pero avisar solo cuesta una línea aquí:
-    // la tabla ya está leída para medir el desfase.
+    // general estos tributos no se aplican, pero avisar solo cuesta una línea aquí.
     fiscales_provisionales: Array.from(new Set(
       parametrosTodos.filter(p => p.provisional && !p.vigente_hasta).map(p => p.concepto))),
-    turnos_catalogo,
-    asignaciones,
     cuentas,
-    empresas:       empresas.map(e => ({
+    anios,
+    total:   nomRes.count ?? nominas.length,
+    limite,
+    hay_mas: (nomRes.count ?? nominas.length) > nominas.length,
+  }
+}
+
+// ── Reportes de personal (`/portal/rrhh-reportes`) ──────────────────────────────
+
+export interface ReportesRrhhData {
+  reportes: ReportesRrhh
+  empresas: RrhhBase['empresas']
+  anios:    string[]
+  /** Sin plantilla no hay informe que enseñar, y el vacío lo dice mejor que una tabla a cero. */
+  sinDatos: boolean
+  /** Monedas del cliente, para el control «Ver en [moneda]». */
+  monedas:  MonedaOpcion[]
+  /** La moneda de la vista, o '' = «Cada moneda» (informe nativo, sin convertir). */
+  ver:      string
+  /** Alguna cifra se convirtió a la moneda de vista con la tasa vigente. Se DICE. */
+  convertido: boolean
+  /** Alguna empresa usa el modelo cubano: sin eso, el resumen de ONAT no aplica. */
+  hayCuba:  boolean
+  /** El negocio, para la cabecera del PDF y del Excel. */
+  negocio:  string
+}
+
+/**
+ * Los reportes se AGREGAN EN SERVIDOR. La vista recibía `RrhhPageData` entero —o sea
+ * la historia de nómina con su desglose y su desfase recalculado— para después
+ * sumarla en el navegador: la pantalla del módulo que menos filas necesitaba era la
+ * que más traía. `construirReportesRrhh` ya era puro y server-safe (lo usa el Excel),
+ * así que aquí solo cambia quién lo llama.
+ */
+export async function obtenerReportesRrhh(
+  anio: string, empresaId: string, verMoneda = '',
+): Promise<ReportesRrhhData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const db          = createAdminClient()
+  const empresas    = await obtenerEmpresas()
+  const empresa_ids = empresas.map(e => e.empresa_id)
+  const idsFiltro   = empresa_ids.length ? empresa_ids : ['__none__']
+
+  const [empRes, nomRes, anios] = await Promise.all([
+    // `cargo` y `nombre` entran por el coste por CARGO y por quién es el de más
+    // antigüedad; son dos columnas de texto sobre una tabla que ya se lee entera.
+    db.from('empleados').select('empleado_id, empresa_id, nombre, apellidos, cargo, departamento, fecha_alta, fecha_baja')
+      .eq('client_id', session.client_id).in('empresa_id', idsFiltro),
+    // Solo las CONFIRMADAS del año: el informe no cuenta borradores, y traer el resto
+    // era pagar por filas que se descartan en el primer `filter`.
+    db.from('nominas').select('nomina_id, empresa_id, estado, periodo, moneda, total')
+      .eq('client_id', session.client_id).in('empresa_id', idsFiltro)
+      .eq('estado', 'CONFIRMADA')
+      .gte('periodo', `${anio}-01`).lte('periodo', `${anio}-12`),
+    aniosConNomina(db, session.client_id, idsFiltro),
+  ])
+
+  const empleados: EmpleadoRrhh[] = ((empRes.data ?? []) as {
+    empleado_id: string; empresa_id: string; nombre: string; apellidos: string | null
+    cargo: string | null; departamento: string | null
+    fecha_alta: string | null; fecha_baja: string | null
+  }[]).map(e => ({
+    ...e,
+    nombre: [e.nombre, e.apellidos].filter(Boolean).join(' '),
+    estado: estadoDe(e.fecha_baja),
+  }))
+
+  const cabeceras = (nomRes.data ?? []) as {
+    nomina_id: string; empresa_id: string; estado: string; periodo: string; moneda: string; total: number
+  }[]
+
+  // Solo lo que el agregado consume: `costeDe` suma DEVENGADOS, no netos (una
+  // retención no es un ahorro). Sin ítems, sin desglose y sin desfase.
+  const { data: lineasData } = cabeceras.length
+    ? await db.from('nomina_lineas').select('nomina_id, empleado_id, neto, devengado')
+        .eq('client_id', session.client_id)
+        .in('nomina_id', cabeceras.map(n => n.nomina_id))
+    : { data: [] }
+
+  const lineasPorNomina = new Map<string, NominaRrhh['lineas']>()
+  for (const l of (lineasData ?? []) as { nomina_id: string; empleado_id: string; neto: number; devengado: number }[]) {
+    const arr = lineasPorNomina.get(l.nomina_id) ?? []
+    arr.push({ empleado_id: l.empleado_id, neto: Number(l.neto), devengado: Number(l.devengado) })
+    lineasPorNomina.set(l.nomina_id, arr)
+  }
+
+  const nominas: NominaRrhh[] = cabeceras.map(n => ({
+    empresa_id: n.empresa_id,
+    estado:     n.estado,
+    periodo:    n.periodo,
+    moneda:     n.moneda,
+    total:      Number(n.total),
+    lineas:     lineasPorNomina.get(n.nomina_id) ?? [],
+  }))
+
+  // ── Lo que se le debe a ONAT y la deuda de vacaciones ─────────────────────────
+  // Los dos informes que faltaban, y los dos con el dato ya entero en la base: las
+  // retenciones y los aportes viven en los ítems, y el saldo de vacaciones se deriva de
+  // `apertura + Σ acumuladas − Σ pagadas`. Hasta ahora el primero había que rebuscarlo
+  // en Cuentas por pagar fila por fila, y el segundo no se agregaba en ninguna parte
+  // —siendo un pasivo real y cuantificado del negocio—.
+  const configs  = await leerConfigNomina(db, session.client_id)
+  const hayCuba  = empresas.some(e => configDe(configs, e.empresa_id).modelo === 'MIPYME_CUBA')
+  const monedaDeNomina = new Map(cabeceras.map(n => [n.nomina_id, n.moneda]))
+
+  let itemsFiscales: ItemFiscalRrhh[] = []
+  if (hayCuba && cabeceras.length) {
+    const { data: items } = await db.from('nomina_linea_conceptos')
+      .select('nomina_id, tipo, monto, concepto_clave, nombre')
+      .eq('client_id', session.client_id)
+      .in('nomina_id', cabeceras.map(n => n.nomina_id))
+    itemsFiscales = ((items ?? []) as {
+      nomina_id: string; tipo: TipoItemLinea; monto: number
+      concepto_clave: ConceptoClave | null; nombre: string
+    }[])
+      // Solo lo que va a un tercero fiscal: un bono o un descuento del trabajador no es
+      // deuda con ONAT. La identidad es la CLAVE, no el nombre (mig. 165) — con el
+      // nombre, una tilde de más dejaba de clasificar en silencio.
+      .filter(i => i.tipo === 'RETENCION' || i.tipo === 'APORTE_EMPRESA')
+      .map(i => ({ clave: i.concepto_clave ?? claveDeNombre(i.nombre), ...i }))
+      .filter(i => esConceptoFiscal(i.clave))
+      .map(i => ({
+        concepto: NOMBRE_CONCEPTO[i.clave as ConceptoClave],
+        moneda:   monedaDeNomina.get(i.nomina_id) ?? '',
+        monto:    Number(i.monto),
+      }))
+  }
+
+  // El saldo de vacaciones de TODA la plantilla, en dos consultas y no una por persona
+  // (`saldoVacacionesAcumulado` es la versión de uno). Cuenta las confirmadas de toda la
+  // historia, no las del año: un saldo es acumulado, no de un ejercicio.
+  let saldos: SaldoVacaciones[] = []
+  if (hayCuba) {
+    const { data: fichas } = await db.from('empleados')
+      .select('empleado_id, nombre, apellidos, moneda, vacaciones_apertura, fecha_baja')
+      .eq('client_id', session.client_id).in('empresa_id', idsFiltro)
+    const visibles = ((fichas ?? []) as {
+      empleado_id: string; nombre: string; apellidos: string | null
+      moneda: string; vacaciones_apertura: number | null; fecha_baja: string | null
+    }[]).filter(f => !f.fecha_baja
+      && (!empresaId || empleados.some(e => e.empleado_id === f.empleado_id && e.empresa_id === empresaId)))
+
+    const { data: confirmadas } = await db.from('nominas')
+      .select('nomina_id').eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro).eq('estado', 'CONFIRMADA')
+    const idsConf = ((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id)
+
+    const movidoPor = new Map<string, number>()
+    if (idsConf.length) {
+      const { data: lns } = await db.from('nomina_lineas')
+        .select('empleado_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+        .eq('client_id', session.client_id).in('nomina_id', idsConf)
+      for (const l of (lns ?? []) as {
+        empleado_id: string
+        vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+      }[]) {
+        movidoPor.set(l.empleado_id, (movidoPor.get(l.empleado_id) ?? 0)
+          + Number(l.vacaciones_acumuladas_periodo ?? 0) - Number(l.vacaciones_pagadas_periodo ?? 0))
+      }
+    }
+    saldos = visibles.map(f => ({
+      nombre: [f.nombre, f.apellidos].filter(Boolean).join(' '),
+      moneda: f.moneda,
+      saldo:  redondear2(Number(f.vacaciones_apertura ?? 0) + (movidoPor.get(f.empleado_id) ?? 0)),
+    }))
+  }
+
+  const reportes = construirReportesRrhh(
+    empleados, nominas,
+    empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
+    { empresaId, anio },
+    itemsFiscales, saldos,
+    // «Hoy» del NEGOCIO para la antigüedad, nunca el reloj del navegador.
+    hoyEnTz(),
+  )
+
+  // ── Moneda de la vista ────────────────────────────────────────────────────────
+  // Mismo contrato que Reportes financieros: por defecto **«Cada moneda»** = informe
+  // NATIVO, sin convertir. Convertir es opt-in, y lo que se convierte SE DICE. Un
+  // negocio que paga en CUP y en USD veía «120.000,00 CUP · 900,00 USD» concatenado y
+  // no había forma de obtener un total.
+  const { data: monData } = await db.from('monedas').select('codigo, nombre')
+    .eq('client_id', session.client_id).eq('activa', true)
+    .order('es_consolidacion', { ascending: false }).order('codigo')
+  const monedas = (monData ?? []) as MonedaOpcion[]
+  const ver = monedas.some(m => m.codigo === verMoneda) ? verMoneda : ''
+
+  let convertido = false
+  const finales = ver ? await (async () => {
+    const tasas = await mapaTasas(db, session.client_id, monedas.map(m => m.codigo))
+    // Regla del informe: con datos reales en la moneda vista NO se convierte; se
+    // convierte solo lo que falta, y se marca.
+    const aVista = (ms: MontoMoneda[]): MontoMoneda[] => {
+      let total = 0
+      for (const m of ms) {
+        if (m.moneda === ver) { total += m.monto; continue }
+        const factor = tasas[`${m.moneda}__${ver}`]
+        // Sin par ni tasa no se inventa un número: esa moneda se queda fuera y el aviso
+        // de conversión lo dice. Un total con una pata a cero es peor que uno incompleto.
+        if (!factor) continue
+        total += m.monto * factor
+        convertido = true
+      }
+      return [{ moneda: ver, monto: redondear2(total) }]
+    }
+    return {
+      ...reportes,
+      costeAnual:  aVista(reportes.costeAnual),
+      costePorMes: reportes.costePorMes.map(r => ({ ...r, monedas: aVista(r.monedas) })),
+      porDepto:    reportes.porDepto.map(d => ({ ...d, coste: aVista(d.coste) })),
+      porEmpresa:  reportes.porEmpresa.map(e => ({ ...e, coste: aVista(e.coste) })),
+      vacaciones:  { ...reportes.vacaciones, total: aVista(reportes.vacaciones.total) },
+      onat:        reportes.onat.map(o => ({ ...o, monedas: aVista(o.monedas) })),
+      costeMedio:  aVista(reportes.costeMedio),
+      porCargo:    reportes.porCargo.map(c => ({ ...c, coste: aVista(c.coste) })),
+      // `rotacion` y `antiguedad` NO se convierten: son personas, años y un porcentaje.
+      // Pasarlos por `aVista` los reetiquetaría con una moneda que no significa nada.
+    }
+  })() : reportes
+
+  return {
+    reportes: finales,
+    empresas: empresas.map(e => ({
       empresa_id: e.empresa_id, nombre: e.nombre, moneda_funcional: e.moneda_funcional,
     })),
-    monedas,
-    tasas,
-    cargos:         datalist(empleados.map(e => e.cargo)),
-    departamentos:  datalist(empleados.map(e => e.departamento)),
-    turnos:         datalist(empleados.map(e => e.turno)),
-    empresa_nombres,
+    anios: anios.includes(anio) ? anios : [anio, ...anios],
+    sinDatos: empleados.length === 0,
+    monedas, ver, convertido, hayCuba,
+    negocio: empresas[0]?.nombre ?? '',
   }
+}
+
+/**
+ * Los reportes de personal en .xlsx.
+ *
+ * Se genera en SERVIDOR y baja como base64 → Blob por server action, igual que los
+ * informes financieros: el escritor de .xlsx es server-only, y el CSV que esta pantalla
+ * armaba en el navegador le llegaba al asesor con los importes como texto (sin poder
+ * sumarlos) y con los dos destrozos de codificación que ya documentó el importador.
+ *
+ * LECTURA: el candado del módulo lo pone la página.
+ */
+export async function exportarReportesRrhhXlsx(
+  anio: string, empresaId: string, verMoneda = '',
+): Promise<{ ok: boolean; base64?: string; nombre?: string; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  // Se reusa el mismo cargador que pinta la pantalla: es lo que garantiza que el
+  // fichero y lo que el dueño está viendo digan la misma cifra.
+  const data = await obtenerReportesRrhh(anio, empresaId, verMoneda)
+  if (!data) return { ok: false, error: 'No se pudo preparar el informe.' }
+
+  const { construirXlsxRrhh } = await import('@/lib/exportar/rrhh-xlsx')
+  const base64 = await construirXlsxRrhh(data.reportes, {
+    negocio:    data.negocio,
+    empresa:    empresaId ? (data.empresas.find(e => e.empresa_id === empresaId)?.nombre ?? '') : 'Todas las empresas',
+    anio,
+    ver:        data.ver,
+    convertido: data.convertido,
+    generado:   hoy(),
+  })
+  return { ok: true, base64, nombre: `reportes-personal-${anio}.xlsx` }
 }
 
 // ── Guardar empleado (crear / editar) ───────────────────────────────────────────
@@ -1389,10 +1925,26 @@ export async function guardarEmpleado(
     return { ok: false, error: 'Empresa no válida.' }
   }
 
+  // Los dos campos del modelo cubano solo los pinta el formulario si la empresa usa
+  // MIPYME_CUBA, así que «no vino en el FormData» significa «no lo toques» y no
+  // «ponlo a cero»: editar el teléfono desde una empresa en modelo General no puede
+  // desmarcar a un socio en silencio. El checkbox viaja con un hidden gemelo a `0`
+  // delante, porque un checkbox desmarcado no se envía y sin él no habría forma de
+  // distinguir «desmarcado» de «no estaba en pantalla».
+  const es_socio = formData.has('es_socio')
+    ? formData.getAll('es_socio').includes('1')
+    : undefined
+  const diasRaw = formData.get('dias_laborables')
+  const dias_laborables = formData.has('dias_laborables')
+    ? (String(diasRaw ?? '').trim() === '' ? null : parseFloat(String(diasRaw)))
+    : undefined
+
   // La normalización (contrato, periodicidad, salario, fecha de alta) la hace el
   // núcleo compartido con el importador (`@/lib/rrhh-core`).
   const campos = construirCamposEmpleado({
     nombre,
+    es_socio,
+    dias_laborables,
     apellidos:             (formData.get('apellidos')             as string) ?? null,
     documento:             (formData.get('documento')             as string) ?? null,
     documento_vencimiento: (formData.get('documento_vencimiento') as string) ?? null,
@@ -1450,6 +2002,42 @@ export async function guardarEmpleado(
   }
 
   revalidatePath('/portal/rrhh')
+  return { ok: true }
+}
+
+/**
+ * Ajusta el saldo de vacaciones de APERTURA (mig. 167): lo que ese trabajador ya tenía
+ * acumulado ANTES de usar CLAUX.
+ *
+ * Acción propia y NO un campo más del formulario, a propósito: `construirCamposEmpleado`
+ * escribe todo lo que le llega, así que meter esto ahí haría que guardar el teléfono
+ * pusiera el saldo a 0 en silencio. Hasta ahora la única vía era el importador, o sea
+ * que un negocio de seis personas que teclea su plantilla no podía cargarlo — y la
+ * ficha se lo enseñaba sin dejarle cambiarlo.
+ *
+ * Es el PUNTO DE PARTIDA de la derivación (`apertura + Σ nóminas confirmadas`), no el
+ * saldo actual: ese sigue calculándose solo y no se guarda en ninguna parte.
+ */
+export async function guardarVacacionesApertura(
+  empleado_id: string, importe: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  if (isNaN(importe) || importe < 0) return { ok: false, error: 'El importe no puede ser negativo.' }
+
+  const db = createAdminClient()
+  const { data: emp } = await db.from('empleados').select('empleado_id')
+    .eq('empleado_id', empleado_id).eq('client_id', session.client_id).maybeSingle()
+  if (!emp) return { ok: false, error: 'Trabajador no encontrado.' }
+
+  const { error } = await db.from('empleados')
+    .update({ vacaciones_apertura: redondear2(importe), updated_at: new Date().toISOString() })
+    .eq('empleado_id', empleado_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/portal/rrhh/${empleado_id}`)
   return { ok: true }
 }
 
@@ -1752,8 +2340,12 @@ export async function eliminarContrato(contrato_id: string): Promise<{ ok: boole
 // ── Detalle de un empleado (datos + sus contratos) ──────────────────────────────
 
 export interface EmpleadoDetalleData {
-  data:      RrhhPageData
+  data:      PersonalPageData
   empleado:  EmpleadoConEstado
+  /** SUS nóminas, no las del negocio: la ficha solo pinta la línea de esta persona.
+   *  Antes salían de `RrhhPageData.nominas`, o sea de traer la historia completa para
+   *  quedarse con una fila de cada una. */
+  nominas:   NominaConLineas[]
   contratos: Contrato[]
   conceptos: ConceptoEmpleado[]
   /** Incidencias cargadas, de más reciente a más antigua (mig. 143). */
@@ -1779,12 +2371,33 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   const session = await getPortalSession()
   if (!session) return null
 
-  const data = await obtenerRrhh()
-  if (!data) return null
-  const empleado = data.empleados.find(e => e.empleado_id === empleado_id)
-  if (!empleado) return null
-
   const db = createAdminClient()
+  const [{ base, fichaCuba, idsFiltro }, configNomina] = await Promise.all([
+    cargarBase(db, session.client_id),
+    leerConfigNomina(db, session.client_id),
+  ])
+  const empleado = base.empleados.find(e => e.empleado_id === empleado_id)
+  if (!empleado) return null
+  const data: PersonalPageData = { ...base, config_nomina: Array.from(configNomina.values()) }
+
+  // Las nóminas donde ESTA persona tiene línea. Se resuelven en dos pasos —sus líneas
+  // primero, sus nóminas después— en vez de traerlas todas y filtrar: con dos años de
+  // histórico, «todas» son cientos de filas para pintar una tabla de doce.
+  const { data: misLineas } = await db.from('nomina_lineas')
+    .select('nomina_id')
+    .eq('client_id', session.client_id)
+    .eq('empleado_id', empleado_id)
+  const misNominaIds = Array.from(new Set((misLineas ?? []).map(l => l.nomina_id as string)))
+  const { data: misNominas } = misNominaIds.length
+    ? await db.from('nominas').select('*')
+        .eq('client_id', session.client_id)
+        .in('empresa_id', idsFiltro)
+        .in('nomina_id', misNominaIds)
+        .order('periodo', { ascending: false })
+    : { data: [] }
+  const nominas = await construirNominas(
+    db, session.client_id, (misNominas ?? []) as Nomina[], fichaCuba, empleado_id)
+
   const [consRes, cptRes] = await Promise.all([
     db.from('contratos').select('*')
       .eq('client_id', session.client_id)
@@ -1823,10 +2436,10 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   // Misma derivación que usa el aviso de tope en `guardarIncidencia`.
   const acumuladas = await saldoVacacionesAcumulado(db, session.client_id, empleado_id)
 
-  // El desfase de cada línea ya viene marcado desde `obtenerRrhh`
+  // El desfase de cada línea ya viene marcado desde `construirNominas`
   // (`NominaLinea.desfasada`): la vista filtra por ahí, sin consultas extra.
   return {
-    data, empleado, contratos, conceptos, incidencias,
+    data, empleado, nominas, contratos, conceptos, incidencias,
     vacaciones: {
       importe:  redondear2(acumuladas),
       moneda:   empleado.moneda,
@@ -1879,6 +2492,44 @@ export interface ReciboNominaData {
   neto:            number
   vacaciones_acumuladas: number
   vacaciones_pagadas:    number
+}
+
+/**
+ * Los recibos de TODA la nómina, en una llamada.
+ *
+ * Hasta ahora el recibo solo se descargaba desde la ficha de cada trabajador: para una
+ * plantilla de 39 personas eran 39 navegaciones y 39 descargas. Aquí los datos comunes
+ * —la empresa, su logo, la configuración del modelo, las incidencias del mes— se piden
+ * **una vez** para las N, que es exactamente lo contrario de lo que conviene cuando se
+ * pide uno solo (por eso `obtenerReciboNomina` sigue existiendo tal cual: cargar el logo
+ * en cada visita a Personal era lo que se quería evitar).
+ *
+ * LECTURA: sin `puedeEditarModulo`, como su hermana. El candado lo pone la página.
+ */
+export async function obtenerRecibosNomina(
+  nomina_id: string,
+): Promise<{ ok: true; recibos: { empleado_id: string; nombre: string; recibo: ReciboNominaData }[] }
+         | { ok: false; error: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  const db = createAdminClient()
+  const { data: lineas } = await db.from('nomina_lineas')
+    .select('empleado_id, empleado_nombre')
+    .eq('nomina_id', nomina_id).eq('client_id', session.client_id)
+    .order('empleado_nombre')
+  if (!lineas?.length) return { ok: false, error: 'Esa nómina no tiene líneas.' }
+
+  // En serie y reusando la acción individual: es la MISMA función que ya está
+  // verificada, y duplicar su lógica para ahorrar consultas es cómo el recibo de uno y
+  // el de todos acabarían diciendo cifras distintas.
+  const recibos: { empleado_id: string; nombre: string; recibo: ReciboNominaData }[] = []
+  for (const l of lineas as { empleado_id: string; empleado_nombre: string }[]) {
+    const r = await obtenerReciboNomina(nomina_id, l.empleado_id)
+    if (r.ok) recibos.push({ empleado_id: l.empleado_id, nombre: l.empleado_nombre, recibo: r.recibo })
+  }
+  if (!recibos.length) return { ok: false, error: 'No se pudo generar ningún recibo.' }
+  return { ok: true, recibos }
 }
 
 export async function obtenerReciboNomina(
@@ -2313,9 +2964,10 @@ export async function eliminarIncidencia(incidencia_id: string): Promise<{ ok: b
 // ── Página de detalle de una nómina (tabla) ─────────────────────────────────────
 
 export interface NominaDetalleData {
-  /** La página entera de RRHH: trae empresas, cuentas, config de modelo… ya
-   *  resuelto — mismo patrón que `EmpleadoDetalleData`, no se duplica nada. */
-  data:        RrhhPageData
+  /** Lo compartido (empresas, monedas, plantilla) más la config del modelo. NO la
+   *  historia de nómina: esta pantalla enseña UNA, y traerlas todas para encontrarla
+   *  era lo que hacía que cada `onBlur` de una celda recargara el módulo entero. */
+  data:        PersonalPageData
   nomina:      NominaConLineas
   /** Lo variable del mes de cada trabajador (mig. 143), por `empleado_id`: son
    *  los valores CRUDOS que rellenan las celdas editables — hoy nadie los
@@ -2326,39 +2978,102 @@ export interface NominaDetalleData {
    *  celda de días trabajados en vez de un «Completo» que no dice cuántos son. */
   diasLaborables: Record<string, number>
   esCuba:      boolean
+  /**
+   * Qué días le tocaban a cada trabajador este mes, según su alta/baja o su semana tipo
+   * (`lib/rrhh/dias-trabajados.ts`). Solo aparece quien tiene algo que sugerir y su
+   * línea no lo refleja todavía: el aviso sale si hay desfase real, nunca «por si acaso».
+   *
+   * Es una PROPUESTA. El dueño la aplica con un botón o teclea otra cosa: es dinero de
+   * una persona concreta y la rejilla es una semana tipo, no un registro de asistencia.
+   */
+  sugerenciaDias: Record<string, SugerenciaDias>
 }
 
 export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDetalleData | null> {
   const session = await getPortalSession()
   if (!session) return null
 
-  const data = await obtenerRrhh()
-  if (!data) return null
-  const nomina = data.nominas.find(n => n.nomina_id === nomina_id)
+  const db = createAdminClient()
+  const [{ base, fichaCuba, idsFiltro }, configs] = await Promise.all([
+    cargarBase(db, session.client_id),
+    leerConfigNomina(db, session.client_id),
+  ])
+
+  // La nómina se pide POR SU ID, no se busca dentro de todas.
+  const { data: cabecera } = await db.from('nominas').select('*')
+    .eq('client_id', session.client_id)
+    .in('empresa_id', idsFiltro)
+    .eq('nomina_id', nomina_id)
+    .maybeSingle()
+  if (!cabecera) return null
+
+  const [nomina] = await construirNominas(db, session.client_id, [cabecera as Nomina], fichaCuba)
   if (!nomina) return null
 
-  const db = createAdminClient()
-  const [incidenciasMap, { data: fichas }] = await Promise.all([
+  const data: PersonalPageData = { ...base, config_nomina: Array.from(configs.values()) }
+
+  const empIds = nomina.lineas.map(l => l.empleado_id)
+  const [incidenciasMap, { data: fichas }, { data: asigns }, { data: turnosCat }] = await Promise.all([
     leerIncidencias(db, session.client_id, nomina.periodo),
-    db.from('empleados').select('empleado_id, dias_laborables')
+    // `fecha_alta`/`fecha_baja` entran aquí para la sugerencia de días: son lo que dice
+    // que alguien no trabajó el mes entero, y hasta ahora nadie lo miraba al generar.
+    db.from('empleados').select('empleado_id, dias_laborables, fecha_alta, fecha_baja')
       .eq('client_id', session.client_id)
-      .in('empleado_id', nomina.lineas.map(l => l.empleado_id)),
+      .in('empleado_id', empIds),
+    db.from('turno_asignaciones').select('empleado_id, dia_semana, turno_id')
+      .eq('client_id', session.client_id)
+      .in('empleado_id', empIds.length ? empIds : ['__none__']),
+    db.from('turnos').select('turno_id, es_descanso, activo')
+      .eq('client_id', session.client_id).eq('empresa_id', nomina.empresa_id),
   ])
-  // `data.config_nomina` viene ya aplanado a array por `obtenerRrhh` (es lo que
-  // consume el cliente); `configDe` trabaja sobre el mapa original.
-  const configs = new Map(data.config_nomina.map(c => [c.empresa_id, c]))
   const config  = configDe(configs, nomina.empresa_id)
   const esCuba  = config.modelo === 'MIPYME_CUBA' && nomina.moneda === MONEDA_CUBA
 
-  const propios = new Map(((fichas ?? []) as { empleado_id: string; dias_laborables: number | null }[])
-    .map(f => [f.empleado_id, f.dias_laborables]))
+  const propios = new Map(((fichas ?? []) as {
+    empleado_id: string; dias_laborables: number | null
+    fecha_alta: string | null; fecha_baja: string | null
+  }[]).map(f => [f.empleado_id, f]))
   const diasLaborables: Record<string, number> = {}
   for (const l of nomina.lineas) {
-    diasLaborables[l.empleado_id] = Number(propios.get(l.empleado_id) ?? config.dias_laborables_default)
+    diasLaborables[l.empleado_id] = Number(propios.get(l.empleado_id)?.dias_laborables ?? config.dias_laborables_default)
+  }
+
+  // ── Qué días le tocaban a cada uno ─────────────────────────────────────────────
+  // Solo bajo el modelo cubano: es el único que prorratea, así que en el General la
+  // sugerencia no tendría dónde aplicarse.
+  const sugerenciaDias: Record<string, SugerenciaDias> = {}
+  if (esCuba) {
+    // Un turno de DESCANSO no cuenta como día trabajado; «sin asignar» tampoco (mig. 169).
+    const noCuenta = new Set(((turnosCat ?? []) as { turno_id: string; es_descanso: boolean }[])
+      .filter(t => t.es_descanso).map(t => t.turno_id))
+    const semanaDe = new Map<string, boolean[]>()
+    for (const a of (asigns ?? []) as { empleado_id: string; dia_semana: number; turno_id: string }[]) {
+      const s = semanaDe.get(a.empleado_id) ?? new Array(7).fill(false)
+      // La semana llega con LUNES = 1 y el vector la indexa con LUNES = 0.
+      s[a.dia_semana - 1] = !noCuenta.has(a.turno_id)
+      semanaDe.set(a.empleado_id, s)
+    }
+    for (const l of nomina.lineas) {
+      const ficha = propios.get(l.empleado_id)
+      const s = sugerirDiasTrabajados({
+        periodo:         nomina.periodo,
+        fecha_alta:      ficha?.fecha_alta ?? null,
+        fecha_baja:      ficha?.fecha_baja ?? null,
+        dias_laborables: diasLaborables[l.empleado_id],
+        semana:          semanaDe.get(l.empleado_id),
+      })
+      if (!s) continue
+      // El aviso sale si hay desfase REAL, nunca «por si acaso»: si la línea ya lleva
+      // esos días —los tecleó el dueño o los aplicó antes—, no hay nada que proponer.
+      const actual = incidenciasMap.get(l.empleado_id)?.dias_trabajados
+      const vigente = actual ?? diasLaborables[l.empleado_id]
+      if (Math.abs(vigente - s.dias) < 0.05) continue
+      sugerenciaDias[l.empleado_id] = s
+    }
   }
 
   return {
-    data, nomina, esCuba, diasLaborables,
+    data, nomina, esCuba, diasLaborables, sugerenciaDias,
     incidencias: Object.fromEntries(incidenciasMap),
   }
 }
@@ -4001,9 +4716,12 @@ export async function guardarTurno(
   const turno_id    = (formData.get('turno_id')    as string)?.trim()
   const empresa_id  = (formData.get('empresa_id')  as string)?.trim()
   const nombre      = (formData.get('nombre')      as string)?.trim()
-  const hora_inicio = (formData.get('hora_inicio') as string)?.trim() || null
-  const hora_fin    = (formData.get('hora_fin')    as string)?.trim() || null
   const color       = (formData.get('color')       as string)?.trim() || null
+  // Un turno de DESCANSO no tiene horario: guardarle uno y no contarlo sería un dato
+  // que dice una cosa y hace otra.
+  const es_descanso = formData.getAll('es_descanso').includes('1')
+  const hora_inicio = es_descanso ? null : ((formData.get('hora_inicio') as string)?.trim() || null)
+  const hora_fin    = es_descanso ? null : ((formData.get('hora_fin')    as string)?.trim() || null)
 
   if (!nombre)     return { ok: false, error: 'El nombre del turno es obligatorio.' }
   if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
@@ -4019,20 +4737,45 @@ export async function guardarTurno(
     const { error } = await db.from('turnos').insert({
       turno_id: generarTurnoId(),
       client_id: session.client_id,
-      empresa_id, nombre, hora_inicio, hora_fin, color,
+      empresa_id, nombre, hora_inicio, hora_fin, color, es_descanso,
       activo: true,
       updated_at: new Date().toISOString(),
     })
     if (error) return { ok: false, error: error.message }
   } else {
     const { error } = await db.from('turnos')
-      .update({ nombre, hora_inicio, hora_fin, color, updated_at: new Date().toISOString() })
+      .update({ nombre, hora_inicio, hora_fin, color, es_descanso, updated_at: new Date().toISOString() })
       .eq('turno_id', turno_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
   }
 
-  revalidatePath('/portal/rrhh')
+  revalidatePath('/portal/turnos')
+  return { ok: true }
+}
+
+/**
+ * Activa o desactiva un turno del catálogo.
+ *
+ * `turnos.activo` existía desde el principio y la UI **nunca lo ponía a `false`**: la
+ * única salida era eliminar, que se lleva por delante todas las asignaciones. Un turno
+ * que ya no se usa pero que sigue en la historia del cuadrante no es un turno que haya
+ * que borrar. Mismo patrón que `alternarConceptoEmpleado`.
+ */
+export async function alternarTurno(
+  turno_id: string, activo: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('turnos')
+    .update({ activo, updated_at: new Date().toISOString() })
+    .eq('turno_id', turno_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/turnos')
   return { ok: true }
 }
 
@@ -4050,53 +4793,98 @@ export async function eliminarTurno(turno_id: string): Promise<{ ok: boolean; er
     .eq('turno_id', turno_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/portal/rrhh')
+  revalidatePath('/portal/turnos')
   return { ok: true }
 }
 
-// ── Asignar turno a (empleado, día) ─────────────────────────────────────────────
-// turno_id vacío → libera la celda. Un turno por empleado y día (reemplaza).
+// ── Guardar la rejilla semanal (varias celdas de una vez) ───────────────────────
 
-export async function asignarTurno(
-  formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+/** Una celda del cuadrante. `turno_id` vacío = liberarla. */
+export interface CambioAsignacion {
+  empleado_id: string
+  /** 1 = lunes … 7 = domingo. */
+  dia_semana:  number
+  turno_id:    string
+}
+
+/**
+ * Escribe VARIAS celdas del cuadrante en una sola llamada.
+ *
+ * Antes había una acción por celda (`asignarTurno`) y la vista disparaba además un
+ * `router.refresh()` detrás de cada `<select>`: rellenar la semana de diez personas
+ * eran **setenta viajes** y setenta recargas de la página entera, cada una con su
+ * toast. En una conexión cubana eso no es una molestia, es una pantalla inutilizable.
+ *
+ * Valida lo que la UI ya filtraba pero la acción aceptaba: que el trabajador sea de
+ * este cliente y que el turno sea de **su misma empresa**. Sin eso se podía asignar
+ * a alguien de la empresa A un turno de la B, y la rejilla —que filtra por empresa—
+ * ni siquiera lo enseñaría.
+ */
+export async function guardarAsignaciones(
+  cambios: CambioAsignacion[],
+): Promise<{ ok: boolean; error?: string; guardadas?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!cambios.length) return { ok: true, guardadas: 0 }
 
-  const empleado_id = (formData.get('empleado_id') as string)?.trim()
-  const diaRaw      = parseInt(formData.get('dia_semana') as string, 10)
-  const turno_id    = (formData.get('turno_id')    as string)?.trim() || ''
-
-  if (!empleado_id)                       return { ok: false, error: 'Empleado no válido.' }
-  if (isNaN(diaRaw) || diaRaw < 1 || diaRaw > 7) return { ok: false, error: 'Día no válido.' }
+  for (const c of cambios) {
+    if (!c.empleado_id) return { ok: false, error: 'Trabajador no válido.' }
+    if (!Number.isInteger(c.dia_semana) || c.dia_semana < 1 || c.dia_semana > 7) {
+      return { ok: false, error: 'Día no válido.' }
+    }
+  }
 
   const db = createAdminClient()
 
-  // Reemplazo: borra la asignación previa de esa celda
-  await db.from('turno_asignaciones').delete()
-    .eq('client_id', session.client_id)
-    .eq('empleado_id', empleado_id)
-    .eq('dia_semana', diaRaw)
+  // Las dos comprobaciones de pertenencia, en dos consultas y no en 2×N.
+  const empIds   = Array.from(new Set(cambios.map(c => c.empleado_id)))
+  const turnoIds = Array.from(new Set(cambios.map(c => c.turno_id).filter(Boolean)))
+  const [{ data: emps }, { data: turnos }] = await Promise.all([
+    db.from('empleados').select('empleado_id, empresa_id')
+      .eq('client_id', session.client_id).in('empleado_id', empIds),
+    turnoIds.length
+      ? db.from('turnos').select('turno_id, empresa_id')
+          .eq('client_id', session.client_id).in('turno_id', turnoIds)
+      : Promise.resolve({ data: [] as { turno_id: string; empresa_id: string }[] }),
+  ])
+  const empresaDeEmpleado = new Map((emps ?? []).map(e => [e.empleado_id as string, e.empresa_id as string]))
+  const empresaDeTurno    = new Map((turnos ?? []).map(t => [t.turno_id as string, t.empresa_id as string]))
 
-  if (turno_id) {
-    const { data: turno } = await db.from('turnos')
-      .select('turno_id')
-      .eq('turno_id', turno_id)
+  for (const c of cambios) {
+    const empresaEmp = empresaDeEmpleado.get(c.empleado_id)
+    if (!empresaEmp) return { ok: false, error: 'Trabajador no encontrado.' }
+    if (!c.turno_id) continue
+    const empresaTur = empresaDeTurno.get(c.turno_id)
+    if (!empresaTur) return { ok: false, error: 'Turno no encontrado.' }
+    if (empresaTur !== empresaEmp) {
+      return { ok: false, error: 'Ese turno es de otra empresa: no se puede asignar a este trabajador.' }
+    }
+  }
+
+  // Reemplazo: se libera cada celda tocada y se reinsertan las que llevan turno. El
+  // borrado va en UNA consulta por trabajador (no por celda) y el alta en una sola.
+  for (const empleado_id of empIds) {
+    const dias = cambios.filter(c => c.empleado_id === empleado_id).map(c => c.dia_semana)
+    const { error } = await db.from('turno_asignaciones').delete()
       .eq('client_id', session.client_id)
-      .single()
-    if (!turno) return { ok: false, error: 'Turno no encontrado.' }
-
-    const { error } = await db.from('turno_asignaciones').insert({
-      asignacion_id: generarAsignacionId(),
-      client_id:     session.client_id,
-      empleado_id,
-      dia_semana:    diaRaw,
-      turno_id,
-    })
+      .eq('empleado_id', empleado_id)
+      .in('dia_semana', dias)
     if (error) return { ok: false, error: error.message }
   }
 
-  revalidatePath('/portal/rrhh')
-  return { ok: true }
+  const altas = cambios.filter(c => c.turno_id).map(c => ({
+    asignacion_id: generarAsignacionId(),
+    client_id:     session.client_id,
+    empleado_id:   c.empleado_id,
+    dia_semana:    c.dia_semana,
+    turno_id:      c.turno_id,
+  }))
+  if (altas.length) {
+    const { error } = await db.from('turno_asignaciones').insert(altas)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/portal/turnos')
+  return { ok: true, guardadas: cambios.length }
 }

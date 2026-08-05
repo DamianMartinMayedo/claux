@@ -91,6 +91,17 @@ export interface RrhhResumen {
   nominasBorrador: number
   /** Contratos que terminan en los próximos 30 días. */
   contratosPorVencer: number
+  /**
+   * Coste de personal de los últimos 6 meses cerrados, por moneda.
+   *
+   * Existe porque el prompt del insight de RRHH pide «lo más relevante del **coste de
+   * personal**» y el snapshot no llevaba **ni una cifra de coste**: se le estaba pidiendo
+   * al modelo un número que no tenía. Es el DEVENGADO (`costeDe`), no el neto — una
+   * retención no es un ahorro.
+   */
+  costeSerie: { periodo: string; monedas: { moneda: string; monto: number }[] }[]
+  /** Deuda de vacaciones acumulada de la plantilla, por moneda. Vacío fuera de Cuba. */
+  vacacionesDeuda: { moneda: string; monto: number }[]
 }
 // Deudas pendientes (aging compacto para el insight). Un lado = cobrar o pagar.
 export interface DeudasLado {
@@ -826,23 +837,75 @@ async function resumenRrhh(db: Db, cid: string, hoy: string, empresaIds: string[
   const en30 = sumarDias(hoy, 30)
 
   const [empRes, nomRes, conRes] = await Promise.all([
-    db.from('empleados').select('fecha_alta, fecha_baja').eq('client_id', cid).in('empresa_id', empresaIds),
+    db.from('empleados').select('empleado_id, fecha_alta, fecha_baja').eq('client_id', cid).in('empresa_id', empresaIds),
     // La nómina en borrador es dinero que el negocio ya debe pero que todavía no
     // está en los gastos: hasta confirmarla, el resultado del mes miente.
     db.from('nominas').select('*', { count: 'exact', head: true })
       .eq('client_id', cid).in('empresa_id', empresaIds).eq('estado', 'BORRADOR'),
     // `fecha_fin` NULL = indefinido, y esos no vencen: la query los deja fuera sola.
-    db.from('contratos').select('*', { count: 'exact', head: true })
+    // Se traen los `empleado_id` en vez de contarlos: un contrato de alguien que ya
+    // causó baja no hay que renovarlo, y de una empresa que no se está mirando
+    // tampoco. El escáner de avisos ya descartaba a los de baja (`escanearRrhh`), así
+    // que esta cifra y la campana respondían distinto a la misma pregunta.
+    db.from('contratos').select('contrato_id, empleado_id')
       .eq('client_id', cid).gte('fecha_fin', hoy).lte('fecha_fin', en30),
   ])
 
-  const lista = (empRes.data ?? []) as { fecha_alta: string | null; fecha_baja: string | null }[]
+  const lista = (empRes.data ?? []) as { empleado_id: string; fecha_alta: string | null; fecha_baja: string | null }[]
   const activos = lista.filter(e => !e.fecha_baja).length
   const altasMes = lista.filter(e => !e.fecha_baja && e.fecha_alta && String(e.fecha_alta) >= inicioMes).length
+  const vigentes = new Set(lista.filter(e => !e.fecha_baja).map(e => e.empleado_id))
+
+  // ── Coste de personal y deuda de vacaciones ───────────────────────────────────
+  // El prompt del insight de RRHH pide «lo más relevante del coste de personal» y hasta
+  // aquí el snapshot no llevaba NINGUNA cifra de coste: se le pedía al modelo un número
+  // que no tenía, así que respondía sobre plantilla y contratos o se lo inventaba.
+  const desde6m = `${sumarDias(`${hoy.slice(0, 7)}-01`, -155).slice(0, 7)}`
+  const { data: nomsConf } = await db.from('nominas')
+    .select('nomina_id, periodo, moneda')
+    .eq('client_id', cid).in('empresa_id', empresaIds).eq('estado', 'CONFIRMADA')
+    .gte('periodo', desde6m).order('periodo', { ascending: false })
+  const cabeceras = (nomsConf ?? []) as { nomina_id: string; periodo: string; moneda: string }[]
+
+  const costePorPeriodo = new Map<string, Map<string, number>>()
+  const vacPorMoneda    = new Map<string, number>()
+  if (cabeceras.length) {
+    // El coste es el DEVENGADO, no `nominas.total` (que es Σ netos): cada retención
+    // rebajaría el coste, que es el error que la mig. 139 cerró en contabilidad.
+    const { data: lns } = await db.from('nomina_lineas')
+      .select('nomina_id, devengado, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+      .eq('client_id', cid).in('nomina_id', cabeceras.map(n => n.nomina_id))
+    const metaDe = new Map(cabeceras.map(n => [n.nomina_id, n]))
+    for (const l of (lns ?? []) as {
+      nomina_id: string; devengado: number
+      vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+    }[]) {
+      const meta = metaDe.get(l.nomina_id)
+      if (!meta) continue
+      const porMoneda = costePorPeriodo.get(meta.periodo) ?? new Map<string, number>()
+      porMoneda.set(meta.moneda, (porMoneda.get(meta.moneda) ?? 0) + Number(l.devengado))
+      costePorPeriodo.set(meta.periodo, porMoneda)
+      const mov = Number(l.vacaciones_acumuladas_periodo ?? 0) - Number(l.vacaciones_pagadas_periodo ?? 0)
+      if (mov) vacPorMoneda.set(meta.moneda, (vacPorMoneda.get(meta.moneda) ?? 0) + mov)
+    }
+  }
+  const costeSerie = Array.from(costePorPeriodo.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, 6)
+    .map(([periodo, m]) => ({
+      periodo,
+      monedas: Array.from(m.entries()).map(([moneda, monto]) => ({ moneda, monto: Math.round(monto * 100) / 100 })),
+    }))
+
   return {
     activos, altasMes,
     nominasBorrador:    nomRes.count ?? 0,
-    contratosPorVencer: conRes.count ?? 0,
+    contratosPorVencer: ((conRes.data ?? []) as { empleado_id: string }[])
+      .filter(c => vigentes.has(c.empleado_id)).length,
+    costeSerie,
+    vacacionesDeuda: Array.from(vacPorMoneda.entries())
+      .filter(([, monto]) => Math.abs(monto) > 0.005)
+      .map(([moneda, monto]) => ({ moneda, monto: Math.round(monto * 100) / 100 })),
   }
 }
 

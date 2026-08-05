@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import {
-  confirmarNomina, eliminarNomina, exportarNominaXlsx,
+  confirmarNomina, eliminarNomina, exportarNominaXlsx, obtenerRecibosNomina,
   guardarIncidenciaDeLinea, guardarDevengadoDeLinea,
   type NominaDetalleData, type NominaLinea, type ItemLinea,
 } from '@/app/actions/portal/rrhh'
@@ -17,8 +17,9 @@ import { useConfigurador } from '@/components/portal/ConfiguradorContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
+import { costeEmpresa } from '@/lib/rrhh/coste'
 import {
-  ChevronDown, CircleCheck, DollarSign, Download, Plus, RefreshCw, Trash2, X,
+  ChevronDown, CircleCheck, DollarSign, Download, FileText, Plus, RefreshCw, Trash2, X,
 } from 'lucide-react'
 
 // ── Lo variable del mes, en el cliente ──────────────────────────────────────────
@@ -110,38 +111,43 @@ function DesgloseFila({ items, colSpan }: { items: ItemLinea[]; colSpan: number 
 // ── Modal: agregar una incidencia rara para un trabajador ───────────────────────
 
 function AgregarIncidenciaModal({
-  lineas, valores, onClose, onGuardar, isPending,
+  lineas, valores, moneda, onClose, onGuardar, isPending,
 }: {
   lineas:     NominaLinea[]
   valores:    Record<string, IncidenciaEditable>
+  moneda:     string
   onClose:    () => void
-  onGuardar:  (empleado_id: string, campo: keyof IncidenciaEditable, valor: number) => void
+  /** Todos los campos de una vez: un guardado, un recálculo. */
+  onGuardar:  (empleado_id: string, cambios: Partial<IncidenciaEditable>) => void
   isPending:  boolean
 }) {
   const [empleadoId, setEmpleadoId] = useState(lineas[0]?.empleado_id ?? '')
-  const [campo, setCampo] = useState<keyof IncidenciaEditable>('pago_extra')
-  const actual = valores[empleadoId]?.[campo] ?? 0
-  const [valor, setValor] = useState(String(actual || ''))
+  // Los seis campos a la vez, no uno por vuelta de modal: un pago extra y una
+  // nocturnidad para la misma persona eran dos aperturas, dos guardados y dos
+  // recálculos de su línea.
+  const vacio = () => Object.fromEntries(CAMPOS_DISPERSOS.map(c => [c.campo, ''])) as Record<string, string>
+  const desde = (id: string) => Object.fromEntries(
+    CAMPOS_DISPERSOS.map(c => [c.campo, String(valores[id]?.[c.campo] || '')])) as Record<string, string>
+  const [campos, setCampos] = useState<Record<string, string>>(() =>
+    empleadoId ? desde(empleadoId) : vacio())
 
   function cambiarEmpleado(id: string) {
     setEmpleadoId(id)
-    setValor(String(valores[id]?.[campo] || ''))
-  }
-  function cambiarCampo(c: keyof IncidenciaEditable) {
-    setCampo(c)
-    setValor(String(valores[empleadoId]?.[c] || ''))
+    setCampos(desde(id))
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onGuardar(empleadoId, campo, num(valor))
+    const cambios: Partial<IncidenciaEditable> = {}
+    for (const c of CAMPOS_DISPERSOS) cambios[c.campo] = num(campos[c.campo] ?? '') as never
+    onGuardar(empleadoId, cambios)
   }
 
   return (
     <div className="modal-backdrop open dialog-top">
-      <div className="modal modal-md" role="dialog" aria-modal>
+      <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">Agregar incidencia</h2>
+          <h2 className="modal-title">Incidencias del mes</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -153,23 +159,20 @@ function AgregarIncidenciaModal({
                   {lineas.map(l => <option key={l.empleado_id} value={l.empleado_id}>{l.empleado_nombre}</option>)}
                 </select>
               </div>
-              <div className="input-group ter-col-span-3">
-                <label htmlFor="ai-tipo">Tipo de incidencia <span className="required">*</span></label>
-                <select className="input" id="ai-tipo" value={campo} onChange={e => cambiarCampo(e.target.value as keyof IncidenciaEditable)}>
-                  {CAMPOS_DISPERSOS.map(c => <option key={c.campo} value={c.campo}>{c.etiqueta}</option>)}
-                </select>
-              </div>
-              <div className="input-group ter-col-span-3">
-                <label htmlFor="ai-valor">Valor <span className="required">*</span></label>
-                <input className="input" id="ai-valor" type="number" min="0" step="any" required
-                  value={valor} onChange={e => setValor(e.target.value)} />
-              </div>
+              {CAMPOS_DISPERSOS.map(c => (
+                <div className="input-group ter-col-span-3" key={c.campo}>
+                  <label htmlFor={`ai-${c.campo}`}>{c.etiqueta} ({moneda})</label>
+                  <input className="input" id={`ai-${c.campo}`} type="number" min="0" step="any"
+                    value={campos[c.campo] ?? ''} placeholder="0"
+                    onChange={e => setCampos(p => ({ ...p, [c.campo]: e.target.value }))} />
+                </div>
+              ))}
             </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
-              {isPending ? <><span className="spinner spinner-sm" /> Añadiendo…</> : <><Plus size={15} strokeWidth={2} /> Añadir</>}
+              {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : <><Plus size={15} strokeWidth={2} /> Guardar</>}
             </button>
           </div>
         </form>
@@ -184,7 +187,8 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
   const router = useRouter()
   const esConfigurador = useConfigurador()
   const [isPending, startTransition] = useTransition()
-  const { data, nomina, esCuba, diasLaborables } = detalle
+  const { data, nomina, esCuba, diasLaborables, sugerenciaDias } = detalle
+  const { tieneContabilidad } = data
 
   const esBorrador  = nomina.estado === 'BORRADOR'
   // Bajo impersonación, una CONFIRMADA se puede corregir sin tocar la base a
@@ -205,6 +209,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
   const [confirmarNom, setConfirmarNom] = useState(false)
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [exportando, setExportando] = useState(false)
+  const [recibosPend, setRecibosPend] = useState(false)
 
   // Reglas/conceptos del negocio cambiados desde que se generó — distinto de
   // las incidencias: lo marca el servidor por línea (`desfasada`) y se resuelve
@@ -220,19 +225,89 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
   }, [incidencias])
 
   const totales = useMemo(() => {
-    let devengado = 0, retenciones = 0, costeEmpresa = 0, neto = 0
+    let devengado = 0, retenciones = 0, aportes = 0, neto = 0
+    let vacPagadas = 0, vacAcumuladas = 0
     for (const l of nomina.lineas) {
       devengado += l.devengado; retenciones += l.deducciones; neto += l.neto
-      for (const it of l.items) if (it.tipo === 'APORTE_EMPRESA') costeEmpresa += it.monto
+      vacPagadas    += l.vacaciones_pagadas_periodo
+      vacAcumuladas += l.vacaciones_acumuladas_periodo
+      for (const it of l.items) if (it.tipo === 'APORTE_EMPRESA') aportes += it.monto
     }
-    return { devengado, retenciones, costeEmpresa, neto }
+    // El número que el dueño busca antes de confirmar: lo que le CUESTA. Misma fórmula
+    // que el recibo, y ahora literalmente la misma función (`lib/rrhh/coste.ts`).
+    return {
+      devengado, retenciones, aportes, neto, vacAcumuladas,
+      coste: costeEmpresa({
+        devengado, aportes,
+        vacaciones_pagadas:    vacPagadas,
+        vacaciones_acumuladas: vacAcumuladas,
+      }),
+    }
   }, [nomina.lineas])
 
   const colSpanFila = 5 + (esCuba ? 2 : 0) + columnasVisibles.length + 1
 
-  function guardarCampo(empleado_id: string, campo: keyof IncidenciaEditable, valor: number | null) {
+  // ── Días sugeridos ─────────────────────────────────────────────────────────────
+  // Se filtran contra el estado LOCAL, no solo contra lo que trajo el servidor: si el
+  // dueño acaba de teclear esos días a mano, la propuesta ya no tiene nada que decir.
+  const sugerenciasVisibles = useMemo(
+    () => Object.entries(sugerenciaDias).filter(([id, s]) => {
+      const actual = incidencias[id]?.dias_trabajados ?? diasLaborables[id] ?? 0
+      return Math.abs(actual - s.dias) >= 0.05
+    }),
+    [sugerenciaDias, incidencias, diasLaborables],
+  )
+  const nombreCorto = (empleadoId: string) => {
+    const l = nomina.lineas.find(x => x.empleado_id === empleadoId)
+    return l ? l.empleado_nombre.split(' ')[0] : '—'
+  }
+  /** Aplica los días propuestos, uno por uno y por el camino que ya existe: cada
+   *  guardado recalcula SU línea (`guardarIncidenciaDeLinea`). No hay lógica de
+   *  escritura nueva, y el dueño puede corregir cualquiera después. */
+  function aplicarSugerencias() {
+    const pend = sugerenciasVisibles
+    if (!pend.length) return
+    const ld = toastLoading(`Aplicando los días de ${pend.length} ${pend.length === 1 ? 'trabajador' : 'trabajadores'}…`)
+    startTransition(async () => {
+      let hechas = 0
+      const fallos: string[] = []
+      // En serie: cada una recalcula su línea y reescribe el total de la nómina, y
+      // varias a la vez se pisarían.
+      for (const [empleadoId, s] of pend) {
+        const previa = incidencias[empleadoId] ?? INCIDENCIA_VACIA
+        const fd = new FormData()
+        fd.set('nomina_id',   nomina.nomina_id)
+        fd.set('empleado_id', empleadoId)
+        fd.set('periodo',     nomina.periodo)
+        fd.set('dias_trabajados',  String(s.dias))
+        fd.set('dias_vacaciones',  String(previa.dias_vacaciones))
+        fd.set('pago_extra',       String(previa.pago_extra))
+        fd.set('pago_nocturnidad', String(previa.pago_nocturnidad))
+        fd.set('feriados',         String(previa.feriados))
+        fd.set('penalizacion',     String(previa.penalizacion))
+        fd.set('otros_descuentos', String(previa.otros_descuentos))
+        fd.set('pago_subsidios',   String(previa.pago_subsidios))
+        const res = await guardarIncidenciaDeLinea(fd)
+        if (res.ok) hechas++
+        else fallos.push(`${nombreCorto(empleadoId)}: ${res.error ?? 'error'}`)
+      }
+      await ld.dismiss()
+      if (hechas) toastSuccess(hechas === 1 ? 'Días aplicados · línea recalculada' : `Días aplicados a ${hechas} trabajadores`)
+      if (fallos.length) toastError(fallos.join(' · '))
+      router.refresh()
+    })
+  }
+
+  /** Escribe uno o varios campos de la incidencia de un trabajador y recalcula SU línea. */
+  function guardarCampo(
+    empleado_id: string,
+    campo: keyof IncidenciaEditable | Partial<IncidenciaEditable>,
+    valor?: number | null,
+  ) {
     const previa = incidencias[empleado_id] ?? INCIDENCIA_VACIA
-    const nueva  = { ...previa, [campo]: valor }
+    const nueva  = typeof campo === 'string'
+      ? { ...previa, [campo]: valor }
+      : { ...previa, ...campo }
     setIncidencias(prev => ({ ...prev, [empleado_id]: nueva }))
 
     const fd = new FormData()
@@ -302,6 +377,32 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
     })
   }
 
+  /**
+   * Los recibos de toda la plantilla. VA FUERA de `startTransition` a propósito, como
+   * el de la ficha: dentro, el toast de carga no llega a pintarse, y con 39 recibos
+   * este paso tarda lo suficiente para que el usuario crea que no hizo nada.
+   */
+  async function descargarRecibos() {
+    if (recibosPend) return
+    setRecibosPend(true)
+    const ld = toastLoading('Generando los recibos…')
+    try {
+      const res = await obtenerRecibosNomina(nomina.nomina_id)
+      if (!res.ok) { toastError(res.error); return }
+      const { descargarReciboNomina } = await import('@/lib/pdf/recibo-nomina')
+      for (const r of res.recibos) {
+        const quien = r.nombre.split(' ').slice(0, 2).join('-').toLowerCase()
+        await descargarReciboNomina(r.recibo, `recibo-${quien}-${nomina.periodo}.pdf`)
+      }
+      toastSuccess(`${res.recibos.length} recibos descargados`)
+    } catch {
+      toastError('No se pudieron generar los recibos.')
+    } finally {
+      await ld.dismiss()
+      setRecibosPend(false)
+    }
+  }
+
   function exportar() {
     setExportando(true)
     const ld = toastLoading('Preparando el Excel…')
@@ -338,12 +439,20 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
                 hace desde Tesorería como cualquier otra: aquí solo se informa de si el
                 salario neto está pagado, y se enlaza a donde se paga. «Pagada» mira solo
                 el salario neto a propósito — los impuestos tienen otro calendario. */}
-            {!esBorrador && (nomina.saldo_pendiente > 0.005
+            {/* Sin Contabilidad no hay Tesorería donde liquidar, así que este estado no
+                se puede apagar nunca: enseñarlo sería un «pendiente» perpetuo por una
+                deuda que ese cliente no tiene forma de pagar en CLAUX. */}
+            {!esBorrador && tieneContabilidad && (nomina.saldo_pendiente > 0.005
               ? <span>Salario pendiente de pago: <strong>{formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong></span>
               : <span>Salario pagado</span>)}
           </div>
         </div>
         <div className="det-actions">
+          {/* Los recibos, de una vez. Antes solo se bajaban desde la ficha de cada
+              trabajador: para 39 personas eran 39 navegaciones. */}
+          <button className="btn btn-secondary" onClick={descargarRecibos} disabled={recibosPend || exportando}>
+            <FileText size={14} strokeWidth={2} /> {recibosPend ? 'Generando recibos…' : 'Descargar recibos'}
+          </button>
           <button className="btn btn-secondary" onClick={exportar} disabled={exportando}>
             <Download size={14} strokeWidth={2} /> Exportar a Excel
           </button>
@@ -356,7 +465,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
               deudas —el salario neto y cada retención, cada una con su acreedor y su
               vencimiento— y un solo botón solo podía pagar una de ellas, dando por
               liquidada la nómina entera. Se paga en Tesorería, con el resto. */}
-          {!esBorrador && nomina.saldo_pendiente > 0.005 && (
+          {!esBorrador && tieneContabilidad && nomina.saldo_pendiente > 0.005 && (
             <Link className="btn btn-primary" href="/portal/cxp">
               <DollarSign size={15} strokeWidth={2} /> Ver en Cuentas por pagar
             </Link>
@@ -393,19 +502,53 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
         </div>
       )}
 
+      {/* ── Los días que le tocaban a cada uno ────────────────────────────────────
+          `crearNomina` mete a propósito a quien trabajó solo parte del mes, pero deja
+          los días en blanco, que el motor lee como MES COMPLETO: quien entró el 20 o
+          causó baja el 5 cobraba el mes entero, con todo su bloque fiscal inflado.
+          Aquí el sistema PROPONE —desde su alta/baja o desde su semana tipo— y el dueño
+          acepta o teclea otra cosa. Solo sale si hay algo que proponer. */}
+      {puedeEditar && sugerenciasVisibles.length > 0 && (
+        <div className="alert alert-warning alert-cta">
+          <span className="alert-cta-texto">
+            <strong>
+              {sugerenciasVisibles.length === 1
+                ? 'Un trabajador no trabajó el mes completo'
+                : `${sugerenciasVisibles.length} trabajadores no trabajaron el mes completo`}
+              {' '}y la nómina se los paga entero.
+            </strong>{' '}
+            {sugerenciasVisibles.slice(0, 3)
+              .map(([id, s]) => `${nombreCorto(id)}: ${s.dias} días`).join(' · ')}
+            {sugerenciasVisibles.length > 3 && ` · y ${sugerenciasVisibles.length - 3} más`}
+          </span>
+          <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}
+            onClick={aplicarSugerencias}>
+            <RefreshCw size={14} strokeWidth={2} /> Poner los días sugeridos
+          </button>
+        </div>
+      )}
+
       <div className="imprt-tiles mb-3">
         <div className="imprt-tile"><strong>{formatMonto(totales.devengado)}</strong><span>Total devengado</span></div>
         <div className="imprt-tile"><strong>{formatMonto(totales.retenciones)}</strong><span>Retenciones al personal</span></div>
         {esCuba && (
-          <div className="imprt-tile"><strong>{formatMonto(totales.costeEmpresa)}</strong><span>Coste de empresa (IUFT+SS)</span></div>
+          <div className="imprt-tile"><strong>{formatMonto(totales.aportes)}</strong><span>Aportes de empresa (IUFT+SS)</span></div>
+        )}
+        {esCuba && totales.vacAcumuladas > 0.005 && (
+          <div className="imprt-tile"><strong>{formatMonto(totales.vacAcumuladas)}</strong><span>Vacaciones acumuladas</span></div>
         )}
         <div className="imprt-tile"><strong>{formatMonto(totales.neto)}</strong><span>Neto a pagar</span></div>
+        {/* Lo que de verdad le cuesta. Estaba calculado y solo se imprimía en el recibo
+            de cada trabajador: la pantalla donde se decide confirmar no lo enseñaba. */}
+        {esCuba && (
+          <div className="imprt-tile"><strong>{formatMonto(totales.coste)}</strong><span>Coste total para la empresa</span></div>
+        )}
       </div>
 
       {puedeEditar && (
         <div className="ter-toolbar">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModalAgregar(true)}>
-            <Plus size={14} strokeWidth={2.5} /> Agregar incidencia
+            <Plus size={14} strokeWidth={2.5} /> Incidencias de un trabajador
           </button>
         </div>
       )}
@@ -439,7 +582,9 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
                       </td>
                       <td data-label="Salario base" className="col-num tes-monto-cell">{formatMonto(l.salario_base)}</td>
                       {esCuba && (
-                        <td data-label="Días trabajados" className="col-num">
+                        <td data-label="Días trabajados" className="col-num"
+                          /* El porqué, al alcance del cursor: «causó baja el 5 de agosto». */
+                          title={sugerenciaDias[l.empleado_id]?.explicacion}>
                           {puedeEditar ? (
                             <input className="input nom-input" type="number" min="0" max="31" step="any"
                               disabled={ocupado}
@@ -448,6 +593,9 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
                                           rellenar(e.currentTarget, diasLaborables[l.empleado_id] ?? 0))}
                               aria-label={`Días trabajados de ${l.empleado_nombre}`} />
                           ) : (inc.dias_trabajados ?? diasLaborables[l.empleado_id] ?? '—')}
+                          {sugerenciaDias[l.empleado_id] && (
+                            <div className="text-xs-muted">Le tocaban {sugerenciaDias[l.empleado_id].dias}</div>
+                          )}
                         </td>
                       )}
                       {esCuba && (
@@ -499,19 +647,20 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
       </div>
 
       {modalAgregar && (
-        <AgregarIncidenciaModal lineas={nomina.lineas} valores={incidencias}
+        <AgregarIncidenciaModal lineas={nomina.lineas} valores={incidencias} moneda={nomina.moneda}
           onClose={() => setModalAgregar(false)}
-          onGuardar={(empleadoId, campo, valor) => guardarCampo(empleadoId, campo, valor)}
+          onGuardar={(empleadoId, cambios) => guardarCampo(empleadoId, cambios)}
           isPending={isPending} />
       )}
       {confirmarNom && (
-        <ConfirmarNominaModal nomina={nomina} onConfirm={doConfirmar}
+        <ConfirmarNominaModal nomina={nomina} tieneContabilidad={tieneContabilidad}
+          onConfirm={doConfirmar}
           onClose={() => setConfirmarNom(false)} isPending={isPending} />
       )}
       {confirmarEliminar && (
         <ConfirmDialog
           title="Eliminar nómina"
-          body={`¿Eliminar la nómina de ${formatPeriodo(nomina.periodo)} (${formatMonto(nomina.total)} ${nomina.moneda})? ${nomina.estado === 'CONFIRMADA' ? 'También se eliminará el gasto de salarios de esta nómina.' : ''}`}
+          body={`¿Eliminar la nómina de ${formatPeriodo(nomina.periodo)} (${formatMonto(nomina.total)} ${nomina.moneda})? ${nomina.estado === 'CONFIRMADA' ? 'También se revertirán todos los apuntes que generó en tu contabilidad.' : ''}`}
           confirmLabel="Eliminar" danger
           onConfirm={doEliminar}
           onCancel={() => setConfirmarEliminar(false)}

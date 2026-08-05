@@ -16,6 +16,7 @@ import {
   alternarConceptoEmpleado,
   guardarIncidencia,
   eliminarIncidencia,
+  guardarVacacionesApertura,
   obtenerReciboNomina,
   type IncidenciaMes,
   type EmpleadoDetalleData,
@@ -29,7 +30,9 @@ import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
-import { Copy, Download, FileText, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { Copy, Download, FileText, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { explicarReciboIa } from '@/app/actions/portal/ia'
+import { useIa } from '@/components/portal/ia/IaContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import {
   actualizarConceptosNominas,
@@ -183,7 +186,11 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
 // los datos del mes delante. Antes no había dónde: la única vía era editar la línea
 // de una nómina ya generada, que perdía el motivo y lo borraba el recálculo.
 
-function mesActualISO(): string { return new Date().toISOString().slice(0, 7) }
+// El mes en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00 el
+// `toISOString()` ya da la fecha de mañana, así que el último día del mes —justo la
+// noche en que se cierra la nómina— el mes propuesto era el SIGUIENTE. Una sola
+// fuente: `hoyISO()`, que sale de `lib/fecha-tz.ts`.
+function mesActualISO(): string { return hoyISO().slice(0, 7) }
 
 function IncidenciaModal({
   empleadoId, moneda, incidencia, esCuba, onClose, onDone,
@@ -306,6 +313,71 @@ function IncidenciaModal({
   )
 }
 
+// ── Saldo de vacaciones de APERTURA (mig. 167) ──────────────────────────────────
+// Lo que el trabajador ya traía acumulado antes de usar CLAUX. Va en su propio modal
+// y en su propia acción, no como un campo más de la ficha: `construirCamposEmpleado`
+// escribe todo lo que le llega, así que ahí dentro guardar el teléfono habría puesto
+// el saldo a 0 en silencio.
+
+function AperturaModal({
+  empleadoId, moneda, actual, onClose, onDone,
+}: {
+  empleadoId: string
+  moneda:     string
+  actual:     number
+  onClose:    () => void
+  onDone:     () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [valor, setValor] = useState(actual ? String(actual) : '')
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const n = parseFloat(valor.replace(',', '.'))
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarVacacionesApertura(empleadoId, isNaN(n) ? 0 : n)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      onDone()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop open dialog-top">
+      <div className="modal modal-sm" role="dialog" aria-modal>
+        <div className="modal-header">
+          <h2 className="modal-title">Saldo de apertura</h2>
+          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="info-box">
+              <strong className="info-box-title">Lo que ya tenía antes de usar CLAUX</strong>
+              <span className="text-xs-muted">
+                Es el <strong>punto de partida</strong>: a partir de ahí el saldo lo lleva el
+                sistema con cada nómina confirmada. No es el saldo actual — ese se calcula solo.
+                Si empezó de cero, déjalo en blanco.
+              </span>
+            </div>
+            <div className="input-group">
+              <label htmlFor="vac-apertura">Importe ({moneda})</label>
+              <input className="input" id="vac-apertura" type="number" min="0" step="any"
+                autoFocus value={valor} onChange={e => setValor(e.target.value)} placeholder="0.00" />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={isPending}>
+              {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function IncidenciasSection({
   empleadoId, moneda, incidencias, esCuba, vacaciones, onChanged,
 }: {
@@ -319,6 +391,7 @@ function IncidenciasSection({
   const [isPending, startTransition] = useTransition()
   const [editando, setEditando] = useState<IncidenciaConId | 'nueva' | null>(null)
   const [borrando, setBorrando] = useState<IncidenciaConId | null>(null)
+  const [apertura, setApertura] = useState(false)
 
   function borrar() {
     if (!borrando) return
@@ -357,12 +430,19 @@ function IncidenciasSection({
       </p>
 
       {/* El saldo se DERIVA de las nóminas confirmadas, no se guarda: así se
-          autocorrige si una nómina se reabre o se borra. */}
+          autocorrige si una nómina se reabre o se borra. Lo único editable es su PUNTO
+          DE PARTIDA, y va por su propia acción — como campo del formulario, guardar el
+          teléfono lo habría puesto a 0 en silencio. */}
       {esCuba && (
         <div className="info-box mb-3">
-          <strong className="info-box-title">
-            Vacaciones acumuladas: {formatMonto(vacaciones.importe)} {vacaciones.moneda}
-          </strong>
+          <div className="det-meta-row">
+            <strong className="info-box-title">
+              Vacaciones acumuladas: {formatMonto(vacaciones.importe)} {vacaciones.moneda}
+            </strong>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setApertura(true)}>
+              <Pencil size={14} strokeWidth={2} /> Ajustar saldo de apertura
+            </button>
+          </div>
           <span className="text-xs-muted">
             Lo acumulado en las nóminas ya confirmadas, menos lo que se le haya pagado.
             {vacaciones.apertura > 0.005 && (
@@ -371,6 +451,14 @@ function IncidenciasSection({
             )}
           </span>
         </div>
+      )}
+
+      {apertura && (
+        <AperturaModal
+          empleadoId={empleadoId} moneda={vacaciones.moneda} actual={vacaciones.apertura}
+          onClose={() => setApertura(false)}
+          onDone={() => { setApertura(false); onChanged() }}
+        />
       )}
 
       {incidencias.length === 0 ? (
@@ -734,13 +822,15 @@ function ConceptosSection({
 
 export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDetalleData }) {
   const router = useRouter()
-  const { data, empleado, contratos, conceptos, incidencias, vacaciones } = detalle
+  const { data, empleado, nominas, contratos, conceptos, incidencias, vacaciones } = detalle
+  const { tieneIa, nombreAgente } = useIa()
   const [isPending, startTransition] = useTransition()
 
   // Los días y las vacaciones solo se piden si SU empresa usa el modelo cubano: en
   // el general no prorratean nada y preguntarlos sería pedir un dato que no se usa.
-  const esCuba = data.config_nomina
-    .find(c => c.empresa_id === empleado.empresa_id)?.modelo === 'MIPYME_CUBA'
+  const cfgEmpresa  = data.config_nomina.find(c => c.empresa_id === empleado.empresa_id)
+  const esCuba      = cfgEmpresa?.modelo === 'MIPYME_CUBA'
+  const diasEmpresa = cfgEmpresa?.dias_laborables_default ?? 24
 
   const [showEdit,      setShowEdit]      = useState(false)
   const [copiar,        setCopiar]        = useState(false)
@@ -751,13 +841,18 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
   const [delContrato,   setDelContrato]   = useState<Contrato | null>(null)
   /** Nómina cuyo recibo se está generando, para no lanzar dos veces el mismo. */
   const [reciboDe,      setReciboDe]      = useState<string | null>(null)
+  /** R8.2 · Nómina cuya explicación se está pidiendo, y el texto ya devuelto. */
+  const [explicando,    setExplicando]    = useState<string | null>(null)
+  const [explicacion,   setExplicacion]   = useState<{ periodo: string; texto: string } | null>(null)
 
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
   const esActivo = empleado.estado === 'ACTIVO'
 
-  // Nómina de este trabajador: su línea en cada nómina donde aparece
-  const miNomina = data.nominas.flatMap(n => {
+  // Nómina de este trabajador: su línea en cada nómina donde aparece. `detalle.nominas`
+  // ya viene acotada a las suyas y con SOLO su línea dentro (antes se filtraba sobre la
+  // historia entera del negocio, que había que traer para quedarse con una fila).
+  const miNomina = nominas.flatMap(n => {
     const l = n.lineas.find(x => x.empleado_id === empleado.empleado_id)
     return l ? [{ nomina: n, linea: l }] : []
   })
@@ -804,6 +899,28 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
     } finally {
       await ld.dismiss()
       setReciboDe(null)
+    }
+  }
+
+  /**
+   * R8.2 · La explicación del recibo en palabras, para leérsela al trabajador.
+   *
+   * Fuera de `startTransition` igual que la descarga del recibo y por el mismo motivo:
+   * dentro, el toast de carga no llega a pintarse y en 3G la pantalla parece muerta.
+   */
+  async function explicarRecibo(nomina: NominaConLineas) {
+    if (explicando) return
+    setExplicando(nomina.nomina_id)
+    const ld = toastLoading('Preparando la explicación…')
+    try {
+      const res = await explicarReciboIa(nomina.nomina_id, empleado.empleado_id)
+      if (!res.ok) { toastError(res.error); return }
+      setExplicacion({ periodo: nomina.periodo, texto: res.texto })
+    } catch {
+      toastError('No se pudo preparar la explicación.')
+    } finally {
+      await ld.dismiss()
+      setExplicando(null)
     }
   }
 
@@ -869,10 +986,25 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
           <Campo label="Teléfono"        value={empleado.telefono} />
           <Campo label="Email"           value={empleado.email} />
           <Campo label="Dirección"       value={empleado.direccion} />
+          {/* Se piden en el modal y no se veían en ninguna parte, aunque los dos generan
+              aviso en la campana: un dato que se pide y no se puede consultar parece
+              perdido. */}
+          <Campo label="Documento caduca" value={empleado.documento_vencimiento ? formatFecha(empleado.documento_vencimiento) : null} />
+          <Campo label="Fecha de nacimiento" value={empleado.fecha_nacimiento ? formatFecha(empleado.fecha_nacimiento) : null} />
           <Campo label="Tipo de contrato" value={TIPO_CONTRATO_LABEL[empleado.tipo_contrato]} />
           <Campo label="Periodicidad"    value={PERIODICIDAD_LABEL[empleado.periodicidad]} />
           <Campo label="Salario base"    value={empleado.salario_base > 0 ? `${formatMonto(empleado.salario_base)} ${empleado.moneda}` : null} />
           <Campo label="Fecha de alta"   value={formatFecha(empleado.fecha_alta)} />
+          <Campo label="Turno habitual"  value={empleado.turno ? (
+            <>{empleado.turno} <Link href="/portal/turnos" className="link-primary">· ver la semana</Link></>
+          ) : null} />
+          {/* Solo bajo el modelo cubano: en el General ninguno de los dos se aplica. */}
+          {esCuba && <Campo label="Días laborables"
+            value={empleado.dias_laborables ?? `${diasEmpresa} (los de su empresa)`} />}
+          {esCuba && <Campo label="Relación con la empresa"
+            value={empleado.es_socio
+              ? <span className="badge badge-info">Socio — no paga CESS</span>
+              : 'Trabajador'} />}
           {!esActivo && <Campo label="Fecha de baja" value={formatFecha(empleado.fecha_baja)} />}
           {!esActivo && <Campo label="Motivo de baja" value={empleado.motivo_baja} />}
         </div>
@@ -976,21 +1108,45 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                     <td data-label="Deducciones" className="col-num tes-monto-cell">{formatMonto(linea.deducciones)}</td>
                     <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(linea.neto)} {nomina.moneda}</td>
                     <td data-label="Estado">
-                      <span className={`badge ${nomina.estado === 'BORRADOR' ? 'badge-warning' : (nomina.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
-                        {nomina.estado === 'BORRADOR' ? 'Borrador' : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
+                      {/* Sin Contabilidad no hay Tesorería donde liquidar: «Pendiente de
+                          pago» sería un estado que ese cliente no puede apagar nunca. */}
+                      <span className={`badge ${nomina.estado === 'BORRADOR' ? 'badge-warning' : (!data.tieneContabilidad || nomina.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
+                        {nomina.estado === 'BORRADOR'
+                          ? 'Borrador'
+                          : !data.tieneContabilidad ? 'Confirmada'
+                          : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
                     </td>
-                    {/* Descarga directa, no un desplegable de un solo elemento: la fila
-                        entera ya lleva a la hoja de nómina al pulsarla, así que «Ver
-                        detalle» era el menú repitiendo lo que hace el clic. */}
+                    {/* Con el addon de IA son DOS acciones, así que van en el menú `⋯`
+                        (regla de tablas): una fila de botones-icono se amontona. Sin
+                        addon queda una sola y se pinta como botón directo. */}
                     <td className="col-actions">
-                      <button className="btn btn-ghost btn-sm"
-                        onClick={e => { e.stopPropagation(); descargarRecibo(nomina) }}
-                        disabled={reciboDe !== null}
-                        title="Descargar el recibo de este período en PDF">
-                        <Download size={15} strokeWidth={2} />
-                        {reciboDe === nomina.nomina_id ? 'Generando…' : 'Recibo'}
-                      </button>
+                      {tieneIa ? (
+                        <RowActions>
+                          <button className="row-actions-item"
+                            onClick={() => descargarRecibo(nomina)}
+                            disabled={reciboDe !== null}>
+                            <Download size={15} strokeWidth={2} />
+                            {reciboDe === nomina.nomina_id ? 'Generando…' : 'Descargar recibo'}
+                          </button>
+                          {/* «¿Por qué cobro menos que el mes pasado?» es la conversación
+                              que el dueño tiene cada mes mirando el PDF. */}
+                          <button className="row-actions-item"
+                            onClick={() => explicarRecibo(nomina)}
+                            disabled={explicando !== null}>
+                            <Sparkles size={15} strokeWidth={2} />
+                            {explicando === nomina.nomina_id ? 'Preparando…' : 'Explicárselo'}
+                          </button>
+                        </RowActions>
+                      ) : (
+                        <button className="btn btn-ghost btn-sm"
+                          onClick={e => { e.stopPropagation(); descargarRecibo(nomina) }}
+                          disabled={reciboDe !== null}
+                          title="Descargar el recibo de este período en PDF">
+                          <Download size={15} strokeWidth={2} />
+                          {reciboDe === nomina.nomina_id ? 'Generando…' : 'Recibo'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1037,6 +1193,33 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
         <ContratoModal empleadoId={empleado.empleado_id} contrato={editContrato}
           onClose={() => setEditContrato(null)} onSaved={() => { setEditContrato(null); refrescar() }} />
       )}
+      {/* R8.2 · La explicación en palabras. Va en modal y no en un panel flotante porque
+          es un texto para LEER en voz alta, no un dato que se consulte de reojo. */}
+      {explicacion && (
+        <div className="modal-backdrop open">
+          <div className="modal modal-md" role="dialog" aria-modal>
+            <div className="modal-header">
+              <h2 className="modal-title">Su nómina de {formatPeriodo(explicacion.periodo)}</h2>
+              <button type="button" className="modal-close" onClick={() => setExplicacion(null)}>
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="text-sm-muted mb-3">
+                Escrito para que se lo puedas leer a {empleado.nombre}. Repásalo antes: lo
+                redacta {nombreAgente} a partir de su recibo.
+              </p>
+              <div className="info-box">
+                <span className="det-value-pre">{explicacion.texto}</span>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setExplicacion(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {delContrato && (
         <div className="modal-backdrop open">
           <div className="modal modal-sm" role="dialog" aria-modal>

@@ -876,9 +876,9 @@ export async function escanearRrhh(
   const [conRes, empRes, nomRes] = await Promise.all([
     db.from('contratos').select('contrato_id, client_id, empleado_id, fecha_fin')
       .in('client_id', ids).not('fecha_fin', 'is', null),
-    db.from('empleados').select('empleado_id, client_id, nombre, apellidos, fecha_baja, fecha_nacimiento, documento_vencimiento')
+    db.from('empleados').select('empleado_id, client_id, empresa_id, nombre, apellidos, fecha_baja, fecha_nacimiento, documento_vencimiento')
       .in('client_id', ids),
-    db.from('nominas').select('client_id, periodo').in('client_id', ids),
+    db.from('nominas').select('client_id, empresa_id, periodo').in('client_id', ids),
   ])
 
   const empleado = new Map(
@@ -911,7 +911,10 @@ export async function escanearRrhh(
       cuerpo:   vencido
         ? `Su contrato terminó el ${fmtFechaEs(c.fecha_fin as string)}.`
         : `Su contrato termina el ${fmtFechaEs(c.fecha_fin as string)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
-      enlace:      '/portal/contratos',
+      // Los contratos viven DENTRO de la ficha del trabajador. `/portal/contratos` no
+      // existe en el árbol de rutas y este aviso llevaba a un 404 — sus dos hermanos
+      // (documento y cumpleaños) ya apuntaban bien.
+      enlace:      `/portal/rrhh/${c.empleado_id}`,
       entidadTipo: 'contrato',
       entidadId:   c.contrato_id as string,
       umbral,
@@ -985,30 +988,43 @@ export async function escanearRrhh(
     )
   }
 
-  // Nómina del mes: solo a partir del día 25, y solo si el tenant tiene personal
-  // de alta (sin empleados no hay nómina que echar en falta).
+  // Nómina del mes: solo a partir del día 25, y solo si esa EMPRESA tiene personal de
+  // alta (sin trabajadores no hay nómina que echar en falta).
+  //
+  // Va por empresa y no por cliente: una nómina es por (empresa, período), así que con
+  // dos empresas generar la de una apagaba el aviso de las dos y la otra se quedaba sin
+  // hacer en silencio. Por eso la entidad es `empresa:periodo` y no solo el período.
   const diaDelMes = Number(hoy.slice(8, 10))
   const periodo   = hoy.slice(0, 7)
   const conNomina = new Set((nomRes.data ?? [])
-    .filter(n => n.periodo === periodo).map(n => n.client_id as string))
-  const conPersonal = new Set((empRes.data ?? [])
-    .filter(e => !e.fecha_baja).map(e => e.client_id as string))
+    .filter(n => n.periodo === periodo)
+    .map(n => `${n.client_id as string}|${n.empresa_id as string}`))
+  const empresasConPersonal = new Map<string, Set<string>>()
+  for (const e of empRes.data ?? []) {
+    if (e.fecha_baja) continue
+    const set = empresasConPersonal.get(e.client_id as string) ?? new Set<string>()
+    set.add(e.empresa_id as string)
+    empresasConPersonal.set(e.client_id as string, set)
+  }
   const pendientes = new Vivas()
 
   if (diaDelMes >= DIA_AVISO_NOMINA) {
     for (const t of tenants) {
-      if (conNomina.has(t.clientId) || !conPersonal.has(t.clientId)) continue
-      pendientes.add(t.clientId, periodo)
-      const ok = await crearNotificacion({
-        clientId:    t.clientId,
-        tipo:        'nomina_pendiente',
-        titulo:      'Nómina del mes pendiente',
-        cuerpo:      'Se acaba el mes y aún no has generado la nómina.',
-        enlace:      '/portal/nomina',
-        entidadTipo: 'nomina',
-        entidadId:   periodo,   // una sola vez por mes
-      }, t)
-      if (ok) creadas++
+      for (const empresaId of empresasConPersonal.get(t.clientId) ?? []) {
+        if (conNomina.has(`${t.clientId}|${empresaId}`)) continue
+        pendientes.add(t.clientId, `${empresaId}:${periodo}`)
+        const ok = await crearNotificacion({
+          clientId:    t.clientId,
+          empresaId,
+          tipo:        'nomina_pendiente',
+          titulo:      'Nómina del mes pendiente',
+          cuerpo:      'Se acaba el mes y aún no has generado la nómina.',
+          enlace:      '/portal/nomina',
+          entidadTipo: 'nomina',
+          entidadId:   `${empresaId}:${periodo}`,   // una sola vez por empresa y mes
+        }, t)
+        if (ok) creadas++
+      }
     }
   }
   // Hecha la nómina (o entrado el mes siguiente), el aviso se archiva solo.

@@ -58,6 +58,16 @@ export interface EmpleadoInput {
   salario_base?:          number | null
   periodicidad?:          string | null
   notas?:                 string | null
+  /**
+   * Los dos campos del modelo cubano (mig. 142). `undefined` = «no viene en esta
+   * entrada, NO lo toques»; es la diferencia que importa, porque el formulario solo
+   * los pinta si la empresa usa `MIPYME_CUBA` y guardar los datos de contacto desde
+   * una empresa en modelo General no puede desmarcar a un socio en silencio. Es la
+   * misma trampa que documentó `vacaciones_apertura` (mig. 167), resuelta aquí en vez
+   * de dejando el campo fuera del núcleo.
+   */
+  es_socio?:        boolean | undefined
+  dias_laborables?: number | null | undefined
 }
 
 /** Arma el objeto de campos que se inserta/actualiza en `empleados`. */
@@ -67,7 +77,17 @@ export function construirCamposEmpleado(input: EmpleadoInput) {
     return t || null
   }
   const salario = input.salario_base
+  // Solo se escriben si el llamante los trae: ver `EmpleadoInput.es_socio`.
+  const cuba: { es_socio?: boolean; dias_laborables?: number | null } = {}
+  if (input.es_socio !== undefined) cuba.es_socio = !!input.es_socio
+  if (input.dias_laborables !== undefined) {
+    const d = input.dias_laborables
+    // Fuera de 1-31 no es una jornada, es un dedo en la tecla equivocada: se ignora y
+    // el trabajador hereda los días de su empresa, que es el comportamiento de siempre.
+    cuba.dias_laborables = d == null || isNaN(d) || d <= 0 || d > 31 ? null : d
+  }
   return {
+    ...cuba,
     nombre:                (input.nombre ?? '').trim(),
     apellidos:             s(input.apellidos),
     documento:             s(input.documento),

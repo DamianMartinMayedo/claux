@@ -16,7 +16,7 @@ export const PROMPTS_INSIGHT_DEFAULT: Record<TipoInsight, string> = {
   gastos:     'Analiza mis GASTOS: tendencia de los últimos 6 meses y, con el desglose por categoría del mes, las categorías que más pesan y dónde podría ahorrar. Máximo 5 frases.',
   proyeccion: 'Proyecta mis ingresos y resultado del próximo mes según la tendencia reciente, indicando el supuesto usado. Sé prudente. Máximo 5 frases.',
   inventario: 'Analiza mi INVENTARIO usando la lista `urgentes` (con su almacén y su cobertura en días): di qué se me acaba antes y en qué almacén, con la fecha aproximada si hay cobertura, y qué conviene reponer primero. Menciona el valor del inventario solo si aporta. La cobertura es una estimación: dilo así. Máximo 5 frases.',
-  rrhh:       'Analiza mi PERSONAL: tamaño de la plantilla, altas recientes y lo más relevante del coste de personal. Máximo 5 frases.',
+  rrhh:       'Analiza mi PERSONAL: tamaño de la plantilla, altas recientes y cómo evoluciona el COSTE de personal según `costeSerie` (es el devengado, no el neto). Si hay `vacacionesDeuda`, di cuánto tengo acumulado en vacaciones y que es dinero que se paga cuando se disfrutan. Avisa de las nóminas sin confirmar y de los contratos que terminan. Máximo 5 frases.',
   tesoreria:  'Analiza mi LIQUIDEZ: saldos de caja por moneda y cómo se ven frente a mis ventas y gastos recientes. Máximo 5 frases.',
   catalogo:   'Revisa mi CATÁLOGO público: ítems sin foto, sin descripción o sin precio que conviene completar para vender mejor, y 1-2 mejoras concretas. Máximo 5 frases.',
   caja:       'Analiza mi PUNTO DE VENTA: ventas de hoy por terminal, puntos sin sincronizar y turnos que sigan abiertos de días anteriores. Señala qué requiere atención. Máximo 5 frases.',

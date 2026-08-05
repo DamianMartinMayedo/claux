@@ -13,7 +13,7 @@
 import {
   construirCamposEmpleado, generarEmpleadoId, TIPOS_CONTRATO, PERIODICIDADES,
 } from '@/lib/rrhh-core'
-import { camposProvistos, norm, parseFecha, parseNumero, primeraDependencia } from '../util'
+import { camposProvistos, norm, parseBooleano, parseFecha, parseNumero, primeraDependencia } from '../util'
 import { defEmpresa, defMoneda } from './comunes'
 import type { Adaptador, Preparado } from '../tipos'
 
@@ -50,6 +50,15 @@ export const adaptadorPersonal: Adaptador = {
       alias: ['vacaciones acumuladas', 'vacaciones', 'saldo vacaciones', 'vacaciones pendientes'],
       ayuda: 'Importe ya acumulado antes de usar CLAUX. Si el trabajador empieza de cero, déjalo vacío.',
       ejemplo: '1363.50' },
+    // Los dos del modelo cubano (mig. 142). Solo se aplican si su empresa usa
+    // MIPYME_CUBA; en el General se importan igual y no molestan.
+    { campo: 'es_socio', etiqueta: 'Es socio', obligatorio: false,
+      alias: ['es socio', 'socio', 'es_socio'],
+      ayuda: 'Sí / No. Un socio no paga la Contribución Especial (CESS). En blanco, No.',
+      ejemplo: 'No' },
+    { campo: 'dias_laborables', etiqueta: 'Días laborables', obligatorio: false,
+      alias: ['dias laborables', 'días laborables', 'jornada', 'dias mes'],
+      ayuda: 'Su jornada del mes. En blanco, los de su empresa.', ejemplo: '24' },
     { campo: 'notas',        etiqueta: 'Notas',         obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
   ],
 
@@ -81,8 +90,25 @@ export const adaptadorPersonal: Adaptador = {
       return { ok: false, motivo: 'Las vacaciones acumuladas no pueden ser negativas.' }
     }
 
+    // Los dos del modelo cubano. `undefined` = la columna no venía en el archivo, y
+    // entonces NO se toca: es la regla «ACTUALIZAR no vacía» aplicada al núcleo
+    // compartido, que es donde ahora vive la decisión.
+    // `parseBooleano` ya distingue los tres casos: `null` = celda vacía, `undefined` =
+    // texto que no se entiende, y el booleano cuando sí.
+    const socioRaw = parseBooleano(valores.es_socio)
+    if (socioRaw === undefined) {
+      return { ok: false, motivo: 'El campo «Es socio» no se entiende (usa Sí o No).' }
+    }
+    const diasRaw = parseNumero(valores.dias_laborables)
+    if (diasRaw === undefined) return { ok: false, motivo: 'Los días laborables no son un número.' }
+    if (diasRaw !== null && (diasRaw <= 0 || diasRaw > 31)) {
+      return { ok: false, motivo: 'Los días laborables deben estar entre 1 y 31.' }
+    }
+
     const campos = construirCamposEmpleado({
       nombre,
+      es_socio:        socioRaw === null ? undefined : socioRaw,
+      dias_laborables: deColumna.has('dias_laborables') ? diasRaw : undefined,
       apellidos:        valores.apellidos,
       documento:        valores.documento,
       fecha_nacimiento,
@@ -137,6 +163,8 @@ export const adaptadorPersonal: Adaptador = {
         // 0 el saldo de apertura de toda la plantilla: es la regla «ACTUALIZAR no vacía
         // — solo se escriben las columnas que trae el archivo».
         vacaciones_apertura: 'vacaciones_apertura',
+        es_socio:            'es_socio',
+        dias_laborables:     'dias_laborables',
       }),
     }
   },

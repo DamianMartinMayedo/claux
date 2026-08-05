@@ -16,14 +16,14 @@ import {
   exportarNominaXlsx,
   type NominaConLineas,
   type ReglaDeduccion,
-  type RrhhPageData,
+  type NominaPageData,
   type ResultadoLote,
 } from '@/app/actions/portal/rrhh'
-import { Check, Download, Eye, Pencil, Plus, Power, Trash2, Wallet, X } from 'lucide-react'
+import { Check, Download, Eye, Pencil, Plus, Power, RefreshCw, Trash2, Wallet, X } from 'lucide-react'
 import { CONCEPTOS_COSTE, NOMBRE_CONCEPTO_COSTE } from '@/lib/rrhh/conceptos'
 import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
 import Tabs from '@/components/Tabs'
-import { formatMonto, hoyISO, formatPeriodo } from '../_shared/NominaDetalleModal'
+import { formatMonto, hoyISO, formatPeriodo, actualizarConceptosNominas } from '../_shared/NominaDetalleModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import BulkBar                          from '@/components/portal/BulkBar'
@@ -31,6 +31,7 @@ import { useRowSelection }             from '@/components/portal/useRowSelection
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
+import AvisoTope                         from '@/components/portal/AvisoTope'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import Filtros                         from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
@@ -46,7 +47,7 @@ import ExportarMenu from '@/components/portal/ExportarMenu'
 function ReglaModal({
   data, regla, onClose, onDone,
 }: {
-  data:    RrhhPageData
+  data:    NominaPageData
   regla:   ReglaDeduccion | null
   onClose: () => void
   onDone:  () => void
@@ -156,7 +157,7 @@ function ReglaModal({
 // lado del título y como el resto de las vistas, así que quien lo dispara está
 // fuera de este panel.
 function ReglasPanel({ data, editando, setEditando }: {
-  data:        RrhhPageData
+  data:        NominaPageData
   editando:    ReglaDeduccion | 'nueva' | null
   setEditando: (r: ReglaDeduccion | 'nueva' | null) => void
 }) {
@@ -283,7 +284,7 @@ function ReglasPanel({ data, editando, setEditando }: {
 // puede tener una en el modelo cubano y el resto en el general. Cambiarlo NO
 // reescribe nada — solo afecta a las nóminas que se generen a partir de ahí.
 
-function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
+function ConfigNominaPanel({ data }: { data: NominaPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editando, setEditando] = useState<string | null>(null)
@@ -449,7 +450,7 @@ function ConfigNominaPanel({ data }: { data: RrhhPageData }) {
 // contabilidad. Mandar dos conceptos a la misma categoría es una decisión suya
 // legítima; en blanco, el concepto usa la categoría que crea el sistema.
 
-function MapeoGastosPanel({ data }: { data: RrhhPageData }) {
+function MapeoGastosPanel({ data }: { data: NominaPageData }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -559,8 +560,12 @@ function MapeoGastosPanel({ data }: { data: RrhhPageData }) {
   )
 }
 
+// El mes en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00 el
+// `toISOString()` ya da la fecha de mañana, así que el último día del mes —justo la
+// noche en que se cierra la nómina— el mes propuesto era el SIGUIENTE. Una sola
+// fuente: `hoyISO()`, que sale de `lib/fecha-tz.ts`.
 function mesActual(): string {
-  return new Date().toISOString().slice(0, 7)
+  return hoyISO().slice(0, 7)
 }
 function siguienteMes(periodo: string): string {
   const [y, m] = periodo.split('-').map(Number)
@@ -573,7 +578,7 @@ function siguienteMes(periodo: string): string {
 function NuevaNominaModal({
   data, onClose, onSaved,
 }: {
-  data:    RrhhPageData
+  data:    NominaPageData
   onClose: () => void
   onSaved: () => void
 }) {
@@ -718,7 +723,10 @@ function ConfirmEliminarNomina({
         <div className="modal-body">
           <p className="modal-body-text">
             ¿Eliminar la nómina de <strong>{formatPeriodo(nomina.periodo)}</strong> ({formatMonto(nomina.total)} {nomina.moneda})?
-            {nomina.estado === 'CONFIRMADA' && ' También se eliminará el gasto de salarios de esta nómina.'}
+            {/* «El gasto de salarios» era de cuando se escribía uno solo. Desde la
+                mig. 166 una nómina confirmada deja hasta ocho apuntes —cada aporte y
+                cada retención con su acreedor— y se revierten TODOS. */}
+            {nomina.estado === 'CONFIRMADA' && ' También se revertirán todos los apuntes que generó en tu contabilidad.'}
           </p>
         </div>
         <div className="modal-footer">
@@ -734,7 +742,7 @@ function ConfirmEliminarNomina({
 
 // ── Página: Nómina ───────────────────────────────────────────────────────────────
 
-export default function NominaView({ data }: { data: RrhhPageData }) {
+export default function NominaView({ data }: { data: NominaPageData }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -743,7 +751,6 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
   }))
   const [isPending, startTransition] = useTransition()
 
-  const [tab, setTab] = useState<'nominas' | 'reglas' | 'config'>('nominas')
   // La regla que se está creando/editando: el disparador es el botón del
   // `.page-header`, así que el estado no puede vivir dentro de `ReglasPanel`.
   const [editandoRegla, setEditandoRegla] = useState<ReglaDeduccion | 'nueva' | null>(null)
@@ -772,16 +779,27 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
   const filtroEmpresa = params.get('empresa') ?? ''
   const filtroAnio    = params.get('anio')    ?? ''
 
-  const aniosDisponibles = useMemo(() => {
-    const set = new Set<string>()
-    for (const n of data.nominas) if (n.periodo) set.add(n.periodo.slice(0, 4))
-    return Array.from(set).sort().reverse()
-  }, [data.nominas])
+  // La pestaña vive en la URL, como en Reportes de Contabilidad: un enlace compartido
+  // —o una recarga en mitad de configurar las reglas— caía siempre en «Nóminas».
+  const tabUrl = params.get('tab')
+  const tab: 'nominas' | 'reglas' | 'config' =
+    tabUrl === 'reglas' || tabUrl === 'config' ? tabUrl : 'nominas'
+  function setTab(t: string) {
+    const url = new URLSearchParams(params.toString())
+    if (t === 'nominas') url.delete('tab'); else url.set('tab', t)
+    router.replace(`?${url.toString()}`, { scroll: false })
+  }
 
   /**
-   * LA DECLARACIÓN. Ambos en `cliente`: son un puñado de nóminas al año, se traen todas.
-   * El AÑO es la granularidad de esta pantalla —el período de una nómina no son unos días
-   * sueltos— así que aquí no hay presets de rango, y a la descarga viaja traducido.
+   * LA DECLARACIÓN. El AÑO es la granularidad de esta pantalla —el período de una nómina
+   * no son unos días sueltos— así que aquí no hay presets de rango, y a la descarga viaja
+   * traducido a `desde`/`hasta`.
+   *
+   * El año va en `servidor`: acota EN LA CONSULTA, no en el navegador. Traerlas todas y
+   * filtrar aquí es lo que hacía que esta pantalla cargara la historia entera de nómina
+   * —con sus líneas y sus ítems— para pintar doce filas. La lista de años sale de una
+   * consulta propia (`data.anios`), no de recorrer las traídas: con rango aplicado el
+   * desplegable se quedaría sin los años que precisamente hay que poder elegir.
    */
   const declaracion: Filtro[] = useMemo(() => [
     {
@@ -796,19 +814,16 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
       // generar el filtro de la descarga. Aquí viaja solo en la URL.
       clave: 'anio', label: 'Todos los años', valor: filtroAnio,
       rotulo: 'Año',
-      widget: 'select', donde: 'cliente', sinExportar: true,
-      ocultarSi: aniosDisponibles.length <= 1,
-      opciones: aniosDisponibles.map(a => ({ valor: a, label: a })),
+      widget: 'select', donde: 'servidor', sinExportar: true,
+      ocultarSi: data.anios.length <= 1,
+      opciones: data.anios.map(a => ({ valor: a, label: a })),
     },
-  ], [filtroEmpresa, filtroAnio, empresasFiltro, aniosDisponibles])
+  ], [filtroEmpresa, filtroAnio, empresasFiltro, data.anios])
 
-  const nominasFiltradas = useMemo(() => {
-    return data.nominas.filter(n => {
-      if (filtroEmpresa && n.empresa_id !== filtroEmpresa) return false
-      if (filtroAnio && !n.periodo.startsWith(filtroAnio))  return false
-      return true
-    })
-  }, [data.nominas, filtroEmpresa, filtroAnio])
+  // El año ya viene acotado por la consulta; aquí solo queda la empresa, que es `cliente`.
+  const nominasFiltradas = useMemo(
+    () => data.nominas.filter(n => !filtroEmpresa || n.empresa_id === filtroEmpresa),
+    [data.nominas, filtroEmpresa])
 
   const { pageItems, ...pag } = usePagination(nominasFiltradas)
 
@@ -820,6 +835,12 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
   useEffect(() => { sel.clear() }, [filtroEmpresa, filtroAnio]) // eslint-disable-line react-hooks/exhaustive-deps
   const plural = (n: number) => n === 1 ? '' : 's'
   const hayBorradores = nominasFiltradas.some(n => sel.isSelected(n.nomina_id) && n.estado === 'BORRADOR')
+  // Las seleccionadas que de verdad se pueden actualizar: `actualizarConceptosNominas`
+  // reabre las confirmadas, y con pagos hechos el servidor se niega — ofrecerlo sería
+  // prometer algo que va a fallar.
+  const desactualizadas = nominasFiltradas.filter(n =>
+    sel.isSelected(n.nomina_id) && n.desactualizada
+    && (n.estado === 'BORRADOR' || n.pagado <= 0.005))
 
   function ejecutarLote(fn: () => Promise<ResultadoLote>) {
     const ld = toastLoading('Procesando…')
@@ -919,8 +940,8 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
       {tab === 'nominas' && (
       <>
       {/* Sin rango de fechas ni buscador: el período de una nómina es el AÑO, no unos días
-          sueltos, y el listado son un puñado de filas al año. */}
-      <Filtros filtros={declaracion} />
+          sueltos. El año acota EN LA CONSULTA (`donde: 'servidor'`). */}
+      <Filtros filtros={declaracion} hayMas={data.hay_mas} />
 
       <div className="card card-table">
         {nominasFiltradas.length === 0 ? (
@@ -969,9 +990,22 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
                     <td data-label="Empleados" className="text-sm-muted">{n.lineas.length}</td>
                     <td data-label="Total" className="col-num tes-monto-cell">{formatMonto(n.total)} {n.moneda}</td>
                     <td data-label="Estado">
-                      <span className={`badge ${n.estado === 'BORRADOR' ? 'badge-warning' : (n.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
-                        {n.estado === 'BORRADOR' ? 'Borrador' : (n.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
+                      {/* Sin Contabilidad no hay Tesorería donde liquidar, así que
+                          «Pendiente de pago» sería un estado que ese cliente no puede
+                          apagar nunca. Los apuntes se escriben igual (independencia de
+                          módulos); lo que no se le promete es un pago que no puede hacer. */}
+                      <span className={`badge ${n.estado === 'BORRADOR' ? 'badge-warning' : (!data.tieneContabilidad || n.saldo_pendiente <= 0.005 ? 'badge-success' : 'badge-info')}`}>
+                        {n.estado === 'BORRADOR'
+                          ? 'Borrador'
+                          : !data.tieneContabilidad ? 'Confirmada'
+                          : (n.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
+                      {/* El servidor ya marcaba `desactualizada` y el listado no lo
+                          enseñaba: había que entrar nómina por nómina para descubrir
+                          cuál no refleja los conceptos vigentes. */}
+                      {n.desactualizada && (
+                        <div><span className="badge badge-warning">Desactualizada</span></div>
+                      )}
                     </td>
                     <td className="col-actions">
                       <RowActions>
@@ -991,6 +1025,12 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
         )}
         <TablePagination {...pag} label="nómina" />
       </div>
+      {/* El techo dice CUÁNTAS faltan y las trae. Antes esta pantalla no tenía ninguno:
+          traía la historia completa y el usuario no podía saber que la había traído. */}
+      {data.hay_mas && (
+        <AvisoTope mostrados={data.nominas.length} total={data.total} limite={data.limite}
+          sustantivo="nóminas" femenino />
+      )}
       </>
       )}
 
@@ -1003,6 +1043,13 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
       )}
 
       <BulkBar count={sel.count} onClear={sel.clear}>
+        {desactualizadas.length > 0 && (
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => actualizarConceptosNominas(desactualizadas, undefined, startTransition,
+              () => { sel.clear(); router.refresh() })}>
+            <RefreshCw size={14} strokeWidth={2} /> Actualizar {desactualizadas.length}
+          </button>
+        )}
         {hayBorradores && (
           <button className="btn btn-secondary btn-sm" disabled={isPending}
             onClick={() => setConfirmLoteConf(true)}>
@@ -1018,7 +1065,7 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
       {confirmLoteConf && (
         <ConfirmDialog
           title={`¿Confirmar ${sel.count} nómina${plural(sel.count)}?`}
-          body="Se confirmarán las que estén en borrador y se registrará su gasto de Salarios en tu contabilidad. Las ya confirmadas se omiten."
+          body="Se confirmarán las que estén en borrador y se registrarán sus apuntes en tu contabilidad, cada uno con su acreedor. Las ya confirmadas se omiten."
           confirmLabel="Confirmar"
           onCancel={() => setConfirmLoteConf(false)}
           onConfirm={doConfirmarLote}
@@ -1027,7 +1074,7 @@ export default function NominaView({ data }: { data: RrhhPageData }) {
       {confirmLoteDel && (
         <ConfirmDialog
           title={`¿Eliminar ${sel.count} nómina${plural(sel.count)}?`}
-          body="Se eliminarán las seleccionadas (y el gasto de salarios de las confirmadas). Las que tengan pagos registrados en Tesorería se omitirán."
+          body="Se eliminarán las seleccionadas (y todos los apuntes de las confirmadas). Las que tengan pagos registrados en Tesorería se omitirán."
           confirmLabel="Eliminar" danger
           onCancel={() => setConfirmLoteDel(false)}
           onConfirm={doEliminarLote}

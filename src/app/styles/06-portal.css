@@ -2112,6 +2112,14 @@
 .nom-chevron-abierto { transform: rotate(180deg); }
 .nom-tabla-desglose-fila td { background: var(--color-surface-2); padding: var(--space-2) var(--space-4); }
 
+/* Repaso de la IA dentro del modal de confirmar (R8.1): separado del cuerpo por una
+   línea, porque no es parte de lo que se va a escribir sino una opinión sobre ello. */
+.nom-revision-ia {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
 /* Turnos */
 .rrhh-card-gap { margin-bottom: var(--space-4); }
 .ter-card-head { padding: var(--space-4) var(--space-4) 0; }
@@ -2124,6 +2132,19 @@
 .turno-grid-emp { position: sticky; left: 0; z-index: 1; background: var(--color-surface); min-width: 150px; }
 .turno-cell-wrap { display: flex; align-items: center; gap: var(--space-1); }
 .turno-grid-select { min-width: 92px; padding: 5px 8px; font-size: var(--text-xs); }
+/* La cabecera del día lleva su atajo de «poner a todos»: rellenar 7 columnas por 39
+   personas a mano son 273 desplegables. */
+.turno-col-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
+.turno-col-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--color-text-muted); cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.turno-col-btn:hover { background: var(--color-surface-offset); color: var(--color-primary-text); }
+/* Celda con un cambio aún sin guardar: la rejilla se edita en el navegador y se
+   escribe de una vez, así que hay que poder ver qué está pendiente. */
+.turno-cell-sucia { background: var(--color-warning-bg); }
 /* Reportes */
 .rrhh-kpi-value { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; font-variant-numeric: tabular-nums; }
 

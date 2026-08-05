@@ -7,12 +7,10 @@ import {
   reabrirYActualizarNomina,
   type NominaConLineas,
 } from '@/app/actions/portal/rrhh'
-import { registrarLiquidacion } from '@/app/actions/portal/gastos'
-import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
-import { X } from 'lucide-react'
+import { revisarNominaIa } from '@/app/actions/portal/ia'
+import { useIa } from '@/components/portal/ia/IaContext'
+import { Sparkles, X } from 'lucide-react'
 import { hoyEnTz } from '@/lib/fecha-tz'
-
-type CuentaInfo = { cuenta_id: string; nombre: string; empresa_id: string; moneda: string }
 
 export function formatMonto(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -109,10 +107,106 @@ export function actualizarConceptosNominas(
   })
 }
 
+/**
+ * Lo que confirmar va a escribir DE VERDAD, derivado de los ítems de la nómina.
+ *
+ * El modal decía «se registrarán **dos** gastos» y hablaba de «el botón Pagar». Las dos
+ * cosas quedaron falsas con la mig. 166: se escriben **hasta ocho** filas —cada aporte y
+ * cada retención con su acreedor y su vencimiento— y el botón Pagar se retiró justo
+ * porque uno solo no podía pagarlas todas. Confirmar es lo único irreversible de este
+ * flujo, así que la lista se calcula en vez de escribirse a mano: un texto fijo vuelve a
+ * caducar en la siguiente migración.
+ */
+function filasQueSeEscriben(nomina: NominaConLineas): {
+  concepto: string; acreedor: string | null; monto: number
+}[] {
+  const porClave = new Map<string, { concepto: string; acreedor: string | null; monto: number }>()
+  const sumar = (clave: string, concepto: string, acreedor: string | null, monto: number) => {
+    if (monto <= 0.005) return
+    const p = porClave.get(clave)
+    if (p) p.monto += monto
+    else porClave.set(clave, { concepto, acreedor, monto })
+  }
+
+  // La deuda con la plantilla: Σ netos. Es la fila que gobierna «Pagada».
+  sumar('__neto__', 'Salario neto', 'La plantilla', nomina.total)
+
+  for (const l of nomina.lineas) {
+    // La acumulación de vacaciones es COSTE sin pago: se reconoce cuando se acumula y
+    // sale cuando se disfruta, así que no tiene acreedor a quien liquidar.
+    sumar('__vac__', 'Acumulación de vacaciones', null, l.vacaciones_acumuladas_periodo)
+    // El subsidio lo cobra el trabajador pero no le cuesta a la empresa: nace como
+    // cuenta por COBRAR a la Seguridad Social.
+    sumar('__sub__', 'Subsidio por cobrar', 'Lo cobras tú de la Seguridad Social', l.subsidios)
+    for (const it of l.items) {
+      if (it.tipo === 'RETENCION') {
+        sumar(`r:${it.clave ?? it.nombre}`, it.nombre, 'La agencia tributaria', it.monto)
+      } else if (it.tipo === 'APORTE_EMPRESA') {
+        sumar(`a:${it.clave ?? it.nombre}`, it.nombre, 'La agencia tributaria', it.monto)
+      }
+    }
+  }
+  return Array.from(porClave.values())
+}
+
+/**
+ * R8.1 · «Repásala antes de confirmar».
+ *
+ * Confirmar es lo ÚNICO irreversible del módulo: crea la deuda con la plantilla y con
+ * ONAT. Este es el punto exacto donde un segundo par de ojos vale, y por eso el botón
+ * vive dentro del modal de confirmación y no en un icono suelto de la cabecera.
+ *
+ * La IA **solo señala**: no puede confirmar, no escribe nada y no bloquea. Si no hay
+ * addon contratado, el bloque no se pinta y la pantalla queda exactamente como estaba.
+ */
+function RevisionIa({ nominaId }: { nominaId: string }) {
+  const { tieneIa, nombreAgente } = useIa()
+  const [texto,   setTexto]   = useState<string | null>(null)
+  const [error,   setError]   = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  if (!tieneIa) return null
+
+  function revisar() {
+    setError(null)
+    startTransition(async () => {
+      const r = await revisarNominaIa(nominaId)
+      if (r.ok) { setTexto(r.texto); setError(null) }
+      else      { setError(r.error); setTexto(null) }
+    })
+  }
+
+  return (
+    <div className="nom-revision-ia">
+      {texto === null && !pending && (
+        <button type="button" className="btn btn-secondary btn-sm" onClick={revisar}>
+          <Sparkles size={14} strokeWidth={2} /> Que {nombreAgente} la repase antes
+        </button>
+      )}
+      {pending && (
+        <p className="text-sm-muted">
+          <span className="spinner spinner-sm" /> Comparando con los meses anteriores…
+        </p>
+      )}
+      {texto && (
+        <div className="info-box">
+          <strong className="info-box-title">Lo que ve {nombreAgente}</strong>
+          <span className="text-xs-muted">{texto}</span>
+        </div>
+      )}
+      {error && <p className="text-sm-muted">{error}</p>}
+    </div>
+  )
+}
+
 export function ConfirmarNominaModal({
-  nomina, onConfirm, onClose, isPending,
+  nomina, tieneContabilidad = true, onConfirm, onClose, isPending,
 }: {
   nomina:    NominaConLineas
+  /** Sin el módulo de Contabilidad los apuntes se escriben igual, pero el dueño no
+   *  tiene ni Gastos ni Cuentas por pagar donde verlos: nombrárselos sería mandarle a
+   *  pantallas que no existen para él. */
+  tieneContabilidad?: boolean
   onConfirm: () => void
   onClose:   () => void
   isPending: boolean
@@ -120,65 +214,62 @@ export function ConfirmarNominaModal({
   // El coste de personal es el DEVENGADO; el neto es solo lo que sale hacia el
   // trabajador. Lo retenido no se pierde: va en su propio gasto (mig. 139).
   const devengado = nomina.lineas.reduce((s, l) => s + l.devengado, 0)
-  const retenido  = nomina.lineas.reduce((s, l) => s + l.deducciones, 0)
+  const filas     = filasQueSeEscriben(nomina)
 
   return (
     <div className="modal-backdrop open">
-      <div className={`modal ${retenido > 0.005 ? 'modal-lg' : 'modal-md'}`} role="dialog" aria-modal>
+      <div className={`modal ${filas.length > 1 ? 'modal-lg' : 'modal-md'}`} role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">Confirmar nómina</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
-            {retenido > 0.005 ? (
-              <>
-                Se registrarán <strong>dos gastos</strong> en Gastos y cobros por la nómina
-                de {formatPeriodo(nomina.periodo)}, que suman el coste real
-                de <strong>{formatMonto(devengado)} {nomina.moneda}</strong>:
-              </>
-            ) : (
-              <>
-                Se registrará un gasto <strong>«Salarios»</strong> de <strong>{formatMonto(nomina.total)} {nomina.moneda}</strong> en
-                Gastos y cobros (nómina de {formatPeriodo(nomina.periodo)}), que podrás pagar con el botón Pagar y aparecerá en
-                Cuentas por pagar y Reportes. La nómina dejará de ser editable.
-              </>
-            )}
+            La nómina de {formatPeriodo(nomina.periodo)} tiene un coste real
+            de <strong>{formatMonto(devengado)} {nomina.moneda}</strong>. Confirmar
+            {tieneContabilidad
+              ? ' registra en tu contabilidad '
+              : ' deja registrado '}
+            {filas.length === 1
+              ? 'este apunte'
+              : <>estos <strong>{filas.length} apuntes</strong></>}, cada uno con su acreedor:
           </p>
-          {retenido > 0.005 && (
-            <>
-              {/* Dos acreedores, dos filas: pagarle a la plantilla no paga los
-                  impuestos, y en una sola fila eso era un clic de más de la cuenta. */}
-              <div className="table-wrapper">
-                <table className="table">
-                  <thead>
-                    <tr><th>Gasto</th><th>Se le paga a</th><th className="col-num">Importe</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td data-label="Gasto"><strong>Salarios</strong></td>
-                      <td data-label="Se le paga a">La plantilla</td>
-                      <td data-label="Importe" className="col-num tes-monto-cell">{formatMonto(nomina.total)} {nomina.moneda}</td>
-                    </tr>
-                    <tr>
-                      <td data-label="Gasto"><strong>Retenciones de nómina</strong></td>
-                      <td data-label="Se le paga a">La agencia tributaria</td>
-                      <td data-label="Importe" className="col-num tes-monto-cell">{formatMonto(retenido)} {nomina.moneda}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="modal-body-text">
-                Cada uno se paga por separado desde Cuentas por pagar; el botón Pagar de la
-                nómina liquida el de Salarios. La nómina dejará de ser editable.
-              </p>
-            </>
-          )}
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr><th>Concepto</th><th>Se le paga a</th><th className="col-num">Importe</th></tr>
+              </thead>
+              <tbody>
+                {filas.map(f => (
+                  <tr key={f.concepto}>
+                    <td data-label="Concepto"><strong>{f.concepto}</strong></td>
+                    <td data-label="Se le paga a">
+                      {f.acreedor ?? <span className="text-xs-muted">Nadie — es coste, no deuda</span>}
+                    </td>
+                    <td data-label="Importe" className="col-num tes-monto-cell">{formatMonto(f.monto)} {nomina.moneda}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="modal-body-text">
+            {tieneContabilidad
+              ? <>Cada deuda se paga <strong>por separado</strong> desde Cuentas por pagar o Tesorería,
+                  con su propio vencimiento: pagarle a la plantilla no paga los impuestos.</>
+              : <>Los apuntes quedan guardados; con el módulo de <strong>Contabilidad</strong> los
+                  verías en tus cuentas y podrías liquidarlos.</>}
+            {' '}La nómina dejará de ser editable.
+          </p>
+
+          {/* Un segundo par de ojos JUSTO antes del único paso irreversible del módulo.
+              No se lanza sola: cada análisis gasta una conversación del cupo del addon,
+              y la nómina se puede confirmar sin pasar por aquí. */}
+          <RevisionIa nominaId={nomina.nomina_id} />
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={isPending}>
-            {isPending ? <><span className="spinner spinner-sm" /> Confirmando…</> : 'Confirmar y registrar gasto'}
+            {isPending ? <><span className="spinner spinner-sm" /> Confirmando…</> : 'Confirmar nómina'}
           </button>
         </div>
       </div>
@@ -186,84 +277,8 @@ export function ConfirmarNominaModal({
   )
 }
 
-export function PagarNominaModal({
-  nomina, cuentas, onClose, onPaid,
-}: {
-  nomina:  NominaConLineas
-  cuentas: CuentaInfo[]
-  onClose: () => void
-  onPaid:  () => void
-}) {
-  const [isPending, startTransition] = useTransition()
-  // Todas las cajas (sin filtrar por empresa ni por moneda): la de la misma
-  // moneda aparece primero; si eliges otra, LiquidarCuentaFields aplica la tasa.
-  const cuentasOrdenadas = [...cuentas].sort((a, b) =>
-    (a.moneda === nomina.moneda ? 0 : 1) - (b.moneda === nomina.moneda ? 0 : 1))
-  const [liq, setLiq]  = useState<LiquidarState | null>(null)
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!liq || !liq.valido) return
-    const fd = new FormData(e.currentTarget)
-    fd.set('registro_id', nomina.gasto_id ?? '')
-    fd.set('cuenta_id', liq.cuentaId)
-    fd.set('monto', liq.monto)
-    fd.set('tasa_cambio', String(liq.tasa))
-    const ld = toastLoading('Registrando…')
-    startTransition(async () => {
-      const res = await registrarLiquidacion(fd)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      onPaid()
-    })
-  }
-
-  return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-md" role="dialog" aria-modal>
-        <div className="modal-header">
-          <div>
-            <h2 className="modal-title">Pagar nómina {formatPeriodo(nomina.periodo)}</h2>
-            <p className="text-xs-muted mt-1">
-              Salarios · Total {formatMonto(nomina.total)} {nomina.moneda} ·
-              Pendiente <strong>{formatMonto(nomina.saldo_pendiente)} {nomina.moneda}</strong>
-            </p>
-          </div>
-          <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
-        </div>
-        <div className="modal-body">
-          {cuentasOrdenadas.length === 0 ? (
-            <div className="alert alert-warning">No tienes cajas disponibles. Crea una en Tesorería para registrar el pago.</div>
-          ) : (
-            <form id="pagar-nomina-form" onSubmit={handleSubmit} className="gc-liq-form">
-              <div className="ter-form-grid">
-                <LiquidarCuentaFields
-                  cuentas={cuentasOrdenadas}
-                  docMoneda={nomina.moneda}
-                  saldo={nomina.saldo_pendiente}
-                  onChange={setLiq}
-                />
-                <div className="input-group ter-col-span-3">
-                  <label>Fecha <span className="required">*</span></label>
-                  <input className="input" name="fecha" type="date" required defaultValue={hoyISO()} />
-                </div>
-                <div className="input-group ter-col-full">
-                  <label>Notas</label>
-                  <input className="input" name="notas" placeholder="Referencia…" />
-                </div>
-              </div>
-            </form>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
-          {cuentasOrdenadas.length > 0 && (
-            <button type="submit" form="pagar-nomina-form" className="btn btn-primary" disabled={isPending || !liq?.valido}>
-              {isPending ? <><span className="spinner spinner-sm" /> Registrando…</> : 'Registrar pago'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
+// `PagarNominaModal` vivía aquí y NO lo importaba nadie: código muerto desde que la
+// mig. 166 retiró el botón «Pagar». Una nómina confirmada genera VARIAS deudas —el
+// salario neto y cada retención, cada una con su acreedor y su vencimiento— y un solo
+// botón únicamente podía pagar una, dando por liquidada la nómina entera. Se paga en
+// Tesorería, con el resto.
