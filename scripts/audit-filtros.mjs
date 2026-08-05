@@ -101,11 +101,93 @@ function revisarLimites(archivo, src) {
   }
 }
 
+// ── 1-bis. La consulta SIN NINGÚN TECHO ──────────────────────────────────────
+//
+// Un `.limit(N)` sin `count` recorta y no lo dice; **no poner límite en absoluto** es
+// el mismo fallo por la puerta de al lado, y este centinela lo dejaba pasar en verde.
+// Fue lo que escondió la carga de RRHH: `obtenerRrhh()` traía la historia COMPLETA de
+// nómina —todas las líneas, todos sus ítems, las incidencias de todos los períodos— a
+// las seis entradas del módulo, y el script no tenía nada que mirar porque no había ni
+// un `.limit()`.
+//
+// ALCANCE ESTRECHO, como el resto: solo grita cuando la consulta no está acotada por
+// NADA — ni techo, ni rango, ni una lista de ids, ni `.single()`. Eso no es un listado
+// paginado ni una lectura puntual: es «tráete la tabla entera de este inquilino».
+
+/** Tablas que crecen sin tope con el uso del negocio. Un catálogo (monedas, empresas,
+ *  categorías) no está aquí: su tamaño lo pone el dueño y no se dispara solo. */
+const TABLAS_QUE_CRECEN = new Set([
+  'facturas', 'ofertas', 'gastos_cobros', 'movimientos_tesoreria', 'compras',
+  'movimientos_inventario', 'nominas', 'nomina_lineas', 'nomina_linea_conceptos',
+  'incidencias_nomina', 'contratos', 'caja_tickets', 'caja_sesiones', 'reservas',
+  'conteos', 'audit_log', 'notificaciones',
+])
+
+/**
+ * Columnas cuyo `.eq()` NO acota nada: son el ámbito del inquilino o un estado, no una
+ * fila. Filtrar por `client_id` y creer que la consulta está acotada es exactamente el
+ * error que tenía el monolito de RRHH.
+ */
+const ALCANCE_DE_INQUILINO = new Set([
+  'client_id', 'empresa_id', 'activo', 'activa', 'archivado', 'archivada',
+  'estado', 'es_prueba', 'es_apertura',
+])
+
+/** Consultas sin techo justificadas. Cada una dice POR QUÉ. */
+const SIN_TECHO_OK = [
+  // Los escáneres de avisos y los crones recorren TODOS los tenants por diseño: no
+  // pintan un listado, y acotarlos por tenant sería no hacer su trabajo.
+  /src\/lib\/notificaciones\//,
+  /src\/app\/api\/cron\//,
+  // La exportación se lleva lo que cae en el filtro, no lo que hay pintado: su techo lo
+  // pone `leer()` en `lib/exportar/tablas.ts`, que es una sola puerta ya revisada.
+  /src\/lib\/exportar\//,
+  // Reservas y Citas SIGUEN sin acotar y NO es un olvido de esta lista: quedaron fuera
+  // del sistema de filtros a propósito (`filtros-sistema.md`, Fase 9: «Fuera a
+  // propósito: Citas, Reservas — las revisa el dueño»). Cuando entren, se quitan de
+  // aquí y el centinela las cubre sin tocar nada más. El hallazgo es REAL; lo que está
+  // aplazado es la decisión, no el diagnóstico.
+  /src\/app\/actions\/portal\/reservas\.ts$/,
+  /src\/app\/actions\/portal\/citas\.ts$/,
+]
+
+function revisarSinTecho(archivo, src) {
+  if (!archivo.includes('actions/portal/')) return
+  if (SIN_TECHO_OK.some(rx => rx.test(archivo))) return
+  const re = /\.from\(\s*'([^']+)'\s*\)\s*\n?\s*\.select\(([\s\S]{0,900}?)(?=\.from\(|\n\s*\]\)|\n\s*\)\s*$|;)/g
+  let m
+  while ((m = re.exec(src)) !== null) {
+    const [todo, tabla] = m
+    if (!TABLAS_QUE_CRECEN.has(tabla)) continue
+    // Acotada de cualquiera de las formas legítimas → no es una carga completa.
+    if (/\.limit\(/.test(todo)) continue                       // tiene techo
+    if (/\.(maybe)?[Ss]ingle\(\)/.test(todo)) continue          // una sola fila
+    if (/head:\s*true/.test(todo)) continue                     // solo cuenta
+    if (/count:\s*'exact'/.test(todo)) continue                 // la gobierna la regla 1
+    if (/\.in\(/.test(todo)) continue                           // acotada a unos ids
+    if (/\.gte\(|\.lte\(|\.gt\(|\.lt\(/.test(todo)) continue    // acotada por rango
+    // Acotada a UN DOCUMENTO concreto (`.eq('nomina_id', …)`, `.eq('referencia_id', …)`).
+    // Es la distinción que importa y la que faltaba: filtrar por `client_id` o por
+    // `empresa_id` NO acota nada —son el inquilino, no la fila—, y era justo lo que
+    // hacían las consultas del monolito de RRHH. Un `.eq()` sobre cualquier otra columna
+    // sí dice «esto es de este documento» y entonces no hay tabla entera que traer.
+    const eqs = Array.from(todo.matchAll(/\.eq\(\s*'([^']+)'/g)).map(x => x[1])
+    if (eqs.some(c => !ALCANCE_DE_INQUILINO.has(c))) continue
+    grito(archivo, lineaDe(src, m.index),
+      `.from('${tabla}') sin techo, sin rango y sin lista de ids`,
+      'es la tabla entera del inquilino: con dos años de datos son miles de filas en 3G. Acota con rango + limiteDelFiltro y di el techo con <AvisoTope>')
+  }
+}
+
 // ── 2. «Hoy» en UTC ──────────────────────────────────────────────────────────
 
 function revisarHoy(archivo, src) {
   if (TZ_OK.has(archivo)) return
-  const re = /new Date\(\)\.toISOString\(\)\s*(?:\.split\(\s*'T'\s*\)\s*\[\s*0\s*\]|\.slice\(\s*0\s*,\s*10\s*\))/g
+  // `.slice(0, 7)` entra desde la revisión de RRHH: el MES en UTC es tan falso como el
+  // día, y el centinela lo dejaba pasar. Dos pantallas de nómina proponían el mes
+  // siguiente el último día del mes a partir de las 20:00 — justo la noche en la que se
+  // cierra la nómina. Es el mismo fallo, un carácter más allá de donde se miraba.
+  const re = /new Date\(\)\.toISOString\(\)\s*(?:\.split\(\s*'T'\s*\)\s*\[\s*0\s*\]|\.slice\(\s*0\s*,\s*(?:10|7)\s*\))/g
   let m
   while ((m = re.exec(src)) !== null) {
     grito(archivo, lineaDe(src, m.index),
@@ -235,6 +317,7 @@ function revisarOpcionesTercero(archivo, src) {
 for (const archivo of ficheros(RAIZ)) {
   const src = readFileSync(archivo, 'utf8')
   revisarLimites(archivo, src)
+  revisarSinTecho(archivo, src)
   revisarHoy(archivo, src)
   revisarRangoEnDescarga(archivo, src)
   revisarResumen(archivo, src)
