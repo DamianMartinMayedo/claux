@@ -80,6 +80,7 @@ export default function PresupuestosView({
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
   const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [menuPdf, setMenuPdf] = useState(false)
 
   /**
    * El presupuesto en PDF, con la misma plantilla de marca que la factura.
@@ -88,7 +89,7 @@ export default function PresupuestosView({
    * recalculando: un presupuesto enseñado al cliente hace tres meses tiene que imprimirse tal
    * como se le enseñó, aunque la tarifa base haya subido desde entonces.
    */
-  async function descargarPdf(d: Detalle) {
+  async function descargarPdf(d: Detalle, incluir: 'todo' | 'instalacion' | 'suscripcion') {
     const claves: string[] = Array.isArray(d.modulos) ? d.modulos : []
     const campo = d.tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
     const mods = catalogo
@@ -114,7 +115,9 @@ export default function PresupuestosView({
         cuotaMensual: mensual,
         cuotaAnual:   importeCiclo(mensual, 'anual', descuentoAnualPct),
         descuentoAnualPct,
-      })
+        incluir,
+      }, `PRE-${String(d.id).padStart(4, '0')}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
+      setMenuPdf(false)
     } catch {
       toastError('No se pudo generar el PDF.')
     }
@@ -146,6 +149,7 @@ export default function PresupuestosView({
     const d = await obtenerPresupuesto(id)
     setCargando(false)
     if (!d) { toastError('No se pudo cargar el presupuesto'); return }
+    setMenuPdf(false)
     setDetalle(d)
     setHorasReales(d.horas_reales != null ? String(d.horas_reales) : '')
   }
@@ -378,12 +382,37 @@ export default function PresupuestosView({
                     )}
                   </div>
 
-                  {/* Descarga directa, sin abrir pestaña ni recargar: el comercial lo manda
-                      por WhatsApp desde el móvil y la conexión es la que es. */}
-                  <button type="button" className="btn btn-secondary btn-sm pres-descargar"
-                    onClick={() => descargarPdf(detalle)}>
-                    <Download size={14} strokeWidth={2} /> Descargar PDF
-                  </button>
+                  {/* Desplegable como el de los reportes: un presupuesto de ampliación a un
+                      cliente que ya paga su cuota no tiene por qué volver a enseñársela, y a
+                      veces solo se manda la parte recurrente. Descarga directa, sin abrir
+                      pestaña: el comercial lo manda por WhatsApp desde el móvil. */}
+                  <div className="ven-dropdown-wrap pres-descargar">
+                    <button type="button" className="btn btn-secondary btn-sm"
+                      aria-expanded={menuPdf}
+                      onClick={() => setMenuPdf(v => !v)}>
+                      <Download size={14} strokeWidth={2} /> Descargar PDF
+                    </button>
+                    {menuPdf && (
+                      <div className="ven-dropdown-menu">
+                        <div className="ven-dropdown-ctx">
+                          {detalle.nombre_negocio}
+                          <span className="ven-dropdown-detalle">Qué incluir en el documento</span>
+                        </div>
+                        <button type="button" className="ven-dropdown-item"
+                          onClick={() => descargarPdf(detalle, 'todo')}>
+                          Todo · instalación y suscripción
+                        </button>
+                        <button type="button" className="ven-dropdown-item"
+                          onClick={() => descargarPdf(detalle, 'instalacion')}>
+                          Solo instalación · pago único
+                        </button>
+                        <button type="button" className="ven-dropdown-item"
+                          onClick={() => descargarPdf(detalle, 'suscripcion')}>
+                          Solo suscripción · cuota mensual
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Acciones de venta: aprobar y convertir en cliente (no aplica si ya está instalado) */}
                   {detalle.estado !== 'instalado' && (

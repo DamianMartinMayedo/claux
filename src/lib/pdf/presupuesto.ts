@@ -11,12 +11,32 @@
 // convierte en «¿esto es lo que pago hoy o al mes?».
 
 import {
-  crearDoc, cabeceraReporte, sellarPie, texto, trazo, relleno,
+  crearDoc, cabeceraReporte, sellarPie, texto, trazo, relleno, textoPdfSeguro,
   MARCA, MARGEN, RESERVA_PIE, type JsPdfDoc,
 } from './documento'
 
 const usd = (n: number) => `$${(Number(n) || 0).toFixed(2)}`
 const hs  = (n: number) => `${Number(n) || 0} h`
+
+/**
+ * Escribe SANEANDO el texto. Las fuentes estándar de jsPDF codifican en WinAnsi, y un
+ * carácter fuera de esa tabla no se omite: jsPDF cambia la cadena entera a UTF-16 y el
+ * resultado sale con un espacio entre cada letra y el carácter convertido en otro glifo.
+ *
+ * Pasó exactamente eso: «Si se paga por año (−10%)» —con el menos tipográfico U+2212, el que
+ * usa la UI porque el guion ASCII no alinea— salió como « S i   s e   p a g a   p o r   a ñ o
+ * ("10%)». El repo ya tenía `textoPdfSeguro` para esto; el fallo fue no pasarlo por él.
+ *
+ * Va en UN envoltorio y no en cada llamada a propósito: olvidarse de una es justo lo que
+ * ocurrió, y aquí hay quince.
+ */
+function escribir(
+  doc: JsPdfDoc, s: string | string[], x: number, y: number,
+  opts?: { align?: string },
+): void {
+  const limpio = Array.isArray(s) ? s.map(textoPdfSeguro) : textoPdfSeguro(s)
+  doc.text(limpio as string, x, y, opts)
+}
 
 export interface LineaPdf {
   etiqueta: string
@@ -56,6 +76,12 @@ export interface PresupuestoPdf {
   cuotaMensual:      number
   cuotaAnual:        number
   descuentoAnualPct: number
+  /**
+   * Qué bloques imprimir. Un presupuesto de ampliación a un cliente que ya paga su cuota no
+   * tiene por qué volver a enseñársela —y al revés, a veces solo se manda la parte
+   * recurrente—. Por defecto, los dos.
+   */
+  incluir?: 'todo' | 'instalacion' | 'suscripcion'
 }
 
 export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc> {
@@ -80,7 +106,7 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     .filter(Boolean).join('  ·  ')
   if (contacto) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
-    texto(doc, MARCA.muted); doc.text(contacto, MARGEN, y)
+    texto(doc, MARCA.muted); escribir(doc, contacto, MARGEN, y)
     y += 8
   }
 
@@ -89,24 +115,40 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     salto(18)
     relleno(doc, MARCA.teal); doc.rect(MARGEN, y - 3.2, 2.2, 7, 'F')
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12)
-    texto(doc, MARCA.dark); doc.text(txt, MARGEN + 5, y + 2)
+    texto(doc, MARCA.dark); escribir(doc, txt, MARGEN + 5, y + 2)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
-    texto(doc, MARCA.muted); doc.text(sub, right, y + 2, { align: 'right' })
+    texto(doc, MARCA.muted); escribir(doc, sub, right, y + 2, { align: 'right' })
     y += 10
   }
 
+  // Fila de totales: la usan los DOS bloques, así que vive fuera de ambos.
+  const totX = right - 78
+  const fila = (label: string, valor: string, fuerte = false) => {
+    salto(8)
+    doc.setFont('helvetica', fuerte ? 'bold' : 'normal')
+    doc.setFontSize(fuerte ? 11 : 9.5)
+    texto(doc, fuerte ? MARCA.dark : MARCA.muted)
+    escribir(doc, label, totX, y)
+    escribir(doc, valor, right, y, { align: 'right' })
+    y += fuerte ? 7 : 5.5
+  }
+
+  const conInstalacion = d.incluir !== 'suscripcion'
+  const conSuscripcion = d.incluir !== 'instalacion'
+
   // ══ 1 · PAGO ÚNICO ═════════════════════════════════════════════════════════
+  if (conInstalacion) {
   tituloBloque('Instalación y configuración', 'Pago único')
 
   doc.setFontSize(9.5)
   for (const f of d.desglose) {
     salto(10)
     doc.setFont('helvetica', 'bold'); texto(doc, MARCA.dark)
-    doc.text(f.fase, MARGEN, y)
+    escribir(doc, f.fase, MARGEN, y)
     texto(doc, MARCA.muted); doc.setFont('helvetica', 'normal')
-    doc.text(hs(f.horas), right - 28, y, { align: 'right' })
+    escribir(doc, hs(f.horas), right - 28, y, { align: 'right' })
     texto(doc, MARCA.dark)
-    doc.text(usd(f.subtotalUsd), right, y, { align: 'right' })
+    escribir(doc, usd(f.subtotalUsd), right, y, { align: 'right' })
     y += 5
 
     // El detalle de cada línea: es lo que hace que el cliente entienda de dónde sale la cifra
@@ -114,8 +156,8 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     doc.setFontSize(8.5); texto(doc, MARCA.muted)
     for (const l of f.lineas ?? []) {
       salto(6)
-      doc.text(`${l.etiqueta} — ${l.detalle}`, MARGEN + 4, y)
-      doc.text(hs(l.horas), right - 28, y, { align: 'right' })
+      escribir(doc, `${l.etiqueta} — ${l.detalle}`, MARGEN + 4, y)
+      escribir(doc, hs(l.horas), right - 28, y, { align: 'right' })
       y += 4.2
     }
     doc.setFontSize(9.5)
@@ -123,18 +165,6 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     trazo(doc, MARCA.border); doc.setLineWidth(0.15)
     doc.line(MARGEN, y, right, y)
     y += 5
-  }
-
-  // Totales del pago único
-  const totX = right - 78
-  const fila = (label: string, valor: string, fuerte = false) => {
-    salto(8)
-    doc.setFont('helvetica', fuerte ? 'bold' : 'normal')
-    doc.setFontSize(fuerte ? 11 : 9.5)
-    texto(doc, fuerte ? MARCA.dark : MARCA.muted)
-    doc.text(label, totX, y)
-    doc.text(valor, right, y, { align: 'right' })
-    y += fuerte ? 7 : 5.5
   }
 
   fila(`${d.horasTotal} h × ${usd(d.tarifaHora)}/h`, usd(d.costeInstalacion))
@@ -148,17 +178,19 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
   y += 6
   fila('Total a pagar una vez', usd(d.totalInstalacion), true)
   y += 6
+  }
 
   // ══ 2 · RECURRENTE ═════════════════════════════════════════════════════════
+  if (conSuscripcion) {
   tituloBloque('Suscripción', 'Cada mes, mientras se use')
 
   doc.setFontSize(9.5)
   for (const m of d.modulos) {
     salto(7)
     doc.setFont('helvetica', 'normal'); texto(doc, MARCA.dark)
-    doc.text(m.nombre, MARGEN, y)
+    escribir(doc, m.nombre, MARGEN, y)
     texto(doc, m.precio > 0 ? MARCA.dark : MARCA.muted)
-    doc.text(m.precio > 0 ? `${usd(m.precio)}/mes` : 'Incluido', right, y, { align: 'right' })
+    escribir(doc, m.precio > 0 ? `${usd(m.precio)}/mes` : 'Incluido', right, y, { align: 'right' })
     y += 5.2
   }
   y += 2
@@ -174,18 +206,26 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     if (ahorro > 0) fila('Ahorro frente a pagar mes a mes', usd(ahorro))
   }
   y += 8
+  }
 
   // ── Nota de cierre ──
   salto(16)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
   texto(doc, MARCA.muted)
-  const nota = doc.splitTextToSize(
-    'Las horas de instalación son una estimación sobre los volúmenes declarados. Si los datos '
-    + 'entregados no se corresponden con lo indicado, se informa del ajuste antes de continuar. '
-    + 'La suscripción se factura por separado del pago de instalación.',
-    right - MARGEN,
-  )
-  doc.text(nota, MARGEN, y)
+  // La nota dice solo lo que aplica a lo impreso: hablar de las horas en un documento que
+  // solo lleva la suscripción es prometer una letra pequeña de otra cosa.
+  const partes: string[] = []
+  if (conInstalacion) {
+    partes.push('Las horas de instalación son una estimación sobre los volúmenes declarados. '
+      + 'Si los datos entregados no se corresponden con lo indicado, se informa del ajuste '
+      + 'antes de continuar.')
+  }
+  if (conInstalacion && conSuscripcion) {
+    partes.push('La suscripción se factura por separado del pago de instalación.')
+  }
+  if (!conInstalacion) partes.push('Importes de la suscripción, sin el coste de instalación.')
+  const nota = doc.splitTextToSize(partes.join(' '), right - MARGEN)
+  escribir(doc, nota, MARGEN, y)
 
   sellarPie(doc, 'Presupuesto generado con CLAUX')
   return doc
