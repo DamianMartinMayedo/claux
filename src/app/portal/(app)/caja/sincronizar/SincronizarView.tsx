@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useTransition, useRef, type ChangeEvent } from 'react'
-import { CheckCircle2, FileJson } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileJson } from 'lucide-react'
 import { ingestarLoteArchivo } from '@/app/actions/portal/caja'
+import type { IngestaResultado } from '@/lib/caja/ingesta'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 
 interface Props { cajas: { caja_id: string; nombre: string }[] }
-type Resultado = { tickets_nuevos: number; cierres_posteados: number; duplicados: number; errores: string[] }
+// El tipo se IMPORTA. Estaba copiado a mano aquí con cuatro campos, y por eso esta pantalla
+// no se enteró de que la ingesta empezó a devolver `rechazados`: enseñaba un tick verde
+// sobre ventas que el servidor había tirado. Una lista paralela se queda corta en silencio.
+type Resultado = IngestaResultado
 
 export default function SincronizarView({ cajas }: Props) {
   // Solo se usa como respaldo para archivos viejos, que no traen el identificador.
@@ -109,21 +113,33 @@ export default function SincronizarView({ cajas }: Props) {
         )}
       </div>
 
-      {resultado && (
-        <div className="card">
-          <div className="alert alert-success">
-            <CheckCircle2 size={16} strokeWidth={2} />
-            <span>
-              {resultado.tickets_nuevos} ventas nuevas · {resultado.cierres_posteados} cierres registrados · {resultado.duplicados} ya existentes
-            </span>
+      {/* El titular sigue al RESULTADO, no al hecho de que el archivo se procesara. Antes
+          era siempre un tick verde: con los 20 tickets rechazados, la pantalla daba el
+          visto bueno y dejaba el motivo en letra pequeña debajo. */}
+      {resultado && (() => {
+        const rechazados = resultado.rechazados?.length ?? 0
+        return (
+          <div className="card">
+            <div className={`alert ${rechazados > 0 ? 'alert-warning' : 'alert-success'} alert-intro`}>
+              {rechazados > 0
+                ? <AlertTriangle size={16} strokeWidth={2} />
+                : <CheckCircle2 size={16} strokeWidth={2} />}
+              <span>
+                {rechazados > 0 && (
+                  <><strong>{rechazados} {rechazados === 1 ? 'venta no se registró' : 'ventas no se registraron'}</strong>. </>
+                )}
+                {resultado.tickets_nuevos} ventas nuevas · {resultado.cierres_posteados} cierres registrados · {resultado.duplicados} ya existentes
+                {rechazados > 0 && '. Lo rechazado sigue en el dispositivo: corrige lo de abajo y vuelve a sincronizar.'}
+              </span>
+            </div>
+            {resultado.errores.length > 0 && (
+              <ul className="caja-install-hint">
+                {resultado.errores.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            )}
           </div>
-          {resultado.errores.length > 0 && (
-            <ul className="caja-install-hint">
-              {resultado.errores.map((e, i) => <li key={i}>{e}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

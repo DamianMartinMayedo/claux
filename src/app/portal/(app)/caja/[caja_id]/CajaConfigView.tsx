@@ -3,7 +3,7 @@
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Copy, Check, RefreshCw } from 'lucide-react'
+import { Copy, Check, RefreshCw, Eye, EyeOff, QrCode } from 'lucide-react'
 import { guardarConfigCaja, regenerarToken, type CajaConfigData } from '@/app/actions/portal/caja'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -23,8 +23,13 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
   const [monedas, setMonedas]     = useState<string[]>(data.caja.monedas_aceptadas ?? [])
   const [tiposCatalogo, setTiposCatalogo] = useState(data.caja.tipos_catalogo ?? 'PRODUCTO')
   const [cuentas, setCuentas]     = useState<Record<string, string>>(data.caja.cuentas_moneda ?? {})
+  const [transf, setTransf]       = useState<Record<string, string>>(data.caja.cuentas_transferencia ?? {})
   const [token, setToken]         = useState(data.caja.sync_token)
   const [copied, setCopied]       = useState(false)
+  const [verEnlace, setVerEnlace] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [generandoQr, setGenerandoQr] = useState(false)
+  const [confirmarRegenerar, setConfirmarRegenerar] = useState(false)
   const [confirmarEmpresa, setConfirmarEmpresa] = useState(false)
 
   // El selector de empresa solo aparece si hay más de una: con una sola no es una
@@ -68,6 +73,7 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
       }
     } else {
       setCuentas(prev => { const next = { ...prev }; delete next[m]; return next })
+      setTransf(prev => { const next = { ...prev }; delete next[m]; return next })
     }
   }
 
@@ -101,7 +107,30 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
     })
   }
 
+  // `qrcode` va por import dinámico, igual que en el catálogo: es una librería que solo
+  // hace falta al pulsar y no tiene por qué viajar en el bundle de todas las visitas.
+  // Cerrar SUELTA la imagen: el QR no se queda en memoria esperando a que alguien vuelva a
+  // abrir el panel, y así la próxima apertura es siempre contra el enlace de ese momento.
+  function cerrarQr() { setQrDataUrl(null) }
+
+  // Se genera EN CADA PULSACIÓN, contra el `installUrl` de ahora. No se cachea a
+  // propósito: un QR guardado en estado sobrevive a «Regenerar enlace» y acabaría
+  // instalando la caja con un token muerto, que falla en el móvil sin decir por qué.
+  async function verQr() {
+    setGenerandoQr(true)
+    try {
+      const QRCode = (await import('qrcode')).default
+      setQrDataUrl(await QRCode.toDataURL(installUrl, { width: 480, margin: 2 }))
+    } catch {
+      toastError('No se pudo generar el QR.')
+    } finally {
+      setGenerandoQr(false)
+    }
+  }
+
   function regenerar() {
+    setConfirmarRegenerar(false)
+    setQrDataUrl(null)   // el QR anterior apunta a un enlace que acaba de morir
     const ld = toastLoading('Regenerando…')
     startTransition(async () => {
       const r = await regenerarToken(data.caja.caja_id)
@@ -131,12 +160,17 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
   function persistir() {
     setConfirmarEmpresa(false)
     const cuentasFiltradas: Record<string, string> = {}
-    for (const m of monedas) if (cuentas[m]) cuentasFiltradas[m] = cuentas[m]
+    const transfFiltradas: Record<string, string> = {}
+    for (const m of monedas) {
+      if (cuentas[m]) cuentasFiltradas[m] = cuentas[m]
+      if (transf[m])  transfFiltradas[m]  = transf[m]
+    }
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarConfigCaja(data.caja.caja_id, {
         nombre, empresa_id: empresaId, almacen_id: almacenId || null,
         monedas_aceptadas: monedas, cuentas_moneda: cuentasFiltradas,
+        cuentas_transferencia: transfFiltradas,
         tipos_catalogo: tiposCatalogo,
       })
       await ld.dismiss()
@@ -179,13 +213,36 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
             </p>
             <div className="caja-install">
               <div className="caja-link-row">
-                <input className="input caja-link-field" readOnly value={installUrl} suppressHydrationWarning
+                {/* El enlace LLEVA EL TOKEN: quien lo vea puede instalar la caja y meter
+                    ventas en tu contabilidad. Va tapado por defecto — copiar no necesita
+                    verlo, y así no queda a la vista de quien pase por detrás. */}
+                <input className="input caja-link-field" readOnly suppressHydrationWarning
+                  type={verEnlace ? 'text' : 'password'} value={installUrl}
                   onFocus={e => e.currentTarget.select()} aria-label="Enlace de instalación" />
+                <button type="button" className="btn btn-secondary" onClick={() => setVerEnlace(v => !v)}
+                  aria-label={verEnlace ? 'Ocultar el enlace' : 'Ver el enlace'}>
+                  {verEnlace ? <EyeOff size={14} strokeWidth={2} /> : <Eye size={14} strokeWidth={2} />}
+                  {verEnlace ? 'Ocultar' : 'Ver'}
+                </button>
                 <button type="button" className="btn btn-secondary" onClick={copiar}>
                   {copied ? <><Check size={14} strokeWidth={2} /> Copiado</> : <><Copy size={14} strokeWidth={2} /> Copiar</>}
                 </button>
               </div>
-              <button type="button" className="btn btn-secondary" onClick={regenerar} disabled={isPending}>
+
+              {/* Instalar en el móvil de al lado sin mandar por Telegram una URL larguísima
+                  que además lleva la credencial dentro.
+
+                  EN MODAL, y no impreso en la página: el QR **es la llave** del punto de
+                  venta —quien lo escanee puede cobrar—, y dejarlo pintado en la pantalla lo
+                  deja a la vista de cualquiera que pase por detrás del mostrador o mire una
+                  captura. Se enseña cuando se pide, se usa para instalar y se cierra. Cada
+                  pulsación lo genera de nuevo a partir del enlace VIGENTE, así que después
+                  de regenerar el enlace nunca se puede estar mirando el QR muerto. */}
+              <button type="button" className="btn btn-secondary" onClick={verQr} disabled={generandoQr}>
+                <QrCode size={14} strokeWidth={2} /> {generandoQr ? 'Generando…' : 'Ver código QR'}
+              </button>
+
+              <button type="button" className="btn btn-secondary" onClick={() => setConfirmarRegenerar(true)} disabled={isPending}>
                 <RefreshCw size={14} strokeWidth={2} /> Regenerar enlace (invalida el anterior)
               </button>
             </div>
@@ -298,12 +355,24 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
                       </label>
                       {checked && data.tieneBase && (
                         cuentasM.length > 0 ? (
-                          <select className="input" value={cuentas[m] ?? ''}
-                            aria-label={`Caja de Tesorería para ${m}`}
-                            onChange={e => setCuentas(prev => ({ ...prev, [m]: e.target.value }))}>
-                            <option value="">— Elige la caja de {m} —</option>
-                            {cuentasM.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
-                          </select>
+                          <>
+                            <select className="input" value={cuentas[m] ?? ''}
+                              aria-label={`Caja de efectivo para ${m}`}
+                              onChange={e => setCuentas(prev => ({ ...prev, [m]: e.target.value }))}>
+                              <option value="">— Elige la caja de {m} —</option>
+                              {cuentasM.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
+                            </select>
+                            {/* Lo cobrado por transferencia no entra en la gaveta, entra en
+                                el banco. Sin esto el saldo de la caja física decía tener un
+                                dinero que no está, y el arqueo del turno no podía cuadrar.
+                                Opcional: vacío = todo a la cuenta de arriba, como siempre. */}
+                            <select className="input" value={transf[m] ?? ''}
+                              aria-label={`Cuenta de transferencias para ${m}`}
+                              onChange={e => setTransf(prev => ({ ...prev, [m]: e.target.value }))}>
+                              <option value="">— Transferencias: a la misma caja —</option>
+                              {cuentasM.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>Transferencias → {c.nombre}</option>)}
+                            </select>
+                          </>
                         ) : (
                           <p className="caja-moneda-sin-cuenta">
                             No tienes una caja en {m} para esta empresa, así que sus ventas no llegarían
@@ -335,6 +404,54 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
             </button>
           </div>
         </form>
+      )}
+
+      {/* El QR, mientras se está usando. Se cierra y desaparece de memoria: la próxima vez
+          se vuelve a generar contra el enlace vigente. */}
+      {qrDataUrl && (
+        <div className="modal-backdrop open dialog-top" onClick={cerrarQr}>
+          <div className="modal modal-alert caja-qr-modal" role="dialog" aria-modal
+            aria-label="Código QR de instalación" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title dialog-title">Instalar en un dispositivo</h2>
+            </div>
+            <div className="modal-body caja-qr-body">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrDataUrl} alt="Código QR del enlace de instalación" className="caja-qr-img" />
+              <p className="caja-install-hint">
+                Apunta con la cámara del móvil que hará de caja. <strong>Trátalo como una llave</strong>:
+                quien lo escanee puede cobrar en este punto de venta.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={cerrarQr} autoFocus>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarRegenerar && (
+        <ConfirmDialog
+          danger
+          title="Regenerar el enlace de instalación"
+          confirmLabel="Regenerar"
+          onCancel={() => setConfirmarRegenerar(false)}
+          onConfirm={regenerar}
+          body={
+            <>
+              <p>
+                El enlace actual <strong>dejará de funcionar</strong>. Es lo que hay que hacer si se
+                perdió el móvil o el enlace acabó donde no debía.
+              </p>
+              <p>
+                <strong>Los dispositivos ya instalados dejarán de sincronizar</strong> hasta que
+                los reinstales con el enlace nuevo. Lo que tengan sin enviar no se pierde, pero
+                solo podrá entrar exportando su archivo y subiéndolo en «Sincronizar».
+              </p>
+              <p>Si hay una caja vendiendo ahora mismo, hazlo cuando cierre el turno.</p>
+            </>
+          }
+        />
       )}
 
       {confirmarEmpresa && (

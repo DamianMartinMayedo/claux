@@ -76,6 +76,9 @@ export interface FiltroExport {
   almacen_id?: string
   /** Movimientos de inventario: el motivo del ajuste (`motivo_tipo`). */
   motivo?:     string
+  /** Punto de venta: efectivo o transferencia. Desde la mig. 172 deciden a qué cuenta de
+   *  Tesorería va el dinero, así que separarlos es el primer paso para cuadrar una caja. */
+  medio_pago?: string
   /** Acta de un conteo físico concreto (mig. 159). */
   conteo_id?:  string
   /** CxC/CxP: tramo de antigüedad de la deuda (`AL_DIA`, `V_1_30`…). */
@@ -1201,7 +1204,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       const [filas, cajas] = await Promise.all([
         leer(db, 'caja_tickets', cid, 'fecha, caja_id, moneda, total, medio_pago, estado', 'fecha',
           filtro, 'fecha', ['medio_pago', 'moneda'],
-          { caja_id: filtro?.cuenta_id, estado: filtro?.estado }),
+          { caja_id: filtro?.cuenta_id, estado: filtro?.estado, medio_pago: filtro?.medio_pago }),
         diccionario(db, 'cajas', cid, 'caja_id', 'nombre'),
       ])
       return filas.map(f => [
@@ -1224,7 +1227,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // hereda del suyo— y es el ticket el que sabe si se anuló.
       const [tickets, cajas] = await Promise.all([
         leer(db, 'caja_tickets', cid, 'ticket_uuid, fecha, caja_id, moneda, estado', 'fecha',
-          filtro, 'fecha', undefined, { caja_id: filtro?.cuenta_id }),
+          filtro, 'fecha', undefined, { caja_id: filtro?.cuenta_id, medio_pago: filtro?.medio_pago }),
         diccionario(db, 'cajas', cid, 'caja_id', 'nombre'),
       ])
       // Un ticket ANULADO no movió stock (se rectificó): sus líneas no son un movimiento.
@@ -1263,32 +1266,78 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     modulos: ['caja'],
     // Los totales son `jsonb` POR MONEDA: no caben en una columna «total» sin mentir
     // (sumar CUP con USD no es una cifra). Se vuelca una fila por cierre y moneda.
-    cabeceras: ['Cierre nº', 'Punto de venta', 'Abierta', 'Cerrada', 'Estado', 'Moneda',
-      'Fondo inicial', 'Ventas', 'Efectivo contado', 'Descuadre'],
+    cabeceras: ['Cierre nº', 'Punto de venta', 'Abierta', 'Cerrada', 'Contado por', 'Estado', 'Moneda',
+      'Fondo inicial', 'Ventas', 'Ventas en efectivo', 'Salidas de efectivo', 'Efectivo esperado',
+      'Efectivo contado', 'Descuadre'],
     cargar: async (db, cid, filtro) => {
       const [filas, cajas] = await Promise.all([
         leer(db, 'caja_sesiones', cid,
-          'numero_z, caja_id, abierta_at, cerrada_at, estado, fondo_inicial, total_por_moneda, efectivo_contado', 'abierta_at',
-          filtro, 'abierta_at', undefined, { caja_id: filtro?.cuenta_id, estado: filtro?.estado }),
+          'sesion_uuid, numero_z, caja_id, abierta_at, cerrada_at, cerrada_por, estado, fondo_inicial, total_por_moneda, efectivo_contado', 'abierta_at',
+          // `?? 'CERRADA'`: el dispositivo sube también el turno ABIERTO (para poder avisar
+          // y rescatarlo), y un turno en curso no es un cierre — en la serie Z saldría como
+          // una fila vacía que nadie sabría leer. La pantalla filtra igual.
+          filtro, 'abierta_at', undefined, { caja_id: filtro?.cuenta_id, estado: filtro?.estado ?? 'CERRADA' }),
         diccionario(db, 'cajas', cid, 'caja_id', 'nombre'),
       ])
       const num = (v: unknown) => Number(v ?? 0) || 0
+      const uuids = filas.map(f => f.sesion_uuid as string)
+
+      // **El descuadre solo puede mirar el EFECTIVO.** La fórmula anterior era
+      // `contado − (fondo + ventas)`, con TODAS las ventas dentro: con un solo cobro por
+      // transferencia le exigía a la gaveta un dinero que nunca pasó por ella, y el cierre
+      // salía descuadrado sin que nada estuviera mal. Ahora se separa por medio de pago y
+      // se restan las salidas de efectivo del turno (mig. 171), que es la otra mitad.
+      const efectivoDe = new Map<string, Record<string, number>>()
+      const salidasDe  = new Map<string, Record<string, number>>()
+      if (uuids.length) {
+        const [tkRes, mvRes] = await Promise.all([
+          db.from('caja_tickets').select('sesion_uuid, moneda, total, estado, medio_pago')
+            .eq('client_id', cid).in('sesion_uuid', uuids),
+          db.from('caja_turno_movimientos').select('sesion_uuid, moneda, importe, tipo')
+            .eq('client_id', cid).in('sesion_uuid', uuids),
+        ])
+        type Tk = { sesion_uuid: string; moneda: string; total: number; estado?: string; medio_pago?: string }
+        for (const t of ((tkRes.data ?? []) as Tk[])) {
+          if ((t.estado ?? 'VIGENTE') === 'ANULADO') continue
+          if ((t.medio_pago ?? 'Efectivo') !== 'Efectivo') continue
+          const acc = efectivoDe.get(t.sesion_uuid) ?? {}
+          acc[t.moneda] = (acc[t.moneda] ?? 0) + Number(t.total)
+          efectivoDe.set(t.sesion_uuid, acc)
+        }
+        type Mv = { sesion_uuid: string; moneda: string; importe: number; tipo: string }
+        for (const mv of ((mvRes.data ?? []) as Mv[])) {
+          const acc = salidasDe.get(mv.sesion_uuid) ?? {}
+          acc[mv.moneda] = (acc[mv.moneda] ?? 0) + (mv.tipo === 'ENTRADA' ? -Number(mv.importe) : Number(mv.importe))
+          salidasDe.set(mv.sesion_uuid, acc)
+        }
+      }
+
       return filas.flatMap(f => {
+        const uuid     = f.sesion_uuid as string
         const fondo    = (f.fondo_inicial    ?? {}) as Record<string, number>
         const ventas   = (f.total_por_moneda ?? {}) as Record<string, number>
         const contado  = (f.efectivo_contado ?? {}) as Record<string, number>
-        const monedas  = [...new Set([...Object.keys(fondo), ...Object.keys(ventas), ...Object.keys(contado)])].sort()
+        const efect    = efectivoDe.get(uuid) ?? {}
+        const salidas  = salidasDe.get(uuid) ?? {}
+        const monedas  = [...new Set([
+          ...Object.keys(fondo), ...Object.keys(ventas), ...Object.keys(contado),
+          ...Object.keys(efect), ...Object.keys(salidas),
+        ])].sort()
         const base = [
           f.numero_z as number, cajas.get(f.caja_id as string) ?? (f.caja_id as string),
-          f.abierta_at as string, f.cerrada_at as string, f.estado as string,
+          f.abierta_at as string, f.cerrada_at as string, (f.cerrada_por as string) ?? '',
+          f.estado as string,
         ]
         // Un cierre sin ninguna moneda sigue saliendo: que no haya vendido nada es
         // información, y omitirlo dejaría un hueco en la serie de números Z.
-        if (monedas.length === 0) return [[...base, '', 0, 0, 0, 0]] as ValorCelda[][]
-        return monedas.map(m => [
-          ...base, m, num(fondo[m]), num(ventas[m]), num(contado[m]),
-          num(contado[m]) - (num(fondo[m]) + num(ventas[m])),
-        ])
+        if (monedas.length === 0) return [[...base, '', 0, 0, 0, 0, 0, 0, 0]] as ValorCelda[][]
+        return monedas.map(m => {
+          const esperado = num(fondo[m]) + num(efect[m]) - num(salidas[m])
+          return [
+            ...base, m, num(fondo[m]), num(ventas[m]), num(efect[m]), num(salidas[m]),
+            esperado, num(contado[m]), num(contado[m]) - esperado,
+          ]
+        })
       })
     },
   },

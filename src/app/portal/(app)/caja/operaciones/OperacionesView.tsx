@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
@@ -11,9 +11,12 @@ import Filtros from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
 
+type Linea = { descripcion: string; cantidad: number; precio_unitario: number }
+
 interface Props {
   data: {
     tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string>
+    lineasPorTicket: Record<string, Linea[]>
     rango: { desde: string; hasta: string }; hay_mas: boolean; total: number; limite: number
   }
 }
@@ -35,8 +38,10 @@ export default function OperacionesView({ data }: Props) {
   const [tab, setTab] = useState<'ventas' | 'stock'>('ventas')
   // Los filtros viven en la URL, como el rango: refrescar ya no los tira.
   const params = useSearchParams()
-  const search = params.get('q')     ?? ''
-  const punto  = params.get('punto') ?? ''   // '' = todos
+  const search = params.get('q')      ?? ''
+  const punto  = params.get('punto')  ?? ''   // '' = todos
+  const estado = params.get('estado') ?? ''
+  const medio  = params.get('medio')  ?? ''
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
 
   /**
@@ -53,15 +58,58 @@ export default function OperacionesView({ data }: Props) {
       ocultarSi: Object.keys(data.cajaNombres).length <= 1,
       opciones: Object.entries(data.cajaNombres).map(([id, nombre]) => ({ valor: id, label: nombre })),
     },
-  ], [punto, data.cajaNombres])
+    // El estado ya lo soportaba la DESCARGA (`operaciones_caja`) y no la pantalla: se podía
+    // bajar un fichero solo de anuladas que aquí no había forma de ver.
+    {
+      clave: 'estado', param: 'estado', label: 'Todas', valor: estado,
+      rotulo: 'Estado', widget: 'pastillas', donde: 'cliente',
+      opciones: [
+        { valor: 'VIGENTE',       label: 'Originales' },
+        { valor: 'RECTIFICACION', label: 'Rectificaciones' },
+        { valor: 'ANULADO',       label: 'Anuladas' },
+      ],
+    },
+    // Efectivo o transferencia: desde la mig. 172 deciden a QUÉ cuenta va el dinero, así
+    // que cuadrar una caja empieza por poder separarlos.
+    {
+      clave: 'medio_pago', param: 'medio', label: 'Todos', valor: medio,
+      rotulo: 'Medio de pago', widget: 'pastillas', donde: 'cliente',
+      opciones: [
+        { valor: 'Efectivo',      label: 'Efectivo' },
+        { valor: 'Transferencia', label: 'Transferencia' },
+        { valor: 'Otro',          label: 'Otro' },
+      ],
+    },
+  ], [punto, estado, medio, data.cajaNombres])
+
+  // El buscador mira TAMBIÉN el producto, que es lo que el `placeholder` prometía y la
+  // pestaña de Ventas no hacía: se buscaba «cerveza» y no salía nada, con la caja de texto
+  // diciendo «Buscar por punto de venta, producto…».
+  const textoDe = (t: Ticket) => [
+    cajaNombre(t.caja_id), t.moneda, t.medio_pago,
+    ...(data.lineasPorTicket[t.ticket_uuid] ?? []).map(l => l.descripcion),
+  ].filter(Boolean).join(' ').toLowerCase()
 
   const ventas = useMemo(() => {
     const q = search.toLowerCase().trim()
     return data.tickets.filter(t =>
-      (!punto || t.caja_id === punto) &&
-      (!q || [cajaNombre(t.caja_id), t.moneda, t.medio_pago].filter(Boolean).join(' ').toLowerCase().includes(q)))
+      (!punto  || t.caja_id === punto) &&
+      (!estado || (t.estado ?? 'VIGENTE') === estado) &&
+      (!medio  || (t.medio_pago ?? '') === medio) &&
+      (!q || textoDe(t).includes(q)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.tickets, search, punto])
+  }, [data.tickets, data.lineasPorTicket, search, punto, estado, medio])
+
+  // Totales por moneda de lo que se está viendo. La pantalla que responde «cuánto vendí»
+  // no lo decía: había que sumar la columna a mano. Las anuladas no cuentan.
+  const totales = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const t of ventas) {
+      if ((t.estado ?? 'VIGENTE') === 'ANULADO') continue
+      m.set(t.moneda, (m.get(t.moneda) ?? 0) + Number(t.total))
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1])
+  }, [ventas])
 
   const stock = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -123,15 +171,32 @@ export default function OperacionesView({ data }: Props) {
         </AvisoTope>
       )}
 
+      {tab === 'ventas' && totales.length > 0 && (
+        <div className="caja-totales">
+          {totales.map(([m, v]) => (
+            <span key={m} className="caja-total-chip">
+              <span className="caja-total-cod">{m}</span>
+              <strong>{money(v)}</strong>
+            </span>
+          ))}
+        </div>
+      )}
+
       {tab === 'ventas'
-        ? <VentasTabla items={ventas} cajaNombre={cajaNombre} />
+        ? <VentasTabla items={ventas} cajaNombre={cajaNombre} lineas={data.lineasPorTicket} />
         : <StockTabla  items={stock}  cajaNombre={cajaNombre} />}
     </div>
   )
 }
 
-function VentasTabla({ items, cajaNombre }: { items: Ticket[]; cajaNombre: (id: string) => string }) {
+function VentasTabla({ items, cajaNombre, lineas }: {
+  items: Ticket[]; cajaNombre: (id: string) => string; lineas: Record<string, Linea[]>
+}) {
   const { pageItems, ...pag } = usePagination(items)
+  // Qué venta está abierta. Desplegar y no una página de detalle: un ticket son tres
+  // líneas, y navegar fuera para verlas obliga a volver y perder la posición del listado.
+  const [abierta, setAbierta] = useState<string | null>(null)
+
   return (
     <div className="card card-table">
       {items.length === 0 ? (
@@ -149,16 +214,37 @@ function VentasTabla({ items, cajaNombre }: { items: Ticket[]; cajaNombre: (id: 
               </tr>
             </thead>
             <tbody>
-              {pageItems.map(t => (
-                <tr key={t.ticket_uuid}>
-                  <td data-label="Fecha">{fecha(t.fecha)}</td>
-                  <td data-label="Punto de venta">{cajaNombre(t.caja_id)}</td>
-                  <td data-label="Medio de pago">{t.medio_pago ?? '—'}</td>
-                  <td data-label="Total" className="col-num">{money(t.total)}</td>
-                  <td data-label="Moneda">{t.moneda}</td>
-                  <td data-label="Estado">{estadoBadge(t.estado)}</td>
-                </tr>
-              ))}
+              {pageItems.map(t => {
+                const suyas = lineas[t.ticket_uuid] ?? []
+                const abre  = abierta === t.ticket_uuid
+                return (
+                  <Fragment key={t.ticket_uuid}>
+                    <tr className={suyas.length ? 'table-row-clickable' : undefined}
+                      onClick={suyas.length ? () => setAbierta(abre ? null : t.ticket_uuid) : undefined}>
+                      <td data-label="Fecha">{fecha(t.fecha)}</td>
+                      <td data-label="Punto de venta">{cajaNombre(t.caja_id)}</td>
+                      <td data-label="Medio de pago">{t.medio_pago ?? '—'}</td>
+                      <td data-label="Total" className="col-num">{money(t.total)}</td>
+                      <td data-label="Moneda">{t.moneda}</td>
+                      <td data-label="Estado">{estadoBadge(t.estado)}</td>
+                    </tr>
+                    {abre && (
+                      <tr className="caja-detalle-fila">
+                        <td colSpan={6}>
+                          <ul className="caja-detalle-lineas">
+                            {suyas.map((l, i) => (
+                              <li key={i}>
+                                <span>{qty(l.cantidad)} × {l.descripcion}</span>
+                                <span className="col-num">{money(l.cantidad * l.precio_unitario)} {t.moneda}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

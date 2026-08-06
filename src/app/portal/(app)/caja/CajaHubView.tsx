@@ -11,14 +11,34 @@ import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 
-interface Props { cajas: Caja[]; empresas: { empresa_id: string; nombre: string }[] }
+interface Salud { monedasSinCuenta: string[]; sinAlmacen: boolean }
+interface Props {
+  cajas: Caja[]
+  empresas: { empresa_id: string; nombre: string }[]
+  salud: Record<string, Salud>
+}
 
 function fechaCorta(s: string | null): string {
   if (!s) return '—'
   return new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export default function CajaHubView({ cajas, empresas }: Props) {
+/**
+ * «hace 18 días» y no «19/07/26, 14:37».
+ *
+ * La fecha exacta obliga a restar de cabeza para contestar la única pregunta que importa
+ * aquí —¿este punto sigue vivo?—, y un punto mudo tres semanas está cobrando con precios
+ * viejos y guardándose su dinero dentro.
+ */
+function desdeCuando(s: string | null): { texto: string; viejo: boolean } {
+  if (!s) return { texto: 'Nunca', viejo: true }
+  const dias = Math.floor((Date.now() - new Date(s).getTime()) / 86_400_000)
+  if (dias <= 0) return { texto: 'Hoy', viejo: false }
+  if (dias === 1) return { texto: 'Ayer', viejo: false }
+  return { texto: `Hace ${dias} días`, viejo: dias >= 5 }
+}
+
+export default function CajaHubView({ cajas, empresas, salud }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
@@ -76,7 +96,10 @@ export default function CajaHubView({ cajas, empresas }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map(c => (
+                {pageItems.map(c => {
+                  const s = salud[c.caja_id]
+                  const sync = desdeCuando(c.last_sync_at)
+                  return (
                   <tr key={c.caja_id} className="table-row-clickable"
                     onClick={() => router.push(`/portal/caja/${c.caja_id}`)}>
                     <td data-label="Nombre">
@@ -84,11 +107,27 @@ export default function CajaHubView({ cajas, empresas }: Props) {
                         onClick={e => e.stopPropagation()}>{c.nombre}</Link>
                     </td>
                     {multi && <td data-label="Empresa">{empresaNombre(c.empresa_id)}</td>}
-                    <td data-label="Última sincronización">{fechaCorta(c.last_sync_at)}</td>
+                    <td data-label="Última sincronización" title={fechaCorta(c.last_sync_at)}>
+                      {sync.viejo ? <span className="badge badge-warning">{sync.texto}</span> : sync.texto}
+                    </td>
                     <td data-label="Estado">
-                      <span className={`badge ${c.activa ? 'badge-success' : ''}`}>
-                        {c.activa ? 'Activa' : 'Desactivada'}
-                      </span>
+                      {/* Un punto al que le falta la caja de Tesorería de una moneda que
+                          acepta se veía IDÉNTICO a uno perfecto, y solo se descubría cuando
+                          su cierre no se podía contabilizar: o sea, cuando ya se vendió. */}
+                      {c.activa && s ? (
+                        <span className="badge badge-warning" title={
+                          [
+                            s.monedasSinCuenta.length ? `Sin caja de Tesorería para ${s.monedasSinCuenta.join(', ')}` : '',
+                            s.sinAlmacen ? 'Sin almacén: no descuenta stock' : '',
+                          ].filter(Boolean).join(' · ')
+                        }>
+                          {s.monedasSinCuenta.length ? `Falta ${s.monedasSinCuenta.join(', ')}` : 'Sin almacén'}
+                        </span>
+                      ) : (
+                        <span className={`badge ${c.activa ? 'badge-success' : ''}`}>
+                          {c.activa ? 'Activa' : 'Desactivada'}
+                        </span>
+                      )}
                     </td>
                     <td className="col-actions">
                       <RowActions>
@@ -103,7 +142,8 @@ export default function CajaHubView({ cajas, empresas }: Props) {
                       </RowActions>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
