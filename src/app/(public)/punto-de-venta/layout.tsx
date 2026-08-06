@@ -2,7 +2,6 @@ import type { Viewport } from 'next'
 // App de punto de venta offline: aislada del design system del portal (regla de públicas,
 // SKILL §6). Solo su hoja propia namespaced (--ca-*) sobre el reset público.
 import './punto-venta-app.css'
-import PuntoVentaPwaRegister from './PuntoVentaPwaRegister'
 
 // Sin `metadata` estático aquí: el título, el manifest y la etiqueta de iOS dependen
 // de QUÉ punto de venta se está instalando, y eso solo se sabe en la página (por el
@@ -15,10 +14,7 @@ export const viewport: Viewport = {
 }
 
 export default function PuntoVentaLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="ca-app">
-      <PuntoVentaPwaRegister />
-      {children}
-    </div>
-  )
+  // El registro del service worker vive DENTRO de la app y no aquí: necesita saber si hay
+  // una venta a medias para no recargar encima de ella tras un despliegue.
+  return <div className="ca-app">{children}</div>
 }

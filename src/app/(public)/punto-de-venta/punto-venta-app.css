@@ -1,22 +1,52 @@
-/* Caja offline (PWA) — hoja propia, paleta namespaced (--ca-*), fuentes del
-   sistema. Aislada del design system del portal (SKILL §6). Tema CLARO,
-   layout de caja registradora real: productos a un lado, ticket al otro. */
+/* ── Punto de venta (PWA) — hoja propia y autocontenida ─────────────────────────
+   Aislada del design system del portal (skills/ui/SKILL.md §6): paleta namespaced
+   `--ca-*`, fuentes del sistema, cero librerías. Misma familia visual que las otras
+   públicas (`catalogo-publica.css`, `reserva-publica.css`): teal de marca, superficie
+   cálida, radios generosos — pero con las decisiones propias de una CAJA:
+
+   · **Tema claro Y OSCURO.** Era la única pública sin él, y es la que más falta hace:
+     un bar cobra de noche, y una pantalla blanca a las once con el brillo automático
+     al máximo se lee peor y quema batería. Sigue al sistema y además se puede forzar
+     desde la app (`[data-tema]`), porque el aparato de la caja se queda donde está y
+     quien cobra no va a entrar a los ajustes del móvil.
+   · **Todo lo que se toca mide 44px como mínimo** (`--ca-tap`). Los steppers tenían 30
+     y la «×» del ticket ninguno: con un dedo eso no es un botón, es una apuesta.
+   · **Zonas seguras** (`env(safe-area-inset-*)`): sin ellas la barra inferior queda
+     debajo del indicador de gestos del iPhone y el botón de Cobrar no se puede pulsar.
+   · **El ticket es una hoja inferior en móvil**: el total y Cobrar están SIEMPRE a un
+     pulgar, y la lista se despliega. Antes el panel se comía media pantalla y con la
+     calculadora de cambio dentro la lista de artículos quedaba en dos líneas.        */
 
 .ca-app {
-  --ca-bg: #eef1f5;
+  /* Superficie cálida, de la familia de las otras públicas, un punto más profunda:
+     esto es una herramienta de trabajo, no una página de lectura. */
+  --ca-bg: #f2efe9;
   --ca-surface: #ffffff;
-  --ca-surface-2: #f4f6f9;
-  --ca-text: #16202e;
-  --ca-muted: #667085;
-  --ca-border: #dbe1e9;
+  --ca-surface-2: #f7f5f1;
+  --ca-elev: 0 1px 2px rgb(24 20 12 / .06), 0 8px 24px rgb(24 20 12 / .06);
+  --ca-elev-alta: 0 -2px 8px rgb(24 20 12 / .08), 0 -12px 32px rgb(24 20 12 / .10);
+  --ca-text: #1a1a1a;
+  --ca-muted: #5f5b54;
+  --ca-faint: #8a857c;
+  --ca-border: #e5e0d8;
   --ca-primary: #0d9488;
+  --ca-primary-hover: #0f766e;
   --ca-primary-ink: #ffffff;
-  --ca-primary-soft: #d5f0ec;
-  --ca-money: #047857;
+  --ca-primary-soft: #d7f0ec;
+  --ca-money: #0f766e;
   --ca-danger: #dc2626;
-  --ca-warn: #b45309;
-  --ca-radius: 12px;
+  --ca-danger-bg: #fef2f2;
+  --ca-warn: #92610c;
+  --ca-warn-bg: #fef6e0;
+  --ca-radius: 14px;
+  --ca-radius-sm: 10px;
+  /* Objetivo táctil mínimo (Apple 44pt / Android 48dp). No es un adorno: media el
+     ancho de un dedo, y en un mostrador se pulsa deprisa y sin mirar. */
+  --ca-tap: 44px;
+  --ca-seguro-abajo: env(safe-area-inset-bottom, 0px);
+  --ca-seguro-arriba: env(safe-area-inset-top, 0px);
 
+  color-scheme: light;
   position: fixed;
   inset: 0;
   display: flex;
@@ -26,109 +56,500 @@
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-/* ── Header ── */
-.ca-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--ca-surface); border-bottom: 1px solid var(--ca-border); }
-.ca-title { font-size: 17px; font-weight: 700; }
-.ca-turno-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ca-money); }
-.ca-turno-chip.closed { color: var(--ca-muted); }
-.ca-online { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ca-money); }
-.ca-online.off { color: var(--ca-muted); }
-.ca-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+/* El tema oscuro sigue al sistema… */
+@media (prefers-color-scheme: dark) {
+  .ca-app { --ca-tema-auto: oscuro; }
+  .ca-app:not([data-tema='claro']) {
+    color-scheme: dark;
+    --ca-bg: #14171a;
+    --ca-surface: #1d2126;
+    --ca-surface-2: #23282e;
+    --ca-elev: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35);
+    --ca-elev-alta: 0 -2px 8px rgb(0 0 0 / .45), 0 -12px 32px rgb(0 0 0 / .4);
+    --ca-text: #e8e6e3;
+    --ca-muted: #a8a29a;
+    --ca-faint: #7c766d;
+    --ca-border: #333a41;
+    --ca-primary: #14b8a6;
+    --ca-primary-hover: #2dd4bf;
+    --ca-primary-ink: #06231f;
+    --ca-primary-soft: #10332f;
+    --ca-money: #5eead4;
+    --ca-danger: #f87171;
+    --ca-danger-bg: #331b1b;
+    --ca-warn: #fbbf24;
+    --ca-warn-bg: #332a12;
+  }
+}
 
-/* ── Banner de mensaje ── */
-.ca-msg { margin: 10px 16px 0; padding: 10px 14px; border-radius: var(--ca-radius); font-size: 14px; font-weight: 500; }
-.ca-msg-ok { background: var(--ca-primary-soft); color: var(--ca-money); }
-.ca-msg-err { background: #fde8e8; color: var(--ca-danger); }
-.ca-msg-warn { background: #fdf0d5; color: var(--ca-warn); }
+/* …y se puede FORZAR desde la caja. El aparato vive en el mostrador y quien cobra no
+   va a entrar en los ajustes del sistema para cambiarlo al anochecer. */
+.ca-app[data-tema='oscuro'] {
+  color-scheme: dark;
+  --ca-bg: #14171a;
+  --ca-surface: #1d2126;
+  --ca-surface-2: #23282e;
+  --ca-elev: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35);
+  --ca-elev-alta: 0 -2px 8px rgb(0 0 0 / .45), 0 -12px 32px rgb(0 0 0 / .4);
+  --ca-text: #e8e6e3;
+  --ca-muted: #a8a29a;
+  --ca-faint: #7c766d;
+  --ca-border: #333a41;
+  --ca-primary: #14b8a6;
+  --ca-primary-hover: #2dd4bf;
+  --ca-primary-ink: #06231f;
+  --ca-primary-soft: #10332f;
+  --ca-money: #5eead4;
+  --ca-danger: #f87171;
+  --ca-danger-bg: #331b1b;
+  --ca-warn: #fbbf24;
+  --ca-warn-bg: #332a12;
+}
 
-/* ── Gate: abrir turno (paso 1) ── */
-.ca-gate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
-.ca-gate-card { background: var(--ca-surface); border: 1px solid var(--ca-border); border-radius: 16px; padding: 28px 24px; max-width: 420px; width: 100%; display: flex; flex-direction: column; gap: 16px; }
-.ca-gate-step { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ca-primary); }
-.ca-gate-title { font-size: 22px; font-weight: 800; }
-.ca-gate-text { color: var(--ca-muted); font-size: 15px; line-height: 1.5; }
-.ca-steps { display: flex; flex-direction: column; gap: 8px; text-align: left; margin: 4px 0; }
+.ca-app *, .ca-app *::before, .ca-app *::after { box-sizing: border-box; }
+
+/* Foco visible en TODO lo pulsable: la caja se puede llevar con teclado (lector de
+   códigos, teclado USB en una tablet acoplada) y sin esto no se sabe dónde estás. */
+.ca-app :focus-visible {
+  outline: 2px solid var(--ca-primary);
+  outline-offset: 2px;
+  border-radius: var(--ca-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ca-app *, .ca-app *::before, .ca-app *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ── Cabecera ──────────────────────────────────────────────────────────────── */
+.ca-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(10px + var(--ca-seguro-arriba)) 16px 10px;
+  background: var(--ca-surface);
+  border-bottom: 1px solid var(--ca-border);
+}
+.ca-header-info { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ca-header-acciones { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.ca-title { font-size: 16px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Estado del turno y de la conexión: dos píldoras pequeñas, legibles de un vistazo y
+   sin competir con el catálogo. El color dice el estado; el texto lo confirma. */
+.ca-turno-chip, .ca-online {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+  background: var(--ca-surface-2); color: var(--ca-muted);
+  white-space: nowrap;
+}
+/* Verde = está pasando lo que tiene que pasar (turno abierto, con conexión).
+   Ámbar = hay algo que atender. Gris = apagado, ni bien ni mal. */
+.ca-turno-chip:not(.closed):not(.vieja), .ca-online:not(.off) { background: var(--ca-primary-soft); color: var(--ca-money); }
+.ca-turno-chip.vieja { background: var(--ca-warn-bg); color: var(--ca-warn); }
+.ca-turno-chip.closed, .ca-online.off { background: var(--ca-surface-2); color: var(--ca-muted); }
+.ca-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.ca-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Botón de solo icono de la cabecera (tema). Cuadrado y del tamaño del dedo. */
+.ca-icon-btn {
+  width: var(--ca-tap); height: var(--ca-tap); flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--ca-border); border-radius: var(--ca-radius-sm);
+  background: var(--ca-surface); color: var(--ca-muted);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+.ca-icon-btn:active { background: var(--ca-surface-2); }
+
+/* ── Avisos ────────────────────────────────────────────────────────────────── */
+/* `.ca-msg` responde a algo que acabas de hacer y se va; `.ca-alerta` dice que hay
+   dinero sin salir del móvil y se queda hasta que se resuelva.
+
+   FLOTA sobre el contenido y encima de la barra de abajo. Iba en el flujo, bajo la
+   cabecera: al actuar desde una pantalla centrada en vertical —abrir turno— la respuesta
+   salía a media pantalla de donde estabas mirando, y no se veía. Abajo es donde está el
+   pulgar y donde se mira después de pulsar. */
+.ca-msg {
+  position: fixed; left: 16px; right: 16px; z-index: 30;
+  bottom: calc(var(--ca-tap) + var(--ca-seguro-abajo) + 12px);
+  max-width: 440px; margin-inline: auto;
+  padding: 12px 14px; border-radius: var(--ca-radius);
+  font-size: 14px; font-weight: 600; line-height: 1.4;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .18);
+  animation: ca-msg-entra .18s ease-out;
+}
+@keyframes ca-msg-entra { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .ca-msg { animation: none; } }
+.ca-msg-ok   { background: var(--ca-primary-soft); color: var(--ca-money); }
+.ca-msg-err  { background: var(--ca-danger-bg); color: var(--ca-danger); }
+.ca-msg-warn { background: var(--ca-warn-bg); color: var(--ca-warn); }
+
+/* «Estoy trabajando», bajo la cabecera y con la etiqueta de lo que se está haciendo. En
+   Cuba esto no es un adorno: sin él, entre pulsar y la respuesta la pantalla no cambia y
+   la reacción normal es volver a pulsar. */
+.ca-cargando {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 16px;
+  background: var(--ca-primary-soft); color: var(--ca-money);
+  font-size: 13px; font-weight: 600;
+  border-bottom: 1px solid var(--ca-border);
+}
+.ca-spinner {
+  flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: ca-gira .7s linear infinite;
+}
+@keyframes ca-gira { to { transform: rotate(360deg); } }
+/* Sin animación, la rueda se queda quieta y parece un aro suelto: se marca con el borde
+   punteado, que sigue diciendo «esto está en marcha» sin moverse. */
+@media (prefers-reduced-motion: reduce) {
+  .ca-spinner { animation: none; border-style: dotted; border-top-color: currentColor; }
+}
+
+.ca-alerta {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  background: var(--ca-warn-bg); color: var(--ca-warn);
+  font-size: 13px; font-weight: 600; line-height: 1.35;
+  border-bottom: 1px solid var(--ca-border);
+}
+.ca-alerta::before { content: '!'; flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: currentColor; color: var(--ca-warn-bg); font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+
+.ca-seed { font-size: 12px; color: var(--ca-faint); margin: 0; }
+.ca-seed.vieja { color: var(--ca-warn); font-weight: 600; }
+
+/* ── Portada / gate ────────────────────────────────────────────────────────── */
+/* `gap`: sobre la tarjeta de abrir turno puede ir el aviso de lo que quedó sin
+   sincronizar, y sin separación las dos se leían como una sola. */
+.ca-gate { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px 16px calc(24px + var(--ca-seguro-abajo)); text-align: center; }
+.ca-gate-card { background: var(--ca-surface); border: 1px solid var(--ca-border); border-radius: 18px; box-shadow: var(--ca-elev); padding: 26px 22px; max-width: 440px; width: 100%; display: flex; flex-direction: column; gap: 14px; }
+/* Lo que quedó sin sincronizar, sobre la tarjeta de abrir turno. En ÁMBAR y no en rojo:
+   no es una avería ni se ha perdido nada —está guardado y a un toque—, así que un cartel
+   de peligro a pantalla completa antes de empezar la jornada asusta sin motivo. Es una
+   línea de aviso: texto a la izquierda, acción a la derecha, y el mismo ancho que la
+   tarjeta de debajo para que las dos se lean como una sola columna. */
+.ca-gate-aviso {
+  max-width: 440px; width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: 14px; text-align: left;
+  /* Sin borde: el fondo ámbar ya distingue el aviso de la tarjeta blanca de debajo, y un
+     trazo de `--ca-warn` (que es tinta, no cromo) lo devolvía al tono de alarma. */
+  background: var(--ca-warn-bg);
+}
+.ca-gate-aviso-txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ca-gate-aviso-txt strong { font-size: 14px; font-weight: 700; color: var(--ca-warn); }
+/* La acción DENTRO de un aviso ámbar. Mismo criterio que `.btn-aviso` del design system
+   del portal (el de las bandas de aviso y el importador), traducido a la paleta propia de
+   la caja: sobre un fondo de estado, un botón normal se pierde —su borde gris desaparece
+   contra el ámbar— y uno de color le discute el protagonismo al aviso. Este levanta la
+   superficie y toma prestado el borde del propio cartel. */
+.ca-btn-aviso {
+  flex: 0 0 auto;
+  background: var(--ca-surface); color: var(--ca-text); border-color: var(--ca-warn);
+  /* Tamaño de acción SECUNDARIA, como el `btn-sm` que usa el banner del portal: a tamaño
+     completo, junto a dos líneas de texto pequeño, el botón pesaba más que el aviso. El
+     objetivo táctil se mantiene en los 44 px por el `min-height` de `.ca-btn`. */
+  padding: 8px 14px; font-size: 14px; border-radius: 10px;
+}
+.ca-btn-aviso svg { flex-shrink: 0; }
+@media (max-width: 420px) {
+  .ca-gate-aviso { flex-direction: column; align-items: stretch; gap: 8px; }
+}
+
+.ca-gate-step { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ca-primary); }
+.ca-gate-title { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+.ca-gate-text { color: var(--ca-muted); font-size: 15px; line-height: 1.5; margin: 0; }
+.ca-steps { display: flex; flex-direction: column; gap: 10px; text-align: left; margin: 2px 0; }
 .ca-step-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ca-muted); }
-.ca-step-num { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: var(--ca-surface-2); color: var(--ca-text); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.ca-step-num { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: var(--ca-primary-soft); color: var(--ca-money); font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
 
-/* ── POS: productos | ticket ── */
+/* ── Vender: catálogo | ticket ─────────────────────────────────────────────── */
 .ca-pos { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.ca-productos { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; gap: 12px; overflow-y: auto; }
-.ca-search { width: 100%; padding: 12px 14px; border-radius: var(--ca-radius); border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; }
-.ca-search:focus { outline: none; border-color: var(--ca-primary); }
-.ca-prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-/* Encabezado de grupo: solo aparece cuando la caja baja servicios Y productos. */
-.ca-prod-grupo { margin: 14px 0 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ca-muted); }
+.ca-productos { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px 16px; gap: 10px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.ca-search {
+  width: 100%; min-height: var(--ca-tap);
+  padding: 12px 14px; border-radius: var(--ca-radius);
+  border: 1px solid var(--ca-border); background: var(--ca-surface);
+  color: var(--ca-text); font: inherit;
+}
+.ca-search:focus { outline: none; border-color: var(--ca-primary); box-shadow: 0 0 0 3px var(--ca-primary-soft); }
+.ca-search::placeholder { color: var(--ca-faint); }
+
+.ca-prod-grupo { margin: 12px 0 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ca-faint); }
 .ca-prod-grupo:first-child { margin-top: 0; }
-.ca-prod { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 12px 14px; min-height: 74px; justify-content: space-between; border-radius: var(--ca-radius); border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; cursor: pointer; transition: border-color .12s, background .12s; }
-.ca-prod:active { background: var(--ca-primary-soft); border-color: var(--ca-primary); }
-.ca-prod-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ca-prod-name { font-weight: 600; line-height: 1.2; }
-.ca-prod-code { font-size: 11px; color: var(--ca-muted); font-variant-numeric: tabular-nums; }
-.ca-prod-price { font-weight: 700; color: var(--ca-money); font-variant-numeric: tabular-nums; }
-.ca-empty { color: var(--ca-muted); font-size: 14px; padding: 20px 4px; text-align: center; }
 
-/* Ticket ("pantalla") */
-.ca-ticket { display: flex; flex-direction: column; background: var(--ca-surface); border-top: 1px solid var(--ca-border); max-height: 46vh; }
-.ca-ticket-head { padding: 10px 16px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ca-muted); border-bottom: 1px solid var(--ca-border); display: flex; justify-content: space-between; }
-.ca-ticket-items { flex: 1; overflow-y: auto; padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
-.ca-tick-item { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 10px; background: var(--ca-surface-2); }
-.ca-tick-name { font-weight: 600; font-size: 14px; }
-.ca-tick-unit { font-size: 12px; color: var(--ca-muted); font-variant-numeric: tabular-nums; }
-.ca-stepper { display: flex; align-items: center; gap: 6px; }
-.ca-step-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
-.ca-qty { min-width: 22px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
-.ca-tick-sub { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 62px; text-align: right; }
-.ca-tick-x { border: none; background: none; color: var(--ca-muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
+/* La rejilla se adapta sola: 2 columnas en un móvil de 360, 3-4 en una tablet.
+   `auto-fill` con mínimo 150 evita las tarjetas de un dedo de ancho. */
+.ca-prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 
-.ca-ticket-foot { padding: 12px 16px; border-top: 1px solid var(--ca-border); display: flex; flex-direction: column; gap: 10px; }
-.ca-total-row { display: flex; align-items: baseline; justify-content: space-between; }
-.ca-total-lbl { font-size: 14px; color: var(--ca-muted); font-weight: 600; }
-.ca-total { font-size: 30px; font-weight: 800; color: var(--ca-money); font-variant-numeric: tabular-nums; }
+.ca-prod {
+  display: flex; flex-direction: column; gap: 4px;
+  text-align: left; padding: 12px 14px; min-height: 84px;
+  border-radius: var(--ca-radius); border: 1px solid var(--ca-border);
+  background: var(--ca-surface); color: var(--ca-text);
+  font: inherit; cursor: pointer;
+  box-shadow: var(--ca-elev);
+  transition: border-color .12s, background .12s, transform .06s;
+}
+.ca-prod:active { transform: scale(.98); background: var(--ca-primary-soft); border-color: var(--ca-primary); }
+.ca-prod:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+
+.ca-prod-name {
+  font-weight: 600; font-size: 15px; line-height: 1.3;
+  /* Dos líneas y elipsis: los nombres largos («Refresco de naranja 1,5 L») rompían la
+     altura de la tarjeta y descuadraban toda la fila de la rejilla. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ca-prod-code { font-size: 11px; color: var(--ca-faint); font-variant-numeric: tabular-nums; }
+.ca-prod-susc { font-size: 11px; font-weight: 700; color: var(--ca-warn); }
+/* El precio es el segundo dato que se mira y va con el peso que le toca. */
+.ca-prod-price { font-weight: 800; font-size: 16px; color: var(--ca-money); font-variant-numeric: tabular-nums; margin-top: auto; }
+.ca-prod-price.miss { color: var(--ca-danger); font-size: 12px; font-weight: 600; }
+
+.ca-empty { color: var(--ca-faint); font-size: 14px; padding: 24px 4px; text-align: center; margin: 0; }
+
+/* Artículo libre: un formulario de tres campos no tiene por qué medir lo que mida la
+   pantalla. En un portátil se estiraba a 1.500 px y las pastillas de moneda con él. */
+.ca-libre { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 460px; }
+
+/* ── El ticket ─────────────────────────────────────────────────────────────── */
+/* En MÓVIL es una hoja inferior: colapsada deja a la vista lo único que importa
+   siempre (cuánto y el botón de cobrar, a un pulgar) y se despliega para revisar las
+   líneas. Antes ocupaba el 46% de la pantalla a todas horas y, con la calculadora de
+   cambio dentro, la lista de artículos se quedaba en dos renglones. */
+.ca-ticket {
+  display: flex; flex-direction: column;
+  background: var(--ca-surface);
+  border-top: 1px solid var(--ca-border);
+  border-radius: 18px 18px 0 0;
+  box-shadow: var(--ca-elev-alta);
+  max-height: 78vh;
+}
+.ca-ticket-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  position: relative; width: 100%;
+  padding: 16px 16px 8px;
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ca-faint);
+  cursor: pointer; border: none; background: none; font-family: inherit;
+}
+.ca-ticket-head::before {
+  content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  width: 36px; height: 4px; border-radius: 999px; background: var(--ca-border);
+}
+.ca-ticket-cuenta { color: var(--ca-money); font-variant-numeric: tabular-nums; margin-left: auto; }
+/* La única señal de que la cabecera se pliega era el asa de 36 px, que no dice nada:
+   al tocar el título se cerraba la lista y parecía que se habían borrado las líneas. */
+.ca-ticket-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; border-radius: 999px;
+  background: var(--ca-surface-2); color: var(--ca-faint);
+  font-size: 11px; letter-spacing: .04em;
+}
+.ca-chevron { font-size: 10px; line-height: 1; transition: transform .15s ease; }
+.ca-ticket.abierta .ca-chevron { transform: rotate(180deg); }
+
+.ca-ticket-items { flex: 1; overflow-y: auto; padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+/* Colapsada: la lista se esconde y queda el pie (total + cobrar). */
+.ca-ticket:not(.abierta) .ca-ticket-items { display: none; }
+
+/* Fila 1: nombre (todo el ancho) + «×». Fila 2: cantidad y subtotal.
+   En una sola fila los controles fijos dejaban al nombre sin sitio y se partía en cuatro
+   renglones — se veía en escritorio y en tablet era peor. */
+.ca-tick-item {
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: center; gap: 6px 8px; padding: 8px 10px;
+  border-radius: var(--ca-radius-sm); background: var(--ca-surface-2);
+}
+.ca-tick-info { min-width: 0; }
+.ca-tick-acciones { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ca-tick-name { font-weight: 600; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.ca-tick-unit { font-size: 12px; color: var(--ca-faint); font-variant-numeric: tabular-nums; }
+.ca-tick-unit.miss { color: var(--ca-danger); font-weight: 600; }
+.ca-stepper { display: flex; align-items: center; gap: 4px; }
+/* 44px, no 30: con un dedo, «quitar uno» y «añadir uno» a 30px se confunden. */
+.ca-step-btn {
+  width: var(--ca-tap); height: var(--ca-tap); flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--ca-radius-sm); border: 1px solid var(--ca-border);
+  background: var(--ca-surface); color: var(--ca-text);
+  font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.ca-step-btn:active { background: var(--ca-primary-soft); }
+.ca-qty { min-width: 34px; height: var(--ca-tap); text-align: center; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; border: none; background: none; color: inherit; padding: 0 4px; cursor: pointer; }
+.ca-qty-input { width: 56px; height: var(--ca-tap); text-align: center; font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; border: 1px solid var(--ca-primary); border-radius: var(--ca-radius-sm); background: var(--ca-surface); color: var(--ca-text); }
+.ca-tick-sub { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
+.ca-tick-x { width: var(--ca-tap); height: var(--ca-tap); flex: 0 0 auto; border: none; background: none; color: var(--ca-faint); font-size: 20px; cursor: pointer; border-radius: var(--ca-radius-sm); }
+.ca-tick-x:active { background: var(--ca-danger-bg); color: var(--ca-danger); }
+
+.ca-ticket-foot {
+  padding: 10px 16px calc(12px + var(--ca-seguro-abajo));
+  border-top: 1px solid var(--ca-border);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ca-total-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ca-total-lbl { font-size: 13px; color: var(--ca-muted); font-weight: 600; }
+.ca-total { font-size: 32px; font-weight: 800; letter-spacing: -.02em; color: var(--ca-money); font-variant-numeric: tabular-nums; }
 .ca-pay-row { display: flex; gap: 8px; }
 .ca-pay-row > * { flex: 1; min-width: 0; }
 
-/* Panels (turno / sync) */
-.ca-panel { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.ca-panel-title { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ca-muted); }
-.ca-card { background: var(--ca-surface); border: 1px solid var(--ca-border); border-radius: var(--ca-radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.ca-stat-row { display: flex; align-items: baseline; justify-content: space-between; }
+/* Moneda y medio de pago: pastillas, no `<select>`. Un desplegable nativo abre un popup
+   del sistema que tapa el ticket que estás cobrando, y en Android es un control distinto
+   en cada móvil. Con dos o tres opciones se ven todas, se sabe cuál está puesta sin abrir
+   nada y se cambia de un toque. */
+.ca-segmento {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--ca-surface-2); border-radius: var(--ca-radius-sm);
+}
+.ca-seg-btn {
+  flex: 1; min-width: 0; min-height: 38px;
+  padding: 8px 6px; border: none; border-radius: 7px;
+  background: none; color: var(--ca-muted);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ca-seg-btn.activo { background: var(--ca-surface); color: var(--ca-text); box-shadow: var(--ca-elev); }
+
+/* Calculadora de cambio: lo que el cajero hace de cabeza en cada venta en efectivo. */
+.ca-cambio { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--ca-border); }
+.ca-cambio-atajos { display: flex; gap: 6px; flex-wrap: wrap; }
+.ca-cambio-atajos .ca-btn { flex: 1; min-width: 68px; }
+.ca-cambio-imp { font-size: 22px; font-weight: 800; color: var(--ca-money); font-variant-numeric: tabular-nums; }
+.ca-cambio-imp.falta { color: var(--ca-danger); font-size: 16px; }
+
+.ca-recti-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: var(--ca-radius-sm); background: var(--ca-warn-bg); color: var(--ca-warn); font-size: 13px; font-weight: 600; }
+.ca-recti-cancel { min-height: 32px; border: none; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+
+/* ── Paneles (turno / ventas / sincronizar) ────────────────────────────────── */
+/* `max-width` + centrado: sin él, en un portátil los paneles se estiraban de borde a
+   borde y cada botón medía dos mil píxeles. Una caja se lee en columna, la pantalla dé
+   lo que dé. */
+.ca-panel { flex: 1; overflow-y: auto; padding: 14px 16px calc(20px + var(--ca-seguro-abajo)); display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 680px; margin-inline: auto; }
+
+/* Acciones secundarias en rejilla: en móvil una columna, en cuanto hay sitio dos. Cinco
+   botones idénticos a todo lo ancho no son un menú, son una lista de la compra. */
+.ca-acciones { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 520px) { .ca-acciones { grid-template-columns: 1fr 1fr; } }
+
+/* Estado de la sincronización: el titular dice si queda algo, el desglose dice qué. */
+/* La marca es un semáforo, no un contador: ✓ cuando está todo arriba, punto ámbar cuando
+   queda algo. Era una cifra de 48px con el total de «cosas», y ese total sumaba ventas con
+   cierres — un número que no significaba nada por sí solo y que obligaba a leer la lista. */
+.ca-card.ca-sync-estado { align-items: stretch; text-align: left; gap: 10px; }
+.ca-sync-cabecera { display: flex; align-items: center; gap: 10px; }
+.ca-sync-marca {
+  flex: 0 0 auto; width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--ca-primary-soft); color: var(--ca-money);
+  font-size: 16px; font-weight: 800; line-height: 1;
+}
+.ca-card.ca-sync-estado.pendiente .ca-sync-marca { background: var(--ca-warn-bg); }
+.ca-card.ca-sync-estado.pendiente .ca-sync-marca::after {
+  content: ''; width: 10px; height: 10px; border-radius: 999px; background: var(--ca-warn);
+}
+.ca-sync-titulo { font-size: 16px; font-weight: 700; min-width: 0; }
+/* Lo que Claux rechazó: dinero que el móvil tiene y la contabilidad no. Va en rojo y no
+   en ámbar a propósito — no es «queda algo por subir», es «esto no ha entrado». */
+/* Sin exigir `.ca-card`: el mismo aviso se usa también sobre `.ca-gate-card`, en la
+   pantalla de abrir turno. Va después de las dos en la hoja, así que gana por orden. */
+.ca-sync-rechazo {
+  align-items: stretch; text-align: left; gap: 8px;
+  background: var(--ca-danger-bg); border-color: var(--ca-danger);
+}
+.ca-sync-rechazo .ca-sync-titulo { color: var(--ca-danger); }
+.ca-sync-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ca-sync-lista li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: var(--ca-radius-sm); background: var(--ca-surface-2);
+  font-size: 14px; font-weight: 600;
+}
+
+/* Vista previa del resumen que se comparte: texto tal cual se va a mandar. */
+.ca-resumen {
+  margin: 0; padding: 12px; border-radius: var(--ca-radius-sm);
+  background: var(--ca-surface-2); color: var(--ca-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 36vh; overflow-y: auto;
+}
+.ca-panel-title { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ca-faint); }
+.ca-card { background: var(--ca-surface); border: 1px solid var(--ca-border); border-radius: var(--ca-radius); box-shadow: var(--ca-elev); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.ca-stat-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .ca-stat-big { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.ca-muted { color: var(--ca-muted); font-size: 14px; }
+.ca-muted { color: var(--ca-muted); font-size: 14px; margin: 0; }
 
-/* Inputs / botones */
-.ca-field { display: flex; flex-direction: column; gap: 5px; }
-.ca-label { font-size: 13px; color: var(--ca-muted); }
-.ca-input, .ca-select { width: 100%; padding: 12px 14px; border-radius: var(--ca-radius); border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; }
-.ca-input:focus, .ca-select:focus { outline: none; border-color: var(--ca-primary); }
-.ca-btn { padding: 13px 16px; border-radius: var(--ca-radius); border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text); font: inherit; font-weight: 600; cursor: pointer; }
-.ca-btn:active { transform: scale(.99); }
-.ca-btn:disabled { opacity: .5; }
+/* ── Formularios y botones ─────────────────────────────────────────────────── */
+.ca-field { display: flex; flex-direction: column; gap: 6px; }
+.ca-label { font-size: 13px; font-weight: 600; color: var(--ca-muted); }
+.ca-input {
+  width: 100%; min-height: var(--ca-tap);
+  padding: 11px 13px; border-radius: var(--ca-radius-sm);
+  border: 1px solid var(--ca-border); background: var(--ca-surface);
+  color: var(--ca-text); font: inherit;
+}
+.ca-input:focus { outline: none; border-color: var(--ca-primary); box-shadow: 0 0 0 3px var(--ca-primary-soft); }
+.ca-input::placeholder { color: var(--ca-faint); }
+
+.ca-btn {
+  min-height: var(--ca-tap);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 11px 16px; border-radius: var(--ca-radius-sm);
+  border: 1px solid var(--ca-border); background: var(--ca-surface); color: var(--ca-text);
+  font: inherit; font-weight: 600; cursor: pointer;
+  transition: transform .06s, background .12s;
+}
+.ca-btn:active { transform: scale(.985); background: var(--ca-surface-2); }
+.ca-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ca-btn-primary { background: var(--ca-primary); border-color: var(--ca-primary); color: var(--ca-primary-ink); }
-.ca-btn-lg { padding: 16px; font-size: 17px; font-weight: 700; }
+.ca-btn-primary:active { background: var(--ca-primary-hover); }
+.ca-btn-lg { padding: 15px 18px; font-size: 17px; font-weight: 700; }
 .ca-btn-block { width: 100%; }
-.ca-btn-danger { color: var(--ca-danger); }
-.ca-cobrar { width: 100%; padding: 16px; border-radius: var(--ca-radius); border: none; background: var(--ca-primary); color: var(--ca-primary-ink); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
-.ca-cobrar:disabled { opacity: .4; }
+.ca-btn-sm { min-height: 36px; padding: 7px 12px; font-size: 13px; }
+.ca-btn-danger { color: var(--ca-danger); border-color: var(--ca-border); }
 
-/* ── Nav inferior ── */
-.ca-nav { display: flex; background: var(--ca-surface); border-top: 1px solid var(--ca-border); }
-.ca-nav-btn { flex: 1; background: none; border: none; color: var(--ca-muted); font: inherit; font-size: 12px; font-weight: 600; padding: 10px 4px 12px; cursor: pointer; position: relative; }
-.ca-nav-btn.active { color: var(--ca-primary); }
-.ca-nav-badge { position: absolute; top: 4px; left: 50%; margin-left: 8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ca-danger); color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+/* Cobrar: el botón más grande de la app, y a propósito. */
+.ca-cobrar {
+  width: 100%; min-height: 56px; padding: 16px;
+  border-radius: var(--ca-radius); border: none;
+  background: var(--ca-primary); color: var(--ca-primary-ink);
+  font: inherit; font-size: 18px; font-weight: 800; letter-spacing: -.01em;
+  cursor: pointer; transition: transform .06s, background .12s;
+}
+.ca-cobrar:active { transform: scale(.99); background: var(--ca-primary-hover); }
+.ca-cobrar:disabled { opacity: .4; cursor: not-allowed; }
 
-/* ── Producto / línea sin precio en la moneda actual ── */
-.ca-prod:disabled { opacity: .55; cursor: not-allowed; }
-.ca-prod-price.miss, .ca-tick-unit.miss { color: var(--ca-danger); font-weight: 600; }
+/* ── Barra inferior ───────────────────────────────────────────────────────── */
+.ca-nav {
+  display: flex;
+  background: var(--ca-surface);
+  border-top: 1px solid var(--ca-border);
+  padding-bottom: var(--ca-seguro-abajo);
+}
+.ca-nav-btn {
+  flex: 1; min-height: var(--ca-tap);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: none; border: none; border-top: 2px solid transparent;
+  color: var(--ca-faint); font: inherit; font-size: 12px; font-weight: 600;
+  padding: 10px 4px; cursor: pointer;
+}
+.ca-nav-btn.active { color: var(--ca-primary); border-top-color: var(--ca-primary); }
+/* Un PUNTO en línea, detrás de la palabra. Antes fue un contador `position:absolute` con un
+   `left:50%` calculado sobre el botón entero, así que al ensancharse —escritorio, o una
+   etiqueta larga como «Sincronizar»— el número aterrizaba encima del texto. Y el número
+   sobraba: en una pestaña solo cabe la respuesta a «¿queda algo?»; el cuánto está dentro. */
+.ca-nav-badge {
+  flex: 0 0 auto;
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--ca-danger);
+}
 
-/* ── Banner de rectificación (pie del ticket) ── */
-.ca-recti-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 10px; background: #fdf0d5; color: var(--ca-warn); font-size: 13px; font-weight: 600; }
-.ca-recti-cancel { border: none; background: none; color: var(--ca-warn); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
-
-/* ── Ventas del día (operaciones + rectificar) ── */
-.ca-op { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--ca-surface); border: 1px solid var(--ca-border); border-radius: var(--ca-radius); padding: 12px 14px; }
+/* ── Ventas del día ───────────────────────────────────────────────────────── */
+.ca-op { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--ca-surface); border: 1px solid var(--ca-border); border-radius: var(--ca-radius); box-shadow: var(--ca-elev); padding: 12px 14px; }
 .ca-op.anulada { opacity: .6; }
 .ca-op.anulada .ca-op-total { text-decoration: line-through; }
 .ca-op-info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -137,14 +558,94 @@
 .ca-op-desc { color: var(--ca-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ca-op-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .ca-op-total { font-weight: 800; color: var(--ca-money); font-variant-numeric: tabular-nums; }
-.ca-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-.ca-tag-anulada { background: #fde8e8; color: var(--ca-danger); }
-.ca-tag-recti { background: var(--ca-primary-soft); color: var(--ca-money); }
-.ca-btn-sm { padding: 7px 12px; font-size: 13px; border-radius: 9px; }
+.ca-op-btns { display: flex; gap: 6px; }
+/* ── Ventas del día: un bloque por turno, y dentro una tabla ─────────────────
+   La lista NO crece (solo el día en curso), así que una tabla se barre mejor que una
+   pila de tarjetas. El bloque por turno es lo que explica por qué hay o no acciones:
+   rectificar solo vale dentro del turno abierto. */
+.ca-card.ca-turno-bloque { align-items: stretch; text-align: left; gap: 8px; }
+.ca-turno-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* `table-layout: fixed` NO es opcional: sin él, una venta con ocho artículos no cabe en su
+   celda y estira la tabla —y con ella el panel— fuera de la pantalla. Con anchos fijos, la
+   columna del detalle se queda con lo que sobra y el texto se recorta.
+   Y NADA de `display:flex` en un `<td>`: le quita el `table-cell` y descuadra la fila
+   entera (es el mismo gotcha del `cell-clamp` del design system). El flex va dentro. */
+.ca-tabla { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.ca-tabla td { padding: 10px 6px; border-top: 1px solid var(--ca-border); vertical-align: middle; overflow: hidden; }
+.ca-tabla tr:first-child td { border-top: none; }
+.ca-tabla tr.anulada { opacity: .6; }
+.ca-tabla tr.anulada .ca-td-imp { text-decoration: line-through; }
+.ca-td-hora { width: 3.4rem; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; padding-left: 0; }
+.ca-td-imp  { width: 7rem; white-space: nowrap; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ca-td-acc  { width: 11.5rem; padding-right: 0; }
+.ca-td-det .ca-op-desc { display: block; }
+.ca-td-det .ca-tag { display: inline-block; margin-top: 4px; }
 
-/* ── Layout de caja real en pantallas anchas: productos | ticket ── */
-@media (min-width: 760px) {
+/* En móvil la fila se APILA: cuatro columnas en 360 px dejan la descripción en un hilo.
+   Aquí ya no es una tabla, así que el grid es libre. */
+@media (max-width: 560px) {
+  .ca-tabla, .ca-tabla tbody, .ca-tabla tr, .ca-tabla td { display: block; width: auto; }
+  .ca-tabla tr { border-top: 1px solid var(--ca-border); padding: 10px 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  .ca-tabla tr:first-child { border-top: none; }
+  .ca-tabla td { border-top: none; padding: 0; }
+  .ca-td-hora { grid-column: 1; width: auto; }
+  .ca-td-imp  { grid-column: 2; width: auto; text-align: right; }
+  .ca-td-det  { grid-column: 1 / -1; }
+  .ca-td-acc  { grid-column: 1 / -1; width: auto; }
+  .ca-td-acc:not(:empty) { margin-top: 8px; }
+}
+
+.ca-tag { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.ca-tag-anulada { background: var(--ca-danger-bg); color: var(--ca-danger); }
+.ca-tag-recti { background: var(--ca-primary-soft); color: var(--ca-money); }
+
+/* ── Arqueo ───────────────────────────────────────────────────────────────── */
+.ca-fondo-row { display: flex; align-items: center; gap: 8px; }
+.ca-fondo-cod { flex: 0 0 48px; font-size: 13px; font-weight: 700; color: var(--ca-muted); font-variant-numeric: tabular-nums; }
+.ca-arqueo-linea { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ca-muted); }
+.ca-arqueo-esperado { font-weight: 700; color: var(--ca-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ca-descuadre { font-size: 13px; font-weight: 700; color: var(--ca-warn); }
+.ca-descuadre.ok { color: var(--ca-money); }
+.ca-mov-imp { font-weight: 700; color: var(--ca-danger); font-variant-numeric: tabular-nums; }
+
+/* ── Diálogos propios (nada de confirm() del navegador) ───────────────────── */
+.ca-dialogo {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0; background: rgb(10 12 14 / .55);
+}
+.ca-dialogo-card {
+  background: var(--ca-surface); color: var(--ca-text);
+  border-radius: 20px 20px 0 0; box-shadow: var(--ca-elev-alta);
+  padding: 22px 20px calc(22px + var(--ca-seguro-abajo));
+  max-width: 460px; width: 100%; max-height: 88vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+/* ── Pantallas anchas: catálogo y ticket lado a lado ──────────────────────── */
+/* 720px cubre una tablet en vertical y un móvil grande EN HORIZONTAL, que es como se
+   monta media caja de mostrador. Ahí el ticket deja de ser hoja: está siempre abierto. */
+@media (min-width: 720px) {
   .ca-pos { flex-direction: row; }
-  .ca-productos { flex: 1.6; }
-  .ca-ticket { max-height: none; width: 380px; flex: 0 0 380px; border-top: none; border-left: 1px solid var(--ca-border); }
+  .ca-productos { flex: 1.7; padding-bottom: 20px; }
+  .ca-ticket {
+    width: 360px; flex: 0 0 360px; max-height: none;
+    border-top: none; border-left: 1px solid var(--ca-border);
+    border-radius: 0; box-shadow: none;
+  }
+  /* Mismo selector que la regla que la pliega (`:not(.abierta)`), no uno más flojo:
+     con `.ca-ticket .ca-ticket-items` perdía por especificidad y el ticket se quedaba
+     plegado en ESCRITORIO al tocar la cabecera. Aquí gana por orden. */
+  .ca-ticket:not(.abierta) .ca-ticket-items { display: flex; }
+  .ca-ticket-head { padding-top: 12px; cursor: default; }
+  .ca-ticket-head::before { display: none; }
+  .ca-prod-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .ca-dialogo { align-items: center; padding: 20px; }
+  .ca-dialogo-card { border-radius: 20px; }
+}
+
+/* Móvil en horizontal y bajito: la hoja del ticket no puede comerse la pantalla. */
+@media (max-height: 480px) {
+  .ca-ticket { max-height: 60vh; }
+  .ca-prod { min-height: 64px; }
 }

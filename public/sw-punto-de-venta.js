@@ -6,9 +6,13 @@
 // /punto-de-venta/api/* (seed/sync) NUNCA se cachean: siempre a red (o fallan y la app
 // guarda local para reintentar).
 
-// v3: la ruta cambió de /caja a /punto-de-venta. Subir la versión invalida la caché
-// vieja, que apuntaba a URLs que ya no existen.
-const CACHE = 'claux-punto-venta-v3'
+// v4: el registro pasa a scope `/punto-de-venta` SIN barra final. Con la barra, la
+// `start_url` de la app instalada (`/punto-de-venta?c=CAJ-…`) quedaba FUERA del ámbito —el
+// ámbito es un prefijo de cadena— y este service worker no llegaba a ejecutarse para ella:
+// el icono de la pantalla de inicio, que es el único camino real de uso, se quedaba sin la
+// caché que hace de esto una caja offline. Se sube la versión para tirar la caché anterior,
+// que se llenó bajo el ámbito equivocado.
+const CACHE = 'claux-punto-venta-v4'
 
 self.addEventListener('install', () => self.skipWaiting())
 
