@@ -72,14 +72,24 @@ Un gasto se identifica por **categoría** (y de ahí sale su etiqueta); un cobro
 
 1. El punto de venta (`/punto-de-venta`) es una **PWA que funciona sin conexión**: vende,
    cobra y cierra contra su copia local.
-2. Al sincronizar sube tickets y cierres. La caja **siempre guarda su propio detalle**
-   (`caja_tickets`), tenga el cliente los módulos que tenga.
-3. Los efectos fuera de la caja son **resúmenes por cierre**, y solo si el módulo está
-   contratado: un **INGRESO de tesorería por moneda** (`origen='CAJA'`) y un **cobro
-   resumen** en `gastos_cobros` (`origen_tipo='CIERRE_CAJA'`); con inventario, una
-   **salida por producto**.
-4. Idempotencia en dos niveles: `ticket_uuid` para el detalle y unos flags en el cierre
-   para los resúmenes. Re-sincronizar o volver a subir el archivo no duplica nada.
+2. Al sincronizar sube tickets, movimientos de efectivo y turnos — **incluido el turno
+   ABIERTO**. La caja **siempre guarda su propio detalle** (`caja_tickets`), tenga el
+   cliente los módulos que tenga.
+3. **Lo que lleva el dinero fuera de la caja es el CIERRE**, y solo si el módulo está
+   contratado: un **INGRESO de tesorería por moneda y destino** (`origen='CAJA'`; efectivo
+   y transferencia pueden ir a cuentas distintas) y un **cobro resumen** en `gastos_cobros`
+   (`origen_tipo='CIERRE_CAJA'`, uno por moneda); con inventario, una **salida por producto**.
+   Se fecha en el **día del negocio** del cierre, no en UTC.
+4. Idempotencia en tres niveles: `ticket_uuid` y `movimiento_uuid` para el detalle, y los
+   **movimientos reales** para los resúmenes. Re-sincronizar o volver a subir el archivo no
+   duplica nada.
+
+**Los dos caminos.** El normal es el de arriba. El de **rescate** existe porque el paso 3
+depende de que alguien cierre el turno, y eso puede no pasar nunca (se fue la luz, el móvil
+se perdió): en Cierres → «Sin contabilizar» el dueño ve esas ventas con su importe y las
+cierra desde el portal, **con la fecha del último ticket**; y un cierre al que le faltó la
+cuenta de una moneda se recupera con «Contabilizar». Los dos usan el mismo núcleo
+idempotente que la ingesta, y la campana avisa de los dos casos.
 
 **Para analizar:** ese cobro resumen **nace liquidado** —su dinero ya entró por el
 movimiento del cierre—, así que el cálculo normal de saldo daría «pendiente» para siempre.
