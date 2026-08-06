@@ -34,6 +34,69 @@ export function horaEnTz(iso: string, tz: string = TZ_NEGOCIO): string {
   }).format(new Date(iso))
 }
 
+/**
+ * Fecha del calendario del NEGOCIO (YYYY-MM-DD) de un instante ISO.
+ *
+ * Es el compañero de `hoyEnTz` para comparar: `fechaEnTz(t.fecha) === hoyEnTz()`.
+ * **Nunca `iso.slice(0, 10)`** — eso es la fecha UTC, y Cuba va cuatro o cinco horas
+ * por detrás, así que a partir de las 20:00 hora local devuelve **el día siguiente**:
+ * una venta de la cena desaparecía de «las de hoy» en el mismo momento de cobrarla.
+ */
+export function fechaEnTz(iso: string, tz: string = TZ_NEGOCIO): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(iso))
+}
+
+/**
+ * Días de CALENDARIO del negocio transcurridos desde `iso` (por defecto, hasta hoy).
+ *
+ * Cuenta cambios de fecha, no múltiplos de 24 h: un turno abierto anoche a las 23:00 y
+ * mirado esta mañana a las 8:00 lleva **1 día** («desde ayer»), que es lo que diría
+ * cualquiera, aunque hayan pasado nueve horas. Para «lleva X horas» está `horasDesde`.
+ */
+export function diasDeCalendario(iso: string, hastaISO?: string, tz: string = TZ_NEGOCIO): number {
+  const dia = (f: string) => {
+    const [a, m, d] = f.split('-').map(Number)
+    return Date.UTC(a, m - 1, d)
+  }
+  const desde = dia(fechaEnTz(iso, tz))
+  const hasta = dia(hastaISO ? fechaEnTz(hastaISO, tz) : hoyEnTz(tz))
+  return Math.round((hasta - desde) / 86_400_000)
+}
+
+/** Minutos de desfase de una zona en un instante dado (Cuba: −240 en verano, −300 en invierno). */
+function offsetMinutos(instante: Date, tz: string): number {
+  const parte = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+    .formatToParts(instante).find(p => p.type === 'timeZoneName')?.value ?? 'GMT+00:00'
+  const m = parte.match(/GMT([+-])(\d{2}):(\d{2})/)
+  if (!m) return 0
+  return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]))
+}
+
+/**
+ * Instante ISO (UTC) que corresponde a una hora del calendario del NEGOCIO.
+ *
+ * Es lo que hace falta para filtrar una columna `timestamptz` por días del negocio: una
+ * fecha desnuda (`'2026-08-06T00:00:00'`) la interpreta Postgres en SU zona —UTC—, así que
+ * «hoy» acababa siendo el día UTC y se comía las últimas cuatro o cinco horas de la jornada
+ * cubana, que en un restaurante son las de más venta.
+ *
+ * El desfase se resuelve DOS veces —la segunda ya sobre el instante corregido— porque Cuba
+ * cambia de horario y en los dos días del año en que eso ocurre la primera lectura puede
+ * caer al otro lado del salto.
+ */
+export function instanteEnTz(fecha: string, hora = '00:00:00.000', tz: string = TZ_NEGOCIO): string {
+  const tentativo = new Date(`${fecha}T${hora}Z`)
+  const primero   = new Date(tentativo.getTime() - offsetMinutos(tentativo, tz) * 60_000)
+  return new Date(tentativo.getTime() - offsetMinutos(primero, tz) * 60_000).toISOString()
+}
+
+/** Los dos extremos de un día del negocio, listos para un `gte`/`lte` sobre `timestamptz`. */
+export function diaDelNegocio(fecha: string, tz: string = TZ_NEGOCIO): { inicio: string; fin: string } {
+  return { inicio: instanteEnTz(fecha, '00:00:00.000', tz), fin: instanteEnTz(fecha, '23:59:59.999', tz) }
+}
+
 export interface RelojNegocio {
   /** Fecha del calendario del negocio (YYYY-MM-DD). */
   fecha: string

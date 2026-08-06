@@ -45,6 +45,14 @@ const ALLOWLIST = {
   // acciones que SÍ escriben datos del cliente (crear/validar/aplicar/deshacer
   // lote) llevan además `puedeEditarAlgunModulo` de la entidad destino.
   'importar.ts': ['guardarPlantillaImport', 'eliminarPlantillaImport'],
+  // LECTURA pura que el detector marca por el `.rpc(`: `caja_pendientes_contabilizar` es
+  // una función `stable` que solo agrega (qué ventas del TPV no han llegado a los libros).
+  // Es un anti-join, y por eso vive en la base y no en el código: hacerlo desde Next
+  // obligaría a traerse todos los tickets del cliente, o a acotar por fecha y esconder
+  // dinero viejo. El candado lo pone la página con `requireModulo('caja')`, como el resto
+  // de lecturas del portal. Lo que SÍ escribe (cerrarYContabilizar, reintentarContabilizar)
+  // lleva `puedeEditarModulo('caja')`.
+  'caja.ts':     ['listarSinContabilizar'],
 }
 
 const WRITE = /\.(insert|update|delete|upsert)\s*\(|\.rpc\s*\(/

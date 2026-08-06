@@ -14,7 +14,7 @@ import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { historialPorAcuerdo } from '@/lib/facturacion-suscripciones'
 import { valorarPorMoneda } from '@/lib/inventario/valoracion'
 import { consumoDiario, diasDeCobertura, DIAS_VENTANA, type MovimientoConsumo } from '@/lib/inventario/consumo'
-import { hoyEnTz, ahoraEnTz, sumarDias, TZ_NEGOCIO } from '@/lib/fecha-tz'
+import { hoyEnTz, ahoraEnTz, sumarDias, diaDelNegocio, TZ_NEGOCIO } from '@/lib/fecha-tz'
 import { diasDeTasa } from '@/lib/tasas-mensaje'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
@@ -789,15 +789,17 @@ async function resumenPuntoVenta(db: Db, cid: string, hoy: string, empresaIds: s
   const [cajasRes, tksRes, sesRes] = await Promise.all([
     db.from('cajas').select('caja_id, nombre, last_sync_at')
       .eq('client_id', cid).eq('activa', true).order('nombre'),
-    // Ventas de hoy: los ANULADO (rectificados) fuera, igual que en los cierres.
+    // Ventas de hoy: los ANULADO (rectificados) fuera, igual que en los cierres. El día es
+    // el del NEGOCIO — con la fecha desnuda, Postgres la lee en UTC y «hoy» empezaba a las
+    // 20:00 de ayer hora de Cuba, así que el widget mezclaba dos jornadas.
     db.from('caja_tickets').select('caja_id, moneda, total, estado')
       .eq('client_id', cid).in('empresa_id', empresaIds)
-      .gte('fecha', `${hoy}T00:00:00`).lte('fecha', `${hoy}T23:59:59`),
+      .gte('fecha', diaDelNegocio(hoy).inicio).lte('fecha', diaDelNegocio(hoy).fin),
     // Turnos abiertos: solo importan los de un día ANTERIOR. Uno abierto hoy es que
     // están vendiendo ahora; uno de ayer es que se olvidaron de cerrar, y sin cierre
     // no hay ingreso en Tesorería ni salida de stock — la contabilidad se queda quieta.
     db.from('caja_sesiones').select('caja_id, abierta_at')
-      .eq('client_id', cid).eq('estado', 'ABIERTA').lt('abierta_at', `${hoy}T00:00:00`),
+      .eq('client_id', cid).eq('estado', 'ABIERTA').lt('abierta_at', diaDelNegocio(hoy).inicio),
   ])
 
   const cajas = (cajasRes.data ?? []) as { caja_id: string; nombre: string; last_sync_at: string | null }[]

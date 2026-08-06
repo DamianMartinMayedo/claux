@@ -10,9 +10,10 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
-import { ingestarLote, type LotePayload, type CajaRow } from '@/lib/caja/ingesta'
+import { ingestarLote, contabilizarCierre, type LotePayload, type CajaRow } from '@/lib/caja/ingesta'
 import { tieneModulo }      from '@/lib/modulos'
 import { LIMITE_LISTADO, limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
+import { diaDelNegocio } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ export interface Caja {
   nombre:            string
   almacen_id:        string | null
   cuentas_moneda:    Record<string, string>
+  /** Moneda → cuenta donde entra lo cobrado por transferencia (mig. 172). Opcional. */
+  cuentas_transferencia: Record<string, string>
   monedas_aceptadas: string[]
   tipos_catalogo:    string
   sync_token:        string
@@ -107,6 +110,18 @@ async function empresaIds(): Promise<string[]> {
   return empresas.map(e => e.empresa_id)
 }
 
+/** Todo lo que toca contabilizar un cierre: su detalle y los dos módulos que recibe. Sin
+ *  `export` (en un fichero `'use server'` solo se exportan funciones async). */
+function revalidarCaja(caja_id?: string) {
+  revalidatePath('/portal/caja')
+  revalidatePath('/portal/caja/operaciones')
+  revalidatePath('/portal/caja/cierres')
+  revalidatePath('/portal/tesoreria')
+  revalidatePath('/portal/gastos')
+  revalidatePath('/portal/inventario')
+  if (caja_id) revalidatePath(`/portal/caja/${caja_id}`)
+}
+
 // ── Listar cajas (hub) ──────────────────────────────────────────────────────────
 
 export async function listarCajas(): Promise<Caja[]> {
@@ -119,6 +134,39 @@ export async function listarCajas(): Promise<Caja[]> {
     .in('empresa_id', ids.length ? ids : ['__none__'])
     .order('created_at', { ascending: false })
   return (data ?? []) as Caja[]
+}
+
+/**
+ * Qué le falta a cada punto para que su dinero llegue entero.
+ *
+ * Sin esto un punto mal configurado se ve **idéntico** a uno perfecto en el listado, y solo
+ * se descubre cuando el cierre no se puede contabilizar — o sea, cuando ya se vendió.
+ * Devuelve las monedas aceptadas sin caja de Tesorería y si le falta el almacén.
+ */
+export async function saludCajas(): Promise<Record<string, { monedasSinCuenta: string[]; sinAlmacen: boolean }>> {
+  const session = await getPortalSession()
+  if (!session) return {}
+  const db = createAdminClient()
+
+  const [cajasRes, cliRes] = await Promise.all([
+    db.from('cajas').select('caja_id, empresa_id, monedas_aceptadas, cuentas_moneda, almacen_id, activa')
+      .eq('client_id', session.client_id).eq('activa', true),
+    db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
+  ])
+  const modulos   = cliRes.data?.modulos_activos
+  const tieneBase = tieneModulo(modulos, 'base')
+  const tieneInv  = tieneModulo(modulos, 'inventario')
+
+  const out: Record<string, { monedasSinCuenta: string[]; sinAlmacen: boolean }> = {}
+  type Fila = { caja_id: string; monedas_aceptadas: string[] | null; cuentas_moneda: Record<string, string> | null; almacen_id: string | null }
+  for (const c of ((cajasRes.data ?? []) as Fila[])) {
+    const faltan = tieneBase
+      ? (c.monedas_aceptadas ?? []).filter(m => !c.cuentas_moneda?.[m])
+      : []
+    const sinAlmacen = tieneInv && !c.almacen_id
+    if (faltan.length || sinAlmacen) out[c.caja_id] = { monedasSinCuenta: faltan, sinAlmacen }
+  }
+  return out
 }
 
 // ── Crear caja ────────────────────────────────────────────────────────────────
@@ -137,10 +185,27 @@ export async function crearCaja(
     return { ok: false, error: 'Empresa no válida.' }
   }
 
-  // Monedas activas del cliente como aceptadas por defecto (se afinan en config).
-  const { data: mons } = await db.from('monedas')
-    .select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo')
-  const monedas = (mons ?? []).map((m: { codigo: string }) => m.codigo)
+  // **Un punto de venta no nace roto.** Antes se aceptaban TODAS las monedas activas con
+  // `cuentas_moneda` vacío: exactamente el estado que `guardarConfigCaja` se niega a
+  // guardar, solo que por la puerta de atrás y sin que el dueño pase nunca por esa
+  // pantalla. Vender así produce un cierre que no se puede contabilizar (le falta la caja
+  // de Tesorería de esa moneda) y hasta la Fase 2 no había forma de recuperarlo.
+  // Con Contabilidad se aceptan solo las monedas que YA tienen una cuenta en esta empresa;
+  // sin ella no hay nada que mapear y valen todas, como hasta ahora.
+  const [monsRes, cuentasRes] = await Promise.all([
+    db.from('monedas').select('codigo').eq('client_id', session.client_id).eq('activa', true).order('codigo'),
+    db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
+  ])
+  const activas = ((monsRes.data ?? []) as { codigo: string }[]).map(m => m.codigo)
+
+  let monedas = activas
+  if (tieneModulo(cuentasRes.data?.modulos_activos, 'base')) {
+    const { data: ctas } = await db.from('cuentas')
+      .select('moneda').eq('client_id', session.client_id).eq('empresa_id', empresa_id)
+      .eq('activa', true).eq('es_apertura', false)
+    const conCuenta = new Set(((ctas ?? []) as { moneda: string }[]).map(c => c.moneda))
+    monedas = activas.filter(m => conCuenta.has(m))
+  }
 
   const caja_id = generarCajaId()
   const { error } = await db.from('cajas').insert({
@@ -245,6 +310,7 @@ export async function guardarConfigCaja(
   cfg: {
     nombre: string; empresa_id?: string; almacen_id: string | null
     monedas_aceptadas: string[]; cuentas_moneda: Record<string, string>
+    cuentas_transferencia?: Record<string, string>
     tipos_catalogo?: string
   },
 ): Promise<{ ok: boolean; error?: string }> {
@@ -288,10 +354,17 @@ export async function guardarConfigCaja(
       .eq('es_apertura', false),   // una caja no puede depositar en la cuenta técnica
   ])
   const cuentasValidas = new Set((cuentasEmpresa.data ?? []).map((c: { cuenta_id: string }) => c.cuenta_id))
-  const cuentasFinal: Record<string, string> = {}
-  for (const [moneda, cuentaId] of Object.entries(cfg.cuentas_moneda ?? {})) {
-    if (cuentasValidas.has(cuentaId)) cuentasFinal[moneda] = cuentaId
+  const soloDeLaEmpresa = (mapa: Record<string, string> | undefined) => {
+    const out: Record<string, string> = {}
+    for (const [moneda, cuentaId] of Object.entries(mapa ?? {})) {
+      if (cuentasValidas.has(cuentaId)) out[moneda] = cuentaId
+    }
+    return out
   }
+  const cuentasFinal = soloDeLaEmpresa(cfg.cuentas_moneda)
+  // Misma guardia para la cuenta de transferencias: es una invariante del dato (un punto
+  // no puede depositar en la cuenta de otra empresa), no una validación del formulario.
+  const transfFinal  = soloDeLaEmpresa(cfg.cuentas_transferencia)
 
   const { error } = await db.from('cajas').update({
     nombre:            cfg.nombre.trim(),
@@ -299,6 +372,7 @@ export async function guardarConfigCaja(
     almacen_id:        almOk.data ? cfg.almacen_id : null,
     monedas_aceptadas: cfg.monedas_aceptadas ?? [],
     cuentas_moneda:    cuentasFinal,
+    cuentas_transferencia: transfFinal,
     // Guardia de servidor: la columna tiene CHECK, y un valor inventado reventaría el
     // guardado entero en vez de ignorarse.
     tipos_catalogo:    (TIPOS_CATALOGO as readonly string[]).includes(cfg.tipos_catalogo ?? '') ? cfg.tipos_catalogo : 'PRODUCTO',
@@ -358,11 +432,12 @@ export async function listarOperaciones(
   filtro?: FiltroListado,
 ): Promise<{
   tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string>
+  lineasPorTicket: Record<string, { descripcion: string; cantidad: number; precio_unitario: number }[]>
   rango: { desde: string; hasta: string }; hay_mas: boolean; total: number; limite: number
 }> {
   const session = await getPortalSession()
   const vacio = { desde: '', hasta: '' }
-  if (!session) return { tickets: [], stock: [], cajaNombres: {}, rango: vacio, hay_mas: false, total: 0, limite: LIMITE_LISTADO }
+  if (!session) return { tickets: [], stock: [], cajaNombres: {}, lineasPorTicket: {}, rango: vacio, hay_mas: false, total: 0, limite: LIMITE_LISTADO }
   const db  = createAdminClient()
   const ids = await empresaIds()
   const scope = ids.length ? ids : ['__none__']
@@ -376,9 +451,12 @@ export async function listarOperaciones(
     .select('ticket_uuid, caja_id, fecha, moneda, total, medio_pago, sesion_uuid, estado', { count: 'exact' })
     .eq('client_id', session.client_id).in('empresa_id', scope)
   // `fecha` es un timestamp: el «hasta» incluye el día entero, o las ventas de hoy se
-  // quedarían fuera de un rango que dice llegar hasta hoy.
-  if (desde) tkQuery = tkQuery.gte('fecha', desde)
-  if (hasta) tkQuery = tkQuery.lte('fecha', `${hasta}T23:59:59.999`)
+  // quedarían fuera de un rango que dice llegar hasta hoy. Y los dos extremos van en el
+  // calendario del NEGOCIO: con una fecha desnuda Postgres las lee en UTC, así que el rango
+  // se comía las ventas de después de las 20:00 hora de Cuba del último día — las de más
+  // venta en un restaurante.
+  if (desde) tkQuery = tkQuery.gte('fecha', diaDelNegocio(desde).inicio)
+  if (hasta) tkQuery = tkQuery.lte('fecha', diaDelNegocio(hasta).fin)
 
   const [tkRes, cajasRes] = await Promise.all([
     tkQuery.order('fecha', { ascending: false }).limit(limite),
@@ -393,10 +471,20 @@ export async function listarOperaciones(
   // tickets ANULADO (rectificados: no movieron stock) y se ordena por fecha desc.
   const uuids = tickets.map(t => t.ticket_uuid)
   let stock: MovimientoStock[] = []
+  let lineasPorTicket: Record<string, { descripcion: string; cantidad: number; precio_unitario: number }[]> = {}
   if (uuids.length) {
     const { data: lineas } = await db.from('caja_ticket_lineas')
       .select('ticket_uuid, producto_id, descripcion, cantidad, precio_unitario')
       .in('ticket_uuid', uuids)
+
+    // Las mismas líneas, agrupadas por ticket: es lo que permite DESPLEGAR una venta y ver
+    // qué llevaba sin irse a la otra pestaña a cruzarlo a ojo.
+    lineasPorTicket = {}
+    for (const l of ((lineas ?? []) as { ticket_uuid: string; descripcion: string; cantidad: number; precio_unitario: number }[])) {
+      ;(lineasPorTicket[l.ticket_uuid] ??= []).push({
+        descripcion: l.descripcion, cantidad: Number(l.cantidad), precio_unitario: Number(l.precio_unitario),
+      })
+    }
     const tkMap = new Map(tickets.map(t => [t.ticket_uuid, t]))
     stock = ((lineas ?? []) as Omit<MovimientoStock, 'fecha' | 'caja_id'>[])
       .filter(l => (tkMap.get(l.ticket_uuid)?.estado ?? 'VIGENTE') !== 'ANULADO')
@@ -408,7 +496,7 @@ export async function listarOperaciones(
   }
 
   return {
-    tickets, stock, cajaNombres,
+    tickets, stock, cajaNombres, lineasPorTicket,
     rango: { desde, hasta },
     hay_mas: tickets.length >= limite,
     total:   tkRes.count ?? tickets.length,
@@ -437,6 +525,12 @@ export async function listarCierres(
     db.from('caja_sesiones')
       .select('sesion_uuid, caja_id, abierta_at, cerrada_at, estado, total_por_moneda, efectivo_contado, posted_at, tesoreria_movs, stock_movs', { count: 'exact' })
       .eq('client_id', session.client_id).in('empresa_id', scope)
+      // **Solo los CERRADOS.** Desde que el dispositivo sube también el turno ABIERTO —lo
+      // que permite avisar de que lleva días sin cerrar y rescatarlo—, esta pantalla
+      // recibiría turnos en curso con la fecha de cierre vacía, sin totales y con la
+      // contabilidad en «Pendiente»: indistinguibles de un cierre que falló. Un turno
+      // abierto no es un cierre; su sitio es el panel de rescate.
+      .eq('estado', 'CERRADA')
       .order('cerrada_at', { ascending: false, nullsFirst: false }).limit(limite),
     db.from('cajas').select('caja_id, nombre').eq('client_id', session.client_id),
   ])
@@ -450,6 +544,145 @@ export async function listarCierres(
     total:   seRes.count ?? cierres.length,
     limite,
   }
+}
+
+// ── Rescate: las ventas que no llegaron a la contabilidad ───────────────────────
+
+/**
+ * Un grupo de ventas cuyo turno no se ha cerrado, y por tanto **no está en los libros**.
+ * `motivo`: `ABIERTA` (el turno existe y sigue abierto) · `SIN_SESION` (su turno nunca
+ * llegó — histórico anterior a que el dispositivo subiera la sesión abierta).
+ */
+export interface PendienteContabilizar {
+  caja_id:     string
+  sesion_uuid: string
+  motivo:      'ABIERTA' | 'SIN_SESION'
+  desde:       string
+  hasta:       string
+  tickets:     number
+  totales:     Record<string, number>
+}
+
+/** LECTURA: sin candado de escritura, el de la página basta. */
+export async function listarSinContabilizar(): Promise<{
+  grupos: PendienteContabilizar[]; cajaNombres: Record<string, string>
+}> {
+  const session = await getPortalSession()
+  if (!session) return { grupos: [], cajaNombres: {} }
+  const db  = createAdminClient()
+  const ids = await empresaIds()
+  if (!ids.length) return { grupos: [], cajaNombres: {} }
+
+  const [rpc, cajasRes] = await Promise.all([
+    db.rpc('caja_pendientes_contabilizar', { p_client_id: session.client_id, p_empresa_ids: ids }),
+    db.from('cajas').select('caja_id, nombre').eq('client_id', session.client_id),
+  ])
+  // El error NO se traga: un `?? []` aquí diría «no falta nada», que es la conclusión
+  // contraria y la más cara de todas. Es la trampa que ya dejó ciega la facturación manual.
+  if (rpc.error) throw new Error(`No se pudo calcular lo pendiente: ${rpc.error.message}`)
+
+  const cajaNombres: Record<string, string> = {}
+  for (const c of (cajasRes.data ?? []) as { caja_id: string; nombre: string }[]) cajaNombres[c.caja_id] = c.nombre
+
+  return {
+    grupos: ((rpc.data ?? []) as PendienteContabilizar[]).map(g => ({ ...g, totales: g.totales ?? {} })),
+    cajaNombres,
+  }
+}
+
+/**
+ * Cierra un turno olvidado DESDE EL PORTAL y lo contabiliza.
+ *
+ * Red de seguridad, no camino normal — el gemelo de «Recalcular» en Inventario. El cierre se
+ * fecha con el **último ticket**, nunca «hoy»: el dinero es del día en que se vendió, y
+ * fecharlo hoy lo metería en el mes equivocado.
+ */
+export async function cerrarYContabilizar(
+  caja_id: string, sesion_uuid: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { data: caja } = await db.from('cajas')
+    .select('caja_id, client_id, empresa_id, nombre, almacen_id, cuentas_moneda, cuentas_transferencia, monedas_aceptadas, tipos_catalogo, activa')
+    .eq('caja_id', caja_id).eq('client_id', session.client_id).maybeSingle()
+  if (!caja) return { ok: false, error: 'Punto de venta no encontrado.' }
+
+  // Tickets sin `sesion_uuid` (histórico): la RPC los agrupa por caja y día con una clave
+  // sintética `SIN-TURNO-<caja>-<fecha>`. Adoptarlos es darles ese turno, y como la clave
+  // es estable, repetir la operación no crea un segundo turno ni mueve nada dos veces.
+  if (sesion_uuid.startsWith('SIN-TURNO-')) {
+    const dia = sesion_uuid.slice(-10)
+    const { error } = await db.rpc('caja_adoptar_tickets_sueltos', {
+      p_client_id: session.client_id, p_caja_id: caja_id, p_dia: dia, p_sesion_uuid: sesion_uuid,
+    })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  // Rango real de la jornada, leído de sus tickets.
+  const { data: tks } = await db.from('caja_tickets')
+    .select('fecha').eq('client_id', session.client_id).eq('sesion_uuid', sesion_uuid)
+    .order('fecha', { ascending: true })
+  const fechas = (tks ?? []) as { fecha: string }[]
+  if (!fechas.length) return { ok: false, error: 'Ese turno ya no tiene ventas que contabilizar.' }
+
+  const { error: sesErr } = await db.from('caja_sesiones').upsert({
+    sesion_uuid,
+    caja_id:         caja.caja_id,
+    client_id:       session.client_id,
+    empresa_id:      caja.empresa_id,
+    abierta_at:      fechas[0].fecha,
+    cerrada_at:      fechas[fechas.length - 1].fecha,
+    estado:          'CERRADA',
+    sincronizado_at: new Date().toISOString(),
+  }, { onConflict: 'sesion_uuid' })
+  if (sesErr) return { ok: false, error: sesErr.message }
+
+  try {
+    await contabilizarCierre(db, caja as CajaRow, sesion_uuid)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo contabilizar.' }
+  }
+
+  revalidarCaja(caja_id)
+  return { ok: true }
+}
+
+/**
+ * Reintenta contabilizar un cierre YA cerrado.
+ *
+ * Es la vuelta que faltaba: si una moneda no tenía su caja de Tesorería, el cierre se
+ * quedaba a medias, el badge decía «Falta CUP» y no había forma de arreglarlo — el
+ * dispositivo ya lo dio por enviado y no lo reenvía nunca. Idempotente: solo escribe lo que
+ * falte, así que pulsarlo dos veces no duplica nada.
+ */
+export async function reintentarContabilizar(
+  sesion_uuid: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { data: ses } = await db.from('caja_sesiones')
+    .select('caja_id').eq('sesion_uuid', sesion_uuid).eq('client_id', session.client_id).maybeSingle()
+  if (!ses) return { ok: false, error: 'Cierre no encontrado.' }
+
+  const { data: caja } = await db.from('cajas')
+    .select('caja_id, client_id, empresa_id, nombre, almacen_id, cuentas_moneda, cuentas_transferencia, monedas_aceptadas, tipos_catalogo, activa')
+    .eq('caja_id', ses.caja_id).eq('client_id', session.client_id).maybeSingle()
+  if (!caja) return { ok: false, error: 'Punto de venta no encontrado.' }
+
+  try {
+    await contabilizarCierre(db, caja as CajaRow, sesion_uuid)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo contabilizar.' }
+  }
+
+  revalidarCaja(ses.caja_id as string)
+  return { ok: true }
 }
 
 // ── Subir archivo para sincronizar (fallback sin conexión) ──────────────────────
@@ -472,7 +705,7 @@ export async function ingestarLoteArchivo(
 
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')
-    .select('caja_id, client_id, empresa_id, nombre, almacen_id, cuentas_moneda, monedas_aceptadas, tipos_catalogo, activa')
+    .select('caja_id, client_id, empresa_id, nombre, almacen_id, cuentas_moneda, cuentas_transferencia, monedas_aceptadas, tipos_catalogo, activa')
     .eq('caja_id', destino).eq('client_id', session.client_id).maybeSingle()
   if (!caja) return { ok: false, error: 'Punto de venta no encontrado.' }
 
