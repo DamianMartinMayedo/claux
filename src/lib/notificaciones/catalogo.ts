@@ -189,6 +189,36 @@ export const CATALOGO = {
     etiqueta: 'Caja abierta sin cerrar',
     descripcion: 'Una sesión de caja lleva demasiado tiempo abierta.',
   },
+  // Los tres de abajo cubren el mismo hueco desde tres momentos distintos: ANTES de
+  // vender (no hay caja de Tesorería asignada), DESPUÉS de vender y sin cerrar (el
+  // dinero sigue en el móvil) y DESPUÉS de cerrar (el cierre se quedó a medias). Los
+  // dos últimos son `urgente`: es dinero cobrado que no está en ningún libro, y un
+  // aviso que se puede pasar por alto no sirve para eso.
+  caja_venta_sin_contabilizar: {
+    categoria: 'finanzas', modulo: 'caja', severidad: 'urgente', implementado: true,
+    etiqueta: 'Ventas de caja sin contabilizar',
+    descripcion: 'Hay ventas cuyo turno no se cerró, así que no están en tu contabilidad.',
+  },
+  caja_cierre_sin_contabilizar: {
+    categoria: 'finanzas', modulo: 'caja', severidad: 'urgente', implementado: true,
+    etiqueta: 'Cierre de caja a medias',
+    descripcion: 'Un cierre tiene ventas en una moneda que no llegó a Tesorería.',
+  },
+  caja_sin_cuenta_configurada: {
+    categoria: 'finanzas', modulo: 'caja', severidad: 'aviso', implementado: true,
+    etiqueta: 'Punto de venta sin caja de Tesorería',
+    descripcion: 'Un punto acepta una moneda que no tiene cuenta asignada.',
+  },
+  // Recurrente por umbral, NO por la fila: con `entidad_id = caja_id` a secas el aviso
+  // saldría una vez en la vida y el silencio del mes siguiente se tragaría. Es el mismo
+  // gotcha (5b) que ya mordió con el cobro de las suscripciones.
+  caja_sin_sincronizar: {
+    categoria: 'finanzas', modulo: 'caja', severidad: 'info', implementado: true,
+    etiqueta: 'Punto de venta sin sincronizar',
+    descripcion: 'Un punto de venta lleva días sin enviar sus ventas.',
+    umbrales: ['30d', '15d', '5d'],
+    porUmbral: { '30d': 'info', '15d': 'aviso', '5d': 'aviso' },
+  },
 
   // ── Inventario ─────────────────────────────────────────────────────────────
   // Falta el aviso de CADUCIDAD, y no por descuido: exige lotes. Un solo campo

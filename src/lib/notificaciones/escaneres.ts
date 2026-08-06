@@ -749,6 +749,171 @@ export async function escanearCaja(db: Db, tenants: ContextoTenant[]): Promise<n
   return creadas
 }
 
+// ── Caja: el dinero que no ha llegado a los libros ────────────────────────────
+//
+// Tres avisos sobre el mismo agujero, cada uno en su momento:
+//   · ANTES de vender      → el punto acepta una moneda sin caja de Tesorería.
+//   · vendido y sin cerrar → el dinero sigue dentro del móvil.
+//   · cerrado a medias     → el cierre no pudo contabilizar una moneda.
+// Más el de un punto que lleva días mudo, que suele ser la causa de los otros dos.
+//
+// Los dos de «no contabilizado» **solo tienen sentido con `base` o `inventario`**: sin
+// ninguno de los dos el cierre no tiene efecto fuera de la caja, así que avisar de que
+// «no se contabilizó» sería avisar de nada. El candado del catálogo es el módulo `caja`,
+// que es otra pregunta; esta condición va aquí.
+export async function escanearCajaContabilidad(db: Db, tenants: ContextoTenant[]): Promise<number> {
+  const relevantes = tenants.filter(t => t.modulos.includes('base') || t.modulos.includes('inventario'))
+  const ids = relevantes.map(t => t.clientId)
+  if (ids.length === 0) return 0
+
+  const ctxDe = new Map(relevantes.map(t => [t.clientId, t]))
+  const sinCerrar = new Vivas()
+  const aMedias   = new Vivas()
+  let creadas = 0
+
+  const [cajasRes, sesRes] = await Promise.all([
+    db.from('cajas').select('caja_id, client_id, empresa_id, nombre').in('client_id', ids),
+    db.from('caja_sesiones')
+      .select('sesion_uuid, client_id, empresa_id, caja_id, cerrada_at, total_por_moneda, tesoreria_movs')
+      .in('client_id', ids).eq('estado', 'CERRADA'),
+  ])
+  type Caja = { caja_id: string; client_id: string; empresa_id: string; nombre: string }
+  const cajas = (cajasRes.data ?? []) as Caja[]
+  const nombreDe = new Map(cajas.map(c => [c.caja_id, c.nombre]))
+  const empresasDeCliente = new Map<string, string[]>()
+  for (const c of cajas) {
+    empresasDeCliente.set(c.client_id, [...new Set([...(empresasDeCliente.get(c.client_id) ?? []), c.empresa_id])])
+  }
+
+  // 1. Ventas cuyo turno no se ha cerrado. Se pregunta a la MISMA función que alimenta el
+  //    panel de rescate del portal: dos implementaciones acabarían diciendo cifras
+  //    distintas sobre el mismo dinero, y el aviso perdería toda su credibilidad.
+  for (const [clientId, empresas] of empresasDeCliente) {
+    const { data, error } = await db.rpc('caja_pendientes_contabilizar', {
+      p_client_id: clientId, p_empresa_ids: empresas,
+    })
+    if (error) continue
+    type Grupo = { caja_id: string; sesion_uuid: string; hasta: string; tickets: number; totales: Record<string, number> }
+    for (const g of ((data ?? []) as Grupo[])) {
+      // Margen de un día: un turno abierto esta mañana no es un olvido, es la jornada.
+      if (horasDesde(g.hasta) < 24) continue
+      sinCerrar.add(clientId, g.sesion_uuid)
+      const importes = Object.entries(g.totales ?? {}).map(([m, v]) => dinero(Number(v), m)).join(' · ')
+      const ok = await crearNotificacion({
+        clientId,
+        empresaId:   null,
+        tipo:        'caja_venta_sin_contabilizar',
+        titulo:      'Tienes ventas de caja sin contabilizar',
+        cuerpo:      `${nombreDe.get(g.caja_id) ?? g.caja_id}: ${g.tickets} ${g.tickets === 1 ? 'venta' : 'ventas'} (${importes}) de un turno que no se cerró. Hasta que se cierre, ese dinero no está en tu contabilidad.`,
+        enlace:      '/portal/caja/cierres',
+        entidadTipo: 'caja_pendiente',
+        entidadId:   g.sesion_uuid,
+      }, ctxDe.get(clientId))
+      if (ok) creadas++
+    }
+  }
+
+  // 2. Cierres que se quedaron a medias: vendieron en una moneda que no llegó a Tesorería.
+  type Ses = {
+    sesion_uuid: string; client_id: string; empresa_id: string | null; caja_id: string
+    total_por_moneda: Record<string, number> | null; tesoreria_movs: Record<string, string> | null
+  }
+  for (const s of ((sesRes.data ?? []) as Ses[])) {
+    const vendidas = Object.keys(s.total_por_moneda ?? {})
+    if (vendidas.length === 0) continue
+    const hechas = Object.keys(s.tesoreria_movs ?? {})
+    const faltan = vendidas.filter(m => !hechas.includes(m))
+    if (faltan.length === 0) continue
+    aMedias.add(s.client_id, s.sesion_uuid)
+    const ok = await crearNotificacion({
+      clientId:    s.client_id,
+      empresaId:   s.empresa_id,
+      tipo:        'caja_cierre_sin_contabilizar',
+      titulo:      'Un cierre de caja no llegó entero a Tesorería',
+      cuerpo:      `${nombreDe.get(s.caja_id) ?? s.caja_id}: falta el ingreso de ${faltan.join(', ')}. Asigna su caja de Tesorería y pulsa «Contabilizar» en el cierre.`,
+      enlace:      '/portal/caja/cierres',
+      entidadTipo: 'caja_cierre_medias',
+      entidadId:   s.sesion_uuid,
+    }, ctxDe.get(s.client_id))
+    if (ok) creadas++
+  }
+
+  for (const t of relevantes) {
+    await resolverNotificaciones(db, t.clientId, ['caja_venta_sin_contabilizar'], 'caja_pendiente', sinCerrar.de(t.clientId))
+    await resolverNotificaciones(db, t.clientId, ['caja_cierre_sin_contabilizar'], 'caja_cierre_medias', aMedias.de(t.clientId))
+  }
+  return creadas
+}
+
+// ── Caja: configuración incompleta y puntos mudos ─────────────────────────────
+export async function escanearCajaConfig(db: Db, tenants: ContextoTenant[]): Promise<number> {
+  const ids = tenants.map(t => t.clientId)
+  if (ids.length === 0) return 0
+
+  const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
+  const sinCuenta = new Vivas()
+  const mudos     = new Vivas()
+  let creadas = 0
+
+  const { data } = await db.from('cajas')
+    .select('caja_id, client_id, empresa_id, nombre, monedas_aceptadas, cuentas_moneda, last_sync_at')
+    .in('client_id', ids).eq('activa', true)
+
+  type Fila = {
+    caja_id: string; client_id: string; empresa_id: string; nombre: string
+    monedas_aceptadas: string[] | null; cuentas_moneda: Record<string, string> | null; last_sync_at: string | null
+  }
+  for (const c of ((data ?? []) as Fila[])) {
+    const ctx = ctxDe.get(c.client_id)
+
+    // PREVENTIVO: salta antes de que se venda nada, no después de perderlo.
+    if (ctx?.modulos.includes('base')) {
+      const faltan = (c.monedas_aceptadas ?? []).filter(m => !c.cuentas_moneda?.[m])
+      if (faltan.length > 0) {
+        sinCuenta.add(c.client_id, c.caja_id)
+        const ok = await crearNotificacion({
+          clientId:    c.client_id,
+          empresaId:   c.empresa_id,
+          tipo:        'caja_sin_cuenta_configurada',
+          titulo:      'Un punto de venta no puede llevar su dinero a Tesorería',
+          cuerpo:      `${c.nombre} acepta ${faltan.join(', ')} y no tiene caja de Tesorería para ${faltan.length === 1 ? 'esa moneda' : 'esas monedas'}. Lo que cobre en ${faltan.length === 1 ? 'ella' : 'ellas'} no entrará en tu contabilidad.`,
+          enlace:      `/portal/caja/${c.caja_id}`,
+          entidadTipo: 'caja_config',
+          entidadId:   c.caja_id,
+        }, ctx)
+        if (ok) creadas++
+      }
+    }
+
+    // Punto mudo. El umbral entra en la clave de idempotencia: sin él saldría UNA vez en
+    // la vida del punto y el silencio del mes siguiente no avisaría de nada.
+    if (!c.last_sync_at) continue
+    const dias = Math.floor(horasDesde(c.last_sync_at) / 24)
+    const umbral = dias >= 30 ? '30d' : dias >= 15 ? '15d' : dias >= 5 ? '5d' : null
+    if (!umbral) continue
+    mudos.add(c.client_id, c.caja_id)
+    const ok = await crearNotificacion({
+      clientId:    c.client_id,
+      empresaId:   c.empresa_id,
+      tipo:        'caja_sin_sincronizar',
+      titulo:      'Un punto de venta lleva días sin sincronizar',
+      cuerpo:      `${c.nombre} no envía sus ventas desde hace ${dias} días. Mientras tanto cobra con precios viejos y su dinero no aparece en Claux.`,
+      enlace:      '/portal/caja',
+      entidadTipo: 'caja_muda',
+      entidadId:   c.caja_id,
+      umbral,
+      sustituyeA:  ['caja_sin_sincronizar'],
+    }, ctx)
+    if (ok) creadas++
+  }
+
+  for (const t of tenants) {
+    await resolverNotificaciones(db, t.clientId, ['caja_sin_cuenta_configurada'], 'caja_config', sinCuenta.de(t.clientId))
+    await resolverNotificaciones(db, t.clientId, ['caja_sin_sincronizar'], 'caja_muda', mudos.de(t.clientId))
+  }
+  return creadas
+}
+
 // ── Inventario: stock bajo y agotado ──────────────────────────────────────────
 //
 // Desde la mig. 153 el mínimo puede ser POR ALMACÉN, y el aviso va con él: un

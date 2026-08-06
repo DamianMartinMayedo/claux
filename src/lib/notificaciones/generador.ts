@@ -16,6 +16,7 @@ import { crearNotificacion, type ContextoTenant, type Preferencia } from './crea
 import {
   diasHasta,
   escanearBorradoresEstancados, escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
+  escanearCajaContabilidad, escanearCajaConfig,
   escanearStock, escanearRrhh, escanearCredito, escanearReservas,
   escanearIa, escanearDossier, escanearServicios, reanudarProgramadas, escanearRenovaciones,
 } from './escaneres'
@@ -102,6 +103,10 @@ export async function generarNotificacionesInternas(
   creadas += await escanearCredito(db, conBase)
 
   creadas += await escanearCaja(db, con('caja'))
+  // Van DESPUÉS del de la caja abierta y antes que nada más: los tres hablan del mismo
+  // dinero, y el de «sin cerrar» es el que explica por qué el de «sin contabilizar» existe.
+  creadas += await escanearCajaContabilidad(db, con('caja'))
+  creadas += await escanearCajaConfig(db, con('caja'))
   creadas += await escanearStock(db, con('inventario'))
   creadas += await escanearRrhh(db, con('rrhh'), hoy)
   creadas += await escanearServicios(db, con('servicios'), hoy)
