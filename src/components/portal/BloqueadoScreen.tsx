@@ -1,20 +1,22 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Lock, Mail, CheckCircle2 } from 'lucide-react'
+import { Lock, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { pedirReactivacion } from '@/app/actions/portal/soporte'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 
 const CORREO = 'contacto@claux.es'
 
+// El texto apunta al BOTÓN, no al correo: la renovación es de un clic y sin escribir
+// nada, y decir «escríbenos» de entrada mandaba al camino más largo de los dos.
 const MENSAJES: Record<string, { titulo: string; texto: string }> = {
   DESACTIVADO: {
     titulo: 'Cuenta suspendida',
-    texto:  'Tu suscripción ha sido suspendida. Escríbenos para regularizar tu situación y recuperar el acceso.',
+    texto:  'Tu suscripción está suspendida. Pide la renovación y te contactamos para reactivarla; tus datos siguen aquí.',
   },
   VENCIDO: {
     titulo: 'Suscripción vencida',
-    texto:  'Tu período de suscripción ha expirado. Escríbenos para renovar y seguir usando CLAUX.',
+    texto:  'Tu período de suscripción ha expirado. Pide la renovación y sigues donde lo dejaste; tus datos siguen aquí.',
   },
 }
 
@@ -35,7 +37,7 @@ export default function BloqueadoScreen({ estado }: { estado: string }) {
 
   const msg = MENSAJES[estado] ?? {
     titulo: 'Acceso restringido',
-    texto:  'Tu cuenta no tiene acceso activo. Escríbenos y lo resolvemos.',
+    texto:  'Tu cuenta no tiene acceso activo. Pide la renovación y lo resolvemos.',
   }
 
   function contactar() {
@@ -46,7 +48,9 @@ export default function BloqueadoScreen({ estado }: { estado: string }) {
       await ld.dismiss()
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar. Escríbenos a ' + CORREO); return }
       setPedido(true)
-      toastSuccess(r.yaPedido ? 'Ya teníamos tu petición. Te contactamos.' : 'Recibido. Te contactamos por correo.')
+      toastSuccess(r.yaPedido
+        ? 'Ya teníamos tu petición de renovación. Te contactamos.'
+        : 'Renovación pedida. Te contactamos por correo.')
     })
   }
 
@@ -61,18 +65,22 @@ export default function BloqueadoScreen({ estado }: { estado: string }) {
       {pedido ? (
         <p className="bloqueado-hecho">
           <CheckCircle2 size={16} strokeWidth={2} />
-          Recibimos tu petición. Te contactamos por correo lo antes posible.
+          Recibimos tu petición de renovación. Te contactamos por correo lo antes posible.
         </p>
       ) : (
         <button type="button" className="btn btn-primary" onClick={contactar} disabled={enviando}>
           {enviando
             ? <><span className="spinner spinner-sm" /> Enviando…</>
-            : <><Mail size={16} strokeWidth={2} /> Contactar con CLAUX</>}
+            : <><RefreshCw size={16} strokeWidth={2} /> Quiero renovar</>}
         </button>
       )}
 
+      {/* DOS acciones distintas, y tienen que leerse como tales: arriba «quiero renovar»,
+          que es un aviso de un clic y sin escribir nada; aquí, escribirnos para cualquier
+          otra cosa. Con «Contactar con CLAUX» arriba y «o escríbenos» debajo parecían la
+          misma cosa dos veces, y el dueño se paraba a elegir entre dos caminos iguales. */}
       <p className="bloqueado-texto">
-        O escríbenos directamente a <a href={`mailto:${CORREO}`} className="link-primary">{CORREO}</a>.
+        ¿Otra cosa? Escríbenos a <a href={`mailto:${CORREO}`} className="link-primary">{CORREO}</a>.
       </p>
     </div>
   )
