@@ -3196,7 +3196,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .view-container-cola { padding-top: 0; }
 
 .modulo-sugerencia {
-  display: flex; align-items: flex-start; gap: var(--space-3);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3);
   padding: var(--space-4);
   background: var(--color-surface-2);
   border: 1px solid var(--color-divider);
@@ -3204,8 +3204,15 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
 }
 /* `flex-shrink` en CSS y no como `style` inline en el icono (regla de UI). */
-.modulo-sugerencia-icono { flex-shrink: 0; margin-top: 1px; color: var(--color-primary-text); }
-.modulo-sugerencia p { margin: 0; }
+.modulo-sugerencia-icono { flex-shrink: 0; color: var(--color-primary-text); }
+.modulo-sugerencia p { margin: 0; flex: 1 1 20rem; min-width: 0; }
+/* La acción no se encoge ni se parte: es lo único pulsable de la nota. En móvil la
+   fila envuelve y el botón cae debajo del texto, a lo ancho de su contenido. */
+.modulo-sugerencia-btn { flex-shrink: 0; white-space: nowrap; }
+.modulo-sugerencia-hecho {
+  display: inline-flex; align-items: center; gap: var(--space-2); flex-shrink: 0;
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-success);
+}
 
 /* ── Caja (POS offline) ─────────────────────────────────────────── */
 /* Pestañas → componente canónico <Tabs> (.tabs/.tab). */
