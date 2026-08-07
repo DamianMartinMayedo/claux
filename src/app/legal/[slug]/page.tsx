@@ -4,6 +4,8 @@ import { PublicFooter } from '@/components/publico/Chrome'
 import { leerSetting } from '@/lib/settings'
 import { PAGINAS_LEGALES, parsearLegal, type BloqueLegal } from '@/lib/publico/legal'
 import LegalHeader from './LegalHeader'
+import VolverLink from './VolverLink'
+import SubirArriba from './SubirArriba'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -46,11 +48,14 @@ export default async function LegalPage({ params }: Props) {
 
   return (
     <div className="ld-page">
-      {/* «Volver» vive AHORA en la cabecera: es la única salida de la página y con un
-          texto de dos mil palabras tiene que seguir a mano al final, no solo arriba
-          del todo. La cabecera es pegajosa; el enlace suelto del cuerpo no lo era. */}
       <LegalHeader />
       <main className="lg-page">
+        {/* «Volver» va donde empieza la lectura, no en la cabecera: ahí, pegado al
+            logo, se lee como parte del cromo y no como la salida de ESTA página. Para
+            el problema que resolvía —volver arriba tras dos mil palabras— está el
+            botón de subir, que es lo que se busca a media lectura. */}
+        <VolverLink />
+
         <h1 className="lg-titulo">{pagina.titulo}</h1>
 
         {bloques.length > 0 ? (
@@ -71,6 +76,7 @@ export default async function LegalPage({ params }: Props) {
         )}
       </main>
       <PublicFooter />
+      <SubirArriba />
     </div>
   )
 }
