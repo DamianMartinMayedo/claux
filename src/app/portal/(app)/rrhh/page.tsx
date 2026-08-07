@@ -12,8 +12,8 @@ export default async function RrhhPage() {
   if (!data) notFound()
   return (
     <>
-      <ContabilidadHint genera="tus nóminas" />
       <PersonalView data={data} />
+      <ContabilidadHint genera="tus nóminas" />
     </>
   )
 }

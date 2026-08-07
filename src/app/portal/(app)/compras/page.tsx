@@ -33,9 +33,9 @@ export default async function ComprasPage({
   }
   return (
     <>
+      <ComprasView data={data} />
       {/* Aquí y no en Movimientos: confirmar una compra es lo que crea el gasto. */}
       <ContabilidadHint genera="tus compras" />
-      <ComprasView data={data} />
     </>
   )
 }

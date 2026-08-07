@@ -3173,17 +3173,56 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .cat-qr-preview { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
 .cat-qr-preview img { border-radius: var(--radius-md); border: 1px solid var(--color-border); }
 
+/* ── Sugerencia de módulo no contratado (ContabilidadHint) ────────────────── */
+/* Nota al pie, no banner. Usaba `.info-banner` —que es de las pantallas de /admin— con
+   fondo y borde de estado `info`: leído desde el portal, el mismo cromo que un aviso de
+   «tu cuenta caduca» para lo que es una recomendación comercial. Superficie de la casa,
+   borde discreto y tinta apagada: se ve, no interrumpe. */
+.modulo-sugerencia {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
+}
+/* `flex-shrink` en CSS y no como `style` inline en el icono (regla de UI). */
+.modulo-sugerencia-icono { flex-shrink: 0; margin-top: 1px; color: var(--color-primary-text); }
+.modulo-sugerencia p { margin: 0; }
+
 /* ── Caja (POS offline) ─────────────────────────────────────────── */
 /* Pestañas → componente canónico <Tabs> (.tabs/.tab). */
 .caja-install { display: flex; flex-direction: column; gap: var(--space-3); }
 .caja-link-row { display: flex; gap: var(--space-2); align-items: center; }
 .caja-link-field { flex: 1; font-size: var(--text-xs); overflow-x: auto; }
 .caja-install-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
+/* Las dos acciones del enlace, en fila y a su ancho. En columna, `.caja-install` las
+   estiraba a todo lo ancho de la tarjeta y dos secundarias parecían dos botones de
+   guardar. Envuelven solas en móvil. */
+.caja-install-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 /* Descripción bajo un título de sección: legible y separada del título y del contenido. */
 .caja-section-sub {
   margin: var(--space-2) 0 var(--space-4);
   font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
 }
+
+/* Confirmación antes de registrar un archivo subido: qué trae y a dónde va. Enumerado
+   por líneas y no en una frase corrida — «12 ventas · 1 cierre · 3 movimientos» se lee
+   como una cifra de sistema, y lo que hay que entender es qué se firma. */
+.caja-previo-lista {
+  list-style: none; margin: var(--space-4) 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.caja-previo-lista li {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3);
+  border-radius: var(--radius-md); background: var(--color-surface-2);
+  font-size: var(--text-sm); font-weight: 600; color: var(--color-text);
+}
+.caja-previo-nota { font-size: var(--text-xs); font-weight: 400; color: var(--color-text-muted); }
+.caja-previo .caja-totales { margin-top: var(--space-3); }
 
 /* Card «Cómo instalar la caja»: pasos legibles para el dueño, no un hint diminuto. */
 .caja-entrega-pasos {
@@ -3216,7 +3255,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 }
 .caja-sync-manual > summary:hover { color: var(--color-text); }
 .caja-sync-manual[open] > summary { margin-bottom: var(--space-2); }
-.caja-actions { display: flex; justify-content: flex-end; margin-top: var(--space-5); }
+.caja-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-5); }
 
 /* ── Banner de impersonación (equipo CLAUX dentro del portal del cliente) ── */
 .imp-banner {
@@ -4422,11 +4461,13 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .caja-detalle-lineas li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); }
 
 /* QR del enlace de instalación del punto de venta. */
-.caja-qr { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
 /* Fondo blanco fijo y no un token: un QR se lee por CONTRASTE, y en tema oscuro sobre
    superficie oscura la cámara no engancha. Es tinta sobre papel, no cromo de la interfaz. */
 .caja-qr-img { width: 200px; height: 200px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #fff; }
 /* El QR en su modal: más grande que en la página (se escanea desde otro móvil, a un palmo)
    y centrado, con la advertencia debajo. */
-.caja-qr-body { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); text-align: center; }
+/* Anclado al modal (`.caja-qr-modal .modal-body`) y no a `.caja-qr-body` a secas: con una
+   sola clase empataba con `.modal-body` de 03-components y el QR se quedaba pegado al borde
+   izquierdo con el texto debajo, en un modal que existe para que alguien apunte la cámara. */
+.caja-qr-modal .modal-body { align-items: center; text-align: center; }
 .caja-qr-modal .caja-qr-img { width: 260px; height: 260px; padding: var(--space-2); }

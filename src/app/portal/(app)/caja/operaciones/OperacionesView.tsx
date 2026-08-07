@@ -45,9 +45,18 @@ export default function OperacionesView({ data }: Props) {
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
 
   /**
-   * LA DECLARACIÓN. El punto de venta sale de las mismas pastillas que la empresa en el
-   * resto del portal. `cliente` porque la búsqueda de esta pantalla mira nombres que vienen
-   * de otra tabla; cuando el listado queda recortado lo dice el aviso del techo.
+   * LA DECLARACIÓN.
+   *
+   * **Solo el punto de venta va en píldoras.** Los tres filtros las pedían y la barra
+   * acababa con hasta once controles a un clic —cuatro de estado, tres de medio de pago y
+   * uno por caja— envolviendo en dos y tres líneas antes de la tabla, que es a lo que se
+   * viene. Las píldoras son un atajo para lo que SE CAMBIA; el estado y el medio de pago se
+   * tocan para responder una pregunta puntual («¿qué cobré por transferencia?») y viven
+   * mejor en «Filtros», como en el resto del portal. El punto de venta se queda fuera
+   * porque es el que cambia qué estás mirando (y con una sola caja se oculta solo).
+   *
+   * `cliente` porque la búsqueda de esta pantalla mira nombres que vienen de otra tabla;
+   * cuando el listado queda recortado lo dice el aviso del techo.
    */
   const declaracion: Filtro[] = useMemo(() => [
     {
@@ -61,8 +70,8 @@ export default function OperacionesView({ data }: Props) {
     // El estado ya lo soportaba la DESCARGA (`operaciones_caja`) y no la pantalla: se podía
     // bajar un fichero solo de anuladas que aquí no había forma de ver.
     {
-      clave: 'estado', param: 'estado', label: 'Todas', valor: estado,
-      rotulo: 'Estado', widget: 'pastillas', donde: 'cliente',
+      clave: 'estado', param: 'estado', label: 'Todas las ventas', valor: estado,
+      rotulo: 'Estado', widget: 'select', donde: 'cliente',
       opciones: [
         { valor: 'VIGENTE',       label: 'Originales' },
         { valor: 'RECTIFICACION', label: 'Rectificaciones' },
@@ -72,8 +81,8 @@ export default function OperacionesView({ data }: Props) {
     // Efectivo o transferencia: desde la mig. 172 deciden a QUÉ cuenta va el dinero, así
     // que cuadrar una caja empieza por poder separarlos.
     {
-      clave: 'medio_pago', param: 'medio', label: 'Todos', valor: medio,
-      rotulo: 'Medio de pago', widget: 'pastillas', donde: 'cliente',
+      clave: 'medio_pago', param: 'medio', label: 'Todos los medios de pago', valor: medio,
+      rotulo: 'Medio de pago', widget: 'select', donde: 'cliente',
       opciones: [
         { valor: 'Efectivo',      label: 'Efectivo' },
         { valor: 'Transferencia', label: 'Transferencia' },
@@ -156,12 +165,15 @@ export default function OperacionesView({ data }: Props) {
       {/* El rango se aplica EN LA CONSULTA. Esta pantalla se traía 1.000 tickets sin rango
           y sin avisar, y encima filtraba en el navegador: en un mostrador con historia, las
           ventas viejas no estaban y nada lo decía. */}
+      {/* `visibles={1}`: en la fila, el rango, el buscador y el punto de venta. El estado y
+          el medio de pago, dentro de «Filtros» con su rótulo. */}
       <Filtros
         filtros={declaracion}
         rango={data.rango}
         q={search}
         placeholder="Buscar por punto de venta, producto…"
         hayMas={data.hay_mas}
+        visibles={1}
       />
 
       {data.hay_mas && (

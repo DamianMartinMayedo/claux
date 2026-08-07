@@ -3,7 +3,7 @@
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Copy, Check, RefreshCw, Eye, EyeOff, QrCode } from 'lucide-react'
+import { Copy, Check, RefreshCw, Eye, EyeOff, QrCode, X } from 'lucide-react'
 import { guardarConfigCaja, regenerarToken, type CajaConfigData } from '@/app/actions/portal/caja'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -238,13 +238,23 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
                   captura. Se enseña cuando se pide, se usa para instalar y se cierra. Cada
                   pulsación lo genera de nuevo a partir del enlace VIGENTE, así que después
                   de regenerar el enlace nunca se puede estar mirando el QR muerto. */}
-              <button type="button" className="btn btn-secondary" onClick={verQr} disabled={generandoQr}>
-                <QrCode size={14} strokeWidth={2} /> {generandoQr ? 'Generando…' : 'Ver código QR'}
-              </button>
+              {/* Los dos EN FILA y a su ancho: apilados y a todo lo ancho parecían dos
+                  acciones principales del tamaño de un botón de guardar, cuando una se usa
+                  una vez (instalar) y la otra casi nunca (perder el móvil). Lo que hace
+                  «Regenerar» se explica debajo; no cabe dentro de la etiqueta. */}
+              <div className="caja-install-acciones">
+                <button type="button" className="btn btn-secondary" onClick={verQr} disabled={generandoQr}>
+                  <QrCode size={14} strokeWidth={2} /> {generandoQr ? 'Generando…' : 'Ver código QR'}
+                </button>
 
-              <button type="button" className="btn btn-secondary" onClick={() => setConfirmarRegenerar(true)} disabled={isPending}>
-                <RefreshCw size={14} strokeWidth={2} /> Regenerar enlace (invalida el anterior)
-              </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setConfirmarRegenerar(true)} disabled={isPending}>
+                  <RefreshCw size={14} strokeWidth={2} /> Regenerar enlace
+                </button>
+              </div>
+              <p className="caja-install-hint">
+                Regenerar invalida el enlace anterior: los dispositivos ya instalados dejan de
+                sincronizar hasta que los reinstales.
+              </p>
             </div>
           </div>
 
@@ -412,19 +422,23 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
         <div className="modal-backdrop open dialog-top" onClick={cerrarQr}>
           <div className="modal modal-alert caja-qr-modal" role="dialog" aria-modal
             aria-label="Código QR de instalación" onClick={e => e.stopPropagation()}>
+            {/* Cerrar con la «×» de la cabecera, como el resto de modales del portal. El
+                botón del pie ocupaba una franja entera para la acción menos interesante de
+                la pantalla, y encima era `btn-primary`: el ojo lo leía como «lo que hay que
+                pulsar», cuando lo que hay que hacer es escanear. */}
             <div className="modal-header">
               <h2 className="modal-title dialog-title">Instalar en un dispositivo</h2>
+              <button type="button" className="modal-close" onClick={cerrarQr} aria-label="Cerrar" autoFocus>
+                <X size={16} strokeWidth={2} />
+              </button>
             </div>
-            <div className="modal-body caja-qr-body">
+            <div className="modal-body">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrDataUrl} alt="Código QR del enlace de instalación" className="caja-qr-img" />
               <p className="caja-install-hint">
                 Apunta con la cámara del móvil que hará de caja. <strong>Trátalo como una llave</strong>:
                 quien lo escanee puede cobrar en este punto de venta.
               </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-primary" onClick={cerrarQr} autoFocus>Cerrar</button>
             </div>
           </div>
         </div>
