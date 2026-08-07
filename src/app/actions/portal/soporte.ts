@@ -138,6 +138,85 @@ export async function registrarInteresModulo(
   return { ok: true }
 }
 
+/**
+ * «Quiero recuperar mi acceso», desde la pantalla de cuenta bloqueada.
+ *
+ * Es el ÚNICO botón que le queda a un cliente suspendido o vencido: con el portal
+ * bloqueado no puede abrir Soporte ni ninguna otra pantalla, así que este es el
+ * final del embudo de cobro. Por eso no es un `mailto:` —que no hace nada si el
+ * dispositivo no tiene correo configurado y no deja rastro de quién lo pulsó— sino
+ * el mismo camino que el resto: queda en `soporte_mensajes` (visible en /admin/soporte),
+ * avisa al panel del equipo y manda el correo al buzón comercial con `replyTo` al
+ * cliente. Va al comercial y no al de soporte: esto es dinero, no una incidencia.
+ *
+ * No comprueba módulos a propósito: quien está bloqueado no tiene ninguno operativo,
+ * y pedir reactivación es justo lo que tiene que poder hacer.
+ */
+export async function pedirReactivacion(): Promise<{ ok: boolean; yaPedido?: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+
+  const db = createAdminClient()
+
+  // Un botón que manda un correo por clic es un botón que nos inunda el buzón —y el
+  // dueño lo va a pulsar varias veces, porque lo que quiere es que le contesten. Se
+  // deja UNA petición viva por día: la segunda contesta que ya está pedida.
+  const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: previa } = await db
+    .from('soporte_mensajes')
+    .select('id')
+    .eq('client_id', session.client_id)
+    .eq('modulo_clave', 'reactivacion')
+    .gte('created_at', ayer)
+    .limit(1)
+    .maybeSingle()
+  if (previa) return { ok: true, yaPedido: true }
+
+  const asunto  = 'Quiero recuperar el acceso'
+  const mensaje = 'Mi cuenta está bloqueada y quiero recuperar el acceso. Contactadme, por favor.'
+
+  const { data: fila, error } = await db.from('soporte_mensajes').insert({
+    client_id:    session.client_id,
+    user_id:      session.user_id,
+    email:        session.email,
+    asunto,
+    mensaje,
+    estado:       'NUEVO',
+    modulo_clave: 'reactivacion',
+  }).select('id').single()
+  if (error) return { ok: false, error: 'No se pudo enviar. Inténtalo de nuevo.' }
+
+  const { data: cliente } = await db
+    .from('clients').select('nombre_empresa, estado').eq('client_id', session.client_id).maybeSingle()
+  const empresa = cliente?.nombre_empresa ?? session.client_id
+
+  await avisarSoporteNuevo({
+    mensajeId: fila.id as number,
+    clientId:  session.client_id,
+    empresa,
+    asunto,
+  })
+
+  const destino = await leerSetting('email_contratacion', 'contacto@claux.es')
+  const cuerpo =
+    `${empresa} quiere recuperar el acceso a su cuenta.\n\n` +
+    `Cliente: ${empresa} (${session.client_id})\n` +
+    `Estado: ${cliente?.estado ?? '—'}\n` +
+    `De: ${session.email}\n\n` +
+    `— Responde a este correo (llega al cliente) o gestiónalo en https://claux.es/admin/clientes/${session.client_id}`
+  after(() => enviarEmail({
+    to:       destino,
+    from:     'CLAUX <contacto@claux.es>',
+    replyTo:  session.email,
+    subject:  `[Reactivación] ${empresa}`,
+    html:     envolverEmail(textoAHtml(cuerpo)),
+    tipo:     'aviso_soporte',
+    clientId: session.client_id,
+  }))
+
+  return { ok: true }
+}
+
 // Mensaje de soporte del cliente: queda registrado en el admin (soporte_mensajes)
 // y se envía directo al buzón de soporte (soporte@claux.es) con replyTo al cliente,
 // para poder responder desde el correo o gestionar la incidencia desde el admin.

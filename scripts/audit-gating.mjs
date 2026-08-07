@@ -36,8 +36,10 @@ const ALLOWLIST = {
   'monedas.ts':  ['actualizarTasasAuto'],
   // Self-service: cada usuario edita su propio perfil.
   'perfil.ts':   ['actualizarMiPerfil'],
-  // Cualquier usuario con sesión puede contactar a soporte.
-  'soporte.ts':  ['enviarMensajeSoporte', 'registrarInteresModulo'],
+  // Cualquier usuario con sesión puede contactar a soporte. `pedirReactivacion` es
+  // además el ÚNICO botón de un cliente bloqueado: exigirle un módulo contratado sería
+  // pedirle lo que acaba de perder para poder pedir que se lo devuelvan.
+  'soporte.ts':  ['enviarMensajeSoporte', 'registrarInteresModulo', 'pedirReactivacion'],
   // Plantillas de MAPEO del importador: no son datos del cliente, son notas del
   // equipo sobre cómo se lee el export de un software de origen (tabla global,
   // sin client_id). El candado real es más estricto que un módulo: `resolverCtx()`

@@ -241,6 +241,16 @@
   color: var(--color-text-muted);
   max-width: 420px;
 }
+/* Acuse de la petición de reactivación: ocupa el sitio del botón para que no se pueda
+   pulsar dos veces sin saber si la primera llegó. */
+.bloqueado-hecho {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-success-bg); color: var(--color-success);
+  font-size: var(--text-sm); font-weight: 600;
+  max-width: 420px;
+}
 
 /* ── Placeholder de módulo en construcción ── */
 .modulo-placeholder {
