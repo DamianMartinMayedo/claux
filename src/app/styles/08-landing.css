@@ -436,6 +436,16 @@
   border-bottom-color: transparent;
 }
 
+/* Dentro de `.ld-page` el tema es SIEMPRE claro (`color-scheme: light`, arriba), así
+   que el logo también tiene que serlo. El par claro/oscuro de 02-base-layout lo
+   conmuta el `[data-theme]` del documento —que se pone en TODO el sitio, también en
+   las páginas públicas—, y con el navegador en oscuro dejaba el logo BLANCO sobre el
+   crema: invisible en la cabecera y en el pie de la landing, del diagnóstico y de los
+   legales. Aquí la única variante legítima es `.is-arriba` (sobre el degradado del
+   hero), y esa gana por especificidad en el bloque de abajo. */
+.ld-page .ld-header-logo .logo-light { display: block; }
+.ld-page .ld-header-logo .logo-dark  { display: none; }
+
 /* Los dos estados de la cabecera, al completo. Cada cosa que va sobre el
    degradado tiene que volver a su color al bajar al crema: el logo, el ghost y
    TAMBIÉN el botón primario (es teal, y sobre el degradado —que arranca en teal—
@@ -466,11 +476,28 @@
    Columna de lectura estrecha (~68 caracteres) y jerarquía tipográfica del
    sistema. El cuerpo lo escribe el admin en texto plano y lo estructura
    `parsearLegal`; aquí solo se le da estilo. */
+/* Cabecera PROPIA de los legales: marca a la izquierda, «Volver» a la derecha y
+   nada más. La compartida (`.ld-header`) es de captación —«Acceso clientes»,
+   «Diagnóstico gratis»— y aquí le ofrecía a un cliente del portal lo que ya tiene
+   contratado. `sticky` y en FLUJO, al revés que la de la landing (que es `fixed`
+   para fundirse con el hero): así la salida sigue a mano a mitad de una política de
+   privacidad y `.lg-page` no tiene que compensar ningún hueco. */
+.lg-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) max(var(--space-6), calc((100% - var(--content-max)) / 2));
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
 .lg-page {
   max-width: 720px;
-  /* La cabecera de .ld-page es fixed y no ocupa flujo: sin este hueco, el
-     enlace de volver quedaría debajo de ella. */
-  padding: calc(var(--header-h) + var(--space-12)) var(--space-6) var(--space-20);
+  padding: var(--space-12) var(--space-6) var(--space-20);
   margin: 0 auto;
   /* Ver nota en .ld-cta: hijo directo de un flex column con márgenes `auto`. */
   width: 100%;
@@ -479,7 +506,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-8);
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-muted);

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { PublicHeader, PublicFooter } from '@/components/publico/Chrome'
+import { PublicFooter } from '@/components/publico/Chrome'
 import { leerSetting } from '@/lib/settings'
 import { PAGINAS_LEGALES, parsearLegal, type BloqueLegal } from '@/lib/publico/legal'
-import VolverLink from './VolverLink'
+import LegalHeader from './LegalHeader'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -46,10 +46,11 @@ export default async function LegalPage({ params }: Props) {
 
   return (
     <div className="ld-page">
-      <PublicHeader />
+      {/* «Volver» vive AHORA en la cabecera: es la única salida de la página y con un
+          texto de dos mil palabras tiene que seguir a mano al final, no solo arriba
+          del todo. La cabecera es pegajosa; el enlace suelto del cuerpo no lo era. */}
+      <LegalHeader />
       <main className="lg-page">
-        <VolverLink />
-
         <h1 className="lg-titulo">{pagina.titulo}</h1>
 
         {bloques.length > 0 ? (
