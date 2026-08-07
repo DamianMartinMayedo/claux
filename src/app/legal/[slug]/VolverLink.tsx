@@ -5,19 +5,34 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 
 /**
- * Botón «Volver» de las páginas legales. Antes iba fijo a `/` (la landing), y
- * eso sacaba del portal a un cliente que abría las cookies desde su Perfil: caía
- * en la web comercial. Ahora vuelve a DONDE ESTABAS:
- *   1. Si hay historia en esta pestaña → atrás (landing, diagnóstico, otro legal…).
- *   2. Si es pestaña nueva —el portal abre los legales con target=_blank, así que
- *      arranca sin historia— usamos el `referrer` del mismo origen: te devuelve a
- *      la página del portal desde la que abriste.
- *   3. Sin ninguna pista (entrada directa desde Google) → la landing.
- * El `href="/"` es el fallback sin JS: si no hidrata, el enlace sigue llevando a
- * la home, que es lo razonable para un visitante público.
+ * Botón «Volver» de las páginas legales. Vuelve a DONDE ESTABAS, por este orden:
+ *
+ *   1. Historia de la pestaña → atrás (landing, diagnóstico, otra página legal…).
+ *   2. `?volver=<ruta>` → lo pone quien abre el enlace en pestaña nueva (el perfil
+ *      del portal). Es la ÚNICA pista fiable ahí: una pestaña nueva no tiene historia
+ *      y el `referrer` lo borra el propio `rel="noreferrer"` del enlace, así que el
+ *      botón acababa siempre en la landing y sacaba del portal a quien solo había
+ *      abierto las cookies desde su perfil.
+ *   3. `referrer` del mismo origen, por si el enlace vino de otro sitio sin parámetro.
+ *   4. Sin ninguna pista (entrada directa desde Google) → la landing.
+ *
+ * El `href="/"` es el fallback sin JS: si no hidrata, el enlace sigue llevando a la
+ * home, que es lo razonable para un visitante público.
+ *
+ * El parámetro se lee de `window.location` DENTRO del manejador y no con
+ * `useSearchParams()`: estas páginas son estáticas (ISR) y ese hook las obligaría a
+ * renderizarse en cliente o a envolverse en un Suspense, para leer algo que solo
+ * hace falta cuando alguien pulsa.
  */
 export default function VolverLink() {
   const router = useRouter()
+
+  /** Ruta interna, o null. Nunca una URL absoluta: acaba en un `push`. */
+  function destinoDelParametro(): string | null {
+    const v = new URLSearchParams(window.location.search).get('volver')
+    if (!v || !v.startsWith('/') || v.startsWith('//')) return null
+    return v
+  }
 
   function volver(e: React.MouseEvent) {
     e.preventDefault()
@@ -27,6 +42,10 @@ export default function VolverLink() {
       router.back()
       return
     }
+
+    const delParametro = destinoDelParametro()
+    if (delParametro) { router.push(delParametro); return }
+
     const ref = document.referrer
     if (ref) {
       try {

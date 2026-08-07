@@ -206,7 +206,7 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
 
       {/* En pestaña nueva: quien está trabajando en el portal no debería perder
           lo que tenga a medias por consultar las cookies. */}
-      <EnlacesLegales nuevaPestana className="prf-legal" />
+      <EnlacesLegales nuevaPestana volverA="/portal/perfil" className="prf-legal" />
 
     </div>
   )
