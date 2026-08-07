@@ -3178,9 +3178,15 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    fondo y borde de estado `info`: leído desde el portal, el mismo cromo que un aviso de
    «tu cuenta caduca» para lo que es una recomendación comercial. Superficie de la casa,
    borde discreto y tinta apagada: se ve, no interrumpe. */
+/* Cola de una vista: lo que se pinta DETRÁS del `.view-container` de la pantalla y tiene
+   que alinear con él. Reutiliza el contenedor —ancho, padding lateral y sus tres
+   breakpoints— y solo le quita el hueco de arriba, que ya lo dejó la vista al terminar.
+   Vive aquí y no en 02-base-layout porque el `padding` en atajo de las media queries de
+   04-responsive-dark reescribiría el `padding-top`: gana por venir después. */
+.view-container-cola { padding-top: 0; }
+
 .modulo-sugerencia {
   display: flex; align-items: flex-start; gap: var(--space-3);
-  margin-top: var(--space-6);
   padding: var(--space-4);
   background: var(--color-surface-2);
   border: 1px solid var(--color-divider);

@@ -26,14 +26,21 @@ export default async function ContabilidadHint({ genera }: { genera: string }) {
 
   if (tieneModulo(data?.modulos_activos, 'base')) return null
 
+  // El envoltorio NO es decorativo: la nota va detrás de la vista, o sea FUERA de su
+  // `.view-container`, y sin él se pintaba a todo lo ancho de la pantalla mientras las
+  // tarjetas de encima se paran en `--content-max`. Se reutiliza el mismo contenedor
+  // (con sus tres breakpoints) y solo se le quita el hueco de arriba, que ya lo puso la
+  // vista al terminar.
   return (
-    <aside className="modulo-sugerencia">
-      <Calculator size={18} strokeWidth={2} className="modulo-sugerencia-icono" />
-      <p>
-        Los gastos y pagos que generan {genera} se quedan aquí. Con el módulo de{' '}
-        <strong>Contabilidad</strong> aparecerían también en tus cuentas y en tesorería.{' '}
-        <Link href="/portal/soporte" className="link-primary">Pídelo desde Soporte</Link>.
-      </p>
-    </aside>
+    <div className="view-container view-container-cola">
+      <aside className="modulo-sugerencia">
+        <Calculator size={18} strokeWidth={2} className="modulo-sugerencia-icono" />
+        <p>
+          Los gastos y pagos que generan {genera} se quedan aquí. Con el módulo de{' '}
+          <strong>Contabilidad</strong> aparecerían también en tus cuentas y en tesorería.{' '}
+          <Link href="/portal/soporte" className="link-primary">Pídelo desde Soporte</Link>.
+        </p>
+      </aside>
+    </div>
   )
 }
