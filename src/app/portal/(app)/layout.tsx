@@ -122,6 +122,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         session={session}
         nombreEmpresa={cliente.nombre_empresa}
         empresas={empresas}
+        /* La MISMA bandera que monta el proveedor, aquí abajo. La campana la calculaba por
+           su cuenta y se olvidaba de `bloqueado`. */
+        verNotificaciones={verNotificaciones}
       />
       <PortalSidebar
         modulosVisibles={modulosVisibles}

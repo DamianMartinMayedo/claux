@@ -19,6 +19,16 @@ interface Props {
   session:       PortalSession
   nombreEmpresa: string
   empresas:      EmpresaLite[]
+  /**
+   * Si hay bandeja de notificaciones en esta sesión. Lo decide el layout, que es quien
+   * monta el `<NotificacionesProvider>`, y **viaja como prop en vez de recalcularse aquí**:
+   * la campana comprobaba `rol === 'admin_empresa'` y el layout `rol === 'admin_empresa' &&
+   * !bloqueado`. Con el portal bloqueado (cliente desactivado, vencido o fuera de gracia) la
+   * campana se pintaba sin proveedor y el `useNotificaciones` reventaba el layout entero:
+   * el admin de un cliente bloqueado no veía la pantalla de bloqueo, veía «This page
+   * couldn't load». Dos condiciones que tienen que ser la misma, ahora son una.
+   */
+  verNotificaciones: boolean
 }
 
 // Iniciales del negocio: primera letra de la primera y la última palabra.
@@ -29,7 +39,7 @@ function inicialesNegocio(nombre: string): string {
   return (palabras[0][0] + palabras[palabras.length - 1][0]).toUpperCase()
 }
 
-export default function PortalHeader({ session, nombreEmpresa, empresas }: Props) {
+export default function PortalHeader({ session, nombreEmpresa, empresas, verNotificaciones }: Props) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -90,7 +100,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas }: Props
       </div>
       <div className="portal-header-right">
         {/* La bandeja es del negocio y compartida: solo la ven sus administradores. */}
-        {session.rol === 'admin_empresa' && <NotificacionesCampana />}
+        {verNotificaciones && <NotificacionesCampana />}
         <button
           type="button"
           className="theme-toggle-btn"
