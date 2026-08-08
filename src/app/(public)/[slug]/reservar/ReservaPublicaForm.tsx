@@ -9,16 +9,17 @@ import {
   type FranjaPublica,
   type SlotAforo,
   type DiaDisponibleAforo,
-  type ReglasReserva,
 } from '@/app/actions/portal/reservas'
+import type { ReglasReserva } from '@/app/actions/portal/agenda-comun'
 import { Check, Loader2, Search, ChevronRight } from 'lucide-react'
+import EnlaceGestion from '../../_componentes/EnlaceGestion'
 
-// Fechas en calendario LOCAL (sin toISOString/UTC) para que "Hoy"/"Mañana" y las
-// comparaciones sean correctas en cualquier zona horaria.
+// COM-7: el «hoy» lo decide el SERVIDOR en la zona del negocio (America/Havana) y
+// baja como prop. Con `new Date()` un cliente en España veía un «Hoy» distinto del
+// que usó la RPC y la tira de 7 días se desalineaba con la disponibilidad real.
 function ymd(dt: Date): string {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
-function hoyISO(): string { return ymd(new Date()) }
 function sumarDiasISO(base: string, dias: number): string {
   const [y, m, d] = base.split('-').map(Number)
   return ymd(new Date(y, m - 1, d + dias))
@@ -32,9 +33,9 @@ function formatFechaCorta(f: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 // Etiquetas para las celdas de la rejilla de días.
-function dowDia(f: string): string {
-  if (f === hoyISO()) return 'Hoy'
-  if (f === sumarDiasISO(hoyISO(), 1)) return 'Mañana'
+function dowDia(f: string, hoy: string): string {
+  if (f === hoy) return 'Hoy'
+  if (f === sumarDiasISO(hoy, 1)) return 'Mañana'
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')
 }
@@ -44,17 +45,20 @@ function numDia(f: string): string {
 }
 
 export default function ReservaPublicaForm({
-  franjas, clientId, negocio, slug, reglas,
+  franjas, clientId, negocio, slug, reglas, hoy,
 }: {
   franjas:  FranjaPublica[]
   clientId: string
-  negocio:  { nombre: string }
+  negocio:  { nombre: string; logo_url: string | null }
   slug:     string
   reglas:   ReglasReserva
+  /** «Hoy» en la zona del NEGOCIO, calculado en el servidor (COM-7). */
+  hoy:      string
 }) {
   const [isPending, startTransition] = useTransition()
+  const hoyISO = () => hoy
   const maxPersonas = reglas.max_personas > 0 ? reglas.max_personas : 20
-  const fechaMax    = reglas.ventana_max_dias > 0 ? sumarDiasISO(hoyISO(), reglas.ventana_max_dias) : undefined
+  const fechaMax    = reglas.ventana_max_dias > 0 ? sumarDiasISO(hoy, reglas.ventana_max_dias) : undefined
 
   const [fecha, setFecha]       = useState(hoyISO())
   const [personas, setPersonas] = useState(2)
@@ -68,8 +72,12 @@ export default function ReservaPublicaForm({
   const jumped = useRef(false)
 
   // Ventana fija de 7 días para la rejilla; cada uno disponible si está en `dias`.
-  const ventana = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDiasISO(hoyISO(), i)), [])
+  const ventana = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDiasISO(hoy, i)), [hoy])
   const diasMap = useMemo(() => new Map(dias.map(d => [d.fecha, d])), [dias])
+
+  // El enlace completo, para poder copiarlo y pegarlo. `window` no existe en el
+  // servidor; solo hace falta al pintar el paso de éxito.
+  const origen = typeof window === 'undefined' ? '' : window.location.origin
 
   const [sel, setSel]           = useState<SlotAforo | null>(null)
   const [revisando, setRevisando] = useState(false)
@@ -161,7 +169,11 @@ export default function ReservaPublicaForm({
       <div className="rp-card">
         <div className="rp-card-body">
 
-          <h1 className="rp-title">{negocio.nombre}</h1>
+          <div className="rp-brand">
+            {/* COM-5: la cara del NEGOCIO, no la de CLAUX. */}
+            {negocio.logo_url && <img src={negocio.logo_url} alt="" className="rp-logo" width={40} height={40} />}
+            <h1 className="rp-title">{negocio.nombre}</h1>
+          </div>
 
           {/* ── Éxito ─────────────────────────────────────────────── */}
           {listo ? (
@@ -175,9 +187,7 @@ export default function ReservaPublicaForm({
               <p className="rp-hint">
                 {estadoFinal === 'CONFIRMADA' ? '¡Te esperamos!' : 'Te avisaremos en cuanto la confirmemos.'}
               </p>
-              {tokenRes && (
-                <a className="rp-manage-link" href={`/${slug}/r/${tokenRes}`}>Gestionar o cancelar mi reserva</a>
-              )}
+              {tokenRes && <EnlaceGestion url={`${origen}/${slug}/r/${tokenRes}`} tipo="reserva" />}
             </div>
 
           /* ── Negocio sin turnos configurados ────────────────────── */
@@ -214,7 +224,7 @@ export default function ReservaPublicaForm({
                 <dl className="rp-review">
                   <div className="rp-review-row"><dt>Nombre</dt><dd>{nombre}</dd></div>
                   <div className="rp-review-row"><dt>Teléfono</dt><dd>{telefono}</dd></div>
-                  <div className="rp-review-row"><dt>Correo</dt><dd>{email}</dd></div>
+                  {email && <div className="rp-review-row"><dt>Correo</dt><dd>{email}</dd></div>}
                   {notas && <div className="rp-review-row"><dt>Notas</dt><dd>{notas}</dd></div>}
                 </dl>
               </div>
@@ -245,12 +255,16 @@ export default function ReservaPublicaForm({
                   <label className="rp-label" htmlFor="rp-tel">Teléfono <span className="rp-required">*</span></label>
                   <input id="rp-tel" className="rp-input" value={telefono} onChange={e => setTelefono(e.target.value)}
                     placeholder="+53 5…" type="tel" required />
+                  <span className="rp-hint">Es por donde te avisará el negocio.</span>
                 </div>
                 <div className="rp-field">
-                  <label className="rp-label" htmlFor="rp-email">Correo <span className="rp-required">*</span></label>
+                  {/* El correo deja de ser obligatorio y deja de prometer: CLAUX no
+                      escribe al cliente final, así que «para confirmarte la reserva»
+                      era una promesa que no se cumple. Se guarda como dato de contacto. */}
+                  <label className="rp-label" htmlFor="rp-email">Correo</label>
                   <input id="rp-email" className="rp-input" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="tucorreo@ejemplo.com" type="email" required />
-                  <span className="rp-hint">Para confirmarte la reserva.</span>
+                    placeholder="tucorreo@ejemplo.com" type="email" />
+                  <span className="rp-hint">Opcional, para que el negocio pueda localizarte.</span>
                 </div>
                 <div className="rp-field">
                   <label className="rp-label" htmlFor="rp-notas">Notas</label>
@@ -301,7 +315,7 @@ export default function ReservaPublicaForm({
                               className={`rp-day-cell${f === fecha ? ' rp-day-cell-active' : ''}${off ? ' rp-day-cell-off' : ''}`}
                               onClick={() => setFecha(f)}
                               aria-label={`${formatFecha(f)}${off ? ', sin disponibilidad' : ', con disponibilidad'}`}>
-                              <span className="rp-day-dow">{dowDia(f)}</span>
+                              <span className="rp-day-dow">{dowDia(f, hoy)}</span>
                               <span className="rp-day-num">{numDia(f)}</span>
                             </button>
                           )

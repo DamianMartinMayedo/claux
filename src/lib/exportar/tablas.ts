@@ -35,6 +35,7 @@ import { SIN_CATEGORIA, SIN_TERCERO, importeBuscado } from '@/lib/listados'
 // 20:00 la fecha ya es la de mañana: el tramo de antigüedad de una deuda y el estado
 // efectivo de un acuerdo salían distintos en el fichero y en la pantalla.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { etiquetaEstado } from '@/lib/reservas/estados'
 import { horasDeTurno } from '@/lib/rrhh/turnos'
 import type { ValorCelda } from './csv'
 
@@ -1371,7 +1372,8 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         .map(f => [
           f.fecha as string, f.hora as string, f.nombre_cliente as string,
           f.telefono as string, f.personas as number, f.canal as string,
-          f.estado as string, f.notas as string,
+          // La descarga habla el idioma de la pantalla: «Pendiente», no `PENDIENTE`.
+          etiquetaEstado(f.estado as string), f.notas as string,
         ])
     },
   },
@@ -1408,7 +1410,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
           f.fecha as string, f.hora as string, f.hora_fin as string,
           f.nombre_cliente as string, f.telefono as string,
           recurso, servicio,
-          f.canal as string, f.estado as string, f.notas as string,
+          f.canal as string, etiquetaEstado(f.estado as string), f.notas as string,
         ])
     },
   },

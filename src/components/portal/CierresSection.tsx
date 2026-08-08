@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
-import { guardarCierre, eliminarCierre, type Cierre } from '@/app/actions/portal/reservas'
+import { guardarCierre, eliminarCierre, type Cierre } from '@/app/actions/portal/agenda-comun'
 import { Plus, Trash2 } from 'lucide-react'
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
@@ -17,7 +17,12 @@ function fmt(f: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[]; iaActiva?: boolean }) {
+export default function CierresSection({ cierres, iaActiva, compartidas }: {
+  cierres: Cierre[]
+  iaActiva?: boolean
+  /** Con Reservas Y Citas contratadas: un cierre es del NEGOCIO, no de una de las dos. */
+  compartidas?: boolean
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mostrarForm, setMostrarForm] = useState(false)
@@ -55,6 +60,11 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
           <Plus size={14} strokeWidth={2.5} /> Añadir
         </button>
       </div>
+      {compartidas && (
+        <span className="text-xs-muted res-ambito">
+          Un cierre es del <strong>negocio entero</strong>: ese día no hay ni reservas ni citas.
+        </span>
+      )}
 
       {iaActiva && (
         <div className="info-box">
@@ -89,7 +99,9 @@ export default function CierresSection({ cierres, iaActiva }: { cierres: Cierre[
       )}
 
       {cierres.length === 0 ? (
-        <div className="ter-form-grid res-conf-pad-top">
+        <div className="res-conf-pad-top">
+          {/* Un párrafo NO va dentro de `ter-form-grid`: es una rejilla de 6 columnas
+              y el texto caía en una sola, en una tira estrecha. */}
           <span className="input-hint">No hay días de cierre. Añade festivos, vacaciones o cierres puntuales para bloquear reservas y citas esos días.</span>
         </div>
       ) : (

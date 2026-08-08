@@ -8,13 +8,19 @@ import { Check, Loader2, X } from 'lucide-react'
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
 
+// Etiquetas PROPIAS, no las del portal: aquí lee el cliente final, no el dueño.
+// «Pendiente de confirmar» le dice qué esperar; «Atendió» sería jerga de gestión, y
+// lo que él quiere saber es que ya pasó. Los badges son los de la hoja pública
+// (`rp-badge-*`), que no comparte tokens con el portal (regla de Cuba, UI §6).
 const ESTADO_LABEL: Record<string, string> = {
   PENDIENTE: 'Pendiente de confirmar', CONFIRMADA: 'Confirmada', RECHAZADA: 'Rechazada',
   NO_SHOW: 'No asistió', CANCELADA: 'Cancelada',
+  ATENDIDA: 'Completada', CADUCADA: 'Caducada',
 }
 const ESTADO_CLASS: Record<string, string> = {
   PENDIENTE: 'rp-badge-warn', CONFIRMADA: 'rp-badge-ok', RECHAZADA: 'rp-badge-neutral',
   NO_SHOW: 'rp-badge-neutral', CANCELADA: 'rp-badge-neutral',
+  ATENDIDA: 'rp-badge-ok', CADUCADA: 'rp-badge-neutral',
 }
 
 function formatFecha(f: string): string {
@@ -29,7 +35,10 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
   const [error, setError] = useState('')
   const [cancelada, setCancelada] = useState(false)
 
-  const titulo = data.tipo === 'cita' ? 'Tu cita' : 'Tu reserva'
+  const titulo  = data.tipo === 'cita' ? 'Tu cita' : 'Tu reserva'
+  // CIT-10: los mensajes del estado no cancelable decían «reserva» aunque fuera una
+  // cita, y el tipo ya viajaba en `data.tipo`.
+  const palabra = data.tipo === 'cita' ? 'cita' : 'reserva'
   const cancelable = (estado === 'PENDIENTE' || estado === 'CONFIRMADA') && data.cancelable && !cancelada
 
   function handleCancelar() {
@@ -84,10 +93,11 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
           </>
         ) : (
           <p className="rp-hint">
-            {estado === 'CANCELADA' ? 'Esta reserva está cancelada.'
-              : estado === 'RECHAZADA' ? 'Esta reserva no fue aceptada.'
-              : data.fecha < hoyEnTz() ? 'Esta reserva ya pasó.'
-              : 'Esta reserva ya no se puede cancelar en línea. Contacta con el negocio.'}
+            {estado === 'CANCELADA' ? `Esta ${palabra} está cancelada.`
+              : estado === 'RECHAZADA' ? `Esta ${palabra} no fue aceptada.`
+              : estado === 'CADUCADA' ? `Esta ${palabra} caducó sin confirmarse.`
+              : data.fecha < hoyEnTz() ? `Esta ${palabra} ya pasó.`
+              : `Esta ${palabra} ya no se puede cancelar en línea. Contacta con el negocio.`}
           </p>
         )}
       </div>

@@ -11,33 +11,42 @@ import {
   type DiaDisponible,
 } from '@/app/actions/portal/citas'
 import type { EtiquetasSector } from '@/lib/sector'
-import type { ReglasReserva } from '@/app/actions/portal/reservas'
+import type { ReglasReserva } from '@/app/actions/portal/agenda-comun'
 import { Check, Loader2, ChevronRight } from 'lucide-react'
+import EnlaceGestion from '../../_componentes/EnlaceGestion'
 
-// Fechas en calendario LOCAL (sin toISOString/UTC) → correctas en cualquier zona.
-function ymd(dt: Date): string {
+// COM-7: el «hoy» NO sale del reloj del visitante. Lo decide el servidor en la zona
+// del negocio (America/Havana) y baja como prop: si no, un cliente en España veía un
+// «Hoy» distinto del que usó la RPC y la tira de 7 días se desalineaba con los días
+// realmente disponibles. Estas funciones operan sobre esa fecha, sin `new Date()`.
+function sumarDiasA(iso: string, dias: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + dias)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
-}
-function hoyISO(): string { return ymd(new Date()) }
-function sumarDiasISO(dias: number): string {
-  const d = new Date(); d.setDate(d.getDate() + dias)
-  return ymd(d)
 }
 function formatFechaCorta(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
 }
-function etiquetaDia(f: string): string {
-  if (f === hoyISO()) return 'Hoy'
-  if (f === sumarDiasISO(1)) return 'Mañana'
+function etiquetaDia(f: string, hoy: string): string {
+  if (f === hoy) return 'Hoy'
+  if (f === sumarDiasA(hoy, 1)) return 'Mañana'
   return formatFechaCorta(f)
 }
 // Etiquetas para las celdas de la rejilla de días.
-function dowDia(f: string): string {
-  if (f === hoyISO()) return 'Hoy'
-  if (f === sumarDiasISO(1)) return 'Mañana'
+function dowDia(f: string, hoy: string): string {
+  if (f === hoy) return 'Hoy'
+  if (f === sumarDiasA(hoy, 1)) return 'Mañana'
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')
+}
+// CIT-2: el precio se imprimía con «$» ignorando la moneda que sí viaja en el dato —
+// el mismo fallo ya corregido en el portal y en el bot. Sin moneda, el número pelado
+// antes que mentir con un símbolo (memoria `monedas-siempre-del-cliente`).
+function formatPrecio(precio: number | null, moneda: string | null): string {
+  if (precio == null) return ''
+  const n = precio.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return moneda ? `${n} ${moneda}` : n
 }
 function numDia(f: string): string {
   const [, , d] = f.split('-').map(Number)
@@ -47,18 +56,22 @@ function numDia(f: string): string {
 type Paso = 'servicio' | 'recurso' | 'horario' | 'datos' | 'revisar' | 'ok'
 
 export default function CitasPublicaForm({
-  clientId, negocio, servicios, recursos, etiquetas, slug, reglas,
+  clientId, negocio, servicios, recursos, etiquetas, slug, reglas, hoy,
 }: {
   clientId:  string
-  negocio:   { nombre: string }
+  negocio:   { nombre: string; logo_url: string | null }
   servicios: ServicioPublico[]
   recursos:  RecursoPublico[]
   etiquetas: EtiquetasSector
   slug:      string
   reglas:    ReglasReserva
+  /** «Hoy» en la zona del NEGOCIO, calculado en el servidor (COM-7). */
+  hoy:       string
 }) {
   const [isPending, startTransition] = useTransition()
   const et = etiquetas
+  const hoyISO = () => hoy
+  const sumarDiasISO = (dias: number) => sumarDiasA(hoy, dias)
   const fechaMax = reglas.ventana_max_dias > 0 ? sumarDiasISO(reglas.ventana_max_dias) : undefined
 
   const [paso, setPaso] = useState<Paso>('servicio')
@@ -70,7 +83,7 @@ export default function CitasPublicaForm({
   const [verOtras, setVerOtras] = useState(false)         // abre el selector de fecha nativo
 
   // Ventana fija de 7 días para la rejilla; cada uno disponible si está en `dias`.
-  const ventana = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDiasISO(i)), [])
+  const ventana = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDiasA(hoy, i)), [hoy])
   const diasMap = useMemo(() => new Map(dias.map(d => [d.fecha, d])), [dias])
   const [slots, setSlots] = useState<SlotCita[]>([])
   const [hora, setHora] = useState('')
@@ -88,6 +101,9 @@ export default function CitasPublicaForm({
   const [error, setError] = useState('')
 
   const servicio = servicios.find(s => s.servicio_id === servicioId) ?? null
+  // El enlace se enseña completo para que se pueda copiar y pegar donde sea. En el
+  // servidor `window` no existe; solo hace falta al pintar el paso de éxito.
+  const origen = typeof window === 'undefined' ? '' : window.location.origin
 
   const recursosParaServicio = useMemo(() =>
     recursos.filter(r => r.servicio_ids.length === 0 || r.servicio_ids.includes(servicioId)),
@@ -198,7 +214,11 @@ export default function CitasPublicaForm({
   return (
     <div className="rp-card">
       <div className="rp-card-body">
-        <h1 className="rp-title">{negocio.nombre}</h1>
+        <div className="rp-brand">
+          {/* COM-5: la cara del NEGOCIO, no la de CLAUX. */}
+          {negocio.logo_url && <img src={negocio.logo_url} alt="" className="rp-logo" width={40} height={40} />}
+          <h1 className="rp-title">{negocio.nombre}</h1>
+        </div>
 
         {paso === 'ok' ? (
           <div className="rp-success">
@@ -209,9 +229,7 @@ export default function CitasPublicaForm({
               <span className="rp-resumen-hora">{formatFecha(fecha)} · {hora}</span>
             </div>
             <p className="rp-hint">{estadoFinal === 'CONFIRMADA' ? '¡Te esperamos!' : 'Te avisaremos en cuanto la confirmemos.'}</p>
-            {tokenCita && (
-              <a className="rp-manage-link" href={`/${slug}/r/${tokenCita}`}>Gestionar o cancelar mi cita</a>
-            )}
+            {tokenCita && <EnlaceGestion url={`${origen}/${slug}/r/${tokenCita}`} tipo="cita" />}
           </div>
         ) : servicios.length === 0 ? (
           <p className="rp-hint">Este negocio aún no tiene horarios de cita disponibles. Vuelve pronto.</p>
@@ -226,7 +244,7 @@ export default function CitasPublicaForm({
                   {servicios.map(s => (
                     <button key={s.servicio_id} type="button" className="rp-opt" onClick={() => elegirServicio(s.servicio_id)}>
                       <span className="rp-opt-main">{s.nombre}</span>
-                      <span className="rp-opt-meta">{s.duracion_minutos} min{s.precio != null ? ` · $${s.precio.toFixed(2)}` : ''}</span>
+                      <span className="rp-opt-meta">{s.duracion_minutos} min{s.precio != null ? ` · ${formatPrecio(s.precio, s.moneda)}` : ''}</span>
                     </button>
                   ))}
                 </div>
@@ -280,7 +298,7 @@ export default function CitasPublicaForm({
                                 className={`rp-day-cell${f === fecha ? ' rp-day-cell-active' : ''}${off ? ' rp-day-cell-off' : ''}`}
                                 onClick={() => setFecha(f)}
                                 aria-label={`${formatFecha(f)}${off ? ', sin huecos' : ', con disponibilidad'}`}>
-                                <span className="rp-day-dow">{dowDia(f)}</span>
+                                <span className="rp-day-dow">{dowDia(f, hoy)}</span>
                                 <span className="rp-day-num">{numDia(f)}</span>
                               </button>
                             )
@@ -313,7 +331,7 @@ export default function CitasPublicaForm({
                     <div className="rp-empty">
                       <p className="rp-hint">No hay horas libres ese día.</p>
                       <button type="button" className="rp-edit-link" onClick={() => setFecha(dias[0].fecha)}>
-                        Ver próxima disponibilidad ({etiquetaDia(dias[0].fecha)})
+                        Ver próxima disponibilidad ({etiquetaDia(dias[0].fecha, hoy)})
                       </button>
                     </div>
                   ) : (
@@ -346,12 +364,16 @@ export default function CitasPublicaForm({
                     <input id="rp-c-nombre" className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Tu nombre completo" required autoFocus />
                   </div>
                   <div className="rp-field">
-                    <label className="rp-label" htmlFor="rp-c-tel">Teléfono</label>
-                    <input id="rp-c-tel" className="rp-input" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="+53 5…" type="tel" />
+                    {/* El teléfono pasa a obligatorio: es el único canal real hacia el
+                        cliente (CLAUX no le manda correos). Antes ni se pedía. */}
+                    <label className="rp-label" htmlFor="rp-c-tel">Teléfono <span className="rp-required">*</span></label>
+                    <input id="rp-c-tel" className="rp-input" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="+53 5…" type="tel" required />
+                    <span className="rp-hint">Es por donde te avisará el negocio.</span>
                   </div>
                   <div className="rp-field">
-                    <label className="rp-label" htmlFor="rp-c-email">Correo <span className="rp-required">*</span></label>
-                    <input id="rp-c-email" className="rp-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" type="email" required />
+                    <label className="rp-label" htmlFor="rp-c-email">Correo</label>
+                    <input id="rp-c-email" className="rp-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" type="email" />
+                    <span className="rp-hint">Opcional, para que el negocio pueda localizarte.</span>
                     <span className="rp-hint">Para confirmarte la cita.</span>
                   </div>
                   <div className="rp-field">
@@ -397,7 +419,7 @@ export default function CitasPublicaForm({
                   <dl className="rp-review">
                     <div className="rp-review-row"><dt>Nombre</dt><dd>{nombre}</dd></div>
                     {telefono && <div className="rp-review-row"><dt>Teléfono</dt><dd>{telefono}</dd></div>}
-                    <div className="rp-review-row"><dt>Correo</dt><dd>{email}</dd></div>
+                    {email && <div className="rp-review-row"><dt>Correo</dt><dd>{email}</dd></div>}
                     {notas && <div className="rp-review-row"><dt>Notas</dt><dd>{notas}</dd></div>}
                   </dl>
                 </div>

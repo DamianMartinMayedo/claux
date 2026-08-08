@@ -7,10 +7,12 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import {
   guardarCategoria, eliminarCategoria, eliminarItem,
   marcarDisponible, marcarDisponibleEnLote, eliminarItemsEnLote,
-  guardarSlug, guardarMonedaCatalogo, importarDesdeProductos,
+  guardarMonedaCatalogo, importarDesdeProductos,
   type CatalogoData, type CatalogoItem, type CatalogoCategoria,
   type ResultadoLoteCatalogo, type TipoImportacion,
 } from '@/app/actions/portal/catalogo'
+import { guardarSlug } from '@/app/actions/portal/agenda-comun'
+import QrEnlace from '@/components/portal/QrEnlace'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import Tabs from '@/components/Tabs'
@@ -20,7 +22,7 @@ import ItemModal from './ItemModal'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { useIa } from '@/components/portal/ia/IaContext'
 import {
-  Plus, Pencil, Trash2, X, Check, Loader2, EyeOff, Eye, QrCode, Copy,
+  Plus, Pencil, Trash2, X, Check, Loader2, EyeOff, Eye, Copy,
   Download, Package, FolderTree,
 } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
@@ -549,8 +551,6 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
   const [tipoImport, setTipoImport] = useState<TipoImportacion>('AMBOS')
   const [isSavingMoneda, startMoneda] = useTransition()
   const [slugInput, setSlugInput] = useState(data.slug ?? '')
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [generandoQr, setGenerandoQr] = useState(false)
 
   const origen = typeof window !== 'undefined' ? window.location.origin : ''
   // Segmento de URL acorde al negocio: /menu, /carta, /servicios o /catalogo
@@ -576,28 +576,6 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
   function copiarEnlace() {
     if (!url) return
     navigator.clipboard.writeText(url).then(() => toastSuccess('Enlace copiado.'))
-  }
-
-  async function generarQr() {
-    if (!url) return
-    setGenerandoQr(true)
-    try {
-      const QRCode = (await import('qrcode')).default
-      const dataUrl = await QRCode.toDataURL(url, { width: 480, margin: 2 })
-      setQrDataUrl(dataUrl)
-    } catch {
-      toastError('No se pudo generar el QR.')
-    } finally {
-      setGenerandoQr(false)
-    }
-  }
-
-  function descargarQr() {
-    if (!qrDataUrl) return
-    const a = document.createElement('a')
-    a.href = qrDataUrl
-    a.download = `qr-${data.slug ?? 'catalogo'}.png`
-    a.click()
   }
 
   function importar() {
@@ -670,24 +648,8 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
         {!data.slug && <p className="input-hint">Define un identificador para poder compartir tu {data.etiquetas.catalogo.toLowerCase()} y generar el QR.</p>}
       </div>
 
-      {url && (
-        <div className="card cat-qr-card">
-          <div className="card-header"><h2 className="card-title">Código QR</h2></div>
-          {qrDataUrl ? (
-            <div className="cat-qr-preview">
-              <Image src={qrDataUrl} alt={`QR de ${url}`} width={220} height={220} unoptimized />
-              <button type="button" className="btn btn-secondary" onClick={descargarQr}>
-                <Download size={16} strokeWidth={2} /> Descargar PNG
-              </button>
-            </div>
-          ) : (
-            <button type="button" className="btn btn-primary" onClick={generarQr} disabled={generandoQr}>
-              {generandoQr ? <Loader2 size={16} strokeWidth={2} className="img-upload-spin" /> : <QrCode size={16} strokeWidth={2} />}
-              Generar QR
-            </button>
-          )}
-        </div>
-      )}
+      {/* El QR vive en `QrEnlace` desde que Reservas y Citas también lo necesitan. */}
+      <QrEnlace url={url} nombreArchivo={`qr-${data.slug ?? 'catalogo'}`} />
 
       {data.puedeImportar && (
         <div className="card">

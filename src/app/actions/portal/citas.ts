@@ -5,15 +5,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz } from '@/lib/fecha-tz'
 import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type EstadoReserva } from '@/lib/reservas/estado'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
-import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
+import { etiquetasDe, etiquetasCliente, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { tieneModulo, tieneAlgunModulo, MODULOS_CATALOGO } from '@/lib/modulos'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
 import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
-import { type Cierre, type ReglasReserva } from './reservas'
+import { enviarMensaje } from '@/lib/telegram/enviar'
+import { type Cierre, type ReglasReserva, type ResultadoAgenda } from './agenda-comun'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import {
-  limiteDelFiltro, patronBusqueda, type FiltroListado,
+  limiteDelFiltro, patronBusqueda, ordenDelRango, type FiltroListado,
 } from '@/lib/listados'
 import { sumarDias } from '@/lib/fecha-tz'
 
@@ -23,6 +24,11 @@ export interface Servicio {
   servicio_id:      string
   nombre:           string
   duracion_minutos: number
+  /**
+   * Minutos entre esta cita y la siguiente (limpiar, cobrar, despedir). Se suma a la
+   * OCUPACIÓN, nunca a lo que ve el cliente («Corte · 30 min») ni al precio. 0 = sin margen.
+   */
+  margen_minutos:   number
   precio:           number | null
   /** Moneda del precio. NULL en fichas viejas sin precio (mig. 119). Nunca de una lista fija. */
   moneda:           string | null
@@ -55,6 +61,16 @@ export interface Recurso {
   empleado_id:  string | null  // vínculo opcional con un empleado de RRHH
   servicio_ids: string[]      // servicios que presta (vacío = todos)
   horarios:     RecursoHorario[]
+  /** Días libres de ESTE profesional. Los cierres son del negocio entero (CIT-4). */
+  ausencias:    Ausencia[]
+}
+
+export interface Ausencia {
+  ausencia_id: string
+  recurso_id:  string
+  fecha_desde: string
+  fecha_hasta: string
+  motivo:      string | null
 }
 
 export interface EmpleadoRRHH {
@@ -77,6 +93,10 @@ export interface Cita {
   canal:          'web' | 'bot' | 'manual'
   estado:         EstadoReserva
   telegram_chat_id: string | null
+  /** La metió el dueño saltándose una regla (horario, solape, antelación…). */
+  forzada:        boolean
+  /** ATENDIDA la puso el barrido diario, no el dueño. */
+  cierre_auto:    boolean
   created_at:     string
 }
 
@@ -88,6 +108,8 @@ export interface CitaConDetalle extends Cita {
 
 export interface CitasPageData {
   client_id:   string
+  /** Nombre del negocio, para redactar el aviso al cliente (fase 10). */
+  negocio:     string
   citas:       CitaConDetalle[]
   recursos:    Recurso[]
   servicios:   Servicio[]
@@ -99,6 +121,8 @@ export interface CitasPageData {
   cierres:     Cierre[]         // festivos/cierres del negocio (compartidos con Reservas)
   reglas:      ReglasReserva    // antelación/ventana (compartidas con Reservas)
   tieneIa:     boolean          // addon asistente_ia contratado → toggle de IA del bot
+  /** Tiene TAMBIÉN Reservas: solo entonces hace falta decir de quién es cada ajuste. */
+  tieneAmbas:  boolean
   monedas:     string[]         // las del cliente (tabla `monedas`), nunca una lista fija
   tasas:       Record<string, number>   // "ORIGEN__DESTINO" → factor, para el atajo al cambiar de moneda
   catalogo:    ServicioCatalogo[]       // llenado rápido; vacío si no hay módulo de catálogo
@@ -118,6 +142,13 @@ export interface CitasPageData {
   total:      number
   /** Techo con el que se consultó, para que «Ver más» sepa desde dónde subir. */
   limite:     number
+  /**
+   * Lo de HOY, contado aparte (U3). La cabecera se calculaba sobre `citas`, que es el
+   * rango cargado: poner «Mes pasado» en la barra la dejaba a cero.
+   */
+  hoy:        { pendientes: number; confirmadas: number; total: number }
+  /** Confirmadas de días pasados que nadie ha cerrado (ni «vino» ni «no vino»). */
+  por_cerrar: number
 }
 
 function reglasDe(c: Record<string, unknown> | null | undefined): ReglasReserva {
@@ -137,6 +168,7 @@ function generarRecursoId():  string { return `REC-${corto()}` }
 function generarServicioId(): string { return `SER-${corto()}` }
 function generarHorarioId():  string { return `RHO-${corto()}` }
 function generarReservaId():  string { return `RES-${corto()}` }
+function generarAusenciaId(): string { return `AUS-${corto()}` }
 
 function hoy(): string { return hoyEnTz() }
 function horaAhora(): string { return ahoraEnTz() }
@@ -148,16 +180,30 @@ function emailValido(v: string): boolean {
 
 function hhmm(t: string | null): string { return t ? t.substring(0, 5) : '' }
 
-async function etiquetasDeSector(db: ReturnType<typeof createAdminClient>, sector: string | null): Promise<EtiquetasSector> {
+/**
+ * CIT-9: la cascada completa **override del cliente → sector → genérico**.
+ *
+ * Esto leía SOLO `plantillas_sector` e ignoraba `clients.etiquetas` (mig. 164), que
+ * sí usa el sidebar: el menú podía decir «Profesional» y la página «Personal». Y
+ * encima forzaba siempre el genérico, así que el override del cliente no llegaba nunca.
+ * El forzado se conserva solo como salvavidas cuando el sector trae una palabra que
+ * en una agenda no significa nada («Mesa»), y siempre por debajo del override.
+ */
+async function etiquetasDeSector(
+  db: ReturnType<typeof createAdminClient>, sector: string | null, override?: unknown,
+): Promise<EtiquetasSector> {
   let base: EtiquetasSector = { ...ETIQUETAS_DEFAULT }
   if (sector) {
     const { data: pl } = await db.from('plantillas_sector').select('etiquetas').eq('sector', sector).maybeSingle()
     base = etiquetasDe(pl?.etiquetas)
   }
-  // Citas NO varía con el tipo de negocio (un restaurante usa Reservas, no Citas):
-  // el "recurso" es siempre el personal que atiende los servicios. Forzamos la
-  // etiqueta genérica para no heredar "Mesas"/"Cabinas"/… del sector.
-  return { ...base, recurso: ETIQUETAS_DEFAULT.recurso, recurso_pl: ETIQUETAS_DEFAULT.recurso_pl }
+  // Del sector no se hereda «Mesa»/«Cabina» como recurso de una agenda.
+  const heredado = /mesa/i.test(base.recurso) ? ETIQUETAS_DEFAULT.recurso : base.recurso
+  const heredadoPl = /mesa/i.test(base.recurso_pl) ? ETIQUETAS_DEFAULT.recurso_pl : base.recurso_pl
+  const conSector: EtiquetasSector = { ...base, recurso: heredado, recurso_pl: heredadoPl }
+
+  // El override del cliente manda sobre todo lo anterior.
+  return etiquetasCliente(conSector, override)
 }
 
 // ── Datos del portal ───────────────────────────────────────────────────────────
@@ -205,9 +251,12 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
       `notas.ilike.${patron}`,
     ].join(','))
   }
+  // El orden sigue al rango (ver `ordenDelRango`): la agenda de mañana arriba cuando se
+  // mira hacia delante; lo más reciente primero cuando se repasa un mes cerrado.
+  const { ascendente } = ordenDelRango(desde, hasta)
   citasQuery = citasQuery
-    .order('fecha', { ascending: false })
-    .order('hora', { ascending: true })
+    .order('fecha', { ascending: ascendente })
+    .order('hora',  { ascending: ascendente, nullsFirst: ascendente })
     .limit(limite)
 
   // `recurso_servicios` NO tiene columna `client_id` (es una tabla puente pura), así que
@@ -219,17 +268,29 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
   const { data: recData } = await db.from('recursos').select('*').eq('client_id', cid).order('nombre')
   const recursoIds = ((recData ?? []) as { recurso_id: string }[]).map(r => r.recurso_id)
 
-  const [srvRes, rsRes, rhRes, citasRes, cliRes] = await Promise.all([
+  // Lo de hoy, contado en la base: la cabecera no puede depender del rango de la barra.
+  const deHoy = (estado: EstadoReserva) => db.from('reservas')
+    .select('reserva_id', { count: 'exact', head: true })
+    .eq('client_id', cid).not('recurso_id', 'is', null)
+    .eq('fecha', hoy()).eq('estado', estado)
+
+  const [srvRes, rsRes, rhRes, citasRes, cliRes, pendHoy, confHoy, porCerrar] = await Promise.all([
     db.from('servicios').select('*').eq('client_id', cid).order('nombre'),
     db.from('recurso_servicios').select('recurso_id, servicio_id')
       .in('recurso_id', recursoIds.length ? recursoIds : ['__none__']),
     db.from('recurso_horarios').select('recurso_id, dia_semana, hora_inicio, hora_fin').eq('client_id', cid),
     citasQuery,
-    db.from('clients').select('slug, sector, bot_config_citas, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas').eq('client_id', cid).single(),
+    db.from('clients').select('slug, sector, nombre_empresa, etiquetas, bot_config_citas, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas').eq('client_id', cid).single(),
+    deHoy('PENDIENTE'),
+    deHoy('CONFIRMADA'),
+    db.from('reservas').select('reserva_id', { count: 'exact', head: true })
+      .eq('client_id', cid).not('recurso_id', 'is', null)
+      .eq('estado', 'CONFIRMADA').lt('fecha', hoy()),
   ])
 
   const servicios: Servicio[] = ((srvRes.data ?? []) as Servicio[]).map(s => ({
-    ...s, duracion_minutos: Number(s.duracion_minutos), precio: s.precio == null ? null : Number(s.precio),
+    ...s, duracion_minutos: Number(s.duracion_minutos), margen_minutos: Number(s.margen_minutos ?? 0),
+    precio: s.precio == null ? null : Number(s.precio),
     moneda: s.moneda ?? null, producto_id: s.producto_id ?? null,
   }))
   const srvPorId = new Map(servicios.map(s => [s.servicio_id, s]))
@@ -248,6 +309,17 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
     horPorRecurso.set(row.recurso_id, arr)
   }
 
+  // Ausencias vigentes (de hoy en adelante): las pasadas ya no dicen nada.
+  const { data: ausData } = await db.from('recurso_ausencias')
+    .select('ausencia_id, recurso_id, fecha_desde, fecha_hasta, motivo')
+    .eq('client_id', cid).gte('fecha_hasta', hoy()).order('fecha_desde')
+  const ausPorRecurso = new Map<string, Ausencia[]>()
+  for (const a of (ausData ?? []) as Ausencia[]) {
+    const arr = ausPorRecurso.get(a.recurso_id) ?? []
+    arr.push(a)
+    ausPorRecurso.set(a.recurso_id, arr)
+  }
+
   const recursos: Recurso[] = ((recData ?? []) as { recurso_id: string; nombre: string; tipo: string | null; activo: boolean; empleado_id: string | null }[]).map(r => ({
     recurso_id:   r.recurso_id,
     nombre:       r.nombre,
@@ -256,6 +328,7 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
     empleado_id:  r.empleado_id ?? null,
     servicio_ids: linkPorRecurso.get(r.recurso_id) ?? [],
     horarios:     (horPorRecurso.get(r.recurso_id) ?? []).sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio)),
+    ausencias:    ausPorRecurso.get(r.recurso_id) ?? [],
   }))
   const recPorId = new Map(recursos.map(r => [r.recurso_id, r]))
 
@@ -318,14 +391,16 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
     citas,
     recursos,
     servicios,
+    negocio:     (cliRes.data?.nombre_empresa as string) ?? 'Tu negocio',
     slug:        (cliRes.data?.slug as string) ?? null,
-    etiquetas:   await etiquetasDeSector(db, (cliRes.data?.sector as string) ?? null),
+    etiquetas:   await etiquetasDeSector(db, (cliRes.data?.sector as string) ?? null, cliRes.data?.etiquetas),
     bot_config:  parseBotConfig(cliRes.data?.bot_config_citas),
     rrhh_activo,
     empleados,
     cierres:     (cierresData ?? []) as Cierre[],
     reglas:      reglasDe(cliRes.data as Record<string, unknown> | null),
     tieneIa:     tieneModulo(cliRes.data?.modulos_activos, 'asistente_ia'),
+    tieneAmbas:  tieneModulo(cliRes.data?.modulos_activos, 'reservas_citas'),
     monedas,
     tasas:       await mapaTasas(db, cid, monedas),
     catalogo,
@@ -335,6 +410,12 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
     hay_mas: citas.length >= limite,
     total:   citasRes.count ?? citas.length,
     limite,
+    hoy: {
+      pendientes:  pendHoy.count ?? 0,
+      confirmadas: confHoy.count ?? 0,
+      total:      (pendHoy.count ?? 0) + (confHoy.count ?? 0),
+    },
+    por_cerrar: porCerrar.count ?? 0,
   }
 }
 
@@ -350,6 +431,7 @@ export async function guardarServicio(
   const servicio_id = (formData.get('servicio_id') as string)?.trim()
   const nombre      = (formData.get('nombre')      as string)?.trim()
   const duracionRaw = parseInt(formData.get('duracion_minutos') as string, 10)
+  const margenRaw   = parseInt(formData.get('margen_minutos') as string, 10)
   const precioRaw   = (formData.get('precio') as string)?.trim()
   const monedaRaw   = (formData.get('moneda') as string)?.trim() || null
   const productoRaw = (formData.get('producto_id') as string)?.trim() || null
@@ -357,6 +439,7 @@ export async function guardarServicio(
 
   if (!nombre) return { ok: false, error: 'El nombre del servicio es obligatorio.' }
   const duracion = isNaN(duracionRaw) || duracionRaw < 5 ? 30 : duracionRaw
+  const margen   = isNaN(margenRaw) || margenRaw < 0 ? 0 : margenRaw
   const precio   = precioRaw ? Number(precioRaw) : null
   if (precio != null && (isNaN(precio) || precio < 0)) return { ok: false, error: 'Precio no válido.' }
 
@@ -445,12 +528,12 @@ export async function guardarServicio(
   if (!servicio_id) {
     const { error } = await db.from('servicios').insert({
       servicio_id: generarServicioId(), client_id: session.client_id,
-      nombre, duracion_minutos: duracion, precio, moneda, producto_id, activo,
+      nombre, duracion_minutos: duracion, margen_minutos: margen, precio, moneda, producto_id, activo,
     })
     if (error) return { ok: false, error: error.message }
   } else {
     const { error } = await db.from('servicios')
-      .update({ nombre, duracion_minutos: duracion, precio, moneda, producto_id, activo, updated_at: new Date().toISOString() })
+      .update({ nombre, duracion_minutos: duracion, margen_minutos: margen, precio, moneda, producto_id, activo, updated_at: new Date().toISOString() })
       .eq('servicio_id', servicio_id).eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
   }
@@ -500,15 +583,27 @@ export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean;
   // Servicios que presta (sin selección = presta todos)
   const servicioIds = formData.getAll('servicio_ids').map(v => (v as string).trim()).filter(Boolean)
 
-  // Horarios: campos hor_<dia>_inicio / hor_<dia>_fin (1..7); ambos rellenos = franja
+  // Horarios: DOS tramos por día (CIT-3, jornada partida). `recurso_horarios` siempre
+  // admitió varias filas por día y `res_slots_cita` las recorre todas; el formulario
+  // guardaba una sola, así que no había forma de cerrar a la hora de comer: o se
+  // ofrecían citas a las 13:30 o se cerraba el negocio entero. Campos:
+  // hor_<dia>_inicio / hor_<dia>_fin y hor_<dia>_inicio2 / hor_<dia>_fin2.
   const horarios: { dia: number; inicio: string; fin: string }[] = []
   for (let d = 1; d <= 7; d++) {
-    const ini = (formData.get(`hor_${d}_inicio`) as string)?.trim()
-    const fin = (formData.get(`hor_${d}_fin`)    as string)?.trim()
-    if (ini && fin) {
-      if (ini >= fin) return { ok: false, error: 'En cada día la hora de fin debe ser posterior a la de inicio.' }
-      horarios.push({ dia: d, inicio: ini, fin })
+    const tramos: { inicio: string; fin: string }[] = []
+    for (const suf of ['', '2']) {
+      const ini = (formData.get(`hor_${d}_inicio${suf}`) as string)?.trim()
+      const fin = (formData.get(`hor_${d}_fin${suf}`)    as string)?.trim()
+      if (!ini || !fin) continue
+      if (ini >= fin) return { ok: false, error: 'En cada tramo la hora de fin debe ser posterior a la de inicio.' }
+      tramos.push({ inicio: ini, fin })
     }
+    // El segundo tramo empieza después de que acabe el primero: si se pisan, no son
+    // dos tramos sino uno mal escrito, y en la agenda saldrían huecos duplicados.
+    if (tramos.length === 2 && tramos[1].inicio < tramos[0].fin) {
+      return { ok: false, error: 'El segundo tramo del día tiene que empezar después de que acabe el primero.' }
+    }
+    for (const t of tramos) horarios.push({ dia: d, inicio: t.inicio, fin: t.fin })
   }
 
   const db = createAdminClient()
@@ -558,8 +653,60 @@ export async function eliminarRecurso(recurso_id: string): Promise<{ ok: boolean
 
   await db.from('recurso_servicios').delete().eq('recurso_id', recurso_id)
   await db.from('recurso_horarios').delete().eq('recurso_id', recurso_id).eq('client_id', session.client_id)
+  await db.from('recurso_ausencias').delete().eq('recurso_id', recurso_id).eq('client_id', session.client_id)
   const { error } = await db.from('recursos').delete()
     .eq('recurso_id', recurso_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
+// ── Ausencias del profesional (CIT-4) ──────────────────────────────────────────
+//
+// `reserva_cierres` es del NEGOCIO: que un barbero libre el martes obligaba a cerrar
+// la barbería entera. Esto es del profesional, y vive en su ficha — no en la pantalla
+// de cierres, que es justo la confusión que se está corrigiendo.
+
+export async function guardarAusencia(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const recurso_id = (formData.get('recurso_id')  as string)?.trim()
+  const desde      = (formData.get('fecha_desde') as string)?.trim()
+  const hastaRaw   = (formData.get('fecha_hasta') as string)?.trim()
+  const motivo     = (formData.get('motivo')      as string)?.trim() || null
+
+  if (!recurso_id) return { ok: false, error: 'Falta el profesional.' }
+  if (!desde)      return { ok: false, error: 'La fecha es obligatoria.' }
+  const hasta = hastaRaw || desde
+  if (hasta < desde) return { ok: false, error: 'La fecha final no puede ser anterior a la inicial.' }
+
+  const db = createAdminClient()
+  // El recurso tiene que ser suyo: el id viene del navegador.
+  const { data: rec } = await db.from('recursos').select('recurso_id')
+    .eq('recurso_id', recurso_id).eq('client_id', session.client_id).maybeSingle()
+  if (!rec) return { ok: false, error: 'Profesional no encontrado.' }
+
+  const { error } = await db.from('recurso_ausencias').insert({
+    ausencia_id: generarAusenciaId(), client_id: session.client_id,
+    recurso_id, fecha_desde: desde, fecha_hasta: hasta, motivo,
+  })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/portal/citas')
+  return { ok: true }
+}
+
+export async function eliminarAusencia(ausencia_id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('recurso_ausencias').delete()
+    .eq('ausencia_id', ausencia_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/portal/citas')
@@ -679,7 +826,7 @@ export async function importarServiciosCatalogo(
 
 // ── Crear cita (manual, desde el panel) ────────────────────────────────────────
 
-export async function crearCitaManual(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+export async function crearCitaManual(formData: FormData, forzar = false): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
@@ -709,20 +856,85 @@ export async function crearCitaManual(formData: FormData): Promise<{ ok: boolean
     p_client_id: session.client_id, p_recurso_id: recurso_id, p_servicio_id: servicio_id,
     p_fecha: fecha, p_hora: horaRaw, p_nombre_cliente: nombre_cliente, p_telefono: telefono, p_notas: notas,
     p_canal: 'manual', p_confirmacion_automatica: bot.confirmacion_automatica, p_reserva_id: reservaId,
+    p_forzar: forzar,
   })
   if (error) return { ok: false, error: error.message }
-  const result = data as { ok: boolean; error?: string }
-  if (!result.ok) return { ok: false, error: result.error ?? 'Error al crear la cita.' }
+  const result = data as ResultadoAgenda
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? 'Error al crear la cita.', forzable: result.forzable }
+  }
 
-  await notificarReservaNueva(
-    { token: bot.token, activo: bot.activo, notificar_owner_chat_id: bot.notificar_owner_chat_id },
-    { reserva_id: reservaId, fecha, hora: horaRaw, personas: 1, nombre_cliente, telefono, notas,
-      estado: bot.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE', telegram_chat_id: null },
-    (cli?.nombre_empresa as string) ?? 'Tu negocio',
-  )
+  // CIT-6: aquí se llamaba a `notificarReservaNueva`, así que el dueño recibía en su
+  // Telegram —con botones de confirmar/rechazar— un aviso de la cita que acababa de
+  // escribir él mismo. Reservas nunca lo hizo. Fuera.
 
   revalidatePath('/portal/citas')
-  return { ok: true }
+  return { ok: true, avisos: result.avisos ?? [] }
+}
+
+// ── Modificar cita (CIT-1) ─────────────────────────────────────────────────────
+//
+// No existía. El caso más frecuente de una peluquería —«¿me lo pasas a las 5?»—
+// obligaba a CANCELAR (con su aviso de cancelación al cliente, que es un mensaje
+// equivocado: no se ha cancelado nada, se ha movido) y crear otra cita.
+
+export async function modificarCita(
+  reserva_id: string,
+  formData: FormData,
+  forzar = false,
+): Promise<ResultadoAgenda> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const recurso_id     = (formData.get('recurso_id')     as string)?.trim()
+  const servicio_id    = (formData.get('servicio_id')    as string)?.trim()
+  const fecha          = (formData.get('fecha')          as string)?.trim()
+  const horaRaw        = (formData.get('hora')           as string)?.trim()
+  const nombre_cliente = (formData.get('nombre_cliente') as string)?.trim()
+  const telefono       = (formData.get('telefono')       as string)?.trim() || null
+  const notas          = (formData.get('notas')          as string)?.trim() || null
+
+  if (!recurso_id)     return { ok: false, error: 'Selecciona un recurso o profesional.' }
+  if (!servicio_id)    return { ok: false, error: 'Selecciona un servicio.' }
+  if (!fecha)          return { ok: false, error: 'La fecha es obligatoria.' }
+  if (!horaRaw)        return { ok: false, error: 'La hora es obligatoria.' }
+  if (!nombre_cliente) return { ok: false, error: 'El nombre del cliente es obligatorio.' }
+  if (fecha < hoy())   return { ok: false, error: 'No se puede mover una cita a una fecha pasada.' }
+
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('res_modificar_cita', {
+    p_client_id: session.client_id, p_reserva_id: reserva_id,
+    p_recurso_id: recurso_id, p_servicio_id: servicio_id,
+    p_fecha: fecha, p_hora: horaRaw,
+    p_nombre_cliente: nombre_cliente, p_telefono: telefono, p_notas: notas,
+    p_forzar: forzar,
+  })
+  if (error) return { ok: false, error: error.message }
+  const result = data as ResultadoAgenda
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? 'Error al modificar la cita.', forzable: result.forzable }
+  }
+
+  // U8: mover una cita no avisaba a nadie. Si el cliente vino por el bot, tiene chat y
+  // se le dice; si no, el dueño lo hace con un clic (Fase 10). Nunca correo.
+  const { data: cita } = await db.from('reservas')
+    .select('telegram_chat_id, personas').eq('reserva_id', reserva_id).eq('client_id', session.client_id).maybeSingle()
+  if (cita?.telegram_chat_id) {
+    const { data: cli } = await db.from('clients')
+      .select('bot_config_citas, nombre_empresa').eq('client_id', session.client_id).single()
+    const bot = parseBotConfig(cli?.bot_config_citas)
+    if (bot.token && bot.activo) {
+      await enviarMensaje(bot.token, cita.telegram_chat_id as string, [
+        `🔄 Tu cita ha cambiado — ${(cli?.nombre_empresa as string) ?? 'el negocio'}`,
+        `📅 ${fecha}  🕐 ${horaRaw.substring(0, 5)}`,
+        'Si no te viene bien, respóndenos.',
+      ].join('\n'))
+    }
+  }
+
+  revalidatePath('/portal/citas')
+  return { ok: true, avisos: result.avisos ?? [] }
 }
 
 // ── Cambiar estado de una cita ─────────────────────────────────────────────────
@@ -739,7 +951,7 @@ export async function cambiarEstadoCita(reserva_id: string, nuevoEstado: EstadoR
   const r = await transicionarEstado(
     db, session.client_id, reserva_id, nuevoEstado,
     (cli?.nombre_empresa as string) ?? 'Tu cita',
-    { token: bot.token, activo: bot.activo },
+    { token: bot.token, activo: bot.activo, clientId: session.client_id, columna: 'bot_config_citas' },
   )
   if (!r.ok) return r
 
@@ -812,7 +1024,7 @@ export interface DiaDisponible {
 }
 
 export async function obtenerCitasPublicas(slug: string): Promise<{
-  negocio: { nombre: string } | null
+  negocio: { nombre: string; logo_url: string | null } | null
   servicios: ServicioPublico[]
   recursos:  RecursoPublico[]
   etiquetas: EtiquetasSector
@@ -822,7 +1034,7 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
   const db = createAdminClient()
 
   const { data: cli } = await db.from('clients')
-    .select('client_id, nombre_empresa, sector, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
+    .select('client_id, nombre_empresa, sector, etiquetas, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
     .eq('slug', slug).single()
 
   if (!cli) return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null, reglas: reglasDe(null) }
@@ -833,9 +1045,11 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
     return { negocio: null, servicios: [], recursos: [], etiquetas: { ...ETIQUETAS_DEFAULT }, client_id: null, reglas: reglasDe(null) }
   }
 
-  const [srvRes, recRes] = await Promise.all([
+  const [srvRes, recRes, empRes] = await Promise.all([
     db.from('servicios').select('servicio_id, nombre, duracion_minutos, precio, moneda').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
     db.from('recursos').select('recurso_id, nombre').eq('client_id', cli.client_id).eq('activo', true).order('nombre'),
+    // COM-5: el enlace compartido es del NEGOCIO. Mismo criterio que el catálogo.
+    db.from('empresas').select('logo_url, mostrar_logo').eq('client_id', cli.client_id).limit(1).maybeSingle(),
   ])
   // `recurso_servicios` no tiene `client_id` (tabla puente pura), así que sin acotar se
   // leía la de TODOS los inquilinos — y esta es una ruta PÚBLICA, la frontera dura de
@@ -853,10 +1067,13 @@ export async function obtenerCitasPublicas(slug: string): Promise<{
   }
 
   return {
-    negocio:   { nombre: cli.nombre_empresa },
+    negocio:   {
+      nombre:   cli.nombre_empresa as string,
+      logo_url: empRes.data?.mostrar_logo ? ((empRes.data?.logo_url as string | null) ?? null) : null,
+    },
     servicios: ((srvRes.data ?? []) as ServicioPublico[]).map(s => ({ ...s, duracion_minutos: Number(s.duracion_minutos), precio: s.precio == null ? null : Number(s.precio) })),
     recursos:  ((recRes.data ?? []) as { recurso_id: string; nombre: string }[]).map(r => ({ recurso_id: r.recurso_id, nombre: r.nombre, servicio_ids: linkPorRecurso.get(r.recurso_id) ?? [] })),
-    etiquetas: await etiquetasDeSector(db, (cli.sector as string) ?? null),
+    etiquetas: await etiquetasDeSector(db, (cli.sector as string) ?? null, cli.etiquetas),
     client_id: cli.client_id,
     reglas:    reglasDe(cli as Record<string, unknown>),
   }
@@ -915,8 +1132,11 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   if (!fecha)          return { ok: false, error: 'Fecha obligatoria.' }
   if (!hora)           return { ok: false, error: 'Hora obligatoria.' }
   if (!nombre_cliente) return { ok: false, error: 'Nombre obligatorio.' }
-  if (!email)          return { ok: false, error: 'Correo obligatorio.' }
-  if (!emailValido(email)) return { ok: false, error: 'Correo no válido.' }
+  // Decisión 1 del plan: CLAUX no escribe al cliente final, así que el correo no puede
+  // ser obligatorio (pedía un dato para un canal que no existe). El TELÉFONO sí, que es
+  // por donde el negocio le va a llamar — y se exige aquí, no solo en el formulario.
+  if (!telefono)       return { ok: false, error: 'Teléfono obligatorio.' }
+  if (email && !emailValido(email)) return { ok: false, error: 'Correo no válido.' }
   if (fecha < hoy())   return { ok: false, error: 'No se puede reservar en una fecha pasada.' }
   if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige otra.' }
 
@@ -941,7 +1161,8 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   await db.from('reservas').update({ email }).eq('reserva_id', reservaId)
 
   await notificarReservaNueva(
-    { token: bot.token, activo: bot.activo, notificar_owner_chat_id: bot.notificar_owner_chat_id },
+    { token: bot.token, activo: bot.activo, notificar_owner_chat_id: bot.notificar_owner_chat_id,
+      clientId: client_id, columna: 'bot_config_citas' },
     { reserva_id: reservaId, fecha, hora, personas: 1, nombre_cliente, telefono, notas,
       estado: bot.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE', telegram_chat_id: null },
     (cli?.nombre_empresa as string) ?? 'Tu negocio',

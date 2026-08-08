@@ -6,7 +6,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
-import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
+import { notificarReservaEntrante, notificarCancelacionCliente } from '@/lib/notificaciones/eventos'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { etiquetasDe, ETIQUETAS_DEFAULT, type EtiquetasSector } from '@/lib/sector'
 import { tieneModulo } from '@/lib/modulos'
@@ -85,12 +85,16 @@ export async function manejarMensajeCitas(ctx: BotContext, texto: string, chat_i
     return iniciarCita(ctx, chat_id)
   }
   if (t === 'ayuda' || t === 'help') return mostrarAyuda(ctx)
+  if (t === 'mis_citas' || t === '/mis_citas') return misCitas(ctx, chat_id)
+  if (t.startsWith('cancelar_cit:')) return cancelarCitaDesdeBot(ctx, chat_id, t.replace('cancelar_cit:', ''))
+  if (t === 'catalogo' || t === 'carta' || t === 'servicios') return mostrarCatalogo(ctx)
+  if (t === 'horarios' || t === 'horario') return mostrarHorariosCitas(ctx)
 
   // Capa de IA opcional (add-on): interpreta lenguaje libre antes del teclado.
   const ia = await intentarIaCitas(ctx, chat_id, texto.trim())
   if (ia) return ia
 
-  return { texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿Quieres pedir una cita?`, markup: tecladoPrincipal() }
+  return { texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿Quieres pedir una cita?`, markup: tecladoPrincipal(ctx) }
 }
 
 // Si el negocio tiene el addon de IA, deja que interprete el lenguaje natural y
@@ -110,13 +114,172 @@ async function intentarIaCitas(ctx: BotContext, chatId: string, texto: string): 
 // ── Bienvenida / teclado ────────────────────────────────────────────────────────
 
 function bienvenida(ctx: BotContext): BotResponse {
-  return { texto: `¡Bienvenido a ${ctx.nombre_empresa}!\n\n¿Qué quieres hacer?`, markup: tecladoPrincipal() }
+  return { texto: `¡Bienvenido a ${ctx.nombre_empresa}!\n\n¿Qué quieres hacer?`, markup: tecladoPrincipal(ctx) }
 }
-function tecladoPrincipal() {
-  return { inline_keyboard: [[{ text: '📅 Pedir cita', callback_data: 'pedir_cita' }]] }
+/**
+ * TG-24: el bot de Citas solo sabía pedir cita. El de Reservas tenía «Carta» y
+ * «Horarios» desde el principio, así que una peluquería con catálogo QR contratado
+ * no podía enseñar sus servicios por su propio bot. Y TG-23: sin «Mis citas», el
+ * cliente no podía ver ni cancelar lo suyo desde el único canal donde está
+ * identificado — que es justo la mitad del anti-no-show.
+ *
+ * `ctx` decide qué se pinta: el botón del catálogo solo si está contratado y hay
+ * slug, porque un botón que lleva a una página que no existe es peor que no tenerlo.
+ */
+function tecladoPrincipal(ctx: BotContext) {
+  const fila1 = [{ text: '📅 Pedir cita', callback_data: 'pedir_cita' }]
+  if (tieneCatalogo(ctx)) fila1.push({ text: '📋 Servicios', callback_data: 'catalogo' })
+  return {
+    inline_keyboard: [
+      fila1,
+      [{ text: '🗒 Mis citas', callback_data: 'mis_citas' }, { text: '🕐 Horarios', callback_data: 'horarios' }],
+    ],
+  }
 }
+
+function tieneCatalogo(ctx: BotContext): boolean {
+  return tieneModulo(ctx.modulos, 'catalogo_qr') && !!ctx.slug
+}
+
 function mostrarAyuda(ctx: BotContext): BotResponse {
-  return { texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes pedir una cita pulsando «Pedir cita».`, markup: tecladoPrincipal() }
+  const puede = ['• Pedir una cita', '• Ver o cancelar tus citas', '• Consultar horarios']
+  if (tieneCatalogo(ctx)) puede.push('• Ver nuestros servicios')
+  return {
+    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n${puede.join('\n')}`,
+    markup: tecladoPrincipal(ctx),
+  }
+}
+
+// ── Catálogo y horarios (TG-24) ────────────────────────────────────────────────
+
+function mostrarCatalogo(ctx: BotContext): BotResponse {
+  if (!tieneCatalogo(ctx)) {
+    return { texto: 'La lista de servicios no está disponible ahora mismo.', markup: tecladoPrincipal(ctx) }
+  }
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
+  const url = base ? `${base}/${ctx.slug}/catalogo` : `/${ctx.slug}/catalogo`
+  return { texto: `📋 Nuestros servicios:\n${url}`, markup: tecladoPrincipal(ctx) }
+}
+
+const DIA_CORTO: Record<number, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' }
+
+/**
+ * Horarios de los profesionales activos. En una agenda «el horario del negocio» no
+ * existe: lo que hay es el de cada persona, y es lo que decide si hay hueco.
+ */
+async function mostrarHorariosCitas(ctx: BotContext): Promise<BotResponse> {
+  const db = createAdminClient()
+  const et = await etiquetasCitas(ctx.client_id)
+
+  const { data: recursos } = await db.from('recursos')
+    .select('recurso_id, nombre').eq('client_id', ctx.client_id).eq('activo', true).order('nombre')
+  const lista = (recursos ?? []) as RecursoRow[]
+  if (lista.length === 0) {
+    return { texto: 'Horario no disponible todavía.', markup: tecladoPrincipal(ctx) }
+  }
+
+  const { data: horarios } = await db.from('recurso_horarios')
+    .select('recurso_id, dia_semana, hora_inicio, hora_fin')
+    .eq('client_id', ctx.client_id)
+    .order('dia_semana').order('hora_inicio')
+
+  const porRecurso = new Map<string, { dia_semana: number; hora_inicio: string; hora_fin: string }[]>()
+  for (const h of (horarios ?? []) as { recurso_id: string; dia_semana: number; hora_inicio: string; hora_fin: string }[]) {
+    const arr = porRecurso.get(h.recurso_id) ?? []
+    arr.push(h); porRecurso.set(h.recurso_id, arr)
+  }
+
+  // Un profesional sin horario no genera huecos: se dice, en vez de dejarlo en blanco.
+  const bloques = lista.map(r => {
+    const suyos = porRecurso.get(r.recurso_id) ?? []
+    if (suyos.length === 0) return `${r.nombre}: sin horario`
+    // Los tramos del mismo día se juntan en una línea (jornada partida).
+    const porDia = new Map<number, string[]>()
+    for (const h of suyos) {
+      const arr = porDia.get(h.dia_semana) ?? []
+      arr.push(`${h.hora_inicio.substring(0, 5)}–${h.hora_fin.substring(0, 5)}`)
+      porDia.set(h.dia_semana, arr)
+    }
+    const dias = [...porDia.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([d, tramos]) => `  ${DIA_CORTO[d] ?? d}: ${tramos.join(' y ')}`)
+      .join('\n')
+    return `${r.nombre}\n${dias}`
+  })
+
+  return {
+    texto: `🕐 Horarios de ${et.recurso_pl.toLowerCase()}:\n\n${bloques.join('\n\n')}`,
+    markup: tecladoPrincipal(ctx),
+  }
+}
+
+// ── Mis citas (TG-23) ──────────────────────────────────────────────────────────
+
+async function misCitas(ctx: BotContext, chatId: string): Promise<BotResponse> {
+  const db = createAdminClient()
+  const { data } = await db.from('reservas')
+    .select('reserva_id, fecha, hora, estado, servicio_id, recurso_id')
+    .eq('client_id', ctx.client_id)
+    .eq('telegram_chat_id', chatId)
+    .not('recurso_id', 'is', null)
+    .gte('fecha', hoyISO())
+    .in('estado', ['PENDIENTE', 'CONFIRMADA'])
+    .order('fecha').order('hora')
+    .limit(5)
+
+  const lista = (data ?? []) as { reserva_id: string; fecha: string; hora: string | null; estado: string; servicio_id: string | null }[]
+  if (lista.length === 0) {
+    return { texto: 'No tienes citas próximas por aquí.', markup: tecladoPrincipal(ctx) }
+  }
+
+  const ids = lista.map(c => c.servicio_id).filter(Boolean) as string[]
+  const { data: servicios } = await db.from('servicios')
+    .select('servicio_id, nombre').eq('client_id', ctx.client_id)
+    .in('servicio_id', ids.length ? ids : ['__none__'])
+  const nombreSrv = new Map(((servicios ?? []) as { servicio_id: string; nombre: string }[]).map(s => [s.servicio_id, s.nombre]))
+
+  const texto = lista.map(c =>
+    `📅 ${formatFechaStr(c.fecha)}  🕐 ${formatHora(c.hora ?? '')}` +
+    `${c.servicio_id ? `  ·  ${nombreSrv.get(c.servicio_id) ?? ''}` : ''}` +
+    `  ·  ${c.estado === 'CONFIRMADA' ? 'confirmada' : 'pendiente'}`).join('\n')
+
+  const filas = lista.map(c => ([{
+    text: `✕ Cancelar ${formatFechaStr(c.fecha)} ${formatHora(c.hora ?? '')}`,
+    callback_data: `cancelar_cit:${c.reserva_id}`,
+  }]))
+
+  return { texto: `Tus próximas citas:\n\n${texto}`, markup: { inline_keyboard: filas } }
+}
+
+async function cancelarCitaDesdeBot(ctx: BotContext, chatId: string, reservaId: string): Promise<BotResponse> {
+  const db = createAdminClient()
+  // El candado es el `telegram_chat_id`: solo cancela quien pidió la cita por ESTE
+  // chat. El id viaja en el botón, o sea desde el cliente.
+  const { data: cita } = await db.from('reservas')
+    .select('reserva_id, estado, fecha')
+    .eq('reserva_id', reservaId)
+    .eq('client_id', ctx.client_id)
+    .eq('telegram_chat_id', chatId)
+    .not('recurso_id', 'is', null)
+    .maybeSingle()
+
+  if (!cita) return { texto: 'No encuentro esa cita.', markup: tecladoPrincipal(ctx) }
+  if (!['PENDIENTE', 'CONFIRMADA'].includes(cita.estado as string)) {
+    return { texto: 'Esa cita ya no está activa.', markup: tecladoPrincipal(ctx) }
+  }
+
+  const { error } = await db.from('reservas')
+    .update({ estado: 'CANCELADA', updated_at: new Date().toISOString() })
+    .eq('reserva_id', reservaId).eq('client_id', ctx.client_id)
+  if (error) return { texto: 'No se pudo cancelar. Inténtalo en un momento.', markup: tecladoPrincipal(ctx) }
+
+  // El hueco que se acaba de liberar es lo que el dueño necesita saber.
+  await notificarCancelacionCliente({
+    clientId: ctx.client_id, reservaId, modo: 'cita',
+    nombreCliente: '', fecha: cita.fecha as string, hora: '',
+  }).catch(() => { /* la cancelación ya está hecha; el aviso es secundario */ })
+
+  return { texto: '✅ Cita cancelada. Gracias por avisar.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Paso 1: elegir servicio ──────────────────────────────────────────────────────
@@ -131,7 +294,7 @@ async function iniciarCita(ctx: BotContext, chatId: string): Promise<BotResponse
   const lista = (servicios ?? []) as ServicioRow[]
   if (lista.length === 0) {
     await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: 'Todavía no hay servicios disponibles. Vuelve pronto.', markup: tecladoPrincipal() }
+    return { texto: 'Todavía no hay servicios disponibles. Vuelve pronto.', markup: tecladoPrincipal(ctx) }
   }
 
   const botones = lista.slice(0, 30).map(s => [{
@@ -160,7 +323,7 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
     const servicioId = texto.slice('csrv:'.length)
     const { data: srv } = await db.from('servicios')
       .select('servicio_id, nombre').eq('servicio_id', servicioId).eq('client_id', ctx.client_id).eq('activo', true).maybeSingle()
-    if (!srv) return { texto: 'Ese servicio ya no está disponible. Empieza de nuevo con «Pedir cita».', markup: tecladoPrincipal() }
+    if (!srv) return { texto: 'Ese servicio ya no está disponible. Empieza de nuevo con «Pedir cita».', markup: tecladoPrincipal(ctx) }
     datos.servicio_id = srv.servicio_id
     datos.servicio_nombre = srv.nombre
     return promptRecurso(ctx, chatId, datos, et)
@@ -174,7 +337,7 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
     else {
       const { data: rec } = await db.from('recursos')
         .select('recurso_id, nombre').eq('recurso_id', sel).eq('client_id', ctx.client_id).eq('activo', true).maybeSingle()
-      if (!rec) return { texto: 'Esa opción ya no está disponible. Empieza de nuevo con «Pedir cita».', markup: tecladoPrincipal() }
+      if (!rec) return { texto: 'Esa opción ya no está disponible. Empieza de nuevo con «Pedir cita».', markup: tecladoPrincipal(ctx) }
       datos.recurso_id = rec.recurso_id; datos.recurso_nombre = rec.nombre
     }
     await guardarSesion(ctx.client_id, chatId, 'fecha', datos)
@@ -241,9 +404,9 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
 
     await guardarSesion(ctx.client_id, chatId, null, {})
 
-    if (rpcErr) return { texto: `❌ No se pudo crear la cita.\n\n${rpcErr.message}`, markup: tecladoPrincipal() }
+    if (rpcErr) return { texto: `❌ No se pudo crear la cita.\n\n${rpcErr.message}`, markup: tecladoPrincipal(ctx) }
     const result = (rpcData as { ok?: boolean; error?: string }) ?? {}
-    if (!result.ok) return { texto: `❌ ${result.error ?? 'Error al crear la cita.'}`, markup: tecladoPrincipal() }
+    if (!result.ok) return { texto: `❌ ${result.error ?? 'Error al crear la cita.'}`, markup: tecladoPrincipal(ctx) }
 
     // Guardar el chat del cliente para avisarle de cambios de estado
     await db.from('reservas').update({ telegram_chat_id: chatId }).eq('reserva_id', reservaId).eq('client_id', ctx.client_id)
@@ -267,21 +430,27 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
     const estado = bot.confirmacion_automatica ? 'confirmada' : 'pendiente de confirmación'
     return {
       texto: `✅ ¡Cita ${estado}!\n\n💈 ${datos.servicio_nombre}\n👤 ${datos.recurso_nombre}\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n✏️ ${datos.nombre}\n\nTe avisaremos por aquí.`,
-      markup: tecladoPrincipal(),
+      markup: tecladoPrincipal(ctx),
     }
   }
 
-  return { texto: 'Algo salió mal. Pulsa «Pedir cita» para empezar.', markup: tecladoPrincipal() }
+  return { texto: 'Algo salió mal. Pulsa «Pedir cita» para empezar.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Prompts ──────────────────────────────────────────────────────────────────────
 
 async function promptRecurso(ctx: BotContext, chatId: string, datos: DatosCita, et: EtiquetasSector): Promise<BotResponse> {
   const db = createAdminClient()
-  const [{ data: recursos }, { data: links }] = await Promise.all([
-    db.from('recursos').select('recurso_id, nombre').eq('client_id', ctx.client_id).eq('activo', true).order('nombre'),
-    db.from('recurso_servicios').select('recurso_id, servicio_id'),
-  ])
+  const { data: recursos } = await db.from('recursos')
+    .select('recurso_id, nombre').eq('client_id', ctx.client_id).eq('activo', true).order('nombre')
+
+  // TG-12: `recurso_servicios` NO tiene `client_id` (es una tabla puente pura), así
+  // que sin acotar se leía la de TODOS los inquilinos para descartar casi todo. Es el
+  // gotcha ya corregido en `citas.ts` y en la acción pública; al bot no llegó.
+  const recIds = ((recursos ?? []) as RecursoRow[]).map(r => r.recurso_id)
+  const { data: links } = await db.from('recurso_servicios')
+    .select('recurso_id, servicio_id')
+    .in('recurso_id', recIds.length ? recIds : ['__none__'])
 
   const linkByRec = new Map<string, Set<string>>()
   for (const row of (links ?? []) as { recurso_id: string; servicio_id: string }[]) {
@@ -298,7 +467,7 @@ async function promptRecurso(ctx: BotContext, chatId: string, datos: DatosCita, 
 
   if (aptos.length === 0) {
     await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: `No hay disponibilidad de ${et.recurso_pl.toLowerCase()} para ese ${et.servicio.toLowerCase()}.`, markup: tecladoPrincipal() }
+    return { texto: `No hay disponibilidad de ${et.recurso_pl.toLowerCase()} para ese ${et.servicio.toLowerCase()}.`, markup: tecladoPrincipal(ctx) }
   }
   if (aptos.length === 1) {
     // Solo uno: lo elegimos y pasamos a fecha

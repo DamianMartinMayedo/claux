@@ -143,6 +143,26 @@ export function rangoUltimosMeses(meses: number, hoyISO?: string): { desde: stri
   return { desde: sumarMeses(ref, -meses), hasta: ref }
 }
 
+/**
+ * El orden de un listado de AGENDA sigue al rango que se está mirando.
+ *
+ * Reservas y Citas ordenaban `fecha` descendente sobre un rango por defecto que es
+ * hoy → +30 días: con paginación de 10, lo de hoy caía en la última página y lo
+ * primero que veía el dueño era la reserva de dentro de un mes. Pero invertirlo a
+ * secas rompe el otro caso: «Mes pasado» es un histórico, y un histórico se lee de lo
+ * más reciente hacia atrás.
+ *
+ * Regla: si el rango alcanza a hoy o más allá, **ascendente** (lo primero que hay que
+ * atender, arriba); si se cierra en el pasado, descendente.
+ */
+export function ordenDelRango(desde?: string | null, hasta?: string | null, hoyISO?: string): { ascendente: boolean } {
+  const ref = hoyISO ?? hoy()
+  // Sin tope superior («Todo») el rango incluye el futuro: mira hacia delante.
+  if (!hasta) return { ascendente: true }
+  void desde
+  return { ascendente: hasta >= ref }
+}
+
 export type PresetRango =
   | 'mes' | 'mes_pasado' | 'trimestre' | 'anio' | 'todo' | 'personalizado'
   // Presets de FUTURO, para un rango que no mira lo que pasó sino lo que viene: el de

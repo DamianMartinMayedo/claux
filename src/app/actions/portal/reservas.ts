@@ -7,12 +7,15 @@ import { transicionarEstado, notificarReservaNueva, CAMBIOS_VALIDOS, type Estado
 import { notificarReservaEntrante, notificarCancelacionCliente } from '@/lib/notificaciones/eventos'
 import { type BotConfig, parseBotConfig, guardarBotConfigCol, toggleActivoBotCol, eliminarBotConfigCol, guardarConfirmacionCol, guardarIaActivaCol } from '@/lib/reservas/bot-config'
 import { tieneModulo } from '@/lib/modulos'
+import { etiquetasCliente } from '@/lib/sector'
 import { enviarMensaje } from '@/lib/telegram/enviar'
 import { rateLimitOk } from '@/lib/rate-limit'
 import { getPortalSession, puedeEditarModulo }  from './auth'
-import { obtenerEmpresas }   from './empresas'
+// El slug, los cierres y las reglas son del NEGOCIO, no de esta funcionalidad: viven
+// en `agenda-comun.ts` con el candado «Reservas o Citas». Aquí solo se usan sus tipos.
+import type { Cierre, ReglasReserva, ResultadoAgenda } from './agenda-comun'
 import {
-  limiteDelFiltro, patronBusqueda, type FiltroListado,
+  limiteDelFiltro, patronBusqueda, ordenDelRango, type FiltroListado,
 } from '@/lib/listados'
 import { sumarDias } from '@/lib/fecha-tz'
 
@@ -27,6 +30,8 @@ export interface ReservaFranja {
   hora_inicio:      string | null
   hora_fin:         string | null
   capacidad:        number
+  /** Tope de RESERVAS a la vez (no de personas). 0 = sin tope. 40 plazas no son 10 mesas de 4. */
+  max_reservas:     number
   duracion_minutos: number
   dias_semana:      number[] | null
   activa:           boolean
@@ -47,6 +52,10 @@ export interface Reserva {
   estado:                  EstadoReserva
   telegram_chat_id:        string | null
   confirmacion_automatica: boolean
+  /** La metió el dueño saltándose una regla (aforo, cierre, antelación…). */
+  forzada:                 boolean
+  /** ATENDIDA la puso el barrido diario, no el dueño. Se dice en pantalla. */
+  cierre_auto:             boolean
   created_at:              string
   updated_at:              string
 }
@@ -57,28 +66,27 @@ export interface ReservaConFranja extends Reserva {
   franja_hora_fin:    string | null
 }
 
-export interface Cierre {
-  cierre_id:   string
-  fecha_desde: string
-  fecha_hasta: string
-  motivo:      string | null
-}
-
-export interface ReglasReserva {
-  antelacion_min_horas: number
-  ventana_max_dias:     number
-  max_personas:         number
-}
-
 export interface ReservaPageData {
+  client_id:  string
+  /** Nombre del negocio: se usa para redactar el aviso al cliente (fase 10). */
+  negocio:    string
+  /**
+   * Cómo llama el negocio a esto («Reservas», «Turnos», «Clases»). El `<h1>` estaba
+   * a fuego, así que el menú podía decir una palabra y la página otra.
+   */
+  etiqueta_reservas: string
   reservas:   ReservaConFranja[]
   franjas:    ReservaFranja[]
   bot_config: BotConfig
   slug:       string | null
-  empresas:   { empresa_id: string; nombre: string }[]
   cierres:    Cierre[]
   reglas:     ReglasReserva
   tieneIa:    boolean   // addon asistente_ia contratado → se ofrece el toggle de IA del bot
+  /**
+   * Tiene TAMBIÉN Citas contratado. Solo entonces se dice de cada ajuste si es de
+   * esta funcionalidad o del negocio entero: con una sola, esa línea es ruido.
+   */
+  tieneAmbas: boolean
   /** Rango aplicado EN LA CONSULTA. Viaja a la vista para pintar el botón de rango. */
   rango:      { desde: string; hasta: string }
   /** Texto buscado, aplicado en la consulta. */
@@ -89,6 +97,18 @@ export interface ReservaPageData {
   total:      number
   /** Techo con el que se consultó, para que «Ver más» sepa desde dónde subir. */
   limite:     number
+  /**
+   * Lo de HOY, contado aparte (U3). La cabecera se calculaba sobre `reservas`, que es
+   * el rango cargado: cambiar el rango a «Mes pasado» la dejaba en cero, como si el
+   * negocio no tuviera nada hoy.
+   */
+  hoy:        { pendientes: number; confirmadas: number; total: number }
+  /**
+   * Confirmadas de días que ya pasaron y que nadie ha cerrado: ni «vino» ni «no vino».
+   * El barrido las cierra solo a los 7 días (`DIAS_CIERRE_AUTO`), pero mientras tanto
+   * solo el dueño lo sabe — y con el rango por defecto (hoy → +30) no las ve nunca.
+   */
+  por_cerrar: number
 }
 
 const REGLAS_DEFAULT: ReglasReserva = { antelacion_min_horas: 0, ventana_max_dias: 0, max_personas: 0 }
@@ -109,7 +129,6 @@ function corto(): string {
 }
 function generarFranjaId():  string { return `FRA-${corto()}` }
 function generarReservaId(): string { return `RES-${corto()}` }
-function generarCierreId():  string { return `CIE-${corto()}` }
 
 // Validación básica de correo (suficiente para el formulario público; el navegador
 // ya aplica type="email"). Evita guardar basura sin pretender RFC completa.
@@ -185,24 +204,43 @@ export async function obtenerReservas(filtro?: FiltroListado): Promise<ReservaPa
       `notas.ilike.${patron}`,
     ].join(','))
   }
+  // El orden sigue al rango: mirando al futuro, lo primero que hay que atender arriba
+  // (y dentro del día, por hora); mirando a un histórico, lo más reciente primero.
+  const { ascendente } = ordenDelRango(desde, hasta)
   resQuery = resQuery
-    .order('fecha', { ascending: false })
-    .order('created_at', { ascending: false })
+    .order('fecha', { ascending: ascendente })
+    .order('hora',  { ascending: ascendente, nullsFirst: ascendente })
+    .order('created_at', { ascending: ascendente })
     .limit(limite)
 
-  const [franRes, resRes, cliRes] = await Promise.all([
+  // Lo de hoy, contado en la base y no sobre las filas traídas: la cabecera no puede
+  // depender del rango que el dueño tenga puesto en la barra.
+  const deHoy = (estado: EstadoReserva) => db.from('reservas')
+    .select('reserva_id', { count: 'exact', head: true })
+    .eq('client_id', session.client_id).is('recurso_id', null)
+    .eq('fecha', hoy()).eq('estado', estado)
+
+  const [franRes, resRes, cliRes, pendHoy, confHoy, porCerrar] = await Promise.all([
     db.from('reserva_franjas').select('*')
       .eq('client_id', session.client_id)
       .order('hora_inicio', { ascending: true, nullsFirst: true }),
     resQuery,
-    db.from('clients').select('bot_config, slug, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
+    db.from('clients').select('bot_config, slug, nombre_empresa, sector, etiquetas, modulos_activos, reserva_antelacion_min_horas, reserva_ventana_max_dias, reserva_max_personas')
       .eq('client_id', session.client_id)
       .single(),
+    deHoy('PENDIENTE'),
+    deHoy('CONFIRMADA'),
+    db.from('reservas').select('reserva_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id).is('recurso_id', null)
+      .eq('estado', 'CONFIRMADA').lt('fecha', hoy()),
   ])
 
-  const empresas = await obtenerEmpresas()
-
-  const franjas  = ((franRes.data ?? []) as ReservaFranja[]).map(f => ({ ...f, capacidad: Number(f.capacidad), duracion_minutos: Number(f.duracion_minutos) }))
+  const franjas  = ((franRes.data ?? []) as ReservaFranja[]).map(f => ({
+    ...f,
+    capacidad:        Number(f.capacidad),
+    max_reservas:     Number(f.max_reservas ?? 0),
+    duracion_minutos: Number(f.duracion_minutos),
+  }))
   const franjaPorId = new Map(franjas.map(f => [f.franja_id, f]))
 
   const reservas: ReservaConFranja[] = ((resRes.data ?? []) as Reserva[]).map(r => {
@@ -222,23 +260,45 @@ export async function obtenerReservas(filtro?: FiltroListado): Promise<ReservaPa
   const reglas     = parseReglas(cliRes.data as Record<string, unknown> | null)
   const tieneIa    = tieneModulo(cliRes.data?.modulos_activos, 'asistente_ia')
 
+  // Cascada completa: override del cliente → sector → genérico (la misma del sidebar).
+  const { data: plantilla } = cliRes.data?.sector
+    ? await db.from('plantillas_sector').select('etiquetas').eq('sector', cliRes.data.sector as string).maybeSingle()
+    : { data: null }
+  const etiquetas = etiquetasCliente(plantilla?.etiquetas, cliRes.data?.etiquetas)
+
   return {
+    client_id: session.client_id,
+    negocio:  (cliRes.data?.nombre_empresa as string) ?? 'Tu negocio',
+    etiqueta_reservas: etiquetas.reservas,
     reservas, franjas, bot_config, slug,
-    empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     cierres, reglas, tieneIa,
+    tieneAmbas: tieneModulo(cliRes.data?.modulos_activos, 'agenda'),
     rango:   { desde, hasta },
     q,
     hay_mas: reservas.length >= limite,
     total:   resRes.count ?? reservas.length,
     limite,
+    hoy: {
+      pendientes:  pendHoy.count ?? 0,
+      confirmadas: confHoy.count ?? 0,
+      total:      (pendHoy.count ?? 0) + (confHoy.count ?? 0),
+    },
+    por_cerrar: porCerrar.count ?? 0,
   }
 }
 
 // ── Crear reserva (manual, desde el panel) ────────────────────────────────────
 
+/**
+ * Alta manual. `forzar` solo puede llegar de aquí: el alta pública y los bots llaman
+ * siempre sin él. Cuando el dueño fuerza, la RPC mete la reserva y devuelve en
+ * `avisos` lo que se ha saltado — el sistema avisa, no bloquea (misma filosofía que
+ * el `permitir_negativo` del TPV).
+ */
 export async function crearReserva(
   formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+  forzar = false,
+): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
@@ -255,9 +315,12 @@ export async function crearReserva(
   if (!fecha)           return { ok: false, error: 'La fecha es obligatoria.' }
   if (fecha < hoy())    return { ok: false, error: 'No se puede crear una reserva en una fecha pasada.' }
   if (!nombre_cliente)  return { ok: false, error: 'El nombre del cliente es obligatorio.' }
+  // RES-4: la hora era opcional y caía a las 12:00 en silencio. Una reserva de mesa
+  // sin hora no es una reserva; que la eligiera el software era un dato inventado.
+  if (!horaRaw)         return { ok: false, error: 'La hora es obligatoria.' }
 
   const personas = isNaN(personasRaw) || personasRaw < 1 ? 1 : personasRaw
-  const hora     = horaRaw || '12:00:00'
+  const hora     = horaRaw
 
   if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige una hora futura.' }
 
@@ -283,14 +346,17 @@ export async function crearReserva(
     p_canal:                   'manual',
     p_confirmacion_automatica: botCfg.confirmacion_automatica,
     p_reserva_id:              generarReservaId(),
+    p_forzar:                  forzar,
   })
 
   if (error) return { ok: false, error: error.message }
-  const result = data as { ok: boolean; error?: string }
-  if (!result.ok) return { ok: false, error: result.error ?? 'Error al crear la reserva.' }
+  const result = data as ResultadoAgenda
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? 'Error al crear la reserva.', forzable: result.forzable }
+  }
 
   revalidatePath('/portal/reservas')
-  return { ok: true }
+  return { ok: true, avisos: result.avisos ?? [] }
 }
 
 // ── Modificar reserva ─────────────────────────────────────────────────────────
@@ -298,7 +364,8 @@ export async function crearReserva(
 export async function modificarReserva(
   reserva_id: string,
   formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+  forzar = false,
+): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
@@ -314,10 +381,11 @@ export async function modificarReserva(
   if (!franja_id)       return { ok: false, error: 'Debes seleccionar un turno.' }
   if (!fecha)           return { ok: false, error: 'La fecha es obligatoria.' }
   if (!nombre_cliente)  return { ok: false, error: 'El nombre del cliente es obligatorio.' }
+  if (!horaRaw)         return { ok: false, error: 'La hora es obligatoria.' }
 
   const db       = createAdminClient()
   const personas = isNaN(personasRaw) || personasRaw < 1 ? 1 : personasRaw
-  const hora     = horaRaw || '12:00:00'
+  const hora     = horaRaw
 
   if (fecha < hoy())                                       return { ok: false, error: 'No se puede poner una fecha pasada.' }
   if (fecha === hoy() && hora <= horaAhora())              return { ok: false, error: 'Esa hora ya pasó hoy.' }
@@ -335,14 +403,17 @@ export async function modificarReserva(
     p_nombre_cliente: nombre_cliente,
     p_telefono:       telefono,
     p_notas:          notas,
+    p_forzar:         forzar,
   })
 
   if (error) return { ok: false, error: error.message }
-  const result = data as { ok: boolean; error?: string }
-  if (!result.ok) return { ok: false, error: result.error ?? 'Error al modificar la reserva.' }
+  const result = data as ResultadoAgenda
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? 'Error al modificar la reserva.', forzable: result.forzable }
+  }
 
   revalidatePath('/portal/reservas')
-  return { ok: true }
+  return { ok: true, avisos: result.avisos ?? [] }
 }
 
 // ── Cambiar estado de una reserva ─────────────────────────────────────────────
@@ -368,7 +439,7 @@ export async function cambiarEstadoReserva(
   const r = await transicionarEstado(
     db, session.client_id, reserva_id, nuevoEstado,
     (cli?.nombre_empresa as string) ?? 'Tu reserva',
-    { token: botCfg.token, activo: botCfg.activo },
+    { token: botCfg.token, activo: botCfg.activo, clientId: session.client_id, columna: 'bot_config' },
   )
   if (!r.ok) return r
 
@@ -431,6 +502,11 @@ export async function guardarFranja(
   const hora_fin       = (formData.get('hora_fin')       as string)?.trim()
   const capacidadRaw   = parseInt(formData.get('capacidad') as string, 10)
   const duracionRaw    = parseInt(formData.get('duracion_minutos') as string, 10)
+  const maxResRaw      = parseInt(formData.get('max_reservas') as string, 10)
+  // RES-1: la casilla no existía, así que un turno solo se podía ELIMINAR — y eliminar
+  // está bloqueado si tiene reservas futuras. Callejón sin salida, con un badge
+  // «Activo/Inactivo» en la tabla que por tanto siempre decía Activo.
+  const activa = formData.get('activa') === 'on' || formData.get('activa') === 'true'
 
   if (!nombre)      return { ok: false, error: 'El nombre del turno es obligatorio.' }
   if (!hora_inicio) return { ok: false, error: 'La hora de inicio es obligatoria.' }
@@ -438,6 +514,8 @@ export async function guardarFranja(
   if (hora_inicio >= hora_fin) return { ok: false, error: 'La hora de fin debe ser posterior a la de inicio.' }
   const capacidad  = isNaN(capacidadRaw) || capacidadRaw < 1 ? 1 : capacidadRaw
   const duracion   = isNaN(duracionRaw)  || duracionRaw  < 15 ? 60 : duracionRaw
+  // 0 = sin tope, como el resto de reglas del módulo.
+  const max_reservas = isNaN(maxResRaw) || maxResRaw < 0 ? 0 : maxResRaw
 
   // dias_semana: array de checkboxes (1-7)
   const diasRaw = formData.getAll('dias_semana').map(v => parseInt(v as string, 10)).filter(d => d >= 1 && d <= 7)
@@ -445,17 +523,25 @@ export async function guardarFranja(
 
   const db = createAdminClient()
 
-  // Validar que no se solape con otra franja activa (mismo rango horario + mismos días)
+  // RES-2: dos turnos solapan solo si además COMPARTEN algún día. La consulta cruzaba
+  // únicamente las horas —pese a que su comentario decía lo contrario—, así que
+  // «Almuerzo Lun-Vie 12-16» rechazaba «Brunch Sáb-Dom 12-16», que no se pisan nunca.
+  // `dias_semana = null` significa TODOS los días, así que un null choca con cualquiera.
   const solapeQuery = db.from('reserva_franjas')
-    .select('franja_id, nombre')
+    .select('franja_id, nombre, dias_semana')
     .eq('client_id', session.client_id)
     .eq('activa', true)
     .lt('hora_inicio', hora_fin)
     .gt('hora_fin', hora_inicio)
   if (franja_id) solapeQuery.neq('franja_id', franja_id)
   const { data: solapadas } = await solapeQuery
-  if (solapadas && solapadas.length > 0) {
-    return { ok: false, error: `El horario se solapa con «${solapadas[0].nombre}». Ajusta las horas.` }
+  const choque = (solapadas ?? []).find((f: { dias_semana: number[] | null }) => {
+    const otros = f.dias_semana
+    if (!dias_semana || !otros || otros.length === 0) return true      // alguno vale para todos los días
+    return otros.some(d => dias_semana.includes(d))
+  })
+  if (choque) {
+    return { ok: false, error: `El horario se solapa con «${choque.nombre}» en algún día. Ajusta las horas o los días.` }
   }
 
   if (!franja_id) {
@@ -466,13 +552,15 @@ export async function guardarFranja(
       hora_inicio,
       hora_fin,
       capacidad,
+      max_reservas,
       duracion_minutos: duracion,
       dias_semana,
+      activa,
     })
     if (error) return { ok: false, error: error.message }
   } else {
     const { error } = await db.from('reserva_franjas')
-      .update({ nombre, hora_inicio, hora_fin, capacidad, duracion_minutos: duracion, dias_semana, updated_at: new Date().toISOString() })
+      .update({ nombre, hora_inicio, hora_fin, capacidad, max_reservas, duracion_minutos: duracion, dias_semana, activa, updated_at: new Date().toISOString() })
       .eq('franja_id', franja_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
@@ -590,105 +678,8 @@ export async function eliminarBotConfig(): Promise<{ ok: boolean; error?: string
   return { ok: true }
 }
 
-// ── Guardar slug público ──────────────────────────────────────────────────────
-
-export async function guardarSlug(
-  formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
-  const session = await getPortalSession()
-  if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-
-  const slugRaw = (formData.get('slug') as string)?.trim() ?? ''
-
-  let slug: string | null = null
-  if (slugRaw) {
-    slug = slugRaw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-    if (!slug || slug.length < 2) return { ok: false, error: 'Mínimo 2 caracteres (letras, números o guiones).' }
-
-    const db = createAdminClient()
-    const { data: existente } = await db.from('clients')
-      .select('client_id')
-      .eq('slug', slug)
-      .neq('client_id', session.client_id)
-      .maybeSingle()
-    if (existente) return { ok: false, error: 'Ese enlace ya lo está usando otro negocio.' }
-  }
-
-  const db = createAdminClient()
-  const { error } = await db.from('clients')
-    .update({ slug })
-    .eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-
-  revalidatePath('/portal/reservas')
-  return { ok: true }
-}
-
-// ── Cierres / festivos (compartidos por Reservas y Citas) ──────────────────────
-
-export async function guardarCierre(formData: FormData): Promise<{ ok: boolean; error?: string }> {
-  const session = await getPortalSession()
-  if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-
-  const desde    = (formData.get('fecha_desde') as string)?.trim()
-  const hastaRaw = (formData.get('fecha_hasta') as string)?.trim()
-  const motivo   = (formData.get('motivo')      as string)?.trim() || null
-  if (!desde) return { ok: false, error: 'La fecha es obligatoria.' }
-  const hasta = hastaRaw || desde
-  if (hasta < desde) return { ok: false, error: 'La fecha final no puede ser anterior a la inicial.' }
-
-  const db = createAdminClient()
-  const { error } = await db.from('reserva_cierres').insert({
-    cierre_id: generarCierreId(), client_id: session.client_id, fecha_desde: desde, fecha_hasta: hasta, motivo,
-  })
-  if (error) return { ok: false, error: error.message }
-
-  revalidatePath('/portal/reservas')
-  revalidatePath('/portal/citas')
-  return { ok: true }
-}
-
-export async function eliminarCierre(cierre_id: string): Promise<{ ok: boolean; error?: string }> {
-  const session = await getPortalSession()
-  if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-
-  const db = createAdminClient()
-  const { error } = await db.from('reserva_cierres').delete()
-    .eq('cierre_id', cierre_id).eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-
-  revalidatePath('/portal/reservas')
-  revalidatePath('/portal/citas')
-  return { ok: true }
-}
-
-// ── Reglas de reserva (config de negocio, compartida con Citas) ────────────────
-
-export async function guardarReglas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
-  const session = await getPortalSession()
-  if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-
-  const ent = (k: string) => {
-    const n = parseInt(formData.get(k) as string, 10)
-    return isNaN(n) || n < 0 ? 0 : n
-  }
-
-  const db = createAdminClient()
-  const { error } = await db.from('clients').update({
-    reserva_antelacion_min_horas: ent('antelacion_min_horas'),
-    reserva_ventana_max_dias:     ent('ventana_max_dias'),
-    reserva_max_personas:         ent('max_personas'),
-  }).eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-
-  revalidatePath('/portal/reservas')
-  revalidatePath('/portal/citas')
-  return { ok: true }
-}
+// El slug, los cierres/festivos y las reglas de reserva se guardan desde
+// `agenda-comun.ts`: son del negocio y los comparten Reservas y Citas.
 
 // ── Reserva pública (sin sesión de portal, desde el formulario web) ───────────
 
@@ -718,8 +709,11 @@ export async function crearReservaPublica(
   if (!fecha)           return { ok: false, error: 'Fecha obligatoria.' }
   if (fecha < hoy())    return { ok: false, error: 'No se puede reservar en una fecha pasada.' }
   if (!nombre_cliente)  return { ok: false, error: 'Nombre obligatorio.' }
-  if (!email)           return { ok: false, error: 'Correo obligatorio.' }
-  if (!emailValido(email)) return { ok: false, error: 'Correo no válido.' }
+  // Decisión 1 del plan: sin correo al cliente final, pedir el correo como obligatorio
+  // era pedir un dato para un canal que no existe. El TELÉFONO sí es obligatorio —el
+  // formulario ya lo exigía, pero la acción lo aceptaba null, que es el que cuenta.
+  if (!telefono)        return { ok: false, error: 'Teléfono obligatorio.' }
+  if (email && !emailValido(email)) return { ok: false, error: 'Correo no válido.' }
 
   const personas = isNaN(personasRaw) || personasRaw < 1 ? 1 : personasRaw
   const horaVal  = hora || '12:00:00'
@@ -767,7 +761,8 @@ export async function crearReservaPublica(
 
   // Avisar al dueño por Telegram (no-op si no hay bot activo / sin chat vinculado)
   await notificarReservaNueva(
-    { token: botCfg.token, activo: botCfg.activo, notificar_owner_chat_id: botCfg.notificar_owner_chat_id },
+    { token: botCfg.token, activo: botCfg.activo, notificar_owner_chat_id: botCfg.notificar_owner_chat_id,
+      clientId: client_id, columna: 'bot_config' },
     {
       reserva_id: reservaId, fecha, hora: horaVal, personas,
       nombre_cliente, telefono, notas,
@@ -811,6 +806,8 @@ export interface FranjaPublica {
 export interface NegocioPublico {
   nombre: string
   slug:   string | null
+  /** Logo del negocio (COM-5): el enlace compartido es SUYO, no de CLAUX. */
+  logo_url: string | null
 }
 
 export async function obtenerReservasPublicas(slug: string): Promise<{
@@ -828,47 +825,59 @@ export async function obtenerReservasPublicas(slug: string): Promise<{
 
   if (!cliente) return { negocio: null, franjas: [], client_id: null, reglas: { ...REGLAS_DEFAULT } }
 
+
   // Gating: el negocio debe tener las reservas contratadas. Si no, se devuelve
   // vacío → la página pública hace notFound() (mismo criterio que las citas).
   const modulos = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos as string[] : []
   if (!modulos.includes('reservas_citas')) return { negocio: null, franjas: [], client_id: null, reglas: { ...REGLAS_DEFAULT } }
 
-  const { data: franjas } = await db.from('reserva_franjas')
-    .select('franja_id, nombre, hora_inicio, hora_fin, capacidad, duracion_minutos, dias_semana')
-    .eq('client_id', cliente.client_id)
-    .eq('activa', true)
-    .order('hora_inicio', { ascending: true, nullsFirst: true })
+  const [{ data: franjas }, { data: empresa }] = await Promise.all([
+    db.from('reserva_franjas')
+      .select('franja_id, nombre, hora_inicio, hora_fin, capacidad, duracion_minutos, dias_semana')
+      .eq('client_id', cliente.client_id)
+      .eq('activa', true)
+      .order('hora_inicio', { ascending: true, nullsFirst: true }),
+    // Mismo criterio que el catálogo: el logo solo si el negocio lo tiene activado.
+    db.from('empresas').select('logo_url, mostrar_logo').eq('client_id', cliente.client_id).limit(1).maybeSingle(),
+  ])
+  const logo = empresa?.mostrar_logo ? ((empresa?.logo_url as string | null) ?? null) : null
 
   return {
-    negocio:  { nombre: cliente.nombre_empresa, slug: cliente.slug },
+    negocio:  { nombre: cliente.nombre_empresa as string, slug: cliente.slug as string | null, logo_url: logo },
     franjas:  ((franjas ?? []) as FranjaPublica[]).map(f => ({ ...f, capacidad: Number(f.capacidad), duracion_minutos: Number(f.duracion_minutos) })),
     client_id: cliente.client_id,
     reglas:   parseReglas(cliente as Record<string, unknown>),
   }
 }
 
-export async function obtenerDisponibilidadPublica(
-  client_id: string,
-  franja_id: string,
-  fecha: string,
-  hora?: string,
-): Promise<{ disponibles: number }> {
-  // Límite generoso para lecturas públicas de disponibilidad (anti-scraping)
-  if (!await rateLimitOk('disp_reserva', 90, 60)) return { disponibles: 0 }
-  const db = createAdminClient()
+export interface Disponibilidad {
+  disponibles: number
+  capacidad:   number
+  /** Reservas vivas en ese solape: el otro tope (`max_reservas`), no las personas. */
+  reservas:    number
+  max_reservas: number
+}
 
+const SIN_HUECO: Disponibilidad = { disponibles: 0, capacidad: 0, reservas: 0, max_reservas: 0 }
+
+// El cálculo, una sola vez. Lo usan la mini-web pública (con rate-limit) y el panel
+// (con sesión): la misma cuenta contada dos veces acaba dando dos respuestas.
+async function calcularDisponibilidad(
+  db: ReturnType<typeof createAdminClient>,
+  client_id: string, franja_id: string, fecha: string, hora?: string,
+): Promise<Disponibilidad> {
   // Negocio cerrado ese día (festivo/cierre) → sin disponibilidad
   const { data: cerr } = await db.from('reserva_cierres').select('cierre_id')
     .eq('client_id', client_id).lte('fecha_desde', fecha).gte('fecha_hasta', fecha).limit(1)
-  if (cerr && cerr.length > 0) return { disponibles: 0 }
+  if (cerr && cerr.length > 0) return { ...SIN_HUECO }
 
   const { data: franja } = await db.from('reserva_franjas')
-    .select('capacidad, duracion_minutos')
+    .select('capacidad, duracion_minutos, max_reservas')
     .eq('franja_id', franja_id)
     .eq('client_id', client_id)
     .single()
 
-  if (!franja) return { disponibles: 0 }
+  if (!franja) return { ...SIN_HUECO }
 
   const horaVal   = hora || '12:00:00'
   const duracion  = Number(franja.duracion_minutos) || 60
@@ -886,8 +895,43 @@ export async function obtenerDisponibilidadPublica(
     .lt('hora', horaFin)
     .gt('hora_fin', horaVal)
 
-  const ocupado = (ocupantes ?? []).reduce((s: number, r: { personas: number }) => s + Number(r.personas), 0)
-  return { disponibles: Math.max(0, Number(franja.capacidad) - ocupado) }
+  const filas    = ocupantes ?? []
+  const ocupado  = filas.reduce((s: number, r: { personas: number }) => s + Number(r.personas), 0)
+  const capacidad = Number(franja.capacidad)
+  return {
+    disponibles:  Math.max(0, capacidad - ocupado),
+    capacidad,
+    reservas:     filas.length,
+    max_reservas: Number(franja.max_reservas ?? 0),
+  }
+}
+
+export async function obtenerDisponibilidadPublica(
+  client_id: string,
+  franja_id: string,
+  fecha: string,
+  hora?: string,
+): Promise<{ disponibles: number }> {
+  // Límite generoso para lecturas públicas de disponibilidad (anti-scraping)
+  if (!await rateLimitOk('disp_reserva', 90, 60)) return { disponibles: 0 }
+  const { disponibles } = await calcularDisponibilidad(createAdminClient(), client_id, franja_id, fecha, hora)
+  return { disponibles }
+}
+
+/**
+ * La misma disponibilidad, para el PANEL (RES-3).
+ *
+ * El alta manual usaba `obtenerDisponibilidadPublica`, o sea el endpoint anti-scraping
+ * con límite por IP: el dueño gastaba el cupo de sus propios clientes solo por abrir el
+ * formulario. Aquí el candado es la sesión, el `client_id` sale de ella —no del
+ * navegador— y devuelve además los dos topes, para poder decir «12 de 40 · 3 reservas».
+ */
+export async function obtenerDisponibilidadPortal(
+  franja_id: string, fecha: string, hora?: string,
+): Promise<Disponibilidad> {
+  const session = await getPortalSession()
+  if (!session) return { ...SIN_HUECO }
+  return calcularDisponibilidad(createAdminClient(), session.client_id, franja_id, fecha, hora)
 }
 
 // ── Disponibilidad de aforo en 1 query (mini-web pública) ──────────────────────

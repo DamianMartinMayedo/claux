@@ -59,10 +59,6 @@ function genId(prefijo: string): string {
   return `${prefijo}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
 }
 
-function normalizarSlug(raw: string): string {
-  return raw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-}
-
 async function etiquetasDeSector(db: ReturnType<typeof createAdminClient>, sector: string | null): Promise<EtiquetasSector> {
   if (!sector) return { ...ETIQUETAS_DEFAULT }
   const { data: pl } = await db.from('plantillas_sector').select('etiquetas').eq('sector', sector).maybeSingle()
@@ -492,31 +488,9 @@ export async function quitarFotoItem(item_id: string): Promise<{ ok: boolean; er
   return { ok: true }
 }
 
-// ── Slug público (mismo `clients.slug` que Reservas/Citas) ──────────────────────
-
-export async function guardarSlug(formData: FormData): Promise<{ ok: boolean; error?: string }> {
-  const session = await getPortalSession()
-  if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-
-  const slugRaw = ((formData.get('slug') as string) ?? '').trim()
-  let slug: string | null = null
-  if (slugRaw) {
-    slug = normalizarSlug(slugRaw)
-    if (!slug || slug.length < 2) return { ok: false, error: 'Mínimo 2 caracteres (letras, números o guiones).' }
-    const db = createAdminClient()
-    const { data: existente } = await db.from('clients').select('client_id')
-      .eq('slug', slug).neq('client_id', session.client_id).maybeSingle()
-    if (existente) return { ok: false, error: 'Ese enlace ya lo está usando otro negocio.' }
-  }
-
-  const db = createAdminClient()
-  const { error } = await db.from('clients').update({ slug }).eq('client_id', session.client_id)
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/portal/catalogo')
-  if (slug) revalidatePath(`/${slug}/catalogo`)
-  return { ok: true }
-}
+// El slug público se guarda desde `agenda-comun.ts`: es la MISMA columna
+// `clients.slug` que usan Reservas y Citas, y tenerla duplicada aquí
+// significaba dos candados distintos sobre el mismo dato.
 
 // ── Moneda de visualización del catálogo ───────────────────────────────────────
 

@@ -52,6 +52,11 @@
    (datos ↔ revisar) para que no "salte" de tamaño al avanzar. */
 .rp-card-body   { padding: 24px; min-height: 420px; }
 
+/* Identidad del NEGOCIO (COM-5): logo + nombre. El enlace que comparte por WhatsApp
+   es suyo, no de CLAUX. El logo se sirve ya optimizado desde Storage y va con
+   width/height fijos para no provocar salto de layout en 3G. */
+.rp-brand   { display: flex; align-items: center; gap: 12px; }
+.rp-logo    { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
 .rp-title   { font-size: 22px; font-weight: 700; margin: 0; }
 .rp-subtitle { font-size: 15px; color: var(--rp-text-muted); margin: 4px 0 20px; }
 .rp-hint    { font-size: 13px; color: var(--rp-text-muted); margin-top: 12px; }
@@ -214,6 +219,25 @@
   color: var(--rp-primary); text-decoration: none;
 }
 .rp-manage-link:hover { text-decoration: underline; }
+
+/* El enlace de gestión, recuperable. Si el cliente cierra la pestaña lo pierde para
+   siempre y ya no puede cancelar — que es la mitad del no-show. Por eso deja de ser
+   un enlace suelto y pasa a ser una caja con su «guárdalo» y su botón de copiar. */
+.rp-guardar {
+  margin-top: 16px; padding: 14px;
+  background: var(--rp-bg); border: 1px dashed var(--rp-border); border-radius: 10px;
+  text-align: left;
+}
+.rp-guardar-tit  { font-size: 13px; font-weight: 700; margin: 0 0 4px; }
+.rp-guardar-url  { font-size: 12px; color: var(--rp-text-muted); word-break: break-all; margin: 0 0 10px; }
+.rp-guardar-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.rp-copiar {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  font-family: var(--rp-font); font-size: 13px; font-weight: 600;
+  background: var(--rp-surface); color: var(--rp-text); border: 1px solid var(--rp-border);
+}
+.rp-copiar:hover { border-color: var(--rp-primary); color: var(--rp-primary); }
 
 /* Turno form section */
 .rp-turno-form-section { margin-top: 24px; }

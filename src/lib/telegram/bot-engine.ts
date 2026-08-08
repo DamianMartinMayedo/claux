@@ -7,7 +7,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz, ahoraEnTz, sumarDias } from '@/lib/fecha-tz'
 import { notificarReservaNueva } from '@/lib/reservas/estado'
-import { notificarReservaEntrante } from '@/lib/notificaciones/eventos'
+import { notificarReservaEntrante, notificarCancelacionCliente } from '@/lib/notificaciones/eventos'
 import { tieneModulo } from '@/lib/modulos'
 import { parseBotConfig } from '@/lib/reservas/bot-config'
 import { conversarReserva, type TurnoConv } from '@/lib/ia/telegram'
@@ -35,7 +35,12 @@ export interface BotResponse {
 
 // 'ia' = conversación en lenguaje natural en curso (modo asistente IA). El resto
 // son pasos del flujo de botones determinista.
-export type PasoReserva = 'inicio' | 'fecha' | 'hora' | 'personas' | 'nombre' | 'confirmar' | 'ia'
+// El flujo de botones va PERSONAS → DÍA → HORA. Antes preguntaba la hora antes que
+// las personas, y como el aforo depende de las personas, el bot no podía saber si el
+// hueco cabía: paseaba al cliente por cinco pasos para soltarle al final «No hay
+// capacidad suficiente para esa hora». Es además el orden de la mini-web.
+export type PasoReserva =
+  | 'inicio' | 'personas' | 'personas_texto' | 'fecha' | 'hora' | 'telefono' | 'nombre' | 'confirmar' | 'ia'
 
 export interface DatosReserva {
   fecha?: string
@@ -44,6 +49,7 @@ export interface DatosReserva {
   hora?: string
   personas?: number
   nombre?: string
+  telefono?: string
   // Solo en modo IA: historial corto de la conversación, para coherencia entre
   // turnos. Se descarta al pasar a 'confirmar'; la creación por RPC no lo usa.
   _hist?: TurnoConv[]
@@ -54,14 +60,28 @@ export interface SesionInfo {
   datos: DatosReserva
 }
 
+/**
+ * Una sesión a medias caduca a las 2 h (TG-20).
+ *
+ * Vivían 24 h: si el flujo quedaba parado en el paso «nombre» y el cliente volvía al
+ * día siguiente y escribía «hola», eso pasaba a ser el NOMBRE de la reserva. Dos horas
+ * es más tiempo del que nadie tarda en reservar una mesa, y menos del que hace falta
+ * para olvidarse de que estaba a medias.
+ */
+const SESION_VIVA_MS = 2 * 60 * 60 * 1000
+
 export async function cargarSesion(clientId: string, chatId: string): Promise<SesionInfo> {
   const db = createAdminClient()
   const { data } = await db.from('telegram_sessions')
-    .select('paso, datos')
+    .select('paso, datos, updated_at')
     .eq('client_id', clientId)
     .eq('chat_id', chatId)
     .eq('modulo', 'reservas')
     .maybeSingle()
+
+  const visto = data?.updated_at ? Date.parse(data.updated_at as string) : 0
+  if (visto && Date.now() - visto > SESION_VIVA_MS) return { paso: null, datos: {} }
+
   return {
     paso: (data?.paso as PasoReserva) ?? null,
     datos: (data?.datos as DatosReserva) ?? {},
@@ -155,8 +175,8 @@ export async function manejarMensaje(
       return bienvenida(ctx)
     }
     if (t === 'reservar') {
-      await guardarSesion(ctx.client_id, chat_id, 'inicio', {})
-      return promptFecha()
+      await guardarSesion(ctx.client_id, chat_id, 'personas', {})
+      return promptPersonas()
     }
     return manejarPasoReserva(ctx, chat_id, sesion, texto.trim())
   }
@@ -164,6 +184,8 @@ export async function manejarMensaje(
   if (t === '/start' || SALUDOS.some(s => t.startsWith(s))) return bienvenida(ctx)
   if (t === 'reservar' || t === '/reservar') return iniciarReserva(ctx, chat_id)
   if (t === 'cancelar_flujo') return bienvenida(ctx)
+  if (t === 'mis_reservas' || t === '/mis_reservas') return misReservas(ctx, chat_id)
+  if (t.startsWith('cancelar_res:')) return cancelarDesdeBot(ctx, chat_id, t.replace('cancelar_res:', ''))
   if (t === 'carta'   || t === 'menu' || t === 'menú') return mostrarCarta(ctx)
   if (t === 'horarios'|| t === 'horario') return mostrarHorarios(ctx)
   if (t === 'ayuda'   || t === 'help') return mostrarAyuda(ctx)
@@ -194,68 +216,134 @@ function bienvenida(ctx: BotContext): BotResponse {
 // ── Iniciar flujo de reserva ──────────────────────────────────────────────────
 
 async function iniciarReserva(ctx: BotContext, chatId: string): Promise<BotResponse> {
-  await guardarSesion(ctx.client_id, chatId, 'inicio', {})
-  return promptFecha()
+  await guardarSesion(ctx.client_id, chatId, 'personas', {})
+  return promptPersonas()
 }
 
-function promptFecha(): BotResponse {
+// Cada paso anuncia su salida: sin esto, una sesión a medias convertía cualquier
+// cosa que escribiera el cliente en el nombre de la reserva (TG-20).
+const SALIDA = '\n\nEscribe *cancelar* para empezar de nuevo.'.replace(/\*/g, '')
+
+function promptPersonas(): BotResponse {
   return {
-    texto: '¿Para qué día quieres reservar?',
+    texto: `¿Para cuántas personas?${SALIDA}`,
     markup: {
       inline_keyboard: [
-        [{ text: 'Hoy', callback_data: 'fecha:hoy' }, { text: 'Mañana', callback_data: 'fecha:mañana' }],
-        [{ text: 'Otro día', callback_data: 'fecha:otro' }],
+        [{ text: '1', callback_data: 'personas:1' }, { text: '2', callback_data: 'personas:2' }, { text: '3', callback_data: 'personas:3' }],
+        [{ text: '4', callback_data: 'personas:4' }, { text: '5', callback_data: 'personas:5' }, { text: '6 o más', callback_data: 'personas:mas' }],
         [{ text: 'Cancelar', callback_data: 'cancelar_flujo' }],
       ],
     },
   }
 }
 
+/**
+ * Elegir día con los días que DE VERDAD tienen hueco (TG-22).
+ *
+ * Antes eran «Hoy / Mañana / Otro día», y «Otro día» obliga a escribir una fecha a
+ * mano en el móvil — que es exactamente donde se cae la gente. Los días salen de
+ * `res_dias_disponibles_aforo`, que ya existe y ya mira aforo, cierres y reglas.
+ */
+async function promptDias(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
+  const dias = await diasConHueco(ctx.client_id, datos.personas ?? 1)
+  const filas: { text: string; callback_data: string }[][] = []
+  for (let i = 0; i < Math.min(dias.length, 8); i++) {
+    if (i % 2 === 0) filas.push([])
+    const d = dias[i]
+    filas[filas.length - 1].push({ text: etiquetaDia(d.fecha), callback_data: `fecha:${d.fecha}` })
+  }
+  filas.push([{ text: 'Otro día', callback_data: 'fecha:otro' }])
+  filas.push([{ text: '← Volver', callback_data: 'reservar' }, { text: 'Cancelar', callback_data: 'cancelar_flujo' }])
+
+  await guardarSesion(ctx.client_id, chatId, 'inicio', datos)
+
+  const cabecera = dias.length === 0
+    ? `No veo huecos para ${datos.personas} en los próximos días. Puedes probar otra fecha o escribirnos.`
+    : `Para ${datos.personas} persona${datos.personas === 1 ? '' : 's'}. ¿Qué día?`
+  return { texto: `${cabecera}${SALIDA}`, markup: { inline_keyboard: filas } }
+}
+
+function etiquetaDia(f: string): string {
+  if (f === hoyISO()) return 'Hoy'
+  if (f === sumarDias(hoyISO(), 1)) return 'Mañana'
+  const [y, m, d] = f.split('-').map(Number)
+  const dow = new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')
+  return `${dow} ${d}`
+}
+
 // ── Helper: calcular slots horarios libres de un día (reutilizado por botones e IA) ──
 
 export interface SlotReserva { hora: string; franja_id: string; franja_nombre: string }
 
-export async function slotsDisponiblesReserva(clientId: string, fecha: string): Promise<SlotReserva[]> {
+/**
+ * Huecos libres de un día. **Una sola fuente de verdad: `res_slots_aforo`** (TG-7).
+ *
+ * Esto enumeraba huecos de 30 min dentro de las franjas y solo descartaba días de la
+ * semana y horas pasadas: no miraba aforo, ni cierres, ni antelación, ni ventana. La
+ * mini-web sí, porque usa la RPC. Resultado: el bot paseaba al cliente por cinco pasos
+ * para soltarle al final «No hay capacidad suficiente para esa hora».
+ *
+ * El aforo depende de las PERSONAS, por eso son un parámetro y por eso el flujo las
+ * pregunta primero.
+ */
+export async function slotsDisponiblesReserva(
+  clientId: string, fecha: string, personas = 1,
+): Promise<SlotReserva[]> {
   const db = createAdminClient()
+  const { data, error } = await db.rpc('res_slots_aforo', {
+    p_client_id: clientId, p_fecha: fecha, p_personas: personas < 1 ? 1 : personas,
+  })
+  if (error || !Array.isArray(data)) return []
+
+  const libres = (data as { hora: string; franja_id: string; libre: boolean }[]).filter(s => s.libre)
+  if (libres.length === 0) return []
+
+  // El nombre del turno solo se enseña si el negocio tiene más de uno: con uno solo
+  // («Comidas») es ruido, con dos («Terraza» / «Salón») es justo lo que hay que elegir.
   const { data: franjas } = await db.from('reserva_franjas')
-    .select('franja_id, nombre, hora_inicio, hora_fin, duracion_minutos, dias_semana')
-    .eq('client_id', clientId)
-    .eq('activa', true)
-    .order('hora_inicio')
+    .select('franja_id, nombre').eq('client_id', clientId).eq('activa', true)
+  const lista = (franjas ?? []) as { franja_id: string; nombre: string }[]
+  const nombres = new Map(lista.map(f => [f.franja_id, f.nombre]))
+  const varios = lista.length > 1
 
-  if (!franjas || franjas.length === 0) return []
+  return libres.map(s => ({
+    hora: s.hora,
+    franja_id: s.franja_id,
+    franja_nombre: varios ? (nombres.get(s.franja_id) ?? '') : '',
+  }))
+}
 
-  const slots: SlotReserva[] = []
-  const isodow = isodowDe(fecha)
-  const [hAhora, mAhora] = ahoraEnTz().split(':').map(Number) // ahora en la zona del negocio
-  const minsAhora = hAhora * 60 + mAhora
-  for (const f of (franjas as { franja_id: string; nombre: string; hora_inicio: string | null; hora_fin: string | null; duracion_minutos: number; dias_semana: number[] | null }[])) {
-    // Respetar los días de la semana del turno (NULL/vacío = todos los días)
-    if (f.dias_semana && f.dias_semana.length > 0 && !f.dias_semana.includes(isodow)) continue
-    if (!f.hora_inicio || !f.hora_fin) continue
-    const [hIni, mIni] = f.hora_inicio.split(':').map(Number)
-    const [hFin, mFin] = f.hora_fin.split(':').map(Number)
-    const ini = hIni * 60 + mIni
-    const fin = hFin * 60 + mFin
-    for (let t = ini; t < fin; t += 30) {
-      if (fecha === hoyISO() && t <= minsAhora) continue
-      const hh = String(Math.floor(t / 60)).padStart(2, '0')
-      const mm = String(t % 60).padStart(2, '0')
-      slots.push({ hora: `${hh}:${mm}`, franja_id: f.franja_id, franja_nombre: f.nombre })
-    }
-  }
-  return slots
+/** Tope de personas por reserva del negocio (`reserva_max_personas`). 0 = sin tope. */
+async function topePersonas(clientId: string): Promise<number> {
+  const db = createAdminClient()
+  const { data } = await db.from('clients')
+    .select('reserva_max_personas').eq('client_id', clientId).maybeSingle()
+  return Number(data?.reserva_max_personas ?? 0) || 0
+}
+
+/** Próximos días con hueco REAL para ese número de personas (TG-22). */
+async function diasConHueco(clientId: string, personas: number): Promise<{ fecha: string; primera_hora: string }[]> {
+  const db = createAdminClient()
+  const { data, error } = await db.rpc('res_dias_disponibles_aforo', {
+    p_client_id: clientId, p_personas: personas < 1 ? 1 : personas,
+    p_desde: hoyISO(), p_max_dias: 30,
+  })
+  if (error || !Array.isArray(data)) return []
+  return data as { fecha: string; primera_hora: string }[]
 }
 
 // ── Helper: mostrar slots horarios disponibles (flujo de botones) ──────────────
 
 async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
   const fecha = datos.fecha!
-  const slots = await slotsDisponiblesReserva(ctx.client_id, fecha)
+  const slots = await slotsDisponiblesReserva(ctx.client_id, fecha, datos.personas ?? 1)
 
+  // TG-18: un día sin huecos BORRABA la sesión y devolvía al teclado inicial, así que
+  // probar otro día era empezar de cero. Se deja al cliente en el paso del día, con
+  // sus datos puestos — que es lo que ya hace bien el motor de Citas.
   if (slots.length === 0) {
-    await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: 'No hay horarios disponibles para ese día.', markup: tecladoPrincipal(ctx) }
+    const r = await promptDias(ctx, chatId, datos)
+    return { texto: `Ese día no me queda hueco para ${datos.personas}. ${r.texto}`, markup: r.markup }
   }
 
   const botones: { text: string; callback_data: string }[][] = []
@@ -263,15 +351,16 @@ async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva
     if (i % 3 === 0) botones.push([])
     const s = slots[i]
     botones[botones.length - 1].push({
-      text: formatHora(s.hora),
+      // Con más de un turno, la hora sola no dice si es Terraza o Salón.
+      text: s.franja_nombre ? `${formatHora(s.hora)} ${s.franja_nombre}` : formatHora(s.hora),
       callback_data: `slot:${s.franja_id}:${s.hora}`,
     })
   }
-  botones.push([{ text: '← Volver', callback_data: 'reservar' }])
+  botones.push([{ text: '← Otro día', callback_data: 'reservar_dia' }, { text: 'Cancelar', callback_data: 'cancelar_flujo' }])
 
   await guardarSesion(ctx.client_id, chatId, 'hora', datos)
   return {
-    texto: `📅 ${formatFechaStr(fecha)}\n\nElige una hora:`,
+    texto: `📅 ${formatFechaStr(fecha)} · ${datos.personas} persona${datos.personas === 1 ? '' : 's'}\n\nElige una hora:${SALIDA}`,
     markup: { inline_keyboard: botones },
   }
 }
@@ -287,13 +376,16 @@ async function resumenConfirmacion(ctx: BotContext, chatId: string, datos: Datos
 
   const limpio: DatosReserva = {
     fecha: datos.fecha, franja_id: datos.franja_id, franja_nombre: datos.franja_nombre,
-    hora: datos.hora, personas: datos.personas, nombre: datos.nombre,
+    hora: datos.hora, personas: datos.personas, nombre: datos.nombre, telefono: datos.telefono,
   }
   await guardarSesion(ctx.client_id, chatId, 'confirmar', limpio)
 
   const autoText = confirmAuto ? '\n✅ Confirmación automática: tu reserva se confirma al instante.' : '\nTe confirmaremos por este mismo chat.'
   return {
-    texto: `📋 *Resumen*\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}${autoText}\n\n¿Confirmar reserva?`,
+    // TG-10: iba `*Resumen*` y `enviarMensaje` nunca manda `parse_mode`, así que el
+    // cliente leía literalmente los asteriscos. Se quitan (más simple que meter
+    // Markdown y tener que escapar el texto libre que escribe el cliente).
+    texto: `📋 Resumen\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}${datos.telefono ? `\n📞 ${datos.telefono}` : ''}${autoText}\n\n¿Confirmar reserva?`,
     markup: {
       inline_keyboard: [
         [{ text: '✅ Confirmar', callback_data: 'confirmar_reserva' }],
@@ -392,42 +484,71 @@ export async function manejarPasoReserva(
   const paso = sesion.paso!
   const datos = { ...sesion.datos }
 
-  // ── FECHA ───────────────────────────────────────────────────────────────────
+  // ── PERSONAS (primer paso: de ellas depende el aforo) ───────────────────────
+  if (paso === 'personas') {
+    // TG-8: «6+» mandaba `personas:6` y ahí moría — justo la reserva que más importa
+    // a un restaurante. Ahora pide el número.
+    if (texto === 'personas:mas') {
+      await guardarSesion(ctx.client_id, chatId, 'personas_texto', datos)
+      const tope = await topePersonas(ctx.client_id)
+      return { texto: `¿Cuántas personas sois?${tope ? ` (máximo ${tope})` : ''}${SALIDA}` }
+    }
+    const n = parseInt(texto.replace('personas:', ''), 10)
+    if (isNaN(n) || n < 1) return promptPersonas()
+    datos.personas = n
+    return promptDias(ctx, chatId, datos)
+  }
+
+  if (paso === 'personas_texto') {
+    const n = parseInt(texto.replace(/\D/g, ''), 10)
+    const tope = await topePersonas(ctx.client_id)
+    if (isNaN(n) || n < 1) return { texto: `Dime un número, por favor.${SALIDA}` }
+    if (tope > 0 && n > tope) {
+      return { texto: `Para grupos de más de ${tope} personas, escríbenos y lo organizamos.${SALIDA}` }
+    }
+    datos.personas = n
+    return promptDias(ctx, chatId, datos)
+  }
+
+  // ── DÍA ─────────────────────────────────────────────────────────────────────
   if (paso === 'inicio') {
     if (texto === 'fecha:otro') {
       await guardarSesion(ctx.client_id, chatId, 'fecha', datos)
-      return { texto: 'Escribe la fecha (ej: 25/06 o 2026-06-25):' }
+      return { texto: `Escribe la fecha (ej: 25/06 o 2026-06-25):${SALIDA}` }
     }
     if (texto.startsWith('fecha:')) {
       const tag = texto.replace('fecha:', '')
-      if (tag === 'hoy') datos.fecha = hoyISO()
-      else if (tag === 'mañana') {
-        const d = new Date(); d.setDate(d.getDate() + 1)
-        datos.fecha = d.toISOString().split('T')[0]
-      }
+      // El botón trae la fecha ya resuelta por el servidor; «hoy»/«mañana» se
+      // mantienen por si llegan escritas (TG-11: nunca con `toISOString`, que en
+      // Cuba después de las 20:00 da el día siguiente).
+      if (tag === 'hoy')          datos.fecha = hoyISO()
+      else if (tag === 'mañana')  datos.fecha = sumarDias(hoyISO(), 1)
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(tag)) datos.fecha = tag
     } else {
       const pf = parseFecha(texto)
-      if (!pf) return { texto: 'No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.', markup: tecladoFecha() }
-      if (pf < hoyISO()) return { texto: 'Esa fecha ya pasó. Elige una fecha futura.', markup: tecladoFecha() }
+      if (!pf) return { texto: `No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.${SALIDA}`, markup: tecladoFecha() }
+      if (pf < hoyISO()) return { texto: `Esa fecha ya pasó. Elige una fecha futura.${SALIDA}`, markup: tecladoFecha() }
       datos.fecha = pf
     }
+    if (!datos.fecha) return promptDias(ctx, chatId, datos)
 
     return mostrarSlots(ctx, chatId, datos)
   }
 
-  // ── FECHA (paso fecha, para texto libre) ────────────────────────────────────
+  // ── FECHA (texto libre) ─────────────────────────────────────────────────────
   if (paso === 'fecha') {
     const pf = parseFecha(texto)
-    if (!pf) return { texto: 'No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.', markup: tecladoFecha() }
-    if (pf < hoyISO()) return { texto: 'Esa fecha ya pasó. Elige una fecha futura.', markup: tecladoFecha() }
+    if (!pf) return { texto: `No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.${SALIDA}`, markup: tecladoFecha() }
+    if (pf < hoyISO()) return { texto: `Esa fecha ya pasó. Elige una fecha futura.${SALIDA}`, markup: tecladoFecha() }
     datos.fecha = pf
     return mostrarSlots(ctx, chatId, datos)
   }
 
   // ── HORA ────────────────────────────────────────────────────────────────────
   if (paso === 'hora') {
+    if (texto === 'reservar_dia') return promptDias(ctx, chatId, datos)
     if (!texto.startsWith('slot:')) {
-      return { texto: 'Elige una hora de los botones.' }
+      return { texto: `Elige una hora de los botones.${SALIDA}` }
     }
     const parts = texto.replace('slot:', '').split(':')
     // Formato: FRANJA_ID:HH:MM (la FRANJA_ID no contiene ':')
@@ -435,33 +556,35 @@ export async function manejarPasoReserva(
     datos.hora = parts.slice(1).join(':')
     datos.franja_nombre = ''
 
-    await guardarSesion(ctx.client_id, chatId, 'personas', datos)
-    return {
-      texto: '¿Cuántas personas?',
-      markup: {
-        inline_keyboard: [
-          [{ text: '1', callback_data: 'personas:1' }, { text: '2', callback_data: 'personas:2' }, { text: '3', callback_data: 'personas:3' }],
-          [{ text: '4', callback_data: 'personas:4' }, { text: '5', callback_data: 'personas:5' }, { text: '6+', callback_data: 'personas:6' }],
-          [{ text: '← Volver', callback_data: 'reservar' }],
-        ],
-      },
-    }
-  }
-
-  // ── PERSONAS ────────────────────────────────────────────────────────────────
-  if (paso === 'personas') {
-    const n = parseInt(texto.replace('personas:', ''))
-    if (isNaN(n) || n < 1) return { texto: 'Dime un número válido (1-20).' }
-    datos.personas = Math.min(n, 20)
-
     await guardarSesion(ctx.client_id, chatId, 'nombre', datos)
-    return { texto: '¿A nombre de quién?' }
+    return { texto: `¿A nombre de quién?${SALIDA}` }
   }
 
   // ── NOMBRE ──────────────────────────────────────────────────────────────────
   if (paso === 'nombre') {
-    if (texto.length < 2) return { texto: 'El nombre debe tener al menos 2 letras.' }
+    if (texto.length < 2) return { texto: `El nombre debe tener al menos 2 letras.${SALIDA}` }
     datos.nombre = texto
+    // TG-9: el bot nunca pedía teléfono (`p_telefono: null`) y la web lo exige. El
+    // chat identifica al cliente, pero el dueño necesita poder llamarle.
+    await guardarSesion(ctx.client_id, chatId, 'telefono', datos)
+    return {
+      texto: `¿Un teléfono de contacto?${SALIDA}`,
+      markup: { inline_keyboard: [[{ text: 'Saltar', callback_data: 'tel:saltar' }]] },
+    }
+  }
+
+  // ── TELÉFONO (opcional) ─────────────────────────────────────────────────────
+  if (paso === 'telefono') {
+    if (texto !== 'tel:saltar') {
+      const tel = texto.trim()
+      if (tel.replace(/\D/g, '').length < 6) {
+        return {
+          texto: `Ese teléfono no parece válido. Escríbelo de nuevo o pulsa Saltar.${SALIDA}`,
+          markup: { inline_keyboard: [[{ text: 'Saltar', callback_data: 'tel:saltar' }]] },
+        }
+      }
+      datos.telefono = tel
+    }
     return resumenConfirmacion(ctx, chatId, datos)
   }
 
@@ -487,29 +610,36 @@ export async function manejarPasoReserva(
       p_hora:                    datos.hora! + ':00',
       p_personas:                datos.personas!,
       p_nombre_cliente:          datos.nombre!,
-      p_telefono:                null,
+      p_telefono:                datos.telefono ?? null,
       p_notas:                   null,
       p_canal:                   'bot',
       p_confirmacion_automatica: confirmAuto,
       p_reserva_id:              reservaId,
     })
 
-    await guardarSesion(ctx.client_id, chatId, null, {})
-
+    // TG-19: un error aquí borraba la sesión y tiraba TODO el flujo — el cliente
+    // tenía que volver a empezar por las personas. Ahora vuelve al paso de la hora
+    // con su día puesto, y el mensaje dice qué pasó.
     if (rpcErr) {
-      return { texto: `❌ No se pudo crear la reserva.\n\n${rpcErr.message}`, markup: tecladoPrincipal(ctx) }
+      const r = await mostrarSlots(ctx, chatId, datos)
+      return { texto: `No se pudo crear la reserva. ${r.texto}`, markup: r.markup }
     }
 
     const result = (rpcData as { ok?: boolean; error?: string; reserva_id?: string }) ?? {}
     if (!result.ok) {
-      return { texto: `❌ ${result.error ?? 'Error al crear la reserva.'}`, markup: tecladoPrincipal(ctx) }
+      const r = await mostrarSlots(ctx, chatId, datos)
+      return { texto: `${result.error ?? 'No se pudo crear la reserva.'} ${r.texto}`, markup: r.markup }
     }
 
+    await guardarSesion(ctx.client_id, chatId, null, {})
+
     // Guardar el chat del cliente para poder avisarle de cambios de estado
-    await db.from('reservas')
+    const { data: guardada } = await db.from('reservas')
       .update({ telegram_chat_id: chatId })
       .eq('reserva_id', reservaId)
       .eq('client_id', ctx.client_id)
+      .select('token')
+      .maybeSingle()
 
     // Avisar al dueño de la reserva nueva (con botones Confirmar/Rechazar si está pendiente)
     await notificarReservaNueva(
@@ -524,7 +654,7 @@ export async function manejarPasoReserva(
         hora:             datos.hora!,
         personas:         datos.personas!,
         nombre_cliente:   datos.nombre!,
-        telefono:         null,
+        telefono:         datos.telefono ?? null,
         notas:            null,
         estado:           confirmAuto ? 'CONFIRMADA' : 'PENDIENTE',
         telegram_chat_id: chatId,
@@ -541,13 +671,84 @@ export async function manejarPasoReserva(
     })
 
     const estado = confirmAuto ? 'confirmada' : 'pendiente de confirmación'
+    // TG-14: el enlace de gestión existía y no se usaba en ningún sitio. Es lo que
+    // permite al cliente cancelar solo — o sea, la mitad del anti-no-show.
+    const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
+    const enlace = guardada?.token && ctx.slug && base
+      ? `\n\nPara verla o cancelarla:\n${base}/${ctx.slug}/r/${guardada.token}`
+      : ''
     return {
-      texto: `✅ ¡Reserva ${estado}!\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}\n\nTe avisaremos por aquí.`,
+      texto: `✅ ¡Reserva ${estado}!\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}\n\nTe avisaremos por aquí.${enlace}`,
       markup: tecladoPrincipal(ctx),
     }
   }
 
   return { texto: 'Algo salió mal. Usa /start para volver.', markup: tecladoPrincipal(ctx) }
+}
+
+// ── Mis reservas (TG-23) ──────────────────────────────────────────────────────
+//
+// El cliente que reservó por el bot no tenía forma de ver ni cancelar lo suyo desde
+// el bot: solo con el enlace de la pantalla de éxito, que se pierde al cerrar el chat.
+// Y una cancelación a tiempo es media reserva recuperada.
+
+async function misReservas(ctx: BotContext, chatId: string): Promise<BotResponse> {
+  const db = createAdminClient()
+  const { data } = await db.from('reservas')
+    .select('reserva_id, fecha, hora, personas, estado')
+    .eq('client_id', ctx.client_id)
+    .eq('telegram_chat_id', chatId)
+    .is('recurso_id', null)
+    .gte('fecha', hoyISO())
+    .in('estado', ['PENDIENTE', 'CONFIRMADA'])
+    .order('fecha').order('hora')
+    .limit(5)
+
+  const lista = (data ?? []) as { reserva_id: string; fecha: string; hora: string | null; personas: number; estado: string }[]
+  if (lista.length === 0) {
+    return { texto: 'No tienes reservas próximas por aquí.', markup: tecladoPrincipal(ctx) }
+  }
+
+  const filas = lista.map(r => ([{
+    text: `✕ Cancelar ${formatFechaStr(r.fecha)} ${formatHora(r.hora ?? '')}`,
+    callback_data: `cancelar_res:${r.reserva_id}`,
+  }]))
+
+  const texto = lista.map(r =>
+    `📅 ${formatFechaStr(r.fecha)}  🕐 ${formatHora(r.hora ?? '')}  👥 ${r.personas}` +
+    `  ·  ${r.estado === 'CONFIRMADA' ? 'confirmada' : 'pendiente'}`).join('\n')
+
+  return { texto: `Tus próximas reservas:\n\n${texto}`, markup: { inline_keyboard: filas } }
+}
+
+async function cancelarDesdeBot(ctx: BotContext, chatId: string, reservaId: string): Promise<BotResponse> {
+  const db = createAdminClient()
+  // El `telegram_chat_id` es el candado: solo puede cancelar quien reservó por ESTE
+  // chat. El id de la reserva viaja en el botón, o sea por el navegador del cliente.
+  const { data: reserva } = await db.from('reservas')
+    .select('reserva_id, estado, fecha')
+    .eq('reserva_id', reservaId)
+    .eq('client_id', ctx.client_id)
+    .eq('telegram_chat_id', chatId)
+    .maybeSingle()
+
+  if (!reserva) return { texto: 'No encuentro esa reserva.', markup: tecladoPrincipal(ctx) }
+  if (!['PENDIENTE', 'CONFIRMADA'].includes(reserva.estado as string)) {
+    return { texto: 'Esa reserva ya no está activa.', markup: tecladoPrincipal(ctx) }
+  }
+
+  const { error } = await db.from('reservas')
+    .update({ estado: 'CANCELADA', updated_at: new Date().toISOString() })
+    .eq('reserva_id', reservaId).eq('client_id', ctx.client_id)
+  if (error) return { texto: 'No se pudo cancelar. Inténtalo en un momento.', markup: tecladoPrincipal(ctx) }
+
+  // Que el dueño se entere: es el hueco que acaba de liberarse.
+  await notificarCancelacionCliente({
+    clientId: ctx.client_id, reservaId, modo: 'reserva',
+    nombreCliente: '', fecha: reserva.fecha as string, hora: '',
+  }).catch(() => { /* la cancelación ya está hecha; el aviso es secundario */ })
+
+  return { texto: '✅ Reserva cancelada. Gracias por avisar.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Mostrar carta (solo si el negocio tiene el módulo de menú digital) ─────────
@@ -589,7 +790,7 @@ async function mostrarHorarios(ctx: BotContext): Promise<BotResponse> {
 // ── Ayuda ─────────────────────────────────────────────────────────────────────
 
 function mostrarAyuda(ctx: BotContext): BotResponse {
-  const puede = ['• Hacer una reserva']
+  const puede = ['• Hacer una reserva', '• Ver o cancelar tus reservas']
   if (tieneCarta(ctx)) puede.push('• Ver la carta')
   puede.push('• Consultar horarios')
   return {
@@ -611,7 +812,9 @@ function tecladoPrincipal(ctx: BotContext): ReplyMarkup | undefined {
   return {
     inline_keyboard: [
       fila1,
-      [{ text: '🕐 Horarios', callback_data: 'horarios' }],
+      // TG-23: el bot es el ÚNICO canal donde el cliente está identificado, y hasta
+      // ahora no podía ver ni cancelar lo suyo desde aquí.
+      [{ text: '🗒 Mis reservas', callback_data: 'mis_reservas' }, { text: '🕐 Horarios', callback_data: 'horarios' }],
     ],
   }
 }

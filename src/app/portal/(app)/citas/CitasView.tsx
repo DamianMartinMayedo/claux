@@ -2,18 +2,19 @@
 
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo, useEffect } from 'react'
+import { useState, useTransition, useMemo, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   guardarServicio, eliminarServicio,
   guardarRecurso, eliminarRecurso, importarPersonalRRHH, importarServiciosCatalogo,
-  crearCitaManual, cambiarEstadoCita, cambiarEstadoCitasEnLote,
+  crearCitaManual, modificarCita, cambiarEstadoCita, cambiarEstadoCitasEnLote,
+  guardarAusencia, eliminarAusencia,
   guardarBotConfigCitas, eliminarBotConfigCitas, toggleActivoBotCitas, toggleIaBotCitas, guardarConfirmacionCitas,
   obtenerSlotsCita, obtenerDiasDisponiblesCita,
   type CitasPageData, type Servicio, type Recurso, type CitaConDetalle, type SlotCita, type DiaDisponible,
-  type ResultadoLote, type ServicioCatalogo,
+  type ResultadoLote, type ServicioCatalogo, type Ausencia,
 } from '@/app/actions/portal/citas'
-import { guardarSlug } from '@/app/actions/portal/reservas'
+import { guardarSlug } from '@/app/actions/portal/agenda-comun'
 import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
@@ -23,22 +24,26 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
-import { type EstadoReserva } from '@/lib/reservas/estado'
+import QrEnlace from '@/components/portal/QrEnlace'
+import BotDiagnostico from '@/components/portal/BotDiagnostico'
+import AvisarCliente from '@/components/portal/AvisarCliente'
+import HistorialClienteLinea from '@/components/portal/HistorialCliente'
+import {
+  ESTADO_LABEL, ESTADO_BADGE, ESTADOS_DESHACIBLES, type EstadoReserva,
+} from '@/lib/reservas/estados'
 import { opcionesCon } from '@/components/portal/form-helpers'
-import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Trash2, UserX, X } from 'lucide-react'
+import { CalendarDays, Check, Copy, Download, Eye, Info, Pencil, Plus, Power, PowerOff, Trash2, Undo2, UserX, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import Filtros from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { type PresetRango } from '@/lib/listados'
-import { hoyEnTz } from '@/lib/fecha-tz'
+import Link from 'next/link'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
+import { DIAS_CIERRE_AUTO } from '@/lib/reservas/estados'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const ESTADO_LABEL: Record<EstadoReserva, string> = {
-  PENDIENTE: 'Pendiente', CONFIRMADA: 'Confirmada', RECHAZADA: 'Rechazada',
-  NO_SHOW: 'No asistió', CANCELADA: 'Cancelada',
-}
 /**
  * Presets del rango de la agenda: miran al FUTURO.
  *
@@ -47,10 +52,6 @@ const ESTADO_LABEL: Record<EstadoReserva, string> = {
  */
 const PRESETS_CITAS: PresetRango[] = ['prox_30', 'prox_3_meses', 'mes', 'mes_pasado', 'todo']
 
-const ESTADO_BADGE: Record<EstadoReserva, string> = {
-  PENDIENTE: 'badge-warning', CONFIRMADA: 'badge-success', RECHAZADA: 'badge-neutral',
-  NO_SHOW: 'badge-danger', CANCELADA: 'badge-neutral',
-}
 const CANAL_LABEL: Record<string, string> = { web: 'Web', bot: 'Bot', manual: 'Manual' }
 const DIA_LABEL: Record<number, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' }
 const MEDIAS_HORAS = Array.from({ length: 48 }, (_, i) => {
@@ -65,7 +66,9 @@ const MEDIAS_HORAS = Array.from({ length: 48 }, (_, i) => {
 // `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
 // adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
 function hoyISO(): string { return hoyEnTz() }
-function mananaISO(): string { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
+// CIT-7: iba con `toISOString()`, que es UTC — después de las 20:00 de Cuba el chip
+// «Mañana» etiquetaba pasado mañana. La fecha del negocio sale de `hoyEnTz`.
+function mananaISO(): string { return sumarDias(hoyISO(), 1) }
 function fechaChip(f: string): string {
   if (f === hoyISO())    return 'Hoy'
   if (f === mananaISO()) return 'Mañana'
@@ -169,6 +172,14 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
                 <input className="input" id="srv-duracion" name="duracion_minutos" type="number" min="5" step="5" required
                   defaultValue={servicio?.duracion_minutos ?? 30} />
                 <span className="input-hint">Tiempo que ocupa cada cita.</span>
+              </div>
+              <div className="input-group ter-col-span-2">
+                <label htmlFor="srv-margen">Margen después (min)</label>
+                <input className="input" id="srv-margen" name="margen_minutos" type="number" min="0" step="5"
+                  defaultValue={servicio?.margen_minutos ?? 0} />
+                {/* La confusión natural es creer que esto alarga la cita. No: el cliente
+                    sigue leyendo «30 min», y el hueco siguiente empieza más tarde. */}
+                <span className="input-hint">Para limpiar o preparar. No se le enseña al cliente ni cambia el precio.</span>
               </div>
               <div className="input-group ter-col-span-2">
                 <label htmlFor="srv-precio">Precio</label>
@@ -388,8 +399,14 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!recurso
-  const horaDe = (dia: number, campo: 'hora_inicio' | 'hora_fin') =>
-    recurso?.horarios.find(h => h.dia_semana === dia)?.[campo] ?? ''
+  // CIT-3: dos tramos por día. `recurso_horarios` guarda una fila por tramo, así que
+  // el «tramo n» de un día es su n-ésima fila ordenada por hora de inicio.
+  const tramosDe = (dia: number) =>
+    (recurso?.horarios ?? [])
+      .filter(h => h.dia_semana === dia)
+      .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
+  const horaDe = (dia: number, tramo: 0 | 1, campo: 'hora_inicio' | 'hora_fin') =>
+    tramosDe(dia)[tramo]?.[campo] ?? ''
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -451,19 +468,31 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
                   {[1, 2, 3, 4, 5, 6, 7].map(d => (
                     <div key={d} className="cita-hor-row">
                       <span className="cita-hor-day">{DIA_LABEL[d]}</span>
-                      <select className="input" name={`hor_${d}_inicio`} defaultValue={horaDe(d, 'hora_inicio')}>
+                      <select className="input" name={`hor_${d}_inicio`} defaultValue={horaDe(d, 0, 'hora_inicio')}>
                         <option value="">—</option>
                         {MEDIAS_HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                       </select>
                       <span className="cita-hor-sep">a</span>
-                      <select className="input" name={`hor_${d}_fin`} defaultValue={horaDe(d, 'hora_fin')}>
+                      <select className="input" name={`hor_${d}_fin`} defaultValue={horaDe(d, 0, 'hora_fin')}>
+                        <option value="">—</option>
+                        {MEDIAS_HORAS.map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      {/* Segundo tramo (jornada partida): sin él no hay pausa de comida
+                          — o se ofrecen citas a las 13:30 o se cierra el día entero. */}
+                      <span className="cita-hor-sep">y</span>
+                      <select className="input" name={`hor_${d}_inicio2`} defaultValue={horaDe(d, 1, 'hora_inicio')}>
+                        <option value="">—</option>
+                        {MEDIAS_HORAS.map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      <span className="cita-hor-sep">a</span>
+                      <select className="input" name={`hor_${d}_fin2`} defaultValue={horaDe(d, 1, 'hora_fin')}>
                         <option value="">—</option>
                         {MEDIAS_HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </div>
                   ))}
                 </div>
-                <span className="input-hint">Deja un día en blanco si no atiende. Necesario para reservas en línea.</span>
+                <span className="input-hint">Deja un día en blanco si no atiende. El segundo tramo es para jornada partida (mañana y tarde); si trabajas seguido, déjalo vacío.</span>
               </div>
 
               <div className="input-group ter-col-full">
@@ -481,27 +510,153 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
             </button>
           </div>
         </form>
+
+        {/* Ausencias (CIT-4). Fuera del <form> de arriba a propósito: son su propio
+            alta/baja inmediata, y anidar formularios no es válido en HTML.
+            Solo al editar: hace falta que el profesional exista. */}
+        {isEdit && recurso && (
+          <AusenciasRecurso recurso={recurso} etiquetaRec={etiquetaRec} onCambio={onSaved} />
+        )}
       </div>
     </div>
   )
 }
 
-// ── Modal: nueva cita (manual) ────────────────────────────────────────────────
+// ── Ausencias de un profesional (CIT-4) ───────────────────────────────────────
+//
+// Vive DENTRO de su ficha, no en la pantalla de cierres del negocio: un cierre para
+// la barbería entera y las vacaciones de un barbero no son la misma cosa, y meterlas
+// juntas es justo la confusión que se está corrigiendo.
 
-function NuevaCitaModal({ data, onClose, onSaved }: {
+function AusenciasRecurso({ recurso, etiquetaRec, onCambio }: {
+  recurso:     Recurso
+  etiquetaRec: string
+  onCambio:    () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [borrar, setBorrar] = useState<Ausencia | null>(null)
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const form = e.currentTarget
+    const fd = new FormData(form)
+    fd.set('recurso_id', recurso.recurso_id)
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await guardarAusencia(fd)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess('Ausencia guardada.')
+      form.reset()
+      onCambio()
+    })
+  }
+
+  function doBorrar() {
+    if (!borrar) return
+    const ld = toastLoading('Eliminando…')
+    startTransition(async () => {
+      const res = await eliminarAusencia(borrar.ausencia_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setBorrar(null); return }
+      toastSuccess('Ausencia eliminada.')
+      setBorrar(null); onCambio()
+    })
+  }
+
+  return (
+    <div className="modal-body res-conf-pad-top">
+      <h3 className="card-title">Días libres y ausencias</h3>
+      <span className="input-hint">
+        Vacaciones, baja o un día suelto. Ese {etiquetaRec.toLowerCase()} deja de ofrecer
+        horas esos días; el resto del negocio sigue igual.
+      </span>
+
+      {recurso.ausencias.length > 0 && (
+        <div className="table-wrapper">
+          <table className="table">
+            <thead><tr><th>Desde</th><th>Hasta</th><th>Motivo</th><th className="col-actions"></th></tr></thead>
+            <tbody>
+              {recurso.ausencias.map(a => (
+                <tr key={a.ausencia_id}>
+                  <td data-label="Desde">{formatFecha(a.fecha_desde)}</td>
+                  <td data-label="Hasta">{formatFecha(a.fecha_hasta)}</td>
+                  <td data-label="Motivo" className="text-sm-muted">{a.motivo ?? '—'}</td>
+                  <td className="col-actions">
+                    <button type="button" className="ter-action-btn" aria-label="Eliminar ausencia"
+                      onClick={() => setBorrar(a)} disabled={isPending}>
+                      <Trash2 size={15} strokeWidth={2} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <div className="ter-form-grid res-conf-pad-top">
+          <div className="input-group ter-col-span-2">
+            <label>Desde <span className="required">*</span></label>
+            <input className="input" name="fecha_desde" type="date" required />
+          </div>
+          <div className="input-group ter-col-span-2">
+            <label>Hasta</label>
+            <input className="input" name="fecha_hasta" type="date" />
+            <span className="input-hint">En blanco = solo ese día.</span>
+          </div>
+          <div className="input-group ter-col-span-2">
+            <label>Motivo</label>
+            <input className="input" name="motivo" placeholder="Vacaciones, médico…" />
+          </div>
+        </div>
+        <div className="res-form-submit">
+          <button type="submit" className="btn btn-secondary" disabled={isPending}>
+            {isPending ? <><span className="spinner spinner-sm" /> Guardando…</> : 'Añadir ausencia'}
+          </button>
+        </div>
+      </form>
+
+      {borrar && (
+        <ConfirmDialog
+          title="¿Eliminar esta ausencia?"
+          body={`Volverá a ofrecer horas del ${formatFecha(borrar.fecha_desde)} al ${formatFecha(borrar.fecha_hasta)}.`}
+          confirmLabel="Eliminar" danger
+          onCancel={() => setBorrar(null)}
+          onConfirm={doBorrar}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Modal: cita manual (nueva o movida) ───────────────────────────────────────
+//
+// El mismo modal hace las dos cosas (CIT-1). Mover una cita —«¿me lo pasas a las
+// 5?»— es el caso más frecuente de una peluquería y no existía: había que CANCELAR,
+// con su aviso de cancelación al cliente, y crear otra. Se reutiliza este porque la
+// parte cara es la misma: elegir servicio, profesional y un hueco REAL.
+
+function NuevaCitaModal({ data, cita, onClose, onSaved }: {
   data: CitasPageData
+  /** Presente = se está moviendo esa cita, no creando una nueva. */
+  cita?: CitaConDetalle | null
   onClose: () => void
   onSaved: () => void
 }) {
+  const editando = !!cita
   const [isPending, startTransition] = useTransition()
-  const [servicioId, setServicioId] = useState('')
-  const [recursoId,  setRecursoId]  = useState('')
-  const [fecha,      setFecha]      = useState(hoyISO())
-  const [hora,       setHora]       = useState('')
+  const [servicioId, setServicioId] = useState(cita?.servicio_id ?? '')
+  const [recursoId,  setRecursoId]  = useState(cita?.recurso_id  ?? '')
+  const [fecha,      setFecha]      = useState(cita?.fecha ?? hoyISO())
+  const [hora,       setHora]       = useState(cita?.hora?.substring(0, 5) ?? '')
   const [slots,      setSlots]      = useState<SlotCita[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [dias,       setDias]       = useState<DiaDisponible[]>([])  // próximos días con hueco
   const [loadingDias, setLoadingDias] = useState(false)
+  // Lo que la base rechazó pero el dueño puede saltarse (Fase 3).
+  const [forzar,     setForzar]     = useState<{ motivo: string; datos: FormData } | null>(null)
 
   const recursosActivos = data.recursos.filter(r => r.activo)
   // Recursos que prestan el servicio elegido (sin asignaciones = presta todos)
@@ -512,6 +667,8 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
 
   // Al elegir servicio + recurso, buscar los próximos días con hueco y saltar al
   // primero (no depende de la fecha → no pisa la que el usuario elija después).
+  // MOVIENDO una cita no se salta: la primera carga borraría la fecha que ya tiene.
+  const saltoInicial = useRef(!editando)
   useEffect(() => {
     if (!servicioId || !recursoId) { setDias([]); return }
     let cancel = false
@@ -519,18 +676,24 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
     obtenerDiasDisponiblesCita(data.client_id, servicioId, recursoId).then(ds => {
       if (cancel) return
       setDias(ds)
-      if (ds.length > 0) setFecha(ds[0].fecha)
+      if (ds.length > 0 && saltoInicial.current) setFecha(ds[0].fecha)
+      saltoInicial.current = true
       setLoadingDias(false)
     }).catch(() => { if (!cancel) setLoadingDias(false) })
     return () => { cancel = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [servicioId, recursoId])
 
-  // Cargar huecos libres cuando hay servicio + recurso + fecha
+  // Cargar huecos libres cuando hay servicio + recurso + fecha. La hora se limpia al
+  // cambiar de contexto salvo la primera vez de una cita que se está moviendo: la suya
+  // no sale como hueco libre (la ocupa ella misma) y hay que conservarla.
+  const conservarHora = useRef(editando)
   useEffect(() => {
     if (!servicioId || !recursoId || !fecha) { setSlots([]); setHora(''); return }
     let cancel = false
-    setLoadingSlots(true); setHora('')
+    setLoadingSlots(true)
+    if (conservarHora.current) conservarHora.current = false
+    else setHora('')
     obtenerSlotsCita(data.client_id, servicioId, recursoId, fecha).then(s => {
       if (cancel) return
       setSlots(s); setLoadingSlots(false)
@@ -539,20 +702,36 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [servicioId, recursoId, fecha])
 
-  const horasLibres = useMemo(() => Array.from(new Set(slots.map(s => s.hora))).sort(), [slots])
+  // Los huecos del día, MÁS la hora que la cita ya ocupa (que no sale como libre
+  // justamente porque la ocupa ella): sin esto, abrir «Mover» dejaría el selector en
+  // blanco y parecería que su propia hora no existe.
+  const horasLibres = useMemo(() => {
+    const propia = editando && cita?.fecha === fecha ? [cita.hora?.substring(0, 5) ?? ''] : []
+    return Array.from(new Set([...slots.map(s => s.hora), ...propia].filter(Boolean))).sort()
+  }, [slots, editando, cita, fecha])
+
+  function enviar(fd: FormData, forzado: boolean) {
+    const ld = toastLoading(editando ? 'Guardando…' : 'Creando…')
+    startTransition(async () => {
+      const res = cita
+        ? await modificarCita(cita.reserva_id, fd, forzado)
+        : await crearCitaManual(fd, forzado)
+      await ld.dismiss()
+      if (!res.ok) {
+        // El sistema avisa, no bloquea: lo que decide el dueño se le pregunta.
+        if (res.forzable) { setForzar({ motivo: res.error ?? '', datos: fd }); return }
+        toastError(res.error ?? 'Error inesperado.'); return
+      }
+      const hecho = editando ? 'Cita actualizada' : 'Cita creada'
+      toastSuccess(res.avisos?.length ? `${hecho} — ${res.avisos.join(' ')}` : `${hecho}.`)
+      onSaved()
+    })
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!hora) { toastError('Selecciona una hora disponible.'); return }
-    const fd = new FormData(e.currentTarget)
-    const ld = toastLoading('Creando…')
-    startTransition(async () => {
-      const res = await crearCitaManual(fd)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      toastSuccess('Cita creada.')
-      onSaved()
-    })
+    enviar(new FormData(e.currentTarget), false)
   }
 
   const sinDatos = recursosActivos.length === 0 || data.servicios.filter(s => s.activo).length === 0
@@ -560,8 +739,17 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
+        {forzar && (
+          <ConfirmDialog
+            title={editando ? '¿La guardas igualmente?' : '¿La añades igualmente?'}
+            body={`${forzar.motivo} Es tu negocio: puedes ${editando ? 'guardarla' : 'meterla'} de todas formas y quedará marcada como forzada.`}
+            confirmLabel={editando ? 'Guardar igualmente' : 'Añadir igualmente'}
+            onCancel={() => setForzar(null)}
+            onConfirm={() => { const fd = forzar.datos; setForzar(null); enviar(fd, true) }}
+          />
+        )}
         <div className="modal-header">
-          <h2 className="modal-title">Nueva cita</h2>
+          <h2 className="modal-title">{editando ? 'Mover cita' : 'Nueva cita'}</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -632,15 +820,16 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Cliente <span className="required">*</span></label>
-                  <input className="input" name="nombre_cliente" required placeholder="Nombre del cliente" />
+                  <input className="input" name="nombre_cliente" required placeholder="Nombre del cliente"
+                    defaultValue={cita?.nombre_cliente ?? ''} />
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Teléfono</label>
-                  <input className="input" name="telefono" placeholder="+53 5…" />
+                  <input className="input" name="telefono" placeholder="+53 5…" defaultValue={cita?.telefono ?? ''} />
                 </div>
                 <div className="input-group ter-col-full">
                   <label>Notas</label>
-                  <input className="input" name="notas" placeholder="Detalles, preferencias…" />
+                  <input className="input" name="notas" placeholder="Detalles, preferencias…" defaultValue={cita?.notas ?? ''} />
                 </div>
               </div>
             )}
@@ -648,7 +837,9 @@ function NuevaCitaModal({ data, onClose, onSaved }: {
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={isPending || sinDatos}>
-              {isPending ? <><span className="spinner spinner-sm" /> Creando…</> : 'Crear cita'}
+              {isPending
+                ? <><span className="spinner spinner-sm" /> {editando ? 'Guardando…' : 'Creando…'}</>
+                : editando ? 'Guardar cambios' : 'Crear cita'}
             </button>
           </div>
         </form>
@@ -670,22 +861,27 @@ function CambiarEstadoModal({ cita, nuevoEstado, onConfirm, onClose, isPending }
     CONFIRMADA: `¿Confirmar la cita de ${cita.nombre_cliente} el ${formatFecha(cita.fecha)}?`,
     RECHAZADA:  `¿Rechazar la cita de ${cita.nombre_cliente} el ${formatFecha(cita.fecha)}?`,
     NO_SHOW:    `¿Marcar como «no asistió» a ${cita.nombre_cliente}?`,
+    ATENDIDA:   `¿Dar por atendida la cita de ${cita.nombre_cliente}?`,
     CANCELADA:  `¿Cancelar la cita de ${cita.nombre_cliente}?`,
-    PENDIENTE:  '',
+    // Deshacer: la hora vuelve a estar ocupada, y pudo cogerla otro mientras tanto.
+    PENDIENTE:  `¿Recuperar la cita de ${cita.nombre_cliente}? Vuelve a ocupar esa hora, así que puede fallar si ya la ha cogido otra persona.`,
+    CADUCADA:   '',
   }
+  const positivo = nuevoEstado === 'CONFIRMADA' || nuevoEstado === 'ATENDIDA' || nuevoEstado === 'PENDIENTE'
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{ESTADO_LABEL[nuevoEstado]} cita</h2>
+          <h2 className="modal-title">{nuevoEstado === 'PENDIENTE' ? 'Recuperar cita' : `${ESTADO_LABEL[nuevoEstado]} cita`}</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body"><p className="modal-body-text">{mensajes[nuevoEstado]}</p></div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="button" className={`btn ${nuevoEstado === 'CONFIRMADA' ? 'btn-primary' : 'btn-danger'}`}
+          <button type="button" className={`btn ${positivo ? 'btn-primary' : 'btn-danger'}`}
             onClick={onConfirm} disabled={isPending}>
-            {isPending ? <><span className="spinner spinner-sm" /> Procesando…</> : ESTADO_LABEL[nuevoEstado]}
+            {isPending ? <><span className="spinner spinner-sm" /> Procesando…</>
+              : nuevoEstado === 'PENDIENTE' ? 'Recuperar' : ESTADO_LABEL[nuevoEstado]}
           </button>
         </div>
       </div>
@@ -695,10 +891,11 @@ function CambiarEstadoModal({ cita, nuevoEstado, onConfirm, onClose, isPending }
 
 // ── Modal: detalle de cita ─────────────────────────────────────────────────────
 
-function CitaDetalleModal({ cita, onClose, onCambiarEstado }: {
+function CitaDetalleModal({ cita, onClose, onCambiarEstado, onMover }: {
   cita: CitaConDetalle
   onClose: () => void
   onCambiarEstado: (a: EstadoReserva) => void
+  onMover: () => void
 }) {
   return (
     <div className="modal-backdrop open">
@@ -711,6 +908,9 @@ function CitaDetalleModal({ cita, onClose, onCambiarEstado }: {
           <div className="ter-form-grid">
             <div className="input-group ter-col-span-2"><label>Cliente</label><input className="input input-static" readOnly value={cita.nombre_cliente} /></div>
             <div className="input-group ter-col-span-2"><label>Teléfono</label><input className="input input-static" readOnly value={cita.telefono ?? '—'} /></div>
+            {/* En una peluquería, saber que este cliente viene desde hace dos años —o
+                que faltó las dos últimas veces— es la mitad del valor del módulo. */}
+            <HistorialClienteLinea telefono={cita.telefono} />
             <div className="input-group ter-col-span-2"><label>Servicio</label><input className="input input-static" readOnly value={cita.servicio_nombre} /></div>
             <div className="input-group ter-col-span-2"><label>Recurso</label><input className="input input-static" readOnly value={cita.recurso_nombre} /></div>
             <div className="input-group ter-col-span-2"><label>Fecha</label><input className="input input-static" readOnly value={formatFecha(cita.fecha)} /></div>
@@ -724,6 +924,10 @@ function CitaDetalleModal({ cita, onClose, onCambiarEstado }: {
           </div>
         </div>
         <div className="modal-footer">
+          {/* «Editar» existía solo en Reservas: en Citas había que cancelar y rehacer. */}
+          {(cita.estado === 'PENDIENTE' || cita.estado === 'CONFIRMADA') && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onMover}><Pencil size={14} strokeWidth={2} /> Mover</button>
+          )}
           {cita.estado === 'PENDIENTE' && (
             <>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => onCambiarEstado('CONFIRMADA')}><Check size={14} strokeWidth={2} /> Confirmar</button>
@@ -732,6 +936,7 @@ function CitaDetalleModal({ cita, onClose, onCambiarEstado }: {
           )}
           {cita.estado === 'CONFIRMADA' && (
             <>
+              <button type="button" className="btn btn-success btn-sm" onClick={() => onCambiarEstado('ATENDIDA')}><Check size={14} strokeWidth={2} /> Atendió</button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => onCambiarEstado('NO_SHOW')}><UserX size={14} strokeWidth={2} /> No asistió</button>
               <button type="button" className="btn btn-danger btn-sm" onClick={() => onCambiarEstado('CANCELADA')}><Trash2 size={14} strokeWidth={2} /> Cancelar</button>
             </>
@@ -776,6 +981,8 @@ export default function CitasView({ data }: { data: CitasPageData }) {
   const [activeTab, setActiveTab] = useState<'agenda' | 'recursos' | 'servicios' | 'configuracion'>('agenda')
 
   const [showNueva,    setShowNueva]    = useState(false)
+  /** Cita que se está moviendo (CIT-1). Reusa el modal del alta. */
+  const [moverCita,    setMoverCita]    = useState<CitaConDetalle | null>(null)
   const [detalleCita,  setDetalleCita]  = useState<CitaConDetalle | null>(null)
   const [cambioEstado, setCambioEstado] = useState<{ cita: CitaConDetalle; a: EstadoReserva } | null>(null)
 
@@ -890,9 +1097,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
     })
   }
 
-  const pendientesHoy  = data.citas.filter(c => c.fecha === hoy && c.estado === 'PENDIENTE').length
-  const confirmadasHoy = data.citas.filter(c => c.fecha === hoy && c.estado === 'CONFIRMADA').length
-  const totalHoy       = data.citas.filter(c => c.fecha === hoy).length
+  // Lo de hoy lo cuenta la consulta (U3): antes salía de `data.citas`, o sea del rango
+  // cargado, y cambiar el rango a un mes pasado dejaba la cabecera a cero.
+  const { pendientes: pendientesHoy, confirmadas: confirmadasHoy, total: totalHoy } = data.hoy
+  const ayer = sumarDias(hoy, -1)
 
   function doCambiarEstado() {
     if (!cambioEstado) return
@@ -1018,7 +1226,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       <div className="page-header">
         <div>
           <div className="page-title-ia">
-            <h1 className="page-title">Citas</h1>
+            {/* Estaba a fuego: un gimnasio que llama «Clases» a sus citas veía
+                «Citas» en la página y «Clases» en el menú. */}
+            <h1 className="page-title">{data.etiquetas.reservas}</h1>
             <IaTouchpoint tipo="citas" descripcion="un análisis de tu agenda" />
           </div>
           <p className="page-subtitle">
@@ -1101,6 +1311,23 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           limite={data.limite} sustantivo="citas" femenino />
       )}
 
+      {/* Por cerrar: confirmadas de días pasados sin marcar. El aviso lleva al listado
+          ya filtrado y el trabajo se hace con la BulkBar de siempre. */}
+      {data.por_cerrar > 0 && (
+        <div className="alert alert-warning alert-cta">
+          <div className="alert-cta-texto">
+            <strong className="alert-titulo">
+              {data.por_cerrar} cita{plural(data.por_cerrar)} sin cerrar
+            </strong>
+            Son de días que ya pasaron y siguen confirmadas. Márcalas como atendidas o como
+            «no asistió»; a los {DIAS_CIERRE_AUTO} días se cierran solas.
+          </div>
+          <Link className="btn btn-aviso btn-sm" href={`/portal/citas?estado=CONFIRMADA&desde=&hasta=${ayer}`}>
+            Verlas
+          </Link>
+        </div>
+      )}
+
       <div className="card card-table">
         {citas.length === 0 ? (
           <div className="mon-empty">
@@ -1141,8 +1368,12 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                       {c.telefono && <div className="text-sm-muted">{c.telefono}</div>}
                     </td>
                     <td data-label="Estado">
-                      <span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span>
+                      <div className="badge-row">
+                        <span className={`badge ${ESTADO_BADGE[c.estado]}`}>{ESTADO_LABEL[c.estado]}</span>
+                        {c.forzada && <span className="badge badge-warning" title="Se metió saltándose una regla de la agenda">forzada</span>}
+                      </div>
                       <div className="text-xs-muted">{CANAL_LABEL[c.canal] ?? c.canal}</div>
+                      {c.cierre_auto && <div className="text-xs-muted">cerrada automáticamente</div>}
                     </td>
                     <td className="col-actions">
                       <RowActions>
@@ -1157,12 +1388,33 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                                 onClick={() => setCambioEstado({ cita: c, a: 'RECHAZADA' })} disabled={isPending}><X size={15} strokeWidth={2} /> Rechazar</button>
                             </>
                           )}
+                          {/* Mover (CIT-1): antes había que cancelar y volver a crear,
+                              y al cliente le llegaba un aviso de cancelación. */}
+                          <button className="row-actions-item"
+                            onClick={() => setMoverCita(c)} disabled={isPending}><Pencil size={15} strokeWidth={2} /> Mover cita</button>
                           {c.estado === 'CONFIRMADA' && (
-                            <button className="row-actions-item row-actions-item-danger"
-                              onClick={() => setCambioEstado({ cita: c, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar cita</button>
+                            <>
+                              <button className="row-actions-item row-actions-item-success"
+                                onClick={() => setCambioEstado({ cita: c, a: 'ATENDIDA' })} disabled={isPending}><Check size={15} strokeWidth={2} /> Atendió</button>
+                              <button className="row-actions-item"
+                                onClick={() => setCambioEstado({ cita: c, a: 'NO_SHOW' })} disabled={isPending}><UserX size={15} strokeWidth={2} /> No asistió</button>
+                              <button className="row-actions-item row-actions-item-danger"
+                                onClick={() => setCambioEstado({ cita: c, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar cita</button>
+                            </>
                           )}
                           </>
                         )}
+                        {/* Deshacer, solo con la fecha por delante. */}
+                        {ESTADOS_DESHACIBLES.includes(c.estado) && c.fecha >= hoy && (
+                          <button className="row-actions-item"
+                            onClick={() => setCambioEstado({ cita: c, a: 'PENDIENTE' })} disabled={isPending}><Undo2 size={15} strokeWidth={2} /> Deshacer</button>
+                        )}
+                        {/* El aviso al cliente lo da el dueño, con el texto ya
+                            redactado y el chat abierto (fase 10). */}
+                        <AvisarCliente compacto
+                          telefono={c.telefono} chatTelegram={c.telegram_chat_id}
+                          datos={{ tipo: 'cita', negocio: data.negocio, nombre: c.nombre_cliente,
+                                   fecha: c.fecha, hora: c.hora, estado: c.estado }} />
                       </RowActions>
                     </td>
                   </tr>
@@ -1200,7 +1452,16 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                       {r.horarios.length === 0 ? <span className="text-xs-muted">Sin horario</span>
                         : r.horarios.map(h => DIA_LABEL[h.dia_semana]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
                     </td>
-                    <td data-label="Estado"><span className={`badge ${r.activo ? 'badge-success' : 'badge-neutral'}`}>{r.activo ? 'Activo' : 'Inactivo'}</span></td>
+                    <td data-label="Estado">
+                      <div className="badge-row">
+                        <span className={`badge ${r.activo ? 'badge-success' : 'badge-neutral'}`}>{r.activo ? 'Activo' : 'Inactivo'}</span>
+                        {/* Ausente HOY: es lo que hace falta saber de un vistazo cuando
+                            alguien llama preguntando por él. */}
+                        {r.ausencias.some(a => a.fecha_desde <= hoy && a.fecha_hasta >= hoy) && (
+                          <span className="badge badge-warning">Ausente hoy</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
@@ -1239,7 +1500,10 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                 {data.servicios.map(s => (
                   <tr key={s.servicio_id} className="table-row-clickable" onClick={() => { setEditServicio(s); setShowServicio(true) }}>
                     <td data-label="Nombre"><strong className="cell-clamp">{s.nombre}</strong></td>
-                    <td data-label="Duración" className="col-num tes-monto-cell">{s.duracion_minutos} min</td>
+                    <td data-label="Duración" className="col-num tes-monto-cell">
+                      {s.duracion_minutos} min
+                      {s.margen_minutos > 0 && <div className="text-xs-muted">+{s.margen_minutos} de margen</div>}
+                    </td>
                     <td data-label="Precio" className="col-num tes-monto-cell cita-precio">{formatPrecio(s.precio, s.moneda)}</td>
                     <td data-label="Estado"><span className={`badge ${s.activo ? 'badge-success' : 'badge-neutral'}`}>{s.activo ? 'Activo' : 'Inactivo'}</span></td>
                     <td className="col-actions">
@@ -1267,9 +1531,18 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           isPending={isPending} onToggle={toggleIaBot} />
       )}
 
+      {/* U20: este bloque colgaba suelto encima de las tarjetas, sin tarjeta propia,
+          en las dos vistas — parecía un ajuste de la pantalla y no de la funcionalidad. */}
+      <div className="card res-section">
+        <div className="card-header"><h2 className="card-title">Confirmación automática</h2></div>
+        {data.tieneAmbas && (
+          <span className="text-xs-muted res-ambito">
+            Solo para citas. Tus reservas tienen la suya.
+          </span>
+        )}
       <div className="res-conf-item">
         <div className="res-conf-item-text">
-          <span className="res-conf-item-title">Confirmación automática</span>
+          <span className="res-conf-item-title">Confirmar sin revisar</span>
           <span className="input-hint">
             {data.tieneIa && data.bot_config.ia_activa
               ? (confirmAuto
@@ -1286,10 +1559,18 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           <span className="switch-track" aria-hidden="true" />
         </label>
       </div>
+      </div>
 
       {/* Enlace público */}
       <div className="card res-section">
         <div className="card-header"><h2 className="card-title">Enlace de citas</h2></div>
+        {/* Ámbito (11.1): ver la nota equivalente en Reservas. */}
+        {data.tieneAmbas && (
+          <span className="text-xs-muted res-ambito">
+            La ruta <code>/citas</code> es solo de Citas, pero <strong>la dirección es del
+            negocio</strong>: si la cambias aquí, cambia también en Reservas y en tu catálogo.
+          </span>
+        )}
         {data.slug && !editandoSlug ? (
           <div className="table-wrapper">
             <table className="table">
@@ -1333,9 +1614,21 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         )}
       </div>
 
+      {/* QR del enlace, igual que en el catálogo y en Reservas. */}
+      {data.slug && (
+        <QrEnlace url={`https://${host}/${data.slug}/citas`} nombreArchivo={`qr-citas-${data.slug}`}
+          titulo="Código QR de citas" />
+      )}
+
       {/* Bot de Telegram (independiente del de Reservas) */}
       <div className="card res-section">
-        <div className="card-header"><h2 className="card-title">Bot de Telegram de citas</h2></div>
+        <div className="card-header"><h2 className="card-title">Bot de Telegram · Citas</h2></div>
+        {data.tieneAmbas && (
+          <span className="text-xs-muted res-ambito">
+            Solo para Citas. Tus Reservas tienen su propio bot, con otro token y otro
+            código de vínculo, en <strong>Reservas › Configuración</strong>.
+          </span>
+        )}
 
         {data.bot_config.token ? (
           <>
@@ -1352,7 +1645,8 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                       <span className={`badge ${data.bot_config.activo ? 'badge-success' : 'badge-neutral'}`}>
                         {data.bot_config.activo ? 'Activo' : 'Inactivo'}
                       </span>
-                      {data.bot_config.webhook_registrado && <div className="text-xs-muted">Webhook registrado</div>}
+                      {/* `webhook_registrado` era el estado del día del alta. Lo que
+                          vale es lo que diga Telegram ahora: botón «Comprobar». */}
                     </td>
                     <td className="col-actions">
                       <RowActions>
@@ -1373,15 +1667,20 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <div className="info-box">
                 <strong className="info-box-title">Vincula tu chat para recibir avisos</strong>
                 <span className="text-xs-muted">
-                  Abre tu bot en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
-                  Recibirás ahí cada cita nueva, con botones para confirmarla o rechazarla.
+                  Abre tu bot de <strong>Citas</strong> en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                  Es un código distinto del de Reservas. Recibirás ahí cada cita nueva, con botones para confirmarla o rechazarla.
                 </span>
               </div>
             ) : (
               <div className="info-box">
-                <span className="text-xs-muted">✓ Chat del dueño vinculado · recibes los avisos de citas nuevas.</span>
+                <span className="text-xs-muted">
+                  ✓ Chat del dueño vinculado · recibes los avisos de citas nuevas. Si cambias de móvil
+                  o de cuenta de Telegram, vuelve a enviar <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                </span>
               </div>
             )}
+
+            <BotDiagnostico columna="bot_config_citas" />
           </>
         ) : (
           <>
@@ -1417,19 +1716,25 @@ export default function CitasView({ data }: { data: CitasPageData }) {
       </div>
 
       {/* Reglas de reserva (antelación/ventana; compartidas con Reservas) */}
-      <ReglasReservaSection reglas={data.reglas} iaActiva={data.tieneIa && data.bot_config.ia_activa} />
+      <ReglasReservaSection reglas={data.reglas} iaActiva={data.tieneIa && data.bot_config.ia_activa} compartidas={data.tieneAmbas} />
 
       {/* Cierres y festivos */}
-      <CierresSection cierres={data.cierres} iaActiva={data.tieneIa && data.bot_config.ia_activa} />
+      <CierresSection cierres={data.cierres} iaActiva={data.tieneIa && data.bot_config.ia_activa} compartidas={data.tieneAmbas} />
 
       </>
       )}
 
       {/* Modales */}
       {showNueva && <NuevaCitaModal data={data} onClose={() => setShowNueva(false)} onSaved={() => { setShowNueva(false); router.refresh() }} />}
+      {moverCita && (
+        <NuevaCitaModal data={data} cita={moverCita}
+          onClose={() => setMoverCita(null)}
+          onSaved={() => { setMoverCita(null); router.refresh() }} />
+      )}
       {detalleCita && (
         <CitaDetalleModal cita={detalleCita} onClose={() => setDetalleCita(null)}
-          onCambiarEstado={a => { const c = detalleCita; setDetalleCita(null); setCambioEstado({ cita: c, a }) }} />
+          onCambiarEstado={a => { const c = detalleCita; setDetalleCita(null); setCambioEstado({ cita: c, a }) }}
+          onMover={() => { const c = detalleCita; setDetalleCita(null); setMoverCita(c) }} />
       )}
       {cambioEstado && (
         <CambiarEstadoModal cita={cambioEstado.cita} nuevoEstado={cambioEstado.a}
@@ -1492,6 +1797,16 @@ export default function CitasView({ data }: { data: CitasPageData }) {
             onClick={() => setLoteAccion({ estado: 'CONFIRMADA', label: 'Confirmar' })}>
             <Check size={14} strokeWidth={2} /> Confirmar
           </button>
+          {/* Cerrar la jornada en bloque (U5): al acabar el día se marca de una vez
+              quién vino y quién no, en vez de abrir el detalle de cada cita. */}
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'ATENDIDA', label: 'Marcar atendidas' })}>
+            <Check size={14} strokeWidth={2} /> Atendió
+          </button>
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'NO_SHOW', label: 'Marcar no asistió' })}>
+            <UserX size={14} strokeWidth={2} /> No asistió
+          </button>
           <button className="btn btn-danger-text btn-sm" disabled={isPending}
             onClick={() => setLoteAccion({ estado: 'RECHAZADA', label: 'Rechazar' })}>
             <X size={14} strokeWidth={2} /> Rechazar
@@ -1508,7 +1823,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           title={`¿${loteAccion.label} ${sel.count} cita${plural(sel.count)}?`}
           body="Solo se aplica a las que admitan el cambio; el resto se omite. Se notificará a los clientes por Telegram cuando proceda."
           confirmLabel={loteAccion.label}
-          danger={loteAccion.estado !== 'CONFIRMADA'}
+          danger={loteAccion.estado === 'RECHAZADA' || loteAccion.estado === 'CANCELADA'}
           onCancel={() => setLoteAccion(null)}
           onConfirm={() => { const e = loteAccion.estado; setLoteAccion(null); ejecutarLote(e) }}
         />

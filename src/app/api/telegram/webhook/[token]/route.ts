@@ -7,7 +7,20 @@ import { transicionarEstado, type EstadoReserva } from '@/lib/reservas/estado'
 
 interface TgChat { id?: number | string }
 interface TgMessage { chat?: TgChat; text?: string }
-interface TgCallback { id?: string; data?: string; message?: TgMessage }
+interface TgMessageConId extends TgMessage { message_id?: number }
+interface TgCallback { id?: string; data?: string; message?: TgMessageConId }
+
+/** Quita los botones de un mensaje ya atendido. Best-effort: nunca rompe el flujo. */
+async function quitarBotones(token: string, chatId: string, messageId?: number): Promise<void> {
+  if (!messageId) return
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/editMessageReplyMarkup`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }),
+    })
+  } catch { /* no-op */ }
+}
 
 // El modo IA llama a un modelo de razonamiento (varios segundos). Ampliamos el
 // límite de la función serverless para que no se corte a mitad (Vercel lo acota
@@ -93,6 +106,25 @@ export async function POST(
   }
 
   const modulos = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []
+
+  // 4c. TG-17 · CANDADO COMERCIAL. Aquí solo se comprobaba `cfg.activo`: si un
+  //     cliente dejaba de pagar Reservas, su bot SEGUÍA tomando reservas y
+  //     escribiendo en la base. Las vías web sí lo miraban. Al cliente final se le
+  //     responde con un mensaje neutro —nunca se le cuenta que el negocio no ha
+  //     pagado— en vez de un 404 mudo que deja el chat sin respuesta.
+  const moduloRequerido = columna === 'bot_config' ? 'reservas_citas' : 'agenda'
+  if (!modulos.includes(moduloRequerido)) {
+    const chatSuelto = String(
+      (body.callback_query as TgCallback | undefined)?.message?.chat?.id ??
+      (body.message as TgMessage | undefined)?.chat?.id ?? '',
+    )
+    if (chatSuelto) {
+      await enviarMensaje(token, chatSuelto,
+        `Ahora mismo no podemos tomar ${modulo === 'citas' ? 'citas' : 'reservas'} por aquí. Escríbenos y te atendemos.`)
+    }
+    return NextResponse.json({ ok: true, sin_modulo: true })
+  }
+
   const ctx: BotContext = {
     client_id:      cliente.client_id as string,
     token,
@@ -125,6 +157,9 @@ export async function POST(
       const [, estado, reservaId] = data.split(':')
       const r = await transicionarEstado(db, ctx.client_id, reservaId, estado as EstadoReserva, ctx.nombre_empresa, { token, activo: true })
       await answerCallback(token, cqId, r.ok ? '✓ Hecho' : (r.error ?? 'Error'))
+      // TG-13: los botones se quedaban puestos, así que volver a pulsarlos daba
+      // «No se puede pasar de CONFIRMADA a CONFIRMADA». Se quitan al usarlos.
+      if (r.ok) await quitarBotones(token, chat_id, (cq.message as TgMessageConId | undefined)?.message_id)
       await enviarMensaje(token, chat_id, r.ok
         ? `Reserva ${estado === 'CONFIRMADA' ? 'confirmada ✅' : 'rechazada ✕'}.`
         : `No se pudo: ${r.error}`)
@@ -160,7 +195,10 @@ export async function POST(
   const codigo = typeof cfg.codigo_vinculo === 'string' ? cfg.codigo_vinculo : null
   const startMatch = texto.trim().match(/^\/start\s+(.+)$/i)
   if (codigo && startMatch && startMatch[1].trim() === codigo) {
-    if (!cfg.notificar_owner_chat_id) {
+    // TG-4: antes solo se escribía si estaba VACÍO, así que cambiar de móvil o de
+    // cuenta de Telegram dejaba los avisos yendo a un chat muerto y la única salida
+    // era borrar el bot entero. Repetir el `/start` vuelve a apuntar aquí.
+    if (cfg.notificar_owner_chat_id !== chat_id) {
       await db.from('clients')
         .update({ [columna]: { ...cfg, notificar_owner_chat_id: chat_id } })
         .eq('client_id', cliente.client_id)

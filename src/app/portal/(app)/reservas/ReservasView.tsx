@@ -17,13 +17,16 @@ import {
   toggleActivoBot,
   toggleIaBotReservas,
   guardarConfirmacionReservas,
-  guardarSlug,
-  obtenerDisponibilidadPublica,
+  obtenerDisponibilidadPortal,
+  type Disponibilidad,
   type ReservaFranja,
   type ReservaConFranja,
   type ReservaPageData,
 } from '@/app/actions/portal/reservas'
-import { type EstadoReserva } from '@/lib/reservas/estado'
+import { guardarSlug } from '@/app/actions/portal/agenda-comun'
+import {
+  ESTADO_LABEL, ESTADO_BADGE, ESTADOS_DESHACIBLES, type EstadoReserva,
+} from '@/lib/reservas/estados'
 import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
@@ -33,24 +36,22 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
-import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Trash2, UserX, X } from 'lucide-react'
+import QrEnlace from '@/components/portal/QrEnlace'
+import BotDiagnostico from '@/components/portal/BotDiagnostico'
+import AvisarCliente from '@/components/portal/AvisarCliente'
+import HistorialClienteLinea from '@/components/portal/HistorialCliente'
+import { Calendar, Check, Copy, Eye, Pencil, Plus, Power, PowerOff, Trash2, Undo2, UserX, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import Filtros from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { type PresetRango } from '@/lib/listados'
-import { hoyEnTz } from '@/lib/fecha-tz'
+import Link from 'next/link'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
+import { DIAS_CIERRE_AUTO } from '@/lib/reservas/estados'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const ESTADO_LABEL: Record<EstadoReserva, string> = {
-  PENDIENTE: 'Pendiente', CONFIRMADA: 'Confirmada', RECHAZADA: 'Rechazada',
-  NO_SHOW: 'No asistió', CANCELADA: 'Cancelada',
-}
-const ESTADO_BADGE: Record<EstadoReserva, string> = {
-  PENDIENTE: 'badge-warning', CONFIRMADA: 'badge-success', RECHAZADA: 'badge-neutral',
-  NO_SHOW: 'badge-danger', CANCELADA: 'badge-neutral',
-}
 const CANAL_LABEL: Record<string, string> = { web: 'Web', bot: 'Bot', manual: 'Manual' }
 
 /**
@@ -108,28 +109,39 @@ function NuevaReservaModal({
   const [dispFranja, setDispFranja] = useState('')
   const [dispFecha,  setDispFecha]  = useState(hoyISO())
   const [dispHora,   setDispHora]   = useState('')
-  const [dispInfo,   setDispInfo]   = useState<{ disponibles: number; ocupado: number; capacidad: number } | null>(null)
-  const clientId = data.reservas[0]?.client_id ?? ''
+  const [dispInfo,   setDispInfo]   = useState<Disponibilidad | null>(null)
+  // Lo que la base rechazó pero el dueño puede saltarse. Guarda el formulario porque
+  // el `<form>` ya se ha enviado cuando aparece el diálogo.
+  const [forzar, setForzar] = useState<{ motivo: string; datos: FormData } | null>(null)
 
   function chequearDisponibilidad(franja: string, fecha: string, hora: string) {
     if (!franja || !fecha || !hora) { setDispInfo(null); return }
-    obtenerDisponibilidadPublica(clientId, franja, fecha, hora).then(r => {
-      const f = data.franjas.find(x => x.franja_id === franja)
-      setDispInfo({ disponibles: r.disponibles, ocupado: (f?.capacidad ?? 0) - r.disponibles, capacidad: f?.capacidad ?? 0 })
-    }).catch(() => setDispInfo(null))
+    // Lectura del PORTAL, no la pública: el panel no consume el cupo anti-scraping
+    // de la mini-web, y el client_id sale de la sesión (RES-3).
+    obtenerDisponibilidadPortal(franja, fecha, hora)
+      .then(setDispInfo)
+      .catch(() => setDispInfo(null))
+  }
+
+  function enviar(fd: FormData, forzado: boolean) {
+    const ld = toastLoading('Creando…')
+    startTransition(async () => {
+      const res = await crearReserva(fd, forzado)
+      await ld.dismiss()
+      if (!res.ok) {
+        // El sistema avisa, no bloquea: si el motivo es de los que decide el dueño,
+        // se le pregunta en vez de dejarle con un error y sin salida.
+        if (res.forzable) { setForzar({ motivo: res.error ?? '', datos: fd }); return }
+        toastError(res.error ?? 'Error inesperado.'); return
+      }
+      toastSuccess(res.avisos?.length ? `Reserva creada — ${res.avisos.join(' ')}` : 'Reserva creada.')
+      onSaved()
+    })
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const fd = new FormData(e.currentTarget)
-    const ld = toastLoading('Creando…')
-    startTransition(async () => {
-      const res = await crearReserva(fd)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      toastSuccess('Reserva creada.')
-      onSaved()
-    })
+    enviar(new FormData(e.currentTarget), false)
   }
 
   return (
@@ -167,8 +179,8 @@ function NuevaReservaModal({
                     onChange={e => { setDispFecha(e.target.value); chequearDisponibilidad(dispFranja, e.target.value, dispHora) }} />
                 </div>
                 <div className="input-group ter-col-span-3">
-                  <label>Hora</label>
-                  <select className="input" name="hora"
+                  <label>Hora <span className="required">*</span></label>
+                  <select className="input" name="hora" required
                     onChange={e => { setDispHora(e.target.value); chequearDisponibilidad(dispFranja, dispFecha, e.target.value) }}>
                     <option value="">Selecciona…</option>
                     {horasEnRango(
@@ -182,6 +194,9 @@ function NuevaReservaModal({
                       {dispInfo.disponibles === 0
                         ? 'Lleno a esta hora.'
                         : `${dispInfo.disponibles} disponible${dispInfo.disponibles !== 1 ? 's' : ''} de ${dispInfo.capacidad}`}
+                      {/* El otro tope: cuántos grupos/mesas caben, que no es lo mismo
+                          que cuánta gente cabe. Solo si el turno lo tiene puesto. */}
+                      {dispInfo.max_reservas > 0 && ` · ${dispInfo.reservas} de ${dispInfo.max_reservas} reservas`}
                     </span>
                   )}
                 </div>
@@ -207,6 +222,15 @@ function NuevaReservaModal({
             </button>
           </div>
         </form>
+        {forzar && (
+          <ConfirmDialog
+            title="¿La añades igualmente?"
+            body={`${forzar.motivo} Es tu negocio: puedes meterla de todas formas y quedará marcada como forzada.`}
+            confirmLabel="Añadir igualmente"
+            onCancel={() => setForzar(null)}
+            onConfirm={() => { const fd = forzar.datos; setForzar(null); enviar(fd, true) }}
+          />
+        )}
       </div>
     </div>
   )
@@ -227,15 +251,19 @@ function CambiarEstadoModal({
     CONFIRMADA: `¿Confirmar la reserva de ${reserva.nombre_cliente} para el ${formatFecha(reserva.fecha)}?`,
     RECHAZADA:  `¿Rechazar la reserva de ${reserva.nombre_cliente} para el ${formatFecha(reserva.fecha)}?`,
     NO_SHOW:    `¿Marcar como «no asistió» a ${reserva.nombre_cliente}?`,
+    ATENDIDA:   `¿Dar por atendida la reserva de ${reserva.nombre_cliente}?`,
     CANCELADA:  `¿Cancelar la reserva de ${reserva.nombre_cliente}?`,
-    PENDIENTE:  '',
+    // Deshacer: vuelve a ocupar la plaza, y la plaza pudo llenarse mientras tanto.
+    PENDIENTE:  `¿Recuperar la reserva de ${reserva.nombre_cliente}? Vuelve a ocupar sitio, así que puede fallar si el turno se ha llenado.`,
+    CADUCADA:   '',
   }
+  const positivo = nuevoEstado === 'CONFIRMADA' || nuevoEstado === 'ATENDIDA' || nuevoEstado === 'PENDIENTE'
 
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{ESTADO_LABEL[nuevoEstado]} reserva</h2>
+          <h2 className="modal-title">{nuevoEstado === 'PENDIENTE' ? 'Recuperar reserva' : `${ESTADO_LABEL[nuevoEstado]} reserva`}</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="modal-body">
@@ -243,9 +271,10 @@ function CambiarEstadoModal({
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="button" className={`btn ${nuevoEstado === 'CONFIRMADA' ? 'btn-primary' : 'btn-danger'}`}
+          <button type="button" className={`btn ${positivo ? 'btn-primary' : 'btn-danger'}`}
             onClick={onConfirm} disabled={isPending}>
-            {isPending ? <><span className="spinner spinner-sm" /> Procesando…</> : ESTADO_LABEL[nuevoEstado]}
+            {isPending ? <><span className="spinner spinner-sm" /> Procesando…</>
+              : nuevoEstado === 'PENDIENTE' ? 'Recuperar' : ESTADO_LABEL[nuevoEstado]}
           </button>
         </div>
       </div>
@@ -280,6 +309,9 @@ function ReservaDetalleModal({
               <label>Teléfono</label>
               <input className="input input-static" readOnly value={reserva.telefono ?? '—'} />
             </div>
+            {/* «3ª visita · 1 no asistió»: lo que el dueño sabría de memoria si el
+                cliente fuera de siempre, y que el software no le decía. */}
+            <HistorialClienteLinea telefono={reserva.telefono} />
             <div className="input-group ter-col-span-2">
               <label>Turno</label>
               <input className="input input-static" readOnly value={reserva.franja_nombre} />
@@ -330,6 +362,9 @@ function ReservaDetalleModal({
           )}
           {reserva.estado === 'CONFIRMADA' && (
             <>
+              <button type="button" className="btn btn-success btn-sm" onClick={() => onCambiarEstado('ATENDIDA')}>
+                <Check size={14} strokeWidth={2} /> Atendió
+              </button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => onCambiarEstado('NO_SHOW')}>
                 <UserX size={14} strokeWidth={2} /> No asistió
               </button>
@@ -356,23 +391,39 @@ function EditarReservaModal({
 }) {
   const [isPending, startTransition] = useTransition()
   const franjasActivas = data.franjas.filter(f => f.activa)
+  const [forzar, setForzar] = useState<{ motivo: string; datos: FormData } | null>(null)
+
+  function enviar(fd: FormData, forzado: boolean) {
+    const ld = toastLoading('Guardando…')
+    startTransition(async () => {
+      const res = await modificarReserva(reserva.reserva_id, fd, forzado)
+      await ld.dismiss()
+      if (!res.ok) {
+        if (res.forzable) { setForzar({ motivo: res.error ?? '', datos: fd }); return }
+        toastError(res.error ?? 'Error inesperado.'); return
+      }
+      toastSuccess(res.avisos?.length ? `Reserva actualizada — ${res.avisos.join(' ')}` : 'Reserva actualizada.')
+      onSaved()
+    })
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const fd = new FormData(e.currentTarget)
-    const ld = toastLoading('Guardando…')
-    startTransition(async () => {
-      const res = await modificarReserva(reserva.reserva_id, fd)
-      await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
-      toastSuccess('Reserva actualizada.')
-      onSaved()
-    })
+    enviar(new FormData(e.currentTarget), false)
   }
 
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
+        {forzar && (
+          <ConfirmDialog
+            title="¿La guardas igualmente?"
+            body={`${forzar.motivo} Es tu negocio: puedes guardarla de todas formas y quedará marcada como forzada.`}
+            confirmLabel="Guardar igualmente"
+            onCancel={() => setForzar(null)}
+            onConfirm={() => { const fd = forzar.datos; setForzar(null); enviar(fd, true) }}
+          />
+        )}
         <div className="modal-header">
           <h2 className="modal-title">Editar reserva</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
@@ -399,8 +450,8 @@ function EditarReservaModal({
                 <input className="input" name="fecha" type="date" required defaultValue={reserva.fecha} />
               </div>
               <div className="input-group ter-col-span-3">
-                <label>Hora</label>
-                <select className="input" name="hora" defaultValue={reserva.hora?.substring(0, 5) ?? ''}>
+                <label>Hora <span className="required">*</span></label>
+                <select className="input" name="hora" required defaultValue={reserva.hora?.substring(0, 5) ?? ''}>
                   <option value="">Selecciona…</option>
                   {horasEnRango(
                     data.franjas.find(f => f.franja_id === reserva.franja_id)?.hora_inicio ?? null,
@@ -480,6 +531,15 @@ function FranjaModal({
                 <label>Capacidad <span className="required">*</span></label>
                 <input className="input" name="capacidad" type="number" min="1" required
                   defaultValue={franja?.capacidad ?? 1} />
+                <span className="input-hint">Cuánta gente cabe a la vez.</span>
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label>Máx. reservas</label>
+                <input className="input" name="max_reservas" type="number" min="0"
+                  defaultValue={franja?.max_reservas ?? 0} />
+                {/* La confusión natural es creer que esto es lo mismo que la capacidad.
+                    No lo es: veinte parejas llenan un salón de 40 plazas. */}
+                <span className="input-hint">Cuántas mesas o grupos puedes atender a la vez. 0 = sin tope.</span>
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Duración (min) <span className="required">*</span></label>
@@ -513,6 +573,15 @@ function FranjaModal({
                   ))}
                 </div>
                 <span className="input-hint">Sin selección = todos los días.</span>
+              </div>
+              {/* RES-1: sin esta casilla, dejar de ofrecer un turno solo se podía hacer
+                  ELIMINÁNDOLO — y eliminar está bloqueado si tiene reservas futuras. */}
+              <div className="input-group ter-col-full">
+                <label className="res-dias-item">
+                  <input type="checkbox" name="activa" defaultChecked={franja ? franja.activa : true} />
+                  Turno activo
+                </label>
+                <span className="input-hint">Desactivado deja de ofrecerse en la web y en el bot, pero conserva sus reservas.</span>
               </div>
             </div>
           </div>
@@ -683,9 +752,36 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
     })
   }
 
-  const pendientesHoy = data.reservas.filter(r => r.fecha === hoy && r.estado === 'PENDIENTE').length
-  const confirmadasHoy = data.reservas.filter(r => r.fecha === hoy && r.estado === 'CONFIRMADA').length
-  const totalHoy = data.reservas.filter(r => r.fecha === hoy).length
+  // Lo de hoy lo cuenta la consulta (U3). Antes se filtraba `data.reservas`, que es el
+  // rango cargado: poner «Mes pasado» en la barra vaciaba la cabecera.
+  const { pendientes: pendientesHoy, confirmadas: confirmadasHoy, total: totalHoy } = data.hoy
+  const ayer = sumarDias(hoy, -1)
+
+  /**
+   * Ocupación de los próximos 7 días por turno (4.2), calculada sobre las reservas que
+   * la vista YA trae — sin una consulta más. Es un porcentaje de personas sobre la
+   * capacidad diaria del turno: `capacidad × días que ese turno atiende en la semana`.
+   *
+   * Solo se pinta si el rango cargado cubre esos 7 días; con «Mes pasado» puesto el
+   * dato no existe y decir 0 % sería mentir, así que se pone «—».
+   */
+  const ocupacion7d = useMemo(() => {
+    const fin = sumarDias(hoy, 7)
+    const cubre = data.rango.desde <= hoy && (!data.rango.hasta || data.rango.hasta >= fin)
+    const m = new Map<string, number | null>()
+    for (const f of data.franjas) {
+      if (!cubre) { m.set(f.franja_id, null); continue }
+      const dias = f.dias_semana && f.dias_semana.length > 0 ? f.dias_semana.length : 7
+      const techo = f.capacidad * dias
+      if (techo <= 0) { m.set(f.franja_id, null); continue }
+      const usado = data.reservas
+        .filter(r => r.franja_id === f.franja_id && r.fecha >= hoy && r.fecha < fin
+          && (r.estado === 'PENDIENTE' || r.estado === 'CONFIRMADA'))
+        .reduce((s, r) => s + r.personas, 0)
+      m.set(f.franja_id, Math.round((usado / techo) * 100))
+    }
+    return m
+  }, [data.franjas, data.reservas, data.rango.desde, data.rango.hasta, hoy])
 
   function onSaved() { setShowNueva(false); router.refresh() }
 
@@ -806,7 +902,8 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
       <div className="page-header">
         <div>
           <div className="page-title-ia">
-            <h1 className="page-title">Reservas</h1>
+            {/* Estaba a fuego: el menú y la página podían decir cosas distintas. */}
+            <h1 className="page-title">{data.etiqueta_reservas}</h1>
             <IaTouchpoint tipo="reservas" descripcion="un análisis de tus reservas" />
           </div>
           <p className="page-subtitle">
@@ -871,6 +968,25 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           limite={data.limite} sustantivo="reservas" femenino />
       )}
 
+      {/* Por cerrar: confirmadas de días pasados que nadie ha marcado. Con el rango
+          por defecto (hoy → +30) no se ven, así que el aviso lleva al listado ya
+          filtrado y el trabajo se hace con la BulkBar de siempre — no hay una segunda
+          tabla que mantener. */}
+      {data.por_cerrar > 0 && (
+        <div className="alert alert-warning alert-cta">
+          <div className="alert-cta-texto">
+            <strong className="alert-titulo">
+              {data.por_cerrar} reserva{plural(data.por_cerrar)} sin cerrar
+            </strong>
+            Son de días que ya pasaron y siguen confirmadas. Márcalas como atendidas o como
+            «no asistió»; a los {DIAS_CIERRE_AUTO} días se cierran solas.
+          </div>
+          <Link className="btn btn-aviso btn-sm" href={`/portal/reservas?estado=CONFIRMADA&desde=&hasta=${ayer}`}>
+            Verlas
+          </Link>
+        </div>
+      )}
+
       <div className="card card-table">
         {reservas.length === 0 ? (
           <div className="mon-empty">
@@ -921,8 +1037,14 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                     </td>
                     <td data-label="Pers." className="col-num tes-monto-cell">{r.personas}</td>
                     <td data-label="Estado">
-                      <span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span>
+                      <div className="badge-row">
+                        <span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span>
+                        {r.forzada && <span className="badge badge-warning" title="Se metió saltándose una regla del turno">forzada</span>}
+                      </div>
                       <div className="text-xs-muted">{CANAL_LABEL[r.canal] ?? r.canal}</div>
+                      {/* La diferencia entre un valor por defecto y un dato inventado:
+                          si «Atendió» lo puso el barrido, se dice. */}
+                      {r.cierre_auto && <div className="text-xs-muted">cerrada automáticamente</div>}
                     </td>
                     <td className="col-actions">
                       <RowActions>
@@ -938,11 +1060,29 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                               </>
                             )}
                             {r.estado === 'CONFIRMADA' && (
-                              <button className="row-actions-item row-actions-item-danger"
-                                onClick={() => setCambioEstado({ reserva: r, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar reserva</button>
+                              <>
+                                <button className="row-actions-item row-actions-item-success"
+                                  onClick={() => setCambioEstado({ reserva: r, a: 'ATENDIDA' })} disabled={isPending}><Check size={15} strokeWidth={2} /> Atendió</button>
+                                <button className="row-actions-item"
+                                  onClick={() => setCambioEstado({ reserva: r, a: 'NO_SHOW' })} disabled={isPending}><UserX size={15} strokeWidth={2} /> No asistió</button>
+                                <button className="row-actions-item row-actions-item-danger"
+                                  onClick={() => setCambioEstado({ reserva: r, a: 'CANCELADA' })} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Cancelar reserva</button>
+                              </>
                             )}
                           </>
                         )}
+                        {/* Deshacer: solo si la fecha no ha pasado — recuperar algo de
+                            ayer no le sirve a nadie y volvería a ocupar aforo muerto. */}
+                        {ESTADOS_DESHACIBLES.includes(r.estado) && r.fecha >= hoy && (
+                          <button className="row-actions-item"
+                            onClick={() => setCambioEstado({ reserva: r, a: 'PENDIENTE' })} disabled={isPending}><Undo2 size={15} strokeWidth={2} /> Deshacer</button>
+                        )}
+                        {/* Sin correo al cliente final, el aviso lo da el dueño — con
+                            el mensaje ya escrito y el chat abierto (fase 10). */}
+                        <AvisarCliente compacto
+                          telefono={r.telefono} chatTelegram={r.telegram_chat_id}
+                          datos={{ tipo: 'reserva', negocio: data.negocio, nombre: r.nombre_cliente,
+                                   fecha: r.fecha, hora: r.hora, estado: r.estado }} />
                       </RowActions>
                     </td>
                   </tr>
@@ -976,6 +1116,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                   <th>Nombre</th>
                   <th>Horario</th>
                   <th className="col-num">Capacidad</th>
+                  <th className="col-num">Ocupación</th>
                   <th>Estado</th>
                   <th className="col-actions"></th>
                 </tr>
@@ -990,7 +1131,18 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                         <div className="text-xs-muted">{f.dias_semana.map(d => DIA_LABEL[d]).join(', ')}</div>
                       )}
                     </td>
-                    <td data-label="Capacidad" className="col-num tes-monto-cell">{f.capacidad}</td>
+                    <td data-label="Capacidad" className="col-num tes-monto-cell">
+                      {f.capacidad}
+                      {f.max_reservas > 0 && <div className="text-xs-muted">máx. {f.max_reservas} reservas</div>}
+                    </td>
+                    {/* Ocupación (4.2): la pestaña enseñaba la capacidad, que es
+                        configuración, y nunca el uso — el dueño no sabía si el sábado
+                        estaba lleno sin abrir su propia web y simular una reserva. */}
+                    <td data-label="Ocupación" className="col-num tes-monto-cell">
+                      {ocupacion7d.get(f.franja_id) == null
+                        ? <span className="text-sm-muted">—</span>
+                        : <>{ocupacion7d.get(f.franja_id)}%<div className="text-xs-muted">7 días</div></>}
+                    </td>
                     <td data-label="Estado">
                       <span className={`badge ${f.activa ? 'badge-success' : 'badge-neutral'}`}>{f.activa ? 'Activo' : 'Inactivo'}</span>
                     </td>
@@ -1020,9 +1172,18 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           isPending={isPending} onToggle={toggleIaBot} />
       )}
 
+      {/* U20: este bloque colgaba suelto encima de las tarjetas, sin tarjeta propia,
+          en las dos vistas — parecía un ajuste de la pantalla y no de la funcionalidad. */}
+      <div className="card res-section">
+        <div className="card-header"><h2 className="card-title">Confirmación automática</h2></div>
+        {data.tieneAmbas && (
+          <span className="text-xs-muted res-ambito">
+            Solo para reservas. Tus citas tienen la suya.
+          </span>
+        )}
       <div className="res-conf-item">
         <div className="res-conf-item-text">
-          <span className="res-conf-item-title">Confirmación automática</span>
+          <span className="res-conf-item-title">Confirmar sin revisar</span>
           <span className="input-hint">
             {data.tieneIa && data.bot_config.ia_activa
               ? (confirmAuto
@@ -1039,12 +1200,24 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           <span className="switch-track" aria-hidden="true" />
         </label>
       </div>
+      </div>
 
       {/* Enlace público */}
       <div className="card res-section">
         <div className="card-header">
           <h2 className="card-title">Enlace de reservas</h2>
         </div>
+        {/* Ámbito (11.1): con las DOS funcionalidades contratadas, la pantalla de
+            Configuración enseña igual lo que es de esta funcionalidad y lo que es del
+            negocio entero. Lo peligroso no es el bot: es cambiar la antelación aquí y
+            cambiársela también a Citas sin que nada lo diga. Con una sola contratada,
+            estas líneas son ruido y no se pintan. */}
+        {data.tieneAmbas && (
+          <span className="text-xs-muted res-ambito">
+            La ruta <code>/reservar</code> es solo de Reservas, pero <strong>la dirección
+            es del negocio</strong>: si la cambias aquí, cambia también en Citas y en tu catálogo.
+          </span>
+        )}
 
         {data.slug && !editandoSlug ? (
           <div className="table-wrapper">
@@ -1103,11 +1276,24 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
         )}
       </div>
 
+      {/* QR del enlace: así es como se reparte una dirección en una mesa o un
+          mostrador. El catálogo ya lo tenía y estas dos no. */}
+      {data.slug && (
+        <QrEnlace url={`https://${host}/${data.slug}/reservar`} nombreArchivo={`qr-reservas-${data.slug}`}
+          titulo="Código QR de reservas" />
+      )}
+
       {/* Bot de Telegram */}
       <div className="card res-section">
         <div className="card-header">
-          <h2 className="card-title">Bot de Telegram</h2>
+          <h2 className="card-title">Bot de Telegram · Reservas</h2>
         </div>
+        {data.tieneAmbas && (
+          <span className="text-xs-muted res-ambito">
+            Solo para Reservas. Tus Citas tienen su propio bot, con otro token y otro
+            código de vínculo, en <strong>Citas › Configuración</strong>.
+          </span>
+        )}
 
         {data.bot_config.token ? (
           <>
@@ -1129,9 +1315,8 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                       <span className={`badge ${data.bot_config.activo ? 'badge-success' : 'badge-neutral'}`}>
                         {data.bot_config.activo ? 'Activo' : 'Inactivo'}
                       </span>
-                      {data.bot_config.webhook_registrado && (
-                        <div className="text-xs-muted">Webhook registrado</div>
-                      )}
+                      {/* Deja de enseñarse `webhook_registrado`: es un booleano del día
+                          del alta, no lo que pasa ahora. Lo dice «Comprobar». */}
                     </td>
                     <td className="col-actions">
                       <RowActions>
@@ -1152,15 +1337,20 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               <div className="info-box">
                 <strong className="info-box-title">Vincula tu chat para recibir avisos</strong>
                 <span className="text-xs-muted">
-                  Abre tu bot en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                  Abre tu bot de <strong>Reservas</strong> en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
                   Recibirás ahí cada reserva nueva, con botones para confirmarla o rechazarla.
                 </span>
               </div>
             ) : (
               <div className="info-box">
-                <span className="text-xs-muted">✓ Chat del dueño vinculado · recibes los avisos de reservas nuevas.</span>
+                <span className="text-xs-muted">
+                  ✓ Chat del dueño vinculado · recibes los avisos de reservas nuevas. Si cambias de móvil
+                  o de cuenta de Telegram, vuelve a enviar <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                </span>
               </div>
             )}
+
+            <BotDiagnostico columna="bot_config" />
           </>
         ) : (
           <>
@@ -1197,10 +1387,10 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
       </div>
 
       {/* Reglas de reserva */}
-      <ReglasReservaSection reglas={data.reglas} mostrarMaxPersonas iaActiva={data.tieneIa && data.bot_config.ia_activa} />
+      <ReglasReservaSection reglas={data.reglas} mostrarMaxPersonas iaActiva={data.tieneIa && data.bot_config.ia_activa} compartidas={data.tieneAmbas} />
 
       {/* Cierres y festivos */}
-      <CierresSection cierres={data.cierres} iaActiva={data.tieneIa && data.bot_config.ia_activa} />
+      <CierresSection cierres={data.cierres} iaActiva={data.tieneIa && data.bot_config.ia_activa} compartidas={data.tieneAmbas} />
 
       </>
       )}
@@ -1261,6 +1451,16 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
             onClick={() => setLoteAccion({ estado: 'CONFIRMADA', label: 'Confirmar' })}>
             <Check size={14} strokeWidth={2} /> Confirmar
           </button>
+          {/* Cerrar el día en bloque (U5): marcar quién vino y quién no es trabajo de
+              fin de servicio, y hasta ahora solo se llegaba de una en una desde el modal. */}
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'ATENDIDA', label: 'Marcar atendidas' })}>
+            <Check size={14} strokeWidth={2} /> Atendió
+          </button>
+          <button className="btn btn-secondary btn-sm" disabled={isPending}
+            onClick={() => setLoteAccion({ estado: 'NO_SHOW', label: 'Marcar no asistió' })}>
+            <UserX size={14} strokeWidth={2} /> No asistió
+          </button>
           <button className="btn btn-danger-text btn-sm" disabled={isPending}
             onClick={() => setLoteAccion({ estado: 'RECHAZADA', label: 'Rechazar' })}>
             <X size={14} strokeWidth={2} /> Rechazar
@@ -1277,7 +1477,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           title={`¿${loteAccion.label} ${sel.count} reserva${plural(sel.count)}?`}
           body="Solo se aplica a las que admitan el cambio; el resto se omite. Se notificará a los clientes por Telegram cuando proceda."
           confirmLabel={loteAccion.label}
-          danger={loteAccion.estado !== 'CONFIRMADA'}
+          danger={loteAccion.estado === 'RECHAZADA' || loteAccion.estado === 'CANCELADA'}
           onCancel={() => setLoteAccion(null)}
           onConfirm={() => { const e = loteAccion.estado; setLoteAccion(null); ejecutarLote(e) }}
         />

@@ -58,6 +58,31 @@ function corto(): string {
   return crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()
 }
 
+/**
+ * URL base del webhook. **Sin fallback inventado** (TG-1).
+ *
+ * Aquí ponía `|| 'https://claux.app'`, y ese dominio NO es de CLAUX: sirve otro
+ * producto, también en Vercel. Si la variable faltaba —entorno nuevo, rama de
+ * pruebas, redeploy limpio— cada `setWebhook` registraba
+ * `https://claux.app/api/telegram/webhook/<TOKEN_DEL_CLIENTE>`, y desde ese momento
+ * el token del bot de un cliente y los mensajes de SUS clientes se iban a un
+ * servidor ajeno. No es un fallo funcional: es una fuga de credenciales.
+ *
+ * Si no hay dominio configurado se falla con un error claro. Un bot registrado en
+ * cualquier sitio es peor que un bot sin registrar.
+ */
+export function baseUrlWebhook(): string | null {
+  const base = process.env.TELEGRAM_WEBHOOK_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL
+  if (!base) return null
+  return base.replace(/\/$/, '')
+}
+
+/** La URL que ESTE bot debería tener registrada en Telegram. */
+export function urlWebhookDe(token: string): string | null {
+  const base = baseUrlWebhook()
+  return base ? `${base}/api/telegram/webhook/${token}` : null
+}
+
 // ── Guardar config + registrar webhook en Telegram ─────────────────────────────
 
 export async function guardarBotConfigCol(
@@ -81,7 +106,9 @@ export async function guardarBotConfigCol(
     ...actual,
     token,
     nombre: nombre || actual.nombre,
-    activo: token ? true : activo,
+    // TG-16: ponía `token ? true : activo`, así que editar el NOMBRE de un bot
+    // apagado lo encendía sin que nadie lo pidiera. Manda el formulario.
+    activo,
     confirmacion_automatica: confirmacionAutomatica,
     webhook_secret: token ? webhookSecret : actual.webhook_secret,
     codigo_vinculo: token ? codigoVinculo : actual.codigo_vinculo,
@@ -103,8 +130,10 @@ export async function guardarBotConfigCol(
 
   // Registrar webhook en Telegram con secret_token (POST, no en la query string)
   if (token) {
-    const baseUrl = process.env.TELEGRAM_WEBHOOK_BASE_URL || 'https://claux.app'
-    const webhookUrl = `${baseUrl}/api/telegram/webhook/${token}`
+    const webhookUrl = urlWebhookDe(token)
+    if (!webhookUrl) {
+      return { ok: false, error: 'Falta configurar el dominio del sistema (NEXT_PUBLIC_SITE_URL). Avisa a soporte antes de activar el bot.' }
+    }
     try {
       const whRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
         method:  'POST',
@@ -122,6 +151,30 @@ export async function guardarBotConfigCol(
       return { ok: false, error: 'No se pudo conectar con Telegram para registrar el webhook.' }
     }
     await db.from('clients').update({ [columna]: nuevaConfig }).eq('client_id', client_id)
+
+    // TG-21: el menú «/» de Telegram estaba VACÍO porque nunca se llamaba a
+    // `setMyCommands`. Es el sitio donde un cliente busca qué sabe hacer un bot.
+    // Best-effort: si falla, el bot funciona igual.
+    const comandos = columna === 'bot_config'
+      ? [
+          { command: 'reservar',     description: 'Reservar una mesa' },
+          { command: 'mis_reservas', description: 'Ver o cancelar mis reservas' },
+          { command: 'cancelar',     description: 'Empezar de nuevo' },
+          { command: 'ayuda',        description: 'Qué puedo hacer' },
+        ]
+      : [
+          { command: 'cita',      description: 'Pedir una cita' },
+          { command: 'mis_citas', description: 'Ver o cancelar mis citas' },
+          { command: 'cancelar',  description: 'Empezar de nuevo' },
+          { command: 'ayuda',     description: 'Qué puedo hacer' },
+        ]
+    try {
+      await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ commands: comandos }),
+      })
+    } catch { /* no-op */ }
   }
 
   return { ok: true }
