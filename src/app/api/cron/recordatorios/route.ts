@@ -6,6 +6,7 @@ import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { barrerVencidos } from '@/lib/clientes/vencimientos'
 import { generarNotificacionesInternas } from '@/lib/notificaciones/generador'
 import { generarAvisosAdmin } from '@/lib/notificaciones/admin/generador'
+import { barrerReservas } from '@/lib/reservas/barrido'
 import { toDateStr, addDays, fmtFechaEs } from '@/lib/date-utils'
 // Los 3 tipos que dispara el cron (subconjunto de TipoEmail).
 type TipoCron = 'recordatorio_pago' | 'fin_prueba' | 'suspension'
@@ -157,14 +158,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 4. Notificaciones internas del portal (campana del dueño). Van al final: son
+  // 4. Barrido de la agenda: cerrar el pasado ANTES de generar los avisos, o el de
+  //    «sin confirmar» seguiría contando reservas de hace tres meses que ya nadie va
+  //    a atender. Ver `lib/reservas/barrido.ts`.
+  const agenda = await barrerReservas()
+
+  // 5. Notificaciones internas del portal (campana del dueño). Van al final: son
   //    independientes del correo y no deben impedir que este se envíe.
   const notificaciones = await generarNotificacionesInternas()
 
-  // 5. Avisos del panel interno (campana del equipo de CLAUX). Después de todo lo
+  // 6. Avisos del panel interno (campana del equipo de CLAUX). Después de todo lo
   //    anterior a propósito: mira los estados YA barridos (un cliente que expiró
   //    hoy sale como vencido) y los correos que acaban de fallar.
   const avisosAdmin = await generarAvisosAdmin()
 
-  return NextResponse.json({ ok: true, ...resumen, notificaciones, avisosAdmin })
+  return NextResponse.json({ ok: true, ...resumen, agenda, notificaciones, avisosAdmin })
 }

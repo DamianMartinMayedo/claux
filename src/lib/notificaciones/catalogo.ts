@@ -10,7 +10,10 @@
 export type Severidad = 'info' | 'aviso' | 'urgente'
 
 export type Categoria =
-  | 'suscripcion' | 'reservas' | 'finanzas'
+  // Reservas y Citas se venden por separado y casi nunca coinciden: una sola
+  // categoría «Reservas y citas» obligaba a una peluquería a filtrar por una palabra
+  // que no usa. Los compartidos se quedan en `reservas` con texto genérico.
+  | 'suscripcion' | 'reservas' | 'citas' | 'finanzas'
   | 'inventario'  | 'rrhh'     | 'terceros'
   | 'servicios'   | 'dossier'  | 'sistema'
 
@@ -96,7 +99,7 @@ export const CATALOGO = {
     descripcion: 'Alguien reservó desde la web o el bot de Telegram.',
   },
   cita_nueva: {
-    categoria: 'reservas', modulo: 'agenda', severidad: 'aviso', implementado: true,
+    categoria: 'citas', modulo: 'agenda', severidad: 'aviso', implementado: true,
     etiqueta: 'Nueva cita',
     descripcion: 'Alguien pidió cita desde la web o el bot de Telegram.',
   },
@@ -105,12 +108,11 @@ export const CATALOGO = {
     etiqueta: 'Cancelada por el cliente',
     descripcion: 'El cliente canceló usando su enlace.',
   },
-  // NO implementado a propósito: al `NO_SHOW` lo marca el propio negocio desde el
-  // panel. Avisar al dueño de lo que acaba de hacer él es ruido, igual que con la
-  // cita creada a mano. Si algún día lo marca el personal y el dueño quiere
-  // enterarse, se activa aquí y se engancha en cambiarEstado*.
+  // Se enciende con la fase 2: ahora el no-show se marca en LOTE al cerrar el día y
+  // lo puede marcar el personal, no solo el dueño. El resumen semanal es lo que
+  // convierte «uno no vino» en «esto me pasa dos veces por semana».
   reserva_no_show: {
-    categoria: 'reservas', modulo: 'reservas_citas', severidad: 'info', implementado: false,
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'info', implementado: true,
     etiqueta: 'No-show',
     descripcion: 'Una reserva se marcó como no presentada.',
   },
@@ -123,6 +125,23 @@ export const CATALOGO = {
     categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
     etiqueta: 'Sin confirmar',
     descripcion: 'Llevan horas pendientes de que las confirmes.',
+  },
+
+  // ── Los agujeros que deja Telegram (fase 9) ────────────────────────────────
+  bot_sin_vincular: {
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
+    etiqueta: 'Bot sin vincular',
+    descripcion: 'Tu bot está activo pero no has vinculado tu chat: no te llega ningún aviso.',
+  },
+  telegram_no_entregado: {
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
+    etiqueta: 'Avisos que no llegaron',
+    descripcion: 'Telegram rechazó algún mensaje: puede que hayas bloqueado el bot o cambiado el token.',
+  },
+  agenda_sin_configurar: {
+    categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
+    etiqueta: 'Web publicada sin configurar',
+    descripcion: 'Tu enlace público está activo pero no hay nada que ofrecer todavía.',
   },
 
   // ── Finanzas (base contable) ───────────────────────────────────────────────
@@ -376,7 +395,8 @@ export function umbralParaFecha(
 
 export const ETIQUETA_CATEGORIA: Record<Categoria, string> = {
   suscripcion: 'Suscripción',
-  reservas:    'Reservas y citas',
+  reservas:    'Reservas',
+  citas:       'Citas',
   finanzas:    'Finanzas',
   inventario:  'Inventario',
   rrhh:        'Personal',

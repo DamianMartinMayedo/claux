@@ -201,16 +201,26 @@ export async function listarPreferencias(): Promise<PreferenciaFila[]> {
   const session = await sesionAdmin()
   if (!session) return []
 
-  const { data } = await createAdminClient()
-    .from('notificacion_config')
-    .select('tipo, activa, severidad_override')
-    .eq('client_id', session.client_id)
+  const db = createAdminClient()
+  const [{ data }, { data: cli }] = await Promise.all([
+    db.from('notificacion_config')
+      .select('tipo, activa, severidad_override')
+      .eq('client_id', session.client_id),
+    db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
+  ])
+
+  // Preferencias listaba TODOS los tipos implementados sin mirar módulos: una
+  // peluquería veía el interruptor de «Nueva reserva», que no dispara nada. El
+  // `modulo` ya está declarado en cada tipo (y admite lista = basta con uno).
+  const contratados = new Set(Array.isArray(cli?.modulos_activos) ? cli.modulos_activos as string[] : [])
+  const contratado = (m: string | string[] | null) =>
+    m === null || (Array.isArray(m) ? m.some(x => contratados.has(x)) : contratados.has(m))
 
   const guardadas = new Map(
     (data ?? []).map(p => [p.tipo as string, p as { activa: boolean; severidad_override: Severidad | null }]),
   )
 
-  return tiposImplementados().map(tipo => {
+  return tiposImplementados().filter(tipo => contratado(CATALOGO[tipo].modulo)).map(tipo => {
     const def   = CATALOGO[tipo]
     const fila  = guardadas.get(tipo)
     return {

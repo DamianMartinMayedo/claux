@@ -1280,7 +1280,7 @@ export async function escanearReservas(
   const [hoyRes, pendRes] = await Promise.all([
     db.from('reservas').select('client_id, recurso_id')
       .in('client_id', ids).eq('fecha', hoy).in('estado', ['PENDIENTE', 'CONFIRMADA']),
-    db.from('reservas').select('reserva_id, client_id, created_at')
+    db.from('reservas').select('reserva_id, client_id, created_at, recurso_id')
       .in('client_id', ids).eq('estado', 'PENDIENTE').gte('fecha', hoy),
   ])
 
@@ -1320,20 +1320,33 @@ export async function escanearReservas(
   }
 
   // 2. Pendientes de confirmar desde hace horas: el cliente sigue esperando.
+  // Se cuentan por tipo (`recurso_id`) igual que el resumen del día: un negocio que
+  // solo tiene Citas no puede recibir un aviso que dice «reservas» y enlaza a
+  // `/portal/reservas`, que para él es un módulo no contratado y rebota al panel.
   const vivas = new Vivas()
+  const tipoPend = new Map<string, { reservas: number; citas: number }>()
   for (const r of pendRes.data ?? []) {
     if (horasDesde(r.created_at as string) < HORAS_SIN_CONFIRMAR) continue
-    vivas.add(r.client_id as string, r.reserva_id as string)
+    const k = r.client_id as string
+    vivas.add(k, r.reserva_id as string)
+    const acc = tipoPend.get(k) ?? { reservas: 0, citas: 0 }
+    if (r.recurso_id) acc.citas++; else acc.reservas++
+    tipoPend.set(k, acc)
   }
   for (const t of tenants) {
     const pendientes = vivas.de(t.clientId)
     if (pendientes.length > 0) {
+      const n = tipoPend.get(t.clientId) ?? { reservas: pendientes.length, citas: 0 }
+      const partes = [
+        n.reservas > 0 ? `${n.reservas} reserva${n.reservas === 1 ? '' : 's'}` : null,
+        n.citas    > 0 ? `${n.citas} cita${n.citas === 1 ? '' : 's'}` : null,
+      ].filter(Boolean)
       const ok = await crearNotificacion({
         clientId:    t.clientId,
         tipo:        'reserva_pendiente_confirmar',
-        titulo:      `${pendientes.length} reserva${pendientes.length === 1 ? '' : 's'} sin confirmar`,
+        titulo:      `${partes.join(' y ')} sin confirmar`,
         cuerpo:      'Llevan horas esperando respuesta. Confírmalas o recházalas.',
-        enlace:      '/portal/reservas',
+        enlace:      n.citas > 0 && n.reservas === 0 ? '/portal/citas' : '/portal/reservas',
         entidadTipo: 'pendientes_dia',
         entidadId:   hoy,
       }, t)
@@ -1345,6 +1358,127 @@ export async function escanearReservas(
       pendientes.length > 0 ? [hoy] : [],
     )
   }
+  return creadas
+}
+
+// ── Telegram y agenda: los agujeros que nadie ve (fase 9) ─────────────────────
+//
+// Los tres avisan de algo que hoy es SILENCIO: un bot que parece funcionar y no
+// avisa a nadie, mensajes que Telegram rechazó, y una web pública que no ofrece nada.
+
+export async function escanearAgendaSalud(
+  db: Db, tenants: ContextoTenant[], hoy: string,
+): Promise<number> {
+  if (tenants.length === 0) return 0
+  const ids = tenants.map(t => t.clientId)
+  let creadas = 0
+
+  const { data: clientes } = await db.from('clients')
+    .select('client_id, slug, bot_config, bot_config_citas, modulos_activos')
+    .in('client_id', ids)
+
+  const filas = (clientes ?? []) as {
+    client_id: string; slug: string | null
+    bot_config: Record<string, unknown> | null
+    bot_config_citas: Record<string, unknown> | null
+    modulos_activos: string[] | null
+  }[]
+
+  // Fallos de entrega de las últimas 24 h, de una sola lectura para todos.
+  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: fallos } = await db.from('telegram_envios')
+    .select('client_id').in('client_id', ids).eq('ok', false).gte('created_at', desde)
+  const fallosPorCliente = new Map<string, number>()
+  for (const f of (fallos ?? []) as { client_id: string }[]) {
+    fallosPorCliente.set(f.client_id, (fallosPorCliente.get(f.client_id) ?? 0) + 1)
+  }
+
+  for (const t of tenants) {
+    const c = filas.find(f => f.client_id === t.clientId)
+    if (!c) continue
+    const modulos = Array.isArray(c.modulos_activos) ? c.modulos_activos : []
+
+    // 1. Bot activo con token pero sin chat vinculado: silencio absoluto, y lo único
+    //    que lo decía era una caja de ayuda que se ve el día del alta y nunca más.
+    for (const [col, cfg] of [['bot_config', c.bot_config], ['bot_config_citas', c.bot_config_citas]] as const) {
+      const conf = (cfg ?? {}) as Record<string, unknown>
+      const modulo = col === 'bot_config' ? 'reservas_citas' : 'agenda'
+      if (!modulos.includes(modulo)) continue
+      if (!conf.token || conf.activo !== true || conf.notificar_owner_chat_id) continue
+      const ok = await crearNotificacion({
+        clientId:    t.clientId,
+        tipo:        'bot_sin_vincular',
+        titulo:      `Tu bot de ${col === 'bot_config' ? 'reservas' : 'citas'} no te avisa a ti`,
+        cuerpo:      'Está activo pero tu chat no está vinculado: los avisos no llegan a ningún sitio. Vincúlalo desde Configuración.',
+        enlace:      col === 'bot_config' ? '/portal/reservas' : '/portal/citas',
+        entidadTipo: 'bot_vinculo',
+        entidadId:   col,
+      }, t)
+      if (ok) creadas++
+    }
+
+    // 2. Telegram rechazó mensajes. La entidad lleva la FECHA, no la fila que lo
+    //    genera: si no, cada fallo crearía un aviso nuevo (mismo patrón que el cobro
+    //    de suscripciones, `SUS-XXXX@2026-08-01`).
+    const nFallos = fallosPorCliente.get(t.clientId) ?? 0
+    if (nFallos > 0) {
+      const ok = await crearNotificacion({
+        clientId:    t.clientId,
+        tipo:        'telegram_no_entregado',
+        titulo:      `${nFallos} aviso${nFallos === 1 ? '' : 's'} de Telegram no llegaron`,
+        cuerpo:      'Puede que hayas bloqueado el bot, cambiado de cuenta o que el token ya no valga. Pruébalo desde Configuración.',
+        enlace:      modulos.includes('reservas_citas') ? '/portal/reservas' : '/portal/citas',
+        entidadTipo: 'telegram_fallos',
+        entidadId:   hoy,
+      }, t)
+      if (ok) creadas++
+    }
+
+    // 3. Enlace público publicado y nada que ofrecer: el cliente que lo abre se
+    //    encuentra una web vacía, y el dueño cree que está vendiendo.
+    if (c.slug) {
+      if (modulos.includes('reservas_citas')) {
+        const { count } = await db.from('reserva_franjas')
+          .select('franja_id', { count: 'exact', head: true })
+          .eq('client_id', t.clientId).eq('activa', true)
+        if ((count ?? 0) === 0) {
+          const ok = await crearNotificacion({
+            clientId:    t.clientId,
+            tipo:        'agenda_sin_configurar',
+            titulo:      'Tu web de reservas no ofrece nada',
+            cuerpo:      'El enlace está publicado pero no tienes ningún turno activo: quien lo abra no puede reservar.',
+            enlace:      '/portal/reservas',
+            entidadTipo: 'agenda_vacia',
+            entidadId:   'reservas',
+          }, t)
+          if (ok) creadas++
+        }
+      }
+      if (modulos.includes('agenda')) {
+        const [{ count: nServ }, { count: nHor }] = await Promise.all([
+          db.from('servicios').select('servicio_id', { count: 'exact', head: true })
+            .eq('client_id', t.clientId).eq('activo', true),
+          db.from('recurso_horarios').select('recurso_id', { count: 'exact', head: true })
+            .eq('client_id', t.clientId),
+        ])
+        if ((nServ ?? 0) === 0 || (nHor ?? 0) === 0) {
+          const ok = await crearNotificacion({
+            clientId:    t.clientId,
+            tipo:        'agenda_sin_configurar',
+            titulo:      'Tu web de citas no ofrece nada',
+            cuerpo:      (nServ ?? 0) === 0
+              ? 'El enlace está publicado pero no tienes servicios activos.'
+              : 'El enlace está publicado pero nadie tiene horario: no hay huecos que ofrecer.',
+            enlace:      '/portal/citas',
+            entidadTipo: 'agenda_vacia',
+            entidadId:   'citas',
+          }, t)
+          if (ok) creadas++
+        }
+      }
+    }
+  }
+
   return creadas
 }
 

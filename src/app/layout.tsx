@@ -8,7 +8,8 @@ import NumberWheelGuard from '@/components/NumberWheelGuard'
 // queden libres de su peso. Regla de públicas: CONTEXTO §3 / skills/ui/SKILL.md §6.
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.app'),
+  // `claux.app` no es de CLAUX (sirve otro producto). El dominio es `claux.es`.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.es'),
   title: {
     default: 'CLAUX — Digitaliza tu negocio',
     template: '%s | CLAUX',

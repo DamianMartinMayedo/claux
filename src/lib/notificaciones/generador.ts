@@ -17,7 +17,7 @@ import {
   diasHasta,
   escanearBorradoresEstancados, escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
   escanearCajaContabilidad, escanearCajaConfig,
-  escanearStock, escanearRrhh, escanearCredito, escanearReservas,
+  escanearStock, escanearRrhh, escanearCredito, escanearReservas, escanearAgendaSalud,
   escanearIa, escanearDossier, escanearServicios, reanudarProgramadas, escanearRenovaciones,
 } from './escaneres'
 import { facturarAutomatico } from '@/lib/facturacion-suscripciones'
@@ -128,6 +128,7 @@ export async function generarNotificacionesInternas(
 
   creadas += await escanearRenovaciones(db, con('servicios'), hoy)
   creadas += await escanearReservas(db, con('reservas_citas', 'agenda'), hoy)
+  creadas += await escanearAgendaSalud(db, con('reservas_citas', 'agenda'), hoy)
   creadas += await escanearIa(con('asistente_ia'))
   creadas += await escanearDossier(db, con('dossier'))
 

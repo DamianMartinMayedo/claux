@@ -495,23 +495,53 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 /* ═══════════════════════════════════════════════════
    ALERT
    ═══════════════════════════════════════════════════ */
-.alert { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: var(--text-sm); }
+/* Un aviso SIEMPRE separa del bloque de abajo. La base no llevaba margen «para poder
+   colocarse en cualquier sitio», y el resultado fue que había que añadírselo a mano
+   cada vez: 33 avisos sueltos pegados a lo siguiente. El defecto correcto es el caso
+   normal; quien de verdad necesite un aviso pegado, lo quita con `.mb-0`. */
+/* Un aviso se lee como un TEXTO: titular y cuerpo. Y por eso su base NO es flex.
+   Lo era, y esa es la causa de que un párrafo normal se partiera en trozos apilados
+   («Tienes» / «22» / «reservas confirmadas…»): en un contenedor flex, CADA elemento
+   hijo es un item —también un `<strong>` inline— y cada trozo de texto suelto entre
+   ellos se envuelve en otro item. Escribir una frase con una cifra en negrita, que es
+   lo más normal del mundo, la rompía en tres. Con `block` el texto fluye como texto y
+   los bloques se apilan solos. */
+.alert { display: block; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: var(--text-sm); margin-bottom: var(--space-4); }
+.alert > * + *   { margin-top: var(--space-2); }
+.alert-titulo    { display: block; font-weight: 700; margin-bottom: 2px; }
+
+/* Icono + texto SÍ es una fila. Se detecta por el `<svg>` (todos los iconos lo son) y
+   no por una clase, para que los avisos que ya existen sigan igual sin tocarlos.
+   Ahí el texto va SIEMPRE envuelto en un elemento: suelto se partiría igual. */
+.alert:has(> svg) { display: flex; flex-direction: row; align-items: flex-start; gap: var(--space-3); }
+.alert:has(> svg) > * + *,
+.alert-cta > * + *,
+.alert-flex > * + *,
+.alert-between > * + * { margin-top: 0; }
+
+/* La ACCIÓN de un aviso va siempre a la derecha, dentro del padding, y no encoge.
+   `width: fit-content` + `margin-left:auto` la alinean igual si el aviso es un bloque
+   de texto que si es una de las variantes en fila — y sin `justify-content:
+   space-between`, que en los avisos de icono+texto separaría el icono del texto.
+   Solo hijos directos, para no descolocar los botones de `.alert-cta-acciones`. */
+.alert > .btn,
+.alert > .alert-cta-acciones { display: flex; width: fit-content; margin-left: auto; flex-shrink: 0; }
 .alert-error   { background: var(--color-error-bg);   color: var(--color-error);   border: 1px solid rgba(183,28,28,0.15); }
 .alert-success { background: var(--color-success-bg); color: var(--color-success); }
 .alert-warning { background: var(--color-warning-bg); color: var(--color-warning); }
 .alert-info    { background: var(--color-info-bg);    color: var(--color-info); }
-/* Aviso que INTRODUCE el contenido de debajo (una explicación al principio de una
-   tarjeta o un paso): la base no lleva margen para poder colocarse en cualquier
-   sitio, así que la separación del bloque siguiente va en esta variante. */
+/* LEGADO: `.alert-intro` era el que ponía la separación de abajo, que ahora trae la
+   base. Se conserva porque está puesto en varias vistas y quitarlo sería un barrido
+   sin ganancia; no hace falta en código nuevo. */
 .alert-intro   { margin-bottom: var(--space-4); }
 
-/* Aviso CON acción propia (contratar un módulo, revisar algo): el texto manda y el
-   botón no encoge. Lleva su separación abajo porque es un cartel suelto sobre el
-   contenido, no un bloque dentro de una tarjeta. La acción va con `.btn-aviso`, que es
-   la que está pautada para ir encima de un fondo de estado. */
-.alert-cta       { align-items: center; flex-wrap: wrap; justify-content: space-between; margin-bottom: var(--space-4); }
+/* Aviso CON acción en la MISMA línea (contratar un módulo, revisar algo): esta es la
+   variante que pide fila explícitamente, porque la base apila. El texto manda, el
+   botón no encoge y la acción va con `.btn-aviso`, la pautada para ir sobre un fondo
+   de estado. El texto lleva base de ancho para que en pantalla intermedia no quede
+   una columna de dos palabras. */
+.alert-cta       { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 .alert-cta-texto { flex: 1 1 20rem; min-width: 0; }
-.alert-cta .btn  { flex-shrink: 0; }
 /* Varias acciones en el mismo aviso (una por período, p. ej.): envuelven entre
    ellas en vez de estirar el aviso a lo ancho. Con una sola acción no hace falta. */
 .alert-cta-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }
@@ -829,7 +859,9 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .input-display   { background: var(--color-surface-2); cursor: default; display: flex; align-items: center; }
 .loading-row  { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-3); }
 .spinner-xs   { width: 14px; height: 14px; }
-.alert-flex   { display: flex; gap: var(--space-2); align-items: flex-start; }
+/* Variantes de FILA explícita. Desde que la base apila, tienen que declarar la
+   dirección: si no, heredan la columna y el `justify-content` deja de significar nada. */
+.alert-flex   { display: flex; flex-direction: row; gap: var(--space-2); align-items: flex-start; }
 .info-box       { background: var(--color-surface-2); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); font-size: var(--text-sm); margin-bottom: var(--space-4); }
 .info-box-title { display: block; font-weight: 700; margin-bottom: 2px; }
 .pro-rata-details { font-size: var(--text-xs); display: flex; flex-direction: column; gap: 2px; }
@@ -839,7 +871,7 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .mb-1               { margin-bottom: var(--space-1); }
 .mb-6               { margin-bottom: var(--space-6); }
 .input-disabled     { opacity: 0.6; cursor: not-allowed; }
-.alert-top          { align-items: flex-start; }
+.alert-top          { display: flex; flex-direction: row; align-items: flex-start; gap: var(--space-3); }
 .confirm-title      { font-weight: 600; margin-bottom: var(--space-1); }
 .label-hint         { font-weight: 400; }
 .label-hint-xs      { font-weight: 400; font-size: var(--text-xs); }
@@ -866,7 +898,7 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .pago-detalle-stack   { display: flex; flex-direction: column; gap: 2px; }
 .page-header-top      { align-items: flex-start; }
 .page-title-row       { display: flex; align-items: center; gap: var(--space-3); }
-.alert-between        { display: flex; justify-content: space-between; align-items: center; }
+.alert-between        { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .link-inherit         { text-decoration: none; color: inherit; }
 .link-primary         { color: var(--color-primary); font-weight: 600; }
 .info-note            { display: block; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
