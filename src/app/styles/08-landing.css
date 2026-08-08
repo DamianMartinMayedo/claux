@@ -627,10 +627,32 @@
 /* ═══════════════════════════════════════════════════
    DIAGNÓSTICO — Formulario multi-step
    ═══════════════════════════════════════════════════ */
+/* Sticky footer, mismo mecanismo que `.ld-page` (columna de al menos un
+   viewport + el `margin-top: auto` de `.ld-footer` comiéndose el sobrante). Va
+   en una clase propia y NO se reutiliza `.ld-page` porque esa fuerza
+   `color-scheme: light` (la landing es marketing en claro), y el diagnóstico sí
+   sigue el tema del usuario. Sin esto, en los pasos cortos el pie se quedaba
+   flotando a media pantalla y saltaba al cambiar de paso. */
+.dg-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;   /* fallback */
+  min-height: 100dvh;  /* móvil: descuenta la barra dinámica del navegador */
+}
+
+/* Mismo ancho que el hero de la landing (900px): a 680px las tarjetas de sector
+   caían de dos en dos y el formulario era una columna estrecha en medio de una
+   pantalla vacía. No se usa --content-max (1200px): un formulario tan ancho deja
+   de leerse de un vistazo. */
 .dg-container {
-  max-width: 680px;
+  max-width: 900px;
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
+  /* Ocupa el sobrante: mientras el paso quepa en pantalla, la página mide
+     exactamente un viewport y el pie NO se mueve al cambiar de paso (los pasos
+     no miden lo mismo: cuatro tarjetas de modo frente al formulario). */
+  flex: 1;
+  width: 100%;
 }
 
 /* ── Progress bar ── */
@@ -720,11 +742,18 @@ input.dg-option-input {
 }
 
 /* ── Option cards (sector) ── */
+/* Base: dos columnas (las necesidades, que llevan título + descripción y piden
+   ancho). Cada paso ajusta su rejilla con un modificador. */
 .dg-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
 }
+/* Sector: tarjetas cortas (icono + nombre) → tres por fila. */
+.dg-options-3 { grid-template-columns: repeat(3, 1fr); }
+/* Modo actual: cuatro opciones que caben en una fila si hay sitio, y bajan solas
+   a tres/dos sin necesitar más media queries. */
+.dg-options-auto { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .dg-option-card {
   position: relative;
   display: flex;
@@ -763,12 +792,15 @@ input.dg-option-input {
 .dg-option-card:has(.dg-option-input:checked) .dg-option-card-label { color: #fff; }
 
 /* ── Checkbox list (necesidades) ── */
+/* Aire interior de tarjeta, no de fila de lista: --space-2 venía de cuando eran
+   dos columnas estrechas y el texto tocaba el borde. La casilla se alinea con la
+   primera línea (flex-start), no al centro de un bloque de dos o tres líneas. */
 .dg-option-check {
   position: relative;
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
   background: var(--color-surface);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -824,7 +856,7 @@ input.dg-option-input {
 .dg-option-check-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -881,11 +913,14 @@ input.dg-option-input {
 .dg-error-block { margin-top: var(--space-3); }
 
 /* ── Form inputs (contact) ── */
+/* Dos columnas (nombre + teléfono) y el correo a lo ancho: en un contenedor de
+   900px, tres inputs apilados a ancho completo se veían como tres barras. */
 .dg-form {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-5);
 }
+.dg-form-group-full { grid-column: 1 / -1; }
 .dg-form-group {
   display: flex;
   flex-direction: column;
@@ -968,12 +1003,21 @@ input.dg-option-input {
   color: var(--color-text);
   margin-bottom: var(--space-2);
 }
+/* Tope de línea (el mismo 640px del subtítulo del hero): con el contenedor a
+   900px, un párrafo a todo lo ancho deja de leerse cómodo. */
 .dg-report-subtitle {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   line-height: 1.6;
+  max-width: 640px;
+  margin-inline: auto;
 }
+/* Dos columnas: la lista de «lo que CLAUX puede hacer por ti» llega a seis
+   módulos y en una sola columna obligaba a hacer scroll para verla entera. */
 .dg-report-modules {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
   margin-bottom: var(--space-6);
 }
 .dg-report-module {
@@ -984,7 +1028,6 @@ input.dg-option-input {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  margin-bottom: var(--space-2);
   opacity: 0;
   transform: translateY(8px);
   animation: dg-fade-in 360ms var(--ease) forwards;
@@ -1058,7 +1101,8 @@ input.dg-option-input {
   font-size: var(--text-sm);
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.92);
-  margin-bottom: var(--space-5);
+  max-width: 640px;
+  margin: 0 auto var(--space-5);
 }
 /* Error al pedir contacto. Va sobre la banda de degradado, así que NO usa
    --color-error (rojo oscuro pensado para fondo claro: aquí no se leería).
@@ -1112,9 +1156,19 @@ input.dg-option-input {
   .ld-value-grid   { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* Paso intermedio: a menos de 900px las tres tarjetas de sector y las dos
+   columnas del informe se quedan sin ancho antes de llegar al móvil. */
+@media (max-width: 900px) {
+  .dg-options-3 { grid-template-columns: repeat(2, 1fr); }
+  .dg-report-modules { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 768px) {
   .dg-container { padding: var(--space-6) var(--space-4); }
-  .dg-options { grid-template-columns: 1fr; }
+  .dg-options,
+  .dg-options-3,
+  .dg-options-auto { grid-template-columns: 1fr; }
+  .dg-form { grid-template-columns: 1fr; }
   .dg-form-actions { flex-direction: column; }
   .dg-step-title { font-size: var(--text-xl); }
   .dg-report { padding: var(--space-8) var(--space-5); }

@@ -208,7 +208,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
           </p>
           <fieldset className="dg-fieldset">
             <legend className="dg-sr-only">Tipo de negocio</legend>
-            <div className="dg-options">
+            <div className="dg-options dg-options-3">
               {sectores.map((s) => {
                 const Icon = iconoSector(s.sector)
                 return (
@@ -303,7 +303,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
           </p>
           <fieldset className="dg-fieldset">
             <legend className="dg-sr-only">Cómo gestionas tu negocio hoy</legend>
-            <div className="dg-options">
+            <div className="dg-options dg-options-auto">
               {MODOS.map((m) => (
                 <label key={m.id} className="dg-option-radio">
                   <input
@@ -384,7 +384,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
               />
               {errores.telefono && <span className="dg-form-error">{errores.telefono}</span>}
             </div>
-            <div className="dg-form-group">
+            <div className="dg-form-group dg-form-group-full">
               <label htmlFor="dg-email">
                 Correo electrónico <span className="required">*</span>
               </label>

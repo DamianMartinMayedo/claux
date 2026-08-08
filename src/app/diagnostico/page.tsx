@@ -26,7 +26,7 @@ export default async function DiagnosticoPage() {
   const { modulos, sectores, necesidades } = await obtenerCatalogoPublico()
 
   return (
-    <div>
+    <div className="dg-page">
       <PublicHeader />
       <div className="dg-container">
         <DiagnosticoForm modulos={modulos} sectores={sectores} necesidades={necesidades} />
