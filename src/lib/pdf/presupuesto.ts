@@ -62,14 +62,12 @@ export interface PresupuestoPdf {
   negocio:           string
   responsable?:      string | null
   contacto?:         string | null
-  comercial?:        string | null
   // ── Pago único ──
   desglose:          FasePdf[]
   horasTotal:        number
   tarifaHora:        number
   costeInstalacion:  number
   descuentoPct:      number
-  descuentoMotivo?:  string | null
   totalInstalacion:  number
   // ── Recurrente ──
   modulos:           ModuloPdf[]
@@ -102,7 +100,7 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
   }
 
   // ── Datos de contacto ──
-  const contacto = [d.responsable, d.contacto, d.comercial ? `Atiende: ${d.comercial}` : null]
+  const contacto = [d.responsable, d.contacto]
     .filter(Boolean).join('  ·  ')
   if (contacto) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
@@ -170,7 +168,7 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
   fila(`${d.horasTotal} h × ${usd(d.tarifaHora)}/h`, usd(d.costeInstalacion))
   if (d.descuentoPct > 0) {
     const dto = d.costeInstalacion - d.totalInstalacion
-    fila(`Descuento ${d.descuentoPct}%${d.descuentoMotivo ? ` · ${d.descuentoMotivo}` : ''}`, `− ${usd(dto)}`)
+    fila(`Descuento ${d.descuentoPct}%`, `− ${usd(dto)}`)
   }
   y += 1
   trazo(doc, MARCA.dark); doc.setLineWidth(0.4)
