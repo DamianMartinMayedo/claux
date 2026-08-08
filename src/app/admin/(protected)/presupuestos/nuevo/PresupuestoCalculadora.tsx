@@ -7,7 +7,7 @@ import { useToast } from '@/app/contexts/ToastContext'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { importeCiclo } from '@/lib/billing'
 import {
-  FORMATOS,
+  FORMATOS, FASES_INSTALACION,
   type FormatoDatos, type TarifaTipo, type ParametrosPresupuesto,
 } from '@/lib/presupuesto/config'
 import {
@@ -71,6 +71,10 @@ export default function PresupuestoCalculadora({
   const [descuento, setDescuento]   = useState('')
   const [dtoMotivo, setDtoMotivo]   = useState('')
 
+  // Fases que este cliente NO contrata. Vacío = las cuatro, que es el caso normal.
+  const [fasesFuera, setFasesFuera] = useState<number[]>([])
+  const enFase = (n: number) => !fasesFuera.includes(n)
+
   const [migDesea, setMigDesea]     = useState(false)
   const [migDesde, setMigDesde]     = useState('')
   const [migHasta, setMigHasta]     = useState('')
@@ -98,12 +102,15 @@ export default function PresupuestoCalculadora({
     historicoHorasManual: migDesea ? Number(migHoras) || 0 : 0,
     tarifaHoraOverride: Number(tarifaHora) || 0,
     descuentoPct: Number(descuento) || 0,
-  }, parametros), [modulosSel, volNum, formato, migDesea, migHoras, tarifaHora, descuento, parametros])
+    fasesExcluidas: fasesFuera,
+  }, parametros), [modulosSel, volNum, formato, migDesea, migHoras, tarifaHora, descuento, fasesFuera, parametros])
 
   // Los campos de volumen salen de los propios parámetros: al añadir una línea en
-  // Configuración aparece su campo, sin tocar esta pantalla.
+  // Configuración aparece su campo, sin tocar esta pantalla. Los de una fase excluida NO se
+  // piden: teclear un volumen que ya no mueve el precio es pedir trabajo para nada.
   const lineasVisibles = parametros.lineas
     .filter(l => !l.modulo || modulosSel.includes(l.modulo))
+    .filter(l => enFase(l.fase))
     .sort((a, b) => a.orden - b.orden)
   const camposFase1 = lineasVisibles.filter(l => l.fase === 1)
   const lineasFase2 = lineasVisibles.filter(l => l.fase === 2)
@@ -111,6 +118,12 @@ export default function PresupuestoCalculadora({
   function toggleModulo(clave: string) {
     setModulosSel(prev =>
       prev.includes(clave) ? prev.filter(c => c !== clave) : [...prev, clave]
+    )
+  }
+
+  function toggleFase(num: number) {
+    setFasesFuera(prev =>
+      prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
     )
   }
 
@@ -137,6 +150,7 @@ export default function PresupuestoCalculadora({
       tarifaHora: Number(tarifaHora) || 0,
       descuentoPct: Number(descuento) || 0,
       descuentoMotivo: dtoMotivo,
+      fasesExcluidas: fasesFuera,
       migracion: {
         desea:       migDesea,
         desde:       migDesde || null,
@@ -267,17 +281,48 @@ export default function PresupuestoCalculadora({
             })}
           </div>
 
-          {/* Formato de los datos de origen */}
+          {/* Fases de la instalación. No todas las instalaciones las llevan: un negocio que
+              empieza de cero no tiene nada que migrar, y hay clientes que no quieren
+              formación. Desmarcar una la quita del precio Y del desglose que ve el cliente. */}
           <div className="card">
-            <div className="input-group">
-              <label htmlFor="p-formato">Formato de los datos de origen</label>
-              <select id="p-formato" className="input" value={formato} onChange={e => setFormato(e.target.value as FormatoDatos)}>
-                {FORMATOS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-              </select>
+            <p className="mod-list-label">Fases incluidas</p>
+            <div className="mod-list">
+              {FASES_INSTALACION.map(f => (
+                <label key={f.num} className="mod-row">
+                  <span className="mod-row-main">
+                    <span className="mod-row-name">{f.etiqueta}</span>
+                  </span>
+                  <span className="switch">
+                    <input type="checkbox" checked={enFase(f.num)}
+                      onChange={() => toggleFase(f.num)}
+                      aria-label={`Incluir ${f.etiqueta}`} />
+                    <span className="switch-track" aria-hidden="true" />
+                  </span>
+                </label>
+              ))}
             </div>
+            {fasesFuera.length > 0 && (
+              <p className="input-hint">
+                Lo que se desmarca no se cobra ni aparece en el presupuesto del cliente.
+              </p>
+            )}
           </div>
 
+          {/* Formato de los datos de origen. Solo dice algo si hay migración: es lo que
+              decide si las horas estimadas se quedan cortas. */}
+          {enFase(2) && (
+            <div className="card">
+              <div className="input-group">
+                <label htmlFor="p-formato">Formato de los datos de origen</label>
+                <select id="p-formato" className="input" value={formato} onChange={e => setFormato(e.target.value as FormatoDatos)}>
+                  {FORMATOS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Datos de volumen */}
+          {[...camposFase1, ...lineasFase2].length > 0 && (
           <div className="card">
             <p className="mod-list-label">Datos de volumen</p>
             <div className="grid-cols-2">
@@ -295,6 +340,7 @@ export default function PresupuestoCalculadora({
               ))}
             </div>
           </div>
+          )}
 
           {/* Migración de histórico */}
           <div className="card">
@@ -356,6 +402,12 @@ export default function PresupuestoCalculadora({
                 <span className="input-hint">Base: {usd(parametros.tarifaHora)}/h</span>
               )}
             </div>
+
+            {resultado.desglose.length === 0 && (
+              <div className="alert alert-info">
+                Sin fases contratadas: la instalación no se cobra. Solo se factura la cuota mensual.
+              </div>
+            )}
 
             <div className="pres-desglose">
               {resultado.desglose.map((d, i) => (

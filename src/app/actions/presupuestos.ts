@@ -49,6 +49,8 @@ export interface CrearPresupuestoInput {
   tarifaHora?:        number
   descuentoPct?:      number
   descuentoMotivo?:   string
+  /** Fases que este cliente no contrata (1-4). Vacío = las cuatro. */
+  fasesExcluidas?:    number[]
 }
 
 export interface PresupuestoRow {
@@ -189,6 +191,12 @@ export async function crearPresupuesto(
   // RECÁLCULO AUTORITATIVO con los parámetros del servidor: lo que llegue del navegador es
   // una propuesta, no el precio. La tarifa pactada sí se respeta —es la palanca comercial—,
   // pero las horas se vuelven a calcular aquí.
+  // Las fases excluidas viajan con el resto: si el recálculo del servidor las ignorara,
+  // guardaría un presupuesto más caro que el que el comercial acaba de enseñar en pantalla.
+  const fasesExcluidas = (input.fasesExcluidas ?? [])
+    .map(Number)
+    .filter(n => n >= 1 && n <= 4)
+
   const parametros = await cargarParametros()
   const resultado = calcularInstalacion({
     modulos:   input.modulos ?? [],
@@ -197,6 +205,7 @@ export async function crearPresupuesto(
     historicoHorasManual,
     tarifaHoraOverride: Number(input.tarifaHora) || 0,
     descuentoPct,
+    fasesExcluidas,
   }, parametros)
 
   const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], tarifa)
@@ -215,7 +224,10 @@ export async function crearPresupuesto(
       modulos:               input.modulos ?? [],
       volumenes:             input.volumenes ?? {},
       formato_datos:         input.formato,
-      migracion:             input.migracion ?? {},
+      // Sin migración de histórico no se guardan sus datos: una fila que dice «no la quiere»
+      // y a la vez lleva período y 10h estimadas es un registro que se contradice solo, y el
+      // que luego se lee para saber qué se le vendió.
+      migracion:             input.migracion?.desea ? input.migracion : { desea: false },
       desglose:              resultado.desglose,
       revisiones:            resultado.revisiones,
       horas_total:           resultado.horasTotal,

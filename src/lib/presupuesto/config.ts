@@ -26,6 +26,32 @@ export const FORMATOS: { key: FormatoDatos; label: string }[] = [
 /** Umbral orientativo para sugerir tarifa "fundador" (primeros N clientes). */
 export const LIMITE_FUNDADOR = 20
 
+/**
+ * Las cuatro fases de una instalación, con su nombre.
+ *
+ * Vive aquí, y no como literal dentro del cálculo, porque el mismo texto lo necesitan tres
+ * sitios: el desglose que se calcula, los interruptores del formulario y lo que lee el
+ * cliente en el PDF. Con el nombre escrito en cada sitio, quitar una fase en la pantalla y
+ * quitarla del precio dejaban de referirse a lo mismo.
+ *
+ * **Una fase se puede excluir**: hay instalaciones sin nada que migrar (un negocio que
+ * empieza de cero) y clientes que no quieren formación. Antes no había forma de quitarlas y
+ * el presupuesto cobraba una migración de datos que nadie iba a hacer.
+ */
+export const FASES_INSTALACION = [
+  { num: 1, etiqueta: 'Fase 1 · Alta y configuración base' },
+  { num: 2, etiqueta: 'Fase 2 · Migración de datos' },
+  { num: 3, etiqueta: 'Fase 3 · Formación' },
+  { num: 4, etiqueta: 'Fase 4 · Validación y cierre' },
+] as const
+
+export type NumeroFase = (typeof FASES_INSTALACION)[number]['num']
+
+/** Nombre de una fase por su número. */
+export function etiquetaFase(num: NumeroFase): string {
+  return FASES_INSTALACION.find(f => f.num === num)?.etiqueta ?? `Fase ${num}`
+}
+
 /** Clave del módulo base de contabilidad: se excluye de las horas extra de formación,
  *  que ya tiene sus horas base. */
 export const CLAVE_BASE = 'base'

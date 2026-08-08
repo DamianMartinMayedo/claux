@@ -18,8 +18,8 @@
 // explicarle al cliente. Ahora todo son horas, y una sola tarifa las convierte en dinero.
 
 import {
-  CLAVE_BASE, CLAVE_CAJA,
-  type FormatoDatos, type LineaParametro, type ParametrosPresupuesto,
+  CLAVE_BASE, CLAVE_CAJA, etiquetaFase,
+  type FormatoDatos, type LineaParametro, type NumeroFase, type ParametrosPresupuesto,
 } from './config'
 
 export interface InstalacionInput {
@@ -32,6 +32,16 @@ export interface InstalacionInput {
   tarifaHoraOverride?: number
   /** Descuento comercial sobre el total, 0-100. */
   descuentoPct?: number
+  /**
+   * Fases que este cliente NO contrata (1-4). Vacío = las cuatro, que es el caso normal y
+   * el comportamiento de siempre.
+   *
+   * Una fase excluida **desaparece del desglose**, no se pinta a cero: una línea de $0 en
+   * el papel que ve el cliente invita a preguntar por qué está ahí. Y no suma horas, que es
+   * el punto: hasta ahora la migración de datos se cobraba siempre que hubiera un módulo
+   * contratado, aunque el negocio empezara de cero y no hubiera nada que migrar.
+   */
+  fasesExcluidas?: number[]
 }
 
 /** Una línea dentro de una fase, con su cuenta a la vista: «4 empresas · 1h + 3 × 0,5h». */
@@ -109,6 +119,12 @@ export function calcularInstalacion(
   const vol = input.volumenes ?? {}
   const revisiones: Revision[] = []
 
+  // Una fase fuera no se calcula: ni horas, ni líneas, ni avisos. El de «vienen en papel»
+  // colgaba de la Fase 2, así que sin este filtro se seguiría pidiendo revisar una
+  // migración que no se va a hacer.
+  const fuera = new Set((input.fasesExcluidas ?? []).map(Number))
+  const dentro = (fase: NumeroFase) => !fuera.has(fase)
+
   const activas = (fase: 1 | 2) => params.lineas
     .filter(l => l.fase === fase && (!l.modulo || modulos.has(l.modulo)))
     .sort((a, b) => a.orden - b.orden)
@@ -134,49 +150,53 @@ export function calcularInstalacion(
     return { horas: r2(horas), lineas }
   }
 
+  const VACIA = { horas: 0, lineas: [] as LineaDesglose[] }
+
   // ── Fase 1: alta y configuración base ──
-  const f1 = acumular(1)
-  const horasFase1 = r2(params.horasAlta + f1.horas)
+  const f1 = dentro(1) ? acumular(1) : VACIA
+  const horasFase1 = dentro(1) ? r2(params.horasAlta + f1.horas) : 0
 
   // ── Fase 2: migración de datos (solo módulos activos) ──
-  const f2 = acumular(2)
+  const f2 = dentro(2) ? acumular(2) : VACIA
 
   // ── Fase 3: formación (base + por módulo; el punto de venta cuesta lo suyo) ──
-  let horasFase3 = params.horasFormacionBase
-  for (const clave of modulos) {
-    if (clave === CLAVE_BASE) continue
-    horasFase3 += clave === CLAVE_CAJA ? params.horasFormacionCaja : params.horasFormacionModulo
+  let horasFase3 = 0
+  if (dentro(3)) {
+    horasFase3 = params.horasFormacionBase
+    for (const clave of modulos) {
+      if (clave === CLAVE_BASE) continue
+      horasFase3 += clave === CLAVE_CAJA ? params.horasFormacionCaja : params.horasFormacionModulo
+    }
+    horasFase3 = r2(horasFase3)
   }
-  horasFase3 = r2(horasFase3)
 
   // ── Fase 4: validación y cierre ──
-  const horasFase4 = params.horasCierre
+  const horasFase4 = dentro(4) ? params.horasCierre : 0
 
-  const desglose: DesgloseFase[] = [
-    {
-      fase: 'Fase 1 · Alta y configuración base',
-      horas: horasFase1,
-      subtotalUsd: r2(horasFase1 * tarifaHora),
-      detalle: `${params.horasAlta}h de alta + lo que sume la configuración.`,
-      lineas: f1.lineas,
-    },
-    {
-      fase: 'Fase 2 · Migración de datos',
-      horas: f2.horas,
-      subtotalUsd: r2(f2.horas * tarifaHora),
-      lineas: f2.lineas,
-    },
-    {
-      fase: 'Fase 3 · Formación',
-      horas: horasFase3,
-      subtotalUsd: r2(horasFase3 * tarifaHora),
-    },
-    {
-      fase: 'Fase 4 · Validación y cierre',
-      horas: horasFase4,
-      subtotalUsd: r2(horasFase4 * tarifaHora),
-    },
-  ]
+  const desglose: DesgloseFase[] = []
+  if (dentro(1)) desglose.push({
+    fase: etiquetaFase(1),
+    horas: horasFase1,
+    subtotalUsd: r2(horasFase1 * tarifaHora),
+    detalle: `${params.horasAlta}h de alta + lo que sume la configuración.`,
+    lineas: f1.lineas,
+  })
+  if (dentro(2)) desglose.push({
+    fase: etiquetaFase(2),
+    horas: f2.horas,
+    subtotalUsd: r2(f2.horas * tarifaHora),
+    lineas: f2.lineas,
+  })
+  if (dentro(3)) desglose.push({
+    fase: etiquetaFase(3),
+    horas: horasFase3,
+    subtotalUsd: r2(horasFase3 * tarifaHora),
+  })
+  if (dentro(4)) desglose.push({
+    fase: etiquetaFase(4),
+    horas: horasFase4,
+    subtotalUsd: r2(horasFase4 * tarifaHora),
+  })
 
   let horasTotal = r2(horasFase1 + f2.horas + horasFase3 + horasFase4)
 
