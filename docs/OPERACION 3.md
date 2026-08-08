@@ -46,10 +46,6 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
   cuántas filas faltan; el contador acaba diciendo «500 de 500» sobre el conjunto ya
   recortado. Es lo que se vio en el cliente DEUS: una tabla que no traía nada de años
   anteriores.
-- **Ningún límite en absoluto**, que es igual de peligroso y antes pasaba en verde: sobre una
-  lista corta de tablas que crecen con el uso (líneas e ítems de nómina, incidencias,
-  contratos, tickets y sesiones de caja, reservas), una lectura sin rango ni techo se lista.
-  Era lo que hacía RRHH: traerse la historia entera del inquilino sin que nada lo dijera.
 - Una vista con rango cuya descarga no lo recibe: el desplegable dice «Todo el listado» y el
   fichero se lleva la historia entera.
 - Un `resumen` con una variable de estado en crudo: el desplegable imprime «PENDIENTE»,
@@ -58,10 +54,7 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
   a una empresa se descarga las de todas.
 - `new Date().toISOString()` usado como «hoy»: eso es UTC y La Habana va a UTC−4/−5, así que
   a partir de las 20:00 «hoy» ya es mañana — el último día del mes, «Este mes» devolvía un
-  listado vacío con la píldora encendida. Fuente única: `hoyEnTz()` de `lib/fecha-tz.ts`. La
-  regla cubre también `.slice(0, 7)`: **el MES en UTC es tan falso como el día**, y era el
-  fallo real de dos pantallas de RRHH — la última noche del mes, justo cuando se cierra la
-  nómina, proponían el mes siguiente.
+  listado vacío con la píldora encendida. Fuente única: `hoyEnTz()` de `lib/fecha-tz.ts`.
 - Un centinela propio de «sin categoría» / «sin tercero» en un valor de filtro: había dos, y
   el de Productos se traducía a cadena vacía al mandarlo, o sea que pedir «Sin categoría»
   descargaba todo el catálogo. Usa `SIN_CATEGORIA` / `SIN_TERCERO` de `lib/listados.ts`.

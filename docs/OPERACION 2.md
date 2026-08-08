@@ -46,10 +46,6 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
   cuántas filas faltan; el contador acaba diciendo «500 de 500» sobre el conjunto ya
   recortado. Es lo que se vio en el cliente DEUS: una tabla que no traía nada de años
   anteriores.
-- **Ningún límite en absoluto**, que es igual de peligroso y antes pasaba en verde: sobre una
-  lista corta de tablas que crecen con el uso (líneas e ítems de nómina, incidencias,
-  contratos, tickets y sesiones de caja, reservas), una lectura sin rango ni techo se lista.
-  Era lo que hacía RRHH: traerse la historia entera del inquilino sin que nada lo dijera.
 - Una vista con rango cuya descarga no lo recibe: el desplegable dice «Todo el listado» y el
   fichero se lleva la historia entera.
 - Un `resumen` con una variable de estado en crudo: el desplegable imprime «PENDIENTE»,
@@ -58,10 +54,7 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
   a una empresa se descarga las de todas.
 - `new Date().toISOString()` usado como «hoy»: eso es UTC y La Habana va a UTC−4/−5, así que
   a partir de las 20:00 «hoy» ya es mañana — el último día del mes, «Este mes» devolvía un
-  listado vacío con la píldora encendida. Fuente única: `hoyEnTz()` de `lib/fecha-tz.ts`. La
-  regla cubre también `.slice(0, 7)`: **el MES en UTC es tan falso como el día**, y era el
-  fallo real de dos pantallas de RRHH — la última noche del mes, justo cuando se cierra la
-  nómina, proponían el mes siguiente.
+  listado vacío con la píldora encendida. Fuente única: `hoyEnTz()` de `lib/fecha-tz.ts`.
 - Un centinela propio de «sin categoría» / «sin tercero» en un valor de filtro: había dos, y
   el de Productos se traducía a cadena vacía al mandarlo, o sea que pedir «Sin categoría»
   descargaba todo el catálogo. Usa `SIN_CATEGORIA` / `SIN_TERCERO` de `lib/listados.ts`.
@@ -69,20 +62,10 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
 `npx eslint <ficheros>` para lo tocado. El build de este proyecto es pesado: si el proceso
 muere con **exit 137** es la máquina quedándose sin memoria, no un fallo del código.
 
-**El proyecto vive dentro de iCloud Drive, y eso ensucia la verificación.** iCloud sincroniza
-también `.next` (que llega a ~15 GB) y, al hacerlo desde dos sitios, deja copias con el sufijo
-« 2» (`routes.d 2.ts`, `cache-life.d 3.ts`). TypeScript las compila igual, así que `tsc` escupe
-errores de **identificadores duplicados** que no existen en el código: `Duplicate identifier
-'LayoutProps'`, `TS6200` sobre `unstable_cache`… No busques el fallo en tu diff — si todos los
-errores vienen de rutas con « N» dentro de `.next`, ignóralos o borra la caché
-(`npm run fix-native` la borra de paso). El dev también va lento por lo mismo.
-
 ## Base de datos
 
 Las migraciones viven en `supabase/migrations/` numeradas, y se aplican directamente al
-proyecto de Supabase (no hay staging: ver `docs/planes/ESTADO.md`, donde también se
-**reserva el número** de la próxima migración antes de escribirla — dos planes en curso
-pidiendo el mismo número es cómo se pisan). Al crear una tabla nueva:
+proyecto de Supabase. Al crear una tabla nueva:
 
 - **Si activas RLS, tiene que llevar política.** Una tabla con RLS activada y sin política
   no devuelve nada… **solo en producción**. En local no se nota porque el cliente de
@@ -108,12 +91,6 @@ Producción es **claux.es** (Vercel), y despliega solo al empujar a `main`. Dos 
 entrada distintas: `/admin/login` (Supabase Auth, equipo CLAUX) y `/portal/login`
 (`client_users`, el cliente).
 
-**El dominio cambió** (antes `claux-azure.vercel.app`) y lo que quedó registrado FUERA de
-Vercel no se entera solo: el webhook que cada bot de Telegram tiene apuntado sigue en el
-dominio viejo hasta que alguien lo reapunta. Por eso la pestaña del bot lleva **Comprobar /
-Reparar** — reparar es reescribir el webhook con `NEXT_PUBLIC_SITE_URL`—. Esa variable es
-obligatoria: el fallback anterior era un dominio de terceros, o sea una fuga del token.
-
 **Los crons se declaran en `vercel.json` y solo se recogen al redesplegar.** Vercel los
 programa en **UTC**; el negocio vive en La Habana, que cambia de UTC−4 a UTC−5 con el
 horario de verano. Para fijar una hora del reloj cubano se programan las dos horas UTC
@@ -129,9 +106,6 @@ El cron de tasas es el ejemplo a copiar.
 | Un correo no llega | La tabla `emails_log`: el error real está ahí («API key is invalid» = clave mal puesta) |
 | Un archivo subido llega corrupto | `Buffer` en vez de `Blob` al subir a Storage |
 | Un proceso local muere con 137 | Memoria de la máquina, no el código |
-| `tsc` da «Duplicate identifier» y el código está bien | Ficheros « 2» de iCloud dentro de `.next`; borra la caché |
-| Un bot de Telegram no responde | Su webhook, apuntado al dominio viejo: pestaña del bot → Comprobar / Reparar |
-| Un listado sale del revés o le faltan filas viejas | El orden lo fija el rango (`ordenDelRango`) y el techo, `limiteDelFiltro` (`lib/listados.ts`) |
 
 ## Convenciones
 
@@ -140,10 +114,3 @@ El cron de tasas es el ejemplo a copiar.
   Prohibido crear `.md` en la raíz.
 - `docs/planes/` está en `.gitignore`: son borradores locales que **no viajan con el
   repositorio**. Lo que deba sobrevivir tiene que subir a `CONTEXTO.md`.
-- **Un plan vivo es un archivo**, que se actualiza en su sitio; nunca uno nuevo por
-  iteración. Qué plan existe y en qué punto está se mira en `docs/planes/ESTADO.md`, que es
-  también donde se reservan los números de migración. Si un plan y `CONTEXTO.md` se
-  contradicen, manda CONTEXTO.
-- **Terminar una fase no es haberla verificado.** Varios planes quedan en «hecho, build y
-  centinelas en verde, **pendiente de mirar en el navegador y commitear**»: quien verifica en
-  pantalla es el propietario, así que ese último paso se pide, no se da por hecho.

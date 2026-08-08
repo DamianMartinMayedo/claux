@@ -128,6 +128,14 @@ cuesta y lo que se debe son cifras distintas, y cada fila declara en su columna
 | `AMBAS` | UFT 5 % · SS 12,5 % · SS 1,5 % | ✔ | ✔ |
 | `DEUDA` | Salario neto a pagar · una fila por retención · el subsidio por cobrar | — | ✔ |
 
+**Quién lee qué.** Las dos columnas de la tabla son dos predicados de `src/lib/gastos-core.ts`,
+y cada consumidor usa el de SU pregunta: `computaEnResultados` en reportes, dossier y dashboard;
+`generaSaldo` en CxC/CxP, Tesorería, el escáner de avisos, la vista de Gastos y las descargas.
+El **puente devengado↔caja usa los dos a la vez**, y es deliberado: con uno solo, las filas de
+coste —que nadie liquida nunca— se quedaban pendientes para siempre y el puente enseñaba una
+deuda fantasma que no se podía pagar desde ninguna pantalla. Si aparece una deuda que nadie
+puede saldar, o un coste que no está en el informe, el sospechoso es el predicado, no la fila.
+
 Los tres aportes **no se desdoblan**: son coste y deuda por el mismo importe y con un
 acreedor real, igual que comprarle mercancía a un proveedor. Solo el bloque salarial se
 parte, y no por diseño sino porque sus dos importes son distintos. Las retenciones son
@@ -185,7 +193,41 @@ se cae de los totales sin avisar.
 4. **Deshacer** existe con la semántica de cada capa: en maestros borra y se niega si algo
    ya lo usa; en el ledger compensa.
 
-## 8. Un aviso llega al dueño
+## 8. Una reserva (o una cita) entra y se cierra
+
+`CONTEXTO §2 › Reservas y Citas` · `src/lib/reservas/`
+
+1. **Entra por tres puertas** —la mini-web pública (`/[slug]/reservar`, `/[slug]/citas`), el
+   bot de Telegram del negocio y el alta manual del dueño— y las tres escriben por la **misma
+   RPC**. Ahí dentro viven las reglas (antelación, ventana, aforo, festivos y cierres) y el
+   lock anti-overbooking. Ninguna vía tiene validación propia: una regla que solo se
+   comprueba en el formulario no existe para el bot.
+2. **El sistema avisa, no bloquea, pero solo a quien decide.** El alta manual puede **forzar**
+   (`p_forzar`): la RPC devuelve qué reglas se saltaría y la fila queda marcada `forzada`, para
+   que después se pueda explicar por qué ese día tiene 41 de 40. Los canales públicos no lo
+   piden nunca.
+3. **El aviso va a los dos lados, y con una asimetría deliberada.** Al dueño, campana +
+   Telegram. Al cliente final **CLAUX no le escribe** (sin correo, y la WhatsApp Business API
+   no admite números +53): lo que hay es su **enlace de gestión por token**
+   (`/[slug]/r/<token>`) para cancelar o modificar él mismo, y un botón que le abre al dueño el
+   chat con el mensaje ya redactado (`lib/reservas/avisar.ts`). Si vino por el bot, el bot le
+   contesta en su chat.
+4. **El estado es la vida del registro** y su fuente única es `lib/reservas/estados.ts`
+   (etiquetas, colores y transiciones válidas). Deshacer una cancelación o un rechazo devuelve
+   a PENDIENTE **solo con fecha futura y revalidando aforo y solape**: el hueco puede haberse
+   dado ya a otro.
+5. **El pasado lo cierra el cron, no el dueño** (`lib/reservas/barrido.ts`, paso 4 del cron
+   diario): PENDIENTE pasada → CADUCADA, y CONFIRMADA pasada → ATENDIDA a los 7 días, marcada
+   `cierre_auto` para que la pantalla diga que la cerró el sistema y no él. Corre **antes** de
+   generar los avisos (proceso 9), o el de «sin confirmar» seguiría contando peticiones de
+   hace tres meses.
+
+**Para analizar:** lo que es del NEGOCIO —el slug, los cierres, las reglas— no pertenece ni a
+Reservas ni a Citas y vive aparte (`actions/portal/agenda-comun.ts`) con el candado «alguna de
+las dos». Es la trampa que ya mordió: con el candado de Reservas, un cliente que solo compró
+Citas no podía guardar su slug, y sin slug su web pública no existe.
+
+## 9. Un aviso llega al dueño
 
 `CONTEXTO §2 › Notificaciones internas` · `src/lib/notificaciones/`
 
@@ -195,7 +237,13 @@ contratado, el aviso no existe) → **preferencia del tenant** → **idempotenci
 avisa dos veces de lo mismo). Los que escalan por tiempo sustituyen al anterior en vez de
 acumularse.
 
-## 9. Qué puede tocar cada usuario
+**El orden dentro del cron diario no es casual** (`/api/cron/recordatorios`): facturación de
+suscripciones → barrido de estados de cliente → correos de la suscripción a CLAUX → **barrido
+de la agenda** → avisos del portal → avisos del panel interno. Cada paso mira el mundo que
+dejó el anterior: los avisos del portal no cuentan reservas que acaban de caducar, y los del
+equipo ven los estados ya barridos y los correos que acaban de fallar.
+
+## 10. Qué puede tocar cada usuario
 
 `CONTEXTO §2 › Modelo comercial` · `docs/MODELO-MODULOS.md`
 
@@ -203,9 +251,14 @@ Dos candados distintos y hay que entender que son dos:
 
 - **Comercial:** ¿contrató el módulo? Se comprueba en **cada acción que escribe**. El
   sidebar oculta lo no contratado, pero **ocultar no es controlar**: el control está en la
-  acción.
+  acción. Un dato que comparten varios módulos (los terceros; el slug, los cierres y las
+  reglas de la agenda) lleva el candado **«alguna de las dos»**, no el de uno de ellos: con
+  el candado del módulo vecino, quien pagó el otro se queda fuera de su propia pantalla.
 - **De rol:** un usuario de **solo lectura** ve todo y no toca nada. Única excepción
   deliberada: puede actualizar las tasas de cambio.
+
+El candado comercial vale igual **fuera del portal**: el bot de Telegram de un cliente que
+dejó de pagar deja de tomar reservas, porque el bot no es una excepción al modelo comercial.
 
 ---
 
@@ -219,6 +272,7 @@ Dos candados distintos y hay que entender que son dos:
 | Una regla de negocio | El núcleo compartido `src/lib/*-core.ts`, no la pantalla |
 | Qué ve o no ve un cliente | `clients.modulos_activos` + `puedeEditarModulo` |
 | Algo que pasa sin que nadie lo pulse | Los crons de `vercel.json` |
+| Una reserva o cita en un estado raro | El barrido diario (`lib/reservas/barrido.ts`) antes que la pantalla |
 
 ## Deuda y decisiones deliberadas (no son fallos)
 
@@ -232,6 +286,13 @@ Un análisis externo suele señalarlas como errores. Están así a propósito:
   consecuencias fiscales y la toma una persona.
 - **Las tablas no llevan RLS activa con política abierta**: cada consulta filtra por
   `client_id` desde el servidor. Ver `CONTEXTO §2 › Esquema y datos`.
+- **El dueño puede saltarse una regla de la agenda, y queda marcado.** Mismo criterio que el
+  stock negativo: cuando quien decide es él, el sistema avisa y deja constancia (`forzada`),
+  no impide.
+- **CLAUX no le escribe nunca al cliente final del negocio.** Ni correo ni WhatsApp
+  automático: el canal es el propio dueño, con el mensaje ya redactado, y el enlace de gestión
+  que el cliente recibió al reservar.
 
-Lo que sí está pendiente de verdad está en `CONTEXTO §2 › Deuda técnica conocida` y en el
-punto abierto de la nómina (proceso 5).
+Lo que sí está pendiente de verdad está en `CONTEXTO §2 › Deuda técnica conocida`. **La nómina
+ya no tiene punto abierto**: el tratamiento de las retenciones lo cerró la separación de coste
+y deuda (proceso 5), y sus invariantes se comprobaron contra las nóminas de producción.
