@@ -36,36 +36,30 @@
    botón se lee sin discutirle el protagonismo. */
 .btn-aviso     { background: var(--color-surface); color: var(--color-text); border-color: var(--color-warning); }
 .btn-aviso:hover:not(:disabled)     { background: var(--color-surface-2); border-color: var(--color-warning); color: var(--color-text); }
-/* Botón de acción-IA: identifica lo que gasta IA (solo activo con el addon). Un
-   RELLENO pleno como .ia-fab/.ia-banner sería lo más obvio, pero con varios botones
-   en pantalla (el relato tiene uno por sección) satura, y dos pegados hacían la
-   junta fea. Punto medio: lavado suave del degradado + borde en degradado + la
-   estrellita con el trazo en degradado (componente IaSparkle) + texto en teal. El
-   spinner Loader2 hereda currentColor (teal); la estrellita ignora ese color porque
-   pinta su trazo con url(#gradiente). El lavado usa color-mix con la superficie, así
-   se adapta a claro/oscuro sin tokens nuevos. */
+/* Botón de acción-IA: identifica lo que gasta IA (solo activo con el addon). En
+   reposo conserva el aspecto secundario, con un lavado muy suave y borde de marca.
+   El borde se construye en el mismo background que el relleno: así no hay una
+   segunda caja con otro radio flotando encima. En hover se convierte en una acción
+   de marca plena, con texto e icono claros. */
 .btn-ia {
-  position: relative; color: var(--color-primary); border-color: transparent;
+  color: var(--color-primary); border-color: transparent;
   background:
     linear-gradient(135deg,
       color-mix(in srgb, var(--color-primary) 10%, var(--color-surface)) 0%,
-      color-mix(in srgb, var(--color-amber) 10%, var(--color-surface)) 100%);
+      color-mix(in srgb, var(--color-amber) 10%, var(--color-surface)) 100%) padding-box,
+    var(--gradient-brand) border-box;
 }
-.btn-ia::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
-  padding: 1.5px; background: var(--gradient-brand); pointer-events: none;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-}
-.btn-ia svg { color: var(--color-primary); }
+.btn-ia .ia-sparkle-icon { color: var(--color-primary); }
 .btn-ia:hover:not(:disabled) {
-  transform: translateY(-1px); box-shadow: var(--shadow-sm); color: var(--color-primary);
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--color-primary) 18%, var(--color-surface)) 0%,
-      color-mix(in srgb, var(--color-amber) 18%, var(--color-surface)) 100%);
+  box-shadow: var(--shadow-sm); color: var(--color-text-on-brand);
+  background: var(--gradient-brand) padding-box, var(--gradient-brand) border-box;
 }
-.btn-ia:active:not(:disabled)       { transform: translateY(0); box-shadow: none; }
+.btn-ia:hover:not(:disabled) .ia-sparkle-icon,
+.btn-ia:hover:not(:disabled) .dos-spin {
+  color: var(--color-text-on-brand) !important;
+  stroke: var(--color-text-on-brand);
+}
+.btn-ia:active:not(:disabled)       { box-shadow: none; }
 .btn-sm   { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
 .btn-xs   { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); min-height: 26px; }
 .btn-lg   { padding: var(--space-4) var(--space-8); font-size: var(--text-base); }
@@ -544,6 +538,7 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    no por una clase, para que los avisos que ya existen sigan igual sin tocarlos.
    Ahí el texto va SIEMPRE envuelto en un elemento: suelto se partiría igual. */
 .alert:has(> svg) { display: flex; flex-direction: row; align-items: flex-start; gap: var(--space-3); }
+.alert:has(> svg) > svg { flex-shrink: 0; margin-top: 2px; }
 .alert:has(> svg) > * + *,
 .alert-cta > * + *,
 .alert-flex > * + *,

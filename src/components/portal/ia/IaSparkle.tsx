@@ -17,7 +17,7 @@ export default function IaSparkle({ size = 13, strokeWidth = 2.5 }: { size?: num
           </linearGradient>
         </defs>
       </svg>
-      <Sparkles size={size} strokeWidth={strokeWidth} color={`url(#${gradId})`} />
+      <Sparkles className="ia-sparkle-icon" size={size} strokeWidth={strokeWidth} color={`url(#${gradId})`} />
     </>
   )
 }

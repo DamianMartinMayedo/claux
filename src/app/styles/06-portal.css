@@ -3389,11 +3389,73 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    a los chips de sí/no: con cuatro papeles un toggle ya no basta. */
 .dos-rol-lista { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .dos-rol-fila {
-  display: grid; grid-template-columns: 1fr minmax(12rem, 16rem);
+  display: grid; grid-template-columns: 1fr minmax(12rem, 16rem) auto;
   align-items: center; gap: var(--space-3);
 }
 .dos-rol-nombre { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); min-width: 0; }
 .dos-rol-select { min-width: 0; }
+.dos-costo-intro { max-width: 48rem; }
+.dos-costo-guia {
+  margin-top: var(--space-5); padding: var(--space-4);
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.dos-costo-guia-titulo {
+  margin: 0; color: var(--color-text); font-size: var(--text-sm); font-weight: 700;
+}
+.dos-costo-guia-texto {
+  margin: var(--space-1) 0 0; color: var(--color-text-muted);
+  font-size: var(--text-sm); line-height: 1.5;
+}
+.dos-costo-guia-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2); margin-top: var(--space-4);
+}
+.dos-costo-guia-card {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  min-width: 0; padding: var(--space-3);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.dos-costo-guia-card strong { color: var(--color-text); font-size: var(--text-xs); }
+.dos-costo-guia-card span {
+  color: var(--color-text-muted); font-size: var(--text-xs); line-height: 1.45;
+}
+.dos-costo-resumen {
+  margin: var(--space-5) 0 var(--space-2); color: var(--color-text-muted);
+  font-size: var(--text-xs); line-height: 1.5;
+}
+.dos-costo-resumen strong { color: var(--color-text); }
+.dos-costo-excluir {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent;
+  color: var(--color-text-faint); cursor: pointer; transition: var(--transition);
+}
+.dos-costo-excluir:hover { background: var(--color-surface-2); color: var(--color-text); }
+.dos-costo-vacio {
+  margin: var(--space-4) 0 0; color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.dos-costo-apartadas {
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+.dos-costo-apartadas-titulo {
+  margin: 0; color: var(--color-text); font-size: var(--text-sm); font-weight: 700;
+}
+.dos-costo-apartadas-ayuda {
+  margin: var(--space-1) 0 0; color: var(--color-text-muted);
+  font-size: var(--text-xs); line-height: 1.5;
+}
+.dos-costo-apartadas-lista {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  margin: var(--space-3) 0 0; padding: 0; list-style: none;
+}
+.dos-costo-apartadas-lista li {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm);
+}
 /* Selector de qué se publica del estado de resultados + encuadre de vista previa.
    Va DENTRO de la tarjeta del estado, pegado a lo que decide: elegir cuánto
    enseñas desde otra pantalla es elegir a ciegas. */
@@ -3411,12 +3473,6 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dos-modo-titulo { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .dos-modo-opciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .dos-modo-ayuda { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
-
-.dos-rol-leyenda {
-  list-style: none; margin: var(--space-4) 0 0; padding: 0;
-  display: flex; flex-direction: column; gap: var(--space-1);
-  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.6;
-}
 
 /* ── Paso «El desglose» ───────────────────────────────────────────────────────
    Lista por grupo (concepto + importe) con conciliación en vivo contra los
@@ -3840,7 +3896,12 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   .dos-desg-fila .dos-grid-cell { grid-column: 1 / -1; }
 
   /* Clasificador de papel: nombre encima del selector, no al lado. */
-  .dos-rol-fila { grid-template-columns: 1fr; gap: var(--space-1); }
+  .dos-rol-fila { grid-template-columns: 1fr min-content; gap: var(--space-1); }
+  .dos-rol-fila .dos-rol-nombre { grid-column: 1 / -1; }
+  .dos-costo-guia-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .dos-costo-guia-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Cambio de moneda de una ficha (aviso compartido: RRHH, terceros, Citas) ── */

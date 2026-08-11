@@ -113,6 +113,7 @@
   --color-text-muted:   light-dark(#5C5B52, #A8A69C);   /* secundario (~6:1) */
   --color-text-faint:   light-dark(#76746A, #8E8C82);   /* terciario accesible (~4.3:1) */
   --color-text-inv:     light-dark(#F8F7F2, #1C1B16);   /* texto sobre fondos oscuros */
+  --color-text-on-brand: #FFFFFF;                        /* texto sobre rellenos de marca */
 
   /* ── Estados funcionales ── */
   --color-success:      light-dark(#2E7D32, #66BB6A);
