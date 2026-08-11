@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
+import { localeDe, fmtNumL, fmtPctL, type Lang } from '@/lib/dossier/deck-i18n'
+import { esTokenValido } from '@/lib/dossier/token'
 
 // Todo el JS del deck: reveal al entrar, conteo de números, punto de navegación
 // activo, teclado (↑/↓) y la descarga en PDF. Sin librerías — el presupuesto es
@@ -11,14 +13,18 @@ import { useEffect } from 'react'
 // `.dp-anim` y entonces el CSS oculta/rellena/dibuja. Si el JS no llega —3G cubano,
 // JS off, error de hidratación— el inversor lee el deck completo igualmente.
 
-// Texto final de un contador: el mismo que ya pintó el servidor. Lo usan el conteo
-// al terminar y `beforeprint`, para que una cifra a medias no se congele en el PDF.
+// Idioma activo del deck (lo fija `data-lang` en `.dp-page`; 'es' por defecto).
+function langActual(): Lang {
+  return document.querySelector('.dp-page')?.getAttribute('data-lang') === 'en' ? 'en' : 'es'
+}
+
+// Texto final de un contador, en el idioma activo. Lo usan el conteo al terminar y
+// `beforeprint`, para que una cifra a medias no se congele en el PDF.
 function textoFinal(el: HTMLElement): string {
   const objetivo = parseFloat(el.dataset.count ?? '')
   if (Number.isNaN(objetivo)) return el.textContent ?? ''
   const dec = parseInt(el.dataset.dec ?? '0', 10)
-  const fmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec })
-  return fmt.format(objetivo) + (el.dataset.suf ?? '')
+  return fmtNumL(objetivo, dec, langActual()) + (el.dataset.suf ?? '')
 }
 
 export default function DeckReveal() {
@@ -88,7 +94,7 @@ export default function DeckReveal() {
       if (Number.isNaN(objetivo)) return
       const dec = parseInt(el.dataset.dec ?? '0', 10)
       const suf = el.dataset.suf ?? ''
-      const fmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+      const fmt = new Intl.NumberFormat(localeDe(langActual()), { minimumFractionDigits: dec, maximumFractionDigits: dec })
       const dur = 1100
       let inicio: number | null = null
       const paso = (ts: number) => {
@@ -119,6 +125,61 @@ export default function DeckReveal() {
       root.removeEventListener('scroll', onScroll)
       window.removeEventListener('keydown', onKey)
     }
+  }, [])
+
+  // ── Acuse de lectura ──
+  // Una apertura por sesión. Solo en el enlace REAL `/d/<token>`: la vista previa en
+  // borrador es `/d/preview/<id>` y no casa con el patrón, así que no cuenta (mirar tu
+  // propio borrador no es que «lo abrió el inversor»). Dedupe con sessionStorage para
+  // no sumar recargas. Fire-and-forget; si falla, ni se nota.
+  useEffect(() => {
+    const m = window.location.pathname.match(/^\/d\/([^/]+)$/)
+    const token = m?.[1]
+    if (!token || !esTokenValido(token)) return
+    const clave = `dossier-visto-${token}`
+    try {
+      if (sessionStorage.getItem(clave)) return
+      sessionStorage.setItem(clave, '1')
+    } catch { /* modo privado sin storage: se contará por carga, aceptable */ }
+    const url = `/d/${token}/visto`
+    try {
+      if (navigator.sendBeacon) navigator.sendBeacon(url)
+      else fetch(url, { method: 'POST', keepalive: true }).catch(() => {})
+    } catch { /* nada que hacer */ }
+  }, [])
+
+  // ── Botón ES/EN en vivo ──
+  // Solo existe cuando el deck trae versión inglesa (`.dp-lang`). El texto lo
+  // intercambia el CSS (clases lang-es/lang-en); aquí solo cambiamos `data-lang` y
+  // reformateamos los NÚMEROS y PORCENTAJES al idioma activo (es-ES ↔ en-US).
+  useEffect(() => {
+    const root = document.querySelector<HTMLElement>('.dp-page')
+    if (!root) return
+    const botones = Array.from(root.querySelectorAll<HTMLElement>('.dp-lang-btn'))
+    if (botones.length === 0) return
+
+    const setLang = (lang: Lang) => {
+      root.setAttribute('data-lang', lang)
+      botones.forEach(b => b.classList.toggle('is-activo', b.dataset.setLang === lang))
+      root.querySelectorAll<HTMLElement>('[data-count]').forEach(el => {
+        const objetivo = parseFloat(el.dataset.count ?? '')
+        if (Number.isNaN(objetivo)) return
+        const dec = parseInt(el.dataset.dec ?? '0', 10)
+        el.textContent = fmtNumL(objetivo, dec, lang) + (el.dataset.suf ?? '')
+      })
+      root.querySelectorAll<HTMLElement>('[data-pct]').forEach(el => {
+        const v = parseFloat(el.dataset.pct ?? '')
+        if (!Number.isNaN(v)) el.textContent = fmtPctL(v, lang)
+      })
+    }
+
+    const onClick = (e: Event) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('.dp-lang-btn')
+      if (!b?.dataset.setLang) return
+      setLang(b.dataset.setLang === 'en' ? 'en' : 'es')
+    }
+    for (const b of botones) b.addEventListener('click', onClick)
+    return () => { for (const b of botones) b.removeEventListener('click', onClick) }
   }, [])
 
   // ── PDF ──
@@ -157,7 +218,11 @@ export default function DeckReveal() {
   }, [])
 
   return (
-    <button type="button" className="dp-print-btn" onClick={() => window.print()}>
+    // El print() se DIFIERE fuera del handler (setTimeout 0): `window.print()` es
+    // síncrono y bloquea el hilo ~segundos mientras el navegador pagina — medido como
+    // INP de ~3 s en Vercel. Sacándolo del evento, la interacción devuelve al instante
+    // y el diálogo abre en el siguiente tick; el usuario no nota diferencia.
+    <button type="button" className="dp-print-btn" onClick={() => setTimeout(() => window.print(), 0)}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <polyline points="7 10 12 15 17 10" />
