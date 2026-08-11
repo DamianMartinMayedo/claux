@@ -3,10 +3,29 @@
 import { useState, useTransition } from 'react'
 import { ExternalLink, Copy, Check, Loader2, Globe, EyeOff, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
+import { useIa } from '@/components/portal/ia/IaContext'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
 import {
-  publicarDossier, despublicarDossier, revocarEnlace,
+  publicarDossier, despublicarDossier, revocarEnlace, guardarTraduccionIngles,
   type DossierBasico,
 } from '@/app/actions/portal/dossier'
+import { revisarDossierIa, traducirDossierIa } from '@/app/actions/portal/ia'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import { TZ_NEGOCIO } from '@/lib/fecha-tz'
+
+// "Visto 3 veces · última vez 10 ago 14:32", o "Nadie lo ha abierto todavía". La
+// fecha va anclada a la zona del negocio (como el resto del módulo) para que el SSR
+// (UTC) y el navegador del dueño (Habana) impriman lo mismo — sin mismatch.
+function textoApertura(n: number, ultima: string | null): string {
+  if (n <= 0 || !ultima) return 'Nadie ha abierto el enlace todavía.'
+  const veces = n === 1 ? 'Visto 1 vez' : `Visto ${n} veces`
+  const d = new Date(ultima)
+  if (Number.isNaN(d.getTime())) return veces + '.'
+  const cuando = new Intl.DateTimeFormat('es-ES', {
+    timeZone: TZ_NEGOCIO, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d)
+  return `${veces} · última vez ${cuando}.`
+}
 import DossierDesfase from './DossierDesfase'
 import AvisoContabilidad from './AvisoContabilidad'
 
@@ -15,15 +34,24 @@ import AvisoContabilidad from './AvisoContabilidad'
 // usuario de CLAUX—, así que la protección real es poder revocarla.
 
 export default function PestanaPresentacion({
-  dossier, tieneBase, onCambio,
+  dossier, tieneBase, aperturas, ultimaApertura, tieneEn, enDesactualizado, onCambio,
 }: {
   dossier: DossierBasico
   tieneBase: boolean
+  aperturas: number
+  ultimaApertura: string | null
+  tieneEn: boolean
+  enDesactualizado: boolean
   onCambio?: () => void
 }) {
+  const { tieneIa } = useIa()
   const [pending, startTransition] = useTransition()
   const [copiado, setCopiado] = useState(false)
   const [confirmarRevocar, setConfirmarRevocar] = useState(false)
+  const [confirmarDespublicar, setConfirmarDespublicar] = useState(false)
+  const [revisando, startRevisar] = useTransition()
+  const [observaciones, setObservaciones] = useState<string[] | null>(null)
+  const [traduciendo, startTraducir] = useTransition()
 
   const publicado = dossier.estado === 'PUBLICADO'
   const sinNumeros = !dossier.snapshot_at
@@ -55,7 +83,7 @@ export default function PestanaPresentacion({
       fd.set('dossier_id', dossier.dossier_id)
       const res = await despublicarDossier(fd)
       await ld.dismiss()
-      if (res.ok) { toastSuccess('Dossier despublicado'); onCambio?.() }
+      if (res.ok) { toastSuccess('Dossier despublicado'); setConfirmarDespublicar(false); onCambio?.() }
       else toastError(res.error || 'No se pudo despublicar')
     })
   }
@@ -69,6 +97,38 @@ export default function PestanaPresentacion({
       await ld.dismiss()
       if (res.ok) { toastSuccess('Enlace nuevo generado; el anterior ya no funciona'); setConfirmarRevocar(false); onCambio?.() }
       else toastError(res.error || 'No se pudo revocar')
+    })
+  }
+
+  // IA1: segunda lectura de coherencia antes de enseñarlo. La IA comenta, no calcula.
+  function revisar() {
+    if (revisando) return
+    const ld = toastLoading('Revisando…')
+    startRevisar(async () => {
+      const res = await revisarDossierIa(dossier.dossier_id)
+      await ld.dismiss()
+      if (res.ok) setObservaciones(res.observaciones)
+      else toastError(res.error || 'No se pudo revisar el dossier')
+    })
+  }
+
+  // Fase 10: genera (o regenera) la versión inglesa. La IA traduce y una acción con
+  // candado la guarda; el deck la sirve con el botón ES/EN.
+  function generarIngles() {
+    if (traduciendo) return
+    const ld = toastLoading('Traduciendo…')
+    startTraducir(async () => {
+      const res = await traducirDossierIa(dossier.dossier_id)
+      if (!res.ok) { await ld.dismiss(); toastError(res.error); return }
+      const fd = new FormData()
+      fd.set('dossier_id', dossier.dossier_id)
+      fd.set('resumen_en', res.resumenEn ?? '')
+      fd.set('secciones', JSON.stringify(res.secciones))
+      fd.set('conceptos', JSON.stringify(res.conceptos))
+      const save = await guardarTraduccionIngles(fd)
+      await ld.dismiss()
+      if (save.ok) { toastSuccess('Versión en inglés lista: el enlace ya trae el botón ES/EN'); onCambio?.() }
+      else toastError(save.error || 'No se pudo guardar la traducción')
     })
   }
 
@@ -127,6 +187,11 @@ export default function PestanaPresentacion({
                 {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Globe size={14} strokeWidth={2.5} />}
                 Publicar presentación
               </button>
+              {/* Ver el deck ensamblado ANTES de publicar: mismo render que el enlace
+                  público, gated por sesión (nadie más lo ve). Evita publicar a ciegas. */}
+              <a className="btn btn-secondary" href={`/d/preview/${dossier.dossier_id}`} target="_blank" rel="noreferrer">
+                <ExternalLink size={14} strokeWidth={2.5} /> Ver borrador
+              </a>
             </div>
           </>
         ) : (
@@ -155,13 +220,16 @@ export default function PestanaPresentacion({
             </div>
 
             <div className="dos-enlace-acciones">
-              <button className="btn btn-ghost btn-sm" onClick={despublicar} disabled={pending}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarDespublicar(true)} disabled={pending}>
                 <EyeOff size={13} strokeWidth={2.5} /> Despublicar
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarRevocar(true)} disabled={pending}>
                 <RefreshCw size={13} strokeWidth={2.5} /> Cambiar el enlace
               </button>
             </div>
+
+            {/* Acuse de lectura: lo que más quiere saber quien manda un dossier. */}
+            <p className="dos-aperturas">{textoApertura(aperturas, ultimaApertura)}</p>
 
             {confirmarRevocar && (
               <div className="dos-revocar">
@@ -181,7 +249,56 @@ export default function PestanaPresentacion({
             )}
           </>
         )}
+
+        {/* Acciones de IA del dossier, juntas y al pie: una segunda lectura de
+            coherencia (IA1) y la versión en inglés (Fase 10). Solo con addon de IA
+            y cuando ya hay algo que revisar/traducir (números congelados). */}
+        {tieneIa && !sinNumeros && (
+          <div className="dos-ia">
+            <div className="dos-ia-acciones">
+              <button className="btn btn-ia btn-sm" onClick={revisar} disabled={revisando}>
+                {revisando ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
+                {revisando ? 'Revisando…' : 'Revisar mi dossier con IA'}
+              </button>
+              <button className="btn btn-ia btn-sm" onClick={generarIngles} disabled={traduciendo}>
+                {traduciendo ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
+                {traduciendo ? 'Traduciendo…' : tieneEn ? 'Regenerar versión en inglés' : 'Generar versión en inglés'}
+              </button>
+            </div>
+            {observaciones && (
+              observaciones.length > 0 ? (
+                <ul className="dos-revision-lista">
+                  {observaciones.map((o, i) => <li key={i}>{o}</li>)}
+                </ul>
+              ) : (
+                <p className="dos-section-hint">Sin observaciones: tu dossier se ve coherente.</p>
+              )
+            )}
+            {tieneEn && !enDesactualizado && (
+              <p className="dos-section-hint">Tu enlace lleva el botón <strong>ES / EN</strong>: el inversor cambia de idioma en vivo.</p>
+            )}
+            {tieneEn && enDesactualizado && (
+              <p className="dos-preview-aviso dos-preview-aviso-warn">
+                <AlertTriangle size={14} strokeWidth={2} /> Cambiaste el dossier después de traducirlo: la versión en inglés puede estar desactualizada. Regénérala para ponerla al día.
+              </p>
+            )}
+          </div>
+        )}
       </div>
+
+      {confirmarDespublicar && (
+        <ConfirmDialog
+          title="Despublicar la presentación"
+          body={
+            <>El enlace dejará de funcionar para quien lo tengas dado, hasta que vuelvas a publicar.
+            El relato y los números se conservan; solo se corta el acceso.</>
+          }
+          confirmLabel="Despublicar"
+          cancelLabel="Cancelar"
+          onConfirm={despublicar}
+          onCancel={() => setConfirmarDespublicar(false)}
+        />
+      )}
     </section>
   )
 }

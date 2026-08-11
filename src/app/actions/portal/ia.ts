@@ -15,7 +15,7 @@ import {
 // El MISMO cargador que dibuja el recibo en PDF: es lo que garantiza que la explicación
 // de la IA y el papel digan las mismas cifras.
 import { obtenerReciboNomina } from './rrhh'
-import { sugerirSeccionDossier } from '@/lib/ia/dossier'
+import { sugerirSeccionDossier, sugerirResumenPortada, revisarDossier, traducirDossier } from '@/lib/ia/dossier'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { estadoDeResultados } from '@/lib/dossier/estado'
 import type { FilaSerie } from '@/lib/dossier/snapshot'
@@ -384,7 +384,7 @@ export async function interpretarConteo(conteo_id: string, dictado: string): Pro
 // alternativa era duplicar el tieneModulo(…,'asistente_ia'), como citas/reservas).
 export type IaSugerenciaSeccion = { ok: true; cuerpo: string } | { ok: false; error: string }
 
-export async function redactarSeccionDossier(clave: string): Promise<IaSugerenciaSeccion> {
+export async function redactarSeccionDossier(clave: string, borrador?: string): Promise<IaSugerenciaSeccion> {
   const guard = await requireAddonIa()
   if ('error' in guard) return { ok: false, error: guard.error }
 
@@ -435,11 +435,243 @@ export async function redactarSeccionDossier(clave: string): Promise<IaSugerenci
       moneda: dos.moneda_presentacion as string,
       cifras,
       otras,
+      borrador: (borrador ?? '').slice(0, 1200),
     })
     if (!sug?.cuerpo) return { ok: false, error: 'No pude generar un borrador ahora mismo. Inténtalo de nuevo.' }
     return { ok: true, cuerpo: sug.cuerpo }
   } catch (e) {
     console.error('[ia] redactarSeccionDossier', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+export type IaResumenPortada = { ok: true; linea: string } | { ok: false; error: string }
+
+// IA3: redacta la línea de pitch de la portada. Mismo patrón y regla dura que
+// redactarSeccionDossier (la IA no calcula cifras). Recibe el dossierId del editor
+// para acertar el dossier; sin él, cae al más antiguo (como el resto de la IA).
+export async function redactarResumenPortada(dossierId?: string, borrador?: string): Promise<IaResumenPortada> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  const db = createAdminClient()
+  const dosQuery = db.from('dossiers').select('dossier_id, moneda_presentacion').eq('client_id', guard.clientId)
+  const [{ data: cli }, { data: dos }] = await Promise.all([
+    db.from('clients').select('sector, nombre_empresa').eq('client_id', guard.clientId).single(),
+    (dossierId
+      ? dosQuery.eq('dossier_id', dossierId)
+      : dosQuery.order('created_at', { ascending: true }).limit(1)
+    ).maybeSingle(),
+  ])
+  if (!dos) return { ok: false, error: 'Crea primero tu dossier.' }
+
+  const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }] = await Promise.all([
+    db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', guard.clientId).order('mes'),
+    db.from('dossier_lineas').select('grupo, concepto, monto, orden')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', guard.clientId).order('orden'),
+    db.from('dossier_secciones').select('clave, cuerpo')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', guard.clientId).order('orden'),
+  ])
+
+  const serie: FilaSerie[] = (serieRows ?? []).map((r: Record<string, unknown>) => ({
+    mes: r.mes as string,
+    ingresos: Number(r.ingresos), costo_ventas: Number(r.costo_ventas), gastos_operativos: Number(r.gastos_operativos),
+    moneda: r.moneda as string, origen: (r.origen === 'BASE' ? 'BASE' : 'MANUAL'),
+  }))
+  const lineas: LineaDesglose[] = (lineaRows ?? []).map((r: Record<string, unknown>) => ({
+    grupo: r.grupo as LineaDesglose['grupo'], concepto: r.concepto as string, monto: Number(r.monto), orden: Number(r.orden),
+  }))
+
+  const er = estadoDeResultados(serie, lineas)
+  const cifras = serie.length > 0
+    ? { ingresos: er.ingresos, margenBrutoPct: er.margenBrutoPct, resultadoNeto: er.resultadoNeto, meses: serie.length }
+    : null
+
+  const otras = (seccionRows ?? [])
+    .map((r: Record<string, unknown>) => ({ clave: r.clave as string, cuerpo: ((r.cuerpo as string) ?? '').trim() }))
+    .filter(s => s.cuerpo.length > 0)
+    .map(s => ({ etiqueta: SECCIONES_RELATO.find(e => e.clave === s.clave)?.etiqueta ?? s.clave, cuerpo: s.cuerpo }))
+
+  try {
+    const sug = await sugerirResumenPortada(guard.clientId, {
+      negocio: (cli?.nombre_empresa as string) || 'Mi negocio',
+      sector: (cli?.sector as string | null) ?? null,
+      moneda: dos.moneda_presentacion as string,
+      cifras,
+      otras,
+      borrador: (borrador ?? '').slice(0, 300),
+    })
+    if (!sug?.linea) return { ok: false, error: 'No pude generar un resumen ahora mismo. Inténtalo de nuevo.' }
+    return { ok: true, linea: sug.linea }
+  } catch (e) {
+    console.error('[ia] redactarResumenPortada', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+// Carga común del contexto de un dossier para las ayudas de IA que miran el dossier
+// entero (revisión, relato completo). Sin dossierId, cae al más antiguo (como el
+// resto de la IA). Filtra por client_id: un dossier de otro tenant no llega.
+async function datosDossierIa(db: ReturnType<typeof createAdminClient>, clientId: string, dossierId?: string) {
+  const dosQuery = db.from('dossiers')
+    .select('dossier_id, moneda_presentacion, crecimiento_mensual_pct, resumen_portada').eq('client_id', clientId)
+  const { data: dos } = await (dossierId
+    ? dosQuery.eq('dossier_id', dossierId)
+    : dosQuery.order('created_at', { ascending: true }).limit(1)
+  ).maybeSingle()
+  if (!dos) return null
+
+  const [{ data: cli }, { data: serieRows }, { data: lineaRows }, { data: seccionRows }] = await Promise.all([
+    db.from('clients').select('sector, nombre_empresa').eq('client_id', clientId).single(),
+    db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', clientId).order('mes'),
+    db.from('dossier_lineas').select('grupo, concepto, monto, orden')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', clientId).order('orden'),
+    db.from('dossier_secciones').select('clave, cuerpo')
+      .eq('dossier_id', dos.dossier_id).eq('client_id', clientId).order('orden'),
+  ])
+
+  const serie: FilaSerie[] = (serieRows ?? []).map((r: Record<string, unknown>) => ({
+    mes: r.mes as string,
+    ingresos: Number(r.ingresos), costo_ventas: Number(r.costo_ventas), gastos_operativos: Number(r.gastos_operativos),
+    moneda: r.moneda as string, origen: (r.origen === 'BASE' ? 'BASE' : 'MANUAL'),
+  }))
+  const lineas: LineaDesglose[] = (lineaRows ?? []).map((r: Record<string, unknown>) => ({
+    grupo: r.grupo as LineaDesglose['grupo'], concepto: r.concepto as string, monto: Number(r.monto), orden: Number(r.orden),
+  }))
+  const secciones = (seccionRows ?? []).map((r: Record<string, unknown>) => ({
+    clave: r.clave as string, cuerpo: ((r.cuerpo as string) ?? '').trim(),
+  }))
+
+  return { dos, cli, serie, lineas, secciones }
+}
+
+export type IaRevisionDossier = { ok: true; observaciones: string[] } | { ok: false; error: string }
+
+// IA1: revisión de coherencia del dossier entero. La IA lee y comenta, no calcula.
+export async function revisarDossierIa(dossierId?: string): Promise<IaRevisionDossier> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  const db = createAdminClient()
+  const datos = await datosDossierIa(db, guard.clientId, dossierId)
+  if (!datos) return { ok: false, error: 'Crea primero tu dossier.' }
+
+  const er = estadoDeResultados(datos.serie, datos.lineas)
+  const cifras = datos.serie.length > 0
+    ? { ingresos: er.ingresos, margenBrutoPct: er.margenBrutoPct, resultadoNeto: er.resultadoNeto, meses: datos.serie.length }
+    : null
+  const secciones = datos.secciones
+    .filter(s => s.cuerpo.length > 0)
+    .map(s => ({ etiqueta: SECCIONES_RELATO.find(e => e.clave === s.clave)?.etiqueta ?? s.clave, cuerpo: s.cuerpo }))
+
+  try {
+    const rev = await revisarDossier(guard.clientId, {
+      negocio: (datos.cli?.nombre_empresa as string) || 'Mi negocio',
+      sector: (datos.cli?.sector as string | null) ?? null,
+      moneda: datos.dos.moneda_presentacion as string,
+      cifras,
+      crecimientoPct: Number(datos.dos.crecimiento_mensual_pct) || 0,
+      secciones,
+    })
+    if (!rev || rev.observaciones.length === 0) return { ok: false, error: 'No pude revisarlo ahora mismo. Inténtalo de nuevo.' }
+    return { ok: true, observaciones: rev.observaciones }
+  } catch (e) {
+    console.error('[ia] revisarDossierIa', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+export type IaTraduccionDossier =
+  | { ok: true; resumenEn: string | null; secciones: { clave: string; cuerpoEn: string }[]; conceptos: { es: string; en: string }[] }
+  | { ok: false; error: string }
+
+// Fase 10: traduce el relato + resumen al inglés (para el botón ES/EN del deck). La
+// IA solo TRADUCE; el guardado va aparte, por `guardarTraduccionIngles` (con su
+// candado de módulo). Aquí no se escribe en BD.
+export async function traducirDossierIa(dossierId?: string): Promise<IaTraduccionDossier> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  const db = createAdminClient()
+  const datos = await datosDossierIa(db, guard.clientId, dossierId)
+  if (!datos) return { ok: false, error: 'Crea primero tu dossier.' }
+
+  const conCuerpo = datos.secciones
+    .filter(s => s.cuerpo.length > 0)
+    .map(s => ({ clave: s.clave, cuerpo: s.cuerpo }))
+  const resumen = (datos.dos.resumen_portada as string | null)?.trim() || null
+  // Conceptos del desglose que pinta «El detalle»: los grupos de GASTO (el de ingresos
+  // ya no se muestra ahí). Distintos y en orden estable — se emparejan por posición.
+  const conceptos = [...new Set(
+    datos.lineas.filter(l => l.grupo !== 'INGRESO').map(l => l.concepto.trim()).filter(Boolean),
+  )]
+  if (conCuerpo.length === 0 && !resumen && conceptos.length === 0) {
+    return { ok: false, error: 'No hay relato ni resumen que traducir todavía.' }
+  }
+
+  try {
+    const trad = await traducirDossier(guard.clientId, { resumen, secciones: conCuerpo, conceptos })
+    if (!trad) return { ok: false, error: 'No pude traducir ahora mismo. Inténtalo de nuevo.' }
+    return {
+      ok: true,
+      resumenEn: trad.resumen,
+      secciones: trad.secciones.filter(s => s.cuerpo.length > 0).map(s => ({ clave: s.clave, cuerpoEn: s.cuerpo })),
+      conceptos: trad.conceptos,
+    }
+  } catch (e) {
+    console.error('[ia] traducirDossierIa', e)
+    return { ok: false, error: mensajeError(e) }
+  }
+}
+
+export type IaRelatoCompleto = { ok: true; secciones: Record<string, string> } | { ok: false; error: string }
+
+// IA2: primer borrador de TODO el relato. Genera solo las secciones VACÍAS (no pisa
+// lo escrito); «equipo» se salta (tiene su propio «Traer mi plantilla»). Devuelve el
+// mapa clave→cuerpo; el editor lo funde en las secciones que sigan vacías en pantalla.
+export async function redactarRelatoCompleto(dossierId?: string): Promise<IaRelatoCompleto> {
+  const guard = await requireAddonIa()
+  if ('error' in guard) return { ok: false, error: guard.error }
+
+  const db = createAdminClient()
+  const datos = await datosDossierIa(db, guard.clientId, dossierId)
+  if (!datos) return { ok: false, error: 'Crea primero tu dossier.' }
+
+  const er = estadoDeResultados(datos.serie, datos.lineas)
+  const cifras = datos.serie.length > 0
+    ? { ingresos: er.ingresos, margenBrutoPct: er.margenBrutoPct, resultadoNeto: er.resultadoNeto, meses: datos.serie.length }
+    : null
+
+  const conContenido = new Set(datos.secciones.filter(s => s.cuerpo.length > 0).map(s => s.clave))
+  // Secciones a generar: las vacías y que no sean «equipo». Se generan en orden.
+  const pendientes = SECCIONES_RELATO.filter(s => s.clave !== 'equipo' && !conContenido.has(s.clave))
+  if (pendientes.length === 0) return { ok: false, error: 'Ya tienes escritas todas las secciones. Genera una suelta con «Ayúdame a escribir».' }
+
+  const negocio = (datos.cli?.nombre_empresa as string) || 'Mi negocio'
+  const sector = (datos.cli?.sector as string | null) ?? null
+  const moneda = datos.dos.moneda_presentacion as string
+
+  const salida: Record<string, string> = {}
+  // Contexto «otras» acumulativo: cada sección generada alimenta la siguiente, para
+  // que el borrador completo sea coherente consigo mismo y no se repita.
+  const otras = datos.secciones
+    .filter(s => s.cuerpo.length > 0)
+    .map(s => ({ etiqueta: SECCIONES_RELATO.find(e => e.clave === s.clave)?.etiqueta ?? s.clave, cuerpo: s.cuerpo }))
+
+  try {
+    for (const espec of pendientes) {
+      const sug = await sugerirSeccionDossier(guard.clientId, espec, { negocio, sector, moneda, cifras, otras })
+      if (sug?.cuerpo) {
+        salida[espec.clave] = sug.cuerpo
+        otras.push({ etiqueta: espec.etiqueta, cuerpo: sug.cuerpo })
+      }
+    }
+    if (Object.keys(salida).length === 0) return { ok: false, error: 'No pude generar el borrador ahora mismo. Inténtalo de nuevo.' }
+    return { ok: true, secciones: salida }
+  } catch (e) {
+    console.error('[ia] redactarRelatoCompleto', e)
     return { ok: false, error: mensajeError(e) }
   }
 }
