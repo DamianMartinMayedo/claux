@@ -12,6 +12,7 @@ import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } f
 const COLORES = [
   '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
   '#E11D48', '#EA580C', '#16A34A', '#64748B',
+  '#FFBF00',
 ]
 
 interface Moneda { codigo: string; nombre: string; simbolo: string }
@@ -534,14 +535,20 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
         )}
       </div>
 
-      <EmpresaModal
-        key={modal.empresa?.empresa_id ?? 'nueva'}
-        state={modal}
-        monedas={monedas}
-        empresas={init}
-        onClose={cerrar}
-        onSaved={onSaved}
-      />
+      {/* Se monta solo mientras está abierto: así cada apertura arranca con estado
+          limpio. Antes vivía montado siempre con key fija 'nueva', y al crear una
+          segunda empresa reutilizaba la misma instancia — el logoFile de la primera
+          seguía en estado y se subía a la segunda (cada empresa es independiente). */}
+      {modal.open && (
+        <EmpresaModal
+          key={modal.empresa?.empresa_id ?? 'nueva'}
+          state={modal}
+          monedas={monedas}
+          empresas={init}
+          onClose={cerrar}
+          onSaved={onSaved}
+        />
+      )}
     </div>
   )
 }

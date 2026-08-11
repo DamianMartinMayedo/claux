@@ -40,7 +40,7 @@ export function esModoEstado(v: unknown): v is ModoEstado {
 }
 
 /** Un concepto del desglose con su peso sobre los ingresos del período. */
-export interface CategoriaMonto { concepto: string; monto: number; pct: number }
+export interface CategoriaMonto { concepto: string; conceptoEn: string | null; monto: number; pct: number }
 
 export interface FilaEvolucion {
   mes: string
@@ -60,11 +60,26 @@ export interface EstadoResultados {
   gastosOperativos: number
   /** Peso de los gastos operativos sobre los ingresos (% vertical). */
   gastosOperativosPct: number
+  // ── Waterfall detallado (solo DESGLOSADO) ──
+  // Parten `gastosOperativos` por rol; sus totales salen del DESGLOSE, no de la
+  // serie. Con base cuadran exacto; a mano, el descuadre lo avisa el paso «El
+  // desglose» (no se maquilla aquí).
+  personal: number
+  personalPct: number
+  operativos: number
+  operativosPct: number
+  otros: number
+  otrosPct: number
+  /** EBIT = neto + otros; null si no hay «Otros» (sin nada debajo, sería el neto). */
+  resultadoOperativo: number | null
+  resultadoOperativoPct: number | null
   resultadoNeto: number
   margenNetoPct: number
   ingresosPorCategoria: CategoriaMonto[]
   costoPorCategoria: CategoriaMonto[]
+  personalPorCategoria: CategoriaMonto[]
   gastosPorCategoria: CategoriaMonto[]
+  otrosPorCategoria: CategoriaMonto[]
   evolucion: FilaEvolucion[]
 }
 
@@ -98,7 +113,23 @@ export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]):
   const deGrupo = (g: LineaDesglose['grupo']): CategoriaMonto[] =>
     lineas.filter(l => l.grupo === g)
       .sort((a, b) => a.orden - b.orden)
-      .map(l => ({ concepto: l.concepto, monto: round2(l.monto), pct: pct(round2(l.monto), ingresos) }))
+      .map(l => ({ concepto: l.concepto, conceptoEn: l.concepto_en ?? null, monto: round2(l.monto), pct: pct(round2(l.monto), ingresos) }))
+
+  // Los gastos operativos, partidos por rol para el waterfall detallado. Cada total
+  // sale de SUS líneas del desglose (con base suman `gastosOperativos` exacto).
+  const personalPorCategoria = deGrupo('PERSONAL')
+  const gastosPorCategoria   = deGrupo('GASTO_OPERATIVO')
+  const otrosPorCategoria    = deGrupo('OTRO')
+  const sumCats = (cats: CategoriaMonto[]) => round2(cats.reduce((s, c) => s + c.monto, 0))
+  const personal   = sumCats(personalPorCategoria)
+  const otros      = sumCats(otrosPorCategoria)
+  // El bucket operativo es el RESIDUAL sobre el total de la serie: así Personal +
+  // Operativos + Otros = gastosOperativos SIEMPRE y el waterfall cuadra con el neto
+  // autoritativo. Con base coincide con la suma de sus líneas; a mano absorbe el descuadre.
+  const operativos = round2(gastosOperativos - personal - otros)
+  // EBIT: solo cuando hay «Otros» debajo que lo separen del neto (misma regla que
+  // reportes.ts). = neto + otros, así siempre cuadra con el neto autoritativo.
+  const resultadoOperativo = otros > 0.005 ? round2(resultadoNeto + otros) : null
 
   return {
     ingresos, costoVentas,
@@ -107,11 +138,18 @@ export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]):
     margenBrutoPct: pct(margenBruto, ingresos),
     gastosOperativos,
     gastosOperativosPct: pct(gastosOperativos, ingresos),
+    personal,   personalPct:   pct(personal, ingresos),
+    operativos, operativosPct: pct(operativos, ingresos),
+    otros,      otrosPct:      pct(otros, ingresos),
+    resultadoOperativo,
+    resultadoOperativoPct: resultadoOperativo == null ? null : pct(resultadoOperativo, ingresos),
     resultadoNeto,
     margenNetoPct: pct(resultadoNeto, ingresos),
     ingresosPorCategoria: deGrupo('INGRESO'),
     costoPorCategoria: deGrupo('COSTO_VENTAS'),
-    gastosPorCategoria: deGrupo('GASTO_OPERATIVO'),
+    personalPorCategoria,
+    gastosPorCategoria,
+    otrosPorCategoria,
     evolucion,
   }
 }
@@ -139,6 +177,17 @@ export function congeladoA(iso: string | null): string {
   }).format(d)
   return `Datos congelados a ${fecha}, ${hora}`
 }
+
+/**
+ * Nota honesta del coste de ventas cuando el negocio NO tiene módulo de inventario
+ * y los números vienen de la base: sin control de existencias, ese renglón son las
+ * COMPRAS del período, no el coste de lo vendido (la misma verdad que `etiqueta_coste`
+ * en `pl/estado.ts`). El rótulo se mantiene «Coste de ventas» —lo que un inversor
+ * espera leer—; la nota lo matiza sin maquillar. Solo aplica con base (el usuario
+ * manual rotuló su columna, es su declaración).
+ */
+export const NOTA_COSTE_COMPRAS =
+  'Sin módulo de inventario, el coste de ventas refleja los costes directos del período (compras y proveedores), no ajustado por variación de existencias.'
 
 const nfTasa = new Intl.NumberFormat('es', { maximumFractionDigits: 4 })
 

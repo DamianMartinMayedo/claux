@@ -42,7 +42,7 @@ export default function DossierWidget({ data }: { data: DossierResumen }) {
       {data.vacio ? (
         <p className="dash-muted">
           Convierte tus números en una presentación y un estado de resultados para enseñar
-          a un inversor, un banco o un socio.
+          a un inversor o un socio.
         </p>
       ) : (
         <>

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Check } from 'lucide-react'
 import type { DossierData, DossierBasico } from '@/app/actions/portal/dossier'
 import { pasosEditables, LABEL_PASO, type PasoEditable } from '@/lib/dossier/pasos'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import DossierDesfase from './DossierDesfase'
 import PasoBasicos from './PasoBasicos'
 import PasoCostoVentas from './PasoCostoVentas'
@@ -20,15 +21,33 @@ import PasoMarca from './PasoMarca'
 // tienen contenido, para que nada parezca perdido tras un proceso de una vez.
 
 export default function DossierSecciones({
-  data, dossier, simbolo, onRefrescar,
+  data, dossier, simbolo, onRefrescar, dirty, setDirty,
 }: {
   data: DossierData
   dossier: DossierBasico
   simbolo: string
   onRefrescar: () => void
+  // `dirty`/`setDirty` viven en DossierEditor: el mismo flag guarda el cambio de
+  // SECCIÓN (aquí) y el de PESTAÑA (allí). Los Paso* re-inicializan de props al
+  // remontar, así que saltar con algo tecleado sin guardar lo perdía en silencio.
+  dirty: boolean
+  setDirty: (v: boolean) => void
 }) {
   const pasos = pasosEditables(data.tieneBase)
   const [activo, setActivo] = useState<PasoEditable>('basicos')
+  const [pendiente, setPendiente] = useState<PasoEditable | null>(null)
+
+  // Un guardado limpia el flag: cada Paso llama a su callback SOLO tras guardar bien,
+  // así que es el punto exacto en que lo tecleado deja de estar en el aire.
+  const marcarGuardado = useCallback(() => { setDirty(false); onRefrescar() }, [setDirty, onRefrescar])
+
+  // Intento de cambiar de sección: si hay algo tecleado sin guardar, se confirma
+  // antes de descartarlo; si no, se cambia directo.
+  const irA = useCallback((p: PasoEditable) => {
+    if (p === activo) return
+    if (dirty) { setPendiente(p); return }
+    setActivo(p)
+  }, [activo, dirty])
 
   // Defecto de la portada: la empresa del dossier, o el nombre de la cuenta si es
   // consolidado (mismo criterio que deriva el deck cuando no hay nombre fijado).
@@ -58,8 +77,8 @@ export default function DossierSecciones({
         <DossierDesfase
           dossierId={dossier.dossier_id}
           tieneBase={data.tieneBase}
-          onIrANumeros={() => setActivo('numeros')}
-          onActualizado={onRefrescar}
+          onIrANumeros={() => irA('numeros')}
+          onActualizado={marcarGuardado}
           mensaje={
             <>
               <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período, pero
@@ -76,7 +95,7 @@ export default function DossierSecciones({
             key={p}
             type="button"
             className={`dos-secc-item${activo === p ? ' active' : ''}${completado[p] ? ' done' : ''}`}
-            onClick={() => setActivo(p)}
+            onClick={() => irA(p)}
             aria-current={activo === p ? 'true' : undefined}
           >
             <span className="dos-secc-num">
@@ -87,19 +106,21 @@ export default function DossierSecciones({
         ))}
       </nav>
 
-      {/* key={activo} → fade suave al cambiar de sección (respeta reduced-motion) */}
-      <div className="dos-secc-panel" key={activo}>
+      {/* key={activo} → fade suave al cambiar de sección (respeta reduced-motion).
+          onChangeCapture marca «sucio» en cuanto se teclea en cualquier campo del
+          Paso activo, sin tener que instrumentar cada uno. */}
+      <div className="dos-secc-panel" key={activo} onChangeCapture={() => setDirty(true)}>
         {activo === 'basicos' && (
-          <PasoBasicos data={data} dossier={dossier} onListo={onRefrescar} />
+          <PasoBasicos data={data} dossier={dossier} onListo={marcarGuardado} />
         )}
         {activo === 'costos' && data.tieneBase && (
-          <PasoCostoVentas categorias={data.categoriasCosto} onGuardado={onRefrescar} />
+          <PasoCostoVentas categorias={data.categoriasCosto} onGuardado={marcarGuardado} />
         )}
         {activo === 'numeros' && (
           <PasoNumeros
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
-            simbolo={simbolo} onGuardado={onRefrescar} onCambio={onRefrescar}
+            simbolo={simbolo} onGuardado={marcarGuardado} onCambio={marcarGuardado}
           />
         )}
         {activo === 'desglose' && (
@@ -107,20 +128,32 @@ export default function DossierSecciones({
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} lineas={data.lineas}
             conceptos={data.conceptosSector} tieneBase={data.tieneBase}
-            simbolo={simbolo} onGuardado={onRefrescar}
+            simbolo={simbolo} onGuardado={marcarGuardado}
           />
         )}
         {activo === 'crecimiento' && (
-          <PasoCrecimiento dossier={dossier} serie={data.serie} simbolo={simbolo} onGuardado={onRefrescar} />
+          <PasoCrecimiento dossier={dossier} serie={data.serie} simbolo={simbolo} onGuardado={marcarGuardado} />
         )}
         {activo === 'relato' && (
-          <PasoRelato dossier={dossier} secciones={data.secciones} tieneRrhh={data.tieneRrhh} onGuardado={onRefrescar} />
+          <PasoRelato dossier={dossier} secciones={data.secciones} tieneRrhh={data.tieneRrhh} onGuardado={marcarGuardado} />
         )}
         {activo === 'marca' && (
           <PasoMarca dossier={dossier} empresaLogoUrl={data.empresaLogoUrl}
-            nombrePorDefecto={nombrePortadaDefault} onGuardado={onRefrescar} onCambio={onRefrescar} />
+            nombrePorDefecto={nombrePortadaDefault} onGuardado={marcarGuardado} onCambio={marcarGuardado} />
         )}
       </div>
+
+      {pendiente && (
+        <ConfirmDialog
+          title="Tienes cambios sin guardar"
+          body="Si cambias de sección ahora, se perderá lo que escribiste aquí y no has guardado."
+          confirmLabel="Descartar y salir"
+          cancelLabel="Seguir aquí"
+          danger
+          onConfirm={() => { setActivo(pendiente); setDirty(false); setPendiente(null) }}
+          onCancel={() => setPendiente(null)}
+        />
+      )}
     </div>
   )
 }

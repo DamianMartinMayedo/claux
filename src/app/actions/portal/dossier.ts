@@ -13,6 +13,7 @@ import { construirConversor } from '@/lib/tasas'
 import { fusionarSerie, resolverFusion, type FilaSerie, type PlanFusion } from '@/lib/dossier/snapshot'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { normalizarHex } from '@/lib/dossier/paleta'
+import { esTokenValido, nuevoToken } from '@/lib/dossier/token'
 import { esModoEstado, type ModoEstado as _ModoEstado } from '@/lib/dossier/estado'
 import { conceptosDe, CONCEPTOS_DEFAULT, type ConceptosSector } from '@/lib/sector'
 
@@ -32,6 +33,7 @@ export interface DossierBasico {
   estado:                  'BORRADOR' | 'PUBLICADO'
   empresa_id:              string | null
   nombre_portada:          string | null   // nombre público elegido; vacío → se deriva
+  resumen_portada:         string | null   // línea de pitch bajo el nombre; vacío → no se pinta
   contacto_email:          string | null   // correo de contacto para la portada de cierre
   moneda_presentacion:     string
   color_principal:         string
@@ -88,6 +90,7 @@ export interface DossierData {
   lineas:             LineaDesglose[]
   secciones:          SeccionRelato[]
   tieneBase:          boolean
+  hayInventario:      boolean                 // sin inventario el coste es «compras del período», no COGS (nota honesta)
   tieneRrhh:          boolean                 // solo habilita precargar Equipo
   multiempresa:       boolean
   nombreNegocio:      string                  // nombre de la cuenta: defecto de portada en consolidado
@@ -99,11 +102,22 @@ export interface DossierData {
   categoriasCosto:    CategoriaCosto[]        // vacío sin base
   conceptosSector:    ConceptosSector          // filas sugeridas del desglose (mig. 135)
   empresaLogoUrl:     string | null           // habilita "usar el logo de mi empresa"
+  aperturas:          number                   // veces que se abrió el enlace público (acuse de lectura)
+  ultimaApertura:     string | null            // ISO de la última apertura, o null si nadie lo abrió
+  tieneEn:            boolean                   // hay versión inglesa generada (mig. 178)
+  enDesactualizado:   boolean                   // se editó el dossier tras generar el inglés
 }
 
 // Plan de fusión + monedas faltantes de la previsualización (serializable al cliente).
 export interface PreviewActualizacion extends PlanFusion {
   monedasFaltantes: string[]
+  /**
+   * El dossier ya tiene un desglose por concepto que la actualización PISARÁ con el
+   * recalculado de Contabilidad (`aplicarActualizacion` escribe `snap.lineas`). El
+   * modal solo enseñaba cambios de la SERIE; sin avisar de esto, un desglose editado
+   * a mano se perdía en silencio al confirmar.
+   */
+  desgloseSeReemplaza: boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -308,9 +322,10 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   // frente a un dueño que no sabe qué escribir — que es el problema que resuelve.
   const conceptosSector = await conceptosDelSector(db, (clienteRow?.sector as string) ?? null)
 
-  const tieneBase    = tieneModulo(modulos, 'base')
-  const tieneRrhh    = tieneModulo(modulos, 'rrhh')
-  const multiempresa = tieneModulo(modulos, 'multiempresa')
+  const tieneBase     = tieneModulo(modulos, 'base')
+  const hayInventario = tieneModulo(modulos, 'inventario')
+  const tieneRrhh     = tieneModulo(modulos, 'rrhh')
+  const multiempresa  = tieneModulo(modulos, 'multiempresa')
   const monedas = (monedasRows ?? []).map((m: { codigo: string; simbolo: string | null }) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo }))
   const monedaConsolidacion = (monedasRows ?? []).find((m: { es_consolidacion: boolean }) => m.es_consolidacion)?.codigo ?? null
 
@@ -332,19 +347,23 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   if (!dosRow) {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
-      tieneBase, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
+      tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
       monedas, monedaConsolidacion, categoriasCosto, conceptosSector, empresaLogoUrl: null,
+      aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false,
     }
   }
 
   const dossierId = dosRow.dossier_id as string
-  const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }] = await Promise.all([
+  const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }, { data: aperturaRows, count: aperturaCount }] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
       .eq('dossier_id', dossierId).eq('client_id', session.client_id).order('mes'),
     db.from('dossier_lineas').select('grupo, concepto, monto, orden')
       .eq('dossier_id', dossierId).eq('client_id', session.client_id).order('orden'),
     db.from('dossier_secciones').select('clave, cuerpo, generado_ia')
       .eq('dossier_id', dossierId).eq('client_id', session.client_id).order('orden'),
+    // Acuse de lectura: cuántas veces se abrió el enlace y la última (mig. 177).
+    db.from('dossier_aperturas').select('vista_at', { count: 'exact' })
+      .eq('dossier_id', dossierId).eq('client_id', session.client_id).order('vista_at', { ascending: false }).limit(1),
   ])
 
   const serie: FilaSerie[] = (serieRows ?? []).map((r: Record<string, unknown>) => ({
@@ -365,6 +384,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     estado: dosRow.estado,
     empresa_id: dosRow.empresa_id ?? null,
     nombre_portada: dosRow.nombre_portada ?? null,
+    resumen_portada: dosRow.resumen_portada ?? null,
     contacto_email: dosRow.contacto_email ?? null,
     moneda_presentacion: dosRow.moneda_presentacion,
     color_principal: dosRow.color_principal,
@@ -385,9 +405,16 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
 
   return {
     dossier, serie, lineas, secciones,
-    tieneBase, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
+    tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
     monedas, monedaConsolidacion, categoriasCosto, conceptosSector,
     empresaLogoUrl: await logoDeEmpresa(dossier.empresa_id),
+    aperturas: aperturaCount ?? 0,
+    ultimaApertura: (aperturaRows?.[0]?.vista_at as string | undefined) ?? null,
+    tieneEn: !!dosRow.traduccion_en_at,
+    // Desactualizado: se editó el dossier tras generar el inglés. Señal gruesa
+    // (updated_at cambia con cualquier guardado); basta para invitar a regenerar.
+    enDesactualizado: !!dosRow.traduccion_en_at && !!dosRow.updated_at
+      && new Date(dosRow.updated_at as string).getTime() > new Date(dosRow.traduccion_en_at as string).getTime(),
   }
 }
 
@@ -489,6 +516,7 @@ export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean
     estado: 'BORRADOR', token: null, publicado_at: null,
     empresa_id: origen.empresa_id,
     nombre_portada: origen.nombre_portada,
+    resumen_portada: origen.resumen_portada,
     contacto_email: origen.contacto_email,
     moneda_presentacion: origen.moneda_presentacion,
     color_principal: origen.color_principal,
@@ -699,7 +727,7 @@ export async function guardarDesglose(formData: FormData): Promise<{ ok: boolean
   let entrada: Array<Partial<LineaDesglose>>
   try { entrada = JSON.parse((formData.get('lineas') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
 
-  const GRUPOS = new Set<LineaDesglose['grupo']>(['INGRESO', 'COSTO_VENTAS', 'GASTO_OPERATIVO'])
+  const GRUPOS = new Set<LineaDesglose['grupo']>(['INGRESO', 'COSTO_VENTAS', 'PERSONAL', 'GASTO_OPERATIVO', 'OTRO'])
   const lineas: LineaDesglose[] = entrada
     .filter(l => l && typeof l.concepto === 'string' && l.concepto.trim() && GRUPOS.has(l.grupo as LineaDesglose['grupo']))
     // Una fila a cero es una fila que el dueño dejó en blanco: en el documento
@@ -885,12 +913,83 @@ export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; e
   // guarda junto al color porque ambos son la identidad PÚBLICA del dossier. El
   // correo de contacto vive en «Lo básico» (guardarBasicos), no aquí.
   const nombrePortada = (formData.get('nombre_portada') as string ?? '').trim() || null
+  // Resumen de portada: la línea de pitch bajo el nombre. Misma identidad pública que
+  // el nombre y el color, así que se guarda aquí. Acotado a 160 caracteres: es UNA
+  // frase, no un párrafo — el deck ya tiene el relato para lo largo.
+  const resumenPortada = ((formData.get('resumen_portada') as string ?? '').trim() || null)?.slice(0, 160) ?? null
 
   const db = createAdminClient()
   const { error } = await db.from('dossiers')
-    .update({ color_principal: color, nombre_portada: nombrePortada, updated_at: new Date().toISOString() })
+    .update({ color_principal: color, nombre_portada: nombrePortada, resumen_portada: resumenPortada, updated_at: new Date().toISOString() })
     .eq('dossier_id', dossierId).eq('client_id', session.client_id)
   if (error) return { ok: false, error: 'No se pudo guardar el color.' }
+
+  revalidatePath('/portal/dossier')
+  await revalidarDeck(db, dossierId, session.client_id)
+  return { ok: true }
+}
+
+/**
+ * Guarda la traducción al inglés generada por IA (Fase 10): `cuerpo_en` por sección,
+ * `resumen_portada_en` y la marca `traduccion_en_at`. La IA solo traduce; el candado
+ * de módulo vive aquí, que es donde se ESCRIBE.
+ */
+export async function guardarTraduccionIngles(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const dossierId = (formData.get('dossier_id') as string)?.trim()
+  if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
+
+  const resumenEn = (formData.get('resumen_en') as string ?? '').trim() || null
+  let secciones: { clave: string; cuerpoEn: string }[] = []
+  try {
+    const raw = JSON.parse((formData.get('secciones') as string) || '[]')
+    if (Array.isArray(raw)) {
+      secciones = raw.filter((s: unknown): s is { clave: string; cuerpoEn: string } =>
+        !!s && typeof (s as Record<string, unknown>).clave === 'string' && typeof (s as Record<string, unknown>).cuerpoEn === 'string')
+    }
+  } catch { return { ok: false, error: 'Datos inválidos.' } }
+
+  // Conceptos del desglose traducidos (slide «El detalle»): {es, en} por concepto.
+  let conceptos: { es: string; en: string }[] = []
+  try {
+    const raw = JSON.parse((formData.get('conceptos') as string) || '[]')
+    if (Array.isArray(raw)) {
+      conceptos = raw.filter((c: unknown): c is { es: string; en: string } =>
+        !!c && typeof (c as Record<string, unknown>).es === 'string' && typeof (c as Record<string, unknown>).en === 'string')
+    }
+  } catch { return { ok: false, error: 'Datos inválidos.' } }
+
+  const db = createAdminClient()
+  // El dossier tiene que ser del cliente: si no, no se toca nada.
+  const { data: dos } = await db.from('dossiers').select('dossier_id')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
+
+  const ahora = new Date().toISOString()
+  const { error } = await db.from('dossiers')
+    .update({ resumen_portada_en: resumenEn, traduccion_en_at: ahora, updated_at: ahora })
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: 'No se pudo guardar la traducción.' }
+
+  // Una actualización por sección (son ≤6): escribe cuerpo_en donde ya hay sección.
+  for (const s of secciones) {
+    await db.from('dossier_secciones')
+      .update({ cuerpo_en: s.cuerpoEn })
+      .eq('dossier_id', dossierId).eq('client_id', session.client_id).eq('clave', s.clave)
+  }
+
+  // Conceptos: una actualización por concepto distinto (todas las líneas con ese
+  // texto comparten traducción). Se escribe por MATCH de `concepto`, no por id: la
+  // RPC del desglose reescribe las filas, pero el texto es la clave estable.
+  for (const c of conceptos) {
+    if (!c.es.trim() || !c.en.trim()) continue
+    await db.from('dossier_lineas')
+      .update({ concepto_en: c.en.trim() })
+      .eq('dossier_id', dossierId).eq('client_id', session.client_id).eq('concepto', c.es)
+  }
 
   revalidatePath('/portal/dossier')
   await revalidarDeck(db, dossierId, session.client_id)
@@ -1007,7 +1106,6 @@ export async function quitarLogoDossier(formData: FormData): Promise<{ ok: boole
 // El token es una CAPABILITY URL: quien lo tiene, ve el deck. No hay login que
 // poner delante (el inversor no es usuario de CLAUX), así que la mitigación real
 // no es esconderlo, es poder REVOCARLO.
-const nuevoToken = () => crypto.randomUUID().replace(/-/g, '')
 
 export async function publicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
   const session = await getPortalSession()
@@ -1206,6 +1304,12 @@ export async function duplicarDossiersEnLote(ids: string[]): Promise<ResultadoLo
 
 export interface DeckPublico {
   nombre: string
+  /** Línea de pitch bajo el nombre en la portada. Vacío → no se pinta. */
+  resumenPortada: string | null
+  /** Traducción al inglés del resumen (mig. 178). Null → sin versión inglesa. */
+  resumenPortadaEn: string | null
+  /** Hay versión inglesa generada: el deck muestra el botón ES/EN. */
+  tieneEn: boolean
   contactoEmail: string | null
   logoUrl: string | null
   color: string
@@ -1214,9 +1318,11 @@ export interface DeckPublico {
   periodoHasta: string | null
   snapshotAt: string | null
   crecimientoPct: number
+  /** Coste derivado de la base sin módulo inventario → nota «compras del período». */
+  costeEsCompras: boolean
   /** RESUMEN oculta el detalle por concepto; el inversor ve lo que el dueño eligió. */
   estadoModo: ModoEstado
-  secciones: SeccionRelato[]
+  secciones: { clave: string; cuerpo: string; cuerpoEn: string | null; generado_ia: boolean }[]
   serie: FilaSerie[]
   lineas: LineaDesglose[]
   tasas: Record<string, TasaUsada>
@@ -1229,23 +1335,27 @@ export interface DeckPublico {
  * `client_id` en la respuesta: la URL no debe filtrar quién es el negocio más
  * allá de lo que el propio dueño pone en la portada.
  */
-export async function obtenerDeckPublico(token: string): Promise<DeckPublico | null> {
-  const limpio = (token ?? '').trim()
-  if (!/^[0-9a-f]{32}$/.test(limpio)) return null   // forma del token: nada de escanear
-
-  const db = createAdminClient()
-  const { data: dos } = await db.from('dossiers').select('*')
-    .eq('token', limpio).eq('estado', 'PUBLICADO').maybeSingle()
-  if (!dos) return null
+/**
+ * Arma el deck (forma `DeckPublico`) a partir de la fila `dossiers` ya leída. Lo
+ * comparten el deck público (por token, solo PUBLICADO) y la vista previa en
+ * borrador (por sesión): así el dueño ve ANTES de publicar exactamente lo mismo
+ * que verá el inversor, sin una segunda ruta que pudiera divergir.
+ */
+async function armarDeck(
+  db: ReturnType<typeof createAdminClient>,
+  dos: Record<string, unknown>,
+): Promise<DeckPublico> {
+  const dossierId = dos.dossier_id as string
+  const clientId  = dos.client_id as string
 
   const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }, { data: cliente }] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
-      .eq('dossier_id', dos.dossier_id).order('mes'),
-    db.from('dossier_lineas').select('grupo, concepto, monto, orden')
-      .eq('dossier_id', dos.dossier_id).order('orden'),
-    db.from('dossier_secciones').select('clave, cuerpo, generado_ia')
-      .eq('dossier_id', dos.dossier_id).eq('visible', true).order('orden'),
-    db.from('clients').select('nombre_empresa').eq('client_id', dos.client_id).maybeSingle(),
+      .eq('dossier_id', dossierId).order('mes'),
+    db.from('dossier_lineas').select('grupo, concepto, concepto_en, monto, orden')
+      .eq('dossier_id', dossierId).order('orden'),
+    db.from('dossier_secciones').select('clave, cuerpo, cuerpo_en, generado_ia')
+      .eq('dossier_id', dossierId).eq('visible', true).order('orden'),
+    db.from('clients').select('nombre_empresa, modulos_activos').eq('client_id', clientId).maybeSingle(),
   ])
 
   // Nombre de la portada: si el dueño lo fijó, manda ese (holding, nombre
@@ -1254,7 +1364,7 @@ export async function obtenerDeckPublico(token: string): Promise<DeckPublico | n
   let nombre = (cliente?.nombre_empresa as string) || 'Mi negocio'
   if (dos.empresa_id) {
     const { data: emp } = await db.from('empresas').select('nombre')
-      .eq('empresa_id', dos.empresa_id).eq('client_id', dos.client_id).maybeSingle()
+      .eq('empresa_id', dos.empresa_id as string).eq('client_id', clientId).maybeSingle()
     if (emp?.nombre) nombre = emp.nombre as string
   }
   const nombrePortada = (dos.nombre_portada as string | null)?.trim()
@@ -1264,21 +1374,32 @@ export async function obtenerDeckPublico(token: string): Promise<DeckPublico | n
   // Si el dueño cambió la moneda sin re-sincronizar, los importes siguen en la
   // moneda vieja; rotular con esa (y no con la nueva) mantiene el deck veraz. Al
   // sincronizar, la serie se reescribe en la nueva y el rótulo la sigue solo.
-  const monedaDeck = (serieRows?.[0]?.moneda as string) || dos.moneda_presentacion
+  const monedaDeck = (serieRows?.[0]?.moneda as string) || (dos.moneda_presentacion as string)
+
+  // Coste derivado de la base sin inventario = compras del período (no COGS): el
+  // deck lo rotula «Coste de ventas» pero lo matiza con una nota honesta.
+  const hayInventario = tieneModulo(cliente?.modulos_activos, 'inventario')
+  const costeEsCompras = !hayInventario && (serieRows ?? []).some((r: Record<string, unknown>) => r.origen === 'BASE')
 
   return {
     nombre,
+    resumenPortada: (dos.resumen_portada as string | null)?.trim() || null,
+    resumenPortadaEn: (dos.resumen_portada_en as string | null)?.trim() || null,
+    tieneEn: !!dos.traduccion_en_at,
     contactoEmail: (dos.contacto_email as string | null)?.trim() || null,
-    logoUrl: dos.logo_url ?? null,
-    color: dos.color_principal || '#00AFAA',
+    logoUrl: (dos.logo_url as string | null) ?? null,
+    color: (dos.color_principal as string) || '#00AFAA',
     moneda: monedaDeck,
-    periodoDesde: dos.periodo_desde ?? null,
-    periodoHasta: dos.periodo_hasta ?? null,
-    snapshotAt: dos.snapshot_at ?? null,
+    periodoDesde: (dos.periodo_desde as string | null) ?? null,
+    periodoHasta: (dos.periodo_hasta as string | null) ?? null,
+    snapshotAt: (dos.snapshot_at as string | null) ?? null,
     crecimientoPct: Number(dos.crecimiento_mensual_pct) || 0,
+    costeEsCompras,
     estadoModo: esModoEstado(dos.estado_modo) ? dos.estado_modo : 'DESGLOSADO',
     secciones: (seccionRows ?? []).map((r: Record<string, unknown>) => ({
-      clave: r.clave as string, cuerpo: (r.cuerpo as string) ?? '', generado_ia: !!r.generado_ia,
+      clave: r.clave as string, cuerpo: (r.cuerpo as string) ?? '',
+      cuerpoEn: (r.cuerpo_en as string | null)?.trim() || null,
+      generado_ia: !!r.generado_ia,
     })),
     serie: (serieRows ?? []).map((r: Record<string, unknown>) => ({
       mes: r.mes as string,
@@ -1286,11 +1407,42 @@ export async function obtenerDeckPublico(token: string): Promise<DeckPublico | n
       moneda: r.moneda as string, origen: (r.origen === 'BASE' ? 'BASE' : 'MANUAL'),
     })),
     lineas: (lineaRows ?? []).map((r: Record<string, unknown>) => ({
-      grupo: r.grupo as LineaDesglose['grupo'], concepto: r.concepto as string, monto: Number(r.monto), orden: Number(r.orden),
+      grupo: r.grupo as LineaDesglose['grupo'], concepto: r.concepto as string,
+      concepto_en: (r.concepto_en as string | null)?.trim() || null,
+      monto: Number(r.monto), orden: Number(r.orden),
     })),
     tasas: (dos.tasas_usadas && typeof dos.tasas_usadas === 'object') ? dos.tasas_usadas as Record<string, TasaUsada> : {},
     faltantes: Array.isArray(dos.monedas_faltantes) ? dos.monedas_faltantes : [],
   }
+}
+
+export async function obtenerDeckPublico(token: string): Promise<DeckPublico | null> {
+  const limpio = (token ?? '').trim()
+  if (!esTokenValido(limpio)) return null   // forma del token: nada de escanear
+
+  const db = createAdminClient()
+  const { data: dos } = await db.from('dossiers').select('*')
+    .eq('token', limpio).eq('estado', 'PUBLICADO').maybeSingle()
+  if (!dos) return null
+
+  return armarDeck(db, dos)
+}
+
+/**
+ * Deck en BORRADOR para la vista previa del dueño: mismo armado que el público,
+ * pero gated por SESIÓN (no por token) y sin exigir PUBLICADO. Así se puede ver el
+ * deck ensamblado antes de publicar a ciegas. Sin snapshot no hay nada que enseñar.
+ */
+export async function obtenerDeckBorrador(dossierId: string): Promise<DeckPublico | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  const db = createAdminClient()
+  const { data: dos } = await db.from('dossiers').select('*')
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!dos || !dos.snapshot_at) return null
+
+  return armarDeck(db, dos)
 }
 
 // Previsualiza "actualizar desde mis datos" SIN escribir nada (requiere base).
@@ -1308,8 +1460,10 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
   if (!dos) return { error: 'Dossier no encontrado.' }
 
   const fallback = periodo12()
-  const [{ data: serieRows }, empresaIds, cats] = await Promise.all([
+  const [{ data: serieRows }, { count: lineasActuales }, empresaIds, cats] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
+      .eq('dossier_id', dossierId).eq('client_id', session.client_id),
+    db.from('dossier_lineas').select('grupo', { count: 'exact', head: true })
       .eq('dossier_id', dossierId).eq('client_id', session.client_id),
     empresaIdsDe(dos.empresa_id ?? null),
     categoriasPL(db, session.client_id),
@@ -1328,7 +1482,7 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
   )
 
   const plan = fusionarSerie(actual, snap.serie)
-  return { ...plan, monedasFaltantes: snap.monedasFaltantes }
+  return { ...plan, monedasFaltantes: snap.monedasFaltantes, desgloseSeReemplaza: (lineasActuales ?? 0) > 0 }
 }
 
 // Aplica la actualización: resuelve la fusión con las decisiones del dueño y

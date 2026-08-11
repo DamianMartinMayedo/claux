@@ -14,7 +14,7 @@ import {
 } from './documento'
 import { crearCursor } from './reporte'
 import {
-  estadoDeResultados, notaConversion, congeladoA,
+  estadoDeResultados, notaConversion, congeladoA, NOTA_COSTE_COMPRAS,
   SUFIJO_MODO_ESTADO, type CategoriaMonto, type ModoEstado,
 } from '@/lib/dossier/estado'
 import { etiquetaMes, type FilaSerie } from '@/lib/dossier/snapshot'
@@ -33,6 +33,8 @@ export interface EstadoResultadosPdf {
   lineas: LineaDesglose[]
   /** RESUMEN imprime solo cifras y márgenes; DESGLOSADO añade el detalle. */
   modo: ModoEstado
+  /** Coste derivado de la base sin inventario → imprime la nota «compras del período». */
+  costeEsCompras?: boolean
   tasas: Record<string, TasaPdf>
   faltantes: string[]
 }
@@ -86,7 +88,18 @@ export function construirEstadoResultados(doc: JsPdfDoc, d: EstadoResultadosPdf)
   grupo('Coste de ventas', er.costoVentas, er.costoVentasPct, er.costoPorCategoria)
   cur.filaTotal(`Margen bruto (${fmtPct(er.margenBrutoPct)})`, fmt(er.margenBruto))
 
-  grupo('Gastos operativos', er.gastosOperativos, er.gastosOperativosPct, er.gastosPorCategoria)
+  // En DESGLOSADO el gasto operativo se parte por rol y, si hay «Otros» debajo,
+  // aparece el resultado operativo (EBIT). En RESUMEN, una sola línea con el total.
+  if (detallar) {
+    if (er.personal > 0.005) grupo('Gastos de personal', er.personal, er.personalPct, er.personalPorCategoria)
+    grupo('Gastos operativos', er.operativos, er.operativosPct, er.gastosPorCategoria)
+    if (er.resultadoOperativo != null) {
+      cur.filaTotal(`Resultado operativo (${fmtPct(er.resultadoOperativoPct!)})`, fmt(er.resultadoOperativo))
+    }
+    if (er.otros > 0.005) grupo('Otros (impuestos y financieros)', er.otros, er.otrosPct, er.otrosPorCategoria)
+  } else {
+    grupo('Gastos operativos', er.gastosOperativos, er.gastosOperativosPct, er.gastosPorCategoria)
+  }
   cur.filaTotal(`Resultado neto (${fmtPct(er.margenNetoPct)})`, fmt(er.resultadoNeto))
 
   // ── Evolución mensual ──
@@ -121,6 +134,12 @@ export function construirEstadoResultados(doc: JsPdfDoc, d: EstadoResultadosPdf)
     for (const e of er.evolucion) {
       filaMes(etiquetaMes(e.mes), [fmt(e.ingresos), fmt(e.costoVentas), fmt(e.gastosOperativos), fmt(e.neto)])
     }
+  }
+
+  // ── Nota honesta del coste sin inventario (compras del período, no COGS) ──
+  if (d.costeEsCompras) {
+    cur.salto(4)
+    cur.nota(NOTA_COSTE_COMPRAS)
   }
 
   // ── Nota de conversión: la tasa aplicada y su fecha, impresas ──

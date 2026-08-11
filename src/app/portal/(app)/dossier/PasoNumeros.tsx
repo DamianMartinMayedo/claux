@@ -290,6 +290,9 @@ export default function PasoNumeros({
                       </ul>
                     </div>
                   )}
+                  {preview.desgloseSeReemplaza && (
+                    <p className="dos-preview-aviso dos-preview-aviso-warn"><AlertTriangle size={14} strokeWidth={2} /> Tu desglose por concepto se reemplazará por el que CLAUX calcule de tu Contabilidad. Si lo habías ajustado a mano, revísalo después en «El desglose».</p>
+                  )}
                   {preview.monedasFaltantes.length > 0 && (
                     <p className="dos-preview-aviso"><AlertTriangle size={14} strokeWidth={2} /> No se incluyen importes en {preview.monedasFaltantes.join(', ')} (sin tasa hacia {dossier.moneda_presentacion}).</p>
                   )}

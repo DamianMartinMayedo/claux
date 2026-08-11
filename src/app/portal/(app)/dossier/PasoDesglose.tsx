@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { Loader2, Save, Plus, Trash2, Wand2 } from 'lucide-react'
-import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
+import { toastError, toastSuccess, toastWarning, toastLoading } from '@/app/contexts/ToastContext'
 import { guardarDesglose, type DossierBasico } from '@/app/actions/portal/dossier'
 import type { LineaDesglose } from '@/lib/dossier/base'
 import type { FilaSerie } from '@/lib/dossier/snapshot'
@@ -33,11 +33,20 @@ const nf = new Intl.NumberFormat('es', { maximumFractionDigits: 2 })
 const fmt = (n: number) => nf.format(n)
 const num = (s: string) => Number(s) || 0
 
-interface Fila { id: string; concepto: string; monto: string }
+interface Fila { id: string; concepto: string; monto: string; grupo: LineaDesglose['grupo'] }
 
-const nuevaFila = (concepto = '', monto = ''): Fila => ({
-  id: `L-${Math.random().toString(36).slice(2, 9)}`, concepto, monto,
+// El grupo se conserva POR FILA: la sección de entrada es una de tres (Ingresos,
+// Coste, Gastos operativos), pero una línea operativa traída de la base puede ser
+// Personal u Otros, y reguardarla como GASTO_OPERATIVO perdería esa clasificación
+// (que es la que enseña el waterfall detallado). Nueva línea manual → GASTO_OPERATIVO.
+const nuevaFila = (concepto = '', monto = '', grupo: LineaDesglose['grupo'] = 'GASTO_OPERATIVO'): Fila => ({
+  id: `L-${Math.random().toString(36).slice(2, 9)}`, concepto, monto, grupo,
 })
+
+// Las tres secciones de entrada = los tres cubos de la serie. Personal y Otros
+// caen en «Gastos operativos» pero recuerdan su grupo fino.
+const seccionDe = (g: LineaDesglose['grupo']): GrupoPL =>
+  g === 'INGRESO' ? 'INGRESO' : g === 'COSTO_VENTAS' ? 'COSTO_VENTAS' : 'GASTO_OPERATIVO'
 
 export default function PasoDesglose({
   dossier, serie, lineas, conceptos, tieneBase, simbolo, onGuardado,
@@ -65,10 +74,10 @@ export default function PasoDesglose({
   const [filas, setFilas] = useState<Record<GrupoPL, Fila[]>>(() => {
     const out = {} as Record<GrupoPL, Fila[]>
     for (const g of GRUPOS_PL) {
-      const guardadas = lineas.filter(l => l.grupo === g).sort((a, b) => a.orden - b.orden)
+      const guardadas = lineas.filter(l => seccionDe(l.grupo) === g).sort((a, b) => a.orden - b.orden)
       out[g] = guardadas.length
-        ? guardadas.map(l => nuevaFila(l.concepto, String(l.monto)))
-        : conceptos[g].map(c => nuevaFila(c, ''))
+        ? guardadas.map(l => nuevaFila(l.concepto, String(l.monto), l.grupo))
+        : conceptos[g].map(c => nuevaFila(c, '', g))
     }
     return out
   })
@@ -79,7 +88,7 @@ export default function PasoDesglose({
     setFilas(prev => ({ ...prev, [g]: prev[g].map(f => (f.id === id ? { ...f, [campo]: valor } : f)) }))
 
   const anadir = (g: GrupoPL) =>
-    setFilas(prev => ({ ...prev, [g]: [...prev[g], nuevaFila()] }))
+    setFilas(prev => ({ ...prev, [g]: [...prev[g], nuevaFila('', '', g)] }))
 
   const quitar = (g: GrupoPL, id: string) =>
     setFilas(prev => ({ ...prev, [g]: prev[g].filter(f => f.id !== id) }))
@@ -95,9 +104,18 @@ export default function PasoDesglose({
       if (existente) {
         return { ...prev, [g]: prev[g].map(f => (f.id === existente.id ? { ...f, monto: String(Math.round((num(f.monto) + resto) * 100) / 100) } : f)) }
       }
-      return { ...prev, [g]: [...prev[g], nuevaFila('Otros', String(resto))] }
+      return { ...prev, [g]: [...prev[g], nuevaFila('Otros', String(resto), g)] }
     })
   }
+
+  // Un grupo con importes escritos que NO suman su total (P3): el documento
+  // enseñaría conceptos que no cuadran. No bloquea —«si es a mano, es lo que
+  // tiene»—, pero se avisa al guardar. Un grupo en blanco (suma 0) no cuenta: es
+  // «sin desglose por concepto», no un descuadre.
+  const descuadra = GRUPOS_PL.some(g => {
+    const s = sumaDe(g)
+    return s > 0.005 && Math.abs(totales[g] - s) > 0.005
+  })
 
   function guardar() {
     const ld = toastLoading('Guardando…')
@@ -106,7 +124,7 @@ export default function PasoDesglose({
       for (const g of GRUPOS_PL) {
         for (const f of filas[g]) {
           if (!f.concepto.trim()) continue
-          payload.push({ grupo: g, concepto: f.concepto.trim(), monto: num(f.monto) })
+          payload.push({ grupo: f.grupo, concepto: f.concepto.trim(), monto: num(f.monto) })
         }
       }
       const fd = new FormData()
@@ -114,7 +132,11 @@ export default function PasoDesglose({
       fd.set('lineas', JSON.stringify(payload))
       const res = await guardarDesglose(fd)
       await ld.dismiss()
-      if (res.ok) { toastSuccess('Desglose guardado'); onGuardado?.() }
+      if (res.ok) {
+        if (descuadra) toastWarning('Guardado. Ojo: algún grupo no cuadra con tus totales; en el documento saldrían conceptos que no suman.')
+        else toastSuccess('Desglose guardado')
+        onGuardado?.()
+      }
       else toastError(res.error || 'No se pudo guardar')
     })
   }

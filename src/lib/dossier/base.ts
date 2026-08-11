@@ -26,11 +26,20 @@ import { construirConversor, type DetalleTasa } from '@/lib/tasas'
 import { indexarCategorias, type CategoriaPL } from '@/lib/pl/estado'
 import type { FilaSerie } from './snapshot'
 
+// Grupos del desglose = los cuatro `rol_pl` (más INGRESO). La SERIE mensual sigue
+// con dos cubos de gasto (coste vs. operativos); el DESGLOSE parte el operativo en
+// Personal / Operativos / Otros para el waterfall del estado de resultados. Los
+// nombres 'COSTO_VENTAS'/'GASTO_OPERATIVO' se conservan (ya hay filas guardadas así).
+export type GrupoLinea = 'INGRESO' | 'COSTO_VENTAS' | 'PERSONAL' | 'GASTO_OPERATIVO' | 'OTRO'
+
 export interface LineaDesglose {
-  grupo: 'INGRESO' | 'COSTO_VENTAS' | 'GASTO_OPERATIVO'
+  grupo: GrupoLinea
   concepto: string
   monto: number
   orden: number
+  /** Concepto traducido al inglés (mig. 179), para la slide «El detalle» del deck
+   *  bilingüe. Opcional: solo lo rellena la traducción con IA; NULL → cae al ES. */
+  concepto_en?: string | null
 }
 
 export interface SnapshotBase {
@@ -85,10 +94,12 @@ export async function construirSnapshotDesdeBase(
 
   const monedasFaltantes = new Set<string>()
   const monedasVistas = new Set<string>()
-  // Desglose de período por (grupo, concepto).
+  // Desglose de período por (grupo, concepto). El gasto no-coste se parte por rol.
   const ingresoCat = new Map<string, number>()      // concepto → monto
   const costoCat = new Map<string, number>()
+  const personalCat = new Map<string, number>()
   const operativoCat = new Map<string, number>()
+  const otroCat = new Map<string, number>()
 
   // Convierte a la moneda de presentación; null → registra la moneda como faltante.
   const conv = (monto: number, moneda: string): number | null => {
@@ -140,12 +151,17 @@ export async function construirSnapshotDesdeBase(
     const raiz = fila ? (idx.raizDe.get(fila.categoria_id) ?? fila) : null
     const cat  = raiz?.nombre ?? (g.categoria?.trim() || 'Sin categoría')
 
-    if (raiz?.rol_pl === 'COSTE_VENTAS') {
+    const rol = raiz?.rol_pl
+    if (rol === 'COSTE_VENTAS') {
       mes.costo_ventas += v
       costoCat.set(cat, (costoCat.get(cat) ?? 0) + v)
     } else {
+      // La SERIE agrupa todo lo no-coste en gastos_operativos (no cambia); el
+      // DESGLOSE lo parte por rol para poder enseñar Personal, Operativos y Otros
+      // por separado y calcular el resultado operativo (EBIT).
       mes.gastos_operativos += v
-      operativoCat.set(cat, (operativoCat.get(cat) ?? 0) + v)
+      const destino = rol === 'PERSONAL' ? personalCat : rol === 'OTRO' ? otroCat : operativoCat
+      destino.set(cat, (destino.get(cat) ?? 0) + v)
     }
   }
 
@@ -171,7 +187,9 @@ export async function construirSnapshotDesdeBase(
   }
   volcar('INGRESO', ingresoCat)
   volcar('COSTO_VENTAS', costoCat)
+  volcar('PERSONAL', personalCat)
   volcar('GASTO_OPERATIVO', operativoCat)
+  volcar('OTRO', otroCat)
 
   // ── Tasas usadas (para imprimir "1 <presentación> = X <foránea>") ──
   const tasasUsadas: Record<string, DetalleTasa> = {}

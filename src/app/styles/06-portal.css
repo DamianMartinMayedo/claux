@@ -3535,6 +3535,30 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 /* Estado de resultados (pestaña; el PDF se dibuja aparte en lib/pdf/dossier.ts) */
 .dos-er-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+/* Acciones a la derecha de la cabecera del relato (Generar todo + contador). */
+.dos-relato-cabecera-acciones { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+/* Acuse de lectura: «Visto 3 veces · última vez…» bajo las acciones del enlace. */
+.dos-aperturas { margin: var(--space-4) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+/* Acciones de IA del dossier (IA1 revisión + versión inglesa), juntas y al pie de
+   la tarjeta. La fila de botones envuelve en móvil; observaciones y avisos debajo. */
+.dos-ia {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+.dos-ia-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dos-revision-lista {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  margin: 0; padding: var(--space-3) var(--space-4);
+  list-style: none;
+  border: 1px solid var(--color-divider); border-radius: var(--radius-lg);
+  background: var(--color-surface-offset);
+  font-size: var(--text-sm); line-height: 1.5;
+}
+.dos-revision-lista li { position: relative; padding-left: var(--space-4); }
+.dos-revision-lista li::before {
+  content: "•"; position: absolute; left: 0; color: var(--color-primary); font-weight: 700;
+}
 .dos-er-bloques { display: flex; flex-direction: column; gap: var(--space-5); margin-top: var(--space-5); }
 .dos-er-bloque { display: flex; flex-direction: column; }
 .dos-er-linea {
@@ -3636,6 +3660,16 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 .dos-fechas { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-3); }
 .dos-fechas-sep { color: var(--color-text-faint); }
+/* Aviso suave al recortar el período: no bloquea, avisa de que se perderán meses. */
+.dos-aviso-recorte {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
 
 /* Crecimiento: palanca única + gráfico en vivo */
 .dos-pct-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }

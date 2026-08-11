@@ -619,7 +619,14 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   const [liquidar,      setLiquidar]       = useState<GastoCobroConSaldo | null>(null)
   const [confirmDel,    setConfirmDel]     = useState<GastoCobroConSaldo | null>(null)
 
-  const [tab,        setTab]        = useState<'gastos' | 'cobros' | 'categorias'>('gastos')
+  const params = useSearchParams()
+  // La pestaña inicial se puede fijar por URL (?tab=categorias): así un CTA de otro
+  // módulo —p. ej. el dossier sin categorías clasificables— aterriza directo donde
+  // hay que actuar, en vez de dejar al dueño buscando la pestaña.
+  const tabParam = params.get('tab')
+  const [tab, setTab] = useState<'gastos' | 'cobros' | 'categorias'>(
+    tabParam === 'categorias' || tabParam === 'cobros' ? tabParam : 'gastos',
+  )
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<CategoriaGasto | null>(null)
   const [confirmCat, setConfirmCat] = useState<CategoriaGasto | null>(null)
@@ -631,7 +638,6 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   // conexión, que aquí es el caso normal— ya no tira lo que el dueño acababa de poner. Y de
   // esta única declaración salen la barra, lo que viaja a la descarga y el texto del
   // desplegable, que antes se escribían tres veces y por eso divergían.
-  const params = useSearchParams()
   const filtroEstado  = params.get('estado')  ?? ''
   const filtroEmpresa = params.get('empresa') ?? ''
   const filtroCat     = params.get('cat')     ?? ''

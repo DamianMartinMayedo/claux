@@ -36,6 +36,36 @@
    botón se lee sin discutirle el protagonismo. */
 .btn-aviso     { background: var(--color-surface); color: var(--color-text); border-color: var(--color-warning); }
 .btn-aviso:hover:not(:disabled)     { background: var(--color-surface-2); border-color: var(--color-warning); color: var(--color-text); }
+/* Botón de acción-IA: identifica lo que gasta IA (solo activo con el addon). Un
+   RELLENO pleno como .ia-fab/.ia-banner sería lo más obvio, pero con varios botones
+   en pantalla (el relato tiene uno por sección) satura, y dos pegados hacían la
+   junta fea. Punto medio: lavado suave del degradado + borde en degradado + la
+   estrellita con el trazo en degradado (componente IaSparkle) + texto en teal. El
+   spinner Loader2 hereda currentColor (teal); la estrellita ignora ese color porque
+   pinta su trazo con url(#gradiente). El lavado usa color-mix con la superficie, así
+   se adapta a claro/oscuro sin tokens nuevos. */
+.btn-ia {
+  position: relative; color: var(--color-primary); border-color: transparent;
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--color-primary) 10%, var(--color-surface)) 0%,
+      color-mix(in srgb, var(--color-amber) 10%, var(--color-surface)) 100%);
+}
+.btn-ia::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  padding: 1.5px; background: var(--gradient-brand); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.btn-ia svg { color: var(--color-primary); }
+.btn-ia:hover:not(:disabled) {
+  transform: translateY(-1px); box-shadow: var(--shadow-sm); color: var(--color-primary);
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--color-primary) 18%, var(--color-surface)) 0%,
+      color-mix(in srgb, var(--color-amber) 18%, var(--color-surface)) 100%);
+}
+.btn-ia:active:not(:disabled)       { transform: translateY(0); box-shadow: none; }
 .btn-sm   { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
 .btn-xs   { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); min-height: 26px; }
 .btn-lg   { padding: var(--space-4) var(--space-8); font-size: var(--text-base); }
@@ -542,6 +572,9 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    una columna de dos palabras. */
 .alert-cta       { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 .alert-cta-texto { flex: 1 1 20rem; min-width: 0; }
+/* Coletilla tranquilizadora bajo el texto del gancho (p. ej. «te lo dejamos
+   configurado»): más pequeña y suave, para no competir con el mensaje principal. */
+.alert-cta-nota  { display: block; margin-top: var(--space-1); font-size: var(--text-xs); opacity: 0.85; }
 /* Varias acciones en el mismo aviso (una por período, p. ej.): envuelven entre
    ellas en vez de estirar el aviso a lo ancho. Con una sola acción no hace falta. */
 .alert-cta-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import type { DossierData } from '@/app/actions/portal/dossier'
 import Tabs from '@/components/Tabs'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import DossierWizard from './DossierWizard'
 import DossierSecciones from './DossierSecciones'
 import PestanaEstado from './PestanaEstado'
@@ -22,6 +23,28 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
   const router = useRouter()
   const refrescar = () => router.refresh()
   const [tab, setTab] = useState<Tab>('dossier')
+  // Estado sucio de «Mi dossier» (lo teclea DossierSecciones). Vive aquí para poder
+  // guardar TAMBIÉN el salto de pestaña, no solo el de sección.
+  const [dirty, setDirty] = useState(false)
+  const [tabPend, setTabPend] = useState<Tab | null>(null)
+
+  function intentarTab(next: string) {
+    const t = next as Tab
+    if (t === tab) return
+    // Solo «Mi dossier» tiene edición a mano sin guardar; las otras dos se guardan
+    // solas o confirman aparte.
+    if (dirty && tab === 'dossier') { setTabPend(t); return }
+    setTab(t)
+  }
+
+  // Recargar la página (habitual en Cuba con mala conexión) también se lleva lo
+  // tecleado: el navegador pregunta antes de descartar.
+  useEffect(() => {
+    if (!dirty) return
+    const aviso = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', aviso)
+    return () => window.removeEventListener('beforeunload', aviso)
+  }, [dirty])
 
   // Wizard mientras el dossier no produce todavía ningún documento (sin números
   // no hay nada que enseñar). Se decide UNA vez al montar, a propósito: si fuera
@@ -68,7 +91,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
       <Tabs
         ariaLabel="Secciones del dossier"
         active={tab}
-        onChange={setTab}
+        onChange={intentarTab}
         tabs={[
           { id: 'dossier', label: 'Mi dossier' },
           { id: 'presentacion', label: 'Presentación' },
@@ -79,11 +102,19 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
       {/* «Mi dossier»: los MISMOS componentes del wizard, con navegación libre
           entre secciones (no un scroll largo). Editar sin pasar por el wizard. */}
       {tab === 'dossier' && (
-        <DossierSecciones data={data} dossier={dossier} simbolo={simbolo} onRefrescar={refrescar} />
+        <DossierSecciones
+          data={data} dossier={dossier} simbolo={simbolo} onRefrescar={refrescar}
+          dirty={dirty} setDirty={setDirty}
+        />
       )}
 
       {tab === 'presentacion' && (
-        <PestanaPresentacion dossier={dossier} tieneBase={data.tieneBase} onCambio={refrescar} />
+        <PestanaPresentacion
+          dossier={dossier} tieneBase={data.tieneBase}
+          aperturas={data.aperturas} ultimaApertura={data.ultimaApertura}
+          tieneEn={data.tieneEn} enDesactualizado={data.enDesactualizado}
+          onCambio={refrescar}
+        />
       )}
 
       {tab === 'estado' && (
@@ -94,7 +125,20 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
           empresaNombre={empresaNombre}
           simbolo={simbolo}
           tieneBase={data.tieneBase}
+          hayInventario={data.hayInventario}
           onRefrescar={refrescar}
+        />
+      )}
+
+      {tabPend && (
+        <ConfirmDialog
+          title="Tienes cambios sin guardar"
+          body="Si cambias de pestaña ahora, se perderá lo que escribiste en «Mi dossier» y no has guardado."
+          confirmLabel="Descartar y salir"
+          cancelLabel="Seguir aquí"
+          danger
+          onConfirm={() => { setTab(tabPend); setDirty(false); setTabPend(null) }}
+          onCancel={() => setTabPend(null)}
         />
       )}
     </div>

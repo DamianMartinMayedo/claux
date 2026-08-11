@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { Download, Loader2, BarChart3, Eye } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
-  estadoDeResultados, notaConversion, congeladoA,
+  estadoDeResultados, notaConversion, congeladoA, NOTA_COSTE_COMPRAS,
   MODOS_ESTADO, LABEL_MODO_ESTADO, AYUDA_MODO_ESTADO, SUFIJO_MODO_ESTADO,
   type CategoriaMonto, type ModoEstado,
 } from '@/lib/dossier/estado'
@@ -39,7 +39,7 @@ function slug(s: string): string {
 }
 
 export default function PestanaEstado({
-  dossier, serie, lineas, empresaNombre, simbolo, tieneBase, onRefrescar,
+  dossier, serie, lineas, empresaNombre, simbolo, tieneBase, hayInventario, onRefrescar,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
@@ -47,9 +47,13 @@ export default function PestanaEstado({
   empresaNombre: string
   simbolo: string
   tieneBase: boolean
+  hayInventario: boolean
   onRefrescar?: () => void
 }) {
   const er = useMemo(() => estadoDeResultados(serie, lineas), [serie, lineas])
+  // Nota honesta: el coste viene de la base y el negocio no tiene inventario, así
+  // que ese renglón son las compras del período, no el coste de lo vendido.
+  const costeEsCompras = !hayInventario && serie.some(f => f.origen === 'BASE')
   const nota = useMemo(
     () => notaConversion(dossier.moneda_presentacion, dossier.tasas_usadas, dossier.monedas_faltantes),
     [dossier.moneda_presentacion, dossier.tasas_usadas, dossier.monedas_faltantes],
@@ -94,6 +98,7 @@ export default function PestanaEstado({
         periodoHasta: dossier.periodo_hasta,
         snapshotAt:   dossier.snapshot_at,
         serie, lineas, modo,
+        costeEsCompras,
         tasas:        dossier.tasas_usadas,
         faltantes:    dossier.monedas_faltantes,
       }, archivo)
@@ -228,7 +233,28 @@ export default function PestanaEstado({
             <strong className="dos-er-monto">{fmt(er.margenBruto)}</strong>
           </div>
 
-          <Grupo titulo="Gastos operativos" total={er.gastosOperativos} pct={er.gastosOperativosPct} cats={er.gastosPorCategoria} />
+          {/* En DESGLOSADO el gasto operativo se parte por rol y aparece el resultado
+              operativo (EBIT) cuando hay «Otros» debajo. En RESUMEN, una sola línea:
+              el total de la serie, sin abrir. */}
+          {detallar ? (
+            <>
+              {er.personal > 0.005 && (
+                <Grupo titulo="Gastos de personal" total={er.personal} pct={er.personalPct} cats={er.personalPorCategoria} />
+              )}
+              <Grupo titulo="Gastos operativos" total={er.operativos} pct={er.operativosPct} cats={er.gastosPorCategoria} />
+              {er.resultadoOperativo != null && (
+                <div className="dos-er-total">
+                  <span>Resultado operativo <span className="dos-er-pct">({fmtPct(er.resultadoOperativoPct!)})</span></span>
+                  <strong className="dos-er-monto">{fmt(er.resultadoOperativo)}</strong>
+                </div>
+              )}
+              {er.otros > 0.005 && (
+                <Grupo titulo="Otros (impuestos y financieros)" total={er.otros} pct={er.otrosPct} cats={er.otrosPorCategoria} />
+              )}
+            </>
+          ) : (
+            <Grupo titulo="Gastos operativos" total={er.gastosOperativos} pct={er.gastosOperativosPct} cats={er.gastosPorCategoria} />
+          )}
 
           <div className="dos-er-total dos-er-total-final">
             <span>Resultado neto <span className="dos-er-pct">({fmtPct(er.margenNetoPct)})</span></span>
@@ -266,6 +292,7 @@ export default function PestanaEstado({
           </>
         )}
 
+        {costeEsCompras && <p className="dos-er-nota">{NOTA_COSTE_COMPRAS}</p>}
         {nota && <p className="dos-er-nota">{nota}</p>}
       </div>
     </section>

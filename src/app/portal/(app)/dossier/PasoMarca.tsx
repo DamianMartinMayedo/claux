@@ -4,11 +4,14 @@ import { useMemo, useState, useTransition } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2, Save, Copy, Check } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
+import { useIa } from '@/components/portal/ia/IaContext'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
 import ImageUpload from '@/components/ImageUpload'
 import {
   guardarMarca, subirLogoDossier, quitarLogoDossier, usarLogoEmpresa,
   type DossierBasico,
 } from '@/app/actions/portal/dossier'
+import { redactarResumenPortada } from '@/app/actions/portal/ia'
 import { derivarPaleta, normalizarHex, contraste, paletaVars } from '@/lib/dossier/paleta'
 
 // El color y el logo son del DOSSIER, no del negocio: `empresas.color` es la
@@ -38,11 +41,14 @@ export default function PasoMarca({
   onGuardado?: () => void
   onCambio?: () => void
 }) {
+  const { tieneIa } = useIa()
   const [hex, setHex] = useState(dossier.color_principal || '#00AFAA')
   const [nombrePortada, setNombrePortada] = useState(dossier.nombre_portada ?? '')
+  const [resumenPortada, setResumenPortada] = useState(dossier.resumen_portada ?? '')
   const [logoUrl, setLogoUrl] = useState(dossier.logo_url)
   const [pending, startTransition] = useTransition()
   const [subiendo, startSubida] = useTransition()
+  const [generando, startGenerar] = useTransition()
 
   const normalizado = normalizarHex(hex)
   const paleta = useMemo(() => derivarPaleta(normalizado), [normalizado])
@@ -57,10 +63,25 @@ export default function PasoMarca({
       fd.set('dossier_id', dossier.dossier_id)
       fd.set('color_principal', normalizado)
       fd.set('nombre_portada', nombrePortada.trim())
+      fd.set('resumen_portada', resumenPortada.trim())
       const res = await guardarMarca(fd)
       await ld.dismiss()
       if (res.ok) { toastSuccess('Marca guardada'); onGuardado?.() }
       else toastError(res.error || 'No se pudo guardar')
+    })
+  }
+
+  // IA3: redacta la línea de portada. No pisa a ciegas —reemplaza el campo, que el
+  // dueño ve y ajusta antes de guardar—; la IA no calcula cifras (regla dura).
+  function generarResumen() {
+    if (generando) return
+    const semilla = resumenPortada.trim()
+    const ld = toastLoading('Generando…')
+    startGenerar(async () => {
+      const res = await redactarResumenPortada(dossier.dossier_id, semilla || undefined)
+      await ld.dismiss()
+      if (res.ok) { setResumenPortada(res.linea); toastSuccess(semilla ? 'Lo mejoré a partir de lo tuyo: revísalo' : 'Resumen listo: revísalo y ajústalo') }
+      else toastError(res.error || 'No se pudo generar el resumen')
     })
   }
 
@@ -120,6 +141,27 @@ export default function PasoMarca({
           <p className="dos-section-hint">
             Es el nombre que verá el inversor en la portada. Si lo dejas vacío, usamos <strong>{nombrePorDefecto}</strong>.
           </p>
+        </div>
+
+        <div className="dos-campo">
+          <div className="dos-relato-head">
+            <div className="dos-relato-titulos">
+              <label className="dos-label" htmlFor="dos-resumen-portada">Una línea que resuma tu negocio</label>
+            </div>
+            {tieneIa && (
+              <button className="btn btn-ia btn-sm" onClick={generarResumen} disabled={generando}>
+                {generando ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
+                {generando ? 'Pensando…' : 'Generar'}
+              </button>
+            )}
+          </div>
+          <textarea
+            id="dos-resumen-portada" className="input input-textarea" value={resumenPortada}
+            onChange={e => setResumenPortada(e.target.value)} maxLength={160} rows={2}
+            placeholder="Ej.: Comida cubana de barrio con reparto propio en toda La Habana"
+            spellCheck
+          />
+          <p className="dos-section-hint">Aparece bajo el nombre en la portada. Opcional; si la dejas vacía, no se muestra.</p>
         </div>
 
         <div className="dos-campo">

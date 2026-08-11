@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, Save, Users, Sparkles, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Save, Users, Plus, Trash2 } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useIa } from '@/components/portal/ia/IaContext'
-import { redactarSeccionDossier } from '@/app/actions/portal/ia'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
+import { redactarSeccionDossier, redactarRelatoCompleto } from '@/app/actions/portal/ia'
 import {
   guardarSecciones, sugerirEquipoDesdeRrhh,
   type DossierBasico, type SeccionRelato,
@@ -72,6 +73,7 @@ export default function PasoRelato({
   const [pending, startTransition] = useTransition()
   const [cargandoEquipo, startEquipo] = useTransition()
   const [redactando, setRedactando] = useState<string | null>(null)
+  const [redactandoTodo, startTodo] = useTransition()
 
   // El cuerpo real de cada sección: el de Equipo sale de las filas, no de `texto`.
   const cuerpoDe = (clave: string) => (clave === 'equipo' ? equipoCuerpo : (texto[clave] ?? ''))
@@ -98,22 +100,48 @@ export default function PasoRelato({
     })
   }
 
-  // El borrador NO pisa lo escrito: si ya hay texto, se añade debajo. Lo que el
-  // dueño escribió con su cabeza no lo borra un modelo.
+  // Lo que el dueño ya escribió en el campo NO se ignora: viaja como semilla e
+  // indicación, y la IA lo desarrolla. Por eso, si había texto, se REEMPLAZA con la
+  // versión desarrollada (ya lo incorpora); si estaba vacío, sencillamente lo rellena.
+  // El dueño revisa antes de guardar, así que nada se pierde a ciegas.
   async function redactar(clave: string) {
     if (redactando) return
     setRedactando(clave)
+    const semilla = (texto[clave] ?? '').trim()
     const ld = toastLoading('Generando…')
     try {
-      const res = await redactarSeccionDossier(clave)
+      const res = await redactarSeccionDossier(clave, semilla || undefined)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error); return }
-      setTexto(prev => ({ ...prev, [clave]: prev[clave]?.trim() ? `${prev[clave].trim()}\n\n${res.cuerpo}` : res.cuerpo }))
+      setTexto(prev => ({ ...prev, [clave]: res.cuerpo }))
       setDeIa(prev => new Set(prev).add(clave))
-      toastSuccess('Borrador listo: revísalo y ajústalo a tu manera')
+      toastSuccess(semilla ? 'Lo desarrollé a partir de lo tuyo: revísalo y ajústalo' : 'Borrador listo: revísalo y ajústalo a tu manera')
     } finally {
       setRedactando(null)
     }
+  }
+
+  // IA2: primer borrador de TODO el relato. Solo rellena las secciones que sigan
+  // vacías EN PANTALLA (nunca pisa lo que el dueño esté escribiendo); «equipo» se
+  // deja aparte (tiene su propio «Traer mi plantilla»).
+  const hayVacias = tieneIa && SECCIONES_RELATO.some(s => s.clave !== 'equipo' && !cuerpoDe(s.clave).trim())
+  function redactarTodo() {
+    if (redactandoTodo) return
+    const ld = toastLoading('Escribiendo tu relato…')
+    startTodo(async () => {
+      const res = await redactarRelatoCompleto(dossier.dossier_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error); return }
+      const vacias = Object.entries(res.secciones).filter(([clave]) => clave !== 'equipo' && !(texto[clave] ?? '').trim())
+      if (vacias.length === 0) { toastSuccess('No había secciones vacías que rellenar'); return }
+      setTexto(prev => {
+        const next = { ...prev }
+        for (const [clave, cuerpo] of vacias) if (!(next[clave] ?? '').trim()) next[clave] = cuerpo
+        return next
+      })
+      setDeIa(prev => { const s = new Set(prev); for (const [clave] of vacias) s.add(clave); return s })
+      toastSuccess('Borrador listo: revísalo y ajústalo a tu manera')
+    })
   }
 
   function precargarEquipo() {
@@ -141,7 +169,15 @@ export default function PasoRelato({
               Contesta con tus palabras; no hace falta que suene a informe. Lo que dejes en blanco no aparece en la presentación.
             </p>
           </div>
-          <span className="dos-costo-tag">{escritas} de {SECCIONES_RELATO.length}</span>
+          <div className="dos-relato-cabecera-acciones">
+            {hayVacias && (
+              <button className="btn btn-ia btn-sm" onClick={redactarTodo} disabled={redactandoTodo}>
+                {redactandoTodo ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
+                {redactandoTodo ? 'Escribiendo…' : 'Generar todo el relato'}
+              </button>
+            )}
+            <span className="dos-costo-tag">{escritas} de {SECCIONES_RELATO.length}</span>
+          </div>
         </div>
 
         <div className="dos-relato">
@@ -159,10 +195,10 @@ export default function PasoRelato({
                     </p>
                   </div>
                   {tieneIa && !esEquipo && (
-                    <button className="btn btn-secondary btn-sm" onClick={() => redactar(s.clave)} disabled={redactando !== null}>
+                    <button className="btn btn-ia btn-sm" onClick={() => redactar(s.clave)} disabled={redactando !== null}>
                       {redactando === s.clave
                         ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" />
-                        : <Sparkles size={13} strokeWidth={2.5} />}
+                        : <IaSparkle />}
                       {redactando === s.clave ? 'Pensando…' : 'Ayúdame a escribir'}
                     </button>
                   )}

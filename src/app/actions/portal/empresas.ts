@@ -12,6 +12,7 @@ import { getPortalSession } from './auth'
 const COLORES_EMPRESA = [
   '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
   '#E11D48', '#EA580C', '#16A34A', '#64748B',
+  '#FFBF00',
 ]
 
 export interface Empresa {

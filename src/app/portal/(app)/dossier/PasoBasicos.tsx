@@ -75,6 +75,15 @@ export default function PasoBasicos({
   const eligeMoneda  = data.monedas.length > 1
   const presetActivo = opciones.find(o => o.desde === desde && o.hasta === hasta)?.clave ?? ''
 
+  // Recorte del período (solo editando): si el rango nuevo cae DENTRO del guardado,
+  // los meses que quedan fuera se descartan al guardar los números (guardarSerie
+  // escribe solo los meses de la rejilla). No se bloquea —es una decisión legítima—,
+  // pero se avisa: perder números tecleados en silencio sería el peor de los casos.
+  const estrechando = !creando && dossier != null && (
+    (!!dossier.periodo_desde && desde > dossier.periodo_desde) ||
+    (!!dossier.periodo_hasta && hasta < dossier.periodo_hasta)
+  )
+
   // Nombre por defecto de la portada, en vivo con la empresa elegida: la empresa
   // seleccionada, o el nombre del negocio si es consolidado (el dueño puede fijar
   // otro en «La marca» → nombre_portada, que prevalece sobre este).
@@ -191,6 +200,11 @@ export default function PasoBasicos({
               <span className="dos-fechas-sep">–</span>
               <input className="input" type="date" value={hasta} onChange={e => setHasta(e.target.value)} aria-label="Hasta" />
             </div>
+            {estrechando && (
+              <p className="dos-aviso-recorte" role="status">
+                Estás recortando el período. Al guardar los números, los meses que queden fuera del nuevo rango se descartarán.
+              </p>
+            )}
           </div>
         </div>
 

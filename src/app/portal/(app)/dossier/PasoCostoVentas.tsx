@@ -5,6 +5,7 @@ import { Loader2, Save } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { guardarCostoVentas, type CategoriaCosto, type RolPL } from '@/app/actions/portal/dossier'
 import { ROLES_PL, ROL_PL_LABEL, ROL_PL_AYUDA } from '@/lib/pl/estado'
+import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 
 // Paso «Coste de ventas» (solo con `base`): clasifica cada categoría de gasto real
 // del cliente por su papel en el estado de resultados. Nivel cliente: el 2º dossier
@@ -55,7 +56,10 @@ export default function PasoCostoVentas({
         </p>
 
         {categorias.length === 0 ? (
-          <p className="dos-vacio">Aún no tienes categorías de gasto registradas.</p>
+          <PrerequisitoAviso acciones={[{ label: 'Crear categorías de gasto', href: '/portal/gastos?tab=categorias' }]}>
+            Aún no tienes categorías de gasto registradas: sin ellas no hay nada que clasificar.
+            Créalas en Gastos y vuelve a este paso.
+          </PrerequisitoAviso>
         ) : (
           <>
             <ul className="dos-rol-lista">
