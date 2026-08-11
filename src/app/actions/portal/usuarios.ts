@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
 import { hashPasswordPortal } from '@/lib/portal-auth'
 import type { ModuloPerm } from '@/lib/permisos'
+import { renderPlantilla } from '@/lib/email/render'
+import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,43 @@ function generarSalt(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+async function enviarCredencialesPortal(params: {
+  tipo: 'bienvenida' | 'password_reset'
+  email: string
+  nombre: string | null
+  password: string
+  clientId: string
+  empresa: string
+}): Promise<boolean> {
+  if (!(await tipoEmailActivo(params.tipo))) return false
+  const plantilla = await renderPlantilla(params.tipo, {
+    nombre: params.nombre || params.email,
+    empresa: params.empresa,
+    usuario: params.email,
+    password_temporal: params.password,
+    link_portal: `${(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.es').replace(/\/$/, '')}/portal/login`,
+  })
+  const resultado = await enviarEmail({
+    to: params.email,
+    subject: plantilla.asunto,
+    html: plantilla.html,
+    tipo: params.tipo,
+    clientId: params.clientId,
+  })
+  return resultado.ok
+}
+
+async function validarEmpresas(
+  db: ReturnType<typeof createAdminClient>, clientId: string, ids: string[],
+): Promise<string[] | null> {
+  const unicas = [...new Set(ids.filter(Boolean))]
+  if (!unicas.length) return []
+  const { data } = await db.from('empresas').select('empresa_id')
+    .eq('client_id', clientId).eq('estado', 'ACTIVO').in('empresa_id', unicas)
+  const validas = new Set((data ?? []).map(e => e.empresa_id as string))
+  return validas.size === unicas.length ? unicas : null
 }
 
 // ── Obtener usuarios ──────────────────────────────────────────────────────────
@@ -92,17 +131,25 @@ async function sincronizarModulos(
   user_id: string,
   rol: UsuarioPortal['rol'],
   formData: FormData,
-): Promise<void> {
-  await db.from('usuario_modulo').delete().eq('user_id', user_id)
-  if (rol !== 'usuario') return
+  clientId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error: errorBorrado } = await db.from('usuario_modulo').delete().eq('user_id', user_id)
+  if (errorBorrado) return { ok: false, error: 'No se pudieron actualizar los permisos por módulo.' }
+  if (rol !== 'usuario') return { ok: true }
 
-  const modulos    = formData.getAll('modulos') as string[]
+  const { data: cliente } = await db.from('clients').select('modulos_activos')
+    .eq('client_id', clientId).maybeSingle()
+  const contratados = new Set(Array.isArray(cliente?.modulos_activos) ? cliente.modulos_activos as string[] : [])
+  const modulos    = [...new Set((formData.getAll('modulos') as string[]).filter(m => contratados.has(m)))]
   const editables  = new Set(formData.getAll('modulos_editar') as string[])
-  if (modulos.length === 0) return
+  if (modulos.length === 0) return { ok: true }
 
-  await db.from('usuario_modulo').insert(
+  const { error } = await db.from('usuario_modulo').insert(
     modulos.map(clave => ({ user_id, modulo_clave: clave, puede_editar: editables.has(clave) })),
   )
+  return error
+    ? { ok: false, error: 'No se pudieron guardar los permisos por módulo.' }
+    : { ok: true }
 }
 
 // ── Crear usuario ─────────────────────────────────────────────────────────────
@@ -110,6 +157,7 @@ async function sincronizarModulos(
 export async function crearUsuario(formData: FormData): Promise<{
   ok: boolean
   passwordTemporal?: string
+  emailEnviado?: boolean
   error?: string
 }> {
   const session = await getPortalSession()
@@ -159,17 +207,39 @@ export async function crearUsuario(formData: FormData): Promise<{
   if (error) return { ok: false, error: 'Error al crear el usuario.' }
 
   // Asignar empresas si es rol usuario
-  if (rol === 'usuario' && empresas.length > 0) {
-    await db.from('empresa_usuario').insert(
-      empresas.map(empresa_id => ({ user_id, empresa_id }))
-    )
+  if (rol === 'usuario') {
+    const empresasValidas = await validarEmpresas(db, session.client_id, empresas)
+    if (!empresasValidas) {
+      await db.from('client_users').delete().eq('user_id', user_id).eq('client_id', session.client_id)
+      return { ok: false, error: 'Una de las empresas seleccionadas no pertenece a este negocio o está inactiva.' }
+    }
+    if (empresasValidas.length > 0) {
+      const { error: errorEmpresas } = await db.from('empresa_usuario').insert(
+        empresasValidas.map(empresa_id => ({ user_id, empresa_id }))
+      )
+      if (errorEmpresas) {
+        await db.from('client_users').delete().eq('user_id', user_id).eq('client_id', session.client_id)
+        return { ok: false, error: 'No se pudieron guardar las empresas del usuario.' }
+      }
+    }
   }
 
   // Permisos por módulo (solo rol usuario; sin filas = todos los contratados)
-  await sincronizarModulos(db, user_id, rol, formData)
+  const modulos = await sincronizarModulos(db, user_id, rol, formData, session.client_id)
+  if (!modulos.ok) {
+    await db.from('client_users').delete().eq('user_id', user_id).eq('client_id', session.client_id)
+    return { ok: false, error: modulos.error }
+  }
+
+  const { data: cliente } = await db.from('clients').select('nombre_empresa')
+    .eq('client_id', session.client_id).maybeSingle()
+  const emailEnviado = await enviarCredencialesPortal({
+    tipo: 'bienvenida', email, nombre, password, clientId: session.client_id,
+    empresa: (cliente?.nombre_empresa as string) || 'tu negocio',
+  })
 
   revalidatePath('/portal/usuarios')
-  return { ok: true, passwordTemporal: password }
+  return { ok: true, passwordTemporal: password, emailEnviado }
 }
 
 // ── Editar usuario ────────────────────────────────────────────────────────────
@@ -207,6 +277,11 @@ export async function editarUsuario(formData: FormData): Promise<{
 
   if (!usr) return { ok: false, error: 'Usuario no encontrado.' }
 
+  const empresasValidas = rol === 'usuario'
+    ? await validarEmpresas(db, session.client_id, empresas)
+    : []
+  if (!empresasValidas) return { ok: false, error: 'Una de las empresas seleccionadas no pertenece a este negocio o está inactiva.' }
+
   const { error } = await db
     .from('client_users')
     .update({ nombre, rol, solo_lectura, estado })
@@ -217,14 +292,16 @@ export async function editarUsuario(formData: FormData): Promise<{
 
   // Sincronizar empresas asignadas (borrar todas y re-insertar)
   await db.from('empresa_usuario').delete().eq('user_id', user_id)
-  if (rol === 'usuario' && empresas.length > 0) {
-    await db.from('empresa_usuario').insert(
-      empresas.map(empresa_id => ({ user_id, empresa_id }))
+  if (rol === 'usuario' && empresasValidas.length > 0) {
+    const { error: errorEmpresas } = await db.from('empresa_usuario').insert(
+      empresasValidas.map(empresa_id => ({ user_id, empresa_id }))
     )
+    if (errorEmpresas) return { ok: false, error: 'No se pudieron guardar las empresas del usuario.' }
   }
 
   // Sincronizar permisos por módulo (borrar + reinsertar; admin = sin filas = todos)
-  await sincronizarModulos(db, user_id, rol, formData)
+  const modulos = await sincronizarModulos(db, user_id, rol, formData, session.client_id)
+  if (!modulos.ok) return { ok: false, error: modulos.error }
 
   revalidatePath('/portal/usuarios')
   return { ok: true }
@@ -235,6 +312,7 @@ export async function editarUsuario(formData: FormData): Promise<{
 export async function resetearPassword(user_id: string): Promise<{
   ok: boolean
   passwordTemporal?: string
+  emailEnviado?: boolean
   error?: string
 }> {
   const session = await getPortalSession()
@@ -255,5 +333,16 @@ export async function resetearPassword(user_id: string): Promise<{
     .eq('client_id', session.client_id)
 
   if (error) return { ok: false, error: 'Error al resetear la contraseña.' }
-  return { ok: true, passwordTemporal: password }
+  const { data: usr } = await db.from('client_users').select('email, nombre')
+    .eq('user_id', user_id).eq('client_id', session.client_id).maybeSingle()
+  const { data: cliente } = await db.from('clients').select('nombre_empresa')
+    .eq('client_id', session.client_id).maybeSingle()
+  const emailEnviado = usr
+    ? await enviarCredencialesPortal({
+        tipo: 'password_reset', email: usr.email, nombre: usr.nombre,
+        password, clientId: session.client_id,
+        empresa: (cliente?.nombre_empresa as string) || 'tu negocio',
+      })
+    : false
+  return { ok: true, passwordTemporal: password, emailEnviado }
 }

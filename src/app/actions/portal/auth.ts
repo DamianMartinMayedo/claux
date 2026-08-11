@@ -27,20 +27,30 @@ export async function loginCliente(
 
   const db = createAdminClient()
 
-  const { data: usuario } = await db
+  // El mismo email puede pertenecer a cuentas de negocios distintos. No usamos
+  // maybeSingle(): el tenant no forma parte del formulario de login, así que
+  // identificamos la cuenta por la contraseña que acompaña a ese email.
+  const { data: usuarios } = await db
     .from('client_users')
     .select('user_id, client_id, email, password_hash, salt, rol, solo_lectura, estado, must_change_password')
     .eq('email', email)
-    .maybeSingle()
+    .order('created_at', { ascending: false })
 
-  if (!usuario) return { error: 'Credenciales incorrectas.' }
-
-  if (usuario.estado !== 'ACTIVO') {
-    return { error: 'Tu usuario está inactivo. Contacta con el administrador.' }
+  const activos = (usuarios ?? []).filter(u => u.estado === 'ACTIVO')
+  let usuario = null as (typeof activos)[number] | null
+  for (const candidato of activos) {
+    const hash = await hashPasswordPortal(password, candidato.salt)
+    if (hash === candidato.password_hash) {
+      usuario = candidato
+      break
+    }
   }
-
-  const hash = await hashPasswordPortal(password, usuario.salt)
-  if (hash !== usuario.password_hash) return { error: 'Credenciales incorrectas.' }
+  if (!usuario) {
+    if ((usuarios ?? []).length > 0 && activos.length === 0) {
+      return { error: 'Tu usuario está inactivo. Contacta con el administrador.' }
+    }
+    return { error: 'Credenciales incorrectas.' }
+  }
 
   const token = await signPortalToken({
     user_id:      usuario.user_id,
@@ -127,7 +137,22 @@ export async function getPortalSession(): Promise<PortalSession | null> {
   // Bypass de login SOLO en desarrollo local: si no hay cookie y el bypass está activo
   // (doble candado), impersonamos el tenant indicado en DEV_PORTAL_CLIENT_ID.
   if (!token) return devPortalSession()
-  return verifyPortalToken(token)
+  const session = await verifyPortalToken(token)
+  if (!session) return null
+  // El JWT evita consultar la sesión en cada página, pero rol, estado y solo lectura
+  // son permisos revocables. Una cookie antigua no puede conservar acceso después de
+  // que el administrador cambie esos campos desde «Usuarios».
+  if (session.imp) return session
+  const { data: usuario } = await createAdminClient().from('client_users')
+    .select('email, rol, solo_lectura, estado')
+    .eq('user_id', session.user_id).eq('client_id', session.client_id).maybeSingle()
+  if (!usuario || usuario.estado !== 'ACTIVO') return null
+  return {
+    ...session,
+    email: usuario.email,
+    rol: usuario.rol as PortalSession['rol'],
+    solo_lectura: !!usuario.solo_lectura,
+  }
 }
 
 // ── Acceso efectivo a módulos (tenant ∩ permisos por usuario) ────────

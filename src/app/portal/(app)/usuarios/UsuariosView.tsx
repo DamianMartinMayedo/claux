@@ -55,7 +55,7 @@ function UsuarioModal({
   sessionUserId:      string
   modulosContratados: ModuloContratado[]
   onClose:            () => void
-  onSaved:            (pwd?: string) => void
+   onSaved:            (pwd?: string, emailEnviado?: boolean) => void
 }) {
   const esEdicion = !!usuario
   const [isPending, startTransition] = useTransition()
@@ -111,7 +111,10 @@ function UsuarioModal({
       const result = esEdicion ? await editarUsuario(fd) : await crearUsuario(fd)
       await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
-      onSaved('passwordTemporal' in result ? (result.passwordTemporal as string | undefined) : undefined)
+      onSaved(
+        'passwordTemporal' in result ? (result.passwordTemporal as string | undefined) : undefined,
+        'emailEnviado' in result ? (result.emailEnviado as boolean | undefined) : undefined,
+      )
     })
   }
 
@@ -251,7 +254,7 @@ function UsuarioModal({
             {!esEdicion && (
               <div className="usr-pwd-info">
                 <Info size={16} strokeWidth={2} />
-                <span>Se generará una contraseña temporal automáticamente. Podrás copiarla al crear el usuario.</span>
+                 <span>Se generará una contraseña temporal y se enviará junto con el enlace de acceso. También podrás copiarla al crear el usuario.</span>
               </div>
             )}
 
@@ -273,7 +276,7 @@ function UsuarioModal({
 
 // ── Modal contraseña temporal ─────────────────────────────────────────────────
 
-function PasswordModal({ password, onClose }: { password: string; onClose: () => void }) {
+function PasswordModal({ password, emailEnviado, onClose }: { password: string; emailEnviado?: boolean; onClose: () => void }) {
   const [copiado, setCopiado] = useState(false)
 
   function copiar() {
@@ -292,6 +295,11 @@ function PasswordModal({ password, onClose }: { password: string; onClose: () =>
         <div className="modal-body modal-body-form">
           <p className="text-sm-muted">
             Comparte esta contraseña con el usuario de forma segura. No se mostrará de nuevo.
+          </p>
+          <p className={`alert ${emailEnviado ? 'alert-success' : 'alert-warning'}`} role="alert">
+            {emailEnviado
+              ? 'También enviamos sus datos de acceso por correo.'
+              : 'No pudimos enviar el correo. Comparte la contraseña de forma segura.'}
           </p>
           <div className="usr-pwd-box">
             <code className="usr-pwd-code">{password}</code>
@@ -325,7 +333,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
   const [tab,        setTab]       = useState<TabKind>('usuarios')
   const [modalOpen,  setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<UsuarioPortal | null>(null)
-  const [pwdModal,   setPwdModal]  = useState<string | null>(null)
+  const [pwdModal,   setPwdModal]  = useState<{ password: string; emailEnviado?: boolean } | null>(null)
   const [resetPending, startResetTrans] = useTransition()
   const [resetTarget, setResetTarget]   = useState<string | null>(null)
 
@@ -333,9 +341,9 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
   function abrirEditar(u: UsuarioPortal) { setEditTarget(u); setModalOpen(true) }
   function cerrar() { setModalOpen(false); setEditTarget(null) }
 
-  function onSaved(pwd?: string) {
+  function onSaved(pwd?: string, emailEnviado?: boolean) {
     cerrar()
-    if (pwd) setPwdModal(pwd)
+    if (pwd) setPwdModal({ password: pwd, emailEnviado })
     router.refresh()
   }
 
@@ -344,7 +352,9 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
     startResetTrans(async () => {
       const result = await resetearPassword(user_id)
       setResetTarget(null)
-      if (result.ok && result.passwordTemporal) setPwdModal(result.passwordTemporal)
+      if (result.ok && result.passwordTemporal) {
+        setPwdModal({ password: result.passwordTemporal, emailEnviado: result.emailEnviado })
+      }
     })
   }
 
@@ -531,9 +541,8 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
         />
       )}
       {pwdModal && (
-        <PasswordModal password={pwdModal} onClose={() => { setPwdModal(null); router.refresh() }} />
+        <PasswordModal password={pwdModal.password} emailEnviado={pwdModal.emailEnviado} onClose={() => { setPwdModal(null); router.refresh() }} />
       )}
     </div>
   )
 }
-
