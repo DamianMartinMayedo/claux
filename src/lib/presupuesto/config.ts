@@ -39,10 +39,10 @@ export const LIMITE_FUNDADOR = 20
  * el presupuesto cobraba una migración de datos que nadie iba a hacer.
  */
 export const FASES_INSTALACION = [
-  { num: 1, etiqueta: 'Fase 1 · Alta y configuración base' },
-  { num: 2, etiqueta: 'Fase 2 · Migración de datos' },
-  { num: 3, etiqueta: 'Fase 3 · Formación' },
-  { num: 4, etiqueta: 'Fase 4 · Validación y cierre' },
+  { num: 1, etiqueta: 'Alta y configuración base' },
+  { num: 2, etiqueta: 'Migración de datos' },
+  { num: 3, etiqueta: 'Formación' },
+  { num: 4, etiqueta: 'Validación y cierre' },
 ] as const
 
 export type NumeroFase = (typeof FASES_INSTALACION)[number]['num']
