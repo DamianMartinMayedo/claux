@@ -23,6 +23,7 @@ import {
 // tenía ni rango ni límite.
 import { limiteDelFiltro }   from '@/lib/listados'
 import { sugerirDiasTrabajados, type SugerenciaDias } from '@/lib/rrhh/dias-trabajados'
+import { truncar2 }          from '@/lib/rrhh/importe'
 import { obtenerEmpresas }   from './empresas'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
 import type { MonedaOpcion } from './monedas'
@@ -328,7 +329,8 @@ function generarAsignacionId(): string { return `TAS-${corto()}` }
 function generarConceptoId():   string { return `CPT-${corto()}` }
 function generarItemId():       string { return `NLC-${corto()}` }
 
-function redondear2(n: number): number { return Math.round(n * 100) / 100 }
+// Alias histórico conservado para no tocar todos los consumidores de este fichero.
+const redondear2 = truncar2
 
 interface ConceptoAplicable {
   concepto_id?:       string

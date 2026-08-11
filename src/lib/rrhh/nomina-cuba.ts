@@ -18,6 +18,8 @@
 // más preciso porque no depende de la vigencia de HOY sino de la que se usó al
 // generar—. Se deja exportada por si un futuro caller la necesita.
 
+import { truncar2 } from './importe'
+
 export type ConceptoFiscal =
   | 'IRPF' | 'CESS' | 'IUFT' | 'SS_EMPRESA_125' | 'SS_EMPRESA_15' | 'VACACIONES'
 
@@ -73,7 +75,9 @@ export interface ResultadoCuba {
   provisional: boolean
 }
 
-function r2(n: number): number { return Math.round(n * 100) / 100 }
+// Alias local para mantener legible el motor: todos los importes legales pasan por
+// la política monetaria común y se truncan a dos decimales, nunca se redondean.
+const r2 = truncar2
 
 /** Elige la fila vigente en una fecha. Sin fila, el tributo no se aplica. */
 export function parametroVigente(
