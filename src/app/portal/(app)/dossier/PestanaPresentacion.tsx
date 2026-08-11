@@ -278,9 +278,10 @@ export default function PestanaPresentacion({
               <p className="dos-section-hint">Tu enlace lleva el botón <strong>ES / EN</strong>: el inversor cambia de idioma en vivo.</p>
             )}
             {tieneEn && enDesactualizado && (
-              <p className="dos-preview-aviso dos-preview-aviso-warn">
-                <AlertTriangle size={14} strokeWidth={2} /> Cambiaste el dossier después de traducirlo: la versión en inglés puede estar desactualizada. Regénérala para ponerla al día.
-              </p>
+              <div className="alert alert-warning" role="alert">
+                <AlertTriangle size={14} strokeWidth={2} />
+                <span>Cambiaste el dossier después de traducirlo: la versión en inglés puede estar desactualizada. Regénérala para ponerla al día.</span>
+              </div>
             )}
           </div>
         )}

@@ -1,11 +1,31 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, Save } from 'lucide-react'
+import { EyeOff, Loader2, RotateCcw, Save } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { guardarCostoVentas, type CategoriaCosto, type RolPL } from '@/app/actions/portal/dossier'
-import { ROLES_PL, ROL_PL_LABEL, ROL_PL_AYUDA } from '@/lib/pl/estado'
+import { ROLES_PL } from '@/lib/pl/estado'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+
+const ROL_PL_UI: Record<RolPL, { titulo: string; descripcion: string }> = {
+  COSTE_VENTAS: {
+    titulo: 'Lo que vendes',
+    descripcion: 'Mercancía, materia prima o el proveedor del servicio que vendes.',
+  },
+  PERSONAL: {
+    titulo: 'Tu equipo',
+    descripcion: 'Sueldos, seguridad social y todo lo que cuesta tu gente.',
+  },
+  OPERATIVO: {
+    titulo: 'Mantener abierto',
+    descripcion: 'Alquiler, luz, transporte, publicidad y el día a día.',
+  },
+  OTRO: {
+    titulo: 'Impuestos y financiación',
+    descripcion: 'Impuestos, comisiones e intereses, fuera del resultado operativo.',
+  },
+}
 
 // Paso «Coste de ventas» (solo con `base`): clasifica cada categoría de gasto real
 // del cliente por su papel en el estado de resultados. Nivel cliente: el 2º dossier
@@ -19,41 +39,71 @@ import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 
 export default function PasoCostoVentas({
   categorias,
+  dossierId,
+  categoriasExcluidasIniciales,
+  tieneSnapshot,
   onGuardado,
 }: {
+  dossierId: string
   categorias: CategoriaCosto[]
+  categoriasExcluidasIniciales: string[]
+  tieneSnapshot: boolean
   onGuardado?: () => void
 }) {
   const [estado, setEstado] = useState<Record<string, RolPL>>(
     () => Object.fromEntries(categorias.map(c => [c.categoria_id, c.rol_pl])),
   )
   const [pending, startTransition] = useTransition()
+  const [confirmar, setConfirmar] = useState(false)
+  const [excluidas, setExcluidas] = useState(categoriasExcluidasIniciales)
+  const categoriasVisibles = categorias.filter(c => !excluidas.includes(c.categoria_id))
+  const categoriasApartadas = categorias.filter(c => excluidas.includes(c.categoria_id))
 
-  function guardar() {
+  function ejecutarGuardado() {
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const fd = new FormData()
+      fd.set('dossier_id', dossierId)
       fd.set('clasificacion', JSON.stringify(
         categorias.map(c => ({ categoria_id: c.categoria_id, rol_pl: estado[c.categoria_id] ?? c.rol_pl })),
       ))
+      fd.set('categorias_excluidas', JSON.stringify(excluidas))
       const res = await guardarCostoVentas(fd)
       await ld.dismiss()
-      if (res.ok) { toastSuccess('Clasificación guardada'); onGuardado?.() }
-      else toastError(res.error || 'No se pudo guardar')
+       if (res.ok) { toastSuccess('Dossier actualizado'); onGuardado?.() }
+       else toastError(res.error || 'No se pudo guardar')
     })
   }
 
-  const cuenta = (rol: RolPL) => categorias.filter(c => (estado[c.categoria_id] ?? 'OPERATIVO') === rol).length
+  function guardar() {
+    if (tieneSnapshot) { setConfirmar(true); return }
+    ejecutarGuardado()
+  }
 
   return (
     <section className="card dos-costo-card">
       <div className="dos-body">
-        <h2 className="dos-section-title">Coste de ventas</h2>
-        <p className="dos-section-hint">
-          Di qué papel tiene cada gasto en tu estado de resultados. Con esto tu informe deja de ser
-          una lista y pasa a enseñar <strong>margen bruto</strong> y <strong>resultado operativo</strong>.
-          Lo que elijas aquí vale también para tus Reportes: es el mismo dato.
+        <h2 className="dos-section-title">¿En qué se te va el dinero?</h2>
+        <p className="dos-section-hint dos-costo-intro">
+          Clasifica tus categorías para que el estado de resultados separe el <strong>margen bruto</strong>,
+          el coste de mantener el negocio y los gastos de personal.
         </p>
+
+        <div className="dos-costo-guia">
+          <p className="dos-costo-guia-titulo">Qué estás decidiendo</p>
+          <p className="dos-costo-guia-texto">
+            No cambias importes ni eliminas gastos. Solo indicas qué significa cada categoría.
+            Esta clasificación también se usa en Reportes.
+          </p>
+          <div className="dos-costo-guia-grid">
+            {ROLES_PL.map(rol => (
+              <div key={rol} className="dos-costo-guia-card">
+                <strong>{ROL_PL_UI[rol].titulo}</strong>
+                <span>{ROL_PL_UI[rol].descripcion}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {categorias.length === 0 ? (
           <PrerequisitoAviso acciones={[{ label: 'Crear categorías de gasto', href: '/portal/gastos?tab=categorias' }]}>
@@ -62,8 +112,17 @@ export default function PasoCostoVentas({
           </PrerequisitoAviso>
         ) : (
           <>
-            <ul className="dos-rol-lista">
-              {categorias.map(c => {
+            <p className="dos-costo-resumen">
+              {ROLES_PL.map((rol, i) => (
+                <span key={rol}>
+                  {i > 0 && ' · '}
+                  <strong>{categoriasVisibles.filter(c => (estado[c.categoria_id] ?? 'OPERATIVO') === rol).length}</strong>{' '}
+                  {ROL_PL_UI[rol].titulo.toLowerCase()}
+                </span>
+              ))}
+            </p>
+            {categoriasVisibles.length > 0 && <ul className="dos-rol-lista">
+              {categoriasVisibles.map(c => {
                 const rol = estado[c.categoria_id] ?? 'OPERATIVO'
                 return (
                   <li key={c.categoria_id} className="dos-rol-fila">
@@ -74,30 +133,66 @@ export default function PasoCostoVentas({
                       value={rol}
                       onChange={e => setEstado(prev => ({ ...prev, [c.categoria_id]: e.target.value as RolPL }))}
                     >
-                      {ROLES_PL.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
+                      {ROLES_PL.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
                     </select>
+                    <button
+                      type="button" className="dos-costo-excluir"
+                      onClick={() => setExcluidas(prev => [...prev, c.categoria_id])}
+                      aria-label={`Apartar ${c.categoria} de este dossier`}
+                      title="Apartar de este dossier"
+                    >
+                      <EyeOff size={14} strokeWidth={2} />
+                    </button>
                   </li>
                 )
               })}
-            </ul>
+            </ul>}
 
-            <ul className="dos-rol-leyenda">
-              {ROLES_PL.map(r => (
-                <li key={r}>
-                  <strong>{ROL_PL_LABEL[r]}</strong> ({cuenta(r)}) — {ROL_PL_AYUDA[r]}
-                </li>
-              ))}
-            </ul>
+            {categoriasVisibles.length === 0 && (
+              <p className="dos-costo-vacio">Has apartado todas las categorías de este dossier.</p>
+            )}
+
+            {categoriasApartadas.length > 0 && (
+              <div className="dos-costo-apartadas">
+                <p className="dos-costo-apartadas-titulo">Apartadas de este dossier</p>
+                <p className="dos-costo-apartadas-ayuda">
+                  Siguen existiendo en Contabilidad y sus importes no cambian.
+                </p>
+                <ul className="dos-costo-apartadas-lista">
+                  {categoriasApartadas.map(c => (
+                    <li key={c.categoria_id}>
+                      <span>{c.categoria}</span>
+                      <button
+                        type="button" className="btn btn-ghost btn-sm"
+                        onClick={() => setExcluidas(prev => prev.filter(id => id !== c.categoria_id))}
+                      >
+                        <RotateCcw size={13} strokeWidth={2.5} /> Restaurar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="dos-acciones">
               <button className="btn btn-primary" onClick={guardar} disabled={pending}>
                 {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Save size={14} strokeWidth={2.5} />}
-                Guardar clasificación
+                Guardar cambios
               </button>
             </div>
           </>
         )}
       </div>
+      {confirmar && (
+        <ConfirmDialog
+          title="Actualizar los números de este dossier"
+          body="Se recalcularán los importes y porcentajes usando la clasificación que acabas de elegir. Este cambio solo afecta a este dossier y no modifica Contabilidad ni Reportes."
+          confirmLabel="Actualizar dossier"
+          cancelLabel="Seguir editando"
+          onConfirm={() => { setConfirmar(false); ejecutarGuardado() }}
+          onCancel={() => setConfirmar(false)}
+        />
+      )}
     </section>
   )
 }

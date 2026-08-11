@@ -46,6 +46,10 @@ export interface DossierBasico {
   // queda desfasada (importes en la moneda vieja, o de otra empresa) hasta reescribirla.
   snapshot_stale:          boolean
   token:                   string | null
+  /** Categorías contables que este dossier no quiere clasificar aquí. No afecta a los números. */
+  categorias_excluidas:    string[]
+  /** Clasificación P&L propia del dossier; no modifica categorias_gastos. */
+  categorias_roles:        Partial<Record<string, RolPL>>
   /** Qué se publica del estado de resultados: RESUMEN | DESGLOSADO (mig. 136). */
   estado_modo:             ModoEstado
   monedas_faltantes:       string[]
@@ -329,7 +333,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   const monedas = (monedasRows ?? []).map((m: { codigo: string; simbolo: string | null }) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo }))
   const monedaConsolidacion = (monedasRows ?? []).find((m: { es_consolidacion: boolean }) => m.es_consolidacion)?.codigo ?? null
 
-  const categoriasCosto = tieneBase ? await obtenerCategoriasGasto() : []
+  const categoriasCatalogoBase = tieneBase ? await obtenerCategoriasGasto() : []
   const listaEmpresas = empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))
 
   // Fecha del primer movimiento contable (para el atajo de período "Toda la vida").
@@ -348,7 +352,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
       tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
-      monedas, monedaConsolidacion, categoriasCosto, conceptosSector, empresaLogoUrl: null,
+       monedas, monedaConsolidacion, categoriasCosto: categoriasCatalogoBase, conceptosSector, empresaLogoUrl: null,
       aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false,
     }
   }
@@ -398,10 +402,22 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     // en ambos casos hay que re-sincronizar antes de enseñarla.
     snapshot_stale: !!dosRow.snapshot_stale || serie.some(f => f.moneda !== dosRow.moneda_presentacion),
     token: dosRow.token ?? null,
+    categorias_excluidas: Array.isArray(dosRow.categorias_excluidas)
+      ? dosRow.categorias_excluidas as string[] : [],
+    categorias_roles: (dosRow.categorias_roles && typeof dosRow.categorias_roles === 'object')
+      ? dosRow.categorias_roles as Partial<Record<string, RolPL>> : {},
     estado_modo: esModoEstado(dosRow.estado_modo) ? dosRow.estado_modo : 'DESGLOSADO',
     monedas_faltantes: Array.isArray(dosRow.monedas_faltantes) ? dosRow.monedas_faltantes : [],
     tasas_usadas: (dosRow.tasas_usadas && typeof dosRow.tasas_usadas === 'object') ? dosRow.tasas_usadas as Record<string, TasaUsada> : {},
   }
+
+  const categoriasCatalogo = tieneBase
+    ? await categoriasDelAlcanceDossier(db, session.client_id, dossier.empresa_id, dossier.periodo_desde, dossier.periodo_hasta)
+    : []
+  const categoriasCosto = categoriasCatalogo.map(c => ({
+    ...c,
+    rol_pl: dossier.categorias_roles[c.categoria_id] ?? c.rol_pl,
+  }))
 
   return {
     dossier, serie, lineas, secciones,
@@ -430,6 +446,44 @@ export async function obtenerCategoriasGasto(): Promise<CategoriaCosto[]> {
   const todas = await categoriasPL(createAdminClient(), session.client_id)
   return todas
     .filter(c => !c.parent_id)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    .map(c => ({ categoria_id: c.categoria_id, categoria: c.nombre, rol_pl: c.rol_pl }))
+}
+
+/** Categorías raíz usadas por los gastos del período y empresas de un dossier. */
+async function categoriasDelAlcanceDossier(
+  db: Db, clientId: string, empresaId: string | null, desde: string | null, hasta: string | null,
+): Promise<CategoriaCosto[]> {
+  if (!desde || !hasta) return []
+  const todas = await categoriasPL(db, clientId)
+  const idsEmpresa = await empresaIdsDe(empresaId)
+  const { data: gastos } = await db.from('gastos_cobros')
+    .select('categoria_id, categoria')
+    .eq('client_id', clientId).eq('tipo', 'GASTO').in('empresa_id', idsEmpresa)
+    .gte('fecha', desde).lte('fecha', hasta)
+
+  const porNombre = new Map(todas.map(c => [c.nombre.trim().toLowerCase(), c]))
+  const porId = new Map(todas.map(c => [c.categoria_id, c]))
+  const raizDe = new Map<string, string>()
+  for (const c of todas) {
+    let actual = c
+    while (actual.parent_id) {
+      const padre = porId.get(actual.parent_id)
+      if (!padre) break
+      actual = padre
+    }
+    raizDe.set(c.categoria_id, actual.categoria_id)
+  }
+
+  const usadas = new Set<string>()
+  for (const g of gastos ?? []) {
+    const categoria = (g.categoria_id ? porId.get(g.categoria_id) : undefined)
+      ?? (g.categoria ? porNombre.get(g.categoria.trim().toLowerCase()) : undefined)
+    if (categoria) usadas.add(raizDe.get(categoria.categoria_id) ?? categoria.categoria_id)
+  }
+
+  return todas
+    .filter(c => !c.parent_id && usadas.has(c.categoria_id))
     .sort((a, b) => a.nombre.localeCompare(b.nombre))
     .map(c => ({ categoria_id: c.categoria_id, categoria: c.nombre, rol_pl: c.rol_pl }))
 }
@@ -525,10 +579,12 @@ export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean
     periodo_hasta: origen.periodo_hasta,
     crecimiento_mensual_pct: origen.crecimiento_mensual_pct,
     estado_modo: origen.estado_modo,
+    categorias_excluidas: origen.categorias_excluidas ?? [],
     snapshot_at: origen.snapshot_at,
     snapshot_stale: origen.snapshot_stale,
     tasas_usadas: origen.tasas_usadas,
     monedas_faltantes: origen.monedas_faltantes,
+    categorias_roles: origen.categorias_roles ?? {},
   })
   if (error) return { ok: false, error: 'No se pudo duplicar el dossier.' }
 
@@ -782,15 +838,16 @@ export async function guardarModoEstado(formData: FormData): Promise<{ ok: boole
 }
 
 /**
- * Guarda el papel en el P&L de las categorías del cliente (paso «Coste de ventas»).
+ * Guarda la clasificación y las exclusiones del dossier (paso «Coste de ventas»).
  *
- * Escribe en `categorias_gastos.rol_pl`, la MISMA columna que lee el informe del
- * portal: clasificar aquí reclasifica también allí, y ese es el punto. Es a nivel
- * cliente, así que el 2º dossier lo hereda igual que antes.
+ * La clasificación vive en el dossier, no en `categorias_gastos.rol_pl`: dos dossiers
+ * del mismo cliente pueden representar empresas distintas sin reclasificarse entre sí.
+ * Después reescribe el snapshot con esas reglas, por lo que los importes y porcentajes
+ * de ESTE dossier sí cambian, pero Contabilidad y Reportes no.
  *
- * El candado es doble a propósito: `dossier` porque es la pantalla desde la que se
- * entra, y `base` porque se está escribiendo en el catálogo de Contabilidad. Sin
- * `base` este paso ni se pinta (no hay categorías reales que clasificar).
+ * El candado es doble: `dossier` porque es la pantalla desde la que se entra, y
+ * `base` porque los nuevos números salen de la base contable. Sin `base` este paso
+ * ni se pinta (el dossier manual no tiene categorías que clasificar).
  */
 export async function guardarCostoVentas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
@@ -798,23 +855,56 @@ export async function guardarCostoVentas(formData: FormData): Promise<{ ok: bool
   if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
   if (!(await puedeEditarModulo('base')))    return { ok: false, error: 'Clasificar categorías necesita el módulo de Contabilidad.' }
 
+  const dossierId = (formData.get('dossier_id') as string)?.trim()
+  if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
+
   let entrada: { categoria_id?: string; rol_pl?: string }[]
   try { entrada = JSON.parse((formData.get('clasificacion') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
 
-  const db = createAdminClient()
-  const validas = new Set((await categoriasPL(db, session.client_id)).filter(c => !c.parent_id).map(c => c.categoria_id))
-
-  for (const c of entrada) {
-    if (!c?.categoria_id || !validas.has(c.categoria_id) || !esRolPL(c.rol_pl)) continue
-    const { error } = await db.from('categorias_gastos')
-      .update({ rol_pl: c.rol_pl, updated_at: new Date().toISOString() })
-      .eq('categoria_id', c.categoria_id).eq('client_id', session.client_id)
-    if (error) return { ok: false, error: 'No se pudo guardar la clasificación.' }
+  let excluidasEntrada: unknown
+  try { excluidasEntrada = JSON.parse((formData.get('categorias_excluidas') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
+  if (!Array.isArray(excluidasEntrada) || excluidasEntrada.some(id => typeof id !== 'string')) {
+    return { ok: false, error: 'Categorías excluidas inválidas.' }
   }
 
+  const db = createAdminClient()
+  const { data: dossier } = await db.from('dossiers').select(
+    'dossier_id, empresa_id, periodo_desde, periodo_hasta, moneda_presentacion, categorias_roles',
+  )
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
+  if (!dossier) return { ok: false, error: 'Dossier no encontrado.' }
+
+  const categorias = await categoriasPL(db, session.client_id)
+  const validas = new Set(categorias.filter(c => !c.parent_id).map(c => c.categoria_id))
+  const excluidas = [...new Set((excluidasEntrada as string[]).filter(id => validas.has(id)))]
+  const rolesPrevios = dossier.categorias_roles && typeof dossier.categorias_roles === 'object'
+    ? dossier.categorias_roles as Record<string, string> : {}
+  const roles: Record<string, RolPL> = {}
+  for (const c of categorias) {
+    const nuevo = entrada.find(e => e?.categoria_id === c.categoria_id)?.rol_pl
+    const previo = rolesPrevios[c.categoria_id]
+    roles[c.categoria_id] = esRolPL(nuevo) ? nuevo : esRolPL(previo) ? previo : c.rol_pl
+  }
+  const categoriasDossier = categorias.map(c => ({ ...c, rol_pl: roles[c.categoria_id] }))
+
+  const { error: errorConfig } = await db.from('dossiers')
+    .update({ categorias_excluidas: excluidas, categorias_roles: roles, updated_at: new Date().toISOString() })
+    .eq('dossier_id', dossierId).eq('client_id', session.client_id)
+  if (errorConfig) return { ok: false, error: 'No se pudo guardar la configuración del dossier.' }
+
+  const snap = await construirSnapshotDesdeBase(
+    db, session.client_id, await empresaIdsDe(dossier.empresa_id),
+    dossier.periodo_desde, dossier.periodo_hasta, dossier.moneda_presentacion,
+    categoriasDossier, new Set(excluidas),
+  )
+  const res = await escribirSnapshot(
+    db, dossierId, session.client_id, snap.serie, snap.lineas, snap.tasasUsadas, snap.monedasFaltantes,
+  )
+  if (!res.ok) return { ok: false, error: 'Se guardó la configuración, pero no se pudo recalcular el dossier.' }
+
   revalidatePath('/portal/dossier')
-  revalidatePath('/portal/gastos')
-  revalidatePath('/portal/reportes')
+  revalidatePath(`/portal/dossier/${dossierId}`)
+  await revalidarDeck(db, dossierId, session.client_id)
   return { ok: true }
 }
 

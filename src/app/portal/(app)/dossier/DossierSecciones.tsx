@@ -47,7 +47,7 @@ export default function DossierSecciones({
     if (p === activo) return
     if (dirty) { setPendiente(p); return }
     setActivo(p)
-  }, [activo, dirty])
+  }, [activo, dirty, setPendiente, setActivo])
 
   // Defecto de la portada: la empresa del dossier, o el nombre de la cuenta si es
   // consolidado (mismo criterio que deriva el deck cuando no hay nombre fijado).
@@ -114,7 +114,13 @@ export default function DossierSecciones({
           <PasoBasicos data={data} dossier={dossier} onListo={marcarGuardado} />
         )}
         {activo === 'costos' && data.tieneBase && (
-          <PasoCostoVentas categorias={data.categoriasCosto} onGuardado={marcarGuardado} />
+          <PasoCostoVentas
+            dossierId={dossier.dossier_id}
+            categorias={data.categoriasCosto}
+            categoriasExcluidasIniciales={dossier.categorias_excluidas}
+            tieneSnapshot={!!dossier.snapshot_at}
+            onGuardado={marcarGuardado}
+          />
         )}
         {activo === 'numeros' && (
           <PasoNumeros

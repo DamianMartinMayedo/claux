@@ -144,8 +144,14 @@ export default function DossierWizard({
           <PasoBasicos data={data} dossier={dossier} onListo={dossier ? avanzar : creado} />
         )}
 
-        {paso === 'costos' && data.tieneBase && (
-          <PasoCostoVentas categorias={data.categoriasCosto} onGuardado={avanzar} />
+        {paso === 'costos' && data.tieneBase && dossier && (
+          <PasoCostoVentas
+            dossierId={dossier.dossier_id}
+            categorias={data.categoriasCosto}
+            categoriasExcluidasIniciales={dossier.categorias_excluidas}
+            tieneSnapshot={!!dossier.snapshot_at}
+            onGuardado={avanzar}
+          />
         )}
 
         {paso === 'numeros' && dossier && (

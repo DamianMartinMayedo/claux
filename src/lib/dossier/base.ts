@@ -69,6 +69,7 @@ export async function construirSnapshotDesdeBase(
   hasta: string,
   monedaPresentacion: string,
   categorias: CategoriaPL[],
+  categoriasExcluidas: Set<string> = new Set(),
 ): Promise<SnapshotBase> {
   const ids = empresaIds.length ? empresaIds : ['__none__']
   const idx = indexarCategorias(categorias)
@@ -149,6 +150,7 @@ export async function construirSnapshotDesdeBase(
     const fila = (g.categoria_id ? idx.porId.get(g.categoria_id) : undefined)
       ?? (g.categoria ? porNombreRaiz.get(g.categoria.trim().toLowerCase()) : undefined)
     const raiz = fila ? (idx.raizDe.get(fila.categoria_id) ?? fila) : null
+    if (raiz && categoriasExcluidas.has(raiz.categoria_id)) continue
     const cat  = raiz?.nombre ?? (g.categoria?.trim() || 'Sin categoría')
 
     const rol = raiz?.rol_pl
