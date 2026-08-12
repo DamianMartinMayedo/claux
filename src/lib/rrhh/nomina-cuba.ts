@@ -127,7 +127,11 @@ export function calcularNominaCuba(
   entrada: EntradaCuba,
   params:  ParametroFiscal[],
 ): ResultadoCuba {
-  const { salario_base, dias_laborables, dias_trabajados, es_socio } = entrada
+  // La base entra truncada: ningún impuesto, aporte o valor diario puede calcularse
+  // sobre los céntimos que luego desaparecerían al guardar el resultado.
+  const salario_base = r2(entrada.salario_base)
+  const devengos_previos = r2(entrada.devengos_previos)
+  const { dias_laborables, dias_trabajados, es_socio } = entrada
 
   // R — prorrateo por días. Sin días cargados se asume el mes completo, que es como
   // se ha comportado el sistema siempre: quien no cargue incidencias no ve cambios.
@@ -138,7 +142,7 @@ export function calcularNominaCuba(
 
   // Devengado antes de vacaciones: el salario del período más lo que ya sumaron las
   // reglas y los conceptos del trabajador.
-  const devengadoSinVacaciones = r2(salario_devengado + entrada.devengos_previos)
+  const devengadoSinVacaciones = r2(salario_devengado + devengos_previos)
 
   // S — se ACUMULA, no se paga. Entra en la base del IUFT y de la SS de empresa,
   // pero no en el neto: es un derecho que se cobra cuando se disfruta.

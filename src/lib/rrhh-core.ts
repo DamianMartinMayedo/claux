@@ -11,6 +11,7 @@
 // las 20:00 la fecha ya es la de mañana, así que un documento fechado de noche el último día
 // del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { truncar2 } from '@/lib/rrhh/importe'
 
 export type TipoContrato = 'INDEFINIDO' | 'TEMPORAL' | 'POR_OBRA' | 'PRACTICAS'
 export type Periodicidad = 'MENSUAL' | 'QUINCENAL' | 'SEMANAL' | 'POR_HORA'
@@ -101,7 +102,7 @@ export function construirCamposEmpleado(input: EmpleadoInput) {
     turno:                 s(input.turno),
     tipo_contrato:         validarTipoContrato((input.tipo_contrato ?? '').trim()),
     fecha_alta:            s(input.fecha_alta) ?? hoyIso(),
-    salario_base:          (salario == null || isNaN(salario) || salario < 0) ? 0 : salario,
+    salario_base:          (salario == null || isNaN(salario) || salario < 0) ? 0 : truncar2(salario),
     periodicidad:          validarPeriodicidad((input.periodicidad ?? '').trim()),
     notas:                 s(input.notas),
     updated_at:            new Date().toISOString(),

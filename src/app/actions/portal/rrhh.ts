@@ -569,6 +569,9 @@ function componerLinea(opts: {
   incidencia?:  IncidenciaMes
 }): ComposicionLinea {
   const { salario_base, reglas = [], conceptos = [], preservados = [], periodo, cuba, incidencia } = opts
+  // La foto salarial es la entrada de toda la cadena: porcentajes, ley cubana y
+  // totales deben ver el mismo importe ya truncado.
+  const salarioBase = redondear2(salario_base)
 
   // ── Paso 1: qué se aplica ───────────────────────────────────────────────────
   // Las excepciones se indexan por regla: una fila de `conceptos_empleado` con
@@ -623,7 +626,7 @@ function componerLinea(opts: {
   // Los preservados van PRIMERO a propósito: si algo hay que recortar por no caber,
   // se recorta por el final, y un ajuste puesto a mano no puede evaporarse porque
   // luego se añadiera un concepto en la ficha.
-  const items: ItemLinea[] = preservados.map(p => ({ ...p }))
+  const items: ItemLinea[] = preservados.map(p => ({ ...p, monto: redondear2(p.monto) }))
 
   // Lo que trae la incidencia del mes. Va PRONTO en la lista porque es un hecho
   // concreto de este período —una noche trabajada, una penalización acordada— y si
@@ -637,7 +640,7 @@ function componerLinea(opts: {
   for (const a of aplicables) {
     if (a.tipo !== 'DEVENGO') continue
     items.push({
-      nombre: a.nombre, tipo: 'DEVENGO', monto: importe(a, salario_base),
+      nombre: a.nombre, tipo: 'DEVENGO', monto: importe(a, salarioBase),
       origen: a.origen, origen_id: a.origen_id, destino: null,
     })
   }
@@ -650,7 +653,7 @@ function componerLinea(opts: {
   // pasada, y llamarlo dos veces obligaría a reconstruirle sus propias entradas.
   const legal = cuba
     ? calcularNominaCuba({
-        salario_base,
+        salario_base: salarioBase,
         dias_laborables:  cuba.dias_laborables,
         dias_trabajados:  cuba.dias_trabajados,
         es_socio:         cuba.es_socio,
@@ -670,7 +673,7 @@ function componerLinea(opts: {
     // propio ítem, normalmente NEGATIVO. Así la invariante se mantiene y, sobre
     // todo, el desglose dice POR QUÉ cobra menos, en vez de que el número aparezca
     // cambiado sin explicación.
-    const ajusteDias = redondear2(legal.salario_devengado - salario_base)
+    const ajusteDias = redondear2(legal.salario_devengado - salarioBase)
     if (Math.abs(ajusteDias) > EPS) {
       items.push({
         nombre: NOMBRE_CONCEPTO.DIAS_NO_TRABAJADOS, tipo: 'DEVENGO', monto: ajusteDias,
@@ -688,7 +691,7 @@ function componerLinea(opts: {
   }
 
   const devengado = redondear2(
-    salario_base + items.filter(i => i.tipo === 'DEVENGO').reduce((s, i) => s + i.monto, 0))
+    salarioBase + items.filter(i => i.tipo === 'DEVENGO').reduce((s, i) => s + i.monto, 0))
 
   // ── Paso 3: lo que resta y lo que cuesta a la empresa, ya con el devengado ──
   // Los tributos van ANTES que reglas y conceptos: si algo hay que recortar por no
@@ -715,7 +718,7 @@ function componerLinea(opts: {
 
   for (const a of aplicables) {
     if (a.tipo === 'DEVENGO') continue
-    const sobre = a.base === 'DEVENGADO' ? devengado : salario_base
+    const sobre = a.base === 'DEVENGADO' ? devengado : salarioBase
     items.push({
       nombre: a.nombre, tipo: a.tipo, monto: importe(a, sobre),
       origen: a.origen, origen_id: a.origen_id,
@@ -1072,8 +1075,8 @@ export async function copiarEmpleadoAEmpresa(
   }
 
   const salario_base = (salario != null && !isNaN(salario) && salario >= 0)
-    ? salario
-    : (src.salario_base as number)
+    ? redondear2(salario)
+    : redondear2(src.salario_base as number)
 
   const nuevo_id = generarEmpleadoId()
   const ahora    = new Date().toISOString()
@@ -2219,7 +2222,7 @@ export async function guardarContrato(
 
   const tipo_contrato = TIPOS_CONTRATO.includes(tipo_raw)    ? tipo_raw    : 'INDEFINIDO'
   const periodicidad  = PERIODICIDADES.includes(periodi_raw) ? periodi_raw : 'MENSUAL'
-  const salario_base  = isNaN(salarioRaw) || salarioRaw < 0 ? 0 : salarioRaw
+  const salario_base  = isNaN(salarioRaw) || salarioRaw < 0 ? 0 : redondear2(salarioRaw)
 
   const db = createAdminClient()
 
@@ -2927,7 +2930,7 @@ export async function guardarIncidencia(
         'puntual, mételo como «Pago extra» en vez de aquí.')
     }
     if (dias_vacaciones > 0) {
-      const salario_base = Number(emp.salario_base)
+      const salario_base = redondear2(Number(emp.salario_base))
       const valorDia = efectivo > 0 ? salario_base / efectivo : 0
       const pago = redondear2(valorDia * dias_vacaciones)
       const saldo = await saldoVacacionesAcumulado(db, session.client_id, empleado_id)
@@ -3541,7 +3544,7 @@ export async function crearNomina(
   // Una nómina recién creada no tiene ítems que preservar: nace de cero.
   const items: ReturnType<typeof filaItem>[] = []
   const lineas = activos.map(e => {
-    const base     = Number(e.salario_base)
+    const base     = redondear2(Number(e.salario_base))
     const linea_id = generarLineaId()
     const inc      = incidencias.get(e.empleado_id)
     const calc     = componerLinea({
@@ -3770,10 +3773,11 @@ async function recomputarLineaDesdeItems(
     .select('tipo, monto').eq('linea_id', linea_id).eq('client_id', client_id)
   const filas = (items ?? []) as { tipo: TipoItemLinea; monto: number }[]
 
-  const devengado = redondear2(Number(linea.salario_base)
-    + filas.filter(i => i.tipo === 'DEVENGO').reduce((s, i) => s + Number(i.monto), 0))
+  const salarioBase = redondear2(Number(linea.salario_base))
+  const devengado = redondear2(salarioBase
+    + filas.filter(i => i.tipo === 'DEVENGO').reduce((s, i) => s + redondear2(Number(i.monto)), 0))
   const deducciones = redondear2(
-    filas.filter(i => i.tipo === 'RETENCION').reduce((s, i) => s + Number(i.monto), 0))
+    filas.filter(i => i.tipo === 'RETENCION').reduce((s, i) => s + redondear2(Number(i.monto)), 0))
 
   const { error } = await db.from('nomina_lineas')
     .update({ devengado, deducciones, neto: redondear2(Math.max(0, devengado - deducciones)) })
@@ -4022,7 +4026,7 @@ async function planificarRecalculo(
   const parametros = aplicaCuba ? await leerParametrosCuba(db, nomina.fecha as string) : []
 
   const lineas = enFoco.map(f => {
-    const base  = Number(f.salario_base)
+    const base  = redondear2(Number(f.salario_base))
     const ficha = fichaDe.get(f.empleado_id)
     const inc   = incidencias.get(f.empleado_id)
     // El recorte lo hace la fórmula compartida, pero aquí NO se queda en silencio:
@@ -4063,7 +4067,8 @@ async function planificarRecalculo(
       vacaciones_pagadas,
       subsidios,
       recortada,
-      cambia: Math.abs(devAntes - devengado) > EPS || Math.abs(dedAntes - deducciones) > EPS,
+      cambia: Math.abs(Number(f.salario_base) - base) > EPS
+        || Math.abs(devAntes - devengado) > EPS || Math.abs(dedAntes - deducciones) > EPS,
     }
   })
 
@@ -4087,6 +4092,7 @@ async function aplicarRecalculo(
   for (const l of cambian) {
     const { error } = await db.from('nomina_lineas')
       .update({
+        salario_base: l.salario_base,
         devengado:   l.devengado_despues,
         deducciones: l.deducciones_despues,
         neto:        l.neto_despues,
