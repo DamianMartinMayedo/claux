@@ -23,6 +23,7 @@ import {
 // tenía ni rango ni límite.
 import { limiteDelFiltro }   from '@/lib/listados'
 import { sugerirDiasTrabajados, type SugerenciaDias } from '@/lib/rrhh/dias-trabajados'
+import type { PatronResuelto, TurnoHorario } from '@/lib/rrhh/turnos'
 import { truncar2 }          from '@/lib/rrhh/importe'
 import { obtenerEmpresas }   from './empresas'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
@@ -232,11 +233,35 @@ export interface Turno {
   es_descanso: boolean
 }
 
-export interface TurnoAsignacion {
-  asignacion_id: string
-  empleado_id:   string
-  dia_semana:    number   // 1=Lunes … 7=Domingo
-  turno_id:      string
+// ── Rotación (mig. 182): patrón + slots + roster ─────────────────────────────────
+
+export type TipoPatron = 'SEMANAL' | 'QUINCENAL' | 'MENSUAL' | 'CICLO'
+
+export interface TurnoPatron {
+  patron_id:     string
+  empresa_id:    string
+  nombre:        string
+  tipo:          TipoPatron
+  longitud_dias: number
+  /** 'YYYY-MM-DD': día 0 del ciclo. */
+  fecha_ancla:   string
+  activo:        boolean
+}
+
+/** Qué franja toca en cada posición del ciclo de un patrón. `turno_id` null = descanso. */
+export interface TurnoPatronSlot {
+  slot_id:   string
+  patron_id: string
+  posicion:  number
+  turno_id:  string | null
+}
+
+/** Una persona en un patrón, con su desplazamiento dentro del ciclo. */
+export interface TurnoMiembro {
+  miembro_id:   string
+  patron_id:    string
+  empleado_id:  string
+  offset_ciclo: number
 }
 
 /**
@@ -283,10 +308,13 @@ export interface PersonalPageData extends RrhhBase {
   config_nomina: ConfigNominaEmpresa[]
 }
 
-/** Turnos (`/portal/turnos`). Ni una fila de nómina. */
+/** Turnos (`/portal/turnos`). Ni una fila de nómina.
+ *  `turnos_catalogo` = franjas; la rotación vive en `patrones` + `slots` + `miembros`. */
 export interface TurnosPageData extends RrhhBase {
   turnos_catalogo: Turno[]
-  asignaciones:    TurnoAsignacion[]
+  patrones:        TurnoPatron[]
+  slots:           TurnoPatronSlot[]
+  miembros:        TurnoMiembro[]
 }
 
 /** Nómina (`/portal/nomina`) y el detalle de una nómina. */
@@ -325,7 +353,9 @@ function generarNominaId():     string { return `NOM-${corto()}` }
 function generarLineaId():      string { return `NLN-${corto()}` }
 function generarGastoId():      string { return `GAS-${corto()}` }
 function generarTurnoId():      string { return `TUR-${corto()}` }
-function generarAsignacionId(): string { return `TAS-${corto()}` }
+function generarPatronId():     string { return `TPA-${corto()}` }
+function generarSlotId():       string { return `TPS-${corto()}` }
+function generarMiembroId():    string { return `TMI-${corto()}` }
 function generarConceptoId():   string { return `CPT-${corto()}` }
 function generarItemId():       string { return `NLC-${corto()}` }
 
@@ -1543,21 +1573,34 @@ export async function obtenerTurnos(): Promise<TurnosPageData | null> {
   const db = createAdminClient()
   const { base, idsFiltro } = await cargarBase(db, session.client_id)
 
-  const [turRes, tasRes] = await Promise.all([
+  const [turRes, patRes, slotRes, miemRes] = await Promise.all([
     db.from('turnos').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
       .order('nombre', { ascending: true }),
-    db.from('turno_asignaciones').select('*')
+    db.from('turno_patrones').select('patron_id, empresa_id, nombre, tipo, longitud_dias, fecha_ancla, activo')
+      .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
+      .order('nombre', { ascending: true }),
+    db.from('turno_patron_slots').select('slot_id, patron_id, posicion, turno_id')
+      .eq('client_id', session.client_id),
+    db.from('turno_miembros').select('miembro_id, patron_id, empleado_id, offset_ciclo')
       .eq('client_id', session.client_id),
   ])
 
+  const patrones = ((patRes.data ?? []) as TurnoPatron[]).map(p => ({
+    ...p, fecha_ancla: String(p.fecha_ancla).slice(0, 10),
+  }))
+  const patronIds  = new Set(patrones.map(p => p.patron_id))
   const empleadoIds = new Set(base.empleados.map(e => e.empleado_id))
   return {
     ...base,
     turnos_catalogo: (turRes.data ?? []) as Turno[],
-    asignaciones:    ((tasRes.data ?? []) as TurnoAsignacion[])
-      .filter(a => empleadoIds.has(a.empleado_id)),
+    patrones,
+    // slots y miembros se acotan a los patrones visibles (los de las empresas del rol).
+    slots:    ((slotRes.data ?? []) as TurnoPatronSlot[]).filter(s => patronIds.has(s.patron_id)),
+    miembros: ((miemRes.data ?? []) as TurnoMiembro[])
+      .filter(m => patronIds.has(m.patron_id) && empleadoIds.has(m.empleado_id)),
   }
 }
 
@@ -3018,17 +3061,23 @@ export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDet
   const data: PersonalPageData = { ...base, config_nomina: Array.from(configs.values()) }
 
   const empIds = nomina.lineas.map(l => l.empleado_id)
-  const [incidenciasMap, { data: fichas }, { data: asigns }, { data: turnosCat }] = await Promise.all([
+  const [incidenciasMap, { data: fichas }, { data: miembros }, { data: patronesRaw }, { data: slotsRaw }, { data: turnosCat }] = await Promise.all([
     leerIncidencias(db, session.client_id, nomina.periodo),
     // `fecha_alta`/`fecha_baja` entran aquí para la sugerencia de días: son lo que dice
     // que alguien no trabajó el mes entero, y hasta ahora nadie lo miraba al generar.
     db.from('empleados').select('empleado_id, dias_laborables, fecha_alta, fecha_baja')
       .eq('client_id', session.client_id)
       .in('empleado_id', empIds),
-    db.from('turno_asignaciones').select('empleado_id, dia_semana, turno_id')
+    // Rotación (mig. 182): roster + patrones + slots + catálogo de franjas. De los tres se
+    // derivan los días que le tocaban a cada uno (`sugerirDiasTrabajados`).
+    db.from('turno_miembros').select('empleado_id, patron_id, offset_ciclo')
       .eq('client_id', session.client_id)
       .in('empleado_id', empIds.length ? empIds : ['__none__']),
-    db.from('turnos').select('turno_id, es_descanso, activo')
+    db.from('turno_patrones').select('patron_id, longitud_dias, fecha_ancla')
+      .eq('client_id', session.client_id).eq('empresa_id', nomina.empresa_id).eq('activo', true),
+    db.from('turno_patron_slots').select('patron_id, posicion, turno_id')
+      .eq('client_id', session.client_id),
+    db.from('turnos').select('turno_id, hora_inicio, hora_fin, es_descanso')
       .eq('client_id', session.client_id).eq('empresa_id', nomina.empresa_id),
   ])
   const config  = configDe(configs, nomina.empresa_id)
@@ -3048,15 +3097,35 @@ export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDet
   // sugerencia no tendría dónde aplicarse.
   const sugerenciaDias: Record<string, SugerenciaDias> = {}
   if (esCuba) {
-    // Un turno de DESCANSO no cuenta como día trabajado; «sin asignar» tampoco (mig. 169).
-    const noCuenta = new Set(((turnosCat ?? []) as { turno_id: string; es_descanso: boolean }[])
-      .filter(t => t.es_descanso).map(t => t.turno_id))
-    const semanaDe = new Map<string, boolean[]>()
-    for (const a of (asigns ?? []) as { empleado_id: string; dia_semana: number; turno_id: string }[]) {
-      const s = semanaDe.get(a.empleado_id) ?? new Array(7).fill(false)
-      // La semana llega con LUNES = 1 y el vector la indexa con LUNES = 0.
-      s[a.dia_semana - 1] = !noCuenta.has(a.turno_id)
-      semanaDe.set(a.empleado_id, s)
+    // Resolver los patrones a lo que entiende el puente: cada slot del ciclo con el
+    // HORARIO de su franja (null = descanso), y por empleado la lista de sus patrones con
+    // offset. Un turno de DESCANSO o un slot vacío no cuentan como día trabajado.
+    const horarioDe = new Map(((turnosCat ?? []) as { turno_id: string; hora_inicio: string | null; hora_fin: string | null; es_descanso: boolean }[])
+      .map(t => [t.turno_id, { hora_inicio: t.hora_inicio, hora_fin: t.hora_fin, es_descanso: t.es_descanso } as TurnoHorario]))
+    const slotsDe = new Map<string, (TurnoHorario | null)[]>()
+    for (const p of (patronesRaw ?? []) as { patron_id: string; longitud_dias: number }[]) {
+      slotsDe.set(p.patron_id, new Array(p.longitud_dias).fill(null))
+    }
+    for (const sl of (slotsRaw ?? []) as { patron_id: string; posicion: number; turno_id: string | null }[]) {
+      const arr = slotsDe.get(sl.patron_id)
+      if (!arr || sl.posicion < 0 || sl.posicion >= arr.length) continue
+      arr[sl.posicion] = sl.turno_id ? (horarioDe.get(sl.turno_id) ?? null) : null
+    }
+    const resueltoDe = new Map<string, PatronResuelto>()
+    for (const p of (patronesRaw ?? []) as { patron_id: string; longitud_dias: number; fecha_ancla: string }[]) {
+      resueltoDe.set(p.patron_id, {
+        longitud_dias: p.longitud_dias,
+        fecha_ancla:   String(p.fecha_ancla).slice(0, 10),
+        slots:         slotsDe.get(p.patron_id) ?? [],
+      })
+    }
+    const patronesDe = new Map<string, { patron: PatronResuelto; offset: number }[]>()
+    for (const m of (miembros ?? []) as { empleado_id: string; patron_id: string; offset_ciclo: number }[]) {
+      const pr = resueltoDe.get(m.patron_id)
+      if (!pr) continue
+      const arr = patronesDe.get(m.empleado_id) ?? []
+      arr.push({ patron: pr, offset: m.offset_ciclo ?? 0 })
+      patronesDe.set(m.empleado_id, arr)
     }
     for (const l of nomina.lineas) {
       const ficha = propios.get(l.empleado_id)
@@ -3065,7 +3134,7 @@ export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDet
         fecha_alta:      ficha?.fecha_alta ?? null,
         fecha_baja:      ficha?.fecha_baja ?? null,
         dias_laborables: diasLaborables[l.empleado_id],
-        semana:          semanaDe.get(l.empleado_id),
+        patrones:        patronesDe.get(l.empleado_id),
       })
       if (!s) continue
       // El aviso sale si hay desfase REAL, nunca «por si acaso»: si la línea ya lleva
@@ -4795,7 +4864,9 @@ export async function eliminarTurno(turno_id: string): Promise<{ ok: boolean; er
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
-  await db.from('turno_asignaciones').delete()
+  // Los slots de rotación que usaban esta franja pasan a descanso (turno_id null) en vez
+  // de quedar apuntando a una franja que ya no existe.
+  await db.from('turno_patron_slots').update({ turno_id: null })
     .eq('client_id', session.client_id).eq('turno_id', turno_id)
   const { error } = await db.from('turnos').delete()
     .eq('turno_id', turno_id).eq('client_id', session.client_id)
@@ -4805,94 +4876,187 @@ export async function eliminarTurno(turno_id: string): Promise<{ ok: boolean; er
   return { ok: true }
 }
 
-// ── Guardar la rejilla semanal (varias celdas de una vez) ───────────────────────
+// ── Patrones de rotación (mig. 182) ──────────────────────────────────────────────
 
-/** Una celda del cuadrante. `turno_id` vacío = liberarla. */
-export interface CambioAsignacion {
-  empleado_id: string
-  /** 1 = lunes … 7 = domingo. */
-  dia_semana:  number
-  turno_id:    string
+const LONGITUD_POR_TIPO: Record<TipoPatron, number | null> = {
+  SEMANAL: 7, QUINCENAL: 14, MENSUAL: 28, CICLO: null,  // CICLO: la longitud la fija N+M
 }
 
-/**
- * Escribe VARIAS celdas del cuadrante en una sola llamada.
- *
- * Antes había una acción por celda (`asignarTurno`) y la vista disparaba además un
- * `router.refresh()` detrás de cada `<select>`: rellenar la semana de diez personas
- * eran **setenta viajes** y setenta recargas de la página entera, cada una con su
- * toast. En una conexión cubana eso no es una molestia, es una pantalla inutilizable.
- *
- * Valida lo que la UI ya filtraba pero la acción aceptaba: que el trabajador sea de
- * este cliente y que el turno sea de **su misma empresa**. Sin eso se podía asignar
- * a alguien de la empresa A un turno de la B, y la rejilla —que filtra por empresa—
- * ni siquiera lo enseñaría.
- */
-export async function guardarAsignaciones(
-  cambios: CambioAsignacion[],
-): Promise<{ ok: boolean; error?: string; guardadas?: number }> {
-  const session = await getPortalSession()
-  if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-  if (!cambios.length) return { ok: true, guardadas: 0 }
+/** Una posición del ciclo con su franja (`turno_id` vacío = descanso). */
+export interface SlotPatron { posicion: number; turno_id: string | null }
 
-  for (const c of cambios) {
-    if (!c.empleado_id) return { ok: false, error: 'Trabajador no válido.' }
-    if (!Number.isInteger(c.dia_semana) || c.dia_semana < 1 || c.dia_semana > 7) {
-      return { ok: false, error: 'Día no válido.' }
+/**
+ * Crea o edita un patrón de rotación **con sus slots** en una sola llamada. Los slots se
+ * reemplazan enteros (borrar + reinsertar): la secuencia de un ciclo se edita como un
+ * bloque, igual que la rejilla se guardaba de una vez.
+ *
+ * Valida que todas las franjas de los slots sean de la **misma empresa** que el patrón:
+ * sin esto se podía meter una franja de la empresa A en un patrón de la B, y la vista
+ * —que filtra por empresa— ni lo enseñaría.
+ */
+export async function guardarPatron(
+  fd: FormData,
+): Promise<{ ok: boolean; error?: string; patron_id?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const patron_id  = (fd.get('patron_id')  as string)?.trim() || ''
+  const empresa_id = (fd.get('empresa_id') as string)?.trim() || ''
+  const nombre     = (fd.get('nombre')     as string)?.trim() || ''
+  const tipo       = (fd.get('tipo')       as string)?.trim() as TipoPatron
+  const fecha_ancla = (fd.get('fecha_ancla') as string)?.trim() || ''
+
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa del patrón.' }
+  if (!nombre)     return { ok: false, error: 'El nombre del patrón es obligatorio.' }
+  if (!(tipo in LONGITUD_POR_TIPO)) return { ok: false, error: 'Tipo de rotación no válido.' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha_ancla)) return { ok: false, error: 'La fecha de inicio del ciclo no es válida.' }
+
+  // Longitud: la fija el tipo, salvo CICLO, que la trae del formulario (N+M).
+  const longitud_dias = LONGITUD_POR_TIPO[tipo] ?? Number((fd.get('longitud_dias') as string) ?? '')
+  if (!Number.isInteger(longitud_dias) || longitud_dias < 1 || longitud_dias > 366) {
+    return { ok: false, error: 'La longitud del ciclo debe estar entre 1 y 366 días.' }
+  }
+
+  // Slots: JSON [{ posicion, turno_id }]. Se validan aquí, no se confía en la UI.
+  let slots: SlotPatron[]
+  try {
+    slots = JSON.parse((fd.get('slots') as string) ?? '[]') as SlotPatron[]
+  } catch { return { ok: false, error: 'Secuencia del ciclo no válida.' } }
+  if (!Array.isArray(slots)) return { ok: false, error: 'Secuencia del ciclo no válida.' }
+  for (const s of slots) {
+    if (!Number.isInteger(s.posicion) || s.posicion < 0 || s.posicion >= longitud_dias) {
+      return { ok: false, error: 'La secuencia tiene un día fuera del ciclo.' }
     }
   }
 
   const db = createAdminClient()
 
-  // Las dos comprobaciones de pertenencia, en dos consultas y no en 2×N.
-  const empIds   = Array.from(new Set(cambios.map(c => c.empleado_id)))
-  const turnoIds = Array.from(new Set(cambios.map(c => c.turno_id).filter(Boolean)))
-  const [{ data: emps }, { data: turnos }] = await Promise.all([
-    db.from('empleados').select('empleado_id, empresa_id')
-      .eq('client_id', session.client_id).in('empleado_id', empIds),
-    turnoIds.length
-      ? db.from('turnos').select('turno_id, empresa_id')
-          .eq('client_id', session.client_id).in('turno_id', turnoIds)
-      : Promise.resolve({ data: [] as { turno_id: string; empresa_id: string }[] }),
-  ])
-  const empresaDeEmpleado = new Map((emps ?? []).map(e => [e.empleado_id as string, e.empresa_id as string]))
-  const empresaDeTurno    = new Map((turnos ?? []).map(t => [t.turno_id as string, t.empresa_id as string]))
+  // La empresa del patrón es del cliente; y las franjas usadas, de esa empresa.
+  const { data: emp } = await db.from('empresas').select('empresa_id')
+    .eq('empresa_id', empresa_id).eq('client_id', session.client_id).maybeSingle()
+  if (!emp) return { ok: false, error: 'Empresa no encontrada.' }
 
-  for (const c of cambios) {
-    const empresaEmp = empresaDeEmpleado.get(c.empleado_id)
-    if (!empresaEmp) return { ok: false, error: 'Trabajador no encontrado.' }
-    if (!c.turno_id) continue
-    const empresaTur = empresaDeTurno.get(c.turno_id)
-    if (!empresaTur) return { ok: false, error: 'Turno no encontrado.' }
-    if (empresaTur !== empresaEmp) {
-      return { ok: false, error: 'Ese turno es de otra empresa: no se puede asignar a este trabajador.' }
+  const turnoIds = Array.from(new Set(slots.map(s => s.turno_id).filter(Boolean))) as string[]
+  if (turnoIds.length) {
+    const { data: fr } = await db.from('turnos').select('turno_id, empresa_id')
+      .eq('client_id', session.client_id).in('turno_id', turnoIds)
+    const ajenas = (fr ?? []).filter(t => t.empresa_id !== empresa_id)
+    if (ajenas.length || (fr ?? []).length !== turnoIds.length) {
+      return { ok: false, error: 'Alguna franja de la secuencia no es de esta empresa.' }
     }
   }
 
-  // Reemplazo: se libera cada celda tocada y se reinsertan las que llevan turno. El
-  // borrado va en UNA consulta por trabajador (no por celda) y el alta en una sola.
-  for (const empleado_id of empIds) {
-    const dias = cambios.filter(c => c.empleado_id === empleado_id).map(c => c.dia_semana)
-    const { error } = await db.from('turno_asignaciones').delete()
-      .eq('client_id', session.client_id)
-      .eq('empleado_id', empleado_id)
-      .in('dia_semana', dias)
+  const id = patron_id || generarPatronId()
+  if (!patron_id) {
+    const { error } = await db.from('turno_patrones').insert({
+      patron_id: id, client_id: session.client_id, empresa_id, nombre, tipo,
+      longitud_dias, fecha_ancla, activo: true,
+    })
+    if (error) return { ok: false, error: error.message }
+  } else {
+    const { error } = await db.from('turno_patrones')
+      .update({ nombre, tipo, longitud_dias, fecha_ancla, updated_at: new Date().toISOString() })
+      .eq('patron_id', id).eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
   }
 
-  const altas = cambios.filter(c => c.turno_id).map(c => ({
-    asignacion_id: generarAsignacionId(),
-    client_id:     session.client_id,
-    empleado_id:   c.empleado_id,
-    dia_semana:    c.dia_semana,
-    turno_id:      c.turno_id,
+  // Reemplazo de slots: fuera los viejos, dentro los nuevos con franja.
+  await db.from('turno_patron_slots').delete().eq('client_id', session.client_id).eq('patron_id', id)
+  const altas = slots.map(s => ({
+    slot_id: generarSlotId(), client_id: session.client_id, patron_id: id,
+    posicion: s.posicion, turno_id: s.turno_id || null,
   }))
   if (altas.length) {
-    const { error } = await db.from('turno_asignaciones').insert(altas)
+    const { error } = await db.from('turno_patron_slots').insert(altas)
     if (error) return { ok: false, error: error.message }
   }
 
   revalidatePath('/portal/turnos')
-  return { ok: true, guardadas: cambios.length }
+  return { ok: true, patron_id: id }
 }
+
+/** Activa/desactiva un patrón sin borrarlo (deja de contar para el cuadrante y la nómina). */
+export async function alternarPatron(
+  patron_id: string, activo: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('turno_patrones')
+    .update({ activo, updated_at: new Date().toISOString() })
+    .eq('patron_id', patron_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/portal/turnos')
+  return { ok: true }
+}
+
+/** Borra un patrón con sus slots y su roster. */
+export async function eliminarPatron(patron_id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  await db.from('turno_miembros').delete().eq('client_id', session.client_id).eq('patron_id', patron_id)
+  await db.from('turno_patron_slots').delete().eq('client_id', session.client_id).eq('patron_id', patron_id)
+  const { error } = await db.from('turno_patrones').delete()
+    .eq('patron_id', patron_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/portal/turnos')
+  return { ok: true }
+}
+
+/** Un miembro del roster de un patrón. */
+export interface MiembroRoster { empleado_id: string; offset_ciclo: number }
+
+/**
+ * Reemplaza el roster de un patrón en una sola llamada (borrar + reinsertar por patrón).
+ * Valida que el patrón y todos los empleados sean de la **misma empresa** (la comprobación
+ * de pertenencia de siempre).
+ */
+export async function guardarRoster(
+  patron_id: string, miembros: MiembroRoster[],
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!patron_id) return { ok: false, error: 'Patrón no válido.' }
+
+  const db = createAdminClient()
+  const { data: patron } = await db.from('turno_patrones').select('patron_id, empresa_id')
+    .eq('patron_id', patron_id).eq('client_id', session.client_id).maybeSingle()
+  if (!patron) return { ok: false, error: 'Patrón no encontrado.' }
+
+  const empIds = Array.from(new Set(miembros.map(m => m.empleado_id).filter(Boolean)))
+  if (empIds.length) {
+    const { data: emps } = await db.from('empleados').select('empleado_id, empresa_id')
+      .eq('client_id', session.client_id).in('empleado_id', empIds)
+    const mapa = new Map((emps ?? []).map(e => [e.empleado_id as string, e.empresa_id as string]))
+    for (const id of empIds) {
+      const empresaEmp = mapa.get(id)
+      if (!empresaEmp) return { ok: false, error: 'Trabajador no encontrado.' }
+      if (empresaEmp !== patron.empresa_id) {
+        return { ok: false, error: 'Ese trabajador es de otra empresa: no entra en este patrón.' }
+      }
+    }
+  }
+
+  await db.from('turno_miembros').delete().eq('client_id', session.client_id).eq('patron_id', patron_id)
+  const altas = miembros.filter(m => m.empleado_id).map(m => ({
+    miembro_id: generarMiembroId(), client_id: session.client_id, patron_id,
+    empleado_id: m.empleado_id, offset_ciclo: Number.isInteger(m.offset_ciclo) ? m.offset_ciclo : 0,
+  }))
+  if (altas.length) {
+    const { error } = await db.from('turno_miembros').insert(altas)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/portal/turnos')
+  return { ok: true }
+}
+
+// La rejilla semanal (`turno_asignaciones` + `guardarAsignaciones`) se retiró con el
+// modelo de rotación (migs. 182-183). Su sustituto es `guardarPatron` + `guardarRoster`.

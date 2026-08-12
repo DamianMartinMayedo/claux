@@ -23,6 +23,8 @@
 // si hubo preaviso— es del negocio, no del software. Y la rejilla es una SEMANA TIPO,
 // no un registro de asistencia: dice lo que estaba planificado, no lo que pasó.
 
+import { diasTrabajadosUnionEnRango, type PatronResuelto } from './turnos'
+
 export type MotivoSugerencia = 'ALTA' | 'BAJA' | 'TURNOS'
 
 export interface SugerenciaDias {
@@ -41,22 +43,17 @@ export interface EntradaSugerencia {
   /** Los del trabajador (o los de su empresa): lo que vale un mes completo para él. */
   dias_laborables: number
   /**
-   * Su semana tipo: siete posiciones, índice 0 = LUNES, `true` si ese día cuenta como
-   * trabajado (o sea: tiene turno asignado y ese turno no es de descanso). Sin rejilla
-   * se omite, y entonces el prorrateo va por días naturales.
+   * Sus patrones de rotación (mig. 182), ya resueltos, cada uno con el offset de la
+   * persona. Un día cuenta como trabajado si ALGÚN patrón lo pone a trabajar (unión, sin
+   * doble conteo). Sin patrones se omite, y entonces el prorrateo va por días naturales.
    */
-  semana?:         boolean[]
+  patrones?:       { patron: PatronResuelto; offset: number }[]
 }
 
 /** Último día del mes de un período 'YYYY-MM'. */
 function ultimoDia(periodo: string): number {
   const [y, m] = periodo.split('-').map(Number)
   return new Date(y, m, 0).getDate()
-}
-
-/** Día de la semana con LUNES = 0, para indexar `semana`. */
-function indiceSemana(y: number, m: number, d: number): number {
-  return (new Date(y, m - 1, d).getDay() + 6) % 7
 }
 
 function redondear1(n: number): number { return Math.round(n * 10) / 10 }
@@ -77,7 +74,6 @@ function fmtDia(iso: string): string {
  */
 export function sugerirDiasTrabajados(e: EntradaSugerencia): SugerenciaDias | null {
   if (!/^\d{4}-\d{2}$/.test(e.periodo)) return null
-  const [y, m]   = e.periodo.split('-').map(Number)
   const finMes   = ultimoDia(e.periodo)
   const inicioISO = `${e.periodo}-01`
   const finISO    = `${e.periodo}-${String(finMes).padStart(2, '0')}`
@@ -98,17 +94,15 @@ export function sugerirDiasTrabajados(e: EntradaSugerencia): SugerenciaDias | nu
   const dDesde  = Number(desde.slice(8, 10))
   const dHasta  = Number(hasta.slice(8, 10))
 
-  // ── Con rejilla: se cuentan los días asignados que caen dentro del tramo ──────
-  // Vale para los dos casos a la vez: el mes completo y el mes partido por un alta o
-  // una baja. Es la misma cuenta, con distintos límites.
-  const usaSemana = Array.isArray(e.semana) && e.semana.some(Boolean)
-  if (usaSemana) {
-    let dias = 0
-    for (let d = dDesde; d <= dHasta; d++) {
-      if (e.semana![indiceSemana(y, m, d)]) dias++
-    }
-    // Si el cuadrante da exactamente lo que ya vale un mes completo y además no hubo
-    // alta ni baja, no hay nada que sugerir: el aviso solo sale si hay desfase real.
+  // ── Con rotación: se cuentan los días que ALGÚN patrón pone a trabajar dentro del
+  // tramo. Vale para los dos casos a la vez —mes completo y mes partido por un alta o una
+  // baja—: la misma cuenta, con distintos límites. Unión sin doble conteo si la persona
+  // está en varios patrones (D2 del plan turnos-frecuencia).
+  const usaPatrones = Array.isArray(e.patrones) && e.patrones.length > 0
+  if (usaPatrones) {
+    const dias = diasTrabajadosUnionEnRango(e.patrones!, desde, hasta)
+    // Si la rotación da exactamente lo que ya vale un mes completo y además no hubo alta
+    // ni baja, no hay nada que sugerir: el aviso solo sale si hay desfase real.
     if (!parcial && Math.abs(dias - e.dias_laborables) < 0.05) return null
     if (parcial) {
       return {

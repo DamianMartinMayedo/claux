@@ -205,7 +205,7 @@ export const adaptadorPersonal: Adaptador = {
       { tabla: 'nomina_lineas',      columna: 'empleado_id', etiqueta: 'líneas de nómina' },
       { tabla: 'contratos',          columna: 'empleado_id', etiqueta: 'contratos' },
       { tabla: 'conceptos_empleado', columna: 'empleado_id', etiqueta: 'conceptos fijos' },
-      { tabla: 'turno_asignaciones', columna: 'empleado_id', etiqueta: 'turnos asignados' },
+      { tabla: 'turno_miembros',     columna: 'empleado_id', etiqueta: 'turnos asignados' },
       { tabla: 'recursos',           columna: 'empleado_id', etiqueta: 'fichas de agenda' },
     ])
     if (dep) return dep

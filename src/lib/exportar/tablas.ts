@@ -34,9 +34,9 @@ import { SIN_CATEGORIA, SIN_TERCERO, importeBuscado } from '@/lib/listados'
 // «Hoy» en la zona del NEGOCIO (America/Havana). Con `toISOString()` (UTC), a partir de las
 // 20:00 la fecha ya es la de mañana: el tramo de antigüedad de una deuda y el estado
 // efectivo de un acuerdo salían distintos en el fichero y en la pantalla.
-import { hoyEnTz } from '@/lib/fecha-tz'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { etiquetaEstado } from '@/lib/reservas/estados'
-import { horasDeTurno } from '@/lib/rrhh/turnos'
+import { horasDeTurno, posicionEnCiclo } from '@/lib/rrhh/turnos'
 import type { ValorCelda } from './csv'
 
 // Los centinelas de «los que no tienen» viven en `lib/listados.ts`: los necesitan las
@@ -1073,41 +1073,78 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     cabeceras: ['Empleado', 'Cargo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes',
       'Sábado', 'Domingo', 'Horas'],
     cargar: async (db, cid, filtro) => {
-      // La plantilla se acota por empresa como el resto (`TABLAS_CON_EMPRESA` cubre
-      // `empleados` y `turnos`); solo se pinta a quien está de alta: un cuadrante con
-      // las bajas dentro no es el cuadrante de esta semana.
-      const [empleados, turnos, asigns] = await Promise.all([
+      // El cuadrante se DERIVA de la rotación (mig. 182): franjas + patrones activos +
+      // slots + roster. Se pinta la SEMANA EN CURSO (lunes-domingo, en la zona del
+      // negocio) porque las cabeceras son por día de la semana. Solo alta.
+      const hoy = hoyEnTz()
+      const [hy, hm, hd] = hoy.split('-').map(Number)
+      const dow   = (new Date(hy, hm - 1, hd).getDay() + 6) % 7   // 0 = lunes
+      const lunes = sumarDias(hoy, -dow)
+      const fechasSemana = [0, 1, 2, 3, 4, 5, 6].map(i => sumarDias(lunes, i))
+
+      const empresaFiltro = filtro?.empresa_id
+      const [empleados, turnos, patRes, slotRes, miemRes] = await Promise.all([
         leer(db, 'empleados', cid, 'empleado_id, nombre, apellidos, cargo, fecha_baja', 'nombre',
           filtro, undefined, ['nombre', 'apellidos', 'cargo'],
-          { empresa_id: filtro?.empresa_id }),
+          { empresa_id: empresaFiltro }),
         leer(db, 'turnos', cid, 'turno_id, nombre, hora_inicio, hora_fin, es_descanso', 'nombre',
-          filtro, undefined, ['nombre'], { empresa_id: filtro?.empresa_id }),
-        db.from('turno_asignaciones').select('empleado_id, dia_semana, turno_id').eq('client_id', cid),
+          filtro, undefined, ['nombre'], { empresa_id: empresaFiltro }),
+        (empresaFiltro
+          ? db.from('turno_patrones').select('patron_id, longitud_dias, fecha_ancla')
+              .eq('client_id', cid).eq('activo', true).eq('empresa_id', empresaFiltro)
+          : db.from('turno_patrones').select('patron_id, longitud_dias, fecha_ancla')
+              .eq('client_id', cid).eq('activo', true)),
+        db.from('turno_patron_slots').select('patron_id, posicion, turno_id').eq('client_id', cid),
+        db.from('turno_miembros').select('patron_id, empleado_id, offset_ciclo').eq('client_id', cid),
       ])
 
       const turnoDe = new Map((turnos as unknown as {
         turno_id: string; nombre: string; hora_inicio: string | null
         hora_fin: string | null; es_descanso: boolean
       }[]).map(t => [t.turno_id, t]))
-      const celda = new Map<string, string>()
-      for (const a of (asigns.data ?? []) as { empleado_id: string; dia_semana: number; turno_id: string }[]) {
-        celda.set(`${a.empleado_id}-${a.dia_semana}`, a.turno_id)
+      const patronDe = new Map(((patRes.data ?? []) as { patron_id: string; longitud_dias: number; fecha_ancla: string }[])
+        .map(p => [p.patron_id, p]))
+      const slotArrDe = new Map<string, (string | null)[]>()
+      for (const [id, p] of patronDe) slotArrDe.set(id, new Array(p.longitud_dias).fill(null))
+      for (const s of (slotRes.data ?? []) as { patron_id: string; posicion: number; turno_id: string | null }[]) {
+        const arr = slotArrDe.get(s.patron_id)
+        if (arr && s.posicion >= 0 && s.posicion < arr.length) arr[s.posicion] = s.turno_id
+      }
+      const patronesDeEmp = new Map<string, { patron_id: string; offset: number }[]>()
+      for (const m of (miemRes.data ?? []) as { patron_id: string; empleado_id: string; offset_ciclo: number }[]) {
+        if (!patronDe.has(m.patron_id)) continue
+        const a = patronesDeEmp.get(m.empleado_id) ?? []
+        a.push({ patron_id: m.patron_id, offset: m.offset_ciclo })
+        patronesDeEmp.set(m.empleado_id, a)
+      }
+
+      // Las franjas de trabajo (sin descanso, sin repetir) de un empleado en una fecha.
+      const franjasDia = (empId: string, fecha: string) => {
+        const seen = new Set<string>()
+        const out: { nombre: string; hora_inicio: string | null; hora_fin: string | null; es_descanso: boolean }[] = []
+        for (const { patron_id, offset } of patronesDeEmp.get(empId) ?? []) {
+          const p = patronDe.get(patron_id); if (!p) continue
+          const pos = posicionEnCiclo({ longitud_dias: p.longitud_dias, fecha_ancla: String(p.fecha_ancla).slice(0, 10), slots: [] }, offset, fecha)
+          const tid = slotArrDe.get(patron_id)?.[pos]; if (!tid) continue
+          const t = turnoDe.get(tid); if (!t || t.es_descanso || seen.has(tid)) continue
+          seen.add(tid); out.push(t)
+        }
+        return out
       }
 
       return empleados
         .filter(e => !e.fecha_baja)
         .map(e => {
-          const dias = [1, 2, 3, 4, 5, 6, 7].map(d => turnoDe.get(celda.get(`${e.empleado_id as string}-${d}`) ?? ''))
-          const horas = dias.reduce((s, t) => s + horasDeTurno(t ?? null), 0)
+          const celdas = fechasSemana.map(f => franjasDia(e.empleado_id as string, f))
+          const horas  = celdas.reduce((s, fr) => s + fr.reduce((a, t) => a + horasDeTurno(t), 0), 0)
           return [
             [e.nombre as string, e.apellidos as string].filter(Boolean).join(' '),
             (e.cargo as string) ?? '',
             // El horario va en la celda: un cuadrante que solo dice «Mañana» obliga a
             // mirar otra hoja para saber a qué hora es «Mañana».
-            ...dias.map(t => !t ? '' : t.es_descanso ? 'Libre'
-              : [t.nombre, t.hora_inicio && t.hora_fin
-                  ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : '']
-                .filter(Boolean).join(' ')),
+            ...celdas.map(fr => fr.map(t =>
+              [t.nombre, t.hora_inicio && t.hora_fin ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : '']
+                .filter(Boolean).join(' ')).join(' / ')),
             horas > 0 ? Math.round(horas * 10) / 10 : '',
           ]
         })
