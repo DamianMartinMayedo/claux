@@ -555,7 +555,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
 
       <div className="card card-table">
         <div className="table-wrapper">
-          <table className="table">
+          <table className="table table-sticky-first">
             <thead>
               <tr>
                 <th>Empleado</th>
