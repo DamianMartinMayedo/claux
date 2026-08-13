@@ -356,6 +356,14 @@ export async function archivarCuentasEnLote(
 // Si registrar_gasto está activo, crea también un gasto_cobro vinculado
 // (GASTO si es EGRESO, COBRO si es INGRESO) y el movimiento queda con
 // origen PAGO/COBRO y referencia_id al registro creado.
+//
+// 🔴 **Una categoría obliga a crear el registro** (fase 5 del clasificador, C7).
+// `movimientos_tesoreria.categoria_id` no lo lee ningún informe: el estado de
+// resultados se construye sobre `gastos_cobros`. Un movimiento MANUAL con
+// categoría era, literalmente, una clasificación que no miraba nadie — el dueño
+// etiquetaba «alquiler» y su informe seguía sin alquiler. Así que la categoría
+// manda sobre el flag: si la hay, se escribe el registro. La combinación
+// «MANUAL + categoría» deja de poder crearse por ningún camino.
 
 export async function registrarMovimiento(
   formData: FormData,
@@ -373,7 +381,7 @@ export async function registrarMovimiento(
   const concepto       = (formData.get('concepto')  as string)?.trim()
   const categoria_id   = (formData.get('categoria_id') as string)?.trim() || null
   const notas          = (formData.get('notas')     as string)?.trim() || null
-  const registrarGasto = formData.get('registrar_gasto') === 'true'
+  const registrarGasto = formData.get('registrar_gasto') === 'true' || !!categoria_id
   const tercero_id     = (formData.get('tercero_id') as string)?.trim() || null
 
   if (!cuenta_id)                          return { ok: false, error: 'Debes seleccionar una cuenta.' }
@@ -732,7 +740,6 @@ export async function editarMovimiento(
   const movimiento_id = (formData.get('movimiento_id') as string)?.trim()
   const fecha         = (formData.get('fecha')     as string)?.trim()
   const concepto      = (formData.get('concepto')  as string)?.trim()
-  const categoria_id  = (formData.get('categoria_id') as string)?.trim() || null
   const notas         = (formData.get('notas')     as string)?.trim() || null
   const montoRaw      = parseFloat(formData.get('monto') as string)
 
@@ -753,23 +760,17 @@ export async function editarMovimiento(
     return { ok: false, error: 'Este movimiento proviene de un cobro o pago. Corrígelo desde su documento.' }
   }
 
-  let categoriaNombre: string | null = null
-  if (categoria_id) {
-    const { data: cat } = await db.from('categorias_gastos')
-      .select('nombre').eq('categoria_id', categoria_id)
-      .eq('client_id', session.client_id).eq('estado', 'ACTIVO').maybeSingle()
-    if (!cat) return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
-    categoriaNombre = cat.nombre as string
-  }
-
+  // 🔴 La CATEGORÍA no se edita aquí, y desde la fase 5 tampoco se pide en pantalla.
+  // Un movimiento manual es dinero que se mueve y nada más: clasificarlo en esta
+  // tabla no lo mete en el informe —el informe se construye sobre `gastos_cobros`—
+  // y le daba al dueño la impresión contraria. Si era un gasto o un cobro, el
+  // camino es borrarlo y registrarlo eligiendo qué fue, que sí crea el registro.
   const { error } = await db.from('movimientos_tesoreria')
     .update({
       fecha:        fecha || undefined,
       monto:        montoRaw,
       monto_ref:    montoRaw,
       concepto,
-      categoria:    categoriaNombre,
-      categoria_id,
       notas,
     })
     .eq('movimiento_id', movimiento_id)

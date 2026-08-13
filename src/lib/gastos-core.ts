@@ -7,6 +7,8 @@
 // texto libre va en `notas`. Un COBRO lleva concepto de texto libre y no lleva
 // categoría. Es la clase de regla que si se copia en dos sitios, se separa.
 
+import { RAIZ_POR_CLAVE, ENTRADA_POR_CLAVE } from '@/lib/catalogo/catalogo'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
 
@@ -209,22 +211,46 @@ export type ClaveCategoriaSistema =
   | 'compras'                 // entrada de mercancía (inv_confirmar_compra)
   | 'servicios_terceros'      // CxP al proveedor de un servicio (srv_cxp_generar)
   | 'salarios'                // nómina confirmada: el salario devengado (coste)
-  | 'retenciones_nomina'      // nómina confirmada: lo retenido, a la agencia tributaria
+  // `retenciones_nomina` se retiró en la mig. 184: nadie la escribía desde la
+  // mig. 166. La retención no es un gasto de la empresa — es parte del salario
+  // devengado que se le retiene al trabajador, y la fila DEUDA de la nómina va
+  // sin categoría a propósito.
   | 'vacaciones_acumuladas'   // nómina MIPYME_CUBA: la provisión del mes (mig. 166)
   | 'impuestos_salario'       // nómina MIPYME_CUBA: IUFT, a cargo de la empresa
   | 'contribucion_ss_empresa' // nómina MIPYME_CUBA: SS de empresa (12,5 % + 1,5 %)
   | 'comisiones_bancarias'    // fees de transferencia
 
+// Los nombres históricos, a propósito: son los que ya tienen los clientes en
+// producción. Ponerles ahora los del catálogo («Compras y mercancía») haría que la
+// búsqueda por nombre de `cat_gasto_sistema` no encontrase la suya y le creara una
+// segunda al lado. Cuando el catálogo esté sembrado ninguno de estos nombres se
+// usa: la fila se encuentra por su clave.
 const NOMBRE_DEFECTO: Record<ClaveCategoriaSistema, string> = {
   compras:                 'Compras',
   servicios_terceros:      'Servicios de terceros',
   salarios:                'Salarios',
-  retenciones_nomina:      'Retenciones de nómina',
   vacaciones_acumuladas:   'Vacaciones acumuladas',
   // Nomenclatura tal y como se usa en Cuba: nada de «aportes patronales».
   impuestos_salario:       'Impuestos de salario',
   contribucion_ss_empresa: 'Contribución a la Seguridad Social',
   comisiones_bancarias:    'Comisiones bancarias',
+}
+
+/**
+ * Bajo qué categoría principal debe nacer una categoría de sistema.
+ *
+ * Sale del catálogo por defecto (`src/lib/catalogo/`), no de una tabla escrita a
+ * mano aquí: son la misma decisión, y tenerla en dos sitios garantiza que un día
+ * digan cosas distintas. Devuelve `null` cuando la propia clave ES una raíz
+ * (`compras`, `servicios_terceros`).
+ */
+function padreDeClaveSistema(
+  clave: ClaveCategoriaSistema,
+): { clave: string; nombre: string; rol: string } | null {
+  if (RAIZ_POR_CLAVE.has(clave)) return null
+  const entrada = ENTRADA_POR_CLAVE.get(clave)
+  const raiz    = entrada && RAIZ_POR_CLAVE.get(entrada.padre)
+  return raiz ? { clave: raiz.clave, nombre: raiz.nombre, rol: raiz.rol } : null
 }
 
 // El `rol_pl` de cada una NO se manda desde aquí: lo fija `cat_gasto_sistema`
@@ -250,8 +276,16 @@ export async function resolverCategoriaSistema(
   db: Db, client_id: string, clave: ClaveCategoriaSistema,
 ): Promise<{ categoria_id: string; nombre: string } | null> {
   const nombreDefecto = NOMBRE_DEFECTO[clave]
+  // La madre bajo la que debe nacer, sacada del catálogo por defecto para que no
+  // haya dos listas que mantener. Sin esto la categoría nace en la RAÍZ, y una
+  // raíz suelta más por cada módulo es justo el árbol plano que el clasificador
+  // viene a arreglar (mig. 185 · rama c).
+  const padre = padreDeClaveSistema(clave)
   const { data: categoria_id, error } = await db.rpc('cat_gasto_sistema', {
     p_client_id: client_id, p_clave: clave, p_nombre: nombreDefecto,
+    p_clave_padre:  padre?.clave  ?? null,
+    p_nombre_padre: padre?.nombre ?? null,
+    p_rol_padre:    padre?.rol    ?? null,
   })
   if (error || !categoria_id) return null
 

@@ -11,11 +11,16 @@ import { formatMonto, formatPct, formatDelta } from './_formato'
 // El TONO no se deduce del signo: que suban los ingresos es bueno y que suban los
 // gastos no. Por eso `bueno` viene en la fila y no se calcula de `n > 0`.
 
-function Delta({ valor, bueno }: { valor: number | null; bueno: 'subir' | 'bajar' }) {
+function Delta({ valor, bueno }: { valor: number | null; bueno: 'subir' | 'bajar' | 'neutro' }) {
   if (valor == null) return <span className="rep-delta-vacio">—</span>
   const plano = Math.abs(valor) < 0.05
   const sube  = valor > 0
-  const tono  = plano ? 'plano' : (sube === (bueno === 'subir') ? 'bien' : 'mal')
+  // 'neutro' (fase 2): invertir más no es mejor ni peor que invertir menos, así
+  // que la variación se enseña sin teñir. Pintarla de rojo sería opinar sobre
+  // una decisión del dueño que el informe no está en posición de juzgar.
+  const tono  = plano || bueno === 'neutro'
+    ? 'plano'
+    : (sube === (bueno === 'subir') ? 'bien' : 'mal')
   const Icono = plano ? Minus : sube ? ArrowUp : ArrowDown
   // Δ enorme (un neto que pasa de casi-cero a mucho da +99.366%): el porcentaje
   // exacto no informa y no cabe en la columna. Se acota a ±999% y el valor real

@@ -37,7 +37,20 @@ import { SIN_CATEGORIA, SIN_TERCERO, importeBuscado } from '@/lib/listados'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { etiquetaEstado } from '@/lib/reservas/estados'
 import { horasDeTurno, posicionEnCiclo } from '@/lib/rrhh/turnos'
+import { esRolPL, esFueraDelResultado, ROL_PL_LABEL } from '@/lib/pl/estado'
 import type { ValorCelda } from './csv'
+
+/**
+ * El papel de una categoría, dicho para una hoja de cálculo.
+ *
+ * Los tres papeles de fuera del resultado se marcan como tales: el asesor que
+ * abre esta descarga tiene que poder ver de un vistazo qué categorías no están
+ * en el estado de resultados, sin cruzarlo con nada.
+ */
+function etiquetaRol(v: unknown): string {
+  if (!esRolPL(v)) return String(v ?? '')
+  return esFueraDelResultado(v) ? `${ROL_PL_LABEL[v]} (fuera del resultado)` : ROL_PL_LABEL[v]
+}
 
 // Los centinelas de «los que no tienen» viven en `lib/listados.ts`: los necesitan las
 // vistas, y este fichero no se puede importar desde el navegador (arrastra acciones de
@@ -318,7 +331,11 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       return filas.map(f => [
         f.categoria_id as string, f.nombre as string,
         f.parent_id ? (porId.get(f.parent_id as string) ?? f.parent_id as string) : '',
-        f.rol_pl as string, f.estado as string, f.es_sistema as boolean, f.descripcion as string,
+        // El nombre del renglón, no el valor de la columna: quien abre esta
+        // descarga en Excel busca «Coste de ventas», no `COSTE_VENTAS`. Y desde
+        // la fase 2 la distinción importa el doble — hay papeles que NO son un
+        // renglón del estado de resultados, y la celda tiene que decirlo.
+        etiquetaRol(f.rol_pl), f.estado as string, f.es_sistema as boolean, f.descripcion as string,
       ])
     },
   },

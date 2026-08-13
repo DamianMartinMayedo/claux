@@ -374,6 +374,18 @@ export async function guardarGastoCobro(
     descripcion     = etq.descripcion
   } else {
     descripcion = concepto
+    // El cobro TAMBIÉN puede llevar categoría desde la fase 3, y es opcional: el
+    // dinero que entra sin factura no tiene líneas de producto, así que su
+    // categoría es lo único que puede decir de qué vive el negocio. Lo que NO
+    // cambia es la etiqueta: en un cobro la escribe el dueño («Venta del
+    // sábado»), y sustituirla por «Ingresos · Mostrador» le borraría de la tabla
+    // lo que él mismo escribió para reconocer la fila.
+    if (categoria_id_in) {
+      const etq = await etiquetaDeCategoria(db, session.client_id, categoria_id_in)
+      if (!etq) return { ok: false, error: 'Categoría no válida o inactiva.' }
+      categoria_id    = etq.categoria_id
+      categoriaNombre = etq.nombre
+    }
   }
 
   if (!registro_id) {
@@ -862,15 +874,27 @@ export async function guardarCategoriaGasto(
   } else {
     // Editar categoría existente
     const { data: cat } = await db.from('categorias_gastos')
-      .select('es_sistema')
+      .select('es_sistema, descripcion')
       .eq('categoria_id', categoria_id_form)
       .eq('client_id', session.client_id)
       .maybeSingle()
-    
+
     if (!cat) return { ok: false, error: 'Categoría no encontrada.' }
 
+    // Si el dueño reescribe el concepto, la marca queda puesta para siempre. Hoy
+    // la semilla solo escribe `descripcion` al INSERTAR, así que nadie le pisa
+    // nada todavía; la bandera se anota AHORA porque el día que el catálogo
+    // refresque textos no habrá forma de saber a posteriori cuáles eran suyos.
+    // Solo se ENCIENDE (nunca se apaga al volver al texto original): quien ya
+    // escribió el suyo ha demostrado que le importa, aunque después lo deshaga.
+    const cambioDescripcion = (cat.descripcion ?? null) !== descripcion
+
     const { error } = await db.from('categorias_gastos')
-      .update({ nombre, descripcion, parent_id, rol_pl, updated_at: new Date().toISOString() })
+      .update({
+        nombre, descripcion, parent_id, rol_pl,
+        ...(cambioDescripcion ? { descripcion_editada: true } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq('categoria_id', categoria_id_form)
       .eq('client_id', session.client_id)
     

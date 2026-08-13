@@ -24,10 +24,15 @@ import {
   type ResultadoLote,
   type RolPL,
 } from '@/app/actions/portal/gastos'
-import { ROLES_PL, ROL_PL_LABEL, ROL_PL_AYUDA } from '@/lib/pl/estado'
+import {
+  ROL_PL_LABEL, ROL_PL_EFECTO, PREGUNTAS_ROL, PREGUNTA_FUERA, OPCIONES_FUERA,
+  OPCION_INGRESO, ROLES_RESULTADO, ROLES_INGRESO, ROLES_FUERA_RESULTADO,
+  esFueraDelResultado, esRolIngreso,
+} from '@/lib/pl/estado'
+import { claveCat } from '@/lib/catalogo/emparejar'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
+import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sparkles, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import type { Filtro } from '@/lib/filtros'
 import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
@@ -37,6 +42,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
+import AsistenteCatalogo               from './AsistenteCatalogo'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
 import Filtros                        from '@/components/portal/Filtros'
@@ -132,6 +138,17 @@ function RegistroModal({
   const catOpciones = conActual(raices, catSel)
   const subOpciones = conActual(catSel ? (subsPorPadre.get(catSel) ?? []) : [], subSel)
 
+  // Las raíces partidas por el lado del informe al que van (fase 3). El desplegable
+  // propone primero las del lado que toca —ingreso si estás anotando un cobro— y
+  // deja las otras debajo, con su encabezado, en vez de esconderlas: un cliente que
+  // lleva meses anotando sus cobros con una categoría de gasto no puede encontrarse
+  // con que la suya ya no está en la lista al editar el registro.
+  const raicesIngreso = catOpciones.filter(c => esRolIngreso(c.rol_pl))
+  const raicesGasto   = catOpciones.filter(c => !esRolIngreso(c.rol_pl))
+  const gruposCat = tipo === 'COBRO'
+    ? [{ label: 'Ingresos', filas: raicesIngreso }, { label: 'Otras categorías', filas: raicesGasto }]
+    : [{ label: 'Gastos', filas: raicesGasto }, { label: 'Ingresos', filas: raicesIngreso }]
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -199,15 +216,35 @@ function RegistroModal({
                   </div>
                 )}
               </div>
-              {/* Clasificación (solo gastos): Categoría → Subcategoría. En cobros no se pide. */}
-              {tipo === 'GASTO' && (<>
+              {/* Clasificación: Categoría → Subcategoría, en los DOS tipos (fase 3).
+                  El cobro también la lleva, y no es simetría: el dinero que entra sin
+                  factura no tiene líneas de producto que mirar, así que su categoría
+                  es lo ÚNICO que puede decir de qué vive el negocio. Sin ella, un
+                  negocio de mostrador ve toda su facturación en un renglón mudo.
+                  En el cobro es opcional a propósito —anotar el dinero primero y
+                  clasificarlo después es el orden real— y sin clasificar cae en el
+                  cajón «Sin categoría» del desglose, que es exactamente la verdad. */}
+              <>
                 <div className="input-group ter-col-span-3">
-                  <label>Categoría <span className="required">*</span></label>
-                  <select className="input" value={catSel} required
+                  <label htmlFor="gc-categoria">
+                    Categoría {tipo === 'GASTO' && <span className="required">*</span>}
+                  </label>
+                  <select id="gc-categoria" className="input" value={catSel} required={tipo === 'GASTO'}
                     onChange={e => { setCatSel(e.target.value); setSubSel('') }}>
-                    <option value="">— Elige categoría —</option>
-                    {catOpciones.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                    <option value="">{tipo === 'GASTO' ? '— Elige categoría —' : '— Sin categoría —'}</option>
+                    {gruposCat.map(g => g.filas.length === 0 ? null : (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.filas.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
+                      </optgroup>
+                    ))}
                   </select>
+                  {tipo === 'COBRO' && (
+                    <span className="input-hint">
+                      {raicesIngreso.length > 0
+                        ? 'Con ella, tu informe desglosa de qué vienen los cobros. Puedes dejarla en blanco.'
+                        : 'Todavía no tienes categorías de ingreso: créalas en la pestaña Categorías para desglosar tus cobros.'}
+                    </span>
+                  )}
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Subcategoría</label>
@@ -220,7 +257,7 @@ function RegistroModal({
                     {subOpciones.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
                   </select>
                 </div>
-              </>)}
+              </>
 
               <div className="input-group ter-col-span-2">
                 <label>Fecha <span className="required">*</span></label>
@@ -431,32 +468,30 @@ function LiquidarModal({
 
 // ── Modal: crear / editar categoría de gasto ─────────────────────────────────────
 
+// ── Crear, renombrar y editar una categoría (F1.6) ───────────────────────────
+//
+// El orden de la interfaz es lo que enseña, así que va al revés de como estaba:
+//
+//  1. **Dónde va** — y por defecto, dentro de una que ya tienes. Nueve de cada
+//     diez categorías que hace un dueño son una subcategoría, y esa rama no tiene
+//     que decidir nada del informe: hereda el papel de su madre.
+//  2. **El nombre**, con los parecidos delante. La mitad de los duplicados nacen
+//     de no acordarse de que «Comisiones bancarias» ya existía.
+//  3. **Y solo entonces**, si de verdad es una categoría principal, las tres
+//     preguntas sin jerga. El resultado se enseña en EFECTO, no en rol: «se
+//     restará de tus ventas», no «coste de ventas».
+//
+// La decisión del punto 1 se toma ANTES de escribir nada y no se mueve mientras
+// se rellena. Ese era el problema del formulario anterior: al elegir madre
+// desaparecía el papel en el informe y aparecía otro aviso, y el formulario se
+// transformaba solo debajo de las manos.
+
 function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
   categoria: CategoriaGasto | null; categorias: CategoriaGasto[]; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!categoria
 
-  // Dos formularios distintos, decididos ANTES de pintar y que no cambian mientras
-  // se rellenan:
-  //
-  //  · Una categoría nueva es SIEMPRE principal, y sus subcategorías se escriben
-  //    aquí mismo. No se pregunta por «categoría padre»: era la pregunta que hacía
-  //    que el formulario se transformara solo (al elegir padre desaparecía el papel
-  //    en el informe y aparecía otro aviso), y la que obligaba a entender la
-  //    jerarquía antes de poder escribir un nombre.
-  //  · Para colgar subcategorías de una principal que ya existe, se EDITA la madre
-  //    y se añaden. Es el mismo campo, en el mismo sitio.
-  //
-  // `esHija` pasa a ser un HECHO de lo que estás editando, no un estado que se
-  // mueve: solo es cierto al editar una subcategoría que ya lo era.
-  const esHija = isEdit && !!categoria!.parent_id
-  const [rolElegido, setRolElegido] = useState<RolPL>(categoria?.rol_pl ?? 'OPERATIVO')
-
-  // Mover una subcategoría a otra madre: el único caso en que sigue haciendo falta
-  // elegir padre. Sin esto, una subcategoría creada en la madre equivocada solo se
-  // podría arreglar archivándola y volviéndola a crear.
-  //
   // La madre ACTUAL va en la lista aunque esté archivada. Si no, el `defaultValue`
   // no casaría con ninguna opción, el navegador seleccionaría la primera y guardar
   // movería la subcategoría de madre SIN QUE NADIE LO PIDA. Un select cuyo valor por
@@ -470,11 +505,59 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
       c.estado === 'ACTIVO' && !c.parent_id && c.categoria_id !== categoria?.categoria_id),
   ]
 
+  // Al EDITAR, dónde vive es un hecho de lo que estás editando y no se pregunta.
+  // Al CREAR sí se pregunta, y el defecto es «dentro de una que ya tengo».
+  const [comoNueva, setComoNueva] = useState<'hija' | 'principal'>(
+    padresPosibles.length ? 'hija' : 'principal')
+  const esHija = isEdit ? !!categoria!.parent_id : comoNueva === 'hija'
+
+  const [nombre, setNombre] = useState(categoria?.nombre ?? '')
+
+  // Parecidas, en el mismo nivel. Solo se AVISA: la del cliente manda, y a veces
+  // «Transporte» de reparto y «Transporte» de personal son dos cuentas de verdad.
+  const parecidas = useMemo(() => {
+    const k = claveCat(nombre)
+    if (k.length < 3) return []
+    return categorias
+      .filter(c => c.categoria_id !== categoria?.categoria_id)
+      .filter(c => !!c.parent_id === esHija)
+      .filter(c => claveCat(c.nombre) === k)
+  }, [nombre, categorias, categoria?.categoria_id, esHija])
+
+  // ── Las preguntas ──
+  // Primero la de la fase 2 —«¿esto sale de tu caja pero no es un gasto?»—, y solo
+  // si se responde que no, las tres de siempre. Ese orden no es cosmético: quien
+  // se equivoca en la primera no se equivoca de renglón, se equivoca de informe.
+  //
+  // `noes` son los «no» acumulados de las tres: la primera que se responde «sí»
+  // decide y el resto ni se pintan. Al editar una principal que ya existe no se
+  // re-pregunta nada — se enseña lo que hace hoy y hay un botón para redecidirlo.
+  const [rolElegido, setRolElegido] = useState<RolPL>(categoria?.rol_pl ?? 'OPERATIVO')
+  const [preguntando, setPreguntando] = useState(!isEdit)
+  const [paso, setPaso] = useState<'fuera' | 'cual' | 'gasto'>('fuera')
+  const [noes, setNoes] = useState(0)
+
+  const responderFuera = (si: boolean) => {
+    if (si) { setPaso('cual'); return }
+    setPaso('gasto'); setNoes(0)
+  }
+  const elegirFuera = (rol: RolPL) => { setRolElegido(rol); setPreguntando(false) }
+  const elegirIngreso = () => { setRolElegido(OPCION_INGRESO.rol); setPreguntando(false) }
+
+  const responder = (si: boolean) => {
+    if (si) { setRolElegido(PREGUNTAS_ROL[noes].rol); setPreguntando(false); return }
+    if (noes + 1 >= PREGUNTAS_ROL.length) { setRolElegido('OPERATIVO'); setPreguntando(false); return }
+    setNoes(noes + 1)
+  }
+  const volverAPreguntar = () => { setNoes(0); setPaso('fuera'); setPreguntando(true) }
+
   // Las que ya cuelgan de esta categoría. Se enseñan para que quede claro que el
   // campo AÑADE a lo que hay, y para no teclear una que ya existe.
   const hijasActuales = isEdit
     ? categorias.filter(c => c.parent_id === categoria!.categoria_id && c.estado === 'ACTIVO')
     : []
+
+  const usos = categoria?.uso_count ?? 0
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -493,7 +576,8 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
         n ? `${n} subcategoría${n > 1 ? 's' : ''}` : '',
         r ? `${r} restaurada${r > 1 ? 's' : ''}` : '',
       ].filter(Boolean).join(' · ')
-      const que = !isEdit ? 'Categoría creada' : esHija ? 'Subcategoría guardada' : 'Categoría guardada'
+      const que = !isEdit ? (esHija ? 'Subcategoría creada' : 'Categoría creada')
+                          : (esHija ? 'Subcategoría guardada' : 'Categoría guardada')
       toastSuccess(que + (detalle ? ` — ${detalle}` : ''))
       onSaved()
     })
@@ -516,18 +600,48 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 Categoría del sistema: CLAUX la asigna sola (comisiones de transferencia, nóminas…). Puedes renombrarla, pero no archivarla.
               </div>
             )}
+
+            {/* 1 · Dónde va. Solo al crear, y antes que nada. */}
+            {!isEdit && padresPosibles.length > 0 && (
+              <div className="input-group">
+                <label htmlFor="cat-donde">¿Dónde va?</label>
+                <select id="cat-donde" className="input" value={comoNueva}
+                  onChange={e => setComoNueva(e.target.value as 'hija' | 'principal')}>
+                  <option value="hija">Dentro de una categoría que ya tengo</option>
+                  <option value="principal">Es una categoría principal nueva</option>
+                </select>
+                <span className="input-hint">
+                  {comoNueva === 'hija'
+                    ? 'Cuenta en el informe dentro de la que elijas, con el papel que ella tenga. Es lo habitual.'
+                    : 'Una categoría principal decide en qué renglón del informe cuentan sus gastos.'}
+                </span>
+              </div>
+            )}
+
+            {/* 2 · El nombre, con los parecidos delante. */}
             <div className="input-group">
               <label htmlFor="cat-nombre">Nombre <span className="required">*</span></label>
               <input id="cat-nombre" className="input" name="nombre" required autoFocus
-                defaultValue={categoria?.nombre ?? ''} placeholder="Ej: Alquiler, Insumos, Servicios…" />
+                value={nombre} onChange={e => setNombre(e.target.value)}
+                placeholder="Ej: Alquiler, Insumos, Servicios…" />
+              {parecidas.length > 0 && (
+                <span className="input-hint input-hint-warning">
+                  Ya tienes {parecidas.map(p => `«${p.nombre}»`).join(', ')}.
+                  {' '}Si es la misma cuenta, mejor usar la que ya está: los registros quedan juntos.
+                </span>
+              )}
+              {isEdit && usos > 0 && (
+                <span className="input-hint">
+                  Se renombrará también en los {usos} registro{usos > 1 ? 's' : ''} que ya la usan.
+                </span>
+              )}
             </div>
+
             {esHija ? (
-              /* Subcategoría: solo su nombre, de quién cuelga y el concepto. Ni papel
-                 en el informe (lo hereda de la madre) ni subcategorías dentro. */
               <div className="input-group">
                 <label htmlFor="cat-parent">Subcategoría de</label>
                 <select id="cat-parent" className="input" name="parent_id"
-                  defaultValue={categoria!.parent_id ?? ''}>
+                  defaultValue={categoria?.parent_id ?? padresPosibles[0]?.categoria_id ?? ''}>
                   {padresPosibles.map(p => (
                     <option key={p.categoria_id} value={p.categoria_id}>
                       {p.nombre}{p.estado !== 'ACTIVO' ? ' (archivada)' : ''}
@@ -540,17 +654,103 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 </span>
               </div>
             ) : (<>
-              {/* Principal: es la que decide el papel en el informe, y la que lleva
-                  las subcategorías colgadas. */}
               <input type="hidden" name="parent_id" value="" />
-              <div className="input-group">
-                <label htmlFor="cat-rol">En el estado de resultados</label>
-                <select id="cat-rol" className="input" name="rol_pl" value={rolElegido}
-                  onChange={e => setRolElegido(e.target.value as RolPL)}>
-                  {ROLES_PL.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
-                </select>
-                <span className="input-hint">{ROL_PL_AYUDA[rolElegido]}</span>
-              </div>
+              <input type="hidden" name="rol_pl" value={rolElegido} />
+
+              {/* 3 · Las preguntas, y el resultado en efecto. */}
+              {preguntando && paso === 'fuera' ? (
+                /* La de la fase 2, primero. Se responde «no» sin pensarla en el
+                   caso mayoritario, que es justo lo que se busca: el camino
+                   ancho no puede costar una decisión difícil. */
+                <div className="input-group">
+                  <label id="cat-pregunta">{PREGUNTA_FUERA.pregunta}</label>
+                  <div className="gc-cat-preg-botones" role="group" aria-labelledby="cat-pregunta">
+                    <button type="button" className="btn btn-secondary" onClick={() => responderFuera(true)}>Sí</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => responderFuera(false)}>No</button>
+                  </div>
+                  <span className="input-hint">{PREGUNTA_FUERA.ejemplo}</span>
+                  {/* La salida de INGRESO (fase 3), colgada de esta pregunta y no
+                      como un paso propio: un paso más al principio le cuesta un
+                      clic a todo el mundo, y casi toda categoría que se crea es de
+                      gasto. Quien viene a crear la categoría de lo que cobra la
+                      reconoce de un vistazo. */}
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => elegirIngreso()}>
+                    {OPCION_INGRESO.titulo}
+                  </button>
+                </div>
+              ) : preguntando && paso === 'cual' ? (
+                /* Las tres salidas, dichas en primera persona y con ejemplos: son
+                   tres palabras de contable y se eligen por lo que el dueño hizo,
+                   no por cómo se llama en el libro. */
+                <div className="input-group">
+                  <label id="cat-pregunta">¿Cuál de estas tres es?</label>
+                  <div className="gc-cat-opciones" role="group" aria-labelledby="cat-pregunta">
+                    {OPCIONES_FUERA.map(o => (
+                      <button
+                        key={o.rol} type="button" className="gc-cat-opcion"
+                        onClick={() => elegirFuera(o.rol)}
+                      >
+                        <strong>{o.titulo}</strong>
+                        <span>{o.ejemplo}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => responderFuera(false)}>
+                    Ninguna: sí es un gasto
+                  </button>
+                </div>
+              ) : preguntando ? (
+                <div className="input-group">
+                  <label id="cat-pregunta">{PREGUNTAS_ROL[noes].pregunta}</label>
+                  <div className="gc-cat-preg-botones" role="group" aria-labelledby="cat-pregunta">
+                    <button type="button" className="btn btn-secondary" onClick={() => responder(true)}>Sí</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => responder(false)}>No</button>
+                  </div>
+                  <span className="input-hint">{PREGUNTAS_ROL[noes].ejemplo}</span>
+                </div>
+              ) : (<>
+                <div className="input-group">
+                  <label>En tu informe</label>
+                  <p className="gc-cat-efecto">{ROL_PL_EFECTO[rolElegido]}</p>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={volverAPreguntar}>
+                    Cambiar
+                  </button>
+                  {isEdit && usos > 0 && rolElegido !== categoria!.rol_pl && (
+                    <span className="input-hint input-hint-warning">
+                      Cambiarlo recalcula los {usos} registro{usos > 1 ? 's' : ''} que ya la usan,
+                      también los de meses cerrados.
+                    </span>
+                  )}
+                </div>
+
+                {/* El renglón exacto, para quien ya sabe cuál quiere (fase 4).
+                    Las preguntas no llevan a los once papeles y no deben: llevan a
+                    los que un dueño reconoce por lo que hizo. Pero desde la fase 4
+                    hay tres —depreciación, impuesto sobre utilidades y los ingresos
+                    que no son ventas— que solo pide quien lleva libros con un
+                    contador, y sin esta lista no tendría por dónde pedirlos. Va
+                    DESPUÉS de la respuesta, nunca en su lugar: aparece cuando ya
+                    hay una decisión tomada, así que no le cuesta un clic a nadie. */}
+                <div className="input-group">
+                  <label htmlFor="cat-rol">Renglón exacto</label>
+                  <select id="cat-rol" className="input" value={rolElegido}
+                    onChange={e => setRolElegido(e.target.value as RolPL)}>
+                    <optgroup label="Gastos">
+                      {ROLES_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
+                    </optgroup>
+                    <optgroup label="Ingresos">
+                      {ROLES_INGRESO.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
+                    </optgroup>
+                    <optgroup label="No afecta a tu resultado">
+                      {ROLES_FUERA_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
+                    </optgroup>
+                  </select>
+                  <span className="input-hint">
+                    Ya está elegido por lo que respondiste. Cámbialo solo si sabes cuál quieres.
+                  </span>
+                </div>
+              </>)}
+
               <div className="input-group">
                 <label htmlFor="cat-subs">Subcategorías</label>
                 {hijasActuales.length > 0 && (
@@ -569,15 +769,16 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 </span>
               </div>
             </>)}
+
             <div className="input-group">
-              <label>Concepto</label>
-              <textarea className="input input-textarea" name="descripcion" rows={2}
+              <label htmlFor="cat-desc">Concepto</label>
+              <textarea id="cat-desc" className="input input-textarea" name="descripcion" rows={2}
                 defaultValue={categoria?.descripcion ?? ''} placeholder="Detalle opcional…" />
             </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={isPending}>
+            <button type="submit" className="btn btn-primary" disabled={isPending || (!esHija && preguntando)}>
               {isPending
                 ? <><span className="spinner spinner-sm" /> Guardando…</>
                 : isEdit ? 'Guardar cambios' : 'Crear categoría'}
@@ -633,6 +834,10 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
   // El impacto se guarda junto a la categoría: el diálogo necesita las dos cosas y
   // pintarlo antes de tenerlo sería preguntar sin poder decir qué pasa al aceptar.
   const [borrarCat, setBorrarCat] = useState<{ cat: CategoriaGasto; impacto: ImpactoCategoria } | null>(null)
+  // El asistente de adopción del catálogo (F1.4). Vive aquí y no en su propia
+  // ruta: la decisión que toma es sobre ESTA lista, y verla detrás mientras se
+  // decide es la mitad de la explicación.
+  const [asistente, setAsistente] = useState(false)
 
   // Los filtros viven en la URL, como el rango y la búsqueda: refrescar —o que se caiga la
   // conexión, que aquí es el caso normal— ya no tira lo que el dueño acababa de poner. Y de
@@ -952,9 +1157,12 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
               <button className="btn btn-primary" onClick={() => openNuevo('GASTO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo gasto</button>
             ) : tab === 'cobros' ? (
               <button className="btn btn-primary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
-            ) : (
+            ) : (<>
+              <button className="btn btn-secondary" onClick={() => setAsistente(true)}>
+                <Sparkles size={14} strokeWidth={2.5} /> Preparar mi catálogo
+              </button>
               <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
-            )
+            </>)
           )}
         </div>
       </div>
@@ -1133,7 +1341,12 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           {data.categorias_gastos.length === 0 ? (
             <div className="mon-empty">
               <Tag size={36} strokeWidth={1} opacity={0.25} />
-              <p>Aún no hay categorías. Crea la primera para clasificar tus gastos.</p>
+              <p>Aún no hay categorías. Podemos cargarte las de tu tipo de negocio, o creas la primera a mano.</p>
+              {puedeEditar && (
+                <button className="btn btn-primary" onClick={() => setAsistente(true)}>
+                  <Sparkles size={14} strokeWidth={2.5} /> Preparar mi catálogo
+                </button>
+              )}
             </div>
           ) : (
             <div className="table-wrapper">
@@ -1177,10 +1390,25 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
                       </td>
                       {/* Una subcategoría no tiene papel propio: enseña el de su
                           madre, que es el que de verdad aplica en el informe. */}
+                      {/* Cuando el papel es de los que no entran en el resultado,
+                          la columna tiene que DECIRLO: su encabezado promete «en
+                          el informe» y estas categorías no salen en el waterfall.
+                          Sin la nota, «Inversiones» se lee como un renglón de
+                          gasto más — justo lo que la fase 2 evita. */}
                       <td data-label="En el informe" className="text-sm-muted">
                         {c.parent_id
                           ? <span className="gc-cat-rol-heredado">{ROL_PL_LABEL[rolPadre(c)]} (heredado)</span>
                           : ROL_PL_LABEL[c.rol_pl]}
+                        {esFueraDelResultado(c.parent_id ? rolPadre(c) : c.rol_pl) && (
+                          <span className="gc-cat-fuera">No resta</span>
+                        )}
+                        {/* Y las de ingreso lo dicen por el otro lado (fase 3): en
+                            esta lista, donde todo lo demás es gasto, «Ingresos del
+                            negocio» a secas se lee como un renglón más de lo que
+                            sale. */}
+                        {esRolIngreso(c.parent_id ? rolPadre(c) : c.rol_pl) && (
+                          <span className="gc-cat-ingreso">Suma</span>
+                        )}
                       </td>
                       <td data-label="Usos" className="col-center text-sm-muted">{c.uso_count ? c.uso_count : '—'}</td>
                       <td data-label="Estado">
@@ -1239,6 +1467,11 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
           onConfirm={confirmarEliminar}
           onCancel={() => setConfirmDel(null)}
         />
+      )}
+      {asistente && (
+        <AsistenteCatalogo
+          onClose={() => setAsistente(false)}
+          onCambios={() => router.refresh()} />
       )}
       {catModal && (
         <CategoriaModal categoria={editCat} categorias={data.categorias_gastos}

@@ -570,6 +570,22 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
             placeholder="Buscar por nombre, código, categoría…"
           />
 
+          {/* F1.8 · Un producto sin categoría no desaparece del informe: se queda
+              suelto, fuera de cualquier agrupación de ingresos. Aviso NO bloqueante
+              y con el número delante — «revisa tus categorías» no mueve a nadie. El
+              enlace deja la lista ya filtrada por los que faltan. */}
+          {!verArchivados && sinCategoriaCount > 0 && filtroCat !== SIN_CATEGORIA && (
+            <div className="alert alert-warning alert-cta">
+              <span className="alert-cta-texto">
+                {sinCategoriaCount === 1
+                  ? '1 producto sin categoría no se agrupa en tu informe de ingresos'
+                  : `${sinCategoriaCount} productos sin categoría no se agrupan en tu informe de ingresos`}
+                <span className="alert-cta-nota">Se venden y se cobran igual; lo único que falta es saber en qué línea suman.</span>
+              </span>
+              <Link href={`?cat=${SIN_CATEGORIA}`} className="btn btn-aviso btn-sm">Ver cuáles son</Link>
+            </div>
+          )}
+
           {/* Tabla */}
           <div className="card card-table">
             <div className="mon-card-header">

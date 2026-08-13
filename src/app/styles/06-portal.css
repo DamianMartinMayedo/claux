@@ -1681,6 +1681,27 @@
 .gc-cat-hija-hueco { flex-shrink: 0; width: 2rem; }
 .gc-cat-hija-nombre { font-size: var(--text-sm); color: var(--color-text-muted); }
 
+/* Marca de «este papel no entra en el resultado» en la columna del informe */
+.gc-cat-fuera,
+.gc-cat-ingreso {
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* La misma pastilla, del lado del ingreso (fase 3): la columna dice «en el
+   informe» y estas categorías no restan, suman. En gris se leería como una nota
+   de lo que queda fuera, que es justo lo contrario. */
+.gc-cat-ingreso {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
 /* Contador de subcategorías junto a la raíz */
 .gc-cat-count {
   flex-shrink: 0;
@@ -1693,6 +1714,42 @@
   font-weight: 700;
   text-align: center;
 }
+
+/* ── Las tres preguntas sin jerga del modal de categoría ──
+   El dueño no elige un "rol del P&L": responde Sí/No y ve el EFECTO en su
+   informe. Los dos botones van en fila y ocupan lo mismo, para que ninguna de
+   las dos respuestas parezca la recomendada. */
+.gc-cat-preg-botones { display: flex; gap: var(--space-3); }
+.gc-cat-preg-botones .btn { flex: 1 1 0; justify-content: center; }
+
+/* ── Las tres salidas de la pregunta de la fase 2 ──
+   Tarjetas apiladas, no un desplegable: cada una lleva su ejemplo debajo, y el
+   ejemplo es lo que hace elegible una opción que se llama «patrimonio». */
+.gc-cat-opciones { display: flex; flex-direction: column; gap: var(--space-2); }
+.gc-cat-opcion {
+  display: flex; flex-direction: column; gap: 2px;
+  width: 100%; padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+.gc-cat-opcion:hover { border-color: var(--color-primary); background: var(--color-surface-2); }
+.gc-cat-opcion strong { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.gc-cat-opcion span   { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
+
+/* El resultado, dicho en efecto y no en nomenclatura contable */
+.gc-cat-efecto {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+/* El "Cambiar" no arrastra el ancho de la columna */
+.gc-cat-efecto + .btn { align-self: flex-start; }
 
 .gc-stats { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
 .gc-stat-card {
@@ -1909,6 +1966,25 @@
   margin-top: var(--space-2); padding-top: var(--space-2);
   border-top: 2px solid var(--color-border-strong);
   font-weight: 700; font-size: var(--text-base); color: var(--color-text);
+}
+
+/* ── Lo que movió dinero y no es resultado (fase 2) ──
+   Va DEBAJO del resultado neto, separado por un hueco grande y atenuado: la
+   distancia es la que dice que no participa en la cuenta de arriba. Si se
+   pareciera a un bloque de gasto, se leería como uno. */
+.rep-t-row.rep-t-aparte {
+  margin-top: var(--space-6);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-text-muted);
+}
+/* Dentro de la sección de fuera, los renglones bajan un escalón más de peso: el
+   ojo tiene que volver arriba, al resultado, que es lo que se vino a mirar. */
+.rep-t-row.rep-t-aparte ~ .rep-t-row.rep-t-grupo,
+.rep-t-wrap:has(> .rep-t-aparte) ~ .rep-t-wrap .rep-t-row.rep-t-grupo {
+  font-weight: 500; color: var(--color-text-muted);
+  margin-top: var(--space-2);
 }
 
 /* Fila de categoría desplegable: es un <button> que se comporta como fila. */
@@ -4665,3 +4741,48 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    izquierdo con el texto debajo, en un modal que existe para que alguien apunte la cámara. */
 .caja-qr-modal .modal-body { align-items: center; text-align: center; }
 .caja-qr-modal .caja-qr-img { width: 260px; height: 260px; padding: var(--space-2); }
+
+/* ── Asistente de adopción del catálogo de categorías (F1.4) ─────────────────
+   Un paso por pantalla dentro del modal. El contenedor es de alto estable a
+   propósito (§8 de la skill): sin `min-height` la tarjeta encoge al pasar de un
+   paso con quince filas a uno con una, y el botón de continuar salta bajo el
+   cursor justo cuando se va a pulsar. */
+.ado-paso { min-height: 18rem; display: flex; flex-direction: column; gap: var(--space-4); }
+.ado-intro { color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; margin: 0; }
+.ado-pasos { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-faint); }
+.ado-pasos-item { display: flex; align-items: center; gap: var(--space-1); }
+.ado-pasos-item[data-activo="si"] { color: var(--color-primary-text); font-weight: 700; }
+
+/* Las preguntas previas a la semilla (el sector «servicios» y el complemento C1).
+   Van arriba del ensayo porque las dos cambian lo que se va a crear; el borde
+   inferior las separa de la lista de «esto es lo que va a pasar», que es el
+   resultado de haberlas contestado. */
+.ado-preguntas {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+/* Una decisión = una fila. La casilla manda: nada se mueve sin marcar. */
+.ado-fila {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+  gap: var(--space-3); padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.ado-fila:last-child { border-bottom: 0; }
+.ado-fila-nombre { font-weight: 600; font-size: var(--text-sm); }
+.ado-fila-detalle { display: block; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; line-height: 1.5; }
+.ado-fila-destino { display: flex; flex-direction: column; gap: var(--space-1); min-width: 12rem; }
+.ado-lista { list-style: none; margin: 0; padding: 0; }
+
+/* La pasarela que cruza roles. Fondo de aviso, sin «marcar todo»: es el único
+   freno real ante dieciséis cambios de renglón disfrazados de reordenación. */
+.ado-cruza { background: var(--color-warning-bg); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
+.ado-cruza .ado-fila { border-bottom-color: rgba(0,0,0,0.06); }
+
+/* Comparación antes/después del informe, una tabla por moneda. */
+.ado-impacto-moneda + .ado-impacto-moneda { margin-top: var(--space-4); }
+.ado-impacto-titulo { font-size: var(--text-sm); font-weight: 700; margin-bottom: var(--space-2); }
+.ado-delta-sube { color: var(--color-error); font-weight: 700; }
+.ado-delta-baja { color: var(--color-success); font-weight: 700; }
+.ado-nuevo { color: var(--color-text-muted); font-style: italic; }

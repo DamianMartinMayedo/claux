@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import {
-  cobroEsIngreso, cobroNaceLiquidado, fuenteDeCobro, computaEnResultados, generaSaldo,
+  cobroEsIngreso, cobroNaceLiquidado, generaSaldo,
 } from '@/lib/gastos-core'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
@@ -12,8 +12,9 @@ import { enviarEmail }       from '@/lib/email/enviar'
 import { envolverEmail }     from '@/lib/email/layout'
 import {
   construirResultadosPorMoneda, esRolPL,
-  type ApunteGasto, type ApunteIngreso, type CategoriaPL, type ResultadoPL,
+  type ApunteGasto, type ApunteIngreso, type CategoriaPL, type LineaIngresoPL, type ResultadoPL,
 } from '@/lib/pl/estado'
+import { apuntesDeFilas, type FilaLineaFacturaPL } from '@/lib/pl/apuntes'
 import { periodoComparacion, type ModoComparacion } from '@/lib/pl/periodo'
 import { construirXlsxReportes } from '@/lib/exportar/reportes-xlsx'
 import { TZ_NEGOCIO } from '@/lib/fecha-tz'
@@ -204,46 +205,56 @@ export async function obtenerReportes(
 
   const enRango = (f: string, d: string, h: string) => !!f && f >= d && f <= h
 
-  // ── Apuntes normalizados de un rango (lo que come el motor) ──
-  function apuntesDe(d: string, h: string): { ingresos: ApunteIngreso[]; gastos: ApunteGasto[] } {
-    const ingresos: ApunteIngreso[] = []
-    const gastos:   ApunteGasto[]   = []
-    for (const f of facturas) {
-      if (!enRango(f.fecha_emision, d, h)) continue
-      ingresos.push({ moneda: f.moneda, monto: Number(f.total), mes: f.fecha_emision.slice(0, 7), fuente: 'VENTA' })
-    }
-    for (const g of gastosCobros) {
-      if (!enRango(g.fecha, d, h)) continue
-      if (g.tipo === 'COBRO') {
-        // Dos preguntas distintas sobre la misma fila, y conviene no mezclarlas:
-        //  · `cobroEsIngreso` decide SI SUMA. Una fila que es solo DEUDA (mig. 166) no
-        //    es ingreso —el subsidio recupera un anticipo—; sin este filtro infla
-        //    ingresos y resultado neto.
-        //  · `fuenteDeCobro` decide EN QUÉ RENGLÓN. El cierre del punto de venta es una
-        //    venta de mostrador, así que va a «Ventas» junto a las facturas: sin esto el
-        //    importe cae en «cobros directos» y un negocio que solo vende por TPV ve su
-        //    renglón de Ventas en blanco.
-        if (!cobroEsIngreso(g.naturaleza)) continue
-        ingresos.push({
-          moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
-          fuente: fuenteDeCobro(g.origen_tipo),
-        })
-      } else {
-        // Un GASTO que es solo DEUDA no es coste: el salario neto y las retenciones de
-        // una nómina ya están contados en las filas de COSTE de esa misma nómina, y
-        // sumarlos otra vez duplicaría el renglón de Personal.
-        if (!computaEnResultados(g.naturaleza)) continue
-        gastos.push({
-          moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
-          categoria_id: g.categoria_id, categoria: g.categoria,
-        })
-      }
-    }
-    return { ingresos, gastos }
+  // ── Las líneas de las facturas ──────────────────────────────────────────────
+  // Una sola lectura que sirve a dos cosas distintas: el coste directo (el coste
+  // congelado en la línea vendida) y la clasificación del ingreso por línea de
+  // negocio (fase 3). Eran dos consultas a la misma tabla con el mismo `in` de
+  // ids; en 3G eso es medio segundo regalado.
+  type LinFactura = { documento_id: string; producto_id: string | null; cantidad: number; costo_unitario: number | null; total: number }
+  let lineasFactura: LinFactura[] = []
+  if (facturas.length) {
+    const { data: lins } = await db.from('documento_lineas')
+      .select('documento_id, producto_id, cantidad, costo_unitario, total')
+      .eq('documento_tipo', 'FACTURA')
+      .in('documento_id', facturas.map(f => f.factura_id))
+    lineasFactura = (lins ?? []) as LinFactura[]
   }
 
+  // Producto → su categoría de catálogo, y proveedor (para el coste directo).
+  const prodIds = [...new Set(lineasFactura.map(l => l.producto_id).filter((id): id is string => !!id))]
+  const conProveedor  = new Set<string>()
+  const lineaDeProducto = new Map<string, string>()
+  if (prodIds.length) {
+    const { data: prods } = await db.from('products')
+      .select('producto_id, proveedor_id, categoria_id')
+      .eq('client_id', session.client_id).in('producto_id', prodIds)
+    for (const p of (prods ?? []) as { producto_id: string; proveedor_id: string | null; categoria_id: string | null }[]) {
+      if (p.proveedor_id) conProveedor.add(p.producto_id)
+      if (p.categoria_id) lineaDeProducto.set(p.producto_id, p.categoria_id)
+    }
+  }
+
+  // El catálogo de líneas de negocio: `product_categories`, plano y del cliente.
+  // Se lee siempre, aunque no haya ventas: sin él las líneas salen con id y sin
+  // nombre, y el desglose sería una lista de códigos.
+  const { data: pcatData } = await db.from('product_categories')
+    .select('categoria_id, nombre').eq('client_id', session.client_id)
+  const lineasIngreso: LineaIngresoPL[] = ((pcatData ?? []) as { categoria_id: string; nombre: string }[])
+    .map(c => ({ linea_id: c.categoria_id, nombre: c.nombre }))
+
+  const lineasPL: FilaLineaFacturaPL[] = lineasFactura.map(l => ({
+    documento_id: l.documento_id,
+    linea_id:     l.producto_id ? (lineaDeProducto.get(l.producto_id) ?? null) : null,
+    total:        Number(l.total) || 0,
+  }))
+
+  // El criterio de qué fila suma y en qué renglón cae vive en `@/lib/pl/apuntes`,
+  // compartido con el aviso previo a una operación estructural: si el aviso
+  // calculara el «antes» con otro criterio, no sería el informe que el dueño ve.
+  const apuntesDe = (d: string, h: string) => apuntesDeFilas(facturas, gastosCobros, d, h, lineasPL)
+
   const act = apuntesDe(desde, hasta)
-  const base = construirResultadosPorMoneda(act.ingresos, act.gastos, categorias, { hayInventario: hay_inventario })
+  const base = construirResultadosPorMoneda(act.ingresos, act.gastos, categorias, { hayInventario: hay_inventario }, lineasIngreso)
 
   // ── Coste directo y margen UNITARIO (informativos) ──
   // No se restan del neto a propósito, y por eso no son el `coste_ventas` del
@@ -260,34 +271,15 @@ export async function obtenerReportes(
   const costoPorMoneda    = new Map<string, number>()
   const costoSinProveedor = new Map<string, number>()
 
-  if (monedaPorFactura.size) {
-    const { data: lins } = await db.from('documento_lineas')
-      .select('documento_id, producto_id, cantidad, costo_unitario')
-      .eq('documento_tipo', 'FACTURA')
-      .in('documento_id', [...monedaPorFactura.keys()])
-      .not('costo_unitario', 'is', null)
-
-    type LinCosto = { documento_id: string; producto_id: string | null; cantidad: number; costo_unitario: number }
-    const lineas = (lins ?? []) as LinCosto[]
-    const prodIds = [...new Set(lineas.map(l => l.producto_id).filter((id): id is string => !!id))]
-
-    const conProveedor = new Set<string>()
-    if (prodIds.length) {
-      const { data: prods } = await db.from('products')
-        .select('producto_id, proveedor_id')
-        .eq('client_id', session.client_id).in('producto_id', prodIds)
-        .not('proveedor_id', 'is', null)
-      for (const p of (prods ?? []) as { producto_id: string }[]) conProveedor.add(p.producto_id)
-    }
-
-    for (const l of lineas) {
-      const moneda = monedaPorFactura.get(l.documento_id)
-      if (!moneda) continue
-      const coste = Number(l.cantidad) * Number(l.costo_unitario)
-      costoPorMoneda.set(moneda, (costoPorMoneda.get(moneda) ?? 0) + coste)
-      if (!l.producto_id || !conProveedor.has(l.producto_id)) {
-        costoSinProveedor.set(moneda, (costoSinProveedor.get(moneda) ?? 0) + coste)
-      }
+  for (const l of lineasFactura) {
+    // `monedaPorFactura` solo tiene las del período en pantalla: las del período
+    // comparado viajaron en la misma consulta pero no cuentan aquí.
+    const moneda = monedaPorFactura.get(l.documento_id)
+    if (moneda == null || l.costo_unitario == null) continue
+    const coste = Number(l.cantidad) * Number(l.costo_unitario)
+    costoPorMoneda.set(moneda, (costoPorMoneda.get(moneda) ?? 0) + coste)
+    if (!l.producto_id || !conProveedor.has(l.producto_id)) {
+      costoSinProveedor.set(moneda, (costoSinProveedor.get(moneda) ?? 0) + coste)
     }
   }
 
@@ -308,7 +300,7 @@ export async function obtenerReportes(
   // Entero, no resumido: la comparación por renglón es la que explica el margen.
   const antApuntes = comp ? apuntesDe(comp.desde, comp.hasta) : null
   const anterior: ResultadoAnterior[] = antApuntes
-    ? construirResultadosPorMoneda(antApuntes.ingresos, antApuntes.gastos, categorias, { hayInventario: hay_inventario })
+    ? construirResultadosPorMoneda(antApuntes.ingresos, antApuntes.gastos, categorias, { hayInventario: hay_inventario }, lineasIngreso)
     : []
 
   // ── Flujo de caja (efectivo) ──
@@ -549,9 +541,9 @@ export async function obtenerReportes(
     }
 
     // Estado de resultados (actual y comparación) por el mismo motor.
-    const baseVer = construirResultadosPorMoneda(conv(act.ingresos), conv(act.gastos), categorias, { hayInventario: hay_inventario })
+    const baseVer = construirResultadosPorMoneda(conv(act.ingresos), conv(act.gastos), categorias, { hayInventario: hay_inventario }, lineasIngreso)
     const antVer  = antApuntes
-      ? construirResultadosPorMoneda(conv(antApuntes.ingresos, false), conv(antApuntes.gastos, false), categorias, { hayInventario: hay_inventario })
+      ? construirResultadosPorMoneda(conv(antApuntes.ingresos, false), conv(antApuntes.gastos, false), categorias, { hayInventario: hay_inventario }, lineasIngreso)
       : []
 
     // Coste directo / margen unitario: convertidos y sumados.

@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { cobroEsIngreso, computaEnResultados } from '@/lib/gastos-core'
+import { indexarCategorias, esFueraDelResultado, esRolPL, type CategoriaPL } from '@/lib/pl/estado'
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
@@ -472,7 +473,9 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     db.from('monedas').select('codigo').eq('client_id', cid).eq('es_consolidacion', true).limit(1).maybeSingle(),
     db.from('tasas_cambio').select('moneda_origen, moneda_destino, tasa, fecha')
       .eq('client_id', cid).order('fecha', { ascending: false }),
-    db.from('categorias_gastos').select('categoria_id, nombre').eq('client_id', cid),
+    // `parent_id` y `rol_pl` además del nombre: el papel se lee en la categoría
+    // RAÍZ (mig. 134) y aquí decide si la fila es gasto o no lo es (fase 2).
+    db.from('categorias_gastos').select('categoria_id, nombre, parent_id, rol_pl').eq('client_id', cid),
   ])
 
   // Se parten los registros en los dos lados del informe, y las filas que son SOLO
@@ -482,7 +485,27 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
   // Reportes y el dossier, para que las tres pantallas no digan tres cifras.
   type FilaGC = { tipo: string; fecha: string; monto: number; moneda: string; categoria_id: string | null; origen_tipo: string | null; naturaleza: string | null }
   const registros = (registros6.data ?? []) as FilaGC[]
-  const gastosGC   = registros.filter(g => g.tipo === 'GASTO' && computaEnResultados(g.naturaleza))
+
+  // Y con el mismo criterio se cae lo que MUEVE DINERO PERO NO ES GASTO (fase 2):
+  // el refrigerador, lo que el dueño saca para sí, el principal que devuelve del
+  // préstamo. Este widget es la primera pantalla que ve el dueño al entrar y la
+  // misma que lee la IA: sin este corte, el mes que invierte le sale un neto
+  // hundido aquí y sano en Reportes, y de las dos cifras se cree la de la portada.
+  const catsGasto: CategoriaPL[] = ((categoriasGasto.data ?? []) as {
+    categoria_id: string; nombre: string; parent_id: string | null; rol_pl: string | null
+  }[]).map(c => ({
+    categoria_id: c.categoria_id, nombre: c.nombre, parent_id: c.parent_id,
+    rol_pl: esRolPL(c.rol_pl) ? c.rol_pl : 'OPERATIVO',
+  }))
+  const idxCat = indexarCategorias(catsGasto)
+  const esGastoDeVerdad = (categoria_id: string | null): boolean => {
+    if (!categoria_id) return true   // sin categoría no hay papel que mirar: cuenta
+    const fila = idxCat.porId.get(categoria_id)
+    if (!fila) return true
+    return !esFueraDelResultado((idxCat.raizDe.get(categoria_id) ?? fila).rol_pl)
+  }
+
+  const gastosGC   = registros.filter(g => g.tipo === 'GASTO' && computaEnResultados(g.naturaleza) && esGastoDeVerdad(g.categoria_id))
   const ingresosGC = registros.filter(g => g.tipo === 'COBRO' && cobroEsIngreso(g.naturaleza))
 
   // Serie mensual y totales del mes SEPARADOS POR MONEDA (no se suman entre sí).
@@ -570,9 +593,7 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
 
   // Desglose de gastos del MES ACTUAL por categoría y moneda (alimenta el insight
   // de Gastos: sin esto solo hay totales y no puede decir «dónde ahorrar»). Top 8.
-  const nombreCat = new Map<string, string>(
-    (categoriasGasto.data ?? []).map((c: { categoria_id: string; nombre: string }) => [c.categoria_id, c.nombre]),
-  )
+  const nombreCat = new Map<string, string>(catsGasto.map(c => [c.categoria_id, c.nombre]))
   const catAgg = new Map<string, { categoria: string; moneda: string; total: number }>()
   for (const g of gastosGC) {
     if (String(g.fecha).slice(0, 7) !== mesActual) continue

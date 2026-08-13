@@ -34,6 +34,10 @@ import {
   type ResultadoLoteCuentas,
 } from '@/app/actions/portal/tesoreria'
 import type { CategoriaGasto } from '@/app/actions/portal/gastos'
+import {
+  ROLES_RESULTADO, ROLES_INGRESO, ROLES_FUERA_RESULTADO,
+  ROL_PL_LABEL, ROL_PL_EFECTO, esRolPL, type RolPL,
+} from '@/lib/pl/estado'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
 import Filtros                        from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
@@ -51,6 +55,78 @@ interface Pendientes {
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const TIPOS_CUENTA: TipoCuenta[] = ['CAJA', 'BANCO', 'PASARELA', 'OTRO']
+
+// ── El movimiento de caja declara QUÉ es (fase 5 del clasificador) ────────────
+//
+// Antes eran dos controles: una casilla «registrar como gasto» y debajo una lista
+// plana de categorías. La casilla es una instrucción técnica —el dueño no tiene
+// por qué saber que el informe se construye sobre otra tabla— y la lista plana no
+// distinguía «pagué la luz» de «compré una nevera», que es justo la diferencia
+// entre un mes malo y un mes en el que se invirtió.
+//
+// Ahora es UNA pregunta, que en un teléfono es lo único que cabe de verdad
+// (§10.5 del plan): en qué se fue el dinero. De la respuesta sale todo lo demás.
+const CLAS_SIN_CLASIFICAR = '__sin__'
+const CLAS_SOLO_MUEVE     = '__solo__'
+
+/**
+ * Las categorías agrupadas por el renglón de su RAÍZ, en el orden del informe.
+ *
+ * Por la raíz y no por la fila: el papel vive arriba y las hijas lo heredan
+ * (mig. 134). Y el orden depende del sentido del movimiento — en un egreso los
+ * gastos primero, en un ingreso los ingresos— sin esconder nunca los del otro
+ * lado: hay clientes que llevan sus cobros con categorías de gasto desde antes
+ * de que existiera el rol de ingreso, y esconderlas les borraría la suya.
+ */
+function gruposDeCategorias(
+  categorias: CategoriaGasto[], esEgreso: boolean,
+): { rol: RolPL; opciones: { id: string; nombre: string }[] }[] {
+  const activas = categorias.filter(c => c.estado === 'ACTIVO')
+  const porId   = new Map(categorias.map(c => [c.categoria_id, c]))
+
+  const rolDe = (c: CategoriaGasto): RolPL => {
+    let actual = c
+    for (let i = 0; i < 4 && actual.parent_id; i++) {
+      const madre = porId.get(actual.parent_id)
+      if (!madre) break
+      actual = madre
+    }
+    return esRolPL(actual.rol_pl) ? actual.rol_pl : 'OPERATIVO'
+  }
+
+  const hijasDe = new Map<string, CategoriaGasto[]>()
+  for (const c of activas) {
+    if (!c.parent_id) continue
+    const ya = hijasDe.get(c.parent_id)
+    if (ya) ya.push(c); else hijasDe.set(c.parent_id, [c])
+  }
+
+  const porRol   = new Map<RolPL, { id: string; nombre: string }[]>()
+  const emitidas = new Set<string>()
+  const meter = (c: CategoriaGasto, hija: boolean) => {
+    if (emitidas.has(c.categoria_id)) return
+    emitidas.add(c.categoria_id)
+    const rol = rolDe(c)
+    const op  = { id: c.categoria_id, nombre: `${hija ? '· ' : ''}${c.nombre}` }
+    const ya  = porRol.get(rol)
+    if (ya) ya.push(op); else porRol.set(rol, [op])
+  }
+
+  const porNombre = (a: CategoriaGasto, b: CategoriaGasto) => a.nombre.localeCompare(b.nombre, 'es')
+  for (const raiz of activas.filter(c => !c.parent_id).sort(porNombre)) {
+    meter(raiz, false)
+    for (const h of (hijasDe.get(raiz.categoria_id) ?? []).sort(porNombre)) meter(h, true)
+  }
+  // Las hijas cuya madre está archivada no tienen por dónde salir arriba: van al
+  // final de su grupo. Perderlas dejaría al dueño sin poder elegir la categoría
+  // con la que lleva meses anotando.
+  for (const c of activas.sort(porNombre)) meter(c, !!c.parent_id)
+
+  const orden: readonly RolPL[] = esEgreso
+    ? [...ROLES_RESULTADO, ...ROLES_FUERA_RESULTADO, ...ROLES_INGRESO]
+    : [...ROLES_INGRESO, ...ROLES_RESULTADO, ...ROLES_FUERA_RESULTADO]
+  return orden.filter(r => porRol.has(r)).map(r => ({ rol: r, opciones: porRol.get(r)! }))
+}
 
 const TIPO_CUENTA_LABEL: Record<TipoCuenta, string> = {
   CAJA: 'Caja', BANCO: 'Banco', PASARELA: 'Pasarela', OTRO: 'Otro',
@@ -225,7 +301,8 @@ function MovimientoModal({
   const [isPending, startTransition] = useTransition()
   const [tipo,  setTipo]  = useState<TipoMovimiento>('INGRESO')
   const [cuentaId, setCuentaId] = useState(cuentaInicial ?? cuentas[0]?.cuenta_id ?? '')
-  const [registrarGasto, setRegistrarGasto] = useState(true)
+  /** Qué es el movimiento: una categoría, «sin clasificar» o «solo mueve dinero». */
+  const [clasificacion, setClasificacion] = useState<string>(CLAS_SIN_CLASIFICAR)
   const [pendienteId, setPendienteId] = useState('')
   const [impDoc, setImpDoc]             = useState('')   // importe en la moneda del documento
   const [impCaja, setImpCaja]           = useState('')   // lo que se mueve en la caja
@@ -241,6 +318,14 @@ function MovimientoModal({
   const cuentaSel = cuentas.find(c => c.cuenta_id === cuentaId)
   const esEgreso  = tipo === 'EGRESO'
   const labelRegistro = esEgreso ? 'gasto' : 'cobro'
+
+  const grupos      = useMemo(() => gruposDeCategorias(categorias, esEgreso), [categorias, esEgreso])
+  const soloMueve   = clasificacion === CLAS_SOLO_MUEVE
+  const categoriaId = (soloMueve || clasificacion === CLAS_SIN_CLASIFICAR) ? '' : clasificacion
+  /** El renglón de lo elegido, para poder decir qué le pasa al dinero antes de guardar. */
+  const rolElegido  = categoriaId
+    ? grupos.find(g => g.opciones.some(o => o.id === categoriaId))?.rol ?? null
+    : null
 
   // Pendientes que puede saldar este movimiento: mismo sentido.
   // Se muestran TODOS los pendientes (sin filtro por empresa).
@@ -354,9 +439,11 @@ function MovimientoModal({
         onSaved()
         return
       }
-      // Movimiento libre (crea gasto/cobro nuevo si el toggle está activo)
+      // Movimiento libre. Lo que decide si nace un gasto/cobro es la respuesta a
+      // «qué es»: solo «solo mueve dinero» se queda en la caja y no llega al informe.
       fd.set('tipo', tipo)
-      fd.set('registrar_gasto', String(registrarGasto))
+      fd.set('registrar_gasto', String(!soloMueve))
+      fd.set('categoria_id', categoriaId)
       const res = await registrarMovimiento(fd)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
@@ -498,30 +585,31 @@ function MovimientoModal({
                       placeholder="Ej: Venta del día, pago de proveedor, retiro…" />
                   </div>
 
-                  {/* Toggle registrar como gasto/cobro */}
+                  {/* Qué es el movimiento: una sola pregunta, y de ella sale todo */}
                   <div className="input-group ter-col-full">
-                    <label className="cita-chk-item">
-                      <input type="checkbox" name="registrar_gasto" checked={registrarGasto}
-                        onChange={e => setRegistrarGasto(e.target.checked)} />
-                      Registrar como {labelRegistro}
+                    <label htmlFor="mov-clasificacion">
+                      ¿{esEgreso ? 'En qué se fue' : 'De dónde viene'} este dinero?
                     </label>
+                    <select id="mov-clasificacion" className="input"
+                      value={clasificacion} onChange={e => setClasificacion(e.target.value)}>
+                      <option value={CLAS_SIN_CLASIFICAR}>Sin clasificar todavía</option>
+                      <option value={CLAS_SOLO_MUEVE}>Solo mueve dinero (ajuste, arqueo)</option>
+                      {grupos.map(g => (
+                        <optgroup key={g.rol} label={ROL_PL_LABEL[g.rol]}>
+                          {g.opciones.map(o => (
+                            <option key={o.id} value={o.id}>{o.nombre}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
                     <span className="input-hint">
-                      El egreso se registrará también como gasto y el ingreso como cobro,
-                      vinculados automáticamente.
+                      {rolElegido
+                        ? ROL_PL_EFECTO[rolElegido]
+                        : soloMueve
+                          ? `No cuenta en tu informe: solo cambia el saldo de la caja. Úsalo para corregir un conteo, no para un ${labelRegistro}.`
+                          : `Se registra como ${labelRegistro} sin categoría. Podrás clasificarlo después desde ${esEgreso ? 'Gastos' : 'Cobros'}.`}
                     </span>
                   </div>
-
-                  {registrarGasto && (
-                    <div className="input-group ter-col-full">
-                      <label>Categoría</label>
-                      <select className="input" name="categoria_id" defaultValue="">
-                        <option value="">— Sin categoría —</option>
-                        {categorias.filter(c => c.estado === 'ACTIVO').map(c => (
-                          <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
                 </>
               )}
 
@@ -552,10 +640,9 @@ function MovimientoModal({
 // dinero de caja son dos saldos a la vez, y para eso está borrar y registrar de nuevo.
 
 function EditarMovimientoModal({
-  movimiento, categorias, cuentaNombre, onClose, onSaved,
+  movimiento, cuentaNombre, onClose, onSaved,
 }: {
   movimiento:   Movimiento
-  categorias:   CategoriaGasto[]
   cuentaNombre: string
   onClose:      () => void
   onSaved:      () => void
@@ -607,17 +694,6 @@ function EditarMovimientoModal({
                   defaultValue={movimiento.fecha} />
               </div>
               <div className="input-group ter-col-full">
-                <label htmlFor="mov-cat">Categoría</label>
-                <select id="mov-cat" className="input" name="categoria_id" defaultValue={movimiento.categoria_id ?? ''}>
-                  <option value="">— Sin categoría —</option>
-                  {categorias.map(c => (
-                    <option key={c.categoria_id} value={c.categoria_id}>
-                      {c.parent_id ? '· ' : ''}{c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group ter-col-full">
                 <label htmlFor="mov-notas">Notas</label>
                 <input id="mov-notas" className="input" name="notas" defaultValue={movimiento.notas ?? ''} />
               </div>
@@ -625,6 +701,13 @@ function EditarMovimientoModal({
                 <span className="input-hint">
                   La cuenta y la moneda no se cambian aquí: mover dinero de una caja a otra
                   toca dos saldos, y para eso está borrar y registrar de nuevo.
+                </span>
+                {/* La categoría se quitó de aquí en la fase 5: en un movimiento manual no
+                    clasificaba nada —el informe se construye sobre los gastos y cobros—,
+                    y decía lo contrario. El camino real se explica, no se esconde. */}
+                <span className="input-hint">
+                  Este movimiento solo mueve dinero. Si fue un gasto o un cobro, bórralo y
+                  vuelve a registrarlo eligiendo qué fue: así sí entra en tu informe.
                 </span>
               </div>
             </div>
@@ -1471,7 +1554,6 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       {editMov && (
         <EditarMovimientoModal
           movimiento={editMov}
-          categorias={data.categorias_gastos}
           cuentaNombre={cuentaNombre[editMov.cuenta_id] ?? editMov.cuenta_id}
           onClose={() => setEditMov(null)}
           onSaved={() => { setEditMov(null); router.refresh() }}
