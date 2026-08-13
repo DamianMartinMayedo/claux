@@ -39,7 +39,7 @@ import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
-import AvisoGaveta                       from '@/components/portal/AvisoGaveta'
+import GavetaLanzador                       from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta }            from '@/lib/caja/pendientes'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -1191,7 +1191,7 @@ export default function GastosView({ data, puedeEditar, gaveta }: {
           gastos (y cobros) que FALTAN de esta tabla. Se avisa aquí, pero se
           clasifica en Tesorería, que es donde está el movimiento. En «Categorías»
           no: allí no falta nada. */}
-      <AvisoGaveta resumen={gaveta} href="/portal/tesoreria" />
+      <GavetaLanzador resumen={gaveta} />
 
       {(data.empresas.length === 0 || data.monedas.length === 0) && (
         <PrerequisitoAviso acciones={data.empresas.length === 0

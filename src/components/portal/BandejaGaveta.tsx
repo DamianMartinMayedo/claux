@@ -15,6 +15,9 @@
 //  · **Se puede resolver en bloque.** Una semana de una cafetería con movimiento
 //    son treinta filas; de una en una esto no se hace nunca, y una bandeja que no
 //    se vacía es un aviso que se aprende a ignorar.
+//
+// Vive en `components/portal` y no junto a Tesorería porque se abre desde donde
+// esté el dueño —Gastos, informes, el TPV, el dossier—: la abre `GavetaLanzador`.
 
 import { useState, useMemo, useTransition } from 'react'
 import { X, Check } from 'lucide-react'
@@ -140,19 +143,22 @@ export default function BandejaGaveta({
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-xl" role="dialog" aria-modal>
+        {/* Título y aspa, nada más: `.modal-header` centra verticalmente sus hijos,
+            así que un párrafo de tres líneas aquí dentro deja el aspa flotando a
+            media altura en vez de en su esquina. La explicación va abajo, que es
+            además donde se lee: pegada a lo que hay que hacer. */}
         <div className="modal-header">
-          <div>
-            <h2 className="modal-title">Dinero que se movió en la caja</h2>
-            <p className="text-xs-muted mt-1">
-              Tu punto de venta registró estas operaciones. Dinos qué fue cada una para que
-              aparezcan donde tienen que aparecer — y si alguna ya la anotaste con su
-              factura, márcala como «no es un gasto nuevo» para no contarla dos veces.
-            </p>
-          </div>
+          <h2 className="modal-title">Dinero que se movió en la caja</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={16} /></button>
         </div>
 
         <div className="modal-body modal-body-wide">
+          <p className="gav-intro">
+            Tu punto de venta registró estas operaciones. Dinos qué fue cada una para que
+            aparezcan donde tienen que aparecer — y si alguna ya la anotaste con su
+            factura, márcala como «no es un gasto nuevo» para no contarla dos veces.
+          </p>
+
           {puedeEditar && pendientes.length > 2 && (
             <div className="gav-lote">
               <span className="gav-lote-txt">
@@ -184,7 +190,7 @@ export default function BandejaGaveta({
           {porDia.map(([dia, movs]) => (
             <div key={dia} className="gav-dia">
               <h3 className="gav-dia-titulo">{diaLargo(movs[0].fecha)}</h3>
-              <ul className="ado-lista">
+              <ul className="gav-lista">
                 {movs.map(m => {
                   const esSalida = m.tipo === 'SALIDA'
                   const grupos   = esSalida ? gruposEgreso : gruposIngreso
@@ -193,17 +199,17 @@ export default function BandejaGaveta({
                     ? grupos.find(g => g.opciones.some(o => o.id === valor))?.rol
                     : undefined
                   return (
-                    <li key={m.movimiento_uuid} className="ado-fila">
+                    <li key={m.movimiento_uuid} className="gav-fila">
                       <span className={esSalida ? 'gav-importe gav-importe-sale' : 'gav-importe'}>
                         {esSalida ? '−' : '+'}{importe(m.importe)} {m.moneda}
                       </span>
-                      <span>
-                        <span className="ado-fila-nombre">{m.motivo || 'Sin motivo anotado'}</span>
-                        <span className="ado-fila-detalle">
+                      <span className="gav-fila-que">
+                        <span className="gav-fila-motivo">{m.motivo || 'Sin motivo anotado'}</span>
+                        <span className="gav-fila-detalle">
                           {m.caja_nombre} · {horaEnTz(m.fecha)}
                         </span>
                       </span>
-                      <span className="ado-fila-destino">
+                      <span className="gav-fila-destino">
                         <label className="sr-only" htmlFor={`gav-${m.movimiento_uuid}`}>
                           {esSalida ? 'En qué se fue' : 'De dónde viene'}
                         </label>

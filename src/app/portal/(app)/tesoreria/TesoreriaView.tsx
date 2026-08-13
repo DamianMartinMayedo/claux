@@ -36,8 +36,7 @@ import {
 import type { CategoriaGasto } from '@/app/actions/portal/gastos'
 import { ROL_PL_LABEL, ROL_PL_EFECTO, type RolPL } from '@/lib/pl/estado'
 import { gruposDeCategorias } from '@/lib/pl/agrupar'
-import AvisoGaveta   from '@/components/portal/AvisoGaveta'
-import BandejaGaveta from './BandejaGaveta'
+import GavetaLanzador from '@/components/portal/GavetaLanzador'
 import type { DatosGaveta } from '@/app/actions/portal/caja-gaveta'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
 import Filtros                        from '@/components/portal/Filtros'
@@ -985,9 +984,6 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  // La bandeja de la gaveta del TPV. Vive aquí porque aquí está el movimiento;
-  // desde Gastos y Reportes el aviso enlaza a esta pantalla.
-  const [bandeja, setBandeja] = useState(false)
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
 
@@ -1222,7 +1218,8 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
       {/* Va ARRIBA del todo, antes de los saldos: el saldo de la caja ya cuenta con
           esta salida —el efectivo bajó— y lo que falta es el otro lado. Enterarse
           después de leer las cifras es enterarse tarde. */}
-      <AvisoGaveta resumen={gaveta.resumen} onAbrir={() => setBandeja(true)} />
+      <GavetaLanzador resumen={gaveta.resumen}
+        datos={{ ...gaveta, categorias: data.categorias_gastos }} />
 
       {(data.empresas.length === 0 || data.monedas.length === 0) && (
         <PrerequisitoAviso acciones={data.empresas.length === 0
@@ -1518,15 +1515,6 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
       {confirmMov && (
         <ConfirmEliminar movimiento={confirmMov} onConfirm={confirmarEliminarMov}
           onClose={() => setConfirmMov(null)} isPending={isPending} />
-      )}
-      {bandeja && (
-        <BandejaGaveta
-          pendientes={gaveta.pendientes}
-          categorias={data.categorias_gastos}
-          puedeEditar={gaveta.puedeEditar}
-          onClose={() => setBandeja(false)}
-          onSaved={() => { setBandeja(false); router.refresh() }}
-        />
       )}
     </div>
   )

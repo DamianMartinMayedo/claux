@@ -4788,9 +4788,14 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ado-nuevo { color: var(--color-text-muted); font-style: italic; }
 
 /* ── Bandeja de la gaveta del TPV (clasificar salidas de caja) ────────────────
-   Reutiliza la rejilla de `.ado-fila` (importe · motivo · destino): es la misma
-   forma de «esto es lo que hay, dime qué hago con ello». Aquí solo se añade lo
-   que aquella no tiene: el importe como primera columna y el corte por día. */
+   Misma forma que `.ado-fila` («esto es lo que hay, dime qué hago con ello»),
+   pero rejilla propia: aquí la tercera columna no es una casilla, es un
+   desplegable con optgroups y un renglón de ayuda debajo, y necesita ancho fijo y
+   aire alrededor o el ojo lee las tres columnas como una sola masa. */
+.gav-intro {
+  font-size: var(--text-sm); color: var(--color-text-muted);
+  line-height: 1.6; margin: 0;
+}
 .gav-dia + .gav-dia { margin-top: var(--space-5); }
 .gav-dia-titulo {
   font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
@@ -4804,6 +4809,35 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
   font-size: var(--text-sm); white-space: nowrap; padding-top: 2px;
 }
 .gav-importe-sale { color: var(--color-error); }
+/* Importe · qué fue · en qué se fue. El desplegable manda en el ancho (20rem, que
+   es lo que mide «Servicios profesionales» sin cortarse) y el motivo se queda con
+   lo que sobre; la separación entre columnas es mayor que la vertical a propósito,
+   para que se lean como tres cosas y no como una frase. */
+.gav-lista { list-style: none; margin: 0; padding: 0; }
+.gav-fila {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr) minmax(16rem, 20rem);
+  align-items: start; gap: var(--space-2) var(--space-6);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.gav-fila:last-child { border-bottom: 0; }
+.gav-fila-que { min-width: 0; }
+.gav-fila-motivo {
+  display: block; font-weight: 600; font-size: var(--text-sm); line-height: 1.4;
+  padding-top: 1px;
+}
+.gav-fila-detalle {
+  display: block; font-size: var(--text-xs); color: var(--color-text-muted);
+  margin-top: 2px; line-height: 1.5;
+}
+.gav-fila-destino { display: flex; flex-direction: column; gap: var(--space-1); }
+/* En estrecho el desplegable no cabe al lado: importe y motivo se quedan en la
+   misma línea (se leen juntos) y la pregunta baja entera debajo. */
+@media (max-width: 720px) {
+  .gav-fila { grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); gap: var(--space-3); }
+  .gav-fila-destino { grid-column: 1 / -1; }
+}
 .gav-lote {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: var(--space-3); margin-bottom: var(--space-4);

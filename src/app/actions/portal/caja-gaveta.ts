@@ -37,6 +37,7 @@ import {
   type GavetaPendiente, type ResumenGaveta,
 } from '@/lib/caja/pendientes'
 import { fechaEnTz } from '@/lib/fecha-tz'
+import type { CategoriaGasto } from './gastos'
 
 export interface DatosGaveta {
   pendientes: GavetaPendiente[]
@@ -63,10 +64,34 @@ export async function obtenerGavetaPendiente(): Promise<DatosGaveta> {
 }
 
 /**
- * Solo el resumen, para las pantallas que únicamente pintan el aviso (Gastos, el
- * estado de resultados, el editor del dossier). La bandeja vive en Tesorería, así
- * que al resto no le hace falta cruzar el detalle de cada movimiento por la red —y
- * ese detalle es el motivo que escribió quien atendió, que no pinta en Gastos.
+ * La bandeja entera, **pedida al pulsar el aviso** desde cualquier pantalla.
+ *
+ * El aviso sale en cinco sitios y la bandeja se abre en el sitio donde estés (ver
+ * `GavetaLanzador`): mandar al dueño a Tesorería para que allí vuelva a pulsar era
+ * un viaje de más, y en Cuba un viaje de más es medio minuto mirando una pantalla
+ * en blanco. Lo que NO se hace es traerse esto en el render de las cinco pantallas:
+ * el 90% de las veces no se pulsa, y entonces son cinco consultas regaladas. Se
+ * paga solo cuando se usa.
+ */
+export async function abrirBandejaGaveta(): Promise<DatosGaveta & { categorias: CategoriaGasto[] }> {
+  const datos = await obtenerGavetaPendiente()
+  const session = await getPortalSession()
+  if (!session) return { ...datos, categorias: [] }
+
+  const { data } = await createAdminClient()
+    .from('categorias_gastos').select('*')
+    .eq('client_id', session.client_id)
+    .eq('estado', 'ACTIVO')
+    .order('nombre')
+
+  return { ...datos, categorias: (data ?? []) as CategoriaGasto[] }
+}
+
+/**
+ * Solo el resumen, para el render de las pantallas que únicamente pintan el aviso
+ * (Gastos, el estado de resultados, el editor del dossier, las operaciones del
+ * TPV). El detalle —el motivo que escribió quien atendió— solo cruza la red si el
+ * dueño abre la bandeja, y entonces lo trae `abrirBandejaGaveta`.
  */
 export async function resumenGavetaPortal(): Promise<ResumenGaveta> {
   const session = await getPortalSession()

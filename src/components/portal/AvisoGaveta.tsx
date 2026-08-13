@@ -8,8 +8,10 @@
 // cuatro números distintos el día que cambie el criterio de «pendiente» — y porque
 // el texto tiene que ser el mismo en los cuatro sitios o parecen cuatro problemas.
 //
-// En Tesorería la acción ABRE la bandeja (`onAbrir`); en el resto lleva a ella
-// (`href`). Nunca las dos.
+// Esto es solo el aviso: quien lo pinta con su acción es `GavetaLanzador`, que es
+// el que sabe abrir la bandeja donde estés. Aquí no hay enlace a Tesorería a
+// propósito — mandar al dueño a otra pantalla para que allí vuelva a pulsar era
+// una recarga entera por una respuesta de dos palabras.
 //
 // Lo que NO lleva aviso es el deck del dossier: ahí lo lee un inversor, y las
 // tareas pendientes del dueño no son asunto suyo. Esa honestidad se resuelve
@@ -23,15 +25,16 @@
 // margen**: `.alert` ya trae `margin-bottom: var(--space-4)`, y ponerle un `mb-3`
 // encima lo dejaría más pegado a lo de abajo que cualquier otro aviso del portal.
 
-import Link from 'next/link'
 import { textoAvisoGaveta, type ResumenGaveta } from '@/lib/caja/pendientes'
 
 export default function AvisoGaveta({
-  resumen, onAbrir, href, className, nota,
+  resumen, onAbrir, className, nota, cargando,
 }: {
   resumen:    ResumenGaveta
-  onAbrir?:   () => void
-  href?:      string
+  onAbrir:    () => void
+  /** La bandeja se está pidiendo al servidor. En Cuba, un botón que no dice nada
+   *  al pulsarlo se pulsa tres veces más. */
+  cargando?:  boolean
   /** Solo para excepciones de colocación (p. ej. `mt-3` si va pegado a un bloque). */
   className?: string
   /**
@@ -61,13 +64,11 @@ export default function AvisoGaveta({
         {nota ?? 'Hasta que digas qué fue cada una, ese dinero no aparece en tu estado de resultados.'}
         {antiguo}
       </div>
-      {onAbrir ? (
-        <button type="button" className="btn btn-aviso btn-sm" onClick={onAbrir}>
-          Clasificarlas
-        </button>
-      ) : href ? (
-        <Link href={href} className="btn btn-aviso btn-sm">Clasificarlas</Link>
-      ) : null}
+      <button type="button" className="btn btn-aviso btn-sm" onClick={onAbrir} disabled={cargando}>
+        {cargando
+          ? <><span className="spinner spinner-sm" /> Abriendo…</>
+          : 'Clasificarlas'}
+      </button>
     </div>
   )
 }

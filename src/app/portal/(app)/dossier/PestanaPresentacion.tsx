@@ -28,7 +28,7 @@ function textoApertura(n: number, ultima: string | null): string {
 }
 import DossierDesfase from './DossierDesfase'
 import AvisoContabilidad from './AvisoContabilidad'
-import AvisoGaveta from '@/components/portal/AvisoGaveta'
+import GavetaLanzador from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 // Panel de control del enlace público. El deck vive en /d/<token>: una capability
@@ -175,8 +175,8 @@ export default function PestanaPresentacion({
             que decirlo AQUÍ, que es la última pantalla del dueño. No se bloquea
             (el desfase sí; esto es una omisión suya, no un dato viejo) y, sobre
             todo, no se escribe una palabra de esto en el deck. */}
-        <AvisoGaveta
-          resumen={gaveta} href="/portal/tesoreria"
+        <GavetaLanzador
+          resumen={gaveta}
           nota={publicado
             ? 'Esos gastos no están en el enlace que ya repartiste: quien lo abra ve un resultado mejor que el real.'
             : 'Esos gastos no entran en lo que vas a publicar: quien lo abra verá un resultado mejor que el real.'}

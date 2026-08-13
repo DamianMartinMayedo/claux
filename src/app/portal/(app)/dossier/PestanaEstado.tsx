@@ -13,7 +13,7 @@ import { guardarModoEstado, type DossierBasico } from '@/app/actions/portal/doss
 import type { LineaDesglose } from '@/lib/dossier/base'
 import DossierDesfase from './DossierDesfase'
 import AvisoContabilidad from './AvisoContabilidad'
-import AvisoGaveta from '@/components/portal/AvisoGaveta'
+import GavetaLanzador from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 // El estado de resultados en pantalla ANTES de descargarlo: en Cuba bajar un PDF
@@ -169,8 +169,8 @@ export default function PestanaEstado({
             del documento: lo de abajo es lo que ve el inversor. Que falten gastos
             por clasificar es un asunto del dueño, y el PDF que descargue de aquí
             tampoco lo lleva. */}
-        <AvisoGaveta
-          resumen={gaveta} href="/portal/tesoreria"
+        <GavetaLanzador
+          resumen={gaveta}
           nota="Esos gastos no están en este estado de resultados, así que tu resultado sale mejor de lo que es. Clasifícalos antes de enseñárselo a nadie."
         />
 

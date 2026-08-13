@@ -12,7 +12,7 @@ import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
 import Tabs                        from '@/components/Tabs'
 import EnviarAsesorModal           from './EnviarAsesorModal'
 import EstadoResultadosCard        from './EstadoResultadosCard'
-import AvisoGaveta                 from '@/components/portal/AvisoGaveta'
+import GavetaLanzador                 from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta }      from '@/lib/caja/pendientes'
 import { formatMonto, formatPct, formatDelta, formatFechaCorta } from './_formato'
 import { construirFilasPL } from '@/lib/pl/comparar'
@@ -421,7 +421,7 @@ export default function ReportesView({ data, asesores, gaveta }: {
       {/* Este informe es para dentro de casa: aquí SÍ se dice que faltan gastos por
           clasificar. El deck del dossier —que lo lee un inversor— no lleva ninguna
           nota de esto; ahí se avisa antes, al congelar y al publicar. */}
-      <AvisoGaveta resumen={gaveta} href="/portal/tesoreria" />
+      <GavetaLanzador resumen={gaveta} />
 
       {/* ── Barra de control: PERÍODO (agrupado) a la izquierda, empresa a la
           derecha ───────────────────────────────────────────────────────────
