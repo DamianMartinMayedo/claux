@@ -13,6 +13,8 @@ import { guardarModoEstado, type DossierBasico } from '@/app/actions/portal/doss
 import type { LineaDesglose } from '@/lib/dossier/base'
 import DossierDesfase from './DossierDesfase'
 import AvisoContabilidad from './AvisoContabilidad'
+import AvisoGaveta from '@/components/portal/AvisoGaveta'
+import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 // El estado de resultados en pantalla ANTES de descargarlo: en Cuba bajar un PDF
 // solo para revisarlo cuesta datos (y es lo que ya hace ReportesView). El PDF se
@@ -39,7 +41,7 @@ function slug(s: string): string {
 }
 
 export default function PestanaEstado({
-  dossier, serie, lineas, empresaNombre, simbolo, tieneBase, hayInventario, onRefrescar,
+  dossier, serie, lineas, empresaNombre, simbolo, tieneBase, hayInventario, gaveta, onRefrescar,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
@@ -48,6 +50,7 @@ export default function PestanaEstado({
   simbolo: string
   tieneBase: boolean
   hayInventario: boolean
+  gaveta: ResumenGaveta
   onRefrescar?: () => void
 }) {
   const er = useMemo(() => estadoDeResultados(serie, lineas), [serie, lineas])
@@ -161,6 +164,15 @@ export default function PestanaEstado({
             }
           />
         )}
+
+        {/* El aviso va aquí arriba, con los otros banners del editor, y NO dentro
+            del documento: lo de abajo es lo que ve el inversor. Que falten gastos
+            por clasificar es un asunto del dueño, y el PDF que descargue de aquí
+            tampoco lo lleva. */}
+        <AvisoGaveta
+          resumen={gaveta} href="/portal/tesoreria"
+          nota="Esos gastos no están en este estado de resultados, así que tu resultado sale mejor de lo que es. Clasifícalos antes de enseñárselo a nadie."
+        />
 
         {/* Segunda ubicación del gancho (M3): el desglose vacío es exactamente lo
             que Contabilidad rellenaría, así que se nombra donde se echa en falta.

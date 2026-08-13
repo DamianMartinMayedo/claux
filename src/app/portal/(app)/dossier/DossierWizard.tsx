@@ -158,7 +158,7 @@ export default function DossierWizard({
           <PasoNumeros
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
-            simbolo={simbolo} onGuardado={avanzar} onCambio={onRefrescar}
+            simbolo={simbolo} gaveta={data.gaveta} onGuardado={avanzar} onCambio={onRefrescar}
           />
         )}
 

@@ -19,6 +19,7 @@ import { hoyEnTz, ahoraEnTz, sumarDias, diaDelNegocio, TZ_NEGOCIO } from '@/lib/
 import { diasDeTasa } from '@/lib/tasas-mensaje'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
+import { resumenGavetaPendiente, textoAvisoGaveta, type ResumenGaveta } from '@/lib/caja/pendientes'
 
 // Dashboard del portal — ADAPTABLE a los módulos contratados. Solo se calculan
 // y devuelven las secciones de los módulos que el cliente tiene activos, así que
@@ -266,6 +267,12 @@ export interface DashboardData {
   tasas?: TasasResumen
   inventario?: InventarioResumen
   puntoVenta?: PuntoVentaResumen
+  /**
+   * Salidas de caja del TPV sin clasificar (mig. 193). Solo con Contabilidad + Punto
+   * de venta: es lo que hace falta para que existan. Alimenta UNA línea de la franja
+   * «Pendiente» — el aviso general que pidió Claudia; el detallado vive en Tesorería.
+   */
+  gaveta?: ResumenGaveta
   rrhh?: RrhhResumen
   servicios?: ServiciosResumen
   dossier?: DossierResumen
@@ -1206,11 +1213,15 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, deudas, inventario, puntoVenta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios] = await Promise.all([
+  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
     puedeVer('caja')           ? resumenPuntoVenta(db, cid, hoy, idsFiltro)   : Promise.resolve(undefined),
+    // Hacen falta los DOS: el movimiento lo crea el TPV, pero lo que falta por
+    // clasificar es un gasto, y sin Contabilidad no hay dónde ponerlo.
+    puedeVer('caja') && puedeVer('base')
+      ? resumenGavetaPendiente(db, cid, idsFiltro)                             : Promise.resolve(undefined),
     puedeVer('rrhh')           ? resumenRrhh(db, cid, hoy, idsFiltro)         : Promise.resolve(undefined),
     puedeVer('reservas_citas') ? resumenAgenda(db, cid, hoy, 'reserva')       : Promise.resolve(undefined),
     puedeVer('agenda')         ? resumenAgenda(db, cid, hoy, 'cita')          : Promise.resolve(undefined),
@@ -1307,6 +1318,14 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       texto: `${puntoVenta.sinSincronizar} ${plural(puntoVenta.sinSincronizar, 'punto de venta sin sincronizar', 'puntos de venta sin sincronizar')}`,
     })
   }
+  if (gaveta && gaveta.n > 0) {
+    // `alerta`, no `aviso`: mientras esté ahí, el estado de resultados del dueño
+    // dice que ganó más de lo que ganó. No es «conviene mirarlo».
+    pendiente.push({
+      clave: 'gaveta', tono: 'alerta', ruta: '/portal/tesoreria',
+      texto: `${textoAvisoGaveta(gaveta)} en tu punto de venta`,
+    })
+  }
   if (dossier && dossier.desfasados > 0) {
     pendiente.push({
       clave: 'dossier', tono: 'aviso', ruta: '/portal/dossier',
@@ -1385,6 +1404,6 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     tieneIa: puedeVer('asistente_ia'),
     pendiente,
     captacion: { conPanel, faltan, email: emailContratacion },
-    contabilidad, deudas, tasas, inventario, puntoVenta, rrhh, servicios, dossier, catalogo, reservas, citas, accesos,
+    contabilidad, deudas, tasas, inventario, puntoVenta, gaveta, rrhh, servicios, dossier, catalogo, reservas, citas, accesos,
   }
 }

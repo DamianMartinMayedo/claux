@@ -3,6 +3,7 @@ import { cookies }          from 'next/headers'
 import { requireModulo }    from '@/app/actions/portal/auth'
 import { obtenerReportes } from '@/app/actions/portal/reportes'
 import { obtenerAsesores } from '@/app/actions/portal/asesores'
+import { resumenGavetaPortal } from '@/app/actions/portal/caja-gaveta'
 import { esModoComparacion } from '@/lib/pl/periodo'
 import ReportesView        from './ReportesView'
 
@@ -36,10 +37,15 @@ export default async function ReportesPage({ searchParams }: PageProps) {
   const cookieVer = (await cookies()).get('rep_ver')?.value
   const verArg = sp.ver ?? cookieVer
 
-  const [data, asesores] = await Promise.all([
+  // La gaveta pendiente NO se acota al período del informe: lo que falta por
+  // clasificar de hace dos meses también falta de este estado de resultados en
+  // cuanto el dueño mire un rango que lo incluya, y el aviso es para el dueño, no
+  // para el período.
+  const [data, asesores, gaveta] = await Promise.all([
     obtenerReportes(desde, hasta, empresa, comparar, verArg),
     obtenerAsesores(),
+    resumenGavetaPortal(),
   ])
   if (!data) notFound()
-  return <ReportesView data={data} asesores={asesores} />
+  return <ReportesView data={data} asesores={asesores} gaveta={gaveta} />
 }

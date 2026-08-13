@@ -4786,3 +4786,32 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ado-delta-sube { color: var(--color-error); font-weight: 700; }
 .ado-delta-baja { color: var(--color-success); font-weight: 700; }
 .ado-nuevo { color: var(--color-text-muted); font-style: italic; }
+
+/* ── Bandeja de la gaveta del TPV (clasificar salidas de caja) ────────────────
+   Reutiliza la rejilla de `.ado-fila` (importe · motivo · destino): es la misma
+   forma de «esto es lo que hay, dime qué hago con ello». Aquí solo se añade lo
+   que aquella no tiene: el importe como primera columna y el corte por día. */
+.gav-dia + .gav-dia { margin-top: var(--space-5); }
+.gav-dia-titulo {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--color-text-muted);
+  padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border);
+}
+/* `tabular-nums` para que la columna de importes se lea en vertical, igual que
+   `col-num` hace en las tablas. */
+.gav-importe {
+  font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: var(--text-sm); white-space: nowrap; padding-top: 2px;
+}
+.gav-importe-sale { color: var(--color-error); }
+.gav-lote {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2); border-radius: var(--radius-md);
+}
+.gav-lote-txt { font-size: var(--text-sm); color: var(--color-text-muted); }
+/* El desplegable del lote y su botón van pegados y no se separan al envolver:
+   son un solo gesto («esto, a las que faltan»). */
+.gav-lote-accion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.gav-lote-select { min-width: 15rem; }

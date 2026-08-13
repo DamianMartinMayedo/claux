@@ -17,6 +17,7 @@ import { esTokenValido, nuevoToken } from '@/lib/dossier/token'
 import { esModoEstado, type ModoEstado as _ModoEstado } from '@/lib/dossier/estado'
 import { conceptosDe, CONCEPTOS_DEFAULT, type ConceptosSector } from '@/lib/sector'
 import { packDe, conceptosDelPack } from '@/lib/catalogo/packs'
+import { resumenGavetaPendiente, RESUMEN_GAVETA_VACIO, type ResumenGaveta } from '@/lib/caja/pendientes'
 
 // ── Funcionalidad "Dossier del negocio" (clave `dossier`) ──
 // Independiente: funciona a mano sin la base. Con `base`, puede TRAER los números
@@ -111,6 +112,13 @@ export interface DossierData {
   ultimaApertura:     string | null            // ISO de la última apertura, o null si nadie lo abrió
   tieneEn:            boolean                   // hay versión inglesa generada (mig. 178)
   enDesactualizado:   boolean                   // se editó el dossier tras generar el inglés
+  /**
+   * Salidas de caja del TPV sin clasificar (mig. 193). Va en el EDITOR y solo ahí:
+   * congelar o publicar con esto pendiente enseña unos gastos por debajo de lo real.
+   * El deck no lleva ninguna nota de esto — el inversor no tiene por qué enterarse
+   * de las tareas pendientes del dueño. Ver `AvisoGaveta`.
+   */
+  gaveta:             ResumenGaveta
 }
 
 // Plan de fusión + monedas faltantes de la previsualización (serializable al cliente).
@@ -371,12 +379,18 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     if (fechas.length) primerMovimiento = fechas.sort()[0]
   }
 
+  // Solo con Contabilidad: sin ella no hay `gastos_cobros` que completar, y la
+  // bandeja vive en Tesorería, que es del mismo módulo.
+  const gaveta = tieneBase
+    ? await resumenGavetaPendiente(db, session.client_id, listaEmpresas.map(e => e.empresa_id))
+    : RESUMEN_GAVETA_VACIO
+
   if (!dosRow) {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
       tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
        monedas, monedaConsolidacion, categoriasCosto: categoriasCatalogoBase, conceptosSector, empresaLogoUrl: null,
-      aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false,
+      aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false, gaveta,
     }
   }
 
@@ -454,6 +468,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     // (updated_at cambia con cualquier guardado); basta para invitar a regenerar.
     enDesactualizado: !!dosRow.traduccion_en_at && !!dosRow.updated_at
       && new Date(dosRow.updated_at as string).getTime() > new Date(dosRow.traduccion_en_at as string).getTime(),
+    gaveta,
   }
 }
 

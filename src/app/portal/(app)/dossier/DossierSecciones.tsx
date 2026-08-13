@@ -133,7 +133,7 @@ export default function DossierSecciones({
           <PasoNumeros
             key={dossier.snapshot_at ?? 'nuevo'}
             dossier={dossier} serie={data.serie} tieneBase={data.tieneBase}
-            simbolo={simbolo} onGuardado={marcarGuardado} onCambio={marcarGuardado}
+            simbolo={simbolo} gaveta={data.gaveta} onGuardado={marcarGuardado} onCambio={marcarGuardado}
           />
         )}
         {activo === 'desglose' && (

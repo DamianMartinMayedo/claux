@@ -1,5 +1,6 @@
 import { requireModulo }      from '@/app/actions/portal/auth'
 import { listarOperaciones }   from '@/app/actions/portal/caja'
+import { resumenGavetaPortal }  from '@/app/actions/portal/caja-gaveta'
 import { TOPE_VER_MAS }        from '@/lib/listados'
 import OperacionesView         from './OperacionesView'
 
@@ -16,9 +17,14 @@ export default async function OperacionesPage({
   // los viejos. `limite` lo sube «Traer más».
   const { desde, hasta, limite } = await searchParams
   const pedido = Number(limite)
-  const data = await listarOperaciones({
-    desde, hasta,
-    limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
-  })
-  return <OperacionesView data={data} />
+  // El aviso de la gaveta ignora el rango: lo pendiente es pendiente aunque sea de
+  // un mes que esta pantalla no esté mirando.
+  const [data, gaveta] = await Promise.all([
+    listarOperaciones({
+      desde, hasta,
+      limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
+    }),
+    resumenGavetaPortal(),
+  ])
+  return <OperacionesView data={data} gaveta={gaveta} />
 }

@@ -3,6 +3,7 @@ import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerGastosCobros } from '@/app/actions/portal/gastos'
 import { TOPE_VER_MAS }        from '@/lib/listados'
 import { filtrosDeUrl }        from '@/lib/filtros'
+import { resumenGavetaPortal } from '@/app/actions/portal/caja-gaveta'
 import GastosView              from './GastosView'
 
 export const dynamic = 'force-dynamic'
@@ -28,11 +29,16 @@ export default async function GastosPage({
     { clave: 'tercero' },
     { clave: 'categoria', param: 'cat' },
   ])
-  const data = await obtenerGastosCobros({
-    desde: sp.desde, hasta: sp.hasta, q: sp.q,
-    ...enServidor,
-    limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
-  })
+  // El aviso de la gaveta va en paralelo: no depende del rango del listado (una
+  // salida sin clasificar de hace dos meses tiene que avisar igual).
+  const [data, gaveta] = await Promise.all([
+    obtenerGastosCobros({
+      desde: sp.desde, hasta: sp.hasta, q: sp.q,
+      ...enServidor,
+      limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
+    }),
+    resumenGavetaPortal(),
+  ])
   if (!data) notFound()
-  return <GastosView data={data} puedeEditar={puedeEditar} />
+  return <GastosView data={data} puedeEditar={puedeEditar} gaveta={gaveta} />
 }

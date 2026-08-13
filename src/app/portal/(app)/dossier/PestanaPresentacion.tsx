@@ -28,16 +28,20 @@ function textoApertura(n: number, ultima: string | null): string {
 }
 import DossierDesfase from './DossierDesfase'
 import AvisoContabilidad from './AvisoContabilidad'
+import AvisoGaveta from '@/components/portal/AvisoGaveta'
+import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 // Panel de control del enlace público. El deck vive en /d/<token>: una capability
 // URL (quien la tiene, la ve). No hay login que ponerle delante —el inversor no es
 // usuario de CLAUX—, así que la protección real es poder revocarla.
 
 export default function PestanaPresentacion({
-  dossier, tieneBase, aperturas, ultimaApertura, tieneEn, enDesactualizado, onCambio,
+  dossier, tieneBase, gaveta, aperturas, ultimaApertura, tieneEn, enDesactualizado, onCambio,
 }: {
   dossier: DossierBasico
   tieneBase: boolean
+  /** Salidas de caja sin clasificar. Avisa al dueño ANTES de publicar; el deck no la menciona. */
+  gaveta: ResumenGaveta
   aperturas: number
   ultimaApertura: string | null
   tieneEn: boolean
@@ -165,6 +169,18 @@ export default function PestanaPresentacion({
             }
           />
         )}
+
+        {/* Publicar es enseñárselo a alguien de fuera. Si faltan gastos por
+            clasificar, el resultado que va a leer ese alguien está inflado — y hay
+            que decirlo AQUÍ, que es la última pantalla del dueño. No se bloquea
+            (el desfase sí; esto es una omisión suya, no un dato viejo) y, sobre
+            todo, no se escribe una palabra de esto en el deck. */}
+        <AvisoGaveta
+          resumen={gaveta} href="/portal/tesoreria"
+          nota={publicado
+            ? 'Esos gastos no están en el enlace que ya repartiste: quien lo abra ve un resultado mejor que el real.'
+            : 'Esos gastos no entran en lo que vas a publicar: quien lo abra verá un resultado mejor que el real.'}
+        />
 
         {sinNumeros ? (
           <p className="dos-vacio">Carga tus números en «Mi dossier» y podrás publicar tu presentación.</p>

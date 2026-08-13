@@ -34,10 +34,11 @@ import {
   type ResultadoLoteCuentas,
 } from '@/app/actions/portal/tesoreria'
 import type { CategoriaGasto } from '@/app/actions/portal/gastos'
-import {
-  ROLES_RESULTADO, ROLES_INGRESO, ROLES_FUERA_RESULTADO,
-  ROL_PL_LABEL, ROL_PL_EFECTO, esRolPL, type RolPL,
-} from '@/lib/pl/estado'
+import { ROL_PL_LABEL, ROL_PL_EFECTO, type RolPL } from '@/lib/pl/estado'
+import { gruposDeCategorias } from '@/lib/pl/agrupar'
+import AvisoGaveta   from '@/components/portal/AvisoGaveta'
+import BandejaGaveta from './BandejaGaveta'
+import type { DatosGaveta } from '@/app/actions/portal/caja-gaveta'
 import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
 import Filtros                        from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
@@ -69,64 +70,9 @@ const TIPOS_CUENTA: TipoCuenta[] = ['CAJA', 'BANCO', 'PASARELA', 'OTRO']
 const CLAS_SIN_CLASIFICAR = '__sin__'
 const CLAS_SOLO_MUEVE     = '__solo__'
 
-/**
- * Las categorías agrupadas por el renglón de su RAÍZ, en el orden del informe.
- *
- * Por la raíz y no por la fila: el papel vive arriba y las hijas lo heredan
- * (mig. 134). Y el orden depende del sentido del movimiento — en un egreso los
- * gastos primero, en un ingreso los ingresos— sin esconder nunca los del otro
- * lado: hay clientes que llevan sus cobros con categorías de gasto desde antes
- * de que existiera el rol de ingreso, y esconderlas les borraría la suya.
- */
-function gruposDeCategorias(
-  categorias: CategoriaGasto[], esEgreso: boolean,
-): { rol: RolPL; opciones: { id: string; nombre: string }[] }[] {
-  const activas = categorias.filter(c => c.estado === 'ACTIVO')
-  const porId   = new Map(categorias.map(c => [c.categoria_id, c]))
-
-  const rolDe = (c: CategoriaGasto): RolPL => {
-    let actual = c
-    for (let i = 0; i < 4 && actual.parent_id; i++) {
-      const madre = porId.get(actual.parent_id)
-      if (!madre) break
-      actual = madre
-    }
-    return esRolPL(actual.rol_pl) ? actual.rol_pl : 'OPERATIVO'
-  }
-
-  const hijasDe = new Map<string, CategoriaGasto[]>()
-  for (const c of activas) {
-    if (!c.parent_id) continue
-    const ya = hijasDe.get(c.parent_id)
-    if (ya) ya.push(c); else hijasDe.set(c.parent_id, [c])
-  }
-
-  const porRol   = new Map<RolPL, { id: string; nombre: string }[]>()
-  const emitidas = new Set<string>()
-  const meter = (c: CategoriaGasto, hija: boolean) => {
-    if (emitidas.has(c.categoria_id)) return
-    emitidas.add(c.categoria_id)
-    const rol = rolDe(c)
-    const op  = { id: c.categoria_id, nombre: `${hija ? '· ' : ''}${c.nombre}` }
-    const ya  = porRol.get(rol)
-    if (ya) ya.push(op); else porRol.set(rol, [op])
-  }
-
-  const porNombre = (a: CategoriaGasto, b: CategoriaGasto) => a.nombre.localeCompare(b.nombre, 'es')
-  for (const raiz of activas.filter(c => !c.parent_id).sort(porNombre)) {
-    meter(raiz, false)
-    for (const h of (hijasDe.get(raiz.categoria_id) ?? []).sort(porNombre)) meter(h, true)
-  }
-  // Las hijas cuya madre está archivada no tienen por dónde salir arriba: van al
-  // final de su grupo. Perderlas dejaría al dueño sin poder elegir la categoría
-  // con la que lleva meses anotando.
-  for (const c of activas.sort(porNombre)) meter(c, !!c.parent_id)
-
-  const orden: readonly RolPL[] = esEgreso
-    ? [...ROLES_RESULTADO, ...ROLES_FUERA_RESULTADO, ...ROLES_INGRESO]
-    : [...ROLES_INGRESO, ...ROLES_RESULTADO, ...ROLES_FUERA_RESULTADO]
-  return orden.filter(r => porRol.has(r)).map(r => ({ rol: r, opciones: porRol.get(r)! }))
-}
+// El agrupador vive en `@/lib/pl/agrupar`: la misma pregunta se hace también en
+// la bandeja de la gaveta del TPV, y dos copias acabarían ofreciendo listas
+// distintas según por dónde entró el dinero.
 
 const TIPO_CUENTA_LABEL: Record<TipoCuenta, string> = {
   CAJA: 'Caja', BANCO: 'Banco', PASARELA: 'Pasarela', OTRO: 'Otro',
@@ -1034,9 +980,14 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPageData; pendientes: Pendientes }) {
+export default function TesoreriaView({ data, pendientes, gaveta }: {
+  data: TesoreriaPageData; pendientes: Pendientes; gaveta: DatosGaveta
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // La bandeja de la gaveta del TPV. Vive aquí porque aquí está el movimiento;
+  // desde Gastos y Reportes el aviso enlaza a esta pantalla.
+  const [bandeja, setBandeja] = useState(false)
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
 
@@ -1267,6 +1218,11 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
           )}
         </div>
       </div>
+
+      {/* Va ARRIBA del todo, antes de los saldos: el saldo de la caja ya cuenta con
+          esta salida —el efectivo bajó— y lo que falta es el otro lado. Enterarse
+          después de leer las cifras es enterarse tarde. */}
+      <AvisoGaveta resumen={gaveta.resumen} onAbrir={() => setBandeja(true)} />
 
       {(data.empresas.length === 0 || data.monedas.length === 0) && (
         <PrerequisitoAviso acciones={data.empresas.length === 0
@@ -1562,6 +1518,15 @@ export default function TesoreriaView({ data, pendientes }: { data: TesoreriaPag
       {confirmMov && (
         <ConfirmEliminar movimiento={confirmMov} onConfirm={confirmarEliminarMov}
           onClose={() => setConfirmMov(null)} isPending={isPending} />
+      )}
+      {bandeja && (
+        <BandejaGaveta
+          pendientes={gaveta.pendientes}
+          categorias={data.categorias_gastos}
+          puedeEditar={gaveta.puedeEditar}
+          onClose={() => setBandeja(false)}
+          onSaved={() => { setBandeja(false); router.refresh() }}
+        />
       )}
     </div>
   )

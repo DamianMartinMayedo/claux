@@ -39,6 +39,8 @@ import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
+import AvisoGaveta                       from '@/components/portal/AvisoGaveta'
+import type { ResumenGaveta }            from '@/lib/caja/pendientes'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
@@ -804,7 +806,11 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPageData; puedeEditar: boolean }) {
+export default function GastosView({ data, puedeEditar, gaveta }: {
+  data: GastosCobrosPageData
+  puedeEditar: boolean
+  gaveta: ResumenGaveta
+}) {
   const router = useRouter()
 
   const { colorOf, nombreOf } = useEmpresas()
@@ -1180,6 +1186,12 @@ export default function GastosView({ data, puedeEditar }: { data: GastosCobrosPa
       />
 
       {(tab === 'gastos' || tab === 'cobros') && (<>
+
+      {/* Lo que salió de la gaveta del TPV y nadie ha dicho qué fue todavía: son
+          gastos (y cobros) que FALTAN de esta tabla. Se avisa aquí, pero se
+          clasifica en Tesorería, que es donde está el movimiento. En «Categorías»
+          no: allí no falta nada. */}
+      <AvisoGaveta resumen={gaveta} href="/portal/tesoreria" />
 
       {(data.empresas.length === 0 || data.monedas.length === 0) && (
         <PrerequisitoAviso acciones={data.empresas.length === 0

@@ -12,6 +12,8 @@ import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
 import Tabs                        from '@/components/Tabs'
 import EnviarAsesorModal           from './EnviarAsesorModal'
 import EstadoResultadosCard        from './EstadoResultadosCard'
+import AvisoGaveta                 from '@/components/portal/AvisoGaveta'
+import type { ResumenGaveta }      from '@/lib/caja/pendientes'
 import { formatMonto, formatPct, formatDelta, formatFechaCorta } from './_formato'
 import { construirFilasPL } from '@/lib/pl/comparar'
 import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
@@ -49,7 +51,11 @@ function slug(s: string): string {
 
 // ── Vista ─────────────────────────────────────────────────────────────────────
 
-export default function ReportesView({ data, asesores }: { data: ReportesData; asesores: Asesor[] }) {
+export default function ReportesView({ data, asesores, gaveta }: {
+  data: ReportesData
+  asesores: Asesor[]
+  gaveta: ResumenGaveta
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [enviarOpen, setEnviarOpen] = useState(false)
@@ -411,6 +417,11 @@ export default function ReportesView({ data, asesores }: { data: ReportesData; a
           </div>
         )}
       </div>
+
+      {/* Este informe es para dentro de casa: aquí SÍ se dice que faltan gastos por
+          clasificar. El deck del dossier —que lo lee un inversor— no lleva ninguna
+          nota de esto; ahí se avisa antes, al congelar y al publicar. */}
+      <AvisoGaveta resumen={gaveta} href="/portal/tesoreria" />
 
       {/* ── Barra de control: PERÍODO (agrupado) a la izquierda, empresa a la
           derecha ───────────────────────────────────────────────────────────

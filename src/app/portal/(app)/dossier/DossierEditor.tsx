@@ -110,7 +110,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
 
       {tab === 'presentacion' && (
         <PestanaPresentacion
-          dossier={dossier} tieneBase={data.tieneBase}
+          dossier={dossier} tieneBase={data.tieneBase} gaveta={data.gaveta}
           aperturas={data.aperturas} ultimaApertura={data.ultimaApertura}
           tieneEn={data.tieneEn} enDesactualizado={data.enDesactualizado}
           onCambio={refrescar}
@@ -126,6 +126,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
           simbolo={simbolo}
           tieneBase={data.tieneBase}
           hayInventario={data.hayInventario}
+          gaveta={data.gaveta}
           onRefrescar={refrescar}
         />
       )}

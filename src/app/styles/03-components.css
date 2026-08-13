@@ -462,6 +462,16 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .modal-body-form { padding: var(--space-5) var(--space-6); gap: var(--space-4); }
 .modal-body-text { color: var(--color-text-muted); line-height: 1.6; }
 
+/* Etiqueta que solo leen los lectores de pantalla. Para el `<label for>` de un
+   control cuyo rótulo visible sería ruido (una lista de filas donde la etiqueta
+   es la misma treinta veces). No sustituye a una etiqueta visible cuando cabe:
+   §7 del design system sigue pidiendo `<label for>` en todo input. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
 /* ═══════════════════════════════════════════════════
    AUTOCOMPLETADO (`.ac-*`)
    ═══════════════════════════════════════════════════

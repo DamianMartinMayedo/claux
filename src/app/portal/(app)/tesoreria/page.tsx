@@ -4,6 +4,7 @@ import { obtenerTesoreria } from '@/app/actions/portal/tesoreria'
 import { TOPE_VER_MAS }     from '@/lib/listados'
 import { filtrosDeUrl }     from '@/lib/filtros'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
+import { obtenerGavetaPendiente } from '@/app/actions/portal/caja-gaveta'
 import TesoreriaView        from './TesoreriaView'
 
 export const dynamic = 'force-dynamic'
@@ -30,17 +31,23 @@ export default async function TesoreriaPage({
   // paga en 3G, pero tiene que haber forma de llegar a lo VIEJO —el techo recorta por
   // fecha descendente— sin adivinar un rango a mano.
   const pedido = Number(limite)
-  const [data, cxc, cxp] = await Promise.all([
+  const [data, cxc, cxp, gaveta] = await Promise.all([
     obtenerTesoreria({ desde, hasta, q, ...enServidor,
       limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined }),
     obtenerCuentasPorCobrar(),
     obtenerCuentasPorPagar(),
+    // La bandeja de la gaveta del TPV (mig. 193). Va aquí y no dentro de
+    // `obtenerTesoreria` porque no depende del rango ni de los filtros del listado:
+    // una salida sin clasificar de hace dos meses tiene que salir igual, o el aviso
+    // desaparecería justo cuando más falta hace.
+    obtenerGavetaPendiente(),
   ])
   if (!data) notFound()
   return (
     <TesoreriaView
       data={data}
       pendientes={{ cobrar: cxc?.documentos ?? [], pagar: cxp?.documentos ?? [] }}
+      gaveta={gaveta}
     />
   )
 }

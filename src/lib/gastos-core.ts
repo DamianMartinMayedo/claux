@@ -136,6 +136,47 @@ export function cobroNaceLiquidado(origen_tipo: string | null | undefined): bool
   return origen_tipo === ORIGEN_CIERRE_CAJA
 }
 
+// ── La gaveta del TPV: lo que sale y entra DURANTE el turno (mig. 193) ───────
+//
+// No confundir con `ORIGEN_CIERRE_CAJA`, que es el resumen de VENTAS de un cierre.
+// Esto es lo otro que pasa en la gaveta: el dependiente le paga al proveedor, el
+// dueño retira, se mete sencillo para dar cambio. La ingesta lo postea en Tesorería
+// (`origen='CAJA'`) y hasta la mig. 193 moría ahí, fuera del estado de resultados.
+//
+// La clasificación NO la hace el dispositivo: la hace el dueño después, en la
+// bandeja de pendientes del portal, contestando la misma pregunta que el movimiento
+// manual de Tesorería. Por eso estas filas nacen desde una acción del portal y no
+// desde la ingesta.
+export const ORIGEN_CAJA_SALIDA  = 'CAJA_SALIDA'
+export const ORIGEN_CAJA_ENTRADA = 'CAJA_ENTRADA'
+
+/**
+ * ¿Esta fila la generó una operación de la gaveta del TPV?
+ *
+ * La usan las dos puertas de Gastos (editar y borrar) para no dejar retocar a mano
+ * un importe que lo fija el dispositivo: bajarlo aquí dejaría el gasto discrepando
+ * del EGRESO de Tesorería que ya está posteado, y nada avisaría.
+ */
+export function esGavetaTpv(origen_tipo: string | null | undefined): boolean {
+  return origen_tipo === ORIGEN_CAJA_SALIDA || origen_tipo === ORIGEN_CAJA_ENTRADA
+}
+
+/**
+ * La naturaleza con la que nace un registro clasificado desde la gaveta.
+ *
+ * **`COSTE`, y esto es lo que hace que la fase entera no toque a ningún consumidor.**
+ * El efectivo YA salió del cajón —la ingesta posteó su EGRESO en Tesorería—, así que
+ * la fila tiene que contar en el estado de resultados y **no** generar deuda: si
+ * naciera `AMBAS` (el defecto), al dueño le aparecería en Cuentas por pagar una
+ * factura fantasma por un dinero que pagó la semana pasada, y el puente devengado↔caja
+ * enseñaría un pendiente imposible de liquidar.
+ *
+ * Es exactamente la semántica que la mig. 166 ya definió para el salario devengado, y
+ * la misma por la que §1.9 reclasifica la depreciación. No hay caso nuevo: hay un
+ * tercer caso normal de una regla que ya está enhebrada en los ocho consumidores.
+ */
+export const NATURALEZA_GAVETA: NaturalezaRegistro = 'COSTE'
+
 export function generarRegistroId(tipo: TipoRegistro): string {
   const pre = tipo === 'GASTO' ? 'GAS' : 'COB'
   return `${pre}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`

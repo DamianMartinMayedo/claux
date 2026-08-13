@@ -8,7 +8,7 @@ import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
 import {
   cobroNaceLiquidado, etiquetaDeCategoria, generarCategoriaGastoId, generarRegistroId,
-  ORIGEN_CIERRE_CAJA, parsearSubcategorias, estadoDeRegistro, generaSaldo,
+  ORIGEN_CIERRE_CAJA, esGavetaTpv, parsearSubcategorias, estadoDeRegistro, generaSaldo,
   type TipoRegistro as _TipoRegistro, type EstadoRegistro as _EstadoRegistro,
   type NaturalezaRegistro as _NaturalezaRegistro,
 } from '@/lib/gastos-core'
@@ -419,6 +419,14 @@ export async function guardarGastoCobro(
     const duenno = await documentoDeOrigen(db, session.client_id, registro_id)
     if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}. Corrígelo desde ahí.` }
 
+    // Gaveta del TPV: el dinero ya salió del cajón y Tesorería lo tiene posteado por
+    // su cuenta (por el uuid del movimiento, no por este registro). Cambiar aquí el
+    // importe o la fecha descuadraría el gasto contra ese egreso sin que nada avise,
+    // y la comprobación de «ya liquidado» de abajo no lo caza porque esa liquidación
+    // no apunta a esta fila. Así que esos campos se ignoran y se reponen los del
+    // dispositivo; lo demás (categoría, concepto, notas) se guarda.
+    const gav = await filaDeGaveta(db, session.client_id, registro_id)
+
     // El importe no puede bajar por debajo de lo ya pagado: el saldo se recortaría a 0
     // y el estado derivado diría LIQUIDADO habiendo salido de la caja más dinero del que
     // el gasto declara. Mismo criterio (y mismo tono) que la guardia de borrado.
@@ -439,7 +447,13 @@ export async function guardarGastoCobro(
     // `empresa_id` SÍ se guarda: antes el formulario lo ofrecía y el update lo
     // descartaba, así que cambiar de empresa se guardaba «bien» y no hacía nada.
     const { error } = await db.from('gastos_cobros')
-      .update({ empresa_id, fecha, vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, concepto, monto: montoRaw, notas, updated_at: new Date().toISOString() })
+      .update({
+        empresa_id: gav ? gav.empresa_id : empresa_id,
+        fecha:      gav ? gav.fecha      : fecha,
+        monto:      gav ? gav.monto      : montoRaw,
+        vencimiento, tercero_id, categoria: categoriaNombre, categoria_id, descripcion, concepto, notas,
+        updated_at: new Date().toISOString(),
+      })
       .eq('registro_id', registro_id)
       .eq('client_id', session.client_id)
     if (error) return { ok: false, error: error.message }
@@ -475,6 +489,30 @@ export async function guardarGastoCobro(
 // de la contabilidad vieja del cliente, y corregirlos a mano es justo su caso de uso.
 // Generalizar la comprobación volvería intocable todo el histórico importado de golpe.
 //
+// ── ¿Esta fila la parió la gaveta del punto de venta? ────────────────────────
+// Devuelve los campos CONGELADOS (los que fijó el dispositivo) o null.
+//
+// No entra en la lista blanca de `documentoDeOrigen` a propósito: esas filas no se
+// tocan porque su documento manda sobre TODO, y estas son medio y medio. El importe,
+// la fecha, la moneda y la empresa los fijó el TPV y tienen que seguir cuadrando con
+// el EGRESO que Tesorería ya posteó; pero la CATEGORÍA la eligió el dueño en la
+// bandeja, y equivocarse ahí es lo más fácil del mundo. Si esto se bloqueara entero,
+// una salida mal clasificada quedaría mal para siempre: ya no vuelve a la bandeja.
+//
+// Sin 'use server' export: es un helper interno (un export no-async rompe el build).
+async function filaDeGaveta(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any, client_id: string, registro_id: string,
+): Promise<{ empresa_id: string | null; fecha: string; monto: number } | null> {
+  const { data } = await db.from('gastos_cobros')
+    .select('origen_tipo, empresa_id, fecha, monto')
+    .eq('registro_id', registro_id).eq('client_id', client_id)
+    .maybeSingle()
+  const r = data as { origen_tipo: string | null; empresa_id: string | null; fecha: string; monto: number } | null
+  if (!r || !esGavetaTpv(r.origen_tipo)) return null
+  return { empresa_id: r.empresa_id, fecha: r.fecha, monto: Number(r.monto) || 0 }
+}
+
 // Sin 'use server' export: es un helper interno (un export no-async rompe el build).
 async function documentoDeOrigen(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -512,6 +550,17 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
   // Se elimina borrando/anulando su documento de origen (que sí revierte todo).
   const duenno = await documentoDeOrigen(db, session.client_id, registro_id)
   if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}. Elimínalo desde ahí.` }
+
+  // Aquí SÍ se bloquea entero: el dinero salió de la gaveta de verdad. Borrar la fila
+  // no devuelve el efectivo ni la manda de vuelta a la bandeja (el movimiento queda
+  // clasificado), así que solo serviría para que ese gasto desapareciera del estado
+  // de resultados sin dejar rastro. Se puede recategorizar; desaparecer, no.
+  if (await filaDeGaveta(db, session.client_id, registro_id)) {
+    return {
+      ok: false,
+      error: 'Esta salida ocurrió en tu punto de venta: no se puede eliminar. Si la clasificaste mal, edítala y cámbiale la categoría.',
+    }
+  }
 
   const { count } = await db.from('movimientos_tesoreria')
     .select('movimiento_id', { count: 'exact', head: true })

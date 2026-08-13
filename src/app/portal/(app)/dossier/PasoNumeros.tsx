@@ -9,6 +9,7 @@ import {
 } from '@/app/actions/portal/dossier'
 import { etiquetaMes, type FilaSerie } from '@/lib/dossier/snapshot'
 import AvisoContabilidad from './AvisoContabilidad'
+import { textoAvisoGaveta, type ResumenGaveta } from '@/lib/caja/pendientes'
 
 // Lista de meses 'YYYY-MM' del período (inclusive).
 function mesesDe(desde: string | null, hasta: string | null): string[] {
@@ -29,12 +30,14 @@ interface Fila { ingresos: string; costo_ventas: string; gastos_operativos: stri
 type Campo = 'ingresos' | 'costo_ventas' | 'gastos_operativos'
 
 export default function PasoNumeros({
-  dossier, serie, tieneBase, simbolo, onGuardado, onCambio,
+  dossier, serie, tieneBase, simbolo, gaveta, onGuardado, onCambio,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
   tieneBase: boolean
   simbolo: string
+  /** Salidas de caja del TPV sin clasificar: avisan ANTES de congelar (mig. 193). */
+  gaveta: ResumenGaveta
   // Dos cosas distintas, y confundirlas se lleva por delante el paso entero:
   //   · onGuardado = «he terminado con los números» → en el wizard AVANZA. Solo el
   //     botón de guardar, que es el único gesto que dice que el dueño ya los da por buenos.
@@ -295,6 +298,17 @@ export default function PasoNumeros({
                   )}
                   {preview.monedasFaltantes.length > 0 && (
                     <p className="dos-preview-aviso"><AlertTriangle size={14} strokeWidth={2} /> No se incluyen importes en {preview.monedasFaltantes.join(', ')} (sin tasa hacia {dossier.moneda_presentacion}).</p>
+                  )}
+                  {/* Congelar es el momento: lo que no esté clasificado no entra en
+                      la serie, y el número queda fijo hasta la próxima actualización.
+                      Se avisa, no se bloquea — el dueño puede tener razones para
+                      congelar ya. En el deck no aparece nada de esto. */}
+                  {gaveta.n > 0 && (
+                    <p className="dos-preview-aviso dos-preview-aviso-warn">
+                      <AlertTriangle size={14} strokeWidth={2} /> Tu punto de venta registró{' '}
+                      {textoAvisoGaveta(gaveta)}. Esos gastos <strong>no entran</strong> en estos
+                      números: clasifícalos en Tesorería si quieres que cuenten.
+                    </p>
                   )}
                   {dossier.estado === 'PUBLICADO' && (
                     <p className="dos-preview-aviso dos-preview-aviso-warn"><AlertTriangle size={14} strokeWidth={2} /> Este dossier está publicado: los números del enlace cambiarán al confirmar.</p>

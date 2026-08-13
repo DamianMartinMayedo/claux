@@ -6,6 +6,8 @@ import { ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import Tabs from '@/components/Tabs'
+import AvisoGaveta from '@/components/portal/AvisoGaveta'
+import type { ResumenGaveta } from '@/lib/caja/pendientes'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import Filtros from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
@@ -34,7 +36,7 @@ function estadoBadge(estado: string) {
   return <span className="badge badge-neutral">Original</span>
 }
 
-export default function OperacionesView({ data }: Props) {
+export default function OperacionesView({ data, gaveta }: Props & { gaveta: ResumenGaveta }) {
   const [tab, setTab] = useState<'ventas' | 'stock'>('ventas')
   // Los filtros viven en la URL, como el rango: refrescar ya no los tira.
   const params = useSearchParams()
@@ -151,6 +153,11 @@ export default function OperacionesView({ data }: Props) {
           />
         </div>
       </div>
+
+      {/* Aquí NACE lo que falta clasificar: quien mira las operaciones del punto de
+          venta es quien mejor recuerda para qué se sacó ese dinero. Se clasifica en
+          Tesorería, que es donde está el movimiento. */}
+      <AvisoGaveta resumen={gaveta} href="/portal/tesoreria" />
 
       <Tabs<'ventas' | 'stock'>
         ariaLabel="Tipos de operación"
