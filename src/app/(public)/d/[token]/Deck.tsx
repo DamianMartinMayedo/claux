@@ -252,6 +252,7 @@ export default function Deck({ deck, borrador = false }: { deck: DeckPublico; bo
         { es: Les.costeVentas,     en: Len.costeVentas,     cats: er.costoPorCategoria },
         { es: Les.gastosPersonal,  en: Len.gastosPersonal,  cats: er.personalPorCategoria },
         { es: Les.gastosOperativos, en: Len.gastosOperativos, cats: er.gastosPorCategoria },
+        { es: Les.depreciacion,    en: Len.depreciacion,    cats: er.depreciacionPorCategoria },
         { es: Les.otros,           en: Len.otros,           cats: er.otrosPorCategoria },
       ].filter(grp => grp.cats.length > 0)
 

@@ -58,6 +58,7 @@ export interface DeckLabels {
   enQueSeVa: string
   ingresos: string
   gastosPersonal: string
+  depreciacion: string
   otros: string
   notaDetalle: (moneda: string) => string
   evolucionProyeccion: string
@@ -86,6 +87,7 @@ export const DECK_LABELS: Record<Lang, DeckLabels> = {
     enQueSeVa: 'En qué se va',
     ingresos: 'Ingresos',
     gastosPersonal: 'Gastos de personal',
+    depreciacion: 'Depreciación',
     otros: 'Otros',
     notaDetalle: moneda => `Porcentajes sobre los ingresos del período · Importes en ${moneda}`,
     evolucionProyeccion: 'Evolución y proyección',
@@ -112,6 +114,7 @@ export const DECK_LABELS: Record<Lang, DeckLabels> = {
     enQueSeVa: 'Where it goes',
     ingresos: 'Revenue',
     gastosPersonal: 'Payroll',
+    depreciacion: 'Depreciation',
     otros: 'Other',
     notaDetalle: moneda => `Percentages over revenue for the period · Amounts in ${moneda}`,
     evolucionProyeccion: 'Trend and projection',

@@ -242,6 +242,12 @@ export default function PestanaEstado({
                 <Grupo titulo="Gastos de personal" total={er.personal} pct={er.personalPct} cats={er.personalPorCategoria} />
               )}
               <Grupo titulo="Gastos operativos" total={er.operativos} pct={er.operativosPct} cats={er.gastosPorCategoria} />
+              {/* Depreciación: DENTRO del resultado operativo, encima de él. Es gasto
+                  de operar aunque no salga de la caja; debajo, el renglón dejaría de
+                  ser un resultado operativo y sería un EBITDA con otro nombre. */}
+              {er.depreciacion > 0.005 && (
+                <Grupo titulo="Depreciación y provisiones" total={er.depreciacion} pct={er.depreciacionPct} cats={er.depreciacionPorCategoria} />
+              )}
               {er.resultadoOperativo != null && (
                 <div className="dos-er-total">
                   <span>Resultado operativo <span className="dos-er-pct">({fmtPct(er.resultadoOperativoPct!)})</span></span>

@@ -68,6 +68,13 @@ export interface EstadoResultados {
   personalPct: number
   operativos: number
   operativosPct: number
+  /**
+   * Depreciación (fase 4): la parte del gasto que NO salió de la caja. Va DENTRO
+   * del resultado operativo —es gasto de operar— pero con renglón propio, que es
+   * lo que permite leer el documento por caja además de por resultado.
+   */
+  depreciacion: number
+  depreciacionPct: number
   otros: number
   otrosPct: number
   /** EBIT = neto + otros; null si no hay «Otros» (sin nada debajo, sería el neto). */
@@ -79,6 +86,7 @@ export interface EstadoResultados {
   costoPorCategoria: CategoriaMonto[]
   personalPorCategoria: CategoriaMonto[]
   gastosPorCategoria: CategoriaMonto[]
+  depreciacionPorCategoria: CategoriaMonto[]
   otrosPorCategoria: CategoriaMonto[]
   evolucion: FilaEvolucion[]
 }
@@ -117,16 +125,19 @@ export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]):
 
   // Los gastos operativos, partidos por rol para el waterfall detallado. Cada total
   // sale de SUS líneas del desglose (con base suman `gastosOperativos` exacto).
-  const personalPorCategoria = deGrupo('PERSONAL')
-  const gastosPorCategoria   = deGrupo('GASTO_OPERATIVO')
-  const otrosPorCategoria    = deGrupo('OTRO')
+  const personalPorCategoria     = deGrupo('PERSONAL')
+  const gastosPorCategoria       = deGrupo('GASTO_OPERATIVO')
+  const depreciacionPorCategoria = deGrupo('DEPRECIACION')
+  const otrosPorCategoria        = deGrupo('OTRO')
   const sumCats = (cats: CategoriaMonto[]) => round2(cats.reduce((s, c) => s + c.monto, 0))
-  const personal   = sumCats(personalPorCategoria)
-  const otros      = sumCats(otrosPorCategoria)
+  const personal     = sumCats(personalPorCategoria)
+  const depreciacion = sumCats(depreciacionPorCategoria)
+  const otros        = sumCats(otrosPorCategoria)
   // El bucket operativo es el RESIDUAL sobre el total de la serie: así Personal +
-  // Operativos + Otros = gastosOperativos SIEMPRE y el waterfall cuadra con el neto
-  // autoritativo. Con base coincide con la suma de sus líneas; a mano absorbe el descuadre.
-  const operativos = round2(gastosOperativos - personal - otros)
+  // Operativos + Depreciación + Otros = gastosOperativos SIEMPRE y el waterfall
+  // cuadra con el neto autoritativo. Con base coincide con la suma de sus líneas; a
+  // mano absorbe el descuadre.
+  const operativos = round2(gastosOperativos - personal - depreciacion - otros)
   // EBIT: solo cuando hay «Otros» debajo que lo separen del neto (misma regla que
   // reportes.ts). = neto + otros, así siempre cuadra con el neto autoritativo.
   const resultadoOperativo = otros > 0.005 ? round2(resultadoNeto + otros) : null
@@ -138,9 +149,10 @@ export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]):
     margenBrutoPct: pct(margenBruto, ingresos),
     gastosOperativos,
     gastosOperativosPct: pct(gastosOperativos, ingresos),
-    personal,   personalPct:   pct(personal, ingresos),
-    operativos, operativosPct: pct(operativos, ingresos),
-    otros,      otrosPct:      pct(otros, ingresos),
+    personal,     personalPct:     pct(personal, ingresos),
+    operativos,   operativosPct:   pct(operativos, ingresos),
+    depreciacion, depreciacionPct: pct(depreciacion, ingresos),
+    otros,        otrosPct:        pct(otros, ingresos),
     resultadoOperativo,
     resultadoOperativoPct: resultadoOperativo == null ? null : pct(resultadoOperativo, ingresos),
     resultadoNeto,
@@ -149,6 +161,7 @@ export function estadoDeResultados(serie: FilaSerie[], lineas: LineaDesglose[]):
     costoPorCategoria: deGrupo('COSTO_VENTAS'),
     personalPorCategoria,
     gastosPorCategoria,
+    depreciacionPorCategoria,
     otrosPorCategoria,
     evolucion,
   }

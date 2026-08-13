@@ -93,6 +93,10 @@ export function construirEstadoResultados(doc: JsPdfDoc, d: EstadoResultadosPdf)
   if (detallar) {
     if (er.personal > 0.005) grupo('Gastos de personal', er.personal, er.personalPct, er.personalPorCategoria)
     grupo('Gastos operativos', er.operativos, er.operativosPct, er.gastosPorCategoria)
+    // Depreciación: ANTES del resultado operativo. Es gasto de operar aunque no
+    // salga de la caja, y sacarla de ahí convertiría este renglón en un EBITDA
+    // rotulado «resultado operativo» en un documento que se le enseña a un banco.
+    if (er.depreciacion > 0.005) grupo('Depreciación y provisiones', er.depreciacion, er.depreciacionPct, er.depreciacionPorCategoria)
     if (er.resultadoOperativo != null) {
       cur.filaTotal(`Resultado operativo (${fmtPct(er.resultadoOperativoPct!)})`, fmt(er.resultadoOperativo))
     }

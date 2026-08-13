@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { EyeOff, Loader2, RotateCcw, Save } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { guardarCostoVentas, type CategoriaCosto, type RolPL } from '@/app/actions/portal/dossier'
-import { ROLES_PL } from '@/lib/pl/estado'
+import { ROLES_PL, ROLES_RESULTADO, ROLES_GUIA, ROLES_FUERA_RESULTADO, ROLES_INGRESO } from '@/lib/pl/estado'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 
@@ -24,6 +24,48 @@ const ROL_PL_UI: Record<RolPL, { titulo: string; descripcion: string }> = {
   OTRO: {
     titulo: 'Impuestos y financiación',
     descripcion: 'Impuestos, comisiones e intereses, fuera del resultado operativo.',
+  },
+  // Los tres de la fase 2. No son renglones del resultado: son dinero que se
+  // mueve sin que el negocio gane ni pierda por ello. Aquí importan tanto como
+  // en Reportes, porque esta pantalla escribe la MISMA columna: una inversión
+  // clasificada como gasto operativo hunde el resultado del documento que el
+  // dueño le enseña a un inversor, que es el peor sitio posible para el error.
+  INVERSION: {
+    titulo: 'Inversiones',
+    descripcion: 'Lo que compras y te dura años: equipos, obra, vehículos.',
+  },
+  PATRIMONIO: {
+    titulo: 'Movimientos del dueño',
+    descripcion: 'Tu dinero entrando o saliendo. Ni ingreso ni gasto.',
+  },
+  FINANCIACION: {
+    titulo: 'Préstamos',
+    descripcion: 'El principal prestado y su devolución. Los intereses no.',
+  },
+  // Fase 3. Aparece aquí porque esta pantalla escribe la MISMA columna y el dueño
+  // puede tener categorías de ingreso mezcladas en la lista; sin su etiqueta
+  // saldrían con el código crudo. No es una opción que se ofrezca en este paso:
+  // el desplegable de abajo solo propone los papeles del GASTO, que es de lo que
+  // trata el paso.
+  INGRESO_OPERATIVO: {
+    titulo: 'Ingresos del negocio',
+    descripcion: 'Dinero que ENTRA por lo que vendes, cobrado sin factura.',
+  },
+  INGRESO_OTRO: {
+    titulo: 'Otros ingresos',
+    descripcion: 'Lo que entra sin ser lo que vendes: la tasa, un reembolso.',
+  },
+  // Los dos de la fase 4. Estos SÍ se ofrecen en el desplegable —son renglones
+  // del resultado, no del ingreso—, pero no en la guía de arriba: solo existen
+  // para quien lleva libros con un contador, y son dos tarjetas más que leer
+  // para todos los demás.
+  DEPRECIACION: {
+    titulo: 'Desgaste de lo que compraste',
+    descripcion: 'El reparto anual de un equipo, una obra o un vehículo. No sale de tu caja.',
+  },
+  IMPUESTO_UTILIDAD: {
+    titulo: 'Impuesto sobre utilidades',
+    descripcion: 'Se calcula sobre tu resultado, así que se resta debajo de él.',
   },
 }
 
@@ -58,6 +100,8 @@ export default function PasoCostoVentas({
   const [excluidas, setExcluidas] = useState(categoriasExcluidasIniciales)
   const categoriasVisibles = categorias.filter(c => !excluidas.includes(c.categoria_id))
   const categoriasApartadas = categorias.filter(c => excluidas.includes(c.categoria_id))
+  const cuentaDe = (rol: string) =>
+    categoriasVisibles.filter(c => (estado[c.categoria_id] ?? 'OPERATIVO') === rol).length
 
   function ejecutarGuardado() {
     const ld = toastLoading('Guardando…')
@@ -95,8 +139,15 @@ export default function PasoCostoVentas({
             No cambias importes ni eliminas gastos. Solo indicas qué significa cada categoría.
             Esta clasificación también se usa en Reportes.
           </p>
+          {/* La guía explica el WATERFALL, así que enseña los cuatro renglones
+              básicos que lo forman (`ROLES_GUIA`). Ni los tres de fuera del
+              resultado —que no son renglones— ni los dos de la fase 4 —que solo
+              existen para quien lleva libros con contador— entran aquí:
+              convertirían una explicación de cuatro tarjetas en una de nueve, que
+              ya nadie lee. Se explican donde se eligen: el desplegable los separa
+              con su propio encabezado. */}
           <div className="dos-costo-guia-grid">
-            {ROLES_PL.map(rol => (
+            {ROLES_GUIA.map(rol => (
               <div key={rol} className="dos-costo-guia-card">
                 <strong>{ROL_PL_UI[rol].titulo}</strong>
                 <span>{ROL_PL_UI[rol].descripcion}</span>
@@ -112,14 +163,20 @@ export default function PasoCostoVentas({
           </PrerequisitoAviso>
         ) : (
           <>
+            {/* El recuento enseña los cuatro básicos siempre, y el resto SOLO si
+                el dueño ha puesto alguna ahí: un «0 inversiones» permanente
+                ocuparía sitio para decir que no pasa nada, y con la fase 4 serían
+                cinco ceros seguidos. */}
             <p className="dos-costo-resumen">
-              {ROLES_PL.map((rol, i) => (
-                <span key={rol}>
-                  {i > 0 && ' · '}
-                  <strong>{categoriasVisibles.filter(c => (estado[c.categoria_id] ?? 'OPERATIVO') === rol).length}</strong>{' '}
-                  {ROL_PL_UI[rol].titulo.toLowerCase()}
-                </span>
-              ))}
+              {ROLES_PL
+                .filter(rol => (ROLES_GUIA as readonly string[]).includes(rol) || cuentaDe(rol) > 0)
+                .map((rol, i) => (
+                  <span key={rol}>
+                    {i > 0 && ' · '}
+                    <strong>{cuentaDe(rol)}</strong>{' '}
+                    {ROL_PL_UI[rol].titulo.toLowerCase()}
+                  </span>
+                ))}
             </p>
             {categoriasVisibles.length > 0 && <ul className="dos-rol-lista">
               {categoriasVisibles.map(c => {
@@ -133,7 +190,22 @@ export default function PasoCostoVentas({
                       value={rol}
                       onChange={e => setEstado(prev => ({ ...prev, [c.categoria_id]: e.target.value as RolPL }))}
                     >
-                      {ROLES_PL.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
+                      {/* Los dos encabezados son la enseñanza: sin ellos, «Inversiones»
+                          parece un renglón más del gasto y se elige por error. */}
+                      <optgroup label="En tu resultado">
+                        {ROLES_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
+                      </optgroup>
+                      <optgroup label="Fuera de tu resultado">
+                        {ROLES_FUERA_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
+                      </optgroup>
+                      {/* Y las de ingreso, porque esta lista son TODAS las raíces
+                          del cliente: sin este grupo, una categoría de ingreso
+                          tendría un valor que no está entre las opciones y el
+                          desplegable enseñaría la primera —«Lo que vendes»— como
+                          si eso fuera lo que hace hoy. */}
+                      <optgroup label="Ingresos">
+                        {ROLES_INGRESO.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
+                      </optgroup>
                     </select>
                     <button
                       type="button" className="dos-costo-excluir"

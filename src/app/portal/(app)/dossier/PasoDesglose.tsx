@@ -37,14 +37,15 @@ interface Fila { id: string; concepto: string; monto: string; grupo: LineaDesglo
 
 // El grupo se conserva POR FILA: la sección de entrada es una de tres (Ingresos,
 // Coste, Gastos operativos), pero una línea operativa traída de la base puede ser
-// Personal u Otros, y reguardarla como GASTO_OPERATIVO perdería esa clasificación
-// (que es la que enseña el waterfall detallado). Nueva línea manual → GASTO_OPERATIVO.
+// Personal, Depreciación u Otros, y reguardarla como GASTO_OPERATIVO perdería esa
+// clasificación (que es la que enseña el waterfall detallado). Nueva línea manual
+// → GASTO_OPERATIVO.
 const nuevaFila = (concepto = '', monto = '', grupo: LineaDesglose['grupo'] = 'GASTO_OPERATIVO'): Fila => ({
   id: `L-${Math.random().toString(36).slice(2, 9)}`, concepto, monto, grupo,
 })
 
-// Las tres secciones de entrada = los tres cubos de la serie. Personal y Otros
-// caen en «Gastos operativos» pero recuerdan su grupo fino.
+// Las tres secciones de entrada = los tres cubos de la serie. Personal,
+// Depreciación y Otros caen en «Gastos operativos» pero recuerdan su grupo fino.
 const seccionDe = (g: LineaDesglose['grupo']): GrupoPL =>
   g === 'INGRESO' ? 'INGRESO' : g === 'COSTO_VENTAS' ? 'COSTO_VENTAS' : 'GASTO_OPERATIVO'
 

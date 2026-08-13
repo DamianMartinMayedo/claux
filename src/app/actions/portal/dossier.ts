@@ -16,6 +16,7 @@ import { normalizarHex } from '@/lib/dossier/paleta'
 import { esTokenValido, nuevoToken } from '@/lib/dossier/token'
 import { esModoEstado, type ModoEstado as _ModoEstado } from '@/lib/dossier/estado'
 import { conceptosDe, CONCEPTOS_DEFAULT, type ConceptosSector } from '@/lib/sector'
+import { packDe, conceptosDelPack } from '@/lib/catalogo/packs'
 
 // ── Funcionalidad "Dossier del negocio" (clave `dossier`) ──
 // Independiente: funciona a mano sin la base. Con `base`, puede TRAER los números
@@ -191,8 +192,30 @@ async function logoDeEmpresa(empresaId: string | null): Promise<string | null> {
   return e?.logo_url ?? null
 }
 
-/** Conceptos típicos del sector del cliente; genéricos si no tiene sector. */
-async function conceptosDelSector(db: Db, sector: string | null): Promise<ConceptosSector> {
+/**
+ * Conceptos típicos del sector del cliente.
+ *
+ * Desde el clasificador (F1.7, §9.5) salen del PACK, no de una segunda lista
+ * escrita a mano en `plantillas_sector`: son los mismos nombres que el dueño ve en
+ * sus categorías, y tenerlos en dos sitios garantizaba que un día se separaran.
+ *
+ * Se deriva de la definición GLOBAL del pack —no de las filas del cliente— a
+ * propósito: quien no tiene el módulo no tiene categorías sembradas y su dossier
+ * necesita conceptos igual.
+ *
+ * El pack MANDA sobre `plantillas_sector.conceptos_pl`. Dejar ganar a la tabla
+ * habría sido no hacer nada: los once sectores la tienen rellena, así que la
+ * derivación no se habría ejecutado nunca. La tabla se queda como red por si un
+ * pack saliera vacío.
+ */
+async function conceptosDelSector(db: Db, sector: string | null, clientId: string): Promise<ConceptosSector> {
+  const { data: cli } = await db.from('clients')
+    .select('pack_servicios').eq('client_id', clientId).maybeSingle()
+  const delPack = conceptosDelPack(packDe(sector, cli?.pack_servicios as string | null))
+  if (Object.values(delPack).some(l => l.length > 0)) return delPack
+
+  // Red: la lista escrita a mano del sector, y si tampoco, la genérica. Un dossier
+  // con renglones en blanco es peor que uno con renglones que no encajan.
   if (!sector) return { ...CONCEPTOS_DEFAULT }
   const { data } = await db.from('plantillas_sector')
     .select('conceptos_pl').eq('sector', sector).maybeSingle()
@@ -324,7 +347,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   // Conceptos típicos del sector (mig. 135): precargan las FILAS del desglose,
   // nunca los importes. Sin ellos, el paso «El desglose» sería una rejilla vacía
   // frente a un dueño que no sabe qué escribir — que es el problema que resuelve.
-  const conceptosSector = await conceptosDelSector(db, (clienteRow?.sector as string) ?? null)
+  const conceptosSector = await conceptosDelSector(db, (clienteRow?.sector as string) ?? null, session.client_id)
 
   const tieneBase     = tieneModulo(modulos, 'base')
   const hayInventario = tieneModulo(modulos, 'inventario')
@@ -783,7 +806,11 @@ export async function guardarDesglose(formData: FormData): Promise<{ ok: boolean
   let entrada: Array<Partial<LineaDesglose>>
   try { entrada = JSON.parse((formData.get('lineas') as string) || '[]') } catch { return { ok: false, error: 'Datos inválidos.' } }
 
-  const GRUPOS = new Set<LineaDesglose['grupo']>(['INGRESO', 'COSTO_VENTAS', 'PERSONAL', 'GASTO_OPERATIVO', 'OTRO'])
+  // 🔴 Lista blanca: un grupo que falte aquí no da error, BORRA la fila en silencio
+  // —el editor manda las líneas enteras y esto las filtra—. Cuando la fase 4 añadió
+  // 'DEPRECIACION' al desglose, sin esta línea el dueño perdía sus líneas de
+  // depreciación la primera vez que tocara cualquier otra cosa del paso.
+  const GRUPOS = new Set<LineaDesglose['grupo']>(['INGRESO', 'COSTO_VENTAS', 'PERSONAL', 'GASTO_OPERATIVO', 'DEPRECIACION', 'OTRO'])
   const lineas: LineaDesglose[] = entrada
     .filter(l => l && typeof l.concepto === 'string' && l.concepto.trim() && GRUPOS.has(l.grupo as LineaDesglose['grupo']))
     // Una fila a cero es una fila que el dueño dejó en blanco: en el documento

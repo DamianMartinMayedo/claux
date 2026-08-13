@@ -63,7 +63,14 @@ export default function DossierSecciones({
   // 'basicos' y 'numeros' existen siempre aquí (se entra a las pestañas con serie).
   const completado: Record<PasoEditable, boolean> = {
     basicos:     true,
-    costos:      data.categoriasCosto.some(c => c.rol_pl !== 'OPERATIVO'),
+    // 🔴 Deducirlo del catálogo NO funciona, y ya falló dos veces: primero con
+    // «algo distinto de OPERATIVO» (la semilla planta raíces de fuera del
+    // resultado desde la fase 2) y después con los tres roles de gasto, porque la
+    // semilla planta también «Compras», que nace `COSTE_VENTAS`. Cualquier
+    // heurística sobre el catálogo se cumple sola en cuanto la semilla crece.
+    // La prueba de verdad de que el dueño pasó por aquí es que GUARDÓ el paso:
+    // `categorias_roles` solo lo escribe `guardarCostoVentas`.
+    costos:      Object.keys(dossier.categorias_roles).length > 0,
     numeros:     data.serie.length > 0,
     desglose:    data.lineas.length > 0,
     crecimiento: (dossier.crecimiento_mensual_pct ?? 0) !== 0,
