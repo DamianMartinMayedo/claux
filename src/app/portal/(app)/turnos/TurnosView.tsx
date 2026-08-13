@@ -185,6 +185,11 @@ function TurnoModal({
 
 interface EmpleadoMin { empleado_id: string; nombre: string; apellidos: string | null; cargo: string | null }
 
+/** Persona dentro de una celda de cobertura (misma forma que EmpleadoMin). */
+type PersonaTurno = { empleado_id: string; nombre: string; apellidos: string | null; cargo: string | null }
+/** La celda que abre el modal de lista al hacer clic (preparado para el editor futuro). */
+interface CeldaCobertura { franja: Turno; fecha: string; empleados: PersonaTurno[] }
+
 function PatronModal({
   patron, empresaId, franjas, empleados, slotsIniciales, rosterInicial, onClose, onSaved,
 }: {
@@ -431,6 +436,8 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
   const [delTurno,    setDelTurno]    = useState<Turno | null>(null)
   const [delPatron,   setDelPatron]   = useState<TurnoPatron | null>(null)
   const [horizonte,   setHorizonte]   = useState(14)
+  const [vistaCuadrante, setVistaCuadrante] = useState<'cobertura' | 'persona'>('cobertura')
+  const [celdaModal,  setCeldaModal]  = useState<CeldaCobertura | null>(null)
   const [isPending,   startTransition] = useTransition()
 
   // La vista previa parte de «hoy» (zona del negocio). Se calcula tras montar para no
@@ -515,6 +522,19 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fechas, empleadosVista, patronesPorEmpleado, slotsResueltos],
   )
+
+  // ── Vista de cobertura: una fila por franja de trabajo (2-3 como mucho) ──────────
+  const franjasCobertura = useMemo(() => franjasActivas.filter(f => !f.es_descanso), [franjasActivas])
+
+  // Por franja, para cada fecha del horizonte, quién la cubre ese día.
+  const coberturaPorFranja = useMemo(() => {
+    const m = new Map<string, PersonaTurno[][]>()
+    for (const fr of franjasCobertura)
+      m.set(fr.turno_id, fechas.map(f =>
+        empleadosVista.filter(e => franjasDe(e.empleado_id, f).some(x => x.turno_id === fr.turno_id))))
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [franjasCobertura, fechas, empleadosVista, patronesPorEmpleado, slotsResueltos])
 
   // ── Acciones ─────────────────────────────────────────────────────────────────
   function confirmarEliminarTurno() {
@@ -729,16 +749,26 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
         )}
       </div>
 
-      {/* ── Vista previa del cuadrante ── */}
+      {/* ── Cuadrante ── */}
       <div className="card card-table">
         <div className="ter-card-head turno-preview-head">
           <span className="ter-form-section-title">Cuadrante</span>
-          <div className="turno-horizonte" role="tablist" aria-label="Horizonte del cuadrante">
-            {HORIZONTES.map(h => (
-              <button key={h.value} type="button" role="tab" aria-selected={horizonte === h.value}
-                className={`turno-horizonte-btn${horizonte === h.value ? ' turno-horizonte-on' : ''}`}
-                onClick={() => setHorizonte(h.value)}>{h.label}</button>
-            ))}
+          <div className="turno-preview-controls">
+            <div className="turno-horizonte" role="tablist" aria-label="Vista del cuadrante">
+              <button type="button" role="tab" aria-selected={vistaCuadrante === 'cobertura'}
+                className={`turno-horizonte-btn${vistaCuadrante === 'cobertura' ? ' turno-horizonte-on' : ''}`}
+                onClick={() => setVistaCuadrante('cobertura')}>Por turno</button>
+              <button type="button" role="tab" aria-selected={vistaCuadrante === 'persona'}
+                className={`turno-horizonte-btn${vistaCuadrante === 'persona' ? ' turno-horizonte-on' : ''}`}
+                onClick={() => setVistaCuadrante('persona')}>Por persona</button>
+            </div>
+            <div className="turno-horizonte" role="tablist" aria-label="Horizonte del cuadrante">
+              {HORIZONTES.map(h => (
+                <button key={h.value} type="button" role="tab" aria-selected={horizonte === h.value}
+                  className={`turno-horizonte-btn${horizonte === h.value ? ' turno-horizonte-on' : ''}`}
+                  onClick={() => setHorizonte(h.value)}>{h.label}</button>
+              ))}
+            </div>
           </div>
         </div>
         {empleadosVista.length === 0 || patrones.length === 0 || !hoy ? (
@@ -749,6 +779,71 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
               : busqueda ? 'Ningún trabajador coincide con la búsqueda.'
               : 'No hay trabajadores activos en esta empresa.'}</p>
           </div>
+        ) : vistaCuadrante === 'cobertura' ? (
+          franjasCobertura.length === 0 ? (
+            <div className="mon-empty">
+              <Clock size={36} strokeWidth={1} opacity={0.2} />
+              <p>Ningún turno con horario que mostrar. Crea una franja de trabajo (no de descanso) y métela en un patrón.</p>
+            </div>
+          ) : (
+            <div className="table-wrapper">
+              <table className={`table table-sticky-first turno-grid turno-cob turno-cob-${horizonte}`}>
+                <thead>
+                  <tr>
+                    <th className="turno-grid-emp">Turno</th>
+                    {fechas.map(f => (
+                      <th key={f} className="col-center turno-preview-col">
+                        <span className="turno-preview-dia">{diaSemanaCorto(f)}</span>
+                        <span className="turno-preview-fecha">{fechaCorta(f)}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {franjasCobertura.map(fr => {
+                    const porFecha = coberturaPorFranja.get(fr.turno_id) ?? []
+                    return (
+                    <tr key={fr.turno_id}>
+                      <td className="turno-grid-emp" data-label="Turno">
+                        <div className="turno-name">
+                          {fr.color && <span className="turno-dot" style={{ '--turno-color': fr.color } as React.CSSProperties} />}
+                          <strong>{fr.nombre}</strong>
+                        </div>
+                        <div className="text-sm-muted">{horario(fr)}</div>
+                      </td>
+                      {fechas.map((f, i) => {
+                        const gente = porFecha[i] ?? []
+                        const n = gente.length
+                        return (
+                          <td key={f} className="col-center turno-cob-td" data-label={fechaCorta(f)}>
+                            {n > 0 ? (
+                              <button type="button" className="turno-cob-cell"
+                                style={fr.color ? ({ '--turno-color': fr.color } as React.CSSProperties) : undefined}
+                                title={gente.map(nombreDe).join(', ')}
+                                onClick={() => setCeldaModal({ franja: fr, fecha: f, empleados: gente })}>
+                                <span className="turno-cob-count">{n}</span>
+                              </button>
+                            ) : <span className="text-faint">·</span>}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td className="turno-grid-emp"><strong>Gente ese día</strong></td>
+                    {gentePorFecha.map((n, i) => (
+                      <td key={fechas[i]} className="col-center">
+                        <strong className={n === 0 ? 'text-faint' : undefined}>{n}</strong>
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )
         ) : (
           <div className="table-wrapper">
             <table className="table table-sticky-first turno-grid">
@@ -872,6 +967,31 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
               <button type="button" className="btn btn-danger" onClick={confirmarEliminarPatron} disabled={isPending}>
                 {isPending ? <><span className="spinner spinner-sm" /> Eliminando…</> : 'Eliminar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {celdaModal && (
+        <div className="modal-backdrop open">
+          <div className="modal modal-sm" role="dialog" aria-modal>
+            <div className="modal-header">
+              <h2 className="modal-title">{celdaModal.franja.nombre} · {diaSemanaCorto(celdaModal.fecha)} {fechaCorta(celdaModal.fecha)}</h2>
+              <button type="button" className="modal-close" onClick={() => setCeldaModal(null)}><X size={16} strokeWidth={2} /></button>
+            </div>
+            <div className="modal-body">
+              <p className="turno-cob-modal-sub">
+                {horario(celdaModal.franja)} · {celdaModal.empleados.length} {celdaModal.empleados.length === 1 ? 'persona' : 'personas'}
+              </p>
+              <ul className="turno-cob-modal-lista">
+                {celdaModal.empleados.map(e => (
+                  <li key={e.empleado_id} className="turno-cob-modal-item">
+                    <span><strong>{nombreDe(e)}</strong>{e.cargo && <span className="text-sm-muted"> · {e.cargo}</span>}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setCeldaModal(null)}>Cerrar</button>
             </div>
           </div>
         </div>
