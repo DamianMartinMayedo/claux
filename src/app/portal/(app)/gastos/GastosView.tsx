@@ -30,9 +30,10 @@ import {
   esFueraDelResultado, esRolIngreso,
 } from '@/lib/pl/estado'
 import { claveCat } from '@/lib/catalogo/emparejar'
+import { PERMITIR_RAIZ_MANUAL } from '@/lib/catalogo/politica'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sparkles, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
+import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sprout, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import type { Filtro } from '@/lib/filtros'
 import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
@@ -511,7 +512,13 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
   // Al CREAR sí se pregunta, y el defecto es «dentro de una que ya tengo».
   const [comoNueva, setComoNueva] = useState<'hija' | 'principal'>(
     padresPosibles.length ? 'hija' : 'principal')
-  const esHija = isEdit ? !!categoria!.parent_id : comoNueva === 'hija'
+  // Con las raíces fijas (PERMITIR_RAIZ_MANUAL = false) el dueño solo pone DETALLE:
+  // crear a mano es SIEMPRE colgar una subcategoría de una raíz que ya tiene. La
+  // rama de «categoría principal nueva» —con sus preguntas de rol— queda entera,
+  // detrás del flag, para recuperarla tal cual si se reabre.
+  const esHija = isEdit
+    ? !!categoria!.parent_id
+    : PERMITIR_RAIZ_MANUAL ? comoNueva === 'hija' : true
 
   const [nombre, setNombre] = useState(categoria?.nombre ?? '')
 
@@ -590,7 +597,8 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
       <div className="modal modal-lg" role="dialog" aria-modal>
         <div className="modal-header">
           <h2 className="modal-title">
-            {!isEdit ? 'Nueva categoría' : esHija ? 'Editar subcategoría' : 'Editar categoría'}
+            {!isEdit ? (esHija ? 'Nueva subcategoría' : 'Nueva categoría')
+                     : esHija ? 'Editar subcategoría' : 'Editar categoría'}
           </h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
@@ -603,8 +611,9 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
               </div>
             )}
 
-            {/* 1 · Dónde va. Solo al crear, y antes que nada. */}
-            {!isEdit && padresPosibles.length > 0 && (
+            {/* 1 · Dónde va. Solo al crear, y antes que nada. Con las raíces fijas
+                no se pregunta: es siempre subcategoría (el selector vuelve con el flag). */}
+            {!isEdit && PERMITIR_RAIZ_MANUAL && padresPosibles.length > 0 && (
               <div className="input-group">
                 <label htmlFor="cat-donde">¿Dónde va?</label>
                 <select id="cat-donde" className="input" value={comoNueva}
@@ -783,7 +792,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
             <button type="submit" className="btn btn-primary" disabled={isPending || (!esHija && preguntando)}>
               {isPending
                 ? <><span className="spinner spinner-sm" /> Guardando…</>
-                : isEdit ? 'Guardar cambios' : 'Crear categoría'}
+                : isEdit ? 'Guardar cambios' : (esHija ? 'Crear subcategoría' : 'Crear categoría')}
             </button>
           </div>
         </form>
@@ -1165,9 +1174,15 @@ export default function GastosView({ data, puedeEditar, gaveta }: {
               <button className="btn btn-primary" onClick={() => openNuevo('COBRO')} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo cobro</button>
             ) : (<>
               <button className="btn btn-secondary" onClick={() => setAsistente(true)}>
-                <Sparkles size={14} strokeWidth={2.5} /> Preparar mi catálogo
+                <Sprout size={14} strokeWidth={2.5} /> Preparar mi catálogo
               </button>
-              <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
+              {/* Con las raíces fijas, crear a mano es solo una subcategoría: baja a
+                  secundario y necesita al menos una raíz de la que colgar. El alta de
+                  raíz (y su etiqueta) vuelve con PERMITIR_RAIZ_MANUAL. */}
+              <button className="btn btn-secondary" onClick={openCreateCat}
+                disabled={!PERMITIR_RAIZ_MANUAL && !categoriasActivas.some(c => !c.parent_id)}>
+                <Plus size={14} strokeWidth={2.5} /> {PERMITIR_RAIZ_MANUAL ? 'Nueva categoría' : 'Nueva subcategoría'}
+              </button>
             </>)
           )}
         </div>
@@ -1353,10 +1368,12 @@ export default function GastosView({ data, puedeEditar, gaveta }: {
           {data.categorias_gastos.length === 0 ? (
             <div className="mon-empty">
               <Tag size={36} strokeWidth={1} opacity={0.25} />
-              <p>Aún no hay categorías. Podemos cargarte las de tu tipo de negocio, o creas la primera a mano.</p>
+              <p>{PERMITIR_RAIZ_MANUAL
+                ? 'Aún no hay categorías. Podemos cargarte las de tu tipo de negocio, o creas la primera a mano.'
+                : 'Aún no hay categorías. Te cargamos las de tu tipo de negocio y luego les añades el detalle que quieras.'}</p>
               {puedeEditar && (
                 <button className="btn btn-primary" onClick={() => setAsistente(true)}>
-                  <Sparkles size={14} strokeWidth={2.5} /> Preparar mi catálogo
+                  <Sprout size={14} strokeWidth={2.5} /> Preparar mi catálogo
                 </button>
               )}
             </div>

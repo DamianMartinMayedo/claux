@@ -14,6 +14,7 @@ import {
 } from '@/lib/gastos-core'
 import { generarMovimientoId } from '@/lib/tesoreria-core'
 import { esRolPL, type RolPL as _RolPL } from '@/lib/pl/estado'
+import { PERMITIR_RAIZ_MANUAL } from '@/lib/catalogo/politica'
 import {
   limiteDelFiltro, importeBuscado, patronBusqueda, rangoUltimosMeses,
   type FiltroListado as _FiltroListado,
@@ -889,6 +890,14 @@ export async function guardarCategoriaGasto(
   }
 
   if (!categoria_id_form) {
+    // Las RAÍCES (renglones del estado de resultados) las fija CLAUX; el dueño solo
+    // crea subcategorías. Enforcement en el servidor y no solo ocultando el botón
+    // —«UI oculta no es control de acceso»—. Vuelve a permitirse con
+    // PERMITIR_RAIZ_MANUAL. Editar/renombrar una raíz sembrada sigue permitido (esto
+    // es solo el ALTA); el sistema (RPC) y el importador crean raíces por su cuenta.
+    if (!parent_id && !PERMITIR_RAIZ_MANUAL) {
+      return { ok: false, error: 'Ahora solo se pueden crear subcategorías dentro de una categoría existente. Usa «Preparar mi catálogo» para cargar las de tu tipo de negocio.' }
+    }
     // Crear nueva categoría
     const categoria_id = generarCategoriaGastoId()
     const { error } = await db.from('categorias_gastos').insert({
