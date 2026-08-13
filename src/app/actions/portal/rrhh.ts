@@ -24,7 +24,7 @@ import {
 import { limiteDelFiltro }   from '@/lib/listados'
 import { sugerirDiasTrabajados, type SugerenciaDias } from '@/lib/rrhh/dias-trabajados'
 import type { PatronResuelto, TurnoHorario } from '@/lib/rrhh/turnos'
-import { truncar2 }          from '@/lib/rrhh/importe'
+import { importe2 }          from '@/lib/rrhh/importe'
 import { obtenerEmpresas }   from './empresas'
 import { mapaTasas, monedaValida } from '@/lib/tasas'
 import type { MonedaOpcion } from './monedas'
@@ -359,8 +359,8 @@ function generarMiembroId():    string { return `TMI-${corto()}` }
 function generarConceptoId():   string { return `CPT-${corto()}` }
 function generarItemId():       string { return `NLC-${corto()}` }
 
-// Alias histórico conservado para no tocar todos los consumidores de este fichero.
-const redondear2 = truncar2
+// Alias local: la política monetaria de RRHH (base truncada a 3 dec, redondeo a 2).
+const redondear2 = importe2
 
 interface ConceptoAplicable {
   concepto_id?:       string

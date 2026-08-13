@@ -9,7 +9,7 @@
 // se imprime y lo que se ve acaban discrepando, que es la misma razón por la que
 // `aplicarConceptos` y `construirReportesRrhh` viven fuera de sus consumidores.
 
-import { truncar2 } from './importe'
+import { importe2 } from './importe'
 
 export interface PiezasCoste {
   devengado:             number
@@ -34,5 +34,5 @@ export interface PiezasCoste {
  * contabilidad y que este cálculo no puede volver a abrir.
  */
 export function costeEmpresa(p: PiezasCoste): number {
-  return truncar2(p.devengado - p.vacaciones_pagadas + p.vacaciones_acumuladas + p.aportes)
+  return importe2(p.devengado - p.vacaciones_pagadas + p.vacaciones_acumuladas + p.aportes)
 }
