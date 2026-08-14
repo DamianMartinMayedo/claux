@@ -105,6 +105,8 @@ export interface FiltroExport {
   bajo_minimo?: boolean
   /** Catálogo de servicios: solo los que se pueden contratar como suscripción. */
   suscribibles?: boolean
+  /** Turnos: forma visible del calendario que se está descargando. */
+  vista_turnos?: 'calendario' | 'persona'
 
   // ── Alcance (NO es un filtro de pantalla) ───────────────────────────────────
   /**
@@ -172,7 +174,7 @@ export interface TablaExportable {
    * exportación — que el botón no se pinte no es control de acceso.
    */
   modulos:   string[]
-  cabeceras: string[]
+  cabeceras: string[] | ((filtro?: FiltroExport) => string[])
   cargar: (db: Db, client_id: string, filtro?: FiltroExport) => Promise<ValorCelda[][]>
 }
 
@@ -288,6 +290,26 @@ async function diccionario(
   const m = new Map<string, string>()
   for (const f of (data ?? []) as Record<string, string>[]) m.set(f[clave], f[valor])
   return m
+}
+
+const DIAS_EXPORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+
+function fechasExport(filtro?: FiltroExport): string[] {
+  const hoy = hoyEnTz()
+  const [hy, hm, hd] = hoy.split('-').map(Number)
+  const dow = (new Date(Date.UTC(hy, hm - 1, hd)).getUTCDay() + 6) % 7
+  const inicioBase = sumarDias(hoy, -dow)
+  const inicio = /^\d{4}-\d{2}-\d{2}$/.test(filtro?.desde ?? '') ? filtro!.desde! : inicioBase
+  const fin = /^\d{4}-\d{2}-\d{2}$/.test(filtro?.hasta ?? '') ? filtro!.hasta! : sumarDias(inicio, 6)
+  const fechas: string[] = []
+  for (let fecha = inicio; fecha <= fin && fechas.length < 62; fecha = sumarDias(fecha, 1)) fechas.push(fecha)
+  return fechas.length ? fechas : [inicio]
+}
+
+function fechaLabelExport(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
+  return `${DIAS_EXPORT[dow]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
 }
 
 export const TABLAS_EXPORTABLES: TablaExportable[] = [
@@ -1065,63 +1087,96 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
   },
   {
     clave: 'turnos',
-    etiqueta: 'Turnos',
+    etiqueta: 'Configuración de turnos',
     modulos: ['rrhh'],
-    cabeceras: ['Turno', 'Hora de inicio', 'Hora de fin', 'Es descanso', 'Empresa', 'Activo'],
+    cabeceras: ['Turno', 'Empresa', 'Tipo', 'Horario', 'Color', 'Cuándo', 'Fecha de inicio', 'Personas', 'Activo'],
     cargar: async (db, cid, filtro) => {
-      const [filas, empresas] = await Promise.all([
-        leer(db, 'turnos', cid, 'nombre, hora_inicio, hora_fin, es_descanso, empresa_id, activo', 'nombre',
-          filtro, undefined, ['nombre'],
-          { empresa_id: filtro?.empresa_id, activo: !filtro?.archivadas }),
+      const empresaFiltro = filtro?.empresa_id
+      const [patRes, slotRes, miemRes, turnos, empleados, empresas] = await Promise.all([
+        db.from('turno_patrones').select('patron_id, nombre, tipo, longitud_dias, fecha_ancla, empresa_id, activo')
+          .eq('client_id', cid).in('empresa_id', alcance(filtro)).eq('activo', filtro?.archivadas ? false : true)
+          .match(empresaFiltro ? { empresa_id: empresaFiltro } : {}),
+        db.from('turno_patron_slots').select('patron_id, posicion, turno_id').eq('client_id', cid),
+        db.from('turno_miembros').select('patron_id, empleado_id').eq('client_id', cid),
+        db.from('turnos').select('turno_id, nombre, hora_inicio, hora_fin, color, es_descanso').eq('client_id', cid),
+        db.from('empleados').select('empleado_id, nombre, apellidos').eq('client_id', cid),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
       ])
-      return filas.map(f => [
-        f.nombre as string, f.hora_inicio as string, f.hora_fin as string,
-        f.es_descanso ? 'Sí' : 'No',
-        empresas.get(f.empresa_id as string) ?? '', f.activo as boolean,
-      ])
+      const franjas = new Map(((turnos.data ?? []) as {
+        turno_id: string; nombre: string; hora_inicio: string | null; hora_fin: string | null
+        color: string | null; es_descanso: boolean
+      }[]).map(t => [t.turno_id, t]))
+      const nombres = new Map(((empleados.data ?? []) as { empleado_id: string; nombre: string; apellidos: string | null }[])
+        .map(e => [e.empleado_id, [e.nombre, e.apellidos].filter(Boolean).join(' ')]))
+      const slots = new Map<string, (string | null)[]>()
+      for (const p of (patRes.data ?? []) as { patron_id: string; longitud_dias: number }[]) {
+        slots.set(p.patron_id, new Array(p.longitud_dias).fill(null))
+      }
+      for (const s of (slotRes.data ?? []) as { patron_id: string; posicion: number; turno_id: string | null }[]) {
+        const arr = slots.get(s.patron_id)
+        if (arr && s.posicion >= 0 && s.posicion < arr.length) arr[s.posicion] = s.turno_id
+      }
+      const roster = new Map<string, string[]>()
+      for (const m of (miemRes.data ?? []) as { patron_id: string; empleado_id: string }[]) {
+        const arr = roster.get(m.patron_id) ?? []
+        const nombre = nombres.get(m.empleado_id)
+        if (nombre) arr.push(nombre)
+        roster.set(m.patron_id, arr)
+      }
+      const tipoLabel: Record<string, string> = { SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Mensual', CICLO: 'Ciclo N×M' }
+      return ((patRes.data ?? []) as { patron_id: string; nombre: string; tipo: string; longitud_dias: number; fecha_ancla: string; empresa_id: string; activo: boolean }[])
+        .map(p => {
+          const usados = [...new Set((slots.get(p.patron_id) ?? []).filter(Boolean) as string[])]
+            .map(id => franjas.get(id)).filter((t): t is NonNullable<typeof t> => !!t)
+          const horarios = usados.map(t => [t.nombre, t.hora_inicio && t.hora_fin ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : ''].filter(Boolean).join(' '))
+          const colores = [...new Set(usados.map(t => t.color).filter(Boolean))].join(' / ')
+          const posiciones = (slots.get(p.patron_id) ?? []).flatMap((id, i) => id && !franjas.get(id)?.es_descanso ? [i] : [])
+          const cuando = p.tipo === 'SEMANAL'
+            ? posiciones.map(i => ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][i] ?? '').join(', ')
+            : p.tipo === 'CICLO' ? `Ciclo ${posiciones.length}×${Math.max(0, p.longitud_dias - posiciones.length)}`
+              : `${posiciones.length} de ${p.longitud_dias} días`
+          return [p.nombre, empresas.get(p.empresa_id) ?? '', tipoLabel[p.tipo] ?? p.tipo,
+            horarios.join(' / '), colores, cuando, p.fecha_ancla, (roster.get(p.patron_id) ?? []).join(' / '), p.activo]
+        })
     },
   },
   {
-    // EL CUADRANTE, que es lo que la pantalla de Turnos está enseñando y lo único de
+    // El CALENDARIO, que es lo que la pantalla de Turnos está enseñando y lo único de
     // ahí que un negocio quiere en papel. El botón «Descargar» bajaba el CATÁLOGO de
     // turnos —tres filas: nombre, horas, empresa— mientras el dueño miraba la rejilla:
     // la descarga prometía una cosa y traía otra, que es justo lo que el sistema de
     // filtros vino a eliminar del portal.
     clave: 'turnos_cuadrante',
-    etiqueta: 'Cuadrante semanal',
+    etiqueta: 'Calendario',
     modulos: ['rrhh'],
-    cabeceras: ['Empleado', 'Cargo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes',
-      'Sábado', 'Domingo', 'Horas'],
+    cabeceras: filtro => filtro?.vista_turnos === 'calendario'
+      ? ['Fecha', 'Día', 'Turno', 'Horario', 'Personas', 'Trabajadores']
+      : ['Empleado', 'Cargo', ...fechasExport(filtro).map(fechaLabelExport), 'Horas'],
     cargar: async (db, cid, filtro) => {
-      // El cuadrante se DERIVA de la rotación (mig. 182): franjas + patrones activos +
-      // slots + roster. Se pinta la SEMANA EN CURSO (lunes-domingo, en la zona del
-      // negocio) porque las cabeceras son por día de la semana. Solo alta.
-      const hoy = hoyEnTz()
-      const [hy, hm, hd] = hoy.split('-').map(Number)
-      const dow   = (new Date(hy, hm - 1, hd).getDay() + 6) % 7   // 0 = lunes
-      const lunes = sumarDias(hoy, -dow)
-      const fechasSemana = [0, 1, 2, 3, 4, 5, 6].map(i => sumarDias(lunes, i))
+      // La vista se deriva de la rotación (mig. 182) y recibe las fechas que el usuario
+      // tiene seleccionadas, no una semana fija calculada al pulsar descargar.
+      const fechasPeriodo = fechasExport(filtro)
 
       const empresaFiltro = filtro?.empresa_id
+      const filtroTurnos = filtro ? { ...filtro, q: undefined } : filtro
       const [empleados, turnos, patRes, slotRes, miemRes] = await Promise.all([
         leer(db, 'empleados', cid, 'empleado_id, nombre, apellidos, cargo, fecha_baja', 'nombre',
           filtro, undefined, ['nombre', 'apellidos', 'cargo'],
-          { empresa_id: empresaFiltro }),
-        leer(db, 'turnos', cid, 'turno_id, nombre, hora_inicio, hora_fin, es_descanso', 'nombre',
-          filtro, undefined, ['nombre'], { empresa_id: empresaFiltro }),
+          { empresa_id: empresaFiltro }, undefined, undefined, ['fecha_baja']),
+        leer(db, 'turnos', cid, 'turno_id, nombre, hora_inicio, hora_fin, color, es_descanso', 'nombre',
+          filtroTurnos, undefined, ['nombre'], { empresa_id: empresaFiltro }),
         (empresaFiltro
           ? db.from('turno_patrones').select('patron_id, longitud_dias, fecha_ancla')
-              .eq('client_id', cid).eq('activo', true).eq('empresa_id', empresaFiltro)
+              .eq('client_id', cid).in('empresa_id', alcance(filtro)).eq('activo', true).eq('empresa_id', empresaFiltro)
           : db.from('turno_patrones').select('patron_id, longitud_dias, fecha_ancla')
-              .eq('client_id', cid).eq('activo', true)),
+              .eq('client_id', cid).in('empresa_id', alcance(filtro)).eq('activo', true)),
         db.from('turno_patron_slots').select('patron_id, posicion, turno_id').eq('client_id', cid),
         db.from('turno_miembros').select('patron_id, empleado_id, offset_ciclo').eq('client_id', cid),
       ])
 
       const turnoDe = new Map((turnos as unknown as {
         turno_id: string; nombre: string; hora_inicio: string | null
-        hora_fin: string | null; es_descanso: boolean
+        hora_fin: string | null; color: string | null; es_descanso: boolean
       }[]).map(t => [t.turno_id, t]))
       const patronDe = new Map(((patRes.data ?? []) as { patron_id: string; longitud_dias: number; fecha_ancla: string }[])
         .map(p => [p.patron_id, p]))
@@ -1142,7 +1197,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // Las franjas de trabajo (sin descanso, sin repetir) de un empleado en una fecha.
       const franjasDia = (empId: string, fecha: string) => {
         const seen = new Set<string>()
-        const out: { nombre: string; hora_inicio: string | null; hora_fin: string | null; es_descanso: boolean }[] = []
+        const out: { turno_id: string; nombre: string; hora_inicio: string | null; hora_fin: string | null; color: string | null; es_descanso: boolean }[] = []
         for (const { patron_id, offset } of patronesDeEmp.get(empId) ?? []) {
           const p = patronDe.get(patron_id); if (!p) continue
           const pos = posicionEnCiclo({ longitud_dias: p.longitud_dias, fecha_ancla: String(p.fecha_ancla).slice(0, 10), slots: [] }, offset, fecha)
@@ -1153,10 +1208,20 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         return out
       }
 
-      return empleados
-        .filter(e => !e.fecha_baja)
-        .map(e => {
-          const celdas = fechasSemana.map(f => franjasDia(e.empleado_id as string, f))
+      const empleadosActivos = empleados as unknown as { empleado_id: string; nombre: string; apellidos: string | null; cargo: string | null }[]
+      if (filtro?.vista_turnos === 'calendario') {
+        const usadas = [...new Set([...slotArrDe.values()].flat().filter(Boolean) as string[])]
+          .map(id => turnoDe.get(id)).filter((t): t is NonNullable<typeof t> => !!t && !t.es_descanso)
+        return fechasPeriodo.flatMap(fecha => usadas.map(t => {
+          const gente = empleadosActivos.filter(e => franjasDia(e.empleado_id, fecha).some(f => f.turno_id === t.turno_id))
+          return [fecha, fechaLabelExport(fecha).split(' ')[0], t.nombre,
+            t.hora_inicio && t.hora_fin ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : '',
+            gente.length, gente.map(e => [e.nombre, e.apellidos].filter(Boolean).join(' ')).join(' / ')]
+        }))
+      }
+
+      return empleadosActivos.map(e => {
+          const celdas = fechasPeriodo.map(f => franjasDia(e.empleado_id, f))
           const horas  = celdas.reduce((s, fr) => s + fr.reduce((a, t) => a + horasDeTurno(t), 0), 0)
           return [
             [e.nombre as string, e.apellidos as string].filter(Boolean).join(' '),
@@ -1164,7 +1229,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
             // El horario va en la celda: un cuadrante que solo dice «Mañana» obliga a
             // mirar otra hoja para saber a qué hora es «Mañana».
             ...celdas.map(fr => fr.map(t =>
-              [t.nombre, t.hora_inicio && t.hora_fin ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : '']
+              [t.nombre, t.hora_inicio && t.hora_fin ? `${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)}` : '', t.color ? `(${t.color})` : '']
                 .filter(Boolean).join(' ')).join(' / ')),
             horas > 0 ? Math.round(horas * 10) / 10 : '',
           ]

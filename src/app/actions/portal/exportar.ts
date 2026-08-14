@@ -84,6 +84,10 @@ export async function exportarListado(
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudieron leer los datos.' }
   }
 
+  const cabeceras = typeof tabla.cabeceras === 'function'
+    ? tabla.cabeceras(filtroConAlcance)
+    : tabla.cabeceras
+
   // El nombre del fichero LLEVA EL PERÍODO. Sin él, tres descargas del mismo listado con
   // rangos distintos son tres ficheros indistinguibles en la carpeta de descargas. Sin
   // rango va la fecha de hoy, por lo mismo: «todo» no distingue dos descargas de dos días.
@@ -93,13 +97,13 @@ export async function exportarListado(
   const base = `${tabla.archivo?.(filtro) ?? tabla.clave}-${sufijo}`
 
   if (formato === 'csv') {
-    return { ok: true, nombre: `${base}.csv`, filas: filas.length, csv: construirCsv(tabla.cabeceras, filas) }
+    return { ok: true, nombre: `${base}.csv`, filas: filas.length, csv: construirCsv(cabeceras, filas) }
   }
 
   // Excel: cada tipo va en su tipo de celda, no todo a texto. Un importe como texto es
   // una columna que no suma; una fecha como texto es una columna que no se ordena ni se
   // filtra por mes — que es justo para lo que alguien se baja el Excel.
-  const cabecera = tabla.cabeceras.map(h =>
+  const cabecera = cabeceras.map(h =>
     texto(h, { fontWeight: 'bold', color: MARCA.blanco, backgroundColor: MARCA.teal, align: 'left' }))
   const cuerpo = filas.map(f => f.map(v =>
     typeof v === 'number'  ? numero(v, { format: '#,##0.00' })
@@ -110,7 +114,7 @@ export async function exportarListado(
   const xlsx = await construirXlsxBase64([{
     nombre:   nombreHoja(tabla.etiqueta),
     filas:    [cabecera, ...cuerpo],
-    columnas: anchosPorColumna(tabla.cabeceras, filas),
+    columnas: anchosPorColumna(cabeceras, filas),
   }])
   return { ok: true, nombre: `${base}.xlsx`, filas: filas.length, xlsx }
 }
