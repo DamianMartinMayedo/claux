@@ -126,6 +126,33 @@ select.input {
 }
 textarea.input { resize: vertical; min-height: 80px; }
 
+/* Ayuda contextual para etiquetas de formularios. La burbuja se posiciona con
+   coordenadas de runtime para escapar de modales con scroll sin perder el contexto del campo. */
+.form-label-with-help { display: flex; align-items: center; gap: var(--space-1); }
+.form-label-with-help > label { margin: 0; }
+.form-help-trigger {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: 0; background: transparent; color: var(--color-text-muted);
+  cursor: help;
+}
+.form-help-trigger:hover, .form-help-trigger:focus-visible { color: var(--color-primary-text); }
+.form-help-tooltip {
+  position: fixed; z-index: 1000;
+  top: calc(var(--form-help-top, -999px) + var(--space-2));
+  left: var(--form-help-left, -999px);
+  width: min(18rem, calc(100vw - var(--space-8))); padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-lg);
+  font-size: var(--text-xs); font-weight: 400; line-height: 1.4; text-align: left;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translate(-50%, calc(var(--space-1) * -1));
+  transition: opacity var(--transition), visibility var(--transition), transform var(--transition);
+}
+.form-help-trigger:hover .form-help-tooltip,
+.form-help-trigger:focus-visible .form-help-tooltip {
+  opacity: 1; visibility: visible; transform: translate(-50%, 0);
+}
+
 /* ═══════════════════════════════════════════════════
    TABLA
    ═══════════════════════════════════════════════════ */
