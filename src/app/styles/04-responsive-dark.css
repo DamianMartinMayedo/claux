@@ -163,6 +163,7 @@
   }
   /* Cuando la tabla va al ras dentro de una .card-table, las tarjetas necesitan aire */
   .card-table > .table-wrapper { padding: var(--space-3) var(--space-4) var(--space-4); }
+  .card-table > .table-wrapper.turno-persona-wrap { padding: var(--space-2) 0 0; }
   .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
   .table thead {
     position: absolute; width: 1px; height: 1px;
@@ -358,4 +359,3 @@
 [data-theme="dark"] .form-input:focus {
   box-shadow: 0 0 0 3px rgba(63, 212, 207, 0.15);
 }
-

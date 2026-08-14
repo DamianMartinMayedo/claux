@@ -5339,3 +5339,191 @@ export async function guardarRoster(
 
 // La rejilla semanal (`turno_asignaciones` + `guardarAsignaciones`) se retiró con el
 // modelo de rotación (migs. 182-183). Su sustituto es `guardarPatron` + `guardarRoster`.
+
+// ── Turno UNIFICADO (fusión franja + patrón + roster en un solo objeto) ───────────
+//
+// A partir de aquí un «turno» es UNA sola cosa para el dueño: un horario con color, los
+// días que se trabaja y quién lo cubre. Por debajo sigue siendo lo de la mig. 182 —una
+// franja (`turnos`), un patrón (`turno_patrones` + `slots`) y su roster (`turno_miembros`)—
+// para que el puente de nómina (`dias-trabajados.ts`) lea EXACTAMENTE lo mismo y no se
+// toque. La fusión es de interfaz: un turno posee UNA banda horaria; «mezclar mañana unos
+// días y tarde otros» se hace con dos turnos que comparten a la persona (la nómina une sus
+// días sin duplicar). Las franjas/patrones sueltos del formato anterior siguen leyéndose
+// en el cuadrante; al editarlos aquí quedan con una sola banda.
+
+/** Un turno unificado a guardar: la banda, la frecuencia y quién lo trabaja. */
+export interface MiembroTurno { empleado_id: string; offset_ciclo: number }
+
+/**
+ * Crea o edita un turno completo en una sola llamada: su banda horaria (franja), su
+ * frecuencia (patrón + slots) y su equipo (roster). Reemplaza a la pareja `guardarTurno`
+ * + `guardarPatron` + `guardarRoster` desde la UI fusionada; las tres siguen existiendo
+ * para el formato anterior y para código que las use.
+ */
+export async function guardarTurnoUnificado(
+  fd: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const patron_id  = (fd.get('patron_id')  as string)?.trim() || ''
+  const franja_id  = (fd.get('franja_id')  as string)?.trim() || ''   // banda existente al editar
+  const empresa_id = (fd.get('empresa_id') as string)?.trim() || ''
+  const nombre     = (fd.get('nombre')     as string)?.trim() || ''
+  const color      = (fd.get('color')      as string)?.trim() || null
+  const hora_inicio = (fd.get('hora_inicio') as string)?.trim() || null
+  const hora_fin    = (fd.get('hora_fin')    as string)?.trim() || null
+  const tipo        = (fd.get('tipo')        as string)?.trim() as TipoPatron
+  const fecha_ancla = (fd.get('fecha_ancla') as string)?.trim() || ''
+
+  if (!nombre)     return { ok: false, error: 'El nombre del turno es obligatorio.' }
+  if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!(tipo in LONGITUD_POR_TIPO)) return { ok: false, error: 'Tipo de rotación no válido.' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha_ancla)) return { ok: false, error: 'La fecha de inicio del ciclo no es válida.' }
+
+  const longitud_dias = LONGITUD_POR_TIPO[tipo] ?? Number((fd.get('longitud_dias') as string) ?? '')
+  if (!Number.isInteger(longitud_dias) || longitud_dias < 1 || longitud_dias > 366) {
+    return { ok: false, error: 'La longitud del ciclo debe estar entre 1 y 366 días.' }
+  }
+
+  // Posiciones del ciclo que se trabajan (el resto es descanso). Una sola banda: cada
+  // posición apunta a la franja de este turno.
+  let posiciones: number[]
+  try {
+    posiciones = JSON.parse((fd.get('posiciones') as string) ?? '[]') as number[]
+  } catch { return { ok: false, error: 'Días del turno no válidos.' } }
+  if (!Array.isArray(posiciones) || !posiciones.length) {
+    return { ok: false, error: 'El turno no tiene ningún día de trabajo.' }
+  }
+  posiciones = Array.from(new Set(posiciones.map(Number)))
+  for (const p of posiciones) {
+    if (!Number.isInteger(p) || p < 0 || p >= longitud_dias) {
+      return { ok: false, error: 'El turno tiene un día fuera del ciclo.' }
+    }
+  }
+
+  // Roster: [{ empleado_id, offset_ciclo }]. Se valida contra la empresa del turno.
+  let miembros: MiembroTurno[]
+  try {
+    miembros = JSON.parse((fd.get('roster') as string) ?? '[]') as MiembroTurno[]
+  } catch { return { ok: false, error: 'Equipo del turno no válido.' } }
+  if (!Array.isArray(miembros)) miembros = []
+
+  const db = createAdminClient()
+
+  const { data: emp } = await db.from('empresas').select('empresa_id')
+    .eq('empresa_id', empresa_id).eq('client_id', session.client_id).maybeSingle()
+  if (!emp) return { ok: false, error: 'Empresa no encontrada.' }
+
+  // ── 1) La banda horaria (franja) ──────────────────────────────────────────────
+  // Al editar reutiliza la banda del turno (si sigue siendo de esta empresa); si no, o al
+  // crear, nace una nueva. El nombre y color de la franja son los del turno: es su banda.
+  let bandaId = ''
+  if (franja_id) {
+    const { data: fr } = await db.from('turnos').select('turno_id, empresa_id')
+      .eq('turno_id', franja_id).eq('client_id', session.client_id).maybeSingle()
+    if (fr && fr.empresa_id === empresa_id) bandaId = fr.turno_id
+  }
+  if (bandaId) {
+    const { error } = await db.from('turnos')
+      .update({ nombre, hora_inicio, hora_fin, color, es_descanso: false, activo: true, updated_at: new Date().toISOString() })
+      .eq('turno_id', bandaId).eq('client_id', session.client_id)
+    if (error) return { ok: false, error: error.message }
+  } else {
+    bandaId = generarTurnoId()
+    const { error } = await db.from('turnos').insert({
+      turno_id: bandaId, client_id: session.client_id, empresa_id,
+      nombre, hora_inicio, hora_fin, color, es_descanso: false, activo: true,
+      updated_at: new Date().toISOString(),
+    })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  // ── 2) El patrón (frecuencia + ancla) ───────────────────────────────────────────
+  const id = patron_id || generarPatronId()
+  if (!patron_id) {
+    const { error } = await db.from('turno_patrones').insert({
+      patron_id: id, client_id: session.client_id, empresa_id, nombre, tipo,
+      longitud_dias, fecha_ancla, activo: true,
+    })
+    if (error) return { ok: false, error: error.message }
+  } else {
+    const { error } = await db.from('turno_patrones')
+      .update({ nombre, tipo, longitud_dias, fecha_ancla, updated_at: new Date().toISOString() })
+      .eq('patron_id', id).eq('client_id', session.client_id)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  // ── 3) Slots: reemplazo completo, todas las posiciones a la banda del turno ──────
+  await db.from('turno_patron_slots').delete().eq('client_id', session.client_id).eq('patron_id', id)
+  const altasSlots = posiciones.map(pos => ({
+    slot_id: generarSlotId(), client_id: session.client_id, patron_id: id,
+    posicion: pos, turno_id: bandaId,
+  }))
+  if (altasSlots.length) {
+    const { error } = await db.from('turno_patron_slots').insert(altasSlots)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  // ── 4) Roster: reemplazo completo, validando pertenencia a la empresa ────────────
+  const empIds = Array.from(new Set(miembros.map(m => m.empleado_id).filter(Boolean)))
+  if (empIds.length) {
+    const { data: emps } = await db.from('empleados').select('empleado_id, empresa_id')
+      .eq('client_id', session.client_id).in('empleado_id', empIds)
+    const mapa = new Map((emps ?? []).map(e => [e.empleado_id as string, e.empresa_id as string]))
+    for (const eid of empIds) {
+      const empresaEmp = mapa.get(eid)
+      if (!empresaEmp) return { ok: false, error: 'Trabajador no encontrado.' }
+      if (empresaEmp !== empresa_id) {
+        return { ok: false, error: 'Ese trabajador es de otra empresa: no entra en este turno.' }
+      }
+    }
+  }
+  await db.from('turno_miembros').delete().eq('client_id', session.client_id).eq('patron_id', id)
+  const altasRoster = miembros.filter(m => m.empleado_id).map(m => ({
+    miembro_id: generarMiembroId(), client_id: session.client_id, patron_id: id,
+    empleado_id: m.empleado_id, offset_ciclo: Number.isInteger(m.offset_ciclo) ? m.offset_ciclo : 0,
+  }))
+  if (altasRoster.length) {
+    const { error } = await db.from('turno_miembros').insert(altasRoster)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/portal/turnos')
+  return { ok: true }
+}
+
+/**
+ * Borra un turno unificado: su patrón (con slots y roster) y su banda horaria, salvo que
+ * esa banda la use algún OTRO patrón (formato anterior con franjas compartidas), en cuyo
+ * caso se conserva para no romper esos turnos.
+ */
+export async function eliminarTurnoUnificado(
+  patron_id: string, franja_id?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!patron_id) return { ok: false, error: 'Turno no válido.' }
+
+  const db = createAdminClient()
+  await db.from('turno_miembros').delete().eq('client_id', session.client_id).eq('patron_id', patron_id)
+  await db.from('turno_patron_slots').delete().eq('client_id', session.client_id).eq('patron_id', patron_id)
+  const { error } = await db.from('turno_patrones').delete()
+    .eq('patron_id', patron_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  // La banda solo se borra si ya no la usa ningún otro patrón.
+  const banda = (franja_id ?? '').trim()
+  if (banda) {
+    const { data: enUso } = await db.from('turno_patron_slots').select('slot_id')
+      .eq('client_id', session.client_id).eq('turno_id', banda).limit(1)
+    if (!enUso?.length) {
+      await db.from('turnos').delete().eq('turno_id', banda).eq('client_id', session.client_id)
+    }
+  }
+
+  revalidatePath('/portal/turnos')
+  return { ok: true }
+}
