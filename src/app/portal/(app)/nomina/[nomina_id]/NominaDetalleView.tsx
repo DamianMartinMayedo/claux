@@ -29,6 +29,7 @@ import {
 interface IncidenciaEditable {
   dias_trabajados:  number | null
   dias_vacaciones:  number
+  dias_liquidacion: number
   pago_extra:       number
   pago_nocturnidad: number
   feriados:         number
@@ -38,8 +39,8 @@ interface IncidenciaEditable {
 }
 
 const INCIDENCIA_VACIA: IncidenciaEditable = {
-  dias_trabajados: null, dias_vacaciones: 0, pago_extra: 0, pago_nocturnidad: 0,
-  feriados: 0, penalizacion: 0, otros_descuentos: 0, pago_subsidios: 0,
+  dias_trabajados: null, dias_vacaciones: 0, dias_liquidacion: 0, pago_extra: 0,
+  pago_nocturnidad: 0, feriados: 0, penalizacion: 0, otros_descuentos: 0, pago_subsidios: 0,
 }
 
 /** Los seis campos en dinero que solo aparecen si alguien los usa este mes. */
@@ -187,7 +188,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
   const router = useRouter()
   const esConfigurador = useConfigurador()
   const [isPending, startTransition] = useTransition()
-  const { data, nomina, esCuba, diasLaborables, sugerenciaDias } = detalle
+  const { data, nomina, esCuba, diasLaborables, sugerenciaDias, sugerenciaLiquidacion } = detalle
   const { tieneContabilidad } = data
 
   const esBorrador  = nomina.estado === 'BORRADOR'
@@ -281,6 +282,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
         fd.set('periodo',     nomina.periodo)
         fd.set('dias_trabajados',  String(s.dias))
         fd.set('dias_vacaciones',  String(previa.dias_vacaciones))
+        fd.set('dias_liquidacion', String(previa.dias_liquidacion))
         fd.set('pago_extra',       String(previa.pago_extra))
         fd.set('pago_nocturnidad', String(previa.pago_nocturnidad))
         fd.set('feriados',         String(previa.feriados))
@@ -293,6 +295,49 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
       }
       await ld.dismiss()
       if (hechas) toastSuccess(hechas === 1 ? 'Días aplicados · línea recalculada' : `Días aplicados a ${hechas} trabajadores`)
+      if (fallos.length) toastError(fallos.join(' · '))
+      router.refresh()
+    })
+  }
+
+  // ── Liquidación de vacaciones al causar baja ───────────────────────────────────
+  // Igual que los días sugeridos, pero para el saldo pendiente de quien se va: solo
+  // sale si el servidor lo propone y la línea no lo liquida ya en local.
+  const liquidacionesVisibles = useMemo(
+    () => Object.entries(sugerenciaLiquidacion).filter(([id]) =>
+      (incidencias[id]?.dias_liquidacion ?? 0) < 0.05),
+    [sugerenciaLiquidacion, incidencias],
+  )
+  /** Rellena `dias_liquidacion` con el saldo propuesto, uno por uno y por el mismo
+   *  camino que ya recalcula la línea. El dueño puede corregirlo después. */
+  function aplicarLiquidaciones() {
+    const pend = liquidacionesVisibles
+    if (!pend.length) return
+    const ld = toastLoading(`Liquidando a ${pend.length} ${pend.length === 1 ? 'trabajador' : 'trabajadores'}…`)
+    startTransition(async () => {
+      let hechas = 0
+      const fallos: string[] = []
+      for (const [empleadoId, s] of pend) {
+        const previa = incidencias[empleadoId] ?? INCIDENCIA_VACIA
+        const fd = new FormData()
+        fd.set('nomina_id',   nomina.nomina_id)
+        fd.set('empleado_id', empleadoId)
+        fd.set('periodo',     nomina.periodo)
+        fd.set('dias_trabajados',  previa.dias_trabajados === null ? '' : String(previa.dias_trabajados))
+        fd.set('dias_vacaciones',  String(previa.dias_vacaciones))
+        fd.set('dias_liquidacion', String(s.dias))
+        fd.set('pago_extra',       String(previa.pago_extra))
+        fd.set('pago_nocturnidad', String(previa.pago_nocturnidad))
+        fd.set('feriados',         String(previa.feriados))
+        fd.set('penalizacion',     String(previa.penalizacion))
+        fd.set('otros_descuentos', String(previa.otros_descuentos))
+        fd.set('pago_subsidios',   String(previa.pago_subsidios))
+        const res = await guardarIncidenciaDeLinea(fd)
+        if (res.ok) hechas++
+        else fallos.push(`${nombreCorto(empleadoId)}: ${res.error ?? 'error'}`)
+      }
+      await ld.dismiss()
+      if (hechas) toastSuccess(hechas === 1 ? 'Vacaciones liquidadas · línea recalculada' : `Liquidadas a ${hechas} trabajadores`)
       if (fallos.length) toastError(fallos.join(' · '))
       router.refresh()
     })
@@ -316,6 +361,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
     fd.set('periodo',     nomina.periodo)
     fd.set('dias_trabajados',  nueva.dias_trabajados === null ? '' : String(nueva.dias_trabajados))
     fd.set('dias_vacaciones',  String(nueva.dias_vacaciones))
+    fd.set('dias_liquidacion', String(nueva.dias_liquidacion))
     fd.set('pago_extra',       String(nueva.pago_extra))
     fd.set('pago_nocturnidad', String(nueva.pago_nocturnidad))
     fd.set('feriados',         String(nueva.feriados))
@@ -381,6 +427,9 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
    * Los recibos de toda la plantilla. VA FUERA de `startTransition` a propósito, como
    * el de la ficha: dentro, el toast de carga no llega a pintarse, y con 39 recibos
    * este paso tarda lo suficiente para que el usuario crea que no hizo nada.
+   *
+   * Con MÁS de uno van en un solo ZIP: 39 descargas sueltas o las bloquea el navegador
+   * o el usuario no sabe dónde acaban. Con uno solo, el PDF directo, sin envolverlo.
    */
   async function descargarRecibos() {
     if (recibosPend) return
@@ -389,12 +438,40 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
     try {
       const res = await obtenerRecibosNomina(nomina.nomina_id)
       if (!res.ok) { toastError(res.error); return }
-      const { descargarReciboNomina } = await import('@/lib/pdf/recibo-nomina')
-      for (const r of res.recibos) {
-        const quien = r.nombre.split(' ').slice(0, 2).join('-').toLowerCase()
-        await descargarReciboNomina(r.recibo, `recibo-${quien}-${nomina.periodo}.pdf`)
+      if (res.recibos.length === 0) { toastError('No hay recibos que descargar.'); return }
+      const nombreDe = (n: string) => n.split(' ').slice(0, 2).join('-').toLowerCase()
+
+      if (res.recibos.length === 1) {
+        const { descargarReciboNomina } = await import('@/lib/pdf/recibo-nomina')
+        const r = res.recibos[0]
+        await descargarReciboNomina(r.recibo, `recibo-${nombreDe(r.nombre)}-${nomina.periodo}.pdf`)
+        toastSuccess('Recibo descargado')
+        return
       }
-      toastSuccess(`${res.recibos.length} recibos descargados`)
+
+      const [{ blobReciboNomina }, JSZipMod] = await Promise.all([
+        import('@/lib/pdf/recibo-nomina'),
+        import('jszip'),
+      ])
+      const zip = new JSZipMod.default()
+      // Un mismo nombre corto podría repetirse (dos «Juan Pérez»): se numera el choque
+      // para que ningún recibo pise a otro dentro del ZIP.
+      const usados = new Map<string, number>()
+      for (const r of res.recibos) {
+        const base = `recibo-${nombreDe(r.nombre)}-${nomina.periodo}`
+        const n = (usados.get(base) ?? 0) + 1
+        usados.set(base, n)
+        const nombre = n === 1 ? `${base}.pdf` : `${base}-${n}.pdf`
+        zip.file(nombre, await blobReciboNomina(r.recibo))
+      }
+      const contenido = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(contenido)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `recibos-${nomina.periodo}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+      toastSuccess(`${res.recibos.length} recibos en un ZIP`)
     } catch {
       toastError('No se pudieron generar los recibos.')
     } finally {
@@ -524,6 +601,30 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
           <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}
             onClick={aplicarSugerencias}>
             <RefreshCw size={14} strokeWidth={2} /> Poner los días sugeridos
+          </button>
+        </div>
+      )}
+
+      {/* ── Liquidar el saldo de quien causa baja ─────────────────────────────────
+          Al irse un trabajador, el saldo de vacaciones pendiente se paga de golpe.
+          El sistema PROPONE el saldo derivado (excluida esta nómina) y el dueño lo
+          acepta o teclea otra cosa en «Días a liquidar». Solo cubano y solo baja. */}
+      {puedeEditar && liquidacionesVisibles.length > 0 && (
+        <div className="alert alert-warning alert-cta">
+          <span className="alert-cta-texto">
+            <strong>
+              {liquidacionesVisibles.length === 1
+                ? 'Un trabajador causa baja este mes'
+                : `${liquidacionesVisibles.length} trabajadores causan baja este mes`}
+              {' '}con vacaciones sin liquidar.
+            </strong>{' '}
+            {liquidacionesVisibles.slice(0, 3)
+              .map(([id, s]) => `${nombreCorto(id)}: ${s.dias} días (${formatMonto(s.importe)} ${nomina.moneda})`).join(' · ')}
+            {liquidacionesVisibles.length > 3 && ` · y ${liquidacionesVisibles.length - 3} más`}
+          </span>
+          <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}
+            onClick={aplicarLiquidaciones}>
+            <RefreshCw size={14} strokeWidth={2} /> Liquidar el saldo pendiente
           </button>
         </div>
       )}

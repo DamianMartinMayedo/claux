@@ -438,8 +438,13 @@ export interface ComposicionLinea {
   items:       ItemLinea[]
   /** Solo MIPYME_CUBA: lo que se acumula este mes y NO se paga. */
   vacaciones_acumuladas: number
-  /** Solo MIPYME_CUBA: lo que se paga por vacaciones disfrutadas. */
+  /** Solo MIPYME_CUBA: lo que se paga por vacaciones (disfrute + liquidación por baja).
+   *  Los dos salen del saldo, así que van juntos en esta cifra —la resta del coste y la
+   *  derivación del saldo netean ambos—; el ítem del recibo sí los distingue por clave. */
   vacaciones_pagadas:    number
+  /** Solo MIPYME_CUBA: gemelos en DÍAS de acumulado y pagado (mig. 194). */
+  vacaciones_dias_acumuladas: number
+  vacaciones_dias_pagadas:    number
   /** Adelantado al trabajador y recuperable de la Seguridad Social. Suma al neto,
    *  NO al coste: por eso viaja aparte y no como ítem DEVENGO. */
   subsidios:             number
@@ -454,6 +459,13 @@ export interface ContextoCuba {
   es_socio:        boolean
   dias_trabajados: number | null
   dias_vacaciones: number
+  /** Días a liquidar de golpe por causar baja (mig. 194). 0 salvo baja. */
+  dias_liquidacion: number
+  /** Saldo de vacaciones acumulado ANTES de esta línea (apertura + confirmadas), que
+   *  fija el VALOR del día pagado (`saldo_importe ÷ saldo_dias`). Lo consulta el caller
+   *  —`componerLinea` es puro— excluyendo la propia nómina. */
+  saldo_vac_importe: number
+  saldo_vac_dias:    number
 }
 
 /**
@@ -466,8 +478,11 @@ export interface IncidenciaMes {
   periodo?:         string
   /** null = mes completo. Solo prorratea bajo MIPYME_CUBA. */
   dias_trabajados:  number | null
-  /** Días que se PAGAN de vacaciones. Solo bajo MIPYME_CUBA. */
+  /** Días que se PAGAN de vacaciones disfrutadas. Solo bajo MIPYME_CUBA. */
   dias_vacaciones:  number
+  /** Días de vacaciones que se LIQUIDAN de golpe por causar baja (mig. 194). Normalmente
+   *  0; lo rellena el aviso de baja de la hoja de nómina, editable a mano. Solo MIPYME_CUBA. */
+  dias_liquidacion: number
   pago_extra:       number
   pago_nocturnidad: number
   feriados:         number
@@ -506,7 +521,7 @@ function itemsDeIncidencia(inc: IncidenciaMes): ItemLinea[] {
 }
 
 const SELECT_INCIDENCIAS =
-  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios'
+  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, dias_liquidacion, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios'
 
 /** Los importes llegan como texto (`numeric`): sin esto, todo suma concatenando. */
 function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaMes {
@@ -514,6 +529,7 @@ function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaM
     ...r,
     dias_trabajados:  r.dias_trabajados === null ? null : Number(r.dias_trabajados),
     dias_vacaciones:  Number(r.dias_vacaciones),
+    dias_liquidacion: Number(r.dias_liquidacion),
     pago_extra:       Number(r.pago_extra),
     pago_nocturnidad: Number(r.pago_nocturnidad),
     feriados:         Number(r.feriados),
@@ -689,12 +705,20 @@ function componerLinea(opts: {
         es_socio:         cuba.es_socio,
         devengos_previos: redondear2(
           items.filter(i => i.tipo === 'DEVENGO').reduce((s, i) => s + i.monto, 0)),
-        dias_vacaciones:  cuba.dias_vacaciones,
+        dias_vacaciones:   cuba.dias_vacaciones,
+        dias_liquidacion:  cuba.dias_liquidacion,
+        saldo_vac_importe: cuba.saldo_vac_importe,
+        saldo_vac_dias:    cuba.saldo_vac_dias,
       }, cuba.parametros)
     : null
 
   const vacaciones_acumuladas = legal?.vacaciones_acumular ?? 0
-  const vacaciones_pagadas    = legal?.vacaciones_pagar    ?? 0
+  // Disfrute + liquidación van juntos en el pagado: los dos salen del saldo y así el
+  // coste «Salarios» (devengado − pagado) y la derivación del saldo los netean sin
+  // lógica nueva. El recibo los separa por clave (ver los ítems más abajo).
+  const vacaciones_pagadas    = redondear2((legal?.vacaciones_pagar ?? 0) + (legal?.vacaciones_liquidar ?? 0))
+  const vacaciones_dias_acumuladas = legal?.vacaciones_dias_acumular ?? 0
+  const vacaciones_dias_pagadas    = legal?.vacaciones_dias_pagar    ?? 0
   const provisional           = legal?.provisional         ?? false
 
   if (legal) {
@@ -715,6 +739,16 @@ function componerLinea(opts: {
       items.push({
         nombre: NOMBRE_CONCEPTO.VACACIONES_PAGADAS, tipo: 'DEVENGO', monto: legal.vacaciones_pagar,
         clave: 'VACACIONES_PAGADAS',
+        origen: 'LEY', origen_id: null, destino: null,
+      })
+    }
+    // La liquidación por baja va como ítem PROPIO (clave distinta del disfrute) para que
+    // el recibo y los reportes la nombren aparte, aunque en el coste y el saldo cuente
+    // igual que unas vacaciones disfrutadas.
+    if (legal.vacaciones_liquidar > EPS) {
+      items.push({
+        nombre: NOMBRE_CONCEPTO.VACACIONES_LIQUIDACION, tipo: 'DEVENGO', monto: legal.vacaciones_liquidar,
+        clave: 'VACACIONES_LIQUIDACION',
         origen: 'LEY', origen_id: null, destino: null,
       })
     }
@@ -794,6 +828,8 @@ function componerLinea(opts: {
     items:     items.filter(it => Math.abs(it.monto) > EPS || esPreservable(it.origen)),
     vacaciones_acumuladas,
     vacaciones_pagadas,
+    vacaciones_dias_acumuladas,
+    vacaciones_dias_pagadas,
     provisional,
   }
 }
@@ -1000,6 +1036,108 @@ async function saldoVacacionesAcumulado(
   return redondear2(apertura + lineas
     .filter(l => cerradas.has(l.nomina_id))
     .reduce((s, l) => s + Number(l.vacaciones_acumuladas_periodo ?? 0) - Number(l.vacaciones_pagadas_periodo ?? 0), 0))
+}
+
+/** Saldo de vacaciones en DÍAS de una persona. Gemelo exacto de
+ *  `saldoVacacionesAcumulado`, sobre las columnas de días (mig. 194/195). Lo usan la
+ *  ficha del empleado y el aviso de tope al guardar una incidencia. */
+async function saldoVacacionesDiasAcumulado(
+  db: DbAdmin, client_id: string, empleado_id: string,
+): Promise<number> {
+  const [{ data: ficha }, { data: misLineas }] = await Promise.all([
+    db.from('empleados').select('vacaciones_apertura_dias')
+      .eq('client_id', client_id).eq('empleado_id', empleado_id).maybeSingle(),
+    db.from('nomina_lineas')
+      .select('nomina_id, vacaciones_dias_acumulados_periodo, vacaciones_dias_pagados_periodo')
+      .eq('client_id', client_id).eq('empleado_id', empleado_id),
+  ])
+  const apertura = Number((ficha as { vacaciones_apertura_dias: number | null } | null)?.vacaciones_apertura_dias ?? 0)
+
+  const lineas = (misLineas ?? []) as {
+    nomina_id: string
+    vacaciones_dias_acumulados_periodo: number | null; vacaciones_dias_pagados_periodo: number | null
+  }[]
+  if (!lineas.length) return redondear2(apertura)
+
+  const { data: confirmadas } = await db.from('nominas')
+    .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA')
+    .in('nomina_id', Array.from(new Set(lineas.map(l => l.nomina_id))))
+  const cerradas = new Set(((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id))
+
+  return redondear2(apertura + lineas
+    .filter(l => cerradas.has(l.nomina_id))
+    .reduce((s, l) => s + Number(l.vacaciones_dias_acumulados_periodo ?? 0) - Number(l.vacaciones_dias_pagados_periodo ?? 0), 0))
+}
+
+/** Saldo de vacaciones en importe y en días. */
+export interface SaldoVac { importe: number; dias: number }
+
+/** El saldo con su DESGLOSE por nómina confirmada, para varias personas a la vez. Hace
+ *  falta el desglose —y no solo el total— porque valorar el día de una línea usa el
+ *  saldo ANTERIOR a esa línea: hay que poder restar la contribución de SU propia nómina.
+ *  Tres consultas para toda la plantilla, no una por persona. */
+async function saldosVacacionesDetalle(
+  db: DbAdmin, client_id: string, empleadoIds: string[],
+): Promise<Map<string, { apertura: SaldoVac; porNomina: Map<string, SaldoVac> }>> {
+  const out = new Map<string, { apertura: SaldoVac; porNomina: Map<string, SaldoVac> }>()
+  const ids = Array.from(new Set(empleadoIds)).filter(Boolean)
+  if (!ids.length) return out
+
+  const [{ data: fichas }, { data: lns }] = await Promise.all([
+    db.from('empleados')
+      .select('empleado_id, vacaciones_apertura, vacaciones_apertura_dias')
+      .eq('client_id', client_id).in('empleado_id', ids),
+    db.from('nomina_lineas')
+      .select('empleado_id, nomina_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo, vacaciones_dias_acumulados_periodo, vacaciones_dias_pagados_periodo')
+      .eq('client_id', client_id).in('empleado_id', ids),
+  ])
+  for (const f of (fichas ?? []) as {
+    empleado_id: string; vacaciones_apertura: number | null; vacaciones_apertura_dias: number | null
+  }[]) {
+    out.set(f.empleado_id, {
+      apertura:  { importe: Number(f.vacaciones_apertura ?? 0), dias: Number(f.vacaciones_apertura_dias ?? 0) },
+      porNomina: new Map(),
+    })
+  }
+
+  const filas = (lns ?? []) as {
+    empleado_id: string; nomina_id: string
+    vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+    vacaciones_dias_acumulados_periodo: number | null; vacaciones_dias_pagados_periodo: number | null
+  }[]
+  const nominaIds = Array.from(new Set(filas.map(l => l.nomina_id)))
+  const cerradas = new Set<string>()
+  if (nominaIds.length) {
+    const { data: conf } = await db.from('nominas')
+      .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA').in('nomina_id', nominaIds)
+    for (const n of (conf ?? []) as { nomina_id: string }[]) cerradas.add(n.nomina_id)
+  }
+  for (const l of filas) {
+    if (!cerradas.has(l.nomina_id)) continue
+    let e = out.get(l.empleado_id)
+    if (!e) { e = { apertura: { importe: 0, dias: 0 }, porNomina: new Map() }; out.set(l.empleado_id, e) }
+    const prev = e.porNomina.get(l.nomina_id) ?? { importe: 0, dias: 0 }
+    e.porNomina.set(l.nomina_id, {
+      importe: prev.importe + Number(l.vacaciones_acumuladas_periodo ?? 0) - Number(l.vacaciones_pagadas_periodo ?? 0),
+      dias:    prev.dias    + Number(l.vacaciones_dias_acumulados_periodo ?? 0) - Number(l.vacaciones_dias_pagados_periodo ?? 0),
+    })
+  }
+  return out
+}
+
+/** Saldo total (apertura + Σ nóminas confirmadas), EXCLUYENDO opcionalmente una nómina
+ *  —la que se está valorando, para no contar su propia contribución—. */
+function saldoVacDe(
+  detalle: { apertura: SaldoVac; porNomina: Map<string, SaldoVac> } | undefined,
+  excluirNominaId?: string,
+): SaldoVac {
+  if (!detalle) return { importe: 0, dias: 0 }
+  let importe = detalle.apertura.importe, dias = detalle.apertura.dias
+  for (const [nid, v] of detalle.porNomina) {
+    if (nid === excluirNominaId) continue
+    importe += v.importe; dias += v.dias
+  }
+  return { importe: redondear2(importe), dias: redondear2(dias) }
 }
 
 /** El modelo cubano SOLO actúa sobre nóminas en CUP. Ver `crearNomina`. */
@@ -1421,6 +1559,13 @@ async function construirNominas(
       ])
     : [null, null, null, null, null] as const
 
+  // El saldo (con desglose por nómina) alimenta la valoración del disfrute EXACTAMENTE
+  // como lo hará el recálculo: si aquí se valorara con otro criterio, una línea que paga
+  // vacaciones saldría «desfasada» sin poder cuadrar jamás.
+  const detalleSaldos = lineasDeInteres.length
+    ? await saldosVacacionesDetalle(db, client_id, empleadosDeInteres)
+    : new Map<string, { apertura: SaldoVac; porNomina: Map<string, SaldoVac> }>()
+
   const conceptosPorEmpleado = new Map<string, ConceptoAplicable[]>()
   for (const c of (cptRes?.data ?? []) as ({ empleado_id: string } & ConceptoAplicable)[]) {
     const arr = conceptosPorEmpleado.get(c.empleado_id) ?? []
@@ -1456,6 +1601,9 @@ async function construirNominas(
     const inc = nom && incidenciasTodas ? incidenciasTodas.get(`${nom.periodo}|${l.empleado_id}`) : undefined
     const aplicaCuba = !!nom && !!cfg && cfg.modelo === 'MIPYME_CUBA' && nom.moneda === MONEDA_CUBA
     const ficha = fichaCuba.get(l.empleado_id)
+    // Saldo ANTERIOR a esta línea: se excluye SU propia nómina (si ya está confirmada,
+    // su contribución no debe contar al valorar su propio disfrute).
+    const saldoVac = aplicaCuba ? saldoVacDe(detalleSaldos.get(l.empleado_id), l.nomina_id) : null
     const calc = nom && reglasDe && midoDesfase.has(l.nomina_id)
       ? componerLinea({
           salario_base: Number(l.salario_base),
@@ -1470,6 +1618,9 @@ async function construirNominas(
             es_socio:        !!ficha?.es_socio,
             dias_trabajados: inc?.dias_trabajados ?? null,
             dias_vacaciones: inc?.dias_vacaciones ?? 0,
+            dias_liquidacion: inc?.dias_liquidacion ?? 0,
+            saldo_vac_importe: saldoVac!.importe,
+            saldo_vac_dias:    saldoVac!.dias,
           } : undefined,
         })
       : null
@@ -1812,43 +1963,80 @@ export async function obtenerReportesRrhh(
       }))
   }
 
-  // El saldo de vacaciones de TODA la plantilla, en dos consultas y no una por persona
-  // (`saldoVacacionesAcumulado` es la versión de uno). Cuenta las confirmadas de toda la
-  // historia, no las del año: un saldo es acumulado, no de un ejercicio.
+  // El SUBMAYOR de vacaciones de toda la plantilla, en dos consultas y no una por persona.
+  // Cada confirmada se reparte a un lado u otro del 1 de enero del año: lo anterior abre el
+  // saldo (junto con la apertura), lo del año es el movimiento. En las dos unidades a la
+  // vez. Se incluye a los de BAJA (a diferencia de la deuda viva de antes): un trabajador
+  // liquidado este año es justo lo que un submayor tiene que mostrar.
   let saldos: SaldoVacaciones[] = []
   if (hayCuba) {
     const { data: fichas } = await db.from('empleados')
-      .select('empleado_id, nombre, apellidos, moneda, vacaciones_apertura, fecha_baja')
+      .select('empleado_id, nombre, apellidos, moneda, vacaciones_apertura, vacaciones_apertura_dias, fecha_baja')
       .eq('client_id', session.client_id).in('empresa_id', idsFiltro)
     const visibles = ((fichas ?? []) as {
       empleado_id: string; nombre: string; apellidos: string | null
-      moneda: string; vacaciones_apertura: number | null; fecha_baja: string | null
-    }[]).filter(f => !f.fecha_baja
-      && (!empresaId || empleados.some(e => e.empleado_id === f.empleado_id && e.empresa_id === empresaId)))
+      moneda: string; vacaciones_apertura: number | null; vacaciones_apertura_dias: number | null
+      fecha_baja: string | null
+    }[]).filter(f =>
+      !empresaId || empleados.some(e => e.empleado_id === f.empleado_id && e.empresa_id === empresaId))
 
+    // Confirmadas con su PERÍODO: hace falta para saber si la línea abre o mueve el saldo.
     const { data: confirmadas } = await db.from('nominas')
-      .select('nomina_id').eq('client_id', session.client_id)
+      .select('nomina_id, periodo').eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro).eq('estado', 'CONFIRMADA')
-    const idsConf = ((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id)
+    const periodoDe = new Map(((confirmadas ?? []) as { nomina_id: string; periodo: string }[])
+      .map(n => [n.nomina_id, n.periodo]))
+    const idsConf = Array.from(periodoDe.keys())
 
-    const movidoPor = new Map<string, number>()
+    // Cada persona con su cuatro-en-uno: inicial (importe/días) y movimiento del año.
+    type Mov = { iniI: number; iniD: number; acuI: number; acuD: number; pagI: number; pagD: number }
+    const vacio = (): Mov => ({ iniI: 0, iniD: 0, acuI: 0, acuD: 0, pagI: 0, pagD: 0 })
+    const movidoPor = new Map<string, Mov>()
+    const enero = `${anio}-01`
+    const dic   = `${anio}-12`
     if (idsConf.length) {
       const { data: lns } = await db.from('nomina_lineas')
-        .select('empleado_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+        .select('empleado_id, nomina_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo, vacaciones_dias_acumulados_periodo, vacaciones_dias_pagados_periodo')
         .eq('client_id', session.client_id).in('nomina_id', idsConf)
       for (const l of (lns ?? []) as {
-        empleado_id: string
+        empleado_id: string; nomina_id: string
         vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
+        vacaciones_dias_acumulados_periodo: number | null; vacaciones_dias_pagados_periodo: number | null
       }[]) {
-        movidoPor.set(l.empleado_id, (movidoPor.get(l.empleado_id) ?? 0)
-          + Number(l.vacaciones_acumuladas_periodo ?? 0) - Number(l.vacaciones_pagadas_periodo ?? 0))
+        const periodo = periodoDe.get(l.nomina_id)
+        if (!periodo) continue
+        const m = movidoPor.get(l.empleado_id) ?? vacio()
+        const acuI = Number(l.vacaciones_acumuladas_periodo ?? 0)
+        const pagI = Number(l.vacaciones_pagadas_periodo ?? 0)
+        const acuD = Number(l.vacaciones_dias_acumulados_periodo ?? 0)
+        const pagD = Number(l.vacaciones_dias_pagados_periodo ?? 0)
+        if (periodo < enero) {
+          // Anterior al año: alimenta el saldo INICIAL (neto acumulado − pagado).
+          m.iniI += acuI - pagI; m.iniD += acuD - pagD
+        } else if (periodo <= dic) {
+          // Dentro del año: es el movimiento del ejercicio.
+          m.acuI += acuI; m.acuD += acuD; m.pagI += pagI; m.pagD += pagD
+        }
+        movidoPor.set(l.empleado_id, m)
       }
     }
-    saldos = visibles.map(f => ({
-      nombre: [f.nombre, f.apellidos].filter(Boolean).join(' '),
-      moneda: f.moneda,
-      saldo:  redondear2(Number(f.vacaciones_apertura ?? 0) + (movidoPor.get(f.empleado_id) ?? 0)),
-    }))
+    saldos = visibles.map(f => {
+      const m = movidoPor.get(f.empleado_id) ?? vacio()
+      const iniImporte = Number(f.vacaciones_apertura ?? 0) + m.iniI
+      const iniDias    = Number(f.vacaciones_apertura_dias ?? 0) + m.iniD
+      return {
+        nombre: [f.nombre, f.apellidos].filter(Boolean).join(' '),
+        moneda: f.moneda,
+        inicialImporte:   redondear2(iniImporte),
+        inicialDias:      redondear2(iniDias),
+        acumuladoImporte: redondear2(m.acuI),
+        acumuladoDias:    redondear2(m.acuD),
+        pagadoImporte:    redondear2(m.pagI),
+        pagadoDias:       redondear2(m.pagD),
+        finalImporte:     redondear2(iniImporte + m.acuI - m.pagI),
+        finalDias:        redondear2(iniDias + m.acuD - m.pagD),
+      }
+    })
   }
 
   const reportes = construirReportesRrhh(
@@ -2067,13 +2255,14 @@ export async function guardarEmpleado(
  * saldo actual: ese sigue calculándose solo y no se guarda en ninguna parte.
  */
 export async function guardarVacacionesApertura(
-  empleado_id: string, importe: number,
+  empleado_id: string, importe: number, dias: number,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   if (isNaN(importe) || importe < 0) return { ok: false, error: 'El importe no puede ser negativo.' }
+  if (isNaN(dias)    || dias    < 0) return { ok: false, error: 'Los días no pueden ser negativos.' }
 
   const db = createAdminClient()
   const { data: emp } = await db.from('empleados').select('empleado_id')
@@ -2081,7 +2270,11 @@ export async function guardarVacacionesApertura(
   if (!emp) return { ok: false, error: 'Trabajador no encontrado.' }
 
   const { error } = await db.from('empleados')
-    .update({ vacaciones_apertura: redondear2(importe), updated_at: new Date().toISOString() })
+    .update({
+      vacaciones_apertura:      redondear2(importe),
+      vacaciones_apertura_dias: redondear2(dias),
+      updated_at: new Date().toISOString(),
+    })
     .eq('empleado_id', empleado_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
 
@@ -2405,13 +2598,18 @@ export interface EmpleadoDetalleData {
    */
   vacaciones: {
     importe: number
+    /** Saldo derivado también EN DÍAS (mig. 194/195): el derecho legal real, en paralelo
+     *  al importe. */
+    dias:    number
     moneda:  string
     /**
      * Lo que ya traía acumulado al empezar a usar CLAUX (mig. 167). Se enseña aparte
      * cuando no es cero: si no, un saldo que arranca en 1.363,50 sin ninguna nómina
      * detrás parece un error del sistema.
      */
-    apertura: number
+    apertura:      number
+    /** La apertura también en días (mig. 195). */
+    apertura_dias: number
   }
 }
 
@@ -2461,7 +2659,7 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   const conceptos = ((cptRes.data ?? []) as ConceptoEmpleado[]).map(c => ({ ...c, valor: Number(c.valor) }))
 
   const { data: incData } = await db.from('incidencias_nomina')
-    .select('incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios')
+    .select(SELECT_INCIDENCIAS)
     .eq('client_id', session.client_id)
     .eq('empleado_id', empleado_id)
     .order('periodo', { ascending: false })
@@ -2470,6 +2668,7 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
       ...i,
       dias_trabajados:  i.dias_trabajados === null ? null : Number(i.dias_trabajados),
       dias_vacaciones:  Number(i.dias_vacaciones),
+      dias_liquidacion: Number(i.dias_liquidacion),
       pago_extra:       Number(i.pago_extra),
       pago_nocturnidad: Number(i.pago_nocturnidad),
       feriados:         Number(i.feriados),
@@ -2481,8 +2680,12 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
   // Saldo de vacaciones DERIVADO: lo acumulado menos lo pagado, sobre las nóminas
   // CONFIRMADAS. Se autocorrige ante cualquier reversión —reabrir o borrar una
   // nómina lo recalcula solo—, que es justo lo que un total guardado no hacía.
-  // Misma derivación que usa el aviso de tope en `guardarIncidencia`.
-  const acumuladas = await saldoVacacionesAcumulado(db, session.client_id, empleado_id)
+  // Misma derivación que usa el aviso de tope en `guardarIncidencia`. Se lleva EN
+  // PARALELO en importe y en días: son dos cadenas con la misma mecánica (mig. 194/195).
+  const [acumuladas, acumuladasDias] = await Promise.all([
+    saldoVacacionesAcumulado(db, session.client_id, empleado_id),
+    saldoVacacionesDiasAcumulado(db, session.client_id, empleado_id),
+  ])
 
   // El desfase de cada línea ya viene marcado desde `construirNominas`
   // (`NominaLinea.desfasada`): la vista filtra por ahí, sin consultas extra.
@@ -2490,8 +2693,10 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
     data, empleado, nominas, contratos, conceptos, incidencias,
     vacaciones: {
       importe:  redondear2(acumuladas),
+      dias:     redondear2(acumuladasDias),
       moneda:   empleado.moneda,
-      apertura: redondear2(Number((empleado as { vacaciones_apertura?: number | null }).vacaciones_apertura ?? 0)),
+      apertura:      redondear2(Number((empleado as { vacaciones_apertura?: number | null }).vacaciones_apertura ?? 0)),
+      apertura_dias: redondear2(Number((empleado as { vacaciones_apertura_dias?: number | null }).vacaciones_apertura_dias ?? 0)),
     },
   }
 }
@@ -2930,6 +3135,10 @@ export async function guardarIncidencia(
   }
   const dias_vacaciones = num('dias_vacaciones')
   if (dias_vacaciones > 31) return { ok: false, error: 'Los días de vacaciones no pueden pasar de 31.' }
+  // La liquidación por baja paga TODO el saldo acumulado, que puede ser de varios años:
+  // no lleva el tope de 31 del disfrute mensual, solo un límite defensivo.
+  const dias_liquidacion = num('dias_liquidacion')
+  if (dias_liquidacion > 366) return { ok: false, error: 'Los días a liquidar no pueden pasar de 366.' }
 
   const db = createAdminClient()
   const { data: emp } = await db.from('empleados')
@@ -2946,6 +3155,7 @@ export async function guardarIncidencia(
     periodo,
     dias_trabajados,
     dias_vacaciones,
+    dias_liquidacion,
     pago_extra:       num('pago_extra'),
     pago_nocturnidad: num('pago_nocturnidad'),
     feriados:         num('feriados'),
@@ -2972,15 +3182,22 @@ export async function guardarIncidencia(
         'Si es su jornada real, sube «Días laborables» en su ficha; si fue un turno extra ' +
         'puntual, mételo como «Pago extra» en vez de aquí.')
     }
-    if (dias_vacaciones > 0) {
+    if (dias_vacaciones > 0 || dias_liquidacion > 0) {
+      // El valor del día es el promedio del saldo (`importe ÷ días`), el mismo criterio
+      // que aplica el motor; sin días de saldo se cae al valor del día del período.
+      const [saldoImporte, saldoDias] = await Promise.all([
+        saldoVacacionesAcumulado(db, session.client_id, empleado_id),
+        saldoVacacionesDiasAcumulado(db, session.client_id, empleado_id),
+      ])
       const salario_base = redondear2(Number(emp.salario_base))
-      const valorDia = efectivo > 0 ? salario_base / efectivo : 0
-      const pago = redondear2(valorDia * dias_vacaciones)
-      const saldo = await saldoVacacionesAcumulado(db, session.client_id, empleado_id)
-      if (pago > saldo + EPS) {
+      const valorDia = saldoDias > 0 ? saldoImporte / saldoDias : (efectivo > 0 ? salario_base / efectivo : 0)
+      const diasPagados = dias_vacaciones + dias_liquidacion
+      const pago = redondear2(valorDia * diasPagados)
+      if (diasPagados > saldoDias + EPS) {
         avisos.push(
-          `El pago de vacaciones de este mes (${pago.toFixed(2)}) supera el saldo acumulado ` +
-          `(${saldo.toFixed(2)}). Se guarda igual — conviene revisarlo.`)
+          `Se pagan ${diasPagados} días de vacaciones y el saldo acumulado es de ${saldoDias.toFixed(2)} ` +
+          `(${saldoImporte.toFixed(2)}). El pago (${pago.toFixed(2)}) supera lo acumulado — se guarda igual, ` +
+          'conviene revisarlo.')
       }
     }
   }
@@ -3035,6 +3252,15 @@ export interface NominaDetalleData {
    * una persona concreta y la rejilla es una semana tipo, no un registro de asistencia.
    */
   sugerenciaDias: Record<string, SugerenciaDias>
+  /**
+   * Días de vacaciones a LIQUIDAR que se le proponen a quien causa baja ESTE mes y aún
+   * tiene saldo pendiente (solo modelo cubano). Es el saldo derivado en días —excluida
+   * esta misma nómina para no morderse la cola— y el aviso de la hoja lo ofrece con un
+   * botón que rellena `dias_liquidacion`. Como los días sugeridos: es una propuesta, el
+   * dueño la acepta o teclea otra cosa. Solo aparece si el saldo es positivo y la línea
+   * no lo liquida todavía.
+   */
+  sugerenciaLiquidacion: Record<string, { dias: number; importe: number }>
 }
 
 export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDetalleData | null> {
@@ -3146,8 +3372,32 @@ export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDet
     }
   }
 
+  // ── A quién liquidarle las vacaciones ──────────────────────────────────────────
+  // Solo cubano y solo quien causa baja ESTE mes: es cuando se salda lo pendiente. El
+  // saldo se deriva en días excluyendo esta nómina (si no, la línea recién generada se
+  // contaría a sí misma) y se ofrece con un botón, nunca se aplica solo.
+  const sugerenciaLiquidacion: Record<string, { dias: number; importe: number }> = {}
+  if (esCuba) {
+    const bajasEsteMes = nomina.lineas.filter(l =>
+      (propios.get(l.empleado_id)?.fecha_baja ?? '').slice(0, 7) === nomina.periodo)
+    if (bajasEsteMes.length) {
+      const detalleSaldos = await saldosVacacionesDetalle(db, session.client_id, bajasEsteMes.map(l => l.empleado_id))
+      for (const l of bajasEsteMes) {
+        const saldo = saldoVacDe(detalleSaldos.get(l.empleado_id), nomina.nomina_id)
+        const yaLiquida = incidenciasMap.get(l.empleado_id)?.dias_liquidacion ?? 0
+        // Positivo y sin liquidar todavía: si ya teclearon los días, no hay nada que proponer.
+        if (saldo.dias > 0.05 && yaLiquida < 0.05) {
+          sugerenciaLiquidacion[l.empleado_id] = {
+            dias:    Math.round(saldo.dias * 100) / 100,
+            importe: Math.round(saldo.importe * 100) / 100,
+          }
+        }
+      }
+    }
+  }
+
   return {
-    data, nomina, esCuba, diasLaborables, sugerenciaDias,
+    data, nomina, esCuba, diasLaborables, sugerenciaDias, sugerenciaLiquidacion,
     incidencias: Object.fromEntries(incidenciasMap),
   }
 }
@@ -3610,12 +3860,19 @@ export async function crearNomina(
     cptPorEmp.set(c.empleado_id, arr)
   }
 
+  // Saldo de vacaciones para valorar el disfrute: es una nómina NUEVA (aún no existe),
+  // así que el saldo es el de todas las confirmadas anteriores, sin nada que excluir.
+  const detalleSaldos = aplicaCuba
+    ? await saldosVacacionesDetalle(db, session.client_id, activos.map(e => e.empleado_id as string))
+    : new Map<string, { apertura: SaldoVac; porNomina: Map<string, SaldoVac> }>()
+
   // Una nómina recién creada no tiene ítems que preservar: nace de cero.
   const items: ReturnType<typeof filaItem>[] = []
   const lineas = activos.map(e => {
     const base     = redondear2(Number(e.salario_base))
     const linea_id = generarLineaId()
     const inc      = incidencias.get(e.empleado_id)
+    const saldoVac = aplicaCuba ? saldoVacDe(detalleSaldos.get(e.empleado_id as string)) : null
     const calc     = componerLinea({
       salario_base: base,
       reglas:       reglasEmpresa,
@@ -3630,6 +3887,9 @@ export async function crearNomina(
         // como se ha comportado el sistema siempre.
         dias_trabajados: inc?.dias_trabajados ?? null,
         dias_vacaciones: inc?.dias_vacaciones ?? 0,
+        dias_liquidacion: inc?.dias_liquidacion ?? 0,
+        saldo_vac_importe: saldoVac!.importe,
+        saldo_vac_dias:    saldoVac!.dias,
       } : undefined,
     })
     for (const it of calc.items) items.push(filaItem(it, linea_id, nomina_id, session.client_id))
@@ -3646,6 +3906,8 @@ export async function crearNomina(
       neto:            calc.neto,
       vacaciones_acumuladas_periodo: calc.vacaciones_acumuladas,
       vacaciones_pagadas_periodo:    calc.vacaciones_pagadas,
+      vacaciones_dias_acumulados_periodo: calc.vacaciones_dias_acumuladas,
+      vacaciones_dias_pagados_periodo:    calc.vacaciones_dias_pagadas,
       subsidios:                     calc.subsidios,
     }
   })
@@ -3995,6 +4257,8 @@ export interface RecalculoLineaNomina {
   items:                 ItemLinea[]
   vacaciones_acumuladas: number
   vacaciones_pagadas:    number
+  vacaciones_dias_acumuladas: number
+  vacaciones_dias_pagadas:    number
   subsidios:             number
   /** Las deducciones superaban el devengado y se recortan a él. */
   recortada:           boolean
@@ -4094,15 +4358,23 @@ async function planificarRecalculo(
   const aplicaCuba = config.modelo === 'MIPYME_CUBA' && nomina.moneda === MONEDA_CUBA
   const parametros = aplicaCuba ? await leerParametrosCuba(db, nomina.fecha as string) : []
 
+  // Saldo para valorar el disfrute, EXCLUYENDO esta misma nómina: si está confirmada, su
+  // propia contribución no debe contar al valorar el disfrute que ella misma paga.
+  const detalleSaldos = aplicaCuba
+    ? await saldosVacacionesDetalle(db, client_id, enFoco.map(f => f.empleado_id))
+    : new Map<string, { apertura: SaldoVac; porNomina: Map<string, SaldoVac> }>()
+
   const lineas = enFoco.map(f => {
     const base  = redondear2(Number(f.salario_base))
     const ficha = fichaDe.get(f.empleado_id)
     const inc   = incidencias.get(f.empleado_id)
+    const saldoVac = aplicaCuba ? saldoVacDe(detalleSaldos.get(f.empleado_id), nomina_id) : null
     // El recorte lo hace la fórmula compartida, pero aquí NO se queda en silencio:
     // `recortada` viaja a la previsualización para que el dueño vea que su
     // deducción no cabe entera antes de aplicar nada.
     const { devengado, deducciones, neto, recortada, items,
-            vacaciones_acumuladas, vacaciones_pagadas, subsidios } = componerLinea({
+            vacaciones_acumuladas, vacaciones_pagadas,
+            vacaciones_dias_acumuladas, vacaciones_dias_pagadas, subsidios } = componerLinea({
       salario_base: base,
       reglas:       reglasEmpresa,
       conceptos:    porEmpleado.get(f.empleado_id) ?? [],
@@ -4115,6 +4387,9 @@ async function planificarRecalculo(
         es_socio:        !!ficha?.es_socio,
         dias_trabajados: inc?.dias_trabajados ?? null,
         dias_vacaciones: inc?.dias_vacaciones ?? 0,
+        dias_liquidacion: inc?.dias_liquidacion ?? 0,
+        saldo_vac_importe: saldoVac!.importe,
+        saldo_vac_dias:    saldoVac!.dias,
       } : undefined,
     })
 
@@ -4134,6 +4409,8 @@ async function planificarRecalculo(
       items,
       vacaciones_acumuladas,
       vacaciones_pagadas,
+      vacaciones_dias_acumuladas,
+      vacaciones_dias_pagadas,
       subsidios,
       recortada,
       cambia: Math.abs(Number(f.salario_base) - base) > EPS
@@ -4167,6 +4444,8 @@ async function aplicarRecalculo(
         neto:        l.neto_despues,
         vacaciones_acumuladas_periodo: l.vacaciones_acumuladas,
         vacaciones_pagadas_periodo:    l.vacaciones_pagadas,
+        vacaciones_dias_acumulados_periodo: l.vacaciones_dias_acumuladas,
+        vacaciones_dias_pagados_periodo:    l.vacaciones_dias_pagadas,
         subsidios:                     l.subsidios,
       })
       .eq('linea_id', l.linea_id)

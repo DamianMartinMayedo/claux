@@ -45,6 +45,10 @@ type IncidenciaConId = IncidenciaMes & { incidencia_id: string; periodo: string 
 
 // ── Constantes / helpers ────────────────────────────────────────────────────────
 
+// Días de vacaciones: hasta 2 decimales, sin ceros de relleno (8, 8.5, 2.73).
+const formatDias = (n: number): string =>
+  Number(n.toFixed(2)).toLocaleString('es-ES', { maximumFractionDigits: 2 })
+
 const TIPO_CONTRATO_LABEL: Record<TipoContrato, string> = {
   INDEFINIDO: 'Indefinido', TEMPORAL: 'Temporal', POR_OBRA: 'Por obra', PRACTICAS: 'Prácticas',
 }
@@ -257,6 +261,15 @@ function IncidenciaModal({
                     <label htmlFor="inc-vac">Días de vacaciones que se pagan</label>
                     <input className="input" id="inc-vac" name="dias_vacaciones" type="number"
                       min="0" max="31" step="any" defaultValue={incidencia?.dias_vacaciones ?? 0} />
+                    <span className="input-hint">El disfrute normal del mes.</span>
+                  </div>
+                  <div className="input-group ter-col-span-3">
+                    <label htmlFor="inc-liq">Días de vacaciones a liquidar</label>
+                    <input className="input" id="inc-liq" name="dias_liquidacion" type="number"
+                      min="0" step="any" defaultValue={incidencia?.dias_liquidacion ?? 0} />
+                    <span className="input-hint">
+                      Solo al causar <strong>baja</strong>: el saldo pendiente se paga de golpe.
+                    </span>
                   </div>
                 </>
               )}
@@ -320,23 +333,26 @@ function IncidenciaModal({
 // el saldo a 0 en silencio.
 
 function AperturaModal({
-  empleadoId, moneda, actual, onClose, onDone,
+  empleadoId, moneda, actual, actualDias, onClose, onDone,
 }: {
   empleadoId: string
   moneda:     string
   actual:     number
+  actualDias: number
   onClose:    () => void
   onDone:     () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const [valor, setValor] = useState(actual ? String(actual) : '')
+  const [dias, setDias] = useState(actualDias ? String(actualDias) : '')
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const n = parseFloat(valor.replace(',', '.'))
+    const d = parseFloat(dias.replace(',', '.'))
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
-      const res = await guardarVacacionesApertura(empleadoId, isNaN(n) ? 0 : n)
+      const res = await guardarVacacionesApertura(empleadoId, isNaN(n) ? 0 : n, isNaN(d) ? 0 : d)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
       onDone()
@@ -360,10 +376,18 @@ function AperturaModal({
                 Si empezó de cero, déjalo en blanco.
               </span>
             </div>
-            <div className="input-group">
-              <label htmlFor="vac-apertura">Importe ({moneda})</label>
-              <input className="input" id="vac-apertura" type="number" min="0" step="any"
-                autoFocus value={valor} onChange={e => setValor(e.target.value)} placeholder="0.00" />
+            <div className="ter-form-grid">
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="vac-apertura">Importe ({moneda})</label>
+                <input className="input" id="vac-apertura" type="number" min="0" step="any"
+                  autoFocus value={valor} onChange={e => setValor(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="input-group ter-col-span-3">
+                <label htmlFor="vac-apertura-dias">Días</label>
+                <input className="input" id="vac-apertura-dias" type="number" min="0" step="any"
+                  value={dias} onChange={e => setDias(e.target.value)} placeholder="0" />
+                <span className="input-hint">Coherente con el importe: valoran juntos el día.</span>
+              </div>
             </div>
           </div>
           <div className="modal-footer">
@@ -385,7 +409,7 @@ function IncidenciasSection({
   moneda:      string
   incidencias: IncidenciaConId[]
   esCuba:      boolean
-  vacaciones:  { importe: number; moneda: string; apertura: number }
+  vacaciones:  { importe: number; moneda: string; apertura: number; dias: number; apertura_dias: number }
   onChanged:   () => void
 }) {
   const [isPending, startTransition] = useTransition()
@@ -438,15 +462,18 @@ function IncidenciasSection({
           <div className="det-meta-row">
             <strong className="info-box-title">
               Vacaciones acumuladas: {formatMonto(vacaciones.importe)} {vacaciones.moneda}
+              {vacaciones.dias > 0.005 && <> · {formatDias(vacaciones.dias)} días</>}
             </strong>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setApertura(true)}>
               <Pencil size={14} strokeWidth={2} /> Ajustar saldo de apertura
             </button>
           </div>
           <span className="text-xs-muted">
-            Lo acumulado en las nóminas ya confirmadas, menos lo que se le haya pagado.
-            {vacaciones.apertura > 0.005 && (
-              <> Incluye <strong>{formatMonto(vacaciones.apertura)} {vacaciones.moneda}</strong> que
+            Lo acumulado en las nóminas ya confirmadas, menos lo que se le haya pagado. El día
+            de vacaciones se paga al promedio del saldo (importe ÷ días).
+            {(vacaciones.apertura > 0.005 || vacaciones.apertura_dias > 0.005) && (
+              <> Incluye <strong>{formatMonto(vacaciones.apertura)} {vacaciones.moneda}</strong>
+              {vacaciones.apertura_dias > 0.005 && <> y <strong>{formatDias(vacaciones.apertura_dias)} días</strong></>} que
               ya traía acumulados al empezar a usar CLAUX.</>
             )}
           </span>
@@ -456,6 +483,7 @@ function IncidenciasSection({
       {apertura && (
         <AperturaModal
           empleadoId={empleadoId} moneda={vacaciones.moneda} actual={vacaciones.apertura}
+          actualDias={vacaciones.apertura_dias}
           onClose={() => setApertura(false)}
           onDone={() => { setApertura(false); onChanged() }}
         />

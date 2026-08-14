@@ -138,18 +138,33 @@ export async function construirXlsxRrhh(r: ReportesRrhh, meta: MetaRrhh): Promis
 
   // ── Los dos pasivos ──────────────────────────────────────────────────────────
   if (r.vacaciones.porTrabajador.length) {
+    const dia = (v: number, e: CeldaEstilo = {}) => numero(v, { align: 'right', ...e })
     hojas.push({
-      nombre: 'Deuda de vacaciones',
+      nombre: 'Submayor de vacaciones',
       filas: [
-        [texto('Saldo acumulado de vacaciones de la plantilla', titulo)],
-        [texto('Es un pasivo: se reconoce al acumularse y se paga cuando se disfruta.')],
+        [texto(`Submayor de vacaciones · ${meta.anio}`, titulo)],
+        [texto('Saldo inicial + acumulado − pagado (disfrute y liquidación) = saldo final. '
+          + 'El día se valora al promedio del saldo; el final es el pasivo vivo.')],
         [],
-        [texto('Trabajador', cabecera), texto('Moneda', cabecera), texto('Saldo', cabecera)],
-        ...r.vacaciones.porTrabajador.map(v => [texto(v.nombre), texto(v.moneda), imp(v.saldo)]),
+        [texto('Trabajador', cabecera), texto('Moneda', cabecera),
+          texto('Inicial', cabecera), texto('Inicial (d.)', cabecera),
+          texto('Acumulado', cabecera), texto('Acum. (d.)', cabecera),
+          texto('Pagado/liq.', cabecera), texto('Pag. (d.)', cabecera),
+          texto('Final', cabecera), texto('Final (d.)', cabecera)],
+        ...r.vacaciones.porTrabajador.map(v => [
+          texto(v.nombre), texto(v.moneda),
+          imp(v.inicialImporte),   dia(v.inicialDias),
+          imp(v.acumuladoImporte), dia(v.acumuladoDias),
+          imp(v.pagadoImporte),    dia(v.pagadoDias),
+          imp(v.finalImporte, fuerte), dia(v.finalDias, fuerte),
+        ]),
         [],
-        ...r.vacaciones.total.map(t => [texto('TOTAL', fuerte), texto(t.moneda, fuerte), imp(t.monto, fuerte)]),
+        ...r.vacaciones.total.map(t => [texto('TOTAL (saldo final)', fuerte), texto(t.moneda, fuerte),
+          texto(''), texto(''), texto(''), texto(''), texto(''), texto(''),
+          imp(t.monto, fuerte), texto('')]),
       ],
-      columnas: [{ width: 30 }, { width: 12 }, { width: 18 }],
+      columnas: [{ width: 26 }, { width: 8 }, { width: 14 }, { width: 10 }, { width: 14 },
+        { width: 10 }, { width: 14 }, { width: 10 }, { width: 14 }, { width: 10 }],
     })
   }
   if (r.onat.length) {

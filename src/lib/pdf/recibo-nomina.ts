@@ -342,3 +342,17 @@ export async function descargarReciboNomina(
   sellarPie(doc, 'Recibo de nómina generado con CLAUX')
   doc.save(filename ?? `recibo-${d.periodo}.pdf`)
 }
+
+/**
+ * El mismo recibo, pero devuelto como Blob en vez de descargado: lo usa la descarga en
+ * lote, que mete todos los recibos en un solo ZIP para no lanzar 39 descargas sueltas
+ * (que el navegador bloquea o el usuario no sabe dónde acaban).
+ */
+export async function blobReciboNomina(d: ReciboNominaPdf): Promise<Blob> {
+  const doc = await crearDoc()
+  await construirReciboNomina(doc, d)
+  sellarPie(doc, 'Recibo de nómina generado con CLAUX')
+  // jsPDF tipa `output()` como string en su firma por defecto; con 'blob' devuelve un
+  // Blob en runtime. El cast salva ese hueco de tipos, no cambia el comportamiento.
+  return doc.output('blob') as unknown as Blob
+}

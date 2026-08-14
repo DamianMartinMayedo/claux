@@ -54,8 +54,26 @@ export interface EntradaCuba {
   es_socio: boolean
   /** Lo que ya suma al devengado por reglas y conceptos (bonos, nocturnidad…). */
   devengos_previos: number
-  /** Días de vacaciones que se le PAGAN este mes. */
+  /** Días de vacaciones que se le PAGAN este mes (disfrute normal). */
   dias_vacaciones: number
+  /**
+   * Días de vacaciones que se LIQUIDAN de golpe por causar baja. Es el mismo
+   * mecanismo que `dias_vacaciones`, pero con clave propia para el recibo y los
+   * reportes; normalmente 0. Su importe entra en el devengado igual que el disfrute,
+   * y —criterio de Claudia (2026-08-13)— NO entra en la base del IUFT ni de la SS de
+   * empresa.
+   */
+  dias_liquidacion: number
+  /**
+   * Saldo de vacaciones acumulado ANTES de esta línea (apertura + nóminas
+   * confirmadas), en importe y en días. Es lo que fija el VALOR del día que se paga:
+   * `valor_dia = saldo_importe ÷ saldo_dias` (promedio del saldo, no el salario del
+   * mes en que se disfruta). Con `saldo_vac_dias = 0` no hay promedio posible y se cae
+   * al valor del día del período (comportamiento anterior y red de seguridad para un
+   * tenant con historia solo en importe).
+   */
+  saldo_vac_importe: number
+  saldo_vac_dias: number
 }
 
 export interface ResultadoCuba {
@@ -65,6 +83,15 @@ export interface ResultadoCuba {
   vacaciones_acumular: number
   /** T — lo que se paga este mes por vacaciones disfrutadas. */
   vacaciones_pagar: number
+  /** T' — lo que se liquida de golpe por baja (0 salvo baja). Mismo trato que T en
+   *  el devengado y en la base de aportes; clave propia para el recibo. */
+  vacaciones_liquidar: number
+  /** Días acumulados este mes (1/11 de los días trabajados efectivos). Gemelo en DÍAS
+   *  de `vacaciones_acumular`, para derivar el saldo también en días (mig. 194). */
+  vacaciones_dias_acumular: number
+  /** Días pagados este mes: disfrute + liquidación. Gemelo en DÍAS de lo que sale del
+   *  saldo, para congelarlo en la línea. */
+  vacaciones_dias_pagar: number
   /** U — total devengado. */
   total_devengado: number
   /** Lo que se le retiene al trabajador (reduce su neto). */
@@ -78,6 +105,10 @@ export interface ResultadoCuba {
 // Alias local para mantener legible el motor: todos los importes legales pasan por
 // la política monetaria común (base truncada a 3 decimales y redondeo a 2).
 const r2 = importe2
+
+// Los DÍAS no son dinero: no pasan por la política monetaria (truncar a 3, redondear a
+// 2), solo se redondean a 2 decimales para que «2,18 días» no arrastre cola binaria.
+const r2dias = (n: number) => Math.round(n * 100) / 100
 
 /** Elige la fila vigente en una fecha. Sin fila, el tributo no se aplica. */
 export function parametroVigente(
@@ -151,18 +182,40 @@ export function calcularNominaCuba(
     ? aplicarTramos(devengadoSinVacaciones, pVac.tabla_tramos)
     : 0
 
-  // T — lo que se paga por los días de vacaciones disfrutados este mes, al valor
-  // del día del período.
-  const valorDia = dias_laborables > 0 ? salario_base / dias_laborables : 0
-  const vacaciones_pagar = r2(valorDia * (entrada.dias_vacaciones || 0))
+  // Días que se ACUMULAN este mes: 1/11 de los días trabajados efectivos, el gemelo
+  // en días de `vacaciones_acumular`. Sin incidencia se asume el mes completo; nunca
+  // por encima de los laborables (un turno extra se paga como «Pago extra», no engorda
+  // el derecho de vacaciones).
+  const diasTrabajadosEfectivos = dias_trabajados === null
+    ? dias_laborables
+    : Math.min(dias_trabajados, dias_laborables)
+  const vacaciones_dias_acumular = dias_laborables > 0 ? r2dias(diasTrabajadosEfectivos / 11) : 0
 
-  const total_devengado = r2(devengadoSinVacaciones + vacaciones_pagar)
+  // T — lo que se paga por los días de vacaciones. El VALOR del día es el promedio del
+  // saldo acumulado (`saldo_importe ÷ saldo_dias`, criterio de Claudia 2026-08-13), NO
+  // el salario del mes en que se disfruta. Sin días de saldo no hay promedio: se cae al
+  // valor del día del período —el comportamiento anterior— como red de seguridad para
+  // un tenant con historia solo en importe.
+  const valorDia = entrada.saldo_vac_dias > 0
+    ? entrada.saldo_vac_importe / entrada.saldo_vac_dias
+    : (dias_laborables > 0 ? salario_base / dias_laborables : 0)
+  const vacaciones_pagar    = r2(valorDia * (entrada.dias_vacaciones  || 0))
+  // T' — liquidación por baja: mismo valor del día. Una liquidación COMPLETA lleva
+  // `dias_liquidacion = saldo_dias`, así que sale exactamente `saldo_importe` —se paga
+  // justo lo acumulado, sin cálculo extra—.
+  const vacaciones_liquidar = r2(valorDia * (entrada.dias_liquidacion || 0))
+
+  // Días pagados este mes: disfrute + liquidación, que es lo que sale del saldo-días.
+  const vacaciones_dias_pagar = r2dias((entrada.dias_vacaciones || 0) + (entrada.dias_liquidacion || 0))
+
+  const total_devengado = r2(devengadoSinVacaciones + vacaciones_pagar + vacaciones_liquidar)
 
   // Base de IUFT y de la Contribución SS de empresa: devengado + acumulación de
-  // vacaciones del MES — sin el pago de vacaciones disfrutadas (`vacaciones_pagar`),
-  // que sí entra en `total_devengado` pero no en esta base (criterio de Claudia,
-  // validado contra un caso real). Van separadas a propósito: reutilizar
-  // `total_devengado` aquí coló ese término de más.
+  // vacaciones del MES — sin el pago de vacaciones disfrutadas (`vacaciones_pagar`) ni
+  // la liquidación por baja (`vacaciones_liquidar`), que sí entran en `total_devengado`
+  // pero no en esta base (criterio de Claudia, validado contra un caso real y ratificado
+  // para la liquidación el 2026-08-13). Van separadas a propósito: reutilizar
+  // `total_devengado` aquí colaría esos términos de más.
   const devengadoMasVacaciones = r2(devengadoSinVacaciones + vacaciones_acumular)
   const vistas = { salario: salario_base, devengado: total_devengado, devengadoMasVacaciones }
 
@@ -199,6 +252,9 @@ export function calcularNominaCuba(
     salario_devengado,
     vacaciones_acumular,
     vacaciones_pagar,
+    vacaciones_liquidar,
+    vacaciones_dias_acumular,
+    vacaciones_dias_pagar,
     total_devengado,
     retenciones,
     aportes,

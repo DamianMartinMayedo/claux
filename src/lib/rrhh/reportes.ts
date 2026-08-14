@@ -61,7 +61,19 @@ export interface ReportesRrhh {
    * parte — ni aquí, ni en el dashboard, ni en el dossier. Solo bajo modelo cubano, que
    * es el único que las acumula.
    */
-  vacaciones:  { total: MontoMoneda[]; porTrabajador: { nombre: string; saldo: number; moneda: string }[] }
+  vacaciones:  {
+    /** La deuda VIVA al cierre del año = suma del saldo final, por moneda. */
+    total: MontoMoneda[]
+    /** El submayor por trabajador: saldo que se abre, se mueve y se cierra, en las dos
+     *  unidades. Solo quien tuvo saldo o movimiento en el año. */
+    porTrabajador: {
+      nombre: string; moneda: string
+      inicialImporte: number; inicialDias: number
+      acumuladoImporte: number; acumuladoDias: number
+      pagadoImporte: number; pagadoDias: number
+      finalImporte: number; finalDias: number
+    }[]
+  }
   /**
    * Lo que se le debe a ONAT y a la Seguridad Social por el período, sacado de los ítems
    * (`concepto_clave`, nunca el nombre). Hasta ahora había que ir a buscarlo a Cuentas
@@ -109,11 +121,24 @@ export interface ItemFiscalRrhh {
   monto:    number
 }
 
-/** El saldo de vacaciones de un trabajador, ya derivado. */
+/**
+ * El SUBMAYOR de vacaciones de un trabajador para el año del informe: el saldo se abre,
+ * se mueve y se cierra, en las DOS unidades a la vez (importe y días). Ya derivado —el
+ * llamador reparte las nóminas confirmadas a un lado y otro del 1 de enero del año.
+ *   final = inicial + acumulado − pagado   (pagado = disfrute + liquidación por baja)
+ */
 export interface SaldoVacaciones {
   nombre: string
   moneda: string
-  saldo:  number
+  inicialImporte:   number
+  inicialDias:      number
+  acumuladoImporte: number
+  acumuladoDias:    number
+  /** Disfrutado + liquidado por baja en el año. */
+  pagadoImporte:    number
+  pagadoDias:       number
+  finalImporte:     number
+  finalDias:        number
 }
 
 const SIN_DEPTO = 'Sin departamento'
@@ -233,15 +258,24 @@ export function construirReportesRrhh(
     }))
     .filter(e => e.activos > 0 || e.coste.length > 0)
 
-  // ── La deuda de vacaciones ────────────────────────────────────────────────────
-  // Solo se enseña a quien tiene saldo: una lista con 30 ceros no es información. El
-  // total va POR MONEDA como todo lo demás — dos monedas no se suman en un número.
-  const conSaldo = saldosVacaciones
-    .filter(v => Math.abs(v.saldo) > 0.005)
-    .sort((a, b) => b.saldo - a.saldo)
+  // ── El submayor de vacaciones ─────────────────────────────────────────────────
+  // Un saldo que se abre, se mueve y se cierra, en las dos unidades. Se enseña a quien
+  // tuvo saldo O movimiento en el año: una fila con seis ceros no es información, pero un
+  // trabajador liquidado —final 0 pero con acumulado y pago en el año— sí lo es. El total
+  // es la DEUDA VIVA (saldo final) por moneda; dos monedas no se suman en un número.
+  const conMovimiento = saldosVacaciones
+    .filter(v => Math.abs(v.finalImporte) > 0.005 || Math.abs(v.acumuladoImporte) > 0.005
+      || Math.abs(v.pagadoImporte) > 0.005 || Math.abs(v.inicialImporte) > 0.005)
+    .sort((a, b) => b.finalImporte - a.finalImporte)
   const vacaciones = {
-    total: porMoneda(conSaldo.map(v => ({ moneda: v.moneda, monto: v.saldo }))),
-    porTrabajador: conSaldo.map(v => ({ nombre: v.nombre, saldo: v.saldo, moneda: v.moneda })),
+    total: porMoneda(conMovimiento.map(v => ({ moneda: v.moneda, monto: v.finalImporte }))),
+    porTrabajador: conMovimiento.map(v => ({
+      nombre: v.nombre, moneda: v.moneda,
+      inicialImporte: v.inicialImporte, inicialDias: v.inicialDias,
+      acumuladoImporte: v.acumuladoImporte, acumuladoDias: v.acumuladoDias,
+      pagadoImporte: v.pagadoImporte, pagadoDias: v.pagadoDias,
+      finalImporte: v.finalImporte, finalDias: v.finalDias,
+    })),
   }
 
   // ── Lo que se le debe a ONAT ──────────────────────────────────────────────────

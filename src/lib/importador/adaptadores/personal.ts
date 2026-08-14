@@ -42,14 +42,18 @@ export const adaptadorPersonal: Adaptador = {
     { campo: 'salario_base', etiqueta: 'Salario',       obligatorio: false, alias: ['salario', 'sueldo', 'salario base', 'remuneracion', 'remuneración'], ejemplo: '18000' },
     { campo: 'periodicidad', etiqueta: 'Periodicidad',  obligatorio: false, alias: ['periodicidad', 'frecuencia pago'], ayuda: PERIODICIDADES.join(', '), ejemplo: PERIODICIDADES[0] },
     { campo: 'moneda',       etiqueta: 'Moneda',        obligatorio: false, alias: ['moneda', 'divisa'], ejemplo: 'CUP' },
-    // Vacaciones ya acumuladas ANTES de usar CLAUX (mig. 167). Es un IMPORTE, no días:
-    // el sistema deriva y muestra el importe (9,09 % del salario percibido), y convertir
-    // días exigiría un valor-día del pasado que nadie conoce. Entra como punto de
-    // partida de la derivación, no como un total editable.
-    { campo: 'vacaciones_apertura', etiqueta: 'Vacaciones acumuladas', obligatorio: false,
-      alias: ['vacaciones acumuladas', 'vacaciones', 'saldo vacaciones', 'vacaciones pendientes'],
+    // Vacaciones ya acumuladas ANTES de usar CLAUX (mig. 167/195). Se cargan en las DOS
+    // unidades —importe Y días— como punto de partida inmutable de la derivación, no como
+    // un total editable. Los dos deben ser coherentes: la valoración del disfrute usa su
+    // promedio (`importe ÷ días`).
+    { campo: 'vacaciones_apertura', etiqueta: 'Vacaciones acumuladas (importe)', obligatorio: false,
+      alias: ['vacaciones acumuladas', 'vacaciones', 'saldo vacaciones', 'vacaciones pendientes', 'vacaciones importe'],
       ayuda: 'Importe ya acumulado antes de usar CLAUX. Si el trabajador empieza de cero, déjalo vacío.',
       ejemplo: '1363.50' },
+    { campo: 'vacaciones_apertura_dias', etiqueta: 'Vacaciones acumuladas (días)', obligatorio: false,
+      alias: ['vacaciones dias', 'vacaciones días', 'saldo vacaciones dias', 'saldo vacaciones días', 'dias vacaciones'],
+      ayuda: 'Días ya acumulados antes de usar CLAUX. Coherente con el importe. En blanco, cero.',
+      ejemplo: '8.5' },
     // Los dos del modelo cubano (mig. 142). Solo se aplican si su empresa usa
     // MIPYME_CUBA; en el General se importan igual y no molestan.
     { campo: 'es_socio', etiqueta: 'Es socio', obligatorio: false,
@@ -88,6 +92,11 @@ export const adaptadorPersonal: Adaptador = {
     if (vacaciones === undefined) return { ok: false, motivo: 'Las vacaciones acumuladas no son un número.' }
     if (vacaciones !== null && vacaciones < 0) {
       return { ok: false, motivo: 'Las vacaciones acumuladas no pueden ser negativas.' }
+    }
+    const vacacionesDias = parseNumero(valores.vacaciones_apertura_dias)
+    if (vacacionesDias === undefined) return { ok: false, motivo: 'Los días de vacaciones acumuladas no son un número.' }
+    if (vacacionesDias !== null && vacacionesDias < 0) {
+      return { ok: false, motivo: 'Los días de vacaciones acumuladas no pueden ser negativos.' }
     }
 
     // Los dos del modelo cubano. `undefined` = la columna no venía en el archivo, y
@@ -130,7 +139,8 @@ export const adaptadorPersonal: Adaptador = {
     // mandaría un 0 y borraría en silencio el saldo que trajo el archivo.
     const datos = {
       ...campos, empresa_id, moneda,
-      vacaciones_apertura: vacaciones ?? 0,
+      vacaciones_apertura:      vacaciones ?? 0,
+      vacaciones_apertura_dias: vacacionesDias ?? 0,
     }
     const documento = campos.documento
     return {
@@ -162,7 +172,8 @@ export const adaptadorPersonal: Adaptador = {
         // Sin esta entrada, reimportar Personal con solo el nombre y el cargo pondría a
         // 0 el saldo de apertura de toda la plantilla: es la regla «ACTUALIZAR no vacía
         // — solo se escriben las columnas que trae el archivo».
-        vacaciones_apertura: 'vacaciones_apertura',
+        vacaciones_apertura:      'vacaciones_apertura',
+        vacaciones_apertura_dias: 'vacaciones_apertura_dias',
         es_socio:            'es_socio',
         dias_laborables:     'dias_laborables',
       }),

@@ -28,6 +28,7 @@ export type ConceptoClave =
   | ConceptoFiscal            // los cinco tributos + la acumulación de vacaciones
   | 'DIAS_NO_TRABAJADOS'      // prorrateo por días (normalmente negativo)
   | 'VACACIONES_PAGADAS'      // los días de vacaciones que se disfrutan este mes
+  | 'VACACIONES_LIQUIDACION'  // el saldo de vacaciones que se paga de golpe al causar baja
   | 'PAGO_EXTRA'
   | 'NOCTURNIDAD'
   | 'FERIADOS'
@@ -37,13 +38,14 @@ export type ConceptoClave =
 /** Nombre canónico de cada clave. Es lo que se graba como snapshot y lo que se imprime. */
 export const NOMBRE_CONCEPTO: Record<ConceptoClave, string> = {
   ...NOMBRE_CONCEPTO_FISCAL,
-  DIAS_NO_TRABAJADOS: 'Días no trabajados',
-  VACACIONES_PAGADAS: 'Vacaciones pagadas',
-  PAGO_EXTRA:         'Pago extra',
-  NOCTURNIDAD:        'Nocturnidad',
-  FERIADOS:           'Feriados',
-  PENALIZACION:       'Penalización',
-  OTROS_DESCUENTOS:   'Otros descuentos',
+  DIAS_NO_TRABAJADOS:     'Días no trabajados',
+  VACACIONES_PAGADAS:     'Vacaciones pagadas',
+  VACACIONES_LIQUIDACION: 'Liquidación de vacaciones',
+  PAGO_EXTRA:             'Pago extra',
+  NOCTURNIDAD:            'Nocturnidad',
+  FERIADOS:               'Feriados',
+  PENALIZACION:           'Penalización',
+  OTROS_DESCUENTOS:       'Otros descuentos',
 }
 
 // ── Los conceptos de COSTE de una nómina (mig. 166) ──────────────────────────

@@ -156,6 +156,15 @@ provisión de vacaciones **no genera pasivo visible** —se registra el coste, p
 todavía no se le debe a nadie no aparece en Tesorería ni en CxP; el saldo solo se ve en la
 ficha del trabajador—.
 
+**La liquidación por baja es otro pago de vacaciones, no un reparto nuevo.** Cuando alguien
+causa baja con saldo vivo, se le liquidan los días pendientes al mismo precio del disfrute
+(`saldo_importe ÷ saldo_dias`): reduce el saldo y sale por caja igual que unas vacaciones
+disfrutadas, así que encaja en las mismas filas de la tabla de arriba (COSTE ya descuenta lo
+pagado, DEUDA lo debe). La única diferencia es fiscal y vive dentro de la nómina, no en el
+reparto contable: la liquidación **entra en el devengado** y está sujeta a las **retenciones
+del trabajador** (IRPF/CESS), pero **no** engorda la base de los aportes de empresa
+(UFT/SS) — cerrado así por Claudia.
+
 **La nómina ya no se paga desde Nómina.** No hay botón «Pagar»: cada deuda se liquida en
 Tesorería con el resto, y el estado «Pagada» se **deriva** de si la CxP del salario neto
 está liquidada. Depende solo del salario neto a propósito — los impuestos tienen su propio

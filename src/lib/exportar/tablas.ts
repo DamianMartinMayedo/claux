@@ -1004,15 +1004,18 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     // Lleva lo que el IMPORTADOR sabe leer, que es lo que convierte esta descarga en
     // una copia de seguridad utilizable. Faltaban `vacaciones_apertura`, `es_socio` y
     // `dias_laborables`: se podían importar y no exportar, así que un ciclo
-    // exportar → reimportar perdía el saldo de vacaciones de toda la plantilla.
+    // exportar → reimportar perdía el saldo de vacaciones de toda la plantilla. El saldo
+    // de vacaciones viaja en las DOS unidades (importe y días) para no romper el promedio
+    // `importe ÷ días` al reimportar.
     cabeceras: ['Código', 'Nombre', 'Apellidos', 'Documento', 'Cargo', 'Departamento',
       'Turno habitual', 'Tipo de contrato', 'Fecha de alta', 'Salario base', 'Moneda',
       'Periodicidad', 'Empresa', 'Fecha de baja', 'Email', 'Teléfono',
-      'Vacaciones acumuladas', 'Es socio', 'Días laborables'],
+      'Vacaciones acumuladas (importe)', 'Vacaciones acumuladas (días)', 'Es socio',
+      'Días laborables'],
     cargar: async (db, cid, filtro) => {
       const [filas, empresas] = await Promise.all([
         leer(db, 'empleados', cid,
-          'empleado_id, nombre, apellidos, documento, cargo, departamento, turno, tipo_contrato, fecha_alta, salario_base, moneda, periodicidad, empresa_id, fecha_baja, email, telefono, vacaciones_apertura, es_socio, dias_laborables', 'nombre',
+          'empleado_id, nombre, apellidos, documento, cargo, departamento, turno, tipo_contrato, fecha_alta, salario_base, moneda, periodicidad, empresa_id, fecha_baja, email, telefono, vacaciones_apertura, vacaciones_apertura_dias, es_socio, dias_laborables', 'nombre',
           filtro, undefined, ['nombre', 'apellidos', 'documento', 'cargo', 'empleado_id'],
           { empresa_id: filtro?.empresa_id, departamento: filtro?.categoria }),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
@@ -1031,6 +1034,7 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         empresas.get(f.empresa_id as string) ?? '', f.fecha_baja as string,
         f.email as string, f.telefono as string,
         Number(f.vacaciones_apertura ?? 0),
+        Number(f.vacaciones_apertura_dias ?? 0),
         // «Sí»/«No» y no un booleano: es lo que el importador vuelve a entender y lo
         // que un dueño reconoce en su hoja de cálculo.
         f.es_socio ? 'Sí' : 'No',

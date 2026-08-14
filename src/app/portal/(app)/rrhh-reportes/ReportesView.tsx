@@ -29,6 +29,10 @@ function formatMonto(n: number): string {
 function lineaMoneda(ms: { moneda: string; monto: number }[]): string {
   return ms.length ? ms.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ') : '—'
 }
+/** Días de vacaciones: hasta 2 decimales, sin ceros de relleno (8, 8,5, 2,73). */
+function formatDiasRep(n: number): string {
+  return Number(n.toFixed(2)).toLocaleString('es-ES', { maximumFractionDigits: 2 })
+}
 
 // ── Página: Reportes de RRHH ─────────────────────────────────────────────────────
 
@@ -116,10 +120,13 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
       for (const c of porCargo) cur.fila(`${c.cargo} (${c.activos})`, lineaMoneda(c.coste))
 
       if (vacaciones.porTrabajador.length) {
-        cur.salto(2); cur.titulo('Deuda de vacaciones')
-        cur.nota('Se reconoce al acumularse y se paga cuando se disfruta: es un pasivo del negocio.')
-        cur.cabeceraTabla('Trabajador', 'Saldo')
-        for (const v of vacaciones.porTrabajador) cur.fila(v.nombre, `${formatMonto(v.saldo)} ${v.moneda}`)
+        cur.salto(2); cur.titulo(`Submayor de vacaciones · ${anio}`)
+        cur.nota('Saldo inicial + acumulado − pagado (disfrute y liquidación) = saldo final. '
+          + 'El día se valora al promedio del saldo; el final es el pasivo vivo del negocio.')
+        cur.cabeceraTabla('Trabajador', 'Saldo final')
+        for (const v of vacaciones.porTrabajador) {
+          cur.fila(v.nombre, `${formatMonto(v.finalImporte)} ${v.moneda} · ${formatDiasRep(v.finalDias)} d.`)
+        }
         for (const t of vacaciones.total) cur.filaTotal(`Total (${t.moneda})`, formatMonto(t.monto))
       }
 
@@ -404,18 +411,42 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
             </div>
           )}
 
-          {/* Deuda de vacaciones por trabajador */}
+          {/* Submayor de vacaciones por trabajador: el saldo se abre, se mueve y se cierra,
+              en importe y en días. El día se valora al promedio del saldo (importe ÷ días). */}
           {vacaciones.porTrabajador.length > 0 && (
             <div className="card card-table rrhh-card-gap">
-              <div className="ter-card-head"><span className="ter-form-section-title">Vacaciones acumuladas por trabajador</span></div>
+              <div className="ter-card-head"><span className="ter-form-section-title">Submayor de vacaciones · {anio}</span></div>
               <div className="table-wrapper">
                 <table className="table">
-                  <thead><tr><th>Trabajador</th><th className="col-num">Saldo</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Trabajador</th>
+                      <th className="col-num">Saldo inicial</th>
+                      <th className="col-num">Acumulado</th>
+                      <th className="col-num">Pagado / liquidado</th>
+                      <th className="col-num">Saldo final</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {vacaciones.porTrabajador.map(v => (
                       <tr key={v.nombre}>
                         <td data-label="Trabajador"><strong>{v.nombre}</strong></td>
-                        <td data-label="Saldo" className="col-num tes-monto-cell">{formatMonto(v.saldo)} {v.moneda}</td>
+                        <td data-label="Saldo inicial" className="col-num tes-monto-cell">
+                          {formatMonto(v.inicialImporte)} {v.moneda}
+                          <div className="text-xs-muted">{formatDiasRep(v.inicialDias)} d.</div>
+                        </td>
+                        <td data-label="Acumulado" className="col-num tes-monto-cell">
+                          {formatMonto(v.acumuladoImporte)} {v.moneda}
+                          <div className="text-xs-muted">{formatDiasRep(v.acumuladoDias)} d.</div>
+                        </td>
+                        <td data-label="Pagado / liquidado" className="col-num tes-monto-cell">
+                          {formatMonto(v.pagadoImporte)} {v.moneda}
+                          <div className="text-xs-muted">{formatDiasRep(v.pagadoDias)} d.</div>
+                        </td>
+                        <td data-label="Saldo final" className="col-num tes-monto-cell">
+                          <strong>{formatMonto(v.finalImporte)} {v.moneda}</strong>
+                          <div className="text-xs-muted">{formatDiasRep(v.finalDias)} d.</div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
