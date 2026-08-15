@@ -18,7 +18,6 @@ import {
 } from '@/app/actions/portal/rrhh'
 import { ChevronLeft, ChevronRight, Clock, Pencil, Plus, Power, Repeat, Search, Trash2, Users, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
-import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { cruzaMedianoche, posicionEnCiclo } from '@/lib/rrhh/turnos'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 
@@ -72,6 +71,31 @@ function horario(t: Turno): string {
   const i = formatHora(t.hora_inicio), f = formatHora(t.hora_fin)
   if (i && f) return `${i}–${f}${cruzaMedianoche(t) ? ' (+1 día)' : ''}`
   return i || f || 'Sin horario'
+}
+
+// ── Solape de horario (display) ──────────────────────────────────────────────
+// Una persona puede tener DOS turnos el mismo día (mañana y tarde): eso no es un
+// conflicto. Solo lo es cuando las bandas se PISAN en el reloj. Aritmética local en
+// minutos —el motor `turnos.ts` es solo-lectura respecto a nómina, no se toca.
+/** Minutos desde medianoche de 'HH:MM(:SS)'; `null` si no hay hora. */
+function minutosDia(h: string | null): number | null {
+  if (!h) return null
+  const [hh, mm] = h.split(':').map(Number)
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+  return hh * 60 + mm
+}
+/** Intervalo [inicio, fin) del turno en minutos; el que cruza medianoche extiende fin +24 h.
+ *  `null` si falta alguna hora: sin horario no hay solape que afirmar. */
+function intervaloTurno(t: Turno): [number, number] | null {
+  const i = minutosDia(t.hora_inicio), f = minutosDia(t.hora_fin)
+  if (i === null || f === null) return null
+  return [i, f > i ? f : f + 24 * 60]
+}
+/** ¿Dos turnos del mismo día se pisan en horario? Mañana+Tarde (sin solape) → false. */
+function turnosSolapan(a: Turno, b: Turno): boolean {
+  const ia = intervaloTurno(a), ib = intervaloTurno(b)
+  if (!ia || !ib) return false
+  return ia[0] < ib[1] && ib[0] < ia[1]
 }
 const nombreDe = (e: { nombre: string; apellidos: string | null }) =>
   [e.nombre, e.apellidos].filter(Boolean).join(' ')
@@ -749,10 +773,7 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
     <div className="view-container">
       <div className="page-header">
         <div>
-          <div className="page-title-ia">
-            <h1 className="page-title">Turnos</h1>
-            <IaTouchpoint tipo="rrhh" descripcion="una revisión de tu cuadrante" />
-          </div>
+          <h1 className="page-title">Turnos</h1>
           <p className="page-subtitle">
             Crea los <strong>turnos</strong> del personal —horario, días que se trabajan y equipo— y velos
             cubiertos en el calendario.
@@ -981,22 +1002,35 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
                       {e.cargo && <div className="text-sm-muted">{e.cargo}</div>}
                     </td>
                     {fechas.map(f => {
-                      const frs = franjasDe(e.empleado_id, f)
-                      const conflicto = frs.length > 1
-                      const fr = frs[0]
+                      // Varios turnos el mismo día (mañana + tarde) se apilan; el aviso rojo
+                      // solo salta si dos bandas se PISAN en horario, no por ser más de una.
+                      const frs = [...franjasDe(e.empleado_id, f)]
+                        .sort((a, b) => (minutosDia(a.hora_inicio) ?? 0) - (minutosDia(b.hora_inicio) ?? 0))
+                      const conflicto = frs.some((a, i) => frs.slice(i + 1).some(b => turnosSolapan(a, b)))
                       return (
                         <td key={f} className={`col-center turno-preview-cell${conflicto ? ' turno-preview-conflicto' : ''}`}
                           data-label={fechaCorta(f)}
-                          title={conflicto ? `Conflicto: ${frs.map(x => x.nombre).join(' y ')}` : fr?.nombre ?? (enPatron ? 'Descanso' : 'Sin turno')}>
-                          {fr ? (
-                            <span className="turno-preview-franja" style={fr.color ? ({ '--turno-color': fr.color } as React.CSSProperties) : undefined}>
-                              {fr.color && <span className="turno-dot" />}
-                              {fr.nombre}
+                          title={frs.length ? frs.map(x => x.nombre).join(' · ')
+                            : enPatron ? 'Descanso' : 'Sin turno'}>
+                          {frs.length ? (
+                            <span className="turno-preview-franjas">
+                              {frs.map(fr => (
+                                <span key={fr.turno_id} className="turno-preview-franja"
+                                  style={fr.color ? ({ '--turno-color': fr.color } as React.CSSProperties) : undefined}>
+                                  {fr.color && <span className="turno-dot" />}
+                                  {fr.nombre}
+                                </span>
+                              ))}
                             </span>
                           ) : enPatron ? (
                             <span className="turno-preview-libre">Libre</span>
                           ) : <span className="text-faint">·</span>}
-                          {conflicto && <span className="turno-preview-warn">!</span>}
+                          {conflicto && (
+                            <span className="turno-preview-warn">
+                              <FormHelp tone="warning" size={13} label="Turnos solapados"
+                                text={`Se solapan en horario: ${frs.map(x => x.nombre).join(' y ')}. Una persona no puede cubrir dos turnos a la vez; revísalo.`} />
+                            </span>
+                          )}
                         </td>
                       )
                     })}
