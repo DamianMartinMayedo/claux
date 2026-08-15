@@ -4,6 +4,7 @@ import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarReglas, type ReglasReserva } from '@/app/actions/portal/agenda-comun'
+import FormHelp from '@/components/portal/FormHelp'
 
 export default function ReglasReservaSection({
   reglas, mostrarMaxPersonas, iaActiva, compartidas,
@@ -53,20 +54,26 @@ export default function ReglasReservaSection({
       <form onSubmit={handleSubmit}>
         <div className="ter-form-grid res-conf-pad-top">
           <div className="input-group ter-col-span-2">
-            <label>Antelación mínima (horas)</label>
+            <div className="form-label-with-help">
+              <label>Antelación mínima (horas)</label>
+              <FormHelp text={`0 = sin mínimo.${compartidas ? ' Vale para Reservas y Citas.' : ''}`} label="Qué es la antelación mínima" />
+            </div>
             <input className="input" name="antelacion_min_horas" type="number" min="0" defaultValue={reglas.antelacion_min_horas} />
-            <span className="input-hint">0 = sin mínimo.{compartidas ? ' Vale para Reservas y Citas.' : ''}</span>
           </div>
           <div className="input-group ter-col-span-2">
-            <label>Ventana máxima (días)</label>
+            <div className="form-label-with-help">
+              <label>Ventana máxima (días)</label>
+              <FormHelp text={`0 = sin límite.${compartidas ? ' Vale para Reservas y Citas.' : ''}`} label="Qué es la ventana máxima" />
+            </div>
             <input className="input" name="ventana_max_dias" type="number" min="0" defaultValue={reglas.ventana_max_dias} />
-            <span className="input-hint">0 = sin límite.{compartidas ? ' Vale para Reservas y Citas.' : ''}</span>
           </div>
           {mostrarMaxPersonas ? (
             <div className="input-group ter-col-span-2">
-              <label>Máx. personas por reserva</label>
+              <div className="form-label-with-help">
+                <label>Máx. personas por reserva</label>
+                <FormHelp text="0 = sin límite." label="Qué es el máximo de personas" />
+              </div>
               <input className="input" name="max_personas" type="number" min="0" defaultValue={reglas.max_personas} />
-              <span className="input-hint">0 = sin límite.</span>
             </div>
           ) : (
             // Preserva el valor (las citas son de 1 persona; no se edita aquí)

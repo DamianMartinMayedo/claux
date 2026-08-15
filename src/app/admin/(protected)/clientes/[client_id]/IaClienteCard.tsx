@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { setCupoClienteIa } from '@/app/actions/ia-admin'
+import FormHelp from '@/components/portal/FormHelp'
 
 interface Props {
   clientId: string
@@ -55,11 +56,13 @@ export default function IaClienteCard({ clientId, cupoGlobal, cupoOverride, conv
 
       <form onSubmit={guardar} className="config-form mt-4">
         <div className="input-group">
-          <label htmlFor="cupo-cli">Cupo propio de este cliente (conversaciones/mes)</label>
+          <div className="form-label-with-help">
+            <label htmlFor="cupo-cli">Cupo propio de este cliente (conversaciones/mes)</label>
+            <FormHelp text="Déjalo vacío para usar el cupo global. Súbelo si el cliente paga consumo extra de IA." label="Cómo funciona el cupo propio" />
+          </div>
           <input id="cupo-cli" type="number" min="0" step="1" className="input"
                  value={valor} onChange={e => setValor(e.target.value)}
                  placeholder={`Global: ${cupoGlobal}`} />
-          <span className="input-hint">Déjalo vacío para usar el cupo global. Súbelo si el cliente paga consumo extra de IA.</span>
         </div>
         <button type="submit" className="btn btn-primary btn-sm" disabled={isPending}>
           {isPending ? <><span className="spinner" /> Guardando...</> : 'Guardar cupo'}

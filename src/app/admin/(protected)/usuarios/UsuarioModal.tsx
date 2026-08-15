@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import {
@@ -89,11 +90,13 @@ export default function UsuarioModal({
             </div>
 
             <div className="input-group">
-              <label htmlFor="u-email">Correo <span className="required">*</span></label>
+              <div className="form-label-with-help">
+                <label htmlFor="u-email">Correo <span className="required">*</span></label>
+                {editando && <FormHelp text="El correo no se puede cambiar." label="Por qué no se puede cambiar el correo" />}
+              </div>
               <input id="u-email" type="email" className="input" required value={email}
                 disabled={editando}
                 onChange={e => setEmail(e.target.value)} placeholder="persona@claux.es" />
-              {editando && <span className="input-hint">El correo no se puede cambiar.</span>}
             </div>
 
             <div className="seg-field">
@@ -109,9 +112,16 @@ export default function UsuarioModal({
             </div>
 
             <div className="input-group">
-              <label htmlFor="u-pass">
-                {editando ? 'Nueva contraseña (opcional)' : 'Contraseña'} {!editando && <span className="required">*</span>}
-              </label>
+              <div className="form-label-with-help">
+                <label htmlFor="u-pass">
+                  {editando ? 'Nueva contraseña (opcional)' : 'Contraseña'} {!editando && <span className="required">*</span>}
+                </label>
+                <FormHelp
+                  text={editando
+                    ? 'Si la rellenas, se regenera la contraseña de acceso de este usuario.'
+                    : 'Se la comunicas al vendedor; podrá cambiarla luego.'}
+                  label="Información sobre la contraseña" />
+              </div>
               <div className="grid-cols-2">
                 <input id="u-pass" type="text" className="input" value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -120,11 +130,6 @@ export default function UsuarioModal({
                   Generar
                 </button>
               </div>
-              <span className="input-hint">
-                {editando
-                  ? 'Si la rellenas, se regenera la contraseña de acceso de este usuario.'
-                  : 'Se la comunicas al vendedor; podrá cambiarla luego.'}
-              </span>
             </div>
 
             {editando && (

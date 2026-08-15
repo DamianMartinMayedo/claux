@@ -9,6 +9,7 @@ import type { ContextoDocumentoData, FacturaDetalleData } from '@/app/actions/po
 import { DocumentoLineasEditor }             from '../../../_DocumentoLineasEditor'
 import { DescuentoStock }                    from '../../../_DescuentoStock'
 import { MonedaDocumento }                   from '../../../_MonedaDocumento'
+import FormHelp                             from '@/components/portal/FormHelp'
 import {
   CONDICION_PAGO_OPTIONS,
   calcularFechaVencimiento,
@@ -144,11 +145,13 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
           <span className="ven-form-section-title">Datos del documento</span>
           <div className="ven-form-grid">
             <div className="input-group">
-              <label>Empresa</label>
+              <div className="form-label-with-help">
+                <label>Empresa</label>
+                <FormHelp text="La empresa no se puede cambiar." label="Por qué no se puede cambiar la empresa" />
+              </div>
               <div className="input input-static">
                 {data.empresa.letra_facturacion} · {data.empresa.nombre}
               </div>
-              <span className="input-hint">La empresa no se puede cambiar.</span>
             </div>
 
             <div className="input-group">
@@ -186,11 +189,13 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
             </div>
 
             <div className="input-group">
-              <label>Vencimiento</label>
+              <div className="form-label-with-help">
+                <label>Vencimiento</label>
+                <FormHelp text="Se calcula desde la condición de pago." label="Cómo se calcula el vencimiento" />
+              </div>
               <input className="input" type="date" value={fecha_vencimiento}
                 min={fecha_emision}
                 onChange={e => setFechaVencimiento(e.target.value)} />
-              <span className="input-hint">Se calcula desde la condición de pago.</span>
               {fecha_vencimiento && fecha_vencimiento < fecha_emision && (
                 <span className="input-hint-warning">
                   El vencimiento es anterior a la emisión: la factura quedaría vencida al guardar.

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Trash2, Activity, Loader2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import FormHelp from '@/components/portal/FormHelp'
 import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa, probarModeloIa, type PruebaModeloUI } from '@/app/actions/ia-admin'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -113,39 +114,49 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         <form onSubmit={guardarGlobal} className="config-form">
           <div className="grid-cols-2">
             <div className="input-group">
-              <label htmlFor="ia-nombre">Nombre del agente</label>
+              <div className="form-label-with-help">
+                <label htmlFor="ia-nombre">Nombre del agente</label>
+                <FormHelp text="Lo ven todos los clientes. El cliente no puede cambiarlo." label="Quién ve el nombre del agente" />
+              </div>
               <input id="ia-nombre" className="input" value={nombre} onChange={e => setNombre(e.target.value)}
                      placeholder="Claux" maxLength={40} />
-              <span className="input-hint">Lo ven todos los clientes. El cliente no puede cambiarlo.</span>
             </div>
             <div className="input-group">
-              <label htmlFor="ia-tono">Tono</label>
+              <div className="form-label-with-help">
+                <label htmlFor="ia-tono">Tono</label>
+                <FormHelp text="Cómo se comunica el agente en las respuestas." label="Qué es el tono" />
+              </div>
               <input id="ia-tono" className="input" value={ton} onChange={e => setTon(e.target.value)}
                      placeholder="cercano y directo, como un asesor de confianza" maxLength={80} />
-              <span className="input-hint">Cómo se comunica el agente en las respuestas.</span>
             </div>
           </div>
           <div className="grid-cols-2">
             <div className="input-group">
-              <label htmlFor="ia-prin">Modelo principal</label>
+              <div className="form-label-with-help">
+                <label htmlFor="ia-prin">Modelo principal</label>
+                <FormHelp text="El que usan los clientes por defecto." label="Qué es el modelo principal" />
+              </div>
               <select id="ia-prin" className="input" value={prin} onChange={e => setPrin(e.target.value)}>
                 {activos.map(m => <option key={m.id} value={m.id}>{m.nombre}{m.gratis ? '' : ' · pago'}</option>)}
               </select>
-              <span className="input-hint">El que usan los clientes por defecto.</span>
             </div>
             <div className="input-group">
-              <label htmlFor="ia-fb">Respaldo gratis (al superar el cupo)</label>
+              <div className="form-label-with-help">
+                <label htmlFor="ia-fb">Respaldo gratis (al superar el cupo)</label>
+                <FormHelp text="Si el principal es de pago, los clientes que superen su cupo del mes pasan a este." label="Cuándo se usa el respaldo" />
+              </div>
               <select id="ia-fb" className="input" value={fb} onChange={e => setFb(e.target.value)}>
                 {activosGratis.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
               </select>
-              <span className="input-hint">Si el principal es de pago, los clientes que superen su cupo del mes pasan a este.</span>
             </div>
           </div>
           <div className="input-group">
-            <label htmlFor="ia-cupo">Cupo global (conversaciones/mes)</label>
+            <div className="form-label-with-help">
+              <label htmlFor="ia-cupo">Cupo global (conversaciones/mes)</label>
+              <FormHelp text="Límite por defecto para cada cliente. Se puede subir por cliente en su ficha." label="Qué es el cupo global" />
+            </div>
             <input id="ia-cupo" type="number" min="1" step="1" className="input"
                    value={cupo} onChange={e => setCupo(e.target.value)} />
-            <span className="input-hint">Límite por defecto para cada cliente. Se puede subir por cliente en su ficha.</span>
           </div>
           <button type="submit" className="btn btn-primary" disabled={isPending}>
             {isPending ? <><span className="spinner" /> Guardando...</> : 'Guardar configuración'}

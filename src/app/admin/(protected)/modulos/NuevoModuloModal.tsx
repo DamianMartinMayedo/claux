@@ -5,6 +5,7 @@ import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { crearModulo } from '@/app/actions/modulos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 
@@ -41,9 +42,11 @@ export default function NuevoModuloModal() {
           <div className="modal-body">
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>Clave <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Clave <span className="required">*</span></label>
+                  <FormHelp text="Identificador único, solo minúsculas y _" label="Información sobre la clave" />
+                </div>
                 <input name="clave" className="input" required placeholder="ej: fidelizacion" pattern="[a-z][a-z0-9_]*" />
-                <span className="input-hint">Identificador único, solo minúsculas y _</span>
               </div>
               <div className="input-group">
                 <label>Tipo <span className="required">*</span></label>

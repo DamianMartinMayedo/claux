@@ -6,6 +6,7 @@ import { fmtFechaEs } from '@/lib/date-utils'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
+import FormHelp from '@/components/portal/FormHelp'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
 import { puntosVentaConMoneda } from '@/app/actions/portal/caja'
 import {
@@ -134,7 +135,10 @@ function MonedaModal({
 
               {(!esEdicion && catalogo === 'OTRA') && (
                 <div className="input-group mon-full">
-                  <label>Código <span className="required">*</span></label>
+                  <div className="form-label-with-help">
+                    <label>Código <span className="required">*</span></label>
+                    <FormHelp text="Identificador único, sin espacios. Ej: CUPB para tasa oficial bancaria." label="Qué es el código" />
+                  </div>
                   <input
                     className="input input-uppercase"
                     name="codigo"
@@ -144,7 +148,6 @@ function MonedaModal({
                     maxLength={10}
                     required
                   />
-                  <span className="input-hint">Identificador único, sin espacios. Ej: CUPB para tasa oficial bancaria.</span>
                 </div>
               )}
 
@@ -288,7 +291,10 @@ function ParModal({
 
             {fuente === 'MANUAL' ? (
               <div className="input-group">
-                <label>Tasa <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Tasa <span className="required">*</span></label>
+                  <FormHelp text={`Unidades de ${par.destino} por cada unidad de ${par.origen}.`} label="Cómo se expresa la tasa" />
+                </div>
                 <input
                   className="input"
                   type="number"
@@ -299,9 +305,6 @@ function ParModal({
                   placeholder="Ej: 531.00"
                   required
                 />
-                <span className="input-hint">
-                  Unidades de <strong>{par.destino}</strong> por cada unidad de <strong>{par.origen}</strong>
-                </span>
               </div>
             ) : (
               <div className="par-auto-info">

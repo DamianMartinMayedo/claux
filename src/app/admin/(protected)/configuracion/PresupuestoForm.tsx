@@ -19,6 +19,7 @@ import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarParametrosPresupuesto } from '@/app/actions/presupuesto-parametros'
 import { horasDeLinea } from '@/lib/presupuesto/calculo'
 import { AJUSTES_PRESUPUESTO, type LineaParametro } from '@/lib/presupuesto/config'
+import FormHelp from '@/components/portal/FormHelp'
 
 type Escalares = Record<string, string>
 type LineaEdit = Pick<LineaParametro,
@@ -139,13 +140,12 @@ export default function PresupuestoForm({
   return (
     <form onSubmit={handleSubmit} className="config-form">
       <div className="input-group">
-        <label htmlFor="pp-tarifa">{AJUSTES_PRESUPUESTO.tarifaHora.label}</label>
+        <div className="form-label-with-help">
+          <label htmlFor="pp-tarifa">{AJUSTES_PRESUPUESTO.tarifaHora.label}</label>
+          <FormHelp text="Todo se cotiza en horas y esta tarifa las convierte en dinero. En cada presupuesto se puede pactar otra para ese cliente." label="Cómo se usa la tarifa por hora" />
+        </div>
         <input id="pp-tarifa" type="number" min="0" step="any" className="input"
           value={escalares.tarifaHora} onChange={e => setEscalares(p => ({ ...p, tarifaHora: e.target.value }))} />
-        <span className="input-hint">
-          Todo se cotiza en horas y esta tarifa las convierte en dinero. En cada presupuesto se
-          puede pactar otra para ese cliente.
-        </span>
       </div>
 
       <div>

@@ -313,20 +313,22 @@ function TurnoUnificadoModal({
               </div>
 
               <div className="input-group ter-col-full">
-                <label className="filtro-toggle">
-                  <input type="checkbox" className="row-check" checked={modo === 'avanzado'}
-                    onChange={e => setModo(e.target.checked ? 'avanzado' : 'simple')} />
-                  Rotación avanzada
-                </label>
-                <span className="input-hint">
-                  Para turnos que no son una semana fija: ciclos de dos o cuatro semanas, o «trabaja N días
-                  seguidos y descansa M».
-                </span>
+                <div className="form-label-with-help">
+                  <label className="filtro-toggle">
+                    <input type="checkbox" className="row-check" checked={modo === 'avanzado'}
+                      onChange={e => setModo(e.target.checked ? 'avanzado' : 'simple')} />
+                    Rotación avanzada
+                  </label>
+                  <FormHelp text="Para turnos que no son una semana fija: ciclos de dos o cuatro semanas, o «trabaja N días seguidos y descansa M»." label="Cuándo usar la rotación avanzada" />
+                </div>
               </div>
 
               {modo === 'simple' ? (
                 <div className="input-group ter-col-full">
-                  <label>Días de la semana</label>
+                  <div className="form-label-with-help">
+                    <label>Días de la semana</label>
+                    <FormHelp text="Marca los días que se trabaja este turno; el resto son descanso." label="Cómo marcar los días" />
+                  </div>
                   <div className="turno-dias-chips">
                     {DIAS.map((d, i) => {
                       const on = dias.has(i)
@@ -337,7 +339,6 @@ function TurnoUnificadoModal({
                       )
                     })}
                   </div>
-                  <span className="input-hint">Marca los días que se trabaja este turno; el resto son descanso.</span>
                 </div>
               ) : (
                 <>

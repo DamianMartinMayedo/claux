@@ -30,6 +30,7 @@ import {
 import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -528,24 +529,30 @@ function FranjaModal({
                   defaultValue={franja?.nombre ?? ''} placeholder="Almuerzo, Comida…" />
               </div>
               <div className="input-group ter-col-span-3">
-                <label>Capacidad <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Capacidad <span className="required">*</span></label>
+                  <FormHelp text="Cuánta gente cabe a la vez." label="Qué es la capacidad" />
+                </div>
                 <input className="input" name="capacidad" type="number" min="1" required
                   defaultValue={franja?.capacidad ?? 1} />
-                <span className="input-hint">Cuánta gente cabe a la vez.</span>
               </div>
               <div className="input-group ter-col-span-3">
-                <label>Máx. reservas</label>
-                <input className="input" name="max_reservas" type="number" min="0"
-                  defaultValue={franja?.max_reservas ?? 0} />
                 {/* La confusión natural es creer que esto es lo mismo que la capacidad.
                     No lo es: veinte parejas llenan un salón de 40 plazas. */}
-                <span className="input-hint">Cuántas mesas o grupos puedes atender a la vez. 0 = sin tope.</span>
+                <div className="form-label-with-help">
+                  <label>Máx. reservas</label>
+                  <FormHelp text="Cuántas mesas o grupos puedes atender a la vez. 0 = sin tope." label="Qué es el máximo de reservas" />
+                </div>
+                <input className="input" name="max_reservas" type="number" min="0"
+                  defaultValue={franja?.max_reservas ?? 0} />
               </div>
               <div className="input-group ter-col-span-3">
-                <label>Duración (min) <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Duración (min) <span className="required">*</span></label>
+                  <FormHelp text="Tiempo que ocupa cada reserva (mín. 15 min)." label="Qué es la duración" />
+                </div>
                 <input className="input" name="duracion_minutos" type="number" min="15" required
                   defaultValue={franja?.duracion_minutos ?? 60} />
-                <span className="input-hint">Tiempo que ocupa cada reserva (mín. 15 min).</span>
               </div>
               <div className="input-group ter-col-span-3">
                 <label>Hora inicio <span className="required">*</span></label>
@@ -562,7 +569,10 @@ function FranjaModal({
                 </select>
               </div>
               <div className="input-group ter-col-full">
-                <label>Días</label>
+                <div className="form-label-with-help">
+                  <label>Días</label>
+                  <FormHelp text="Sin selección = todos los días." label="Cómo funcionan los días" />
+                </div>
                 <div className="res-dias-row">
                   {[1, 2, 3, 4, 5, 6, 7].map(d => (
                     <label key={d} className="res-dias-item">
@@ -572,16 +582,17 @@ function FranjaModal({
                     </label>
                   ))}
                 </div>
-                <span className="input-hint">Sin selección = todos los días.</span>
               </div>
               {/* RES-1: sin esta casilla, dejar de ofrecer un turno solo se podía hacer
                   ELIMINÁNDOLO — y eliminar está bloqueado si tiene reservas futuras. */}
               <div className="input-group ter-col-full">
-                <label className="res-dias-item">
-                  <input type="checkbox" name="activa" defaultChecked={franja ? franja.activa : true} />
-                  Turno activo
-                </label>
-                <span className="input-hint">Desactivado deja de ofrecerse en la web y en el bot, pero conserva sus reservas.</span>
+                <div className="form-label-with-help">
+                  <label className="res-dias-item">
+                    <input type="checkbox" name="activa" defaultChecked={franja ? franja.activa : true} />
+                    Turno activo
+                  </label>
+                  <FormHelp text="Desactivado deja de ofrecerse en la web y en el bot, pero conserva sus reservas." label="Qué hace desactivar el turno" />
+                </div>
               </div>
             </div>
           </div>
@@ -1254,14 +1265,16 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           <form onSubmit={handleSlugSubmit}>
             <div className="ter-form-grid res-conf-pad-top">
               <div className="input-group ter-col-full">
-                <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
+                <div className="form-label-with-help">
+                  <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
+                  <FormHelp text="Solo letras, números y guiones." label="Qué puede llevar el enlace" />
+                </div>
                 <div className="res-slug-wrap">
                   <span className="res-slug-prefix">{host}/</span>
                   <input className="input" name="slug" placeholder="tu-negocio"
                     value={slugForm} onChange={e => setSlugForm(e.target.value)} />
                   <span className="res-slug-suffix">/reservar</span>
                 </div>
-                <span className="input-hint">Solo letras, números y guiones.</span>
               </div>
             </div>
             <div className="res-form-submit res-actions-row">

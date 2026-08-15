@@ -10,6 +10,7 @@ import { hoyEnTz } from '@/lib/fecha-tz'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -343,11 +344,13 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
                     cambiar de empresa lo borra — se rellena un campo para deshacerlo. */}
                 {data.empresas.length > 1 && (
                   <div className="input-group ter-col-span-3">
-                    <label>Empresa <span className="required">*</span></label>
+                    <div className="form-label-with-help">
+                      <label>Empresa <span className="required">*</span></label>
+                      <FormHelp text="Los clientes y las facturas son de esta empresa." label="A qué empresa pertenece" />
+                    </div>
                     <select className="input" value={empresaId} onChange={e => onEmpresaChange(e.target.value)} required>
                       {data.empresas.map(em => <option key={em.empresa_id} value={em.empresa_id}>{em.nombre}</option>)}
                     </select>
-                    <span className="input-hint">Los clientes y las facturas son de esta empresa.</span>
                   </div>
                 )}
                 {/* Con la lista de clientes marcables, media fila no da: la caja alta al
@@ -494,12 +497,14 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
               <span className="ter-form-section-title">Cobro</span>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-2">
-                  <label htmlFor="sus-moneda">Moneda <span className="required">*</span></label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="sus-moneda">Moneda <span className="required">*</span></label>
+                    <FormHelp text="Una sola para todo el acuerdo." label="Información sobre la moneda" />
+                  </div>
                   <select className="input" id="sus-moneda" value={moneda}
                     onChange={e => onMonedaChange(e.target.value)} required>
                     {data.monedas.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
-                  <span className="input-hint">Una sola para todo el acuerdo.</span>
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label htmlFor="sus-periodicidad">Cada cuánto se cobra <span className="required">*</span></label>
@@ -545,10 +550,12 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
               <span className="ter-form-section-title">Vigencia</span>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-2">
-                  <label htmlFor="sus-inicio">Inicio <span className="required">*</span></label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="sus-inicio">Inicio <span className="required">*</span></label>
+                    <FormHelp text="Desde cuándo tiene contratado el servicio." label="Información sobre el inicio" />
+                  </div>
                   <input className="input" id="sus-inicio" type="date" value={fechaInicio}
                     onChange={e => setFechaInicio(e.target.value)} required />
-                  <span className="input-hint">Desde cuándo tiene contratado el servicio.</span>
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label htmlFor="sus-proximo">Próximo cobro</label>
@@ -580,10 +587,12 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
                   )}
                 </div>
                 <div className="input-group ter-col-span-2">
-                  <label htmlFor="sus-fin">Fin (opcional)</label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="sus-fin">Fin (opcional)</label>
+                    <FormHelp text="Vacío = indefinida: se cobra hasta que la canceles." label="Información sobre el fin" />
+                  </div>
                   <input className="input" id="sus-fin" type="date" value={fechaFin}
                     onChange={e => setFechaFin(e.target.value)} />
-                  <span className="input-hint">Vacío = indefinida: se cobra hasta que la canceles.</span>
                 </div>
                 {/* La casilla solo pinta algo si HAY fin: sin fecha de fin no hay nada que
                     renovar, y ahí la casilla marcada era ruido que no significaba nada. */}
@@ -1656,7 +1665,10 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
           body={
             <>
               <div className="input-group">
-                <label htmlFor="sus-subida">Cuánto sube</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="sus-subida">Cuánto sube</label>
+                  <FormHelp text="Se aplica al precio mensual de cada servicio. El descuento pactado se mantiene tal cual." label="Cómo se aplica la subida" />
+                </div>
                 <div className="sus-dto-row">
                   <input className="input" id="sus-subida" type="text" inputMode="decimal"
                     value={subidaValor} onChange={e => setSubidaValor(e.target.value)} placeholder="0" />
@@ -1666,10 +1678,6 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                     <option value="IMPORTE">importe</option>
                   </select>
                 </div>
-                <span className="input-hint">
-                  Se aplica al precio mensual de cada servicio. El descuento pactado se
-                  mantiene tal cual.
-                </span>
               </div>
               <p className="mt-2 text-sm-muted">
                 No toca los borradores ya generados: la subida vale desde el siguiente

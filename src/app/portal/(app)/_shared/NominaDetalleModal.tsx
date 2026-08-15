@@ -9,7 +9,8 @@ import {
 } from '@/app/actions/portal/rrhh'
 import { revisarNominaIa } from '@/app/actions/portal/ia'
 import { useIa } from '@/components/portal/ia/IaContext'
-import { Sparkles, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
 export function formatMonto(n: number): string {
@@ -179,8 +180,8 @@ function RevisionIa({ nominaId }: { nominaId: string }) {
   return (
     <div className="nom-revision-ia">
       {texto === null && !pending && (
-        <button type="button" className="btn btn-secondary btn-sm" onClick={revisar}>
-          <Sparkles size={14} strokeWidth={2} /> Que {nombreAgente} la repase antes
+        <button type="button" className="btn btn-ia btn-sm" onClick={revisar}>
+          <IaSparkle size={14} /> Que {nombreAgente} la repase antes
         </button>
       )}
       {pending && (

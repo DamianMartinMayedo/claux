@@ -2,6 +2,7 @@
 
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
@@ -79,14 +80,16 @@ function CategoriaModal({ categoria, modo, onClose, onSaved }: {
                 defaultValue={categoria?.nombre ?? ''} placeholder="Ej: Electrónicos, Servicios profesionales…" />
             </div>
             <div className="input-group">
-              <label htmlFor="cat-tipo">Se usa en <span className="required">*</span></label>
+              <div className="form-label-with-help">
+                <label htmlFor="cat-tipo">Se usa en <span className="required">*</span></label>
+                <FormHelp text="Dónde aparece al crear un artículo." label="Dónde se usa la categoría" />
+              </div>
               <select className="input" id="cat-tipo" name="tipo" value={tipo}
                 onChange={e => setTipo(e.target.value as TipoCategoria)}>
                 <option value="PRODUCTO">Solo productos físicos</option>
                 <option value="SERVICIO">Solo servicios</option>
                 <option value="AMBAS">Productos y servicios</option>
               </select>
-              <span className="input-hint">Dónde aparece al crear un artículo.</span>
             </div>
             <div className="input-group">
               <label>Descripción</label>

@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import VentasTabs from '@/components/admin/VentasTabs'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -439,11 +440,13 @@ export default function PresupuestosView({
                   )}
 
                   <div className="input-group">
-                    <label htmlFor="horas-reales">Horas reales de la instalación</label>
+                    <div className="form-label-with-help">
+                      <label htmlFor="horas-reales">Horas reales de la instalación</label>
+                      <FormHelp text="Permite comparar estimado vs. real para afinar tarifas/límites." label="Para qué sirven las horas reales" />
+                    </div>
                     <input id="horas-reales" type="number" min="0" step="0.5" className="input"
                       value={horasReales} onChange={e => setHorasReales(e.target.value)}
                       placeholder="Completar al cerrar la instalación" />
-                    <span className="input-hint">Permite comparar estimado vs. real para afinar tarifas/límites.</span>
                   </div>
                 </div>
                 <div className="modal-footer">

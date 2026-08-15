@@ -12,6 +12,7 @@ import {
 } from '@/app/actions/soporte'
 import { Eye, Mail, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import Tabs from '@/components/Tabs'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 
@@ -200,12 +201,14 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
             {faqEdit && <input type="hidden" name="id" value={faqEdit.id} />}
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>Módulo</label>
+                <div className="form-label-with-help">
+                  <label>Módulo</label>
+                  <FormHelp text="El cliente solo verá esta pregunta si tiene el módulo contratado." label="Quién ve la pregunta" />
+                </div>
                 <select name="modulo_clave" className="input" defaultValue={faqEdit?.modulo_clave ?? 'general'}>
                   <option value="general">General</option>
                   {catalogo.map(c => <option key={c.clave} value={c.clave}>{c.nombre}</option>)}
                 </select>
-                <span className="input-hint">El cliente solo verá esta pregunta si tiene el módulo contratado.</span>
               </div>
               <div className="input-group">
                 <label>Orden</label>

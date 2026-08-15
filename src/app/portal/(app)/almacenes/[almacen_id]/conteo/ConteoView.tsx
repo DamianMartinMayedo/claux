@@ -18,7 +18,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Check, Save, Sparkles, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Check, Save, Trash2, Upload } from 'lucide-react'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
 import { toastError, toastSuccess, toastWarning, toastLoading } from '@/app/contexts/ToastContext'
 import {
   guardarAvanceConteo, aplicarConteo, anularConteo, guardarCabeceraConteo,
@@ -827,8 +828,8 @@ export default function ConteoView({ data }: { data: ConteoDetalle }) {
             </label>
           )}
           {tieneIa && (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDictando(v => !v)}>
-              <Sparkles size={14} strokeWidth={2} /> Dictar el conteo
+            <button type="button" className="btn btn-ia btn-sm" onClick={() => setDictando(v => !v)}>
+              <IaSparkle size={14} /> Dictar el conteo
             </button>
           )}
           {/* La hoja en blanco, en su sitio: junto a lo que se usa MIENTRAS se cuenta.

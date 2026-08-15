@@ -7,6 +7,7 @@ import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import Tabs from '@/components/Tabs'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
@@ -184,12 +185,12 @@ function CuentaModal({
                   )}
                 </div>
                 <div className="input-group ter-col-span-3">
-                  <label>Moneda <span className="required">*</span></label>
+                  <div className="form-label-with-help">
+                    <label>Moneda <span className="required">*</span></label>
+                    {isEdit && <FormHelp text="La moneda no se puede cambiar tras crear la cuenta." label="Por qué no se puede cambiar la moneda" />}
+                  </div>
                   {isEdit ? (
-                    <>
-                      <input className="input input-static" readOnly value={cuenta!.moneda} />
-                      <span className="input-hint">La moneda no se puede cambiar tras crear la cuenta.</span>
-                    </>
+                    <input className="input input-static" readOnly value={cuenta!.moneda} />
                   ) : monedas.length === 0 ? (
                     <>
                       <input className="input input-static" readOnly value="Sin monedas activas" />
@@ -203,10 +204,12 @@ function CuentaModal({
                   )}
                 </div>
                 <div className="input-group ter-col-span-3">
-                  <label>Saldo inicial</label>
+                  <div className="form-label-with-help">
+                    <label>Saldo inicial</label>
+                    <FormHelp text="Saldo del que parte la cuenta hoy." label="Qué es el saldo inicial" />
+                  </div>
                   <input className="input" name="saldo_inicial" type="number" step="any"
                     defaultValue={cuenta?.saldo_inicial ?? 0} placeholder="0.00" />
-                  <span className="input-hint">Saldo del que parte la cuenta hoy.</span>
                 </div>
                 <div className="input-group ter-col-full">
                   <label>Notas</label>
@@ -433,7 +436,10 @@ function MovimientoModal({
               {/* Saldar un pendiente ya existente (evita duplicar el gasto/cobro) */}
               {listaPendientes.length > 0 && (
                 <div className="input-group ter-col-full">
-                  <label>{esEgreso ? 'Pagar un pendiente' : 'Cobrar un pendiente'}</label>
+                  <div className="form-label-with-help">
+                    <label>{esEgreso ? 'Pagar un pendiente' : 'Cobrar un pendiente'}</label>
+                    <FormHelp text="Los de la misma moneda aparecen primero. Elige uno para evitar duplicados." label="Cómo elegir el pendiente" />
+                  </div>
                   <select className="input" value={pendienteEfectivo} onChange={e => elegirPendiente(e.target.value)}>
                     <option value="">— Ninguno (registrar {labelRegistro} nuevo) —</option>
                     {listaPendientes.map(d => (
@@ -445,9 +451,6 @@ function MovimientoModal({
                       </option>
                     ))}
                   </select>
-                  <span className="input-hint">
-                    Los de la misma moneda aparecen primero. Elige uno para evitar duplicados.
-                  </span>
                   {cambiaMoneda && pendienteSel && cuentaSel && (
                     <span className="input-hint-warning">
                       Monedas distintas: el documento está en {pendienteSel.moneda} y la caja en {cuentaSel.moneda}. Se aplicará la tasa de cambio.
@@ -864,26 +867,32 @@ function TransferenciaModal({
                     </span>
                   </div>
                   <div className="input-group ter-col-span-3">
-                    <label>Monto recibido ({cuentaDestino?.moneda})</label>
+                    <div className="form-label-with-help">
+                      <label>Monto recibido ({cuentaDestino?.moneda})</label>
+                      <FormHelp text="Editable si la tasa real difiere." label="Cuándo editar el monto recibido" />
+                    </div>
                     <input className="input" type="number" min="0" step="any"
                       placeholder="0.00"
                       value={montoRecibidoVista} onChange={e => handleMontoRecibidoChange(e.target.value)} />
-                    <span className="input-hint">Editable si la tasa real difiere</span>
                   </div>
                 </>
               )}
 
               <div className="input-group ter-col-span-3">
-                <label>Fee de envío {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''}</label>
+                <div className="form-label-with-help">
+                  <label>Fee de envío {cuentaOrigen ? `(${cuentaOrigen.moneda})` : ''}</label>
+                  <FormHelp text="Comisión por enviar (opcional)." label="Qué es el fee de envío" />
+                </div>
                 <input className="input" name="fee_envio" type="number" min="0" step="any"
                   placeholder="0.00" value={feeEnvio} onChange={e => setFeeEnvio(e.target.value)} />
-                <span className="input-hint">Comisión por enviar (opcional)</span>
               </div>
               <div className="input-group ter-col-span-3">
-                <label>Fee de recepción {cuentaDestino ? `(${cuentaDestino.moneda})` : ''}</label>
+                <div className="form-label-with-help">
+                  <label>Fee de recepción {cuentaDestino ? `(${cuentaDestino.moneda})` : ''}</label>
+                  <FormHelp text="Comisión por recibir (opcional)." label="Qué es el fee de recepción" />
+                </div>
                 <input className="input" name="fee_recibo" type="number" min="0" step="any"
                   placeholder="0.00" value={feeRecibo} onChange={e => setFeeRecibo(e.target.value)} />
-                <span className="input-hint">Comisión por recibir (opcional)</span>
               </div>
 
               <div className="input-group ter-col-full">

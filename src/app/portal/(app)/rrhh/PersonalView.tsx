@@ -24,6 +24,7 @@ import {
 import { Copy, Eye, Info, Pencil, Plus, RotateCcw, Trash2, UserMinus, Users, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import FormHelp                        from '@/components/portal/FormHelp'
 import BulkBar                         from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
@@ -186,16 +187,20 @@ export function EmpleadoModal({
                 <input className="input" name="documento" defaultValue={empleado?.documento ?? ''} placeholder="Carné de identidad" />
               </div>
               <div className="input-group ter-col-span-2">
-                <label>Caduca el</label>
+                <div className="form-label-with-help">
+                  <label>Caduca el</label>
+                  <FormHelp text="Te avisamos antes de que venza." label="Qué pasa con la caducidad" />
+                </div>
                 <input className="input" name="documento_vencimiento" type="date"
                   defaultValue={empleado?.documento_vencimiento?.split('T')[0] ?? ''} />
-                <span className="input-hint">Te avisamos antes de que venza.</span>
               </div>
               <div className="input-group ter-col-span-2">
-                <label>Fecha de nacimiento</label>
+                <div className="form-label-with-help">
+                  <label>Fecha de nacimiento</label>
+                  <FormHelp text="Para avisarte de su cumpleaños." label="Para qué se usa la fecha de nacimiento" />
+                </div>
                 <input className="input" name="fecha_nacimiento" type="date"
                   defaultValue={empleado?.fecha_nacimiento?.split('T')[0] ?? ''} />
-                <span className="input-hint">Para avisarte de su cumpleaños.</span>
               </div>
               <div className="input-group ter-col-span-2">
                 <label>Teléfono</label>
@@ -237,11 +242,13 @@ export function EmpleadoModal({
                   entraba y desaparecía. No es la rejilla: eso se dice aquí para que no
                   se confundan dos cosas que se llaman igual. */}
               <div className="input-group ter-col-span-2">
-                <label>Turno habitual</label>
+                <div className="form-label-with-help">
+                  <label>Turno habitual</label>
+                  <FormHelp text="Etiqueta suya. La semana se planifica en Turnos." label="Qué es el turno habitual" />
+                </div>
                 <input className="input" name="turno" list="rrhh-turnos"
                   defaultValue={empleado?.turno ?? ''} placeholder="Mañana, tarde…" />
                 <datalist id="rrhh-turnos">{data.turnos.map(t => <option key={t} value={t} />)}</datalist>
-                <span className="input-hint">Etiqueta suya. La semana se planifica en Turnos.</span>
               </div>
 
               <div className="input-group ter-col-span-2">
@@ -299,15 +306,20 @@ export function EmpleadoModal({
               {esCuba && (
                 <>
                   <div className="input-group ter-col-span-3">
-                    <label htmlFor="emp-dias">Días laborables</label>
+                    <div className="form-label-with-help">
+                      <label htmlFor="emp-dias">Días laborables</label>
+                      <FormHelp text={`En blanco, los ${diasEmpresa} de ${nombreEmpresa}.`} label="Información sobre los días laborables" />
+                    </div>
                     <input className="input" id="emp-dias" name="dias_laborables" type="number"
                       min="1" max="31" step="any"
                       defaultValue={empleado?.dias_laborables ?? ''}
                       placeholder={String(diasEmpresa)} />
-                    <span className="input-hint">En blanco, los {diasEmpresa} de {nombreEmpresa}.</span>
                   </div>
                   <div className="input-group ter-col-span-3">
-                    <label htmlFor="emp-socio">Relación con la empresa</label>
+                    <div className="form-label-with-help">
+                      <label htmlFor="emp-socio">Relación con la empresa</label>
+                      <FormHelp text="Los socios no pagan la Contribución Especial (CESS). El resto se le calcula igual." label="Qué implica ser socio" />
+                    </div>
                     {/* El hidden gemelo es lo que permite distinguir «desmarcado» de
                         «no estaba en pantalla»: un checkbox sin marcar no se envía. */}
                     <input type="hidden" name="es_socio" value="0" />
@@ -316,9 +328,6 @@ export function EmpleadoModal({
                         name="es_socio" value="1" defaultChecked={!!empleado?.es_socio} />
                       Es socio de la empresa
                     </label>
-                    <span className="input-hint">
-                      Los socios no pagan la Contribución Especial (CESS). El resto se le calcula igual.
-                    </span>
                   </div>
                 </>
               )}

@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearNecesidad, editarNecesidad } from '@/app/actions/diagnostico-necesidades'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 
@@ -90,9 +91,12 @@ export default function NecesidadModal({
           {esEdicion && <input type="hidden" name="clave" value={necesidad!.clave} />}
           <div className="modal-body">
             <div className="input-group">
-              <label>
-                Lo que el cliente quiere <span className="required">*</span>
-              </label>
+              <div className="form-label-with-help">
+                <label>
+                  Lo que el cliente quiere <span className="required">*</span>
+                </label>
+                <FormHelp text="En lenguaje del cliente, no técnico." label="Cómo redactar la etiqueta" />
+              </div>
               <input
                 name="etiqueta"
                 className="input"
@@ -101,14 +105,16 @@ export default function NecesidadModal({
                 value={etiqueta}
                 onChange={(e) => handleEtiquetaChange(e.target.value)}
               />
-              <span className="input-hint">En lenguaje del cliente, no técnico.</span>
             </div>
 
             {!esEdicion && (
               <div className="input-group">
-                <label>
-                  Clave <span className="required">*</span>
-                </label>
+                <div className="form-label-with-help">
+                  <label>
+                    Clave <span className="required">*</span>
+                  </label>
+                  <FormHelp text="Identificador interno: minúsculas, números y _" label="Información sobre la clave" />
+                </div>
                 <input
                   name="clave"
                   className="input"
@@ -121,7 +127,6 @@ export default function NecesidadModal({
                     setClaveEdited(true)
                   }}
                 />
-                <span className="input-hint">Identificador interno: minúsculas, números y _</span>
               </div>
             )}
 
@@ -136,9 +141,12 @@ export default function NecesidadModal({
             </div>
 
             <div className="input-group">
-              <label>
-                Módulos que recomienda <span className="required">*</span>
-              </label>
+              <div className="form-label-with-help">
+                <label>
+                  Módulos que recomienda <span className="required">*</span>
+                </label>
+                <FormHelp text="Lo que ofrecemos cuando el cliente marca esta opción (la contabilidad es un módulo más)." label="Qué se recomienda" />
+              </div>
               <div className="grid-cols-2">
                 {modulos.map((m) => (
                   <label key={m.clave} className="module-check">
@@ -152,9 +160,6 @@ export default function NecesidadModal({
                   </label>
                 ))}
               </div>
-              <span className="input-hint">
-                Lo que ofrecemos cuando el cliente marca esta opción (la contabilidad es un módulo más).
-              </span>
             </div>
 
             {esEdicion && (

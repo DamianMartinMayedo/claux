@@ -322,6 +322,11 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    color solo cuando la acción cambia el estado de la fila de forma definitiva. */
 .row-actions-item-success       { color: var(--color-success); }
 .row-actions-item-success svg   { color: var(--color-success); }
+/* Acción de IA dentro del menú `⋯`: el mismo lenguaje que `.btn-ia`, pero en
+   desplegable el relleno degradado completo sería demasiado. Aquí solo el TEXTO
+   va en tinta de marca; el icono (`IaSparkle`) ya trae su trazo en degradado
+   (stroke=url(#grad), que `.row-actions-item svg { color }` no pisa). */
+.row-actions-item-ia            { color: var(--color-primary); }
 .btn-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; border-radius: var(--radius-md);

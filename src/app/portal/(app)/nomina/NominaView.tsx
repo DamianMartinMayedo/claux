@@ -26,6 +26,7 @@ import Tabs from '@/components/Tabs'
 import { formatMonto, hoyISO, formatPeriodo, actualizarConceptosNominas } from '../_shared/NominaDetalleModal'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import FormHelp                        from '@/components/portal/FormHelp'
 import BulkBar                          from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
@@ -119,15 +120,17 @@ function ReglaModal({
               </div>
 
               <div className="input-group ter-col-span-3">
-                <label htmlFor="rg-valor">
-                  {modo === 'PORCENTAJE' ? 'Porcentaje (%)' : 'Importe'} <span className="required">*</span>
-                </label>
+                <div className="form-label-with-help">
+                  <label htmlFor="rg-valor">
+                    {modo === 'PORCENTAJE' ? 'Porcentaje (%)' : 'Importe'} <span className="required">*</span>
+                  </label>
+                  {modo === 'FIJO' && (
+                    <FormHelp text="En la moneda de cada nómina donde se aplique." label="En qué moneda se aplica el importe" />
+                  )}
+                </div>
                 <input className="input" id="rg-valor" name="valor" type="number" required
                   min="0.01" step="any" max={modo === 'PORCENTAJE' ? 100 : undefined}
                   defaultValue={regla?.valor ?? ''} />
-                {modo === 'FIJO' && (
-                  <span className="input-hint">En la moneda de cada nómina donde se aplique.</span>
-                )}
               </div>
 
               {modo === 'PORCENTAJE' && (

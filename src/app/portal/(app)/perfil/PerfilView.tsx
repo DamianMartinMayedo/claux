@@ -8,6 +8,7 @@ import { type IaPanel } from '@/app/actions/portal/ia'
 import IaUsoCard from '@/components/portal/ia/IaUsoCard'
 import EnlacesLegales from '@/components/publico/EnlacesLegales'
 import { Lock } from 'lucide-react'
+import FormHelp from '@/components/portal/FormHelp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -142,9 +143,11 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
           {/* Email + Nombre */}
           <div className="prf-form-row">
             <div className="input-group">
-              <label>Email</label>
+              <div className="form-label-with-help">
+                <label>Email</label>
+                <FormHelp text="El email no se puede cambiar." label="Por qué no se puede cambiar el email" />
+              </div>
               <input className="input" type="email" value={perfil.email} readOnly />
-              <span className="input-hint">El email no se puede cambiar.</span>
             </div>
             <div className="input-group">
               <label>Nombre</label>
@@ -182,9 +185,11 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
                   <input className="input" type="password" name="password_actual" autoComplete="current-password" />
                 </div>
                 <div className="input-group">
-                  <label>Contraseña nueva <span className="required">*</span></label>
+                  <div className="form-label-with-help">
+                    <label>Contraseña nueva <span className="required">*</span></label>
+                    <FormHelp text="Mínimo 8 caracteres." label="Requisitos de la contraseña" />
+                  </div>
                   <input className="input" type="password" name="password_nueva" autoComplete="new-password" minLength={8} />
-                  <span className="input-hint">Mínimo 8 caracteres.</span>
                 </div>
                 <div className="input-group">
                   <label>Confirmar nueva <span className="required">*</span></label>

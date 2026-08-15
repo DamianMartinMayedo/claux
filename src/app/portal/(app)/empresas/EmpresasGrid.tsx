@@ -8,6 +8,7 @@ import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/po
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
+import FormHelp from '@/components/portal/FormHelp'
 // Debe coincidir con COLORES_EMPRESA en actions/portal/empresas.ts (fuente de verdad).
 const COLORES = [
   '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
@@ -223,9 +224,11 @@ function EmpresaModal({
               </div>
 
               <div className="input-group">
-                <label>NIF / NIT</label>
+                <div className="form-label-with-help">
+                  <label>NIF / NIT</label>
+                  <FormHelp text="Número de Identificación Fiscal o Tributaria." label="Qué es el NIF / NIT" />
+                </div>
                 <input className="input" name="rif_nit" defaultValue={state.empresa?.rif_nit ?? ''} placeholder="Ej: B-12345678" />
-                <span className="input-hint">Número de Identificación Fiscal o Tributaria</span>
               </div>
 
               {/* La moneda funcional es NOT NULL en base de datos, pero el formulario la
@@ -320,7 +323,10 @@ function EmpresaModal({
                   documento porque son estables: el dueño los estaba copiando en las notas
                   de cada factura, a mano, cada vez. */}
               <div className="input-group emp-full">
-                <label htmlFor="emp-datos-pago">Cómo te pagan</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="emp-datos-pago">Cómo te pagan</label>
+                  <FormHelp text="Sale en tus facturas bajo «Cómo pagar». Si lo dejas vacío, ese bloque no se imprime." label="Dónde aparecen los datos de pago" />
+                </div>
                 <textarea
                   id="emp-datos-pago"
                   className="input input-textarea"
@@ -329,13 +335,13 @@ function EmpresaModal({
                   defaultValue={state.empresa?.datos_pago ?? ''}
                   placeholder={'Tarjeta 9224 0699 1234 5678 (MLC)\nEnzona / Transfermóvil: +53 5 123 4567\nBanco Metropolitano, cuenta 1234...'}
                 />
-                <span className="input-hint">
-                  Sale en tus facturas bajo «Cómo pagar». Si lo dejas vacío, ese bloque no se imprime.
-                </span>
               </div>
 
               <div className="input-group emp-full">
-                <label htmlFor="emp-pie-factura">Pie de factura</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="emp-pie-factura">Pie de factura</label>
+                  <FormHelp text="Texto fijo al final de todas tus facturas." label="Qué es el pie de factura" />
+                </div>
                 <textarea
                   id="emp-pie-factura"
                   className="input input-textarea"
@@ -344,12 +350,14 @@ function EmpresaModal({
                   defaultValue={state.empresa?.pie_factura ?? ''}
                   placeholder="Gracias por su confianza · Licencia de operaciones nº…"
                 />
-                <span className="input-hint">Texto fijo al final de todas tus facturas.</span>
               </div>
 
               {/* Paleta de colores */}
               <div className="input-group emp-full">
-                <label>Color de identificación</label>
+                <div className="form-label-with-help">
+                  <label>Color de identificación</label>
+                  <FormHelp text="Se usa para distinguir esta empresa en listas y documentos." label="Para qué sirve el color" />
+                </div>
                 <div className="color-picker">
                   {COLORES.map(c => (
                     <button
@@ -363,7 +371,6 @@ function EmpresaModal({
                     />
                   ))}
                 </div>
-                <span className="input-hint">Se usa para distinguir esta empresa en listas y documentos</span>
               </div>
 
               {/* Upload logo */}

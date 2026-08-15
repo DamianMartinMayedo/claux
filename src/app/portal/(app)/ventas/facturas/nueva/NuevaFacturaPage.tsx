@@ -10,6 +10,7 @@ import { DocumentoLineasEditor }             from '../../_DocumentoLineasEditor'
 import { DescuentoStock }                    from '../../_DescuentoStock'
 import { MonedaDocumento }                   from '../../_MonedaDocumento'
 import CrearTerceroInline                    from '@/components/portal/CrearTerceroInline'
+import FormHelp                             from '@/components/portal/FormHelp'
 import {
   CONDICION_PAGO_OPTIONS,
   calcularFechaVencimiento,
@@ -195,11 +196,13 @@ export default function NuevaFacturaPage({ contexto }: Props) {
             </div>
 
             <div className="input-group">
-              <label>Vencimiento</label>
+              <div className="form-label-with-help">
+                <label>Vencimiento</label>
+                <FormHelp text="Se calcula desde la condición de pago." label="Cómo se calcula el vencimiento" />
+              </div>
               <input className="input" type="date" value={fecha_vencimiento}
                 min={fecha_emision}
                 onChange={e => setFechaVencimiento(e.target.value)} />
-              <span className="input-hint">Se calcula desde la condición de pago.</span>
               {fecha_vencimiento && fecha_vencimiento < fecha_emision && (
                 <span className="input-hint-warning">
                   El vencimiento es anterior a la emisión: la factura nacería vencida.

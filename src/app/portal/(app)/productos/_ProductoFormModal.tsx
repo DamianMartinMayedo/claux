@@ -3,7 +3,9 @@
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, X, Sparkles, Loader2 } from 'lucide-react'
+import { Plus, X, Loader2 } from 'lucide-react'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
+import FormHelp from '@/components/portal/FormHelp'
 import {
   guardarProducto,
   type Producto,
@@ -347,12 +349,12 @@ export function ProductoFormModal({
                 <div className="input-group ter-col-full">
                   <label>Descripción</label>
                   {tieneIa && (
-                    <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={sugerirConIa}
+                    <button type="button" className="btn btn-ia btn-sm cat-ia-btn" onClick={sugerirConIa}
                       disabled={sugiriendo}
                       title={esServicio
                         ? 'Sugiere la descripción y la categoría a partir del nombre'
                         : 'Sugiere la descripción, la unidad y la categoría a partir del nombre'}>
-                      {sugiriendo ? <Loader2 size={14} strokeWidth={2} className="img-upload-spin" /> : <Sparkles size={14} strokeWidth={2} />}
+                      {sugiriendo ? <Loader2 size={14} strokeWidth={2} className="img-upload-spin" /> : <IaSparkle size={14} />}
                       {sugiriendo ? 'Pensando…' : 'Completar con IA'}
                     </button>
                   )}
@@ -400,7 +402,10 @@ export function ProductoFormModal({
                 {esSuscribible && (
                   <div className="ter-form-grid mt-3">
                     <div className="input-group ter-col-span-3">
-                      <label>Periodicidad por defecto</label>
+                      <div className="form-label-with-help">
+                        <label>Periodicidad por defecto</label>
+                        <FormHelp text="Se usará al crear una suscripción; se puede cambiar por cliente." label="Información sobre la periodicidad" />
+                      </div>
                       <select className="input" value={periodicidad}
                         onChange={e => setPeriodicidad(e.target.value)}>
                         <option value="MENSUAL">Mensual</option>
@@ -408,7 +413,6 @@ export function ProductoFormModal({
                         <option value="SEMESTRAL">Semestral</option>
                         <option value="ANUAL">Anual</option>
                       </select>
-                      <span className="input-hint">Se usará al crear una suscripción; se puede cambiar por cliente.</span>
                     </div>
                   </div>
                 )}
@@ -428,19 +432,21 @@ export function ProductoFormModal({
                   <div className="ter-form-grid">
                     {isEdit && (
                       <div className="input-group ter-col-span-3">
-                        <label>Stock actual</label>
+                        <div className="form-label-with-help">
+                          <label>Stock actual</label>
+                          <FormHelp text="Ajusta el stock desde el botón correspondiente." label="Cómo ajustar el stock" />
+                        </div>
                         <input className="input input-static" readOnly
                           value={`${producto?.stock_actual ?? 0} ${producto?.unidad ?? ''}`} />
-                        <span className="input-hint">Ajusta el stock desde el botón correspondiente.</span>
                       </div>
                     )}
                     <div className="input-group ter-col-span-3">
-                      <label>Stock mínimo (todos los almacenes)</label>
+                      <div className="form-label-with-help">
+                        <label>Stock mínimo (todos los almacenes)</label>
+                        <FormHelp text="Aviso cuando el stock baje de este nivel. Puedes afinarlo por almacén desde la ficha del producto." label="Información sobre el stock mínimo" />
+                      </div>
                       <input className="input" type="text" inputMode="decimal" name="stock_minimo"
                         defaultValue={textoNumeroEs(producto?.stock_minimo ?? 0)} placeholder="0" />
-                      <span className="input-hint">
-                        Aviso cuando el stock baje de este nivel. Puedes afinarlo por almacén desde la ficha del producto.
-                      </span>
                     </div>
                   </div>
                 )}

@@ -8,6 +8,7 @@ import { guardarOferta }                     from '@/app/actions/portal/ventas'
 import type { ContextoDocumentoData, OfertaDetalleData } from '@/app/actions/portal/ventas'
 import { DocumentoLineasEditor }             from '../../../_DocumentoLineasEditor'
 import { MonedaDocumento }                   from '../../../_MonedaDocumento'
+import FormHelp                             from '@/components/portal/FormHelp'
 import {
   CONDICION_PAGO_OPTIONS,
   tieneImportes,
@@ -130,11 +131,13 @@ export default function EditarOfertaPage({ data, contexto }: Props) {
           <div className="ven-form-grid">
             {/* Empresa es fija en edición */}
             <div className="input-group">
-              <label>Empresa</label>
+              <div className="form-label-with-help">
+                <label>Empresa</label>
+                <FormHelp text="La empresa no se puede cambiar una vez creada la oferta." label="Por qué no se puede cambiar la empresa" />
+              </div>
               <div className="input input-static">
                 {data.empresa.letra_facturacion} · {data.empresa.nombre}
               </div>
-              <span className="input-hint">La empresa no se puede cambiar una vez creada la oferta.</span>
             </div>
 
             <div className="input-group">

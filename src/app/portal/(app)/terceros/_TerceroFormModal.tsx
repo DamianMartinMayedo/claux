@@ -11,6 +11,7 @@ import {
 import type { MonedaOpcion } from '@/app/actions/portal/monedas'
 import { VIAS_TIPOS, VIA_BADGE } from './_vias-pago'
 import { opcionesCon }          from '@/components/portal/form-helpers'
+import FormHelp                 from '@/components/portal/FormHelp'
 
 // ── Selector de moneda ────────────────────────────────────────────────────────
 
@@ -345,14 +346,16 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
               <span className="ter-form-section-title">Condiciones comerciales</span>
               <div className="ter-form-grid">
                 <div className="input-group ter-col-span-2">
-                  <label htmlFor="ter-moneda">Moneda predeterminada</label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="ter-moneda">Moneda predeterminada</label>
+                    <FormHelp
+                      text={monedas.length === 0
+                        ? 'Aún no tienes monedas: créalas en Monedas y Tasas.'
+                        : 'Tus monedas configuradas en Monedas y Tasas.'}
+                      label="Información sobre la moneda predeterminada" />
+                  </div>
                   <MonedaSelect id="ter-moneda" name="moneda_defecto"
                     monedas={monedas} actual={tercero?.moneda_defecto} />
-                  <span className="input-hint">
-                    {monedas.length === 0
-                      ? 'Aún no tienes monedas: créalas en Monedas y Tasas.'
-                      : 'Tus monedas configuradas en Monedas y Tasas.'}
-                  </span>
                 </div>
                 <div className="input-group ter-col-span-2">
                   <label>Condición de pago</label>
@@ -365,10 +368,12 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
                   </select>
                 </div>
                 <div className="input-group ter-col-span-2">
-                  <label>Límite de crédito</label>
+                  <div className="form-label-with-help">
+                    <label>Límite de crédito</label>
+                    <FormHelp text="Deuda máx. permitida, en su moneda predeterminada." label="Información sobre el límite de crédito" />
+                  </div>
                   <input className="input" type="number" name="limite_credito"
                     defaultValue={tercero?.limite_credito ?? ''} placeholder="0.00" min="0" step="any" />
-                  <span className="input-hint">Deuda máx. permitida, en su moneda predeterminada.</span>
                 </div>
               </div>
             </div>
@@ -408,19 +413,21 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
                     defaultValue={tercero?.fecha_fin_contrato ?? ''} />
                 </div>
                 <div className="input-group ter-col-full">
-                  <label>
-                    {tercero?.contrato_url
-                      ? <>PDF del contrato{' '}
-                          <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer"
-                            className="ter-contrato-link">
-                            <FileText size={15} strokeWidth={2} /> Ver contrato actual
-                          </a>
-                        </>
-                      : 'PDF del contrato (opcional)'}
-                  </label>
+                  <div className="form-label-with-help">
+                    <label>
+                      {tercero?.contrato_url
+                        ? <>PDF del contrato{' '}
+                            <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer"
+                              className="ter-contrato-link">
+                              <FileText size={15} strokeWidth={2} /> Ver contrato actual
+                            </a>
+                          </>
+                        : 'PDF del contrato (opcional)'}
+                    </label>
+                    <FormHelp text="Formatos: PDF, JPG, PNG. Máx. 10 MB." label="Formatos admitidos" />
+                  </div>
                   <input className="input input-file" type="file" name="contrato"
                     accept=".pdf,.jpg,.jpeg,.png" />
-                  <span className="input-hint">Formatos: PDF, JPG, PNG. Máx. 10 MB.</span>
                 </div>
               </div>
             </div>

@@ -18,6 +18,7 @@ import { guardarSlug } from '@/app/actions/portal/agenda-comun'
 import Tabs from '@/components/Tabs'
 import CierresSection from '@/components/portal/CierresSection'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -168,18 +169,22 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
                   placeholder="Corte de pelo, Consulta…" />
               </div>
               <div className="input-group ter-col-span-2">
-                <label htmlFor="srv-duracion">Duración (min) <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label htmlFor="srv-duracion">Duración (min) <span className="required">*</span></label>
+                  <FormHelp text="Tiempo que ocupa cada cita." label="Qué es la duración" />
+                </div>
                 <input className="input" id="srv-duracion" name="duracion_minutos" type="number" min="5" step="5" required
                   defaultValue={servicio?.duracion_minutos ?? 30} />
-                <span className="input-hint">Tiempo que ocupa cada cita.</span>
               </div>
               <div className="input-group ter-col-span-2">
-                <label htmlFor="srv-margen">Margen después (min)</label>
-                <input className="input" id="srv-margen" name="margen_minutos" type="number" min="0" step="5"
-                  defaultValue={servicio?.margen_minutos ?? 0} />
                 {/* La confusión natural es creer que esto alarga la cita. No: el cliente
                     sigue leyendo «30 min», y el hueco siguiente empieza más tarde. */}
-                <span className="input-hint">Para limpiar o preparar. No se le enseña al cliente ni cambia el precio.</span>
+                <div className="form-label-with-help">
+                  <label htmlFor="srv-margen">Margen después (min)</label>
+                  <FormHelp text="Para limpiar o preparar. No se le enseña al cliente ni cambia el precio." label="Qué es el margen después" />
+                </div>
+                <input className="input" id="srv-margen" name="margen_minutos" type="number" min="0" step="5"
+                  defaultValue={servicio?.margen_minutos ?? 0} />
               </div>
               <div className="input-group ter-col-span-2">
                 <label htmlFor="srv-precio">Precio</label>
@@ -187,7 +192,10 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
                   value={precio} onChange={e => setPrecio(e.target.value)} placeholder="Opcional" />
               </div>
               <div className="input-group ter-col-span-2">
-                <label htmlFor="srv-moneda">Moneda {precio !== '' && <span className="required">*</span>}</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="srv-moneda">Moneda {precio !== '' && <span className="required">*</span>}</label>
+                  <FormHelp text="En la que cobras esta cita." label="Qué es la moneda de la cita" />
+                </div>
                 {opcionesMoneda.length === 0 ? (
                   <>
                     <input className="input input-static" readOnly value="Sin monedas activas" />
@@ -200,7 +208,6 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
                       <option value="" disabled>Selecciona…</option>
                       {opcionesMoneda.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
-                    <span className="input-hint">En la que cobras esta cita.</span>
                   </>
                 )}
               </div>
@@ -445,7 +452,10 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
               </div>
 
               <div className="input-group ter-col-full">
-                <label>{etiquetaSrv}s que atiende</label>
+                <div className="form-label-with-help">
+                  <label>{etiquetaSrv}s que atiende</label>
+                  <FormHelp text="Sin selección = atiende todos los servicios." label="Cómo funciona la selección de servicios" />
+                </div>
                 {servicios.length === 0 ? (
                   <span className="input-hint">Aún no hay servicios. Créalos en la pestaña «Servicios» (si solo das un tipo de cita, basta con uno).</span>
                 ) : (
@@ -459,11 +469,13 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
                     ))}
                   </div>
                 )}
-                <span className="input-hint">Sin selección = atiende todos los servicios.</span>
               </div>
 
               <div className="input-group ter-col-full">
-                <label>Horario semanal</label>
+                <div className="form-label-with-help">
+                  <label>Horario semanal</label>
+                  <FormHelp text="Deja un día en blanco si no atiende. El segundo tramo es para jornada partida (mañana y tarde); si trabajas seguido, déjalo vacío." label="Cómo rellenar el horario semanal" />
+                </div>
                 <div className="cita-hor-grid">
                   {[1, 2, 3, 4, 5, 6, 7].map(d => (
                     <div key={d} className="cita-hor-row">
@@ -492,7 +504,6 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
                     </div>
                   ))}
                 </div>
-                <span className="input-hint">Deja un día en blanco si no atiende. El segundo tramo es para jornada partida (mañana y tarde); si trabajas seguido, déjalo vacío.</span>
               </div>
 
               <div className="input-group ter-col-full">
@@ -602,9 +613,11 @@ function AusenciasRecurso({ recurso, etiquetaRec, onCambio }: {
             <input className="input" name="fecha_desde" type="date" required />
           </div>
           <div className="input-group ter-col-span-2">
-            <label>Hasta</label>
+            <div className="form-label-with-help">
+              <label>Hasta</label>
+              <FormHelp text="En blanco = solo ese día." label="Cómo indicar un solo día" />
+            </div>
             <input className="input" name="fecha_hasta" type="date" />
-            <span className="input-hint">En blanco = solo ese día.</span>
           </div>
           <div className="input-group ter-col-span-2">
             <label>Motivo</label>
@@ -1595,13 +1608,15 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           <form onSubmit={handleSlugSubmit}>
             <div className="ter-form-grid res-conf-pad-top">
               <div className="input-group ter-col-full">
-                <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
+                <div className="form-label-with-help">
+                  <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
+                  <FormHelp text="Solo letras, números y guiones." label="Qué puede llevar el enlace" />
+                </div>
                 <div className="res-slug-wrap">
                   <span className="res-slug-prefix">{host}/</span>
                   <input className="input" name="slug" placeholder="tu-negocio" value={slugForm} onChange={e => setSlugForm(e.target.value)} />
                   <span className="res-slug-suffix">/citas</span>
                 </div>
-                <span className="input-hint">Solo letras, números y guiones.</span>
               </div>
             </div>
             <div className="res-form-submit res-actions-row">

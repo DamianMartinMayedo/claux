@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { Plus, Pencil, Trash2, Users } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import type { Asesor } from '@/app/actions/portal/asesores'
 import { guardarAsesor, eliminarAsesor } from '@/app/actions/portal/asesores'
@@ -100,12 +101,14 @@ export default function AsesoresView({
               spellCheck={false} autoComplete="off" />
           </div>
           <div className="input-group">
-            <label htmlFor="asr-empresa">Para</label>
+            <div className="form-label-with-help">
+              <label htmlFor="asr-empresa">Para</label>
+              <FormHelp text="Un asesor «para todas» aparece en el envío de cualquier empresa." label="Qué significa «para todas»" />
+            </div>
             <select id="asr-empresa" className="input" value={empresa} onChange={e => setEmpresa(e.target.value)}>
               <option value="">Todas las empresas</option>
               {empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
             </select>
-            <span className="input-hint">Un asesor «para todas» aparece en el envío de cualquier empresa.</span>
           </div>
           <div className="env-asesor-add-acciones">
             <button type="button" className="btn btn-secondary btn-sm" onClick={cerrar} disabled={isPending}>Cancelar</button>

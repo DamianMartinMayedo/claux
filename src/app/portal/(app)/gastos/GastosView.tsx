@@ -38,6 +38,7 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import type { Filtro } from '@/lib/filtros'
 import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
+import FormHelp                        from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import GavetaLanzador                       from '@/components/portal/GavetaLanzador'
@@ -186,7 +187,12 @@ function RegistroModal({
                   concepto identifica la fila. Sin él, dos «Suministros · Electricidad»
                   del mismo mes eran la misma línea repetida en la tabla. */}
               <div className="input-group ter-col-full">
-                <label htmlFor="gc-concepto">Concepto <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label htmlFor="gc-concepto">Concepto <span className="required">*</span></label>
+                  <FormHelp text={tipo === 'GASTO'
+                    ? 'En dos palabras, de qué es. Lo verás en la tabla; la categoría es para el informe.'
+                    : 'Lo verás en la tabla y en Cuentas por cobrar.'} label="Qué poner en el concepto" />
+                </div>
                 <input
                   id="gc-concepto"
                   className="input" name="descripcion" required autoFocus={!isEdit}
@@ -194,11 +200,6 @@ function RegistroModal({
                   placeholder={tipo === 'GASTO'
                     ? 'Ej: Factura de la ONE de marzo, alquiler del local…'
                     : 'Ej: Venta directa, anticipo de cliente…'} />
-                <span className="input-hint">
-                  {tipo === 'GASTO'
-                    ? 'En dos palabras, de qué es. Lo verás en la tabla; la categoría es para el informe.'
-                    : 'Lo verás en la tabla y en Cuentas por cobrar.'}
-                </span>
               </div>
 
               <div className="input-group ter-col-full">
@@ -229,9 +230,16 @@ function RegistroModal({
                   cajón «Sin categoría» del desglose, que es exactamente la verdad. */}
               <>
                 <div className="input-group ter-col-span-3">
-                  <label htmlFor="gc-categoria">
-                    Categoría {tipo === 'GASTO' && <span className="required">*</span>}
-                  </label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="gc-categoria">
+                      Categoría {tipo === 'GASTO' && <span className="required">*</span>}
+                    </label>
+                    {tipo === 'COBRO' && (
+                      <FormHelp text={raicesIngreso.length > 0
+                        ? 'Con ella, tu informe desglosa de qué vienen los cobros. Puedes dejarla en blanco.'
+                        : 'Todavía no tienes categorías de ingreso: créalas en la pestaña Categorías para desglosar tus cobros.'} label="Para qué sirve la categoría" />
+                    )}
+                  </div>
                   <select id="gc-categoria" className="input" value={catSel} required={tipo === 'GASTO'}
                     onChange={e => { setCatSel(e.target.value); setSubSel('') }}>
                     <option value="">{tipo === 'GASTO' ? '— Elige categoría —' : '— Sin categoría —'}</option>
@@ -241,13 +249,6 @@ function RegistroModal({
                       </optgroup>
                     ))}
                   </select>
-                  {tipo === 'COBRO' && (
-                    <span className="input-hint">
-                      {raicesIngreso.length > 0
-                        ? 'Con ella, tu informe desglosa de qué vienen los cobros. Puedes dejarla en blanco.'
-                        : 'Todavía no tienes categorías de ingreso: créalas en la pestaña Categorías para desglosar tus cobros.'}
-                    </span>
-                  )}
                 </div>
                 <div className="input-group ter-col-span-3">
                   <label>Subcategoría</label>
@@ -293,12 +294,12 @@ function RegistroModal({
                   defaultValue={registro?.monto ?? ''} placeholder="0.00" />
               </div>
               <div className="input-group ter-col-span-3">
-                <label>Moneda <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Moneda <span className="required">*</span></label>
+                  {isEdit && <FormHelp text="La moneda no se cambia tras crear." label="Por qué no se puede cambiar la moneda" />}
+                </div>
                 {isEdit ? (
-                  <>
-                    <input className="input input-static" readOnly value={registro!.moneda} />
-                    <span className="input-hint">La moneda no se cambia tras crear.</span>
-                  </>
+                  <input className="input input-static" readOnly value={registro!.moneda} />
                 ) : data.monedas.length === 0 ? (
                   <>
                     <input className="input input-static" readOnly value="Sin monedas activas" />
@@ -615,17 +616,17 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 no se pregunta: es siempre subcategoría (el selector vuelve con el flag). */}
             {!isEdit && PERMITIR_RAIZ_MANUAL && padresPosibles.length > 0 && (
               <div className="input-group">
-                <label htmlFor="cat-donde">¿Dónde va?</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="cat-donde">¿Dónde va?</label>
+                  <FormHelp text={comoNueva === 'hija'
+                    ? 'Cuenta en el informe dentro de la que elijas, con el papel que ella tenga. Es lo habitual.'
+                    : 'Una categoría principal decide en qué renglón del informe cuentan sus gastos.'} label="Dónde encaja la categoría" />
+                </div>
                 <select id="cat-donde" className="input" value={comoNueva}
                   onChange={e => setComoNueva(e.target.value as 'hija' | 'principal')}>
                   <option value="hija">Dentro de una categoría que ya tengo</option>
                   <option value="principal">Es una categoría principal nueva</option>
                 </select>
-                <span className="input-hint">
-                  {comoNueva === 'hija'
-                    ? 'Cuenta en el informe dentro de la que elijas, con el papel que ella tenga. Es lo habitual.'
-                    : 'Una categoría principal decide en qué renglón del informe cuentan sus gastos.'}
-                </span>
               </div>
             )}
 
@@ -650,7 +651,10 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
 
             {esHija ? (
               <div className="input-group">
-                <label htmlFor="cat-parent">Subcategoría de</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="cat-parent">Subcategoría de</label>
+                  <FormHelp text="Cuenta en el informe dentro de esta categoría, con el papel que ella tenga. Cámbiala para moverla a otra." label="Qué implica la categoría madre" />
+                </div>
                 <select id="cat-parent" className="input" name="parent_id"
                   defaultValue={categoria?.parent_id ?? padresPosibles[0]?.categoria_id ?? ''}>
                   {padresPosibles.map(p => (
@@ -659,10 +663,6 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                     </option>
                   ))}
                 </select>
-                <span className="input-hint">
-                  Cuenta en el informe dentro de esta categoría, con el papel que ella tenga.
-                  Cámbiala para moverla a otra.
-                </span>
               </div>
             ) : (<>
               <input type="hidden" name="parent_id" value="" />
@@ -743,7 +743,10 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                     DESPUÉS de la respuesta, nunca en su lugar: aparece cuando ya
                     hay una decisión tomada, así que no le cuesta un clic a nadie. */}
                 <div className="input-group">
-                  <label htmlFor="cat-rol">Renglón exacto</label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="cat-rol">Renglón exacto</label>
+                    <FormHelp text="Ya está elegido por lo que respondiste. Cámbialo solo si sabes cuál quieres." label="Qué es el renglón exacto" />
+                  </div>
                   <select id="cat-rol" className="input" value={rolElegido}
                     onChange={e => setRolElegido(e.target.value as RolPL)}>
                     <optgroup label="Gastos">
@@ -756,14 +759,16 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                       {ROLES_FUERA_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
                     </optgroup>
                   </select>
-                  <span className="input-hint">
-                    Ya está elegido por lo que respondiste. Cámbialo solo si sabes cuál quieres.
-                  </span>
                 </div>
               </>)}
 
               <div className="input-group">
-                <label htmlFor="cat-subs">Subcategorías</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="cat-subs">Subcategorías</label>
+                  <FormHelp text={`Opcional, varias separadas por coma. ${hijasActuales.length > 0
+                    ? 'Se añaden a las de arriba; las que ya estén se ignoran.'
+                    : 'Puedes añadir más luego editando esta categoría.'}`} label="Cómo añadir subcategorías" />
+                </div>
                 {hijasActuales.length > 0 && (
                   <div className="badge-row">
                     {hijasActuales.map(h => (
@@ -773,11 +778,6 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 )}
                 <textarea id="cat-subs" className="input input-textarea" name="subcategorias" rows={2}
                   placeholder="Bebidas, Carnes, Limpieza" />
-                <span className="input-hint">
-                  Opcional, varias separadas por coma. {hijasActuales.length > 0
-                    ? 'Se añaden a las de arriba; las que ya estén se ignoran.'
-                    : 'Puedes añadir más luego editando esta categoría.'}
-                </span>
               </div>
             </>)}
 

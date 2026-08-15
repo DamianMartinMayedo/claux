@@ -16,6 +16,7 @@ import { guardarSlug } from '@/app/actions/portal/agenda-comun'
 import { sufijoPeriodo } from '@/lib/catalogo-periodo'
 import QrEnlace from '@/components/portal/QrEnlace'
 import { RowActions } from '@/components/portal/RowActions'
+import FormHelp from '@/components/portal/FormHelp'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import Tabs from '@/components/Tabs'
 import BulkBar from '@/components/portal/BulkBar'
@@ -586,10 +587,12 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
               <input id="cat-nombre" name="nombre" className="input" defaultValue={categoria?.nombre ?? ''} required autoFocus />
             </div>
             <div className="input-group">
-              <label htmlFor="cat-descuento">Descuento de la categoría (%)</label>
+              <div className="form-label-with-help">
+                <label htmlFor="cat-descuento">Descuento de la categoría (%)</label>
+                <FormHelp text="Se aplica a todos los productos del grupo que no tengan su propio descuento." label="Cómo se aplica el descuento de categoría" />
+              </div>
               <input id="cat-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
                 className="input" defaultValue={categoria?.descuento_pct ? categoria.descuento_pct : ''} placeholder="0" />
-              <p className="input-hint">Se aplica a todos los productos del grupo que no tengan su propio descuento.</p>
             </div>
           </div>
           <div className="modal-footer">
@@ -668,10 +671,13 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
       <div className="card">
         <div className="card-header"><h2 className="card-title">Moneda del {data.etiquetas.catalogo.toLowerCase()}</h2></div>
         <div className="input-group">
-          <label htmlFor="cat-moneda" className="cat-moneda-label">
-            Los precios se muestran en esta moneda
-            {isSavingMoneda && <span className="cat-moneda-loading"><Loader2 size={13} strokeWidth={2} className="img-upload-spin" /> Actualizando…</span>}
-          </label>
+          <div className="form-label-with-help">
+            <label htmlFor="cat-moneda" className="cat-moneda-label">
+              Los precios se muestran en esta moneda
+              {isSavingMoneda && <span className="cat-moneda-loading"><Loader2 size={13} strokeWidth={2} className="img-upload-spin" /> Actualizando…</span>}
+            </label>
+            <FormHelp text={`Cada producto guarda su precio en su moneda; tu ${data.etiquetas.catalogo.toLowerCase()} los convierte a esta según la tasa de cambio vigente (Monedas y tasas). No cambia tu enlace público.`} label="Cómo se convierten los precios" />
+          </div>
           <select id="cat-moneda" className="input" value={data.monedaCatalogo} onChange={cambiarMoneda} disabled={isSavingMoneda || data.monedasActivas.length === 0}>
             {data.monedasActivas.length === 0
               ? <option value={data.monedaCatalogo}>{data.monedaCatalogo}</option>
@@ -682,7 +688,6 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
                 ))}
           </select>
         </div>
-        <p className="input-hint">Cada producto guarda su precio en su moneda; tu {data.etiquetas.catalogo.toLowerCase()} los convierte a esta según la tasa de cambio vigente (Monedas y tasas). No cambia tu enlace público.</p>
       </div>
 
       <div className="card">

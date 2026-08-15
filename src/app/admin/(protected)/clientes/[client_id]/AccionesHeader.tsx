@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
@@ -326,7 +327,10 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
 
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>Días de acceso especial <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Días de acceso especial <span className="required">*</span></label>
+                  <FormHelp text="Entre 1 y 180 días." label="Rango de días permitido" />
+                </div>
                 <input
                   name="dias"
                   type="number"
@@ -338,7 +342,6 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
                   value={diasGracia}
                   onChange={(e) => onDiasChange(e.target.value)}
                 />
-                <span className="input-hint">Entre 1 y 180 días</span>
               </div>
               <div className="input-group">
                 <label>Acceso hasta</label>

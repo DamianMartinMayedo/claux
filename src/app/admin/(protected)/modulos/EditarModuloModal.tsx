@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarModulo } from '@/app/actions/modulos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 
@@ -162,7 +163,10 @@ export default function EditarModuloModal({
                 <input name="nombre" className="input" required defaultValue={modulo.nombre} />
               </div>
               <div className="input-group">
-                <label>Tipo</label>
+                <div className="form-label-with-help">
+                  <label>Tipo</label>
+                  {modulo.tipo === 'addon' && <FormHelp text="Los addons no pueden cambiar de tipo." label="Por qué no se puede cambiar el tipo" />}
+                </div>
                 <select
                   className="input"
                   value={editTipo}
@@ -173,7 +177,6 @@ export default function EditarModuloModal({
                   <option value="funcionalidad">Funcionalidad</option>
                   {modulo.tipo === 'addon' && <option value="addon">Addon</option>}
                 </select>
-                {modulo.tipo === 'addon' && <span className="input-hint">Los addons no pueden cambiar de tipo.</span>}
               </div>
             </div>
             <div className="grid-cols-2">

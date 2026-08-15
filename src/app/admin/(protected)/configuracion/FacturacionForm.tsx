@@ -3,6 +3,7 @@
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
+import FormHelp from '@/components/portal/FormHelp'
 
 type Props = {
   descuentoAnual: number
@@ -31,16 +32,20 @@ export default function FacturacionForm({ descuentoAnual, diasTrial }: Props) {
     <form onSubmit={handleSubmit} className="config-form">
       <div className="grid-cols-2">
         <div className="input-group">
-          <label>Descuento anual (%)</label>
+          <div className="form-label-with-help">
+            <label>Descuento anual (%)</label>
+            <FormHelp text="Aplicado al cobrar el ciclo anual." label="Cuándo se aplica el descuento anual" />
+          </div>
           <input type="number" min="0" max="100" step="1" className="input"
             value={descuento} onChange={e => setDescuento(e.target.value)} />
-          <span className="input-hint">Aplicado al cobrar el ciclo anual.</span>
         </div>
         <div className="input-group">
-          <label>Días de prueba (trial)</label>
+          <div className="form-label-with-help">
+            <label>Días de prueba (trial)</label>
+            <FormHelp text="Vigencia inicial de un cliente en trial." label="Qué son los días de prueba" />
+          </div>
           <input type="number" min="0" max="180" step="1" className="input"
             value={trial} onChange={e => setTrial(e.target.value)} />
-          <span className="input-hint">Vigencia inicial de un cliente en trial.</span>
         </div>
       </div>
 

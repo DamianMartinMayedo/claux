@@ -30,7 +30,9 @@ import { EmpleadoModal, BajaModal, ConfirmEliminar } from '../PersonalView'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
-import { Copy, Download, FileText, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import { Copy, Download, FileText, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
+import FormHelp from '@/components/portal/FormHelp'
 import { explicarReciboIa } from '@/app/actions/portal/ia'
 import { useIa } from '@/components/portal/ia/IaContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -242,34 +244,40 @@ function IncidenciaModal({
           <form id="incidencia-form" onSubmit={handleSubmit}>
             <div className="ter-form-grid">
               <div className="input-group ter-col-span-3">
-                <label htmlFor="inc-periodo">Mes <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label htmlFor="inc-periodo">Mes <span className="required">*</span></label>
+                  {incidencia && <FormHelp text="El mes no se cambia: crea otra incidencia." label="Por qué no se puede cambiar el mes" />}
+                </div>
                 <input className="input" id="inc-periodo" name="periodo" type="month" required
                   defaultValue={incidencia?.periodo ?? mesActualISO()}
                   readOnly={!!incidencia} />
-                {incidencia && <span className="input-hint">El mes no se cambia: crea otra incidencia.</span>}
               </div>
 
               {esCuba && (
                 <>
                   <div className="input-group ter-col-span-3">
-                    <label htmlFor="inc-dias">Días trabajados</label>
+                    <div className="form-label-with-help">
+                      <label htmlFor="inc-dias">Días trabajados</label>
+                      <FormHelp text="Vacío = mes completo." label="Qué significa dejarlo vacío" />
+                    </div>
                     <input className="input" id="inc-dias" name="dias_trabajados" type="number"
                       min="0" max="31" step="any" defaultValue={incidencia?.dias_trabajados ?? ''} />
-                    <span className="input-hint">Vacío = mes completo.</span>
                   </div>
                   <div className="input-group ter-col-span-3">
-                    <label htmlFor="inc-vac">Días de vacaciones que se pagan</label>
+                    <div className="form-label-with-help">
+                      <label htmlFor="inc-vac">Días de vacaciones que se pagan</label>
+                      <FormHelp text="El disfrute normal del mes." label="Qué son los días de vacaciones que se pagan" />
+                    </div>
                     <input className="input" id="inc-vac" name="dias_vacaciones" type="number"
                       min="0" max="31" step="any" defaultValue={incidencia?.dias_vacaciones ?? 0} />
-                    <span className="input-hint">El disfrute normal del mes.</span>
                   </div>
                   <div className="input-group ter-col-span-3">
-                    <label htmlFor="inc-liq">Días de vacaciones a liquidar</label>
+                    <div className="form-label-with-help">
+                      <label htmlFor="inc-liq">Días de vacaciones a liquidar</label>
+                      <FormHelp text="Solo al causar baja: el saldo pendiente se paga de golpe." label="Cuándo se liquidan las vacaciones" />
+                    </div>
                     <input className="input" id="inc-liq" name="dias_liquidacion" type="number"
                       min="0" step="any" defaultValue={incidencia?.dias_liquidacion ?? 0} />
-                    <span className="input-hint">
-                      Solo al causar <strong>baja</strong>: el saldo pendiente se paga de golpe.
-                    </span>
                   </div>
                 </>
               )}
@@ -302,14 +310,12 @@ function IncidenciaModal({
 
               {esCuba && (
                 <div className="input-group ter-col-full">
-                  <label htmlFor="inc-subs">Subsidios adelantados ({moneda})</label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="inc-subs">Subsidios adelantados ({moneda})</label>
+                    <FormHelp text="Se le suma al neto porque lo cobra, pero no cuenta como coste: al confirmar la nómina queda como pendiente de cobro a la Seguridad Social, y lo liquidas en Tesorería cuando llegue el reembolso." label="Cómo funcionan los subsidios adelantados" />
+                  </div>
                   <input className="input" id="inc-subs" name="pago_subsidios" type="number" min="0" step="any"
                     defaultValue={incidencia?.pago_subsidios ?? 0} />
-                  <span className="input-hint">
-                    Se le suma al neto porque lo cobra, pero <strong>no cuenta como coste</strong>:
-                    al confirmar la nómina queda como pendiente de cobro a la Seguridad Social,
-                    y lo liquidas en Tesorería cuando llegue el reembolso.
-                  </span>
                 </div>
               )}
             </div>
@@ -383,10 +389,12 @@ function AperturaModal({
                   autoFocus value={valor} onChange={e => setValor(e.target.value)} placeholder="0.00" />
               </div>
               <div className="input-group ter-col-span-3">
-                <label htmlFor="vac-apertura-dias">Días</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="vac-apertura-dias">Días</label>
+                  <FormHelp text="Coherente con el importe: valoran juntos el día." label="Cómo se relacionan días e importe" />
+                </div>
                 <input className="input" id="vac-apertura-dias" type="number" min="0" step="any"
                   value={dias} onChange={e => setDias(e.target.value)} placeholder="0" />
-                <span className="input-hint">Coherente con el importe: valoran juntos el día.</span>
               </div>
             </div>
           </div>
@@ -640,10 +648,12 @@ function ConceptoModal({
 
               {recurrencia === 'PUNTUAL' && (
                 <div className="input-group ter-col-span-3">
-                  <label htmlFor="cpt-periodo">Mes <span className="required">*</span></label>
+                  <div className="form-label-with-help">
+                    <label htmlFor="cpt-periodo">Mes <span className="required">*</span></label>
+                    <FormHelp text="Se desactiva solo al confirmar la nómina de ese mes." label="Cuándo se desactiva" />
+                  </div>
                   <input className="input" id="cpt-periodo" name="periodo_aplicable" type="month" required
                     defaultValue={concepto?.periodo_aplicable ?? ''} />
-                  <span className="input-hint">Se desactiva solo al confirmar la nómina de ese mes.</span>
                 </div>
               )}
             </div>
@@ -1159,10 +1169,10 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                           </button>
                           {/* «¿Por qué cobro menos que el mes pasado?» es la conversación
                               que el dueño tiene cada mes mirando el PDF. */}
-                          <button className="row-actions-item"
+                          <button className="row-actions-item row-actions-item-ia"
                             onClick={() => explicarRecibo(nomina)}
                             disabled={explicando !== null}>
-                            <Sparkles size={15} strokeWidth={2} />
+                            <IaSparkle size={15} />
                             {explicando === nomina.nomina_id ? 'Preparando…' : 'Explicárselo'}
                           </button>
                         </RowActions>

@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearCliente } from '@/app/actions/clientes'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { importeCiclo } from '@/lib/billing'
 
@@ -273,12 +274,14 @@ export default function ClienteFormModal({
 
                 {/* Sector del negocio: preselecciona módulos recomendados y adapta etiquetas */}
                 <div className="input-group">
-                  <label>Sector del negocio</label>
+                  <div className="form-label-with-help">
+                    <label>Sector del negocio</label>
+                    <FormHelp text="Adapta las etiquetas del negocio (Reservas/Citas, Mesa/Profesional…). No cambia los módulos seleccionados." label="Qué hace el sector" />
+                  </div>
                   <select name="sector" className="input" value={sector} onChange={e => setSector(e.target.value)}>
                     <option value="">Sin especificar</option>
                     {plantillas.map(p => <option key={p.sector} value={p.sector}>{p.nombre}</option>)}
                   </select>
-                  <span className="input-hint">Adapta las etiquetas del negocio (Reservas/Citas, Mesa/Profesional…). No cambia los módulos seleccionados.</span>
                 </div>
 
                 {/* Tarifa */}
@@ -373,7 +376,14 @@ export default function ClienteFormModal({
                     llega su total; en un alta manual se escribe, y se dice que ese importe
                     no tiene horas detrás con las que contrastarlo. */}
                 <div className="input-group">
-                  <label>Pago de configuración (USD)</label>
+                  <div className="form-label-with-help">
+                    <label>Pago de configuración (USD)</label>
+                    <FormHelp
+                      text={presupuestoId
+                        ? 'Viene del presupuesto aprobado. Cambiarlo aquí lo separa de las horas cotizadas.'
+                        : 'Pago único inicial. Déjalo vacío para omitirlo. La estimación no cuenta volúmenes ni descuentos: para eso, un presupuesto — se le puede hacer luego desde su ficha y queda enlazado.'}
+                      label="Información sobre el pago de configuración" />
+                  </div>
                   <input
                     name="pago_setup_usd"
                     type="number"
@@ -412,11 +422,6 @@ export default function ClienteFormModal({
                       </span>
                     </p>
                   )}
-                  <span className="input-hint">
-                    {presupuestoId
-                      ? 'Viene del presupuesto aprobado. Cambiarlo aquí lo separa de las horas cotizadas.'
-                      : 'Pago único inicial. Déjalo vacío para omitirlo. La estimación no cuenta volúmenes ni descuentos: para eso, un presupuesto — se le puede hacer luego desde su ficha y queda enlazado.'}
-                  </span>
                 </div>
 
                 {/* Marcada por defecto: el alta normal empieza con prueba gratuita.

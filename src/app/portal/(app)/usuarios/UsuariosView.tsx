@@ -11,6 +11,7 @@ import {
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar, EmpresaTag } from '@/components/portal/EmpresaTag'
+import FormHelp from '@/components/portal/FormHelp'
 import Tabs from '@/components/Tabs'
 import { Info, Key, Pencil, Plus, User, X } from 'lucide-react'
 
@@ -132,7 +133,10 @@ function UsuarioModal({
 
             <div className="usr-form-grid">
               <div className="input-group">
-                <label>Email <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Email <span className="required">*</span></label>
+                  {esEdicion && <FormHelp text="El email no se puede cambiar." label="Por qué no se puede cambiar el email" />}
+                </div>
                 <input
                   className="input"
                   type="email"
@@ -142,7 +146,6 @@ function UsuarioModal({
                   readOnly={esEdicion}
                   required
                 />
-                {esEdicion && <span className="input-hint">El email no se puede cambiar.</span>}
               </div>
 
               <div className="input-group">
@@ -164,12 +167,14 @@ function UsuarioModal({
               </div>
 
               <div className="input-group">
-                <label>Permisos de escritura</label>
+                <div className="form-label-with-help">
+                  <label>Permisos de escritura</label>
+                  <FormHelp text="Solo lectura: puede ver todo pero no ejecutar acciones." label="Qué implica solo lectura" />
+                </div>
                 <select className="input" name="solo_lectura" defaultValue={usuario?.solo_lectura ? 'true' : 'false'}>
                   <option value="false">Lectura y escritura</option>
                   <option value="true">Solo lectura</option>
                 </select>
-                <span className="input-hint">Solo lectura: puede ver todo pero no ejecutar acciones</span>
               </div>
 
               {esEdicion && usuario.user_id !== sessionUserId && (
@@ -186,7 +191,10 @@ function UsuarioModal({
             {/* Empresas asignadas — solo para operadores */}
             {rol === 'usuario' && (
               <div>
-                <label className="form-label">Empresas con acceso</label>
+                <div className="form-label-with-help">
+                  <label className="form-label">Empresas con acceso</label>
+                  <FormHelp text="El operador solo verá y operará en estas empresas." label="Alcance de las empresas asignadas" />
+                </div>
                 {empresas.filter(e => e.estado === 'ACTIVO').length === 0 ? (
                   <p className="text-sm-muted">No hay empresas activas.</p>
                 ) : (
@@ -204,14 +212,16 @@ function UsuarioModal({
                     ))}
                   </div>
                 )}
-                <span className="input-hint">El operador solo verá y operará en estas empresas</span>
               </div>
             )}
 
             {/* Módulos y permisos — solo para operadores */}
             {rol === 'usuario' && (
               <div>
-                <label className="form-label">Módulos y permisos</label>
+                <div className="form-label-with-help">
+                  <label className="form-label">Módulos y permisos</label>
+                  <FormHelp text="Los módulos ocultos siguen funcionando en segundo plano: sus cargas y relaciones con otros módulos se mantienen." label="Qué pasa con los módulos ocultos" />
+                </div>
                 <label className="checkbox-group">
                   <input
                     type="checkbox"
@@ -244,10 +254,6 @@ function UsuarioModal({
                     </div>
                   )
                 )}
-                <span className="input-hint">
-                  Los módulos ocultos siguen funcionando en segundo plano: sus cargas y relaciones
-                  con otros módulos se mantienen.
-                </span>
               </div>
             )}
 

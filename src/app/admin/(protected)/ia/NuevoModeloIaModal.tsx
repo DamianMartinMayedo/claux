@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearModeloIa } from '@/app/actions/ia-admin'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 
@@ -52,9 +53,11 @@ export default function NuevoModeloIaModal() {
           <div className="modal-body">
             <div className="grid-cols-2">
               <div className="input-group">
-                <label>ID del modelo <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>ID del modelo <span className="required">*</span></label>
+                  <FormHelp text="Tal cual lo espera el proveedor (sin prefijos)." label="Información sobre el ID del modelo" />
+                </div>
                 <input name="id" className="input" required placeholder="p. ej. claude-haiku-4-5" />
-                <span className="input-hint">Tal cual lo espera el proveedor (sin prefijos).</span>
               </div>
               <div className="input-group">
                 <label>Nombre visible</label>
@@ -62,9 +65,11 @@ export default function NuevoModeloIaModal() {
               </div>
             </div>
             <div className="input-group">
-              <label>Endpoint (opcional)</label>
+              <div className="form-label-with-help">
+                <label>Endpoint (opcional)</label>
+                <FormHelp text="Solo si el modelo usa otra API. La key va en variable de entorno del servidor." label="Información sobre el endpoint" />
+              </div>
               <input name="api_base" className="input" placeholder="vacío = mismo proveedor (OpenCode Zen)" />
-              <span className="input-hint">Solo si el modelo usa otra API. La key va en variable de entorno del servidor.</span>
             </div>
             <label className="ia-check">
               <input type="checkbox" checked={gratis} onChange={e => setGratis(e.target.checked)} />

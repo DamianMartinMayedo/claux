@@ -9,7 +9,9 @@ import {
 import { autocompletarItemCatalogo } from '@/app/actions/portal/ia'
 import { OPCIONES_PERIODO } from '@/lib/catalogo-periodo'
 import ImageUpload from '@/components/ImageUpload'
-import { X, Check, Loader2, Sparkles } from 'lucide-react'
+import { X, Check, Loader2 } from 'lucide-react'
+import IaSparkle from '@/components/portal/ia/IaSparkle'
+import FormHelp from '@/components/portal/FormHelp'
 
 // Modal de alta/edición de un ítem del catálogo. Compartido entre el editor
 // (lista/tarjetas) y la página de detalle, para que "Editar" abra el mismo
@@ -117,7 +119,10 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
 
             <div className="cat-form-row">
               <div className="input-group">
-                <label htmlFor="item-precio">Precio</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="item-precio">Precio</label>
+                  <FormHelp text={`Se mostrará convertido a ${monedaCatalogo} (la moneda que verá el cliente) según la tasa de cambio. Déjalo en blanco para que el cliente vea «Consultar precio» (sin importe).`} label="Información sobre el precio" />
+                </div>
                 <input id="item-precio" name="precio" type="number" step="any" min="0" className="input" defaultValue={item?.precio ?? ''} />
               </div>
               <div className="input-group">
@@ -127,30 +132,33 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
                 </select>
               </div>
             </div>
-            <p className="input-hint">Se mostrará convertido a {monedaCatalogo} (la moneda que verá el cliente) según la tasa de cambio. Déjalo en blanco para que el cliente vea «Consultar precio» (sin importe).</p>
 
             {/* «Cobro» (suscripción/periodicidad) solo tiene sentido fuera de la comida:
                 un plato no se cobra «/mes». En un menú se omite y queda como pago único. */}
             {!esComida && (
               <div className="input-group">
-                <label htmlFor="item-periodicidad">Cobro</label>
+                <div className="form-label-with-help">
+                  <label htmlFor="item-periodicidad">Cobro</label>
+                  <FormHelp text="Si se cobra por suscripción, el precio se mostrará con su periodo (por ejemplo «/mes»)." label="Información sobre el cobro" />
+                </div>
                 <select id="item-periodicidad" name="periodicidad" className="input" defaultValue={item?.periodicidad ?? ''}>
                   {OPCIONES_PERIODO.map(o => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
                 </select>
-                <p className="input-hint">Si se cobra por suscripción, el precio se mostrará con su periodo (por ejemplo «/mes»).</p>
               </div>
             )}
 
             <div className="input-group">
-              <label htmlFor="item-descuento">Descuento (%)</label>
+              <div className="form-label-with-help">
+                <label htmlFor="item-descuento">Descuento (%)</label>
+                <FormHelp text={`Si le pones un descuento al ${artL}, ese manda sobre el de la categoría.`} label="Información sobre el descuento" />
+              </div>
               <input id="item-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
                 className="input" defaultValue={item?.descuento_pct ? item.descuento_pct : ''} placeholder="0" />
-              <p className="input-hint">Si le pones un descuento al {artL}, ese manda sobre el de la categoría.</p>
             </div>
 
             {tieneIa && (
-              <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={autocompletar} disabled={sugiriendo}>
-                {sugiriendo ? <Loader2 size={14} strokeWidth={2} className="img-upload-spin" /> : <Sparkles size={14} strokeWidth={2} />}
+              <button type="button" className="btn btn-ia btn-sm cat-ia-btn" onClick={autocompletar} disabled={sugiriendo}>
+                {sugiriendo ? <Loader2 size={14} strokeWidth={2} className="img-upload-spin" /> : <IaSparkle size={14} />}
                 {sugiriendo ? 'Pensando…' : 'Autocompletar con IA'}
               </button>
             )}

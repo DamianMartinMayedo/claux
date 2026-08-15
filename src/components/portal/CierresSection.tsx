@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import FormHelp from '@/components/portal/FormHelp'
 import { guardarCierre, eliminarCierre, type Cierre } from '@/app/actions/portal/agenda-comun'
 import { Plus, Trash2 } from 'lucide-react'
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
@@ -80,9 +81,11 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
               <input className="input" name="fecha_desde" type="date" required min={hoyISO()} defaultValue={hoyISO()} />
             </div>
             <div className="input-group ter-col-span-2">
-              <label>Hasta</label>
+              <div className="form-label-with-help">
+                <label>Hasta</label>
+                <FormHelp text="Déjalo vacío si es un solo día." label="Cómo indicar un solo día" />
+              </div>
               <input className="input" name="fecha_hasta" type="date" min={hoyISO()} />
-              <span className="input-hint">Déjalo vacío si es un solo día.</span>
             </div>
             <div className="input-group ter-col-span-2">
               <label>Motivo</label>

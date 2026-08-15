@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { X, ShoppingCart } from 'lucide-react'
+import FormHelp from '@/components/portal/FormHelp'
 import { toastError, toastSuccess, toastLoading, toastWarning } from '@/app/contexts/ToastContext'
 import {
   previsualizarReposicion, crearComprasDeReposicion,
@@ -94,7 +95,10 @@ export function ReposicionModal({
 
         <div className="modal-body">
           <div className="input-group">
-            <label htmlFor="rep-alm">Almacén que hay que reponer</label>
+            <div className="form-label-with-help">
+              <label htmlFor="rep-alm">Almacén que hay que reponer</label>
+              <FormHelp text="La cantidad sugerida es la que falta para llegar al mínimo de ESE almacén." label="Cómo se calcula la cantidad sugerida" />
+            </div>
             <select id="rep-alm" className="input" value={almacenId}
               onChange={e => setAlmacenId(e.target.value)} disabled={isPending}>
               <option value="">Elige el almacén…</option>
@@ -104,9 +108,6 @@ export function ReposicionModal({
                 </option>
               ))}
             </select>
-            <span className="input-hint">
-              La cantidad sugerida es la que falta para llegar al mínimo de ESE almacén.
-            </span>
           </div>
 
           {cargando ? (
