@@ -3,14 +3,9 @@ import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { ArrowLeft, UtensilsCrossed, Package } from 'lucide-react'
-import { obtenerItemPublico } from '@/app/actions/portal/catalogo'
+import { obtenerItemPublicoCache } from '@/lib/publico/catalogo-qr'
+import { sufijoPeriodo } from '@/lib/catalogo-periodo'
 import '../catalogo-publica.css'
-
-/** «/mes» y equivalentes: un suscribible anunciado sin sufijo dice otro precio (mig. 162). */
-const SUFIJO_PERIODO: Record<string, string> = {
-  MENSUAL: '/mes', TRIMESTRAL: '/trimestre', SEMESTRAL: '/semestre', ANUAL: '/año',
-}
-
 
 export const revalidate = 60
 
@@ -20,7 +15,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, itemId } = await params
-  const item = await obtenerItemPublico(slug, itemId)
+  const item = await obtenerItemPublicoCache(slug, itemId)
   if (!item) return {}
   return {
     title: `${item.nombre} — ${item.negocio?.nombre ?? ''}`.trim(),
@@ -30,7 +25,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CatalogoItemPublicoPage({ params }: Props) {
   const { slug, itemId } = await params
-  const item = await obtenerItemPublico(slug, itemId)
+  const item = await obtenerItemPublicoCache(slug, itemId)
   if (!item) notFound()
 
   return (
@@ -57,7 +52,7 @@ export default async function CatalogoItemPublicoPage({ params }: Props) {
                   <span className="cp-precio-antes">{item.precioAntes.toFixed(2)}</span>
                 )}
                 {item.precio.toFixed(2)} {item.moneda ?? ''}
-                {item.periodicidad && (SUFIJO_PERIODO[item.periodicidad] ?? '')}
+                {sufijoPeriodo(item.periodicidad)}
                 {item.descuentoPct > 0 && <span className="cp-badge-desc-inline">-{item.descuentoPct}%</span>}
               </p>
             )}

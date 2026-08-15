@@ -1,6 +1,6 @@
 import { notFound }            from 'next/navigation'
 import type { Metadata }       from 'next'
-import { obtenerCatalogoPublico } from '@/app/actions/portal/catalogo'
+import { obtenerCatalogoPublicoCache } from '@/lib/publico/catalogo-qr'
 import CatalogoPublico          from './CatalogoPublico'
 import PwaCatalogoRegister      from './PwaCatalogoRegister'
 import './catalogo-publica.css'
@@ -16,7 +16,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const data = await obtenerCatalogoPublico(slug)
+  const data = await obtenerCatalogoPublicoCache(slug)
   if (!data.negocio) return {}
   return {
     title: `${data.negocio.nombre} — ${data.etiquetas.catalogo}`,
@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CatalogoPublicoPage({ params }: Props) {
   const { slug } = await params
-  const data = await obtenerCatalogoPublico(slug)
+  const data = await obtenerCatalogoPublicoCache(slug)
   if (!data.negocio) notFound()
 
   return (

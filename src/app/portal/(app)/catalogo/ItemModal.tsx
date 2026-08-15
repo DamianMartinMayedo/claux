@@ -7,21 +7,27 @@ import {
   type CatalogoItem, type CatalogoCategoria, type MonedaOpcion,
 } from '@/app/actions/portal/catalogo'
 import { autocompletarItemCatalogo } from '@/app/actions/portal/ia'
+import { OPCIONES_PERIODO } from '@/lib/catalogo-periodo'
 import ImageUpload from '@/components/ImageUpload'
 import { X, Check, Loader2, Sparkles } from 'lucide-react'
 
 // Modal de alta/edición de un ítem del catálogo. Compartido entre el editor
 // (lista/tarjetas) y la página de detalle, para que "Editar" abra el mismo
 // formulario sin salir de la pantalla.
-export default function ItemModal({ item, categorias, monedaCatalogo, monedasActivas, tieneIa, onClose, onSaved }: {
+export default function ItemModal({ item, categorias, monedaCatalogo, monedasActivas, tieneIa, esComida, articulo, onClose, onSaved }: {
   item: CatalogoItem | null
   categorias: CatalogoCategoria[]
   monedaCatalogo: string
   monedasActivas: MonedaOpcion[]
   tieneIa: boolean
+  /** Sector de comida: solo entonces se piden ingredientes/alérgenos/calorías. */
+  esComida: boolean
+  /** Etiqueta singular del ítem según el negocio («Plato», «Artículo», «Servicio»). */
+  articulo: string
   onClose: () => void
   onSaved: () => void
 }) {
+  const artL = articulo.toLowerCase()
   const [isPending, startTransition] = useTransition()
   const [sugiriendo, setSugiriendo] = useState(false)
   const [nombre, setNombre] = useState(item?.nombre ?? '')
@@ -29,6 +35,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
   const [ingredientes, setIngredientes] = useState(item?.ingredientes ?? '')
   const [alergenos, setAlergenos] = useState(item?.alergenos ?? '')
   const [calorias, setCalorias] = useState(item?.calorias?.toString() ?? '')
+  const [agotado, setAgotado] = useState(!(item?.disponible ?? true))
   const [nuevaFoto, setNuevaFoto] = useState<File | null>(null)
   const [quitarFoto, setQuitarFoto] = useState(false)
 
@@ -58,7 +65,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
       }
 
       await ld.dismiss()
-      toastSuccess('Producto guardado.')
+      toastSuccess(`${articulo} guardado.`)
       onSaved()
     })
   }
@@ -81,7 +88,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
     <div className="modal-backdrop open">
       <div className="modal modal-md" role="dialog" aria-modal>
         <div className="modal-header">
-          <h2 className="modal-title">{item ? 'Editar producto' : 'Nuevo producto'}</h2>
+          <h2 className="modal-title">{item ? `Editar ${artL}` : `Nuevo ${artL}`}</h2>
           <button type="button" className="modal-close" onClick={onClose}><X size={16} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -120,21 +127,26 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
                 </select>
               </div>
             </div>
-            <p className="input-hint">Se mostrará convertido a {monedaCatalogo} (la moneda que verá el cliente) según la tasa de cambio.</p>
+            <p className="input-hint">Se mostrará convertido a {monedaCatalogo} (la moneda que verá el cliente) según la tasa de cambio. Déjalo en blanco para que el cliente vea «Consultar precio» (sin importe).</p>
 
-            <div className="cat-form-row">
+            {/* «Cobro» (suscripción/periodicidad) solo tiene sentido fuera de la comida:
+                un plato no se cobra «/mes». En un menú se omite y queda como pago único. */}
+            {!esComida && (
               <div className="input-group">
-                <label htmlFor="item-descuento">Descuento (%)</label>
-                <input id="item-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
-                  className="input" defaultValue={item?.descuento_pct ? item.descuento_pct : ''} placeholder="0" />
+                <label htmlFor="item-periodicidad">Cobro</label>
+                <select id="item-periodicidad" name="periodicidad" className="input" defaultValue={item?.periodicidad ?? ''}>
+                  {OPCIONES_PERIODO.map(o => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                </select>
+                <p className="input-hint">Si se cobra por suscripción, el precio se mostrará con su periodo (por ejemplo «/mes»).</p>
               </div>
-              <div className="input-group">
-                <label htmlFor="item-calorias">Calorías</label>
-                <input id="item-calorias" name="calorias" type="number" min="0" className="input"
-                  value={calorias} onChange={e => setCalorias(e.target.value)} />
-              </div>
+            )}
+
+            <div className="input-group">
+              <label htmlFor="item-descuento">Descuento (%)</label>
+              <input id="item-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
+                className="input" defaultValue={item?.descuento_pct ? item.descuento_pct : ''} placeholder="0" />
+              <p className="input-hint">Si le pones un descuento al {artL}, ese manda sobre el de la categoría.</p>
             </div>
-            <p className="input-hint">Si le pones un descuento al producto, ese manda sobre el de la categoría.</p>
 
             {tieneIa && (
               <button type="button" className="btn btn-secondary btn-sm cat-ia-btn" onClick={autocompletar} disabled={sugiriendo}>
@@ -149,21 +161,37 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
                 value={descripcion ?? ''} onChange={e => setDescripcion(e.target.value)} />
             </div>
 
-            <div className="input-group">
-              <label htmlFor="item-ingredientes">Ingredientes</label>
-              <input id="item-ingredientes" name="ingredientes" className="input"
-                value={ingredientes ?? ''} onChange={e => setIngredientes(e.target.value)} />
-            </div>
+            {/* Ingredientes/Alérgenos/Calorías solo tienen sentido en un negocio de
+                comida; fuera de ahí ni se piden (una ferretería no tiene alérgenos). */}
+            {esComida && (
+              <>
+                <div className="input-group">
+                  <label htmlFor="item-ingredientes">Ingredientes</label>
+                  <input id="item-ingredientes" name="ingredientes" className="input"
+                    value={ingredientes ?? ''} onChange={e => setIngredientes(e.target.value)} />
+                </div>
 
-            <div className="input-group">
-              <label htmlFor="item-alergenos">Alérgenos</label>
-              <input id="item-alergenos" name="alergenos" className="input"
-                value={alergenos ?? ''} onChange={e => setAlergenos(e.target.value)} />
-            </div>
+                <div className="input-group">
+                  <label htmlFor="item-alergenos">Alérgenos</label>
+                  <input id="item-alergenos" name="alergenos" className="input"
+                    value={alergenos ?? ''} onChange={e => setAlergenos(e.target.value)} />
+                </div>
 
+                <div className="input-group">
+                  <label htmlFor="item-calorias">Calorías</label>
+                  <input id="item-calorias" name="calorias" type="number" min="0" className="input"
+                    value={calorias} onChange={e => setCalorias(e.target.value)} />
+                </div>
+              </>
+            )}
+
+            {/* Se pregunta por «Agotado» (lo que el dueño marca de un vistazo) pero se
+                guarda `disponible` invertido. El hidden lleva el valor explícito: un
+                checkbox sin marcar no envía nada y dejaría el dato ambiguo. */}
+            <input type="hidden" name="disponible" value={agotado ? 'false' : 'true'} />
             <label className="res-switch-wrap">
-              <input type="checkbox" name="disponible" value="true" defaultChecked={item?.disponible ?? true} />
-              <span className="res-switch-text">Disponible (desmarca si está agotado)</span>
+              <input type="checkbox" checked={agotado} onChange={e => setAgotado(e.target.checked)} />
+              <span className="res-switch-text">Agotado (no disponible ahora mismo)</span>
             </label>
           </div>
           <div className="modal-footer">

@@ -267,14 +267,17 @@ export async function autocompletarItemCatalogo(nombre: string): Promise<IaSuger
   const { data: cli } = await db.from('clients').select('sector').eq('client_id', guard.clientId).single()
   const sector = (cli?.sector as string | null) ?? null
 
-  let etiquetaCatalogo = ETIQUETAS_DEFAULT.catalogo
+  let etiquetas = ETIQUETAS_DEFAULT
   if (sector) {
     const { data: pl } = await db.from('plantillas_sector').select('etiquetas').eq('sector', sector).maybeSingle()
-    etiquetaCatalogo = etiquetasDe(pl?.etiquetas).catalogo
+    etiquetas = etiquetasDe(pl?.etiquetas)
   }
+  // Solo un negocio de comida tiene ingredientes/alérgenos/calorías: fuera de ahí
+  // la IA no debe inventarlos (una ferretería no tiene alérgenos).
+  const esComida = etiquetas.catalogoIcono === 'comida'
 
   try {
-    const sugerencia = await sugerirDatosItem(guard.clientId, nombre0, etiquetaCatalogo, sector)
+    const sugerencia = await sugerirDatosItem(guard.clientId, nombre0, etiquetas.catalogo, sector, esComida)
     if (!sugerencia) return { ok: false, error: 'No pude generar sugerencias ahora mismo. Inténtalo de nuevo.' }
     return { ok: true, sugerencia }
   } catch (e) {

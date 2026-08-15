@@ -86,9 +86,10 @@
 @media (hover: hover) and (pointer: fine) {
   .cp-card:hover { border-color: var(--cp-primary); box-shadow: 0 4px 14px rgb(0 0 0 / .08); }
 }
-/* "Agotado": solo se atenúan foto y textos, no los badges. */
-.cp-card-agotado .cp-card-photo,
-.cp-card-agotado .cp-card-body { opacity: .5; }
+/* "Agotado": se atenúa SOLO la foto (imagen, sin requisito de contraste). El
+   texto se deja a contraste pleno — un opacity:.5 sobre un gris ya atenuado cae
+   por debajo de WCAG AA (a11y). El estado lo comunica el badge "Agotado". */
+.cp-card-agotado .cp-card-photo { opacity: .5; }
 
 .cp-card-photo {
   position: relative; width: 100%; aspect-ratio: 4 / 3; background: var(--cp-bg);
@@ -145,7 +146,8 @@
 }
 .cp-row:last-child { border-bottom: none; }
 .cp-row:active { opacity: .6; }
-.cp-card-agotado.cp-row { opacity: .55; }
+/* En lista no hay foto que atenuar: el estado "agotado" lo comunica el badge
+   inline, sin bajar el contraste del texto con opacity (a11y / WCAG AA). */
 .cp-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cp-row-nombre { font-size: 15px; font-weight: 600; color: var(--cp-text); display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cp-row-desc {

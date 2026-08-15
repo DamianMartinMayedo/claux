@@ -25,18 +25,31 @@ export async function sugerirDatosItem(
   nombre: string,
   etiquetaCatalogo: string,
   sector: string | null,
+  esComida = true,
 ): Promise<SugerenciaItem | null> {
   const contexto = sector ? `El negocio es del sector "${sector}".` : ''
-  const sys = [
-    `Eres un asistente que ayuda al dueño de un negocio a rellenar la ficha de un producto de su ${etiquetaCatalogo.toLowerCase()}.`,
-    contexto,
-    `Dado el NOMBRE del producto, devuelves SOLO un objeto JSON con las claves: descripcion, ingredientes, alergenos, calorias.`,
-    `descripcion: una frase breve y apetecible en español (máx. 140 caracteres); null si no puedes.`,
-    `ingredientes: lista corta separada por comas de ingredientes típicos; null si no aplica al tipo de producto.`,
-    `alergenos: alérgenos frecuentes (gluten, lactosa, frutos secos, huevo, marisco…) separados por comas; null si no aplica.`,
-    `calorias: estimación entera aproximada por ración si es un alimento; null si no aplica.`,
-    `Son SUGERENCIAS estimadas para que el dueño las revise; no afirmes que son exactas. No añadas texto fuera del JSON.`,
-  ].filter(Boolean).join(' ')
+  // Fuera de un negocio de comida no hay ingredientes/alérgenos/calorías: se pide
+  // solo la descripción (venta neutra) y el resto se fuerza a null, para que la IA
+  // no invente alérgenos en una ferretería o una tienda de ropa.
+  const sys = esComida
+    ? [
+        `Eres un asistente que ayuda al dueño de un negocio a rellenar la ficha de un producto de su ${etiquetaCatalogo.toLowerCase()}.`,
+        contexto,
+        `Dado el NOMBRE del producto, devuelves SOLO un objeto JSON con las claves: descripcion, ingredientes, alergenos, calorias.`,
+        `descripcion: una frase breve y apetecible en español (máx. 140 caracteres); null si no puedes.`,
+        `ingredientes: lista corta separada por comas de ingredientes típicos; null si no aplica al tipo de producto.`,
+        `alergenos: alérgenos frecuentes (gluten, lactosa, frutos secos, huevo, marisco…) separados por comas; null si no aplica.`,
+        `calorias: estimación entera aproximada por ración si es un alimento; null si no aplica.`,
+        `Son SUGERENCIAS estimadas para que el dueño las revise; no afirmes que son exactas. No añadas texto fuera del JSON.`,
+      ].filter(Boolean).join(' ')
+    : [
+        `Eres un asistente que ayuda al dueño de un negocio a rellenar la ficha de un artículo de su ${etiquetaCatalogo.toLowerCase()}.`,
+        contexto,
+        `Dado el NOMBRE del artículo, devuelves SOLO un objeto JSON con las claves: descripcion, ingredientes, alergenos, calorias.`,
+        `descripcion: una frase de venta breve y neutra en español (máx. 140 caracteres); null si no puedes.`,
+        `ingredientes, alergenos, calorias: SIEMPRE null (este negocio no es de comida; no inventes ingredientes ni alérgenos ni calorías).`,
+        `Son SUGERENCIAS para que el dueño las revise. No añadas texto fuera del JSON.`,
+      ].filter(Boolean).join(' ')
 
   try {
     const { texto: out, usage } = await chat({
@@ -50,9 +63,10 @@ export async function sugerirDatosItem(
     const cal = Number(o.calorias)
     return {
       descripcion:  s(o.descripcion),
-      ingredientes: s(o.ingredientes),
-      alergenos:    s(o.alergenos),
-      calorias:     Number.isFinite(cal) && cal > 0 ? Math.round(cal) : null,
+      // Fuera de comida, los campos de alimentación se descartan pase lo que pase.
+      ingredientes: esComida ? s(o.ingredientes) : null,
+      alergenos:    esComida ? s(o.alergenos) : null,
+      calorias:     esComida && Number.isFinite(cal) && cal > 0 ? Math.round(cal) : null,
     }
   } catch (e) {
     if (!(e instanceof IaNoConfigurada)) console.error('[ia] sugerirDatosItem', e)

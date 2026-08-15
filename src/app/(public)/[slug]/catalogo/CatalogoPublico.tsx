@@ -5,15 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { UtensilsCrossed, Package, LayoutGrid, List } from 'lucide-react'
 import type { CatalogoPublico as CatalogoPublicoData } from '@/app/actions/portal/catalogo'
-
-/**
- * «/mes» y equivalentes. Un servicio por suscripción anunciado a «2.000 CUP» a secas
- * dice otra cosa que «2.000 CUP/mes», y ante el cliente final eso no es formato: es el
- * sentido del precio (mig. 162).
- */
-const SUFIJO_PERIODO: Record<string, string> = {
-  MENSUAL: '/mes', TRIMESTRAL: '/trimestre', SEMESTRAL: '/semestre', ANUAL: '/año',
-}
+import { sufijoPeriodo } from '@/lib/catalogo-periodo'
 
 type Vista = 'card' | 'lista'
 
@@ -23,6 +15,8 @@ type Vista = 'card' | 'lista'
 // (/[slug]/catalogo/[itemId]). Presupuesto de rendimiento: solo lucide-react +
 // hooks de React, nada del ERP.
 export default function CatalogoPublico({ data, slug }: { data: CatalogoPublicoData; slug: string }) {
+  // El enlace abre siempre en lista (más ligera y legible en móvil/3G); el cliente
+  // pasa a tarjetas con el toggle si quiere ver las fotos.
   const [vista, setVista] = useState<Vista>('lista')
 
   // Si el único grupo es el sintético "Otros" (ítems sin categoría), no tiene
@@ -101,8 +95,7 @@ export default function CatalogoPublico({ data, slug }: { data: CatalogoPublicoD
                           <span className="cp-card-precio">
                             {item.precioAntes != null && <span className="cp-precio-antes">{item.precioAntes.toFixed(2)}</span>}
                             {item.precio.toFixed(2)} {item.moneda ?? ''}
-                          {item.periodicidad && (SUFIJO_PERIODO[item.periodicidad] ?? '')}
-                            {item.periodicidad && (SUFIJO_PERIODO[item.periodicidad] ?? '')}
+                            {sufijoPeriodo(item.periodicidad)}
                           </span>
                         )}
                       </span>
@@ -129,6 +122,7 @@ export default function CatalogoPublico({ data, slug }: { data: CatalogoPublicoD
                         <span className="cp-row-precio">
                           {item.precioAntes != null && <span className="cp-precio-antes">{item.precioAntes.toFixed(2)}</span>}
                           {item.precio.toFixed(2)} {item.moneda ?? ''}
+                          {sufijoPeriodo(item.periodicidad)}
                         </span>
                       )}
                     </Link>

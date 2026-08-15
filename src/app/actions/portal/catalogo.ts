@@ -288,6 +288,9 @@ export async function guardarItem(formData: FormData): Promise<{ ok: boolean; er
     alergenos:    str('alergenos'),
     calorias:     num('calorias') == null ? null : Math.round(num('calorias') as number),
     descuento_pct: clampPct(num('descuento_pct')),
+    // Pago único (NULL) o una de las periodicidades: cambia el SENTIDO del precio
+    // ante el cliente final («2.000 CUP» ≠ «2.000 CUP/mes», mig. 162).
+    periodicidad: str('periodicidad'),
     disponible:   formData.get('disponible') !== 'false',
     updated_at:   new Date().toISOString(),
   }
@@ -314,6 +317,39 @@ export async function guardarItem(formData: FormData): Promise<{ ok: boolean; er
   revalidatePath('/portal/catalogo')
   await revalidarPublico(db, session.client_id)
   return { ok: true, item_id: item_id_form }
+}
+
+// Duplicar un ítem: acelera montar cartas con variantes («Margarita» → «Marinara»).
+// La PK `item_id` es texto regenerable, así que se crea uno nuevo con genId y NO se
+// arrastra el `id` uuid interno (trampa A de CONTEXTO §2). Se copia campo a campo,
+// nombre «… (copia)», SIN foto y SIN el vínculo a Inventario (`producto_id`): el
+// duplicado es una variante suelta, no otra ficha del mismo producto físico.
+export async function duplicarItem(item_id: string): Promise<{ ok: boolean; error?: string; item_id?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const db = createAdminClient()
+  const { data: orig } = await db.from('catalogo_items').select('*')
+    .eq('item_id', item_id).eq('client_id', session.client_id).maybeSingle()
+  if (!orig) return { ok: false, error: 'Ítem no encontrado.' }
+
+  const o = orig as CatalogoItem
+  const { count } = await db.from('catalogo_items')
+    .select('item_id', { count: 'exact', head: true }).eq('client_id', session.client_id)
+  const nuevo_id = genId('CATITM')
+  const { error } = await db.from('catalogo_items').insert({
+    item_id: nuevo_id, client_id: session.client_id,
+    categoria_id: o.categoria_id, nombre: `${o.nombre} (copia)`, descripcion: o.descripcion,
+    precio: o.precio, moneda: o.moneda, ingredientes: o.ingredientes, alergenos: o.alergenos,
+    calorias: o.calorias, disponible: o.disponible, descuento_pct: o.descuento_pct,
+    periodicidad: o.periodicidad, orden: count ?? 0,
+    // producto_id y foto se dejan en blanco a propósito.
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/portal/catalogo')
+  await revalidarPublico(db, session.client_id)
+  return { ok: true, item_id: nuevo_id }
 }
 
 export async function eliminarItem(item_id: string): Promise<{ ok: boolean; error?: string }> {
@@ -405,6 +441,58 @@ export async function eliminarItemsEnLote(ids: string[]): Promise<ResultadoLoteC
   revalidatePath('/portal/catalogo')
   await revalidarPublico(db, session.client_id)
   return { ok: true, hechas: (data ?? []).length }
+}
+
+// ── Reordenar (arrastre lógico: subir/bajar) ────────────────────────────────────
+//
+// `orden` existía pero solo se fijaba al crear (por `count`): la carta salía en
+// orden de alta (entrantes después que postres). Estas acciones reciben la lista
+// de ids YA ordenada y reescriben `orden` = posición. Los ítems se reordenan
+// DENTRO de su categoría (el editor manda solo los de ese grupo); las categorías,
+// sobre su propia lista. Candado `catalogo_qr` inline para audit-gating. Público
+// en ISR: se revalida al final.
+
+// Aplica orden = índice a una lista de filas de una tabla del catálogo, scoped por
+// `client_id`. Un UPDATE por fila (N pequeño: los ítems de una categoría).
+async function aplicarOrden(
+  db: ReturnType<typeof createAdminClient>, tabla: 'catalogo_items' | 'catalogo_categorias',
+  pk: 'item_id' | 'categoria_id', clientId: string, ids: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  for (let i = 0; i < ids.length; i++) {
+    const { error } = await db.from(tabla)
+      .update({ orden: i, updated_at: new Date().toISOString() })
+      .eq(pk, ids[i]).eq('client_id', clientId)
+    if (error) return { ok: false, error: error.message }
+  }
+  return { ok: true }
+}
+
+export async function reordenarItems(ids: string[]): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true }
+
+  const db = createAdminClient()
+  const r = await aplicarOrden(db, 'catalogo_items', 'item_id', session.client_id, ids)
+  if (!r.ok) return r
+  revalidatePath('/portal/catalogo')
+  await revalidarPublico(db, session.client_id)
+  return { ok: true }
+}
+
+export async function reordenarCategorias(ids: string[]): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!ids.length) return { ok: true }
+
+  const db = createAdminClient()
+  const r = await aplicarOrden(db, 'catalogo_categorias', 'categoria_id', session.client_id, ids)
+  if (!r.ok) return r
+  revalidatePath('/portal/catalogo')
+  await revalidarPublico(db, session.client_id)
+  return { ok: true }
 }
 
 // ── Subir foto del ítem (optimización servidor) ────────────────────────────────

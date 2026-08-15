@@ -14,6 +14,9 @@ export interface EtiquetasSector {
    *  NUNCA «Contratos»: esa entrada del sidebar ya existe y es de RRHH (mig. 164). */
   suscripcion: string
   catalogo:   string  // "Menú" | "Carta" | "Catálogo" | "Servicios"
+  /** El ÍTEM del catálogo, en singular: "Plato" | "Artículo" | "Servicio". Distinto
+   *  de `catalogo` (la carta entera). Sin sembrar por sector cae al genérico. */
+  articulo:   string
   // Icono de la card de catálogo sin foto: comida → cubiertos, producto → caja.
   catalogoIcono: CatalogoIcono
 }
@@ -28,6 +31,7 @@ export const ETIQUETAS_DEFAULT: EtiquetasSector = {
   servicio:   'Servicio',
   suscripcion: 'Suscripciones',
   catalogo:   'Catálogo',
+  articulo:   'Artículo',     // singular genérico del ítem; el sector lo afina (Plato, Servicio…)
   catalogoIcono: 'producto',  // sin sector → icono genérico de producto (no comida)
 }
 
@@ -82,7 +86,7 @@ export function etiquetasCliente(sector: unknown, cliente: unknown): EtiquetasSe
   if (!cliente || typeof cliente !== 'object') return base
   const r = cliente as Record<string, unknown>
   const out = { ...base }
-  for (const k of ['reservas', 'recurso', 'recurso_pl', 'servicio', 'suscripcion', 'catalogo'] as const) {
+  for (const k of ['reservas', 'recurso', 'recurso_pl', 'servicio', 'suscripcion', 'catalogo', 'articulo'] as const) {
     if (typeof r[k] === 'string' && (r[k] as string).trim()) out[k] = (r[k] as string).trim()
   }
   return out
@@ -101,6 +105,7 @@ export function etiquetasDe(raw: unknown): EtiquetasSector {
     servicio:   pick('servicio'),
     suscripcion: pick('suscripcion'),
     catalogo:   pick('catalogo'),
+    articulo:   pick('articulo'),
     catalogoIcono: r.catalogoIcono === 'comida' ? 'comida' : 'producto',
   }
 }

@@ -3436,7 +3436,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .cat-row-agotado td:not(.col-actions) { opacity: 0.5; }
 
 .cat-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-.cat-form-row-inline { display: flex; align-items: flex-end; gap: var(--space-4); }
+.cat-form-row-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); }
 .cat-input-grow { flex: 1; }
 .cat-ia-btn { align-self: flex-start; }
 

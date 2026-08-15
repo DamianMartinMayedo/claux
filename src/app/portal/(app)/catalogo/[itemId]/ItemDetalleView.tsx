@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Pencil, Package } from 'lucide-react'
 import type { CatalogoData, CatalogoItem } from '@/app/actions/portal/catalogo'
+import { sufijoPeriodo } from '@/lib/catalogo-periodo'
 import { useIa } from '@/components/portal/ia/IaContext'
 import ItemModal from '../ItemModal'
 
@@ -16,6 +17,7 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
 
   const categoriaNombre = data.categorias.find(c => c.categoria_id === item.categoria_id)?.nombre ?? null
   const etiqueta = data.etiquetas.catalogo
+  const esComida = data.etiquetas.catalogoIcono === 'comida'
   const moneda = item.monedaMostrada ?? ''
 
   return (
@@ -52,6 +54,7 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
                   <span className="cat-precio-antes">{item.precioAntes.toFixed(2)} {moneda}</span>
                 )}
                 {item.precioMostrado.toFixed(2)} {moneda}
+                {sufijoPeriodo(item.periodicidad)}
               </p>
             )}
             {data.tieneInventario && item.stock != null && (
@@ -59,6 +62,7 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
             )}
             {item.descripcion && <p className="cat-detalle-desc">{item.descripcion}</p>}
 
+            {esComida && (
             <div className="cat-detalle-meta">
               {item.ingredientes && (
                 <div className="cat-detalle-meta-row">
@@ -79,6 +83,7 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
       </div>
@@ -90,6 +95,8 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
           monedaCatalogo={data.monedaCatalogo}
           monedasActivas={data.monedasActivas}
           tieneIa={tieneIa}
+          esComida={esComida}
+          articulo={data.etiquetas.articulo}
           onClose={() => setEditando(false)}
           onSaved={() => { setEditando(false); router.refresh() }}
         />
