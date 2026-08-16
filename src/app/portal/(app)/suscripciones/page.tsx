@@ -1,6 +1,6 @@
 import { cookies }              from 'next/headers'
 import { redirect }             from 'next/navigation'
-import { requireModulo }        from '@/app/actions/portal/auth'
+import { requireAccesoModulo }  from '@/app/actions/portal/auth'
 import { obtenerSuscripciones } from '@/app/actions/portal/suscripciones'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { TOPE_VER_MAS }         from '@/lib/listados'
@@ -13,7 +13,7 @@ export default async function SuscripcionesPage({
 }: {
   searchParams: Promise<{ desde?: string; hasta?: string; limite?: string }>
 }) {
-  await requireModulo('servicios')
+  const { puedeEditar } = await requireAccesoModulo('servicios')
   // El rango viaja en la URL y se aplica EN LA CONSULTA (sobre `fecha_proximo_cobro`).
   // Sin parámetros no hay rango, a propósito: un acuerdo vivo no puede desaparecer del
   // listado por un filtro que nadie ha puesto (mismo criterio que CxC/CxP).
@@ -34,6 +34,6 @@ export default async function SuscripcionesPage({
   const etiquetas = await obtenerEtiquetasNegocio()
   return (
     <SuscripcionesView data={data} empresaInicial={empresaInicial}
-      etiqueta={etiquetas.suscripcion} />
+      etiqueta={etiquetas.suscripcion} puedeEditar={puedeEditar} />
   )
 }

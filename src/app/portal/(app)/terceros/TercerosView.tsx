@@ -102,7 +102,7 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function TercerosView({ data }: { data: TercerosPageData }) {
+export default function TercerosView({ data, puedeEditar }: { data: TercerosPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const [isPending, startTransition] = useTransition()
@@ -258,9 +258,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             filtro={filtroExport(declaracion, { q: search })}
             resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
           />
-          <button className="btn btn-primary" onClick={openCreate} disabled={empresasLista.length === 0}>
-            <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
-          </button>
+          {puedeEditar && (
+            <button className="btn btn-primary" onClick={openCreate} disabled={empresasLista.length === 0}>
+              <Plus size={14} strokeWidth={2.5} /> Nuevo cliente o proveedor
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,9 +304,11 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    </th>
+                  )}
                   <th>Nombre / ID fiscal</th>
                   <th>Tipo</th>
                   {multiempresa && <th>Empresa</th>}
@@ -324,12 +328,14 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                   >
 
                     {/* Selección */}
-                    <td className="col-check" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={sel.isSelected(t.tercero_id)}
-                        onChange={() => sel.toggle(t.tercero_id)}
-                        aria-label={`Seleccionar ${t.nombre}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(t.tercero_id)}
+                          onChange={() => sel.toggle(t.tercero_id)}
+                          aria-label={`Seleccionar ${t.nombre}`} />
+                      </td>
+                    )}
 
                     {/* Nombre / ID */}
                     <td data-label="Nombre">
@@ -411,7 +417,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                             <FileText size={15} strokeWidth={2} /> Ver contrato
                           </a>
                         )}
-                        {t.activo ? (
+                        {puedeEditar && (t.activo ? (
                           <>
                             <button className="row-actions-item" onClick={() => openEdit(t)}>
                               <Pencil size={15} strokeWidth={2} /> Editar
@@ -431,7 +437,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
                             onClick={() => handleRestaurar(t)} disabled={isPending}>
                             <RotateCcw size={15} strokeWidth={2} /> Restaurar
                           </button>
-                        )}
+                        ))}
                       </RowActions>
                     </td>
                   </tr>
@@ -444,6 +450,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
       </div>
 
       {/* ── Barra de acciones en lote ── */}
+      {puedeEditar && (
       <BulkBar count={sel.count} onClear={sel.clear}>
         {verArchivados ? (
           <button className="btn btn-secondary btn-sm" disabled={isPending}
@@ -467,6 +474,7 @@ export default function TercerosView({ data }: { data: TercerosPageData }) {
           </>
         )}
       </BulkBar>
+      )}
 
       {/* ── Modales ── */}
       {modalOpen && (

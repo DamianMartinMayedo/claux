@@ -19,10 +19,17 @@ type Tab = 'dossier' | 'presentacion' | 'estado'
 
 // `volver`: solo lo pasa la ruta /portal/dossier/[dossierId] del addon; sin él la
 // página ES el módulo entero y no hay ninguna lista a la que volver.
-export default function DossierEditor({ data, volver }: { data: DossierData; volver?: string }) {
+export default function DossierEditor({ data, volver, puedeEditar = true }: {
+  data: DossierData
+  volver?: string
+  /** Solo-ver: sin wizard, sin pestaña de edición «Mi dossier», y las dos
+   *  pestañas de vista (Presentación / Estado) esconden sus controles de escritura. */
+  puedeEditar?: boolean
+}) {
   const router = useRouter()
   const refrescar = () => router.refresh()
-  const [tab, setTab] = useState<Tab>('dossier')
+  // Quien solo puede ver no tiene «Mi dossier» (edición): arranca en Presentación.
+  const [tab, setTab] = useState<Tab>(puedeEditar ? 'dossier' : 'presentacion')
   // Estado sucio de «Mi dossier» (lo teclea DossierSecciones). Vive aquí para poder
   // guardar TAMBIÉN el salto de pestaña, no solo el de sección.
   const [dirty, setDirty] = useState(false)
@@ -51,8 +58,10 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
   // reactivo, guardar los números dentro del wizard te expulsaría de él a mitad
   // de flujo. Al volver más tarde, la serie ya existe → pestañas, y todo lo que
   // faltara se edita ahí suelto: nada de lo escrito se pierde por abandonar.
+  // El wizard es puro flujo de EDICIÓN: quien solo puede ver nunca entra (verá las
+  // pestañas de vista, aunque estén vacías si aún no hay números).
   const [modo, setModo] = useState<'wizard' | 'tabs'>(
-    () => (!data.dossier || data.serie.length === 0) ? 'wizard' : 'tabs',
+    () => (puedeEditar && (!data.dossier || data.serie.length === 0)) ? 'wizard' : 'tabs',
   )
 
   if (modo === 'wizard') {
@@ -93,7 +102,8 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
         active={tab}
         onChange={intentarTab}
         tabs={[
-          { id: 'dossier', label: 'Mi dossier' },
+          // «Mi dossier» es la pestaña de edición: fuera para quien solo puede ver.
+          ...(puedeEditar ? [{ id: 'dossier' as Tab, label: 'Mi dossier' }] : []),
           { id: 'presentacion', label: 'Presentación' },
           { id: 'estado', label: 'Estado de resultados' },
         ]}
@@ -101,7 +111,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
 
       {/* «Mi dossier»: los MISMOS componentes del wizard, con navegación libre
           entre secciones (no un scroll largo). Editar sin pasar por el wizard. */}
-      {tab === 'dossier' && (
+      {tab === 'dossier' && puedeEditar && (
         <DossierSecciones
           data={data} dossier={dossier} simbolo={simbolo} onRefrescar={refrescar}
           dirty={dirty} setDirty={setDirty}
@@ -114,6 +124,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
           aperturas={data.aperturas} ultimaApertura={data.ultimaApertura}
           tieneEn={data.tieneEn} enDesactualizado={data.enDesactualizado}
           onCambio={refrescar}
+          puedeEditar={puedeEditar}
         />
       )}
 
@@ -128,6 +139,7 @@ export default function DossierEditor({ data, volver }: { data: DossierData; vol
           hayInventario={data.hayInventario}
           gaveta={data.gaveta}
           onRefrescar={refrescar}
+          puedeEditar={puedeEditar}
         />
       )}
 

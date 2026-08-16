@@ -287,9 +287,10 @@ const REVISION_BADGE: Record<AvisoRevision['tipo'], string> = {
 }
 
 function PanelRevisar({
-  revision, onAjustar,
+  revision, puedeEditar, onAjustar,
 }: {
   revision: AvisoRevision[]
+  puedeEditar: boolean
   onAjustar: (a: AvisoRevision) => void
 }) {
   const router = useRouter()
@@ -346,7 +347,7 @@ function PanelRevisar({
                 </td>
                 <td className="col-actions">
                   <RowActions>
-                    {a.almacen_id && (
+                    {puedeEditar && a.almacen_id && (
                       <button className="row-actions-item" onClick={() => onAjustar(a)}>
                         <Settings2 size={15} strokeWidth={2} /> Ajustar stock
                       </button>
@@ -384,10 +385,11 @@ function PanelRevisar({
 // ── Vista principal ───────────────────────────────────────────────────────────
 
 export default function MovimientosView({
-  data, revision = [],
+  data, revision = [], puedeEditar,
 }: {
   data: MovimientosPageData
   revision?: AvisoRevision[]
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   const [tab,         setTab]         = useState<'movimientos' | 'revisar'>('movimientos')
@@ -508,18 +510,20 @@ export default function MovimientosView({
             filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta })}
             resumen={resumenDe(declaracion)}
           />
-          <button className="btn btn-secondary" onClick={() => setShowRecalc(true)} disabled={recalcPending}
-            title="Recalcula las existencias desde su historial de entradas y salidas">
-            <RefreshCw size={14} strokeWidth={2} /> Recalcular stock
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}
-            disabled={data.almacenes.length === 0 || data.productos.length === 0}>
-            <Plus size={14} strokeWidth={2.5} /> Nuevo movimiento
-          </button>
+          {puedeEditar && (<>
+            <button className="btn btn-secondary" onClick={() => setShowRecalc(true)} disabled={recalcPending}
+              title="Recalcula las existencias desde su historial de entradas y salidas">
+              <RefreshCw size={14} strokeWidth={2} /> Recalcular stock
+            </button>
+            <button className="btn btn-primary" onClick={() => setModalOpen(true)}
+              disabled={data.almacenes.length === 0 || data.productos.length === 0}>
+              <Plus size={14} strokeWidth={2.5} /> Nuevo movimiento
+            </button>
+          </>)}
         </div>
       </div>
 
-      {(data.almacenes.length === 0 || data.productos.length === 0) && (
+      {puedeEditar && (data.almacenes.length === 0 || data.productos.length === 0) && (
         <PrerequisitoAviso acciones={[
           ...(data.productos.length === 0 ? [{ label: 'Crear producto', href: '/portal/productos' }] : []),
           ...(data.almacenes.length === 0 ? [{ label: 'Crear almacén', href: '/portal/almacenes' }] : []),
@@ -538,7 +542,7 @@ export default function MovimientosView({
       />
 
       {tab === 'revisar' && (
-        <PanelRevisar revision={revision} onAjustar={setAjuste} />
+        <PanelRevisar revision={revision} puedeEditar={puedeEditar} onAjustar={setAjuste} />
       )}
 
       {tab === 'movimientos' && (
@@ -656,7 +660,7 @@ export default function MovimientosView({
                       <td className="col-actions">
                         {/* Solo los manuales: compras y ventas se deshacen anulando su
                             documento, no compensando el movimiento a mano. */}
-                        {m.origen === 'MANUAL' && (
+                        {puedeEditar && m.origen === 'MANUAL' && (
                           <RowActions>
                             <button className="row-actions-item" onClick={() => setRevertir(m)}>
                               <RotateCcw size={15} strokeWidth={2} /> Revertir

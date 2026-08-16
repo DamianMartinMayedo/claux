@@ -16,10 +16,11 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 // del modal "Enviar al asesor" de Reportes. Cada asesor tiene un ámbito: una empresa
 // concreta o "todas".
 export default function AsesoresView({
-  asesores, empresas,
+  asesores, empresas, puedeEditar,
 }: {
   asesores: Asesor[]
   empresas: { empresa_id: string; nombre: string }[]
+  puedeEditar: boolean
 }) {
   const [lista, setLista] = useState<Asesor[]>(asesores)
   // null = formulario cerrado; 'new' = alta; Asesor = edición.
@@ -80,7 +81,7 @@ export default function AsesoresView({
           <h1 className="page-title">Asesores</h1>
           <p className="page-subtitle">Contactos a los que envías tus reportes financieros por correo.</p>
         </div>
-        {!form && (
+        {puedeEditar && !form && (
           <button type="button" className="btn btn-primary" onClick={abrirAlta}>
             <Plus size={14} strokeWidth={2.5} /> Añadir asesor
           </button>
@@ -147,14 +148,16 @@ export default function AsesoresView({
                       <span className="badge badge-neutral">{empresaNombre(a.empresa_id)}</span>
                     </td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => abrirEdicion(a)}>
-                          <Pencil size={15} strokeWidth={2} /> Editar
-                        </button>
-                        <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarBorrado(a)}>
-                          <Trash2 size={14} strokeWidth={2} /> Eliminar
-                        </button>
-                      </RowActions>
+                      {puedeEditar && (
+                        <RowActions>
+                          <button className="row-actions-item" onClick={() => abrirEdicion(a)}>
+                            <Pencil size={15} strokeWidth={2} /> Editar
+                          </button>
+                          <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarBorrado(a)}>
+                            <Trash2 size={14} strokeWidth={2} /> Eliminar
+                          </button>
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}

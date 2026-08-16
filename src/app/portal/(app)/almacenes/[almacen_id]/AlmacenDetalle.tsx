@@ -328,9 +328,11 @@ export default function AlmacenDetalle(
                       </td>
                       <td className="col-actions">
                         <RowActions>
-                          <button className="row-actions-item" onClick={() => setAjuste(l)}>
-                            <Layers size={15} strokeWidth={2} /> Ajustar stock
-                          </button>
+                          {data.puede_editar && (
+                            <button className="row-actions-item" onClick={() => setAjuste(l)}>
+                              <Layers size={15} strokeWidth={2} /> Ajustar stock
+                            </button>
+                          )}
                           <button className="row-actions-item"
                             onClick={() => router.push(`/portal/productos/${l.producto_id}`)}>
                             <Package size={15} strokeWidth={2} /> Ver producto

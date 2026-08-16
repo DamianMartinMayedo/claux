@@ -10,7 +10,7 @@ import { sufijoPeriodo } from '@/lib/catalogo-periodo'
 import { useIa } from '@/components/portal/ia/IaContext'
 import ItemModal from '../ItemModal'
 
-export default function ItemDetalleView({ data, item }: { data: CatalogoData; item: CatalogoItem }) {
+export default function ItemDetalleView({ data, item, puedeEditar }: { data: CatalogoData; item: CatalogoItem; puedeEditar: boolean }) {
   const router = useRouter()
   const { tieneIa } = useIa()
   const [editando, setEditando] = useState(false)
@@ -30,9 +30,11 @@ export default function ItemDetalleView({ data, item }: { data: CatalogoData; it
           <h1 className="page-title">{item.nombre}</h1>
           {categoriaNombre && <p className="page-subtitle">{categoriaNombre}</p>}
         </div>
-        <button className="btn btn-primary" onClick={() => setEditando(true)}>
-          <Pencil size={16} strokeWidth={2} /> Editar
-        </button>
+        {puedeEditar && (
+          <button className="btn btn-primary" onClick={() => setEditando(true)}>
+            <Pencil size={16} strokeWidth={2} /> Editar
+          </button>
+        )}
       </div>
 
       <div className="card">

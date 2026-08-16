@@ -42,6 +42,7 @@ function slug(s: string): string {
 
 export default function PestanaEstado({
   dossier, serie, lineas, empresaNombre, simbolo, tieneBase, hayInventario, gaveta, onRefrescar,
+  puedeEditar = true,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
@@ -52,6 +53,8 @@ export default function PestanaEstado({
   hayInventario: boolean
   gaveta: ResumenGaveta
   onRefrescar?: () => void
+  /** Solo-ver: sin selector de modo (es ajuste de publicación) ni resincronizar. */
+  puedeEditar?: boolean
 }) {
   const er = useMemo(() => estadoDeResultados(serie, lineas), [serie, lineas])
   // Nota honesta: el coste viene de la base y el negocio no tiene inventario, así
@@ -156,6 +159,7 @@ export default function PestanaEstado({
             dossierId={dossier.dossier_id}
             tieneBase={tieneBase}
             onActualizado={onRefrescar}
+            puedeEditar={puedeEditar}
             mensaje={
               <>
                 <strong>Datos desfasados.</strong> Cambiaste la moneda, la empresa o el período: este estado
@@ -198,32 +202,35 @@ export default function PestanaEstado({
 
         {/* Selector de modo + encuadre de vista previa. Van juntos a propósito: el
             dueño elige cuánto enseña MIRANDO lo que enseña, no a ciegas desde otra
-            pantalla. Cambia el PDF y el enlace público a la vez que esto. */}
-        <div className="dos-modo">
-          <div className="dos-modo-cabeza">
-            <Eye size={14} strokeWidth={2} aria-hidden="true" />
-            <span className="dos-modo-titulo">Así verá tu estado de resultados quien lo reciba</span>
+            pantalla. Cambia el PDF y el enlace público a la vez que esto.
+            El modo es un ajuste de PUBLICACIÓN: quien solo puede ver no lo cambia
+            (el candado real sigue en `guardarModoEstado`), así que ve el resultado
+            en el modo guardado sin el selector. */}
+        {puedeEditar && (
+          <div className="dos-modo">
+            <div className="dos-modo-cabeza">
+              <Eye size={14} strokeWidth={2} aria-hidden="true" />
+              <span className="dos-modo-titulo">Así verá tu estado de resultados quien lo reciba</span>
+            </div>
+            <div className="dos-modo-opciones" role="group" aria-label="Qué se publica del estado de resultados">
+              {MODOS_ESTADO.map(m => (
+                <button
+                  key={m} type="button"
+                  className={`cxx-chip${modo === m ? ' active' : ''}`}
+                  onClick={() => cambiarModo(m)}
+                  disabled={guardando}
+                  aria-pressed={modo === m}
+                >
+                  {LABEL_MODO_ESTADO[m]}
+                </button>
+              ))}
+            </div>
+            <p className="dos-modo-ayuda">
+              {AYUDA_MODO_ESTADO[modo]}
+              {detallar && sinDesglose && ' Todavía no has escrito ningún concepto: complétalo en el paso «El desglose».'}
+            </p>
           </div>
-          {/* Sin gate de solo-lectura en cliente, como el resto del dossier: el
-              candado real lo pone `guardarModoEstado` en servidor. */}
-          <div className="dos-modo-opciones" role="group" aria-label="Qué se publica del estado de resultados">
-            {MODOS_ESTADO.map(m => (
-              <button
-                key={m} type="button"
-                className={`cxx-chip${modo === m ? ' active' : ''}`}
-                onClick={() => cambiarModo(m)}
-                disabled={guardando}
-                aria-pressed={modo === m}
-              >
-                {LABEL_MODO_ESTADO[m]}
-              </button>
-            ))}
-          </div>
-          <p className="dos-modo-ayuda">
-            {AYUDA_MODO_ESTADO[modo]}
-            {detallar && sinDesglose && ' Todavía no has escrito ningún concepto: complétalo en el paso «El desglose».'}
-          </p>
-        </div>
+        )}
 
         <div className="dos-resumen">
           <div className="dos-resumen-item">

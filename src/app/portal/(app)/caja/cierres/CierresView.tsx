@@ -34,9 +34,10 @@ interface Props {
     hay_mas: boolean; total: number; limite: number
   }
   pendientes: PendienteContabilizar[]
+  puedeEditar: boolean
 }
 
-export default function CierresView({ data, pendientes }: Props) {
+export default function CierresView({ data, pendientes, puedeEditar }: Props) {
   const [tab, setTab] = useState<'cierres' | 'pendientes'>(pendientes.length > 0 ? 'pendientes' : 'cierres')
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
 
@@ -67,16 +68,16 @@ export default function CierresView({ data, pendientes }: Props) {
       )}
 
       {tab === 'pendientes' && pendientes.length > 0
-        ? <PendientesTabla items={pendientes} cajaNombre={cajaNombre} />
-        : <CierresTabla data={data} cajaNombre={cajaNombre} />}
+        ? <PendientesTabla items={pendientes} cajaNombre={cajaNombre} puedeEditar={puedeEditar} />
+        : <CierresTabla data={data} cajaNombre={cajaNombre} puedeEditar={puedeEditar} />}
     </div>
   )
 }
 
 // ── Sin contabilizar: el rescate ────────────────────────────────────────────────
 
-function PendientesTabla({ items, cajaNombre }: {
-  items: PendienteContabilizar[]; cajaNombre: (id: string) => string
+function PendientesTabla({ items, cajaNombre, puedeEditar }: {
+  items: PendienteContabilizar[]; cajaNombre: (id: string) => string; puedeEditar: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -144,10 +145,12 @@ function PendientesTabla({ items, cajaNombre }: {
                     </span>
                   </td>
                   <td className="col-actions">
-                    <button className="btn btn-secondary btn-sm" disabled={isPending}
-                      onClick={() => setConfirmar(g)}>
-                      Cerrar y contabilizar
-                    </button>
+                    {puedeEditar && (
+                      <button className="btn btn-secondary btn-sm" disabled={isPending}
+                        onClick={() => setConfirmar(g)}>
+                        Cerrar y contabilizar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -188,8 +191,8 @@ function PendientesTabla({ items, cajaNombre }: {
 
 // ── Cierres ─────────────────────────────────────────────────────────────────────
 
-function CierresTabla({ data, cajaNombre }: {
-  data: Props['data']; cajaNombre: (id: string) => string
+function CierresTabla({ data, cajaNombre, puedeEditar }: {
+  data: Props['data']; cajaNombre: (id: string) => string; puedeEditar: boolean
 }) {
   const router = useRouter()
   const { pageItems, ...pag } = usePagination(data.cierres)
@@ -257,7 +260,7 @@ function CierresTabla({ data, cajaNombre }: {
                       {/* La vuelta que faltaba: el badge señalaba el problema y no ofrecía
                           nada, y el dispositivo ya no reenvía un cierre que dio por enviado.
                           Es idempotente, así que solo escribe lo que falte. */}
-                      {vendidas.length > 0 && faltan.length > 0 && (
+                      {puedeEditar && vendidas.length > 0 && faltan.length > 0 && (
                         <button className="btn btn-secondary btn-sm" disabled={isPending}
                           onClick={() => reintentar(c)}>
                           <RefreshCw size={14} strokeWidth={2} /> Contabilizar

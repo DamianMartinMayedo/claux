@@ -1,4 +1,4 @@
-import { requireModulo }     from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerMovimientos, obtenerRevision } from '@/app/actions/portal/inventario'
 import EnConstruccion         from '@/components/portal/EnConstruccion'
 import { TOPE_VER_MAS }       from '@/lib/listados'
@@ -12,7 +12,7 @@ export default async function InventarioPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('inventario')
+  const { puedeEditar } = await requireAccesoModulo('inventario')
   // El rango viaja en la URL y se aplica EN LA QUERY, como en los listados de
   // Contabilidad: antes se traían 500 filas sin rango y sin decirlo.
   // `limite` lo sube «Traer más»: el techo recorta por fecha descendente, así que sin
@@ -37,6 +37,6 @@ export default async function InventarioPage({
   // los movimientos de almacén, y estaba prometiendo apuntes en la pantalla que no
   // los produce. Vive en /portal/compras.
   return data
-    ? <MovimientosView data={data} revision={revision} />
+    ? <MovimientosView data={data} revision={revision} puedeEditar={puedeEditar} />
     : <EnConstruccion titulo="Movimientos" subtitulo="Stock y movimientos de almacén." />
 }

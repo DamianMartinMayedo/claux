@@ -1,5 +1,5 @@
 import { notFound }            from 'next/navigation'
-import { requireModulo }       from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerCompraDetalle } from '@/app/actions/portal/compras'
 import CompraDetalle           from './CompraDetalle'
 
@@ -10,9 +10,9 @@ export default async function CompraDetallePage({
 }: {
   params: Promise<{ compra_id: string }>
 }) {
-  await requireModulo('inventario')
+  const { puedeEditar } = await requireAccesoModulo('inventario')
   const { compra_id } = await params
   const data = await obtenerCompraDetalle(compra_id)
   if (!data) notFound()
-  return <CompraDetalle data={data} />
+  return <CompraDetalle data={data} puedeEditar={puedeEditar} />
 }

@@ -12,7 +12,7 @@ import Tabs from '@/components/Tabs'
 
 type TabId = 'caja' | 'config'
 
-export default function CajaConfigView({ data }: { data: CajaConfigData }) {
+export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfigData; puedeEditar: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [tab, setTab] = useState<TabId>('caja')
@@ -199,7 +199,10 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
       </div>
 
       <Tabs
-        tabs={[{ id: 'caja', label: 'El punto de venta' }, { id: 'config', label: 'Configuración' }]}
+        tabs={[
+          { id: 'caja', label: 'El punto de venta' },
+          ...(puedeEditar ? [{ id: 'config' as const, label: 'Configuración' }] : []),
+        ]}
         active={tab} onChange={setTab} ariaLabel="Secciones del punto de venta"
       />
 
@@ -247,9 +250,11 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
                   <QrCode size={14} strokeWidth={2} /> {generandoQr ? 'Generando…' : 'Ver código QR'}
                 </button>
 
-                <button type="button" className="btn btn-secondary" onClick={() => setConfirmarRegenerar(true)} disabled={isPending}>
-                  <RefreshCw size={14} strokeWidth={2} /> Regenerar enlace
-                </button>
+                {puedeEditar && (
+                  <button type="button" className="btn btn-secondary" onClick={() => setConfirmarRegenerar(true)} disabled={isPending}>
+                    <RefreshCw size={14} strokeWidth={2} /> Regenerar enlace
+                  </button>
+                )}
               </div>
               <p className="caja-install-hint">
                 Regenerar invalida el enlace anterior: los dispositivos ya instalados dejan de
@@ -270,7 +275,7 @@ export default function CajaConfigView({ data }: { data: CajaConfigData }) {
       )}
 
       {/* ── Configuración ── */}
-      {tab === 'config' && (
+      {puedeEditar && tab === 'config' && (
         <form className="card caja-config-form" onSubmit={guardar}>
           <h2 className="mon-section-title">Configuración</h2>
 

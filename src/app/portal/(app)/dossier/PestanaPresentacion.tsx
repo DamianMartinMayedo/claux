@@ -37,6 +37,7 @@ import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 export default function PestanaPresentacion({
   dossier, tieneBase, gaveta, aperturas, ultimaApertura, tieneEn, enDesactualizado, onCambio,
+  puedeEditar = true,
 }: {
   dossier: DossierBasico
   tieneBase: boolean
@@ -47,6 +48,9 @@ export default function PestanaPresentacion({
   tieneEn: boolean
   enDesactualizado: boolean
   onCambio?: () => void
+  /** Solo-ver: puede copiar/ver/descargar el enlace, pero no publicar, despublicar,
+   *  cambiar el enlace ni regenerar la traducción. */
+  puedeEditar?: boolean
 }) {
   const { tieneIa } = useIa()
   const [pending, startTransition] = useTransition()
@@ -159,6 +163,7 @@ export default function PestanaPresentacion({
             dossierId={dossier.dossier_id}
             tieneBase={tieneBase}
             onActualizado={onCambio}
+            puedeEditar={puedeEditar}
             mensaje={
               <>
                 <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período.
@@ -199,10 +204,12 @@ export default function PestanaPresentacion({
               solo funciona para quien se lo des.
             </p>
             <div className="dos-acciones">
-              <button className="btn btn-primary" onClick={publicar} disabled={pending || desfasado}>
-                {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Globe size={14} strokeWidth={2.5} />}
-                Publicar presentación
-              </button>
+              {puedeEditar && (
+                <button className="btn btn-primary" onClick={publicar} disabled={pending || desfasado}>
+                  {pending ? <Loader2 size={14} strokeWidth={2.5} className="dos-spin" /> : <Globe size={14} strokeWidth={2.5} />}
+                  Publicar presentación
+                </button>
+              )}
               {/* Ver el deck ensamblado ANTES de publicar: mismo render que el enlace
                   público, gated por sesión (nadie más lo ve). Evita publicar a ciegas. */}
               <a className="btn btn-secondary" href={`/d/preview/${dossier.dossier_id}`} target="_blank" rel="noreferrer">
@@ -235,14 +242,16 @@ export default function PestanaPresentacion({
               </a>
             </div>
 
-            <div className="dos-enlace-acciones">
-              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarDespublicar(true)} disabled={pending}>
-                <EyeOff size={13} strokeWidth={2.5} /> Despublicar
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarRevocar(true)} disabled={pending}>
-                <RefreshCw size={13} strokeWidth={2.5} /> Cambiar el enlace
-              </button>
-            </div>
+            {puedeEditar && (
+              <div className="dos-enlace-acciones">
+                <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarDespublicar(true)} disabled={pending}>
+                  <EyeOff size={13} strokeWidth={2.5} /> Despublicar
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarRevocar(true)} disabled={pending}>
+                  <RefreshCw size={13} strokeWidth={2.5} /> Cambiar el enlace
+                </button>
+              </div>
+            )}
 
             {/* Acuse de lectura: lo que más quiere saber quien manda un dossier. */}
             <p className="dos-aperturas">{textoApertura(aperturas, ultimaApertura)}</p>
@@ -276,10 +285,14 @@ export default function PestanaPresentacion({
                 {revisando ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
                 {revisando ? 'Revisando…' : 'Revisar mi dossier con IA'}
               </button>
-              <button className="btn btn-ia btn-sm" onClick={generarIngles} disabled={traduciendo}>
-                {traduciendo ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
-                {traduciendo ? 'Traduciendo…' : tieneEn ? 'Regenerar versión en inglés' : 'Generar versión en inglés'}
-              </button>
+              {/* Generar/regenerar inglés ESCRIBE (guarda la traducción): solo quien
+                  puede editar. Revisar es lectura y se queda para todos. */}
+              {puedeEditar && (
+                <button className="btn btn-ia btn-sm" onClick={generarIngles} disabled={traduciendo}>
+                  {traduciendo ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <IaSparkle />}
+                  {traduciendo ? 'Traduciendo…' : tieneEn ? 'Regenerar versión en inglés' : 'Generar versión en inglés'}
+                </button>
+              )}
             </div>
             {observaciones && (
               observaciones.length > 0 ? (

@@ -45,10 +45,13 @@ const REBOTE_MS = 4000
 
 type Campo = 'texto' | 'causa' | 'nota'
 
-export default function ConteoView({ data }: { data: ConteoDetalle }) {
+export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle; puedeEditar: boolean }) {
   const router = useRouter()
   const { conteo, almacen, moneda } = data
-  const soloLectura = conteo.estado !== 'BORRADOR'
+  // `soloLectura` mezcla dos cosas que aquí coinciden en efecto: sin permiso de módulo
+  // (o usuario de solo-lectura) la hoja es de consulta; y un conteo ya aplicado también
+  // lo es aunque tengas permiso. Basta con que se dé una para no poder tocar nada.
+  const soloLectura = !puedeEditar || conteo.estado !== 'BORRADOR'
 
   // Todo lo editable vive en UN ref (`vivo`) y el estado es su espejo para repintar.
   // Con tres campos por línea, leer «lo último que hay escrito» desde el temporizador

@@ -45,7 +45,7 @@ const ESTADO_LABEL: Record<EstadoCompra, string> = {
 
 type Confirm = { title: string; body?: string; confirmLabel: string; danger: boolean; run: () => void }
 
-export default function ComprasView({ data }: { data: ComprasPageData }) {
+export default function ComprasView({ data, puedeEditar }: { data: ComprasPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const [modalOpen,    setModalOpen]    = useState(false)
   const [reponiendo,   setReponiendo]   = useState(false)
@@ -145,16 +145,18 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
           />
           {/* Cierra la cadena del módulo: el mínimo detecta la falta, la cobertura la
               ordena y esto la convierte en la compra. Nada se confirma solo. */}
-          <button className="btn btn-secondary" onClick={() => setReponiendo(true)} disabled={sinAlmacenes || isPending}>
-            <PackageSearch size={14} strokeWidth={2} /> Comprar lo que falta
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
-            <Plus size={14} strokeWidth={2.5} /> Nueva compra
-          </button>
+          {puedeEditar && (<>
+            <button className="btn btn-secondary" onClick={() => setReponiendo(true)} disabled={sinAlmacenes || isPending}>
+              <PackageSearch size={14} strokeWidth={2} /> Comprar lo que falta
+            </button>
+            <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
+              <Plus size={14} strokeWidth={2.5} /> Nueva compra
+            </button>
+          </>)}
         </div>
       </div>
 
-      {sinAlmacenes && (
+      {sinAlmacenes && puedeEditar && (
         <PrerequisitoAviso acciones={[{ label: 'Crear almacén', href: '/portal/almacenes' }]}>
           Para registrar compras necesitas <strong>al menos un almacén</strong>.
         </PrerequisitoAviso>
@@ -190,9 +192,11 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    </th>
+                  )}
                   <th>Número</th>
                   <th>Fecha</th>
                   <th>Proveedor</th>
@@ -206,12 +210,14 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                 {pageItems.map(c => (
                   <tr key={c.compra_id} className="table-row-clickable"
                     onClick={() => router.push(`/portal/compras/${c.compra_id}`)}>
-                    <td className="col-check" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={sel.isSelected(c.compra_id)}
-                        onChange={() => sel.toggle(c.compra_id)}
-                        aria-label={`Seleccionar ${c.numero}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(c.compra_id)}
+                          onChange={() => sel.toggle(c.compra_id)}
+                          aria-label={`Seleccionar ${c.numero}`} />
+                      </td>
+                    )}
                     <td data-label="Número"><code className="text-mono">{c.numero}</code></td>
                     <td data-label="Fecha" className="text-sm-muted">{fmtDate(c.fecha)}</td>
                     <td data-label="Proveedor"><span className="cell-clamp">{c.proveedor_id ? (data.proveedor_nombres[c.proveedor_id] ?? c.proveedor_id) : <span className="text-faint">—</span>}</span></td>
@@ -223,9 +229,11 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
                         <button className="row-actions-item" onClick={() => router.push(`/portal/compras/${c.compra_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                         {/* Comprar lo mismo al mismo proveedor es LA operación repetida
                             del módulo, y había que teclearla entera cada vez. */}
-                        <button className="row-actions-item" onClick={() => duplicar(c.compra_id)} disabled={isPending}>
-                          <Copy size={15} strokeWidth={2} /> Duplicar
-                        </button>
+                        {puedeEditar && (
+                          <button className="row-actions-item" onClick={() => duplicar(c.compra_id)} disabled={isPending}>
+                            <Copy size={15} strokeWidth={2} /> Duplicar
+                          </button>
+                        )}
                       </RowActions>
                     </td>
                   </tr>
@@ -238,6 +246,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
       </div>
 
       {/* ── Barra flotante de acciones en lote ── */}
+      {puedeEditar && (
       <BulkBar count={sel.count} onClear={sel.clear}>
         {nConfirmadas > 0 && (
           <button className="btn btn-secondary btn-sm" disabled={isPending}
@@ -262,6 +271,7 @@ export default function ComprasView({ data }: { data: ComprasPageData }) {
           </button>
         )}
       </BulkBar>
+      )}
 
       {confirm && (
         <ConfirmDialog

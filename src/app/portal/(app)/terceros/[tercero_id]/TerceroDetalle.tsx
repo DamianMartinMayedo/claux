@@ -558,7 +558,7 @@ function TabSuscripciones({ suscripciones }: { suscripciones: TerceroSuscripcion
 
 type TabId = 'datos' | 'productos' | 'suscripciones' | 'cp' | 'historial'
 
-export default function TerceroDetalle({ data: initialData }: { data: TerceroDetalleData }) {
+export default function TerceroDetalle({ data: initialData, puedeEditar }: { data: TerceroDetalleData; puedeEditar: boolean }) {
   const [data,      setData]      = useState(initialData)
   const [tab,       setTab]       = useState<TabId>('datos')
   const [showEdit,  setShowEdit]  = useState(false)
@@ -638,25 +638,27 @@ export default function TerceroDetalle({ data: initialData }: { data: TerceroDet
         </div>
 
         {/* Acciones */}
-        <div className="det-actions">
-          <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
-            <Pencil size={14} strokeWidth={2} /> Editar
-          </button>
-          <RowActions>
-            {empresas.length > 1 && (
-              <button className="row-actions-item" onClick={() => setCopiar(true)}>
-                <Copy size={15} strokeWidth={2} /> Copiar a otra empresa
-              </button>
-            )}
-            <button
-              className={`row-actions-item${tercero.activo ? ' row-actions-item-danger' : ''}`}
-              onClick={toggleActivo}
-              disabled={pending}
-            >
-              {tercero.activo ? <><Archive size={15} strokeWidth={2} /> Archivar</> : <><RotateCcw size={15} strokeWidth={2} /> Restaurar</>}
+        {puedeEditar && (
+          <div className="det-actions">
+            <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
+              <Pencil size={14} strokeWidth={2} /> Editar
             </button>
-          </RowActions>
-        </div>
+            <RowActions>
+              {empresas.length > 1 && (
+                <button className="row-actions-item" onClick={() => setCopiar(true)}>
+                  <Copy size={15} strokeWidth={2} /> Copiar a otra empresa
+                </button>
+              )}
+              <button
+                className={`row-actions-item${tercero.activo ? ' row-actions-item-danger' : ''}`}
+                onClick={toggleActivo}
+                disabled={pending}
+              >
+                {tercero.activo ? <><Archive size={15} strokeWidth={2} /> Archivar</> : <><RotateCcw size={15} strokeWidth={2} /> Restaurar</>}
+              </button>
+            </RowActions>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

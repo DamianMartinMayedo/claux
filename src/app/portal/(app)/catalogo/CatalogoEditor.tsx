@@ -32,7 +32,7 @@ import ExportarMenu from '@/components/portal/ExportarMenu'
 
 type Tab = 'items' | 'categorias' | 'configuracion'
 
-export default function CatalogoEditor({ data }: { data: CatalogoData }) {
+export default function CatalogoEditor({ data, puedeEditar }: { data: CatalogoData; puedeEditar: boolean }) {
   const router = useRouter()
   const { tieneIa } = useIa()
   // Etiqueta del ítem en el idioma del negocio («Plato», «Artículo», «Servicio»):
@@ -137,8 +137,9 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
   const hayItems = data.items.length > 0
   // Sin cabecera de sección cuando el único grupo es "Sin categoría".
   const soloSin = gruposFiltrados.length === 1 && gruposFiltrados[0].id === '__sin__'
-  // +1 por la columna de selección (col-check) al inicio de la vista lista.
-  const colSpanLista = data.tieneInventario ? 7 : 6
+  // +1 por la columna de selección (col-check) al inicio de la vista lista, que solo
+  // se pinta si el usuario puede editar (la selección en lote es una acción de escritura).
+  const colSpanLista = (data.tieneInventario ? 6 : 5) + (puedeEditar ? 1 : 0)
 
   // ── Selección múltiple (acciones en lote) ──
   // Sobre los ítems VISIBLES (respeta el chip de categoría). Se limpia al cambiar
@@ -188,12 +189,14 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                 ? (data.categorias.find(c => c.categoria_id === filtroCategoria)?.nombre ?? '')
                 : ''].filter((x): x is string => Boolean(x))}
             />
-            <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
-              <Plus size={16} strokeWidth={2} /> {art}
-            </button>
+            {puedeEditar && (
+              <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
+                <Plus size={16} strokeWidth={2} /> {art}
+              </button>
+            )}
           </div>
         )}
-        {tab === 'categorias' && (
+        {tab === 'categorias' && puedeEditar && (
           <button className="btn btn-primary" onClick={() => setModalCategoria('nueva')}>
             <Plus size={16} strokeWidth={2} /> Categoría
           </button>
@@ -234,9 +237,11 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
             <div className="card cat-empty">
               <Package size={32} strokeWidth={1.5} />
               <p>Aún no has añadido {artsL} a tu {data.etiquetas.catalogo.toLowerCase()}.</p>
-              <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
-                <Plus size={16} strokeWidth={2} /> Añadir el primero
-              </button>
+              {puedeEditar && (
+                <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
+                  <Plus size={16} strokeWidth={2} /> Añadir el primero
+                </button>
+              )}
             </div>
           ) : (
             <div className="card card-table">
@@ -244,9 +249,11 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th className="col-check">
-                        <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                      </th>
+                      {puedeEditar && (
+                        <th className="col-check">
+                          <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                        </th>
+                      )}
                       <th></th>
                       <th>{art}</th>
                       <th className="col-num">Precio</th>
@@ -268,6 +275,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
                         )}
                         {g.items.map((item, idx) => (
                           <ItemRow key={item.item_id} item={item} tieneInventario={data.tieneInventario} articulo={art}
+                            puedeEditar={puedeEditar}
                             selected={sel.isSelected(item.item_id)} onToggle={() => sel.toggle(item.item_id)}
                             canUp={idx > 0} canDown={idx < g.items.length - 1} reordenando={isReordenando}
                             onMoveUp={() => reordenar(g.items.map(i => i.item_id), idx, -1, reordenarItems)}
@@ -290,6 +298,7 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
           categorias={data.categorias}
           items={data.items}
           articulo={art}
+          puedeEditar={puedeEditar}
           reordenando={isReordenando}
           onMover={(ids, index, dir) => reordenar(ids, index, dir, reordenarCategorias)}
           onNueva={() => setModalCategoria('nueva')}
@@ -299,10 +308,10 @@ export default function CatalogoEditor({ data }: { data: CatalogoData }) {
       )}
 
       {tab === 'configuracion' && (
-        <ConfiguracionTab data={data} onSaved={onSaved} />
+        <ConfiguracionTab data={data} puedeEditar={puedeEditar} onSaved={onSaved} />
       )}
 
-      {tab === 'items' && (
+      {tab === 'items' && puedeEditar && (
         <BulkBar count={sel.count} onClear={sel.clear}>
           {hayAgotados && (
             <button className="btn btn-secondary btn-sm" disabled={isBulk}
@@ -414,8 +423,8 @@ function Precio({ item, className, antesClassName }: {
 
 // ── Fila de ítem (vista lista) ───────────────────────────────────────────────
 
-function ItemRow({ item, tieneInventario, articulo, selected, onToggle, canUp, canDown, reordenando, onMoveUp, onMoveDown, onEdit, onDuplicate, onDelete, onSaved }: {
-  item: CatalogoItem; tieneInventario: boolean; articulo: string; selected: boolean; onToggle: () => void
+function ItemRow({ item, tieneInventario, articulo, puedeEditar, selected, onToggle, canUp, canDown, reordenando, onMoveUp, onMoveDown, onEdit, onDuplicate, onDelete, onSaved }: {
+  item: CatalogoItem; tieneInventario: boolean; articulo: string; puedeEditar: boolean; selected: boolean; onToggle: () => void
   canUp: boolean; canDown: boolean; reordenando: boolean; onMoveUp: () => void; onMoveDown: () => void
   onEdit: () => void; onDuplicate: () => void; onDelete: () => void; onSaved: () => void
 }) {
@@ -435,10 +444,12 @@ function ItemRow({ item, tieneInventario, articulo, selected, onToggle, canUp, c
   return (
     <tr className={`table-row-clickable ${!item.disponible ? 'cat-row-agotado' : ''}`}
       onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}>
-      <td className="col-check" onClick={e => e.stopPropagation()}>
-        <input type="checkbox" className="row-check" checked={selected}
-          onChange={onToggle} aria-label={`Seleccionar ${item.nombre}`} />
-      </td>
+      {puedeEditar && (
+        <td className="col-check" onClick={e => e.stopPropagation()}>
+          <input type="checkbox" className="row-check" checked={selected}
+            onChange={onToggle} aria-label={`Seleccionar ${item.nombre}`} />
+        </td>
+      )}
       <td data-label="" className="cat-row-thumb-cell">
         <span className="cat-row-thumb">
           {item.foto_thumb_url
@@ -461,16 +472,18 @@ function ItemRow({ item, tieneInventario, articulo, selected, onToggle, canUp, c
       <td className="col-actions">
         <RowActions>
           <button className="row-actions-item" onClick={() => router.push(`/portal/catalogo/${item.item_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-          <button className="row-actions-item" onClick={onEdit}><Pencil size={15} strokeWidth={2} /> Editar</button>
-          <button className="row-actions-item" onClick={onDuplicate} disabled={isPending}><Copy size={15} strokeWidth={2} /> Duplicar</button>
-          <button className="row-actions-item" onClick={onMoveUp} disabled={!canUp || reordenando}><ChevronUp size={15} strokeWidth={2} /> Subir</button>
-          <button className="row-actions-item" onClick={onMoveDown} disabled={!canDown || reordenando}><ChevronDown size={15} strokeWidth={2} /> Bajar</button>
-          <button className="row-actions-item" onClick={toggleDisponible} disabled={isPending}>
-            {item.disponible ? <><EyeOff size={15} strokeWidth={2} /> Marcar agotado</> : <><Eye size={15} strokeWidth={2} /> Marcar disponible</>}
-          </button>
-          <button className="row-actions-item row-actions-item-danger" onClick={onDelete} disabled={isPending}>
-            <Trash2 size={14} strokeWidth={2} /> Eliminar
-          </button>
+          {puedeEditar && (<>
+            <button className="row-actions-item" onClick={onEdit}><Pencil size={15} strokeWidth={2} /> Editar</button>
+            <button className="row-actions-item" onClick={onDuplicate} disabled={isPending}><Copy size={15} strokeWidth={2} /> Duplicar</button>
+            <button className="row-actions-item" onClick={onMoveUp} disabled={!canUp || reordenando}><ChevronUp size={15} strokeWidth={2} /> Subir</button>
+            <button className="row-actions-item" onClick={onMoveDown} disabled={!canDown || reordenando}><ChevronDown size={15} strokeWidth={2} /> Bajar</button>
+            <button className="row-actions-item" onClick={toggleDisponible} disabled={isPending}>
+              {item.disponible ? <><EyeOff size={15} strokeWidth={2} /> Marcar agotado</> : <><Eye size={15} strokeWidth={2} /> Marcar disponible</>}
+            </button>
+            <button className="row-actions-item row-actions-item-danger" onClick={onDelete} disabled={isPending}>
+              <Trash2 size={14} strokeWidth={2} /> Eliminar
+            </button>
+          </>)}
         </RowActions>
       </td>
     </tr>
@@ -479,10 +492,11 @@ function ItemRow({ item, tieneInventario, articulo, selected, onToggle, canUp, c
 
 // ── Tab: Categorías ──────────────────────────────────────────────────────────
 
-function CategoriasTab({ categorias, items, articulo, reordenando, onMover, onNueva, onEditar, onEliminar }: {
+function CategoriasTab({ categorias, items, articulo, puedeEditar, reordenando, onMover, onNueva, onEditar, onEliminar }: {
   categorias: CatalogoCategoria[]
   items: CatalogoItem[]
   articulo: string
+  puedeEditar: boolean
   reordenando: boolean
   onMover: (ids: string[], index: number, dir: -1 | 1) => void
   onNueva: () => void
@@ -504,9 +518,11 @@ function CategoriasTab({ categorias, items, articulo, reordenando, onMover, onNu
       <div className="card cat-empty">
         <FolderTree size={32} strokeWidth={1.5} />
         <p>Aún no tienes categorías. Agrúpalas para que tus clientes encuentren los {artsL} más rápido.</p>
-        <button className="btn btn-primary" onClick={onNueva}>
-          <Plus size={16} strokeWidth={2} /> Nueva categoría
-        </button>
+        {puedeEditar && (
+          <button className="btn btn-primary" onClick={onNueva}>
+            <Plus size={16} strokeWidth={2} /> Nueva categoría
+          </button>
+        )}
       </div>
     )
   }
@@ -525,17 +541,20 @@ function CategoriasTab({ categorias, items, articulo, reordenando, onMover, onNu
           </thead>
           <tbody>
             {categorias.map((c, idx) => (
-              <tr key={c.categoria_id} className="table-row-clickable" onClick={() => onEditar(c)}>
+              <tr key={c.categoria_id} className={puedeEditar ? 'table-row-clickable' : undefined}
+                onClick={puedeEditar ? () => onEditar(c) : undefined}>
                 <td data-label="Categoría"><strong className="cell-clamp">{c.nombre}</strong></td>
                 <td data-label={arts} className="col-num">{conteo.get(c.categoria_id) ?? 0}</td>
                 <td data-label="Descuento" className="col-num">{c.descuento_pct > 0 ? `-${c.descuento_pct}%` : '—'}</td>
                 <td className="col-actions">
-                  <RowActions>
-                    <button className="row-actions-item" onClick={() => onEditar(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                    <button className="row-actions-item" onClick={() => onMover(catIds, idx, -1)} disabled={idx === 0 || reordenando}><ChevronUp size={15} strokeWidth={2} /> Subir</button>
-                    <button className="row-actions-item" onClick={() => onMover(catIds, idx, 1)} disabled={idx === categorias.length - 1 || reordenando}><ChevronDown size={15} strokeWidth={2} /> Bajar</button>
-                    <button className="row-actions-item row-actions-item-danger" onClick={() => onEliminar(c)}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
-                  </RowActions>
+                  {puedeEditar && (
+                    <RowActions>
+                      <button className="row-actions-item" onClick={() => onEditar(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                      <button className="row-actions-item" onClick={() => onMover(catIds, idx, -1)} disabled={idx === 0 || reordenando}><ChevronUp size={15} strokeWidth={2} /> Subir</button>
+                      <button className="row-actions-item" onClick={() => onMover(catIds, idx, 1)} disabled={idx === categorias.length - 1 || reordenando}><ChevronDown size={15} strokeWidth={2} /> Bajar</button>
+                      <button className="row-actions-item row-actions-item-danger" onClick={() => onEliminar(c)}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                    </RowActions>
+                  )}
                 </td>
               </tr>
             ))}
@@ -609,7 +628,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
 
 // ── Tab: Configuración + QR ──────────────────────────────────────────────────
 
-function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () => void }) {
+function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; puedeEditar: boolean; onSaved: () => void }) {
   const [isPending, startTransition] = useTransition()
   const [isImporting, startImport] = useTransition()
   const [tipoImport, setTipoImport] = useState<TipoImportacion>('AMBOS')
@@ -668,6 +687,7 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
 
   return (
     <div className="cat-config-grid">
+      {puedeEditar && (
       <div className="card">
         <div className="card-header"><h2 className="card-title">Moneda del {data.etiquetas.catalogo.toLowerCase()}</h2></div>
         <div className="input-group">
@@ -689,19 +709,22 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
           </select>
         </div>
       </div>
+      )}
 
       <div className="card">
         <div className="card-header"><h2 className="card-title">Enlace público</h2></div>
-        <form onSubmit={guardar} className="cat-form-row-inline">
-          <div className="input-group cat-input-grow">
-            <label htmlFor="cat-slug">Identificador (parte final de tu enlace)</label>
-            <input id="cat-slug" name="slug" className="input" value={slugInput}
-              onChange={e => setSlugInput(e.target.value)} placeholder="mi-negocio" />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={isPending}>
-            {isPending ? <Loader2 size={16} strokeWidth={2} className="img-upload-spin" /> : <Check size={16} strokeWidth={2} />} Guardar
-          </button>
-        </form>
+        {puedeEditar && (
+          <form onSubmit={guardar} className="cat-form-row-inline">
+            <div className="input-group cat-input-grow">
+              <label htmlFor="cat-slug">Identificador (parte final de tu enlace)</label>
+              <input id="cat-slug" name="slug" className="input" value={slugInput}
+                onChange={e => setSlugInput(e.target.value)} placeholder="mi-negocio" />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={isPending}>
+              {isPending ? <Loader2 size={16} strokeWidth={2} className="img-upload-spin" /> : <Check size={16} strokeWidth={2} />} Guardar
+            </button>
+          </form>
+        )}
 
         {url && (
           <div className="cat-url-row">
@@ -717,7 +740,7 @@ function ConfiguracionTab({ data, onSaved }: { data: CatalogoData; onSaved: () =
       {/* El QR vive en `QrEnlace` desde que Reservas y Citas también lo necesitan. */}
       <QrEnlace url={url} nombreArchivo={`qr-${data.slug ?? 'catalogo'}`} />
 
-      {data.puedeImportar && (
+      {data.puedeImportar && puedeEditar && (
         <div className="card">
           <div className="card-header"><h2 className="card-title">Importar de tu lista</h2></div>
           <p className="input-hint">

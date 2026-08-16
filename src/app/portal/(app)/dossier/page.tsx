@@ -1,5 +1,5 @@
 import { notFound, redirect }   from 'next/navigation'
-import { requireModulo }         from '@/app/actions/portal/auth'
+import { requireAccesoModulo }   from '@/app/actions/portal/auth'
 import { obtenerDossier, obtenerDossiers } from '@/app/actions/portal/dossier'
 import { obtenerEmpresas }       from '@/app/actions/portal/empresas'
 import { createAdminClient }     from '@/lib/supabase/admin'
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 // El addon no añade una ruta al sidebar (`paginas` vacío en el catálogo): la ruta
 // la sigue aportando la funcionalidad `dossier`, y este archivo bifurca.
 export default async function DossierPage() {
-  const session = await requireModulo('dossier')
+  const { session, puedeEditar } = await requireAccesoModulo('dossier')
 
   const db = createAdminClient()
   const { data: cliente } = await db.from('clients').select('modulos_activos')
@@ -28,18 +28,21 @@ export default async function DossierPage() {
   if (!tieneModulo(cliente?.modulos_activos, 'multidossier')) {
     const data = await obtenerDossier()
     if (!data) notFound()
-    return <DossierEditor data={data} />
+    return <DossierEditor data={data} puedeEditar={puedeEditar} />
   }
 
   const [dossiers, empresas] = await Promise.all([obtenerDossiers(), obtenerEmpresas()])
   // Sin ninguno todavía (recién contratado y aún sin dossier): al wizard directo.
   // Una lista vacía con un botón es una pantalla de más para llegar al mismo sitio.
-  if (dossiers.length === 0) redirect('/portal/dossier/nuevo')
+  // Solo si puede editar: a quien es «solo ver» /nuevo lo devolvería aquí (redirect),
+  // y el par de redirecciones se convierte en un bucle. Ve la lista vacía y ya está.
+  if (dossiers.length === 0 && puedeEditar) redirect('/portal/dossier/nuevo')
 
   return (
     <DossierLista
       dossiers={dossiers}
       empresas={empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
+      puedeEditar={puedeEditar}
     />
   )
 }

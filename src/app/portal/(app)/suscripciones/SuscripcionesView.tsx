@@ -761,7 +761,7 @@ const ESTADO_COBRO_BADGE: Record<EstadoCobro, string> = {
   PROYECTADO: 'badge-neutral',
 }
 
-function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGenerar, onEmitir, isPending }: {
+function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGenerar, onEmitir, isPending, puedeEditar }: {
   mes:       MesCalendario
   /** Su mes ya pasó y sigue sin factura: se marca, que es justo lo que antes no se veía. */
   atrasado:  boolean
@@ -773,6 +773,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
   onGenerar: (periodo: string) => void
   onEmitir:  (ids: string[], onDone: () => void) => void
   isPending: boolean
+  puedeEditar: boolean
 }) {
   const accionable = mes.estado === 'PENDIENTE' && mes.grupos.length > 0
   const incluidos  = mes.grupos.filter(g => !excluidos.has(`${mes.periodo}#${g.cliente_id}#${g.moneda}`))
@@ -816,7 +817,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
             ))}
           </span>
         </div>
-        {accionable && tieneBase && (
+        {puedeEditar && accionable && tieneBase && (
           <button className={`btn btn-sm ${primario ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => onGenerar(mes.periodo)}
             disabled={isPending || incluidos.length === 0}>
@@ -850,7 +851,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
           <table className="table">
             <thead>
               <tr>
-                {borradores.length > 0 && (
+                {puedeEditar && borradores.length > 0 && (
                   <th className="col-center">
                     <input type="checkbox" checked={sel.allSelected}
                       ref={el => { if (el) el.indeterminate = sel.someSelected }}
@@ -869,7 +870,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
             <tbody>
               {mes.facturas.map(f => (
                 <tr key={f.factura_id}>
-                  {borradores.length > 0 && (
+                  {puedeEditar && borradores.length > 0 && (
                     <td data-label="Seleccionar" className="col-center">
                       {f.estado === 'BORRADOR' && (
                         <input type="checkbox" checked={sel.isSelected(f.factura_id)}
@@ -911,7 +912,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
           <table className="table">
             <thead>
               <tr>
-                <th className="col-center">Incluir</th>
+                {puedeEditar && <th className="col-center">Incluir</th>}
                 <th>Cliente</th>
                 <th>Qué se le factura</th>
                 <th className="col-num">Total</th>
@@ -923,10 +924,12 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
                 const incluido = !excluidos.has(key)
                 return (
                   <tr key={key} className={incluido ? undefined : 'sus-fila-excluida'}>
-                    <td data-label="Incluir" className="col-center">
-                      <input type="checkbox" checked={incluido} onChange={() => onToggle(key)}
-                        aria-label={`Incluir a ${g.cliente_nombre} en ${g.moneda}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td data-label="Incluir" className="col-center">
+                        <input type="checkbox" checked={incluido} onChange={() => onToggle(key)}
+                          aria-label={`Incluir a ${g.cliente_nombre} en ${g.moneda}`} />
+                      </td>
+                    )}
                     <td data-label="Cliente"><strong className="text-sm-bold cell-clamp">{g.cliente_nombre}</strong></td>
                     <td data-label="Qué se le factura">
                       <ul className="sus-lineas">
@@ -977,20 +980,23 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
 
       {/* Emitir es lo que RESERVA el correlativo fiscal, así que se avisa. Si alguna
           falla, el lote no se aborta: la acción reporta las omitidas con su motivo. */}
-      <BulkBar count={sel.count} onClear={sel.clear}>
-        <button className="btn btn-primary btn-sm" disabled={isPending}
-          onClick={() => onEmitir(sel.selectedIds, sel.clear)}>
-          <Receipt size={14} strokeWidth={2} /> Emitir
-        </button>
-      </BulkBar>
+      {puedeEditar && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          <button className="btn btn-primary btn-sm" disabled={isPending}
+            onClick={() => onEmitir(sel.selectedIds, sel.clear)}>
+            <Receipt size={14} strokeWidth={2} /> Emitir
+          </button>
+        </BulkBar>
+      )}
     </div>
   )
 }
 
-function FacturacionPanel({ data, empresaInicial }: {
+function FacturacionPanel({ data, empresaInicial, puedeEditar }: {
   data: SuscripcionesPageData
   /** La última empresa que se miró (cookie), resuelta en el servidor. */
   empresaInicial: string
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1144,7 +1150,8 @@ function FacturacionPanel({ data, empresaInicial }: {
           atrasado={m.estado === 'PENDIENTE' && m.periodo < mesActual}
           primario={m.periodo === primerPendiente}
           tieneBase={data.tieneBase} excluidos={excluidos}
-          onToggle={toggleExcluir} onGenerar={generar} onEmitir={emitir} isPending={isPending} />
+          onToggle={toggleExcluir} onGenerar={generar} onEmitir={emitir} isPending={isPending}
+          puedeEditar={puedeEditar} />
       ))}
 
       {confirmEmitir && (
@@ -1185,7 +1192,8 @@ function FacturacionPanel({ data, empresaInicial }: {
           {verFuturo && futuro.map(m => (
             <MesCard key={m.periodo} mes={m} atrasado={false} primario={false}
               tieneBase={data.tieneBase} excluidos={excluidos}
-              onToggle={toggleExcluir} onGenerar={generar} onEmitir={emitir} isPending={isPending} />
+              onToggle={toggleExcluir} onGenerar={generar} onEmitir={emitir} isPending={isPending}
+              puedeEditar={puedeEditar} />
           ))}
         </div>
       )}
@@ -1195,12 +1203,14 @@ function FacturacionPanel({ data, empresaInicial }: {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function SuscripcionesView({ data, empresaInicial = '', etiqueta = 'Suscripciones' }: {
+export default function SuscripcionesView({ data, empresaInicial = '', etiqueta = 'Suscripciones', puedeEditar }: {
   data: SuscripcionesPageData
   /** Última empresa mirada en «Facturación del período» (cookie `sus_empresa`). */
   empresaInicial?: string
   /** Cómo llama el negocio a esto: «Membresías», «Bonos»… (mig. 164). */
   etiqueta?: string
+  /** Permiso de escritura del módulo `servicios` (cubre solo_lectura y falta de módulo). */
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1399,10 +1409,14 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
               resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
             />
             {/* Una sola entrada al alta: «varios clientes» es una casilla DENTRO del
-                modal, no otra pantalla que haya que descubrir en la cabecera. */}
-            <button className="btn btn-primary" onClick={openCreate} disabled={!puedeCrear}>
-              <Plus size={14} strokeWidth={2.5} /> Nueva suscripción
-            </button>
+                modal, no otra pantalla que haya que descubrir en la cabecera.
+                `puedeCrear` es READINESS de datos (hay empresa/clientes/servicios); el
+                permiso es aparte: sin él, el botón no existe. */}
+            {puedeEditar && (
+              <button className="btn btn-primary" onClick={openCreate} disabled={!puedeCrear}>
+                <Plus size={14} strokeWidth={2.5} /> Nueva suscripción
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1551,16 +1565,21 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                       )}
                     </td>
                     <td className="col-actions">
+                      {/* «Ver sus facturas» es lectura y se queda para todos; el resto son
+                          acciones de escritura y solo salen con permiso. Si no queda
+                          ninguna entrada, no se pinta el menú «⋯» vacío. */}
+                      {(s.historial.length > 0 || puedeEditar) && (
                       <RowActions>
-                        {s.estado !== 'CANCELADA' && (
-                          <button className="row-actions-item" onClick={() => openEdit(s)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                        )}
                         {s.historial.length > 0 && (
                           <button className="row-actions-item"
                             onClick={() => setAbierta(a => a === s.suscripcion_id ? null : s.suscripcion_id)}>
                             <Receipt size={15} strokeWidth={2} />
                             {abierta === s.suscripcion_id ? 'Ocultar sus facturas' : `Ver sus facturas (${s.historial.length})`}
                           </button>
+                        )}
+                        {puedeEditar && (<>
+                        {s.estado !== 'CANCELADA' && (
+                          <button className="row-actions-item" onClick={() => openEdit(s)}><Pencil size={15} strokeWidth={2} /> Editar</button>
                         )}
                         <button className="row-actions-item" onClick={() => openDuplicar(s)}>
                           <Copy size={15} strokeWidth={2} /> Duplicar
@@ -1596,7 +1615,9 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                             <XCircle size={15} strokeWidth={2} /> Cancelar ahora
                           </button>
                         )}
+                        </>)}
                       </RowActions>
+                      )}
                     </td>
                   </tr>
                   {abierta === s.suscripcion_id && (
@@ -1642,7 +1663,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
       </>
       )}
 
-      {vista === 'facturacion' && <FacturacionPanel data={data} empresaInicial={empresaInicial} />}
+      {vista === 'facturacion' && <FacturacionPanel data={data} empresaInicial={empresaInicial} puedeEditar={puedeEditar} />}
 
       {modal && (
         <SuscripcionModal

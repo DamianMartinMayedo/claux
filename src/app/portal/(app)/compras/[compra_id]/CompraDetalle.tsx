@@ -63,7 +63,7 @@ function ConfirmModal({
 const ESTADO_BADGE = { BORRADOR: 'badge-neutral', CONFIRMADA: 'badge-success', ANULADA: 'badge-error' } as const
 const ESTADO_LABEL = { BORRADOR: 'Borrador', CONFIRMADA: 'Confirmada', ANULADA: 'Anulada' } as const
 
-export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
+export default function CompraDetalle({ data, puedeEditar }: { data: CompraDetalleData; puedeEditar: boolean }) {
   const router = useRouter()
   const { compra, lineas } = data
   const [isPending, startTransition] = useTransition()
@@ -131,40 +131,44 @@ export default function CompraDetalle({ data }: { data: CompraDetalleData }) {
         </div>
 
         <div className="det-actions">
-          {esBorrador && (
-            <>
-              <button className="btn btn-secondary" onClick={() => setShowEdit(true)}>
-                <Pencil size={14} strokeWidth={2} /> Editar
-              </button>
-              <button className="btn btn-primary" onClick={() => setShowConfirm(true)} disabled={isPending}>
-                <CheckCircle2 size={14} strokeWidth={2} /> Confirmar
-              </button>
+          {/* Todas las acciones son de escritura: se ocultan a quien solo puede ver
+              (solo-lectura o sin permiso del módulo), incluidas las del configurador. */}
+          {puedeEditar && (<>
+            {esBorrador && (
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowEdit(true)}>
+                  <Pencil size={14} strokeWidth={2} /> Editar
+                </button>
+                <button className="btn btn-primary" onClick={() => setShowConfirm(true)} disabled={isPending}>
+                  <CheckCircle2 size={14} strokeWidth={2} /> Confirmar
+                </button>
+                <RowActions>
+                  <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
+                    <Trash2 size={15} strokeWidth={2} /> Eliminar
+                  </button>
+                </RowActions>
+              </>
+            )}
+            {esConfirmada && (
+              <RowActions>
+                <button className="row-actions-item row-actions-item-danger" onClick={() => setShowAnular(true)} disabled={isPending}>
+                  <Ban size={15} strokeWidth={2} /> Anular
+                </button>
+                {esConfigurador && (
+                  <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
+                    <Trash2 size={15} strokeWidth={2} /> Eliminar
+                  </button>
+                )}
+              </RowActions>
+            )}
+            {esConfigurador && compra.estado === 'ANULADA' && (
               <RowActions>
                 <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
                   <Trash2 size={15} strokeWidth={2} /> Eliminar
                 </button>
               </RowActions>
-            </>
-          )}
-          {esConfirmada && (
-            <RowActions>
-              <button className="row-actions-item row-actions-item-danger" onClick={() => setShowAnular(true)} disabled={isPending}>
-                <Ban size={15} strokeWidth={2} /> Anular
-              </button>
-              {esConfigurador && (
-                <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
-                  <Trash2 size={15} strokeWidth={2} /> Eliminar
-                </button>
-              )}
-            </RowActions>
-          )}
-          {esConfigurador && compra.estado === 'ANULADA' && (
-            <RowActions>
-              <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}>
-                <Trash2 size={15} strokeWidth={2} /> Eliminar
-              </button>
-            </RowActions>
-          )}
+            )}
+          </>)}
         </div>
       </div>
 

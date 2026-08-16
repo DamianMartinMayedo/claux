@@ -16,6 +16,7 @@ interface Props {
   cajas: Caja[]
   empresas: { empresa_id: string; nombre: string }[]
   salud: Record<string, Salud>
+  puedeEditar: boolean
 }
 
 function fechaCorta(s: string | null): string {
@@ -38,7 +39,7 @@ function desdeCuando(s: string | null): { texto: string; viejo: boolean } {
   return { texto: `Hace ${dias} días`, viejo: dias >= 5 }
 }
 
-export default function CajaHubView({ cajas, empresas, salud }: Props) {
+export default function CajaHubView({ cajas, empresas, salud, puedeEditar }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
@@ -66,9 +67,11 @@ export default function CajaHubView({ cajas, empresas, salud }: Props) {
           </div>
           <p className="page-subtitle">Cobran sin conexión y sincronizan con Claux cuando vuelve la señal.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={empresas.length === 0}>
-          <Plus size={14} strokeWidth={2.5} /> Nuevo punto de venta
-        </button>
+        {puedeEditar && (
+          <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={empresas.length === 0}>
+            <Plus size={14} strokeWidth={2.5} /> Nuevo punto de venta
+          </button>
+        )}
       </div>
 
       {empresas.length === 0 && (
@@ -134,11 +137,13 @@ export default function CajaHubView({ cajas, empresas, salud }: Props) {
                         <Link href={`/portal/caja/${c.caja_id}`} className="row-actions-item">
                           <Settings size={15} strokeWidth={2} /> Configurar
                         </Link>
-                        <button className="row-actions-item" onClick={() => toggleActiva(c)} disabled={isPending}>
-                          {c.activa
-                            ? <><PowerOff size={15} strokeWidth={2} /> Desactivar</>
-                            : <><Power size={15} strokeWidth={2} /> Activar</>}
-                        </button>
+                        {puedeEditar && (
+                          <button className="row-actions-item" onClick={() => toggleActiva(c)} disabled={isPending}>
+                            {c.activa
+                              ? <><PowerOff size={15} strokeWidth={2} /> Desactivar</>
+                              : <><Power size={15} strokeWidth={2} /> Activar</>}
+                          </button>
+                        )}
                       </RowActions>
                     </td>
                   </tr>
@@ -151,7 +156,7 @@ export default function CajaHubView({ cajas, empresas, salud }: Props) {
         <TablePagination {...pag} label="punto de venta" />
       </div>
 
-      {modalOpen && (
+      {puedeEditar && modalOpen && (
         <NuevoPuntoVentaModal
           empresas={empresas}
           onClose={() => setModalOpen(false)}

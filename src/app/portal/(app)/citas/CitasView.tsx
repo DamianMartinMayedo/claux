@@ -904,11 +904,12 @@ function CambiarEstadoModal({ cita, nuevoEstado, onConfirm, onClose, isPending }
 
 // ── Modal: detalle de cita ─────────────────────────────────────────────────────
 
-function CitaDetalleModal({ cita, onClose, onCambiarEstado, onMover }: {
+function CitaDetalleModal({ cita, onClose, onCambiarEstado, onMover, puedeEditar }: {
   cita: CitaConDetalle
   onClose: () => void
   onCambiarEstado: (a: EstadoReserva) => void
   onMover: () => void
+  puedeEditar: boolean
 }) {
   return (
     <div className="modal-backdrop open">
@@ -936,6 +937,7 @@ function CitaDetalleModal({ cita, onClose, onCambiarEstado, onMover }: {
             {cita.notas && <div className="input-group ter-col-full"><label>Notas</label><input className="input input-static" readOnly value={cita.notas} /></div>}
           </div>
         </div>
+        {puedeEditar && (
         <div className="modal-footer">
           {/* «Editar» existía solo en Reservas: en Citas había que cancelar y rehacer. */}
           {(cita.estado === 'PENDIENTE' || cita.estado === 'CONFIRMADA') && (
@@ -955,6 +957,7 @@ function CitaDetalleModal({ cita, onClose, onCambiarEstado, onMover }: {
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   )
@@ -986,7 +989,7 @@ function ConfirmEliminar({ titulo, cuerpo, onConfirm, onClose, isPending }: {
 
 // ── Página: Citas ───────────────────────────────────────────────────────────
 
-export default function CitasView({ data }: { data: CitasPageData }) {
+export default function CitasView({ data, puedeEditar }: { data: CitasPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const et = data.etiquetas
@@ -1262,29 +1265,29 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
             />
           )}
-          {activeTab === 'agenda' && (
+          {activeTab === 'agenda' && puedeEditar && (
             <button className="btn btn-primary" onClick={() => setShowNueva(true)}>
               <Plus size={14} strokeWidth={2.5} /> Nueva cita
             </button>
           )}
-          {activeTab === 'recursos' && data.rrhh_activo && data.empleados.some(e => !e.ya_importado) && (
+          {activeTab === 'recursos' && puedeEditar && data.rrhh_activo && data.empleados.some(e => !e.ya_importado) && (
             <button className="btn btn-secondary" onClick={doImportarRRHH} disabled={isPending}>
               <Download size={14} strokeWidth={2.5} /> Importar de RRHH
             </button>
           )}
-          {activeTab === 'recursos' && (
+          {activeTab === 'recursos' && puedeEditar && (
             <button className="btn btn-primary" onClick={() => { setEditRecurso(null); setShowRecurso(true) }}>
               <Plus size={14} strokeWidth={2.5} /> Nuevo {et.recurso.toLowerCase()}
             </button>
           )}
           {/* Importar es su propio botón, no un desplegable escondido dentro del alta:
               con el catálogo delante se ve qué falta por traer y se marca de una vez. */}
-          {activeTab === 'servicios' && data.catalogo.some(c => !c.ya_importado) && (
+          {activeTab === 'servicios' && puedeEditar && data.catalogo.some(c => !c.ya_importado) && (
             <button className="btn btn-secondary" onClick={() => setShowImportar(true)} disabled={isPending}>
               <Download size={14} strokeWidth={2.5} /> Importar del catálogo
             </button>
           )}
-          {activeTab === 'servicios' && (
+          {activeTab === 'servicios' && puedeEditar && (
             <button className="btn btn-primary" onClick={() => { setEditServicio(null); setShowServicio(true) }}>
               <Plus size={14} strokeWidth={2.5} /> Nuevo {servicioNombre.toLowerCase()}
             </button>
@@ -1354,9 +1357,11 @@ export default function CitasView({ data }: { data: CitasPageData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    </th>
+                  )}
                   <th>Fecha</th><th>Hora</th><th>{servicioNombre}</th><th>{et.recurso}</th>
                   <th>Cliente</th><th>Estado</th><th className="col-actions"></th>
                 </tr>
@@ -1364,12 +1369,14 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               <tbody>
                 {citaItems.map(c => (
                   <tr key={c.reserva_id} className="table-row-clickable" onClick={() => setDetalleCita(c)}>
-                    <td className="col-check" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={sel.isSelected(c.reserva_id)}
-                        onChange={() => sel.toggle(c.reserva_id)}
-                        aria-label={`Seleccionar cita de ${c.nombre_cliente}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(c.reserva_id)}
+                          onChange={() => sel.toggle(c.reserva_id)}
+                          aria-label={`Seleccionar cita de ${c.nombre_cliente}`} />
+                      </td>
+                    )}
                     <td data-label="Fecha"><strong>{formatFecha(c.fecha)}</strong></td>
                     <td data-label="Hora" className="tes-nowrap">
                       {c.hora ? `${formatHora(c.hora)}${c.hora_fin ? ` – ${formatHora(c.hora_fin)}` : ''}` : '—'}
@@ -1391,7 +1398,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => setDetalleCita(c)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-                        {(c.estado === 'PENDIENTE' || c.estado === 'CONFIRMADA') && (
+                        {puedeEditar && (c.estado === 'PENDIENTE' || c.estado === 'CONFIRMADA') && (
                           <>
                           {c.estado === 'PENDIENTE' && (
                             <>
@@ -1418,7 +1425,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                           </>
                         )}
                         {/* Deshacer, solo con la fecha por delante. */}
-                        {ESTADOS_DESHACIBLES.includes(c.estado) && c.fecha >= hoy && (
+                        {puedeEditar && ESTADOS_DESHACIBLES.includes(c.estado) && c.fecha >= hoy && (
                           <button className="row-actions-item"
                             onClick={() => setCambioEstado({ cita: c, a: 'PENDIENTE' })} disabled={isPending}><Undo2 size={15} strokeWidth={2} /> Deshacer</button>
                         )}
@@ -1457,7 +1464,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               </thead>
               <tbody>
                 {data.recursos.map(r => (
-                  <tr key={r.recurso_id} className="table-row-clickable" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}>
+                  <tr key={r.recurso_id}
+                    className={puedeEditar ? 'table-row-clickable' : undefined}
+                    onClick={puedeEditar ? () => { setEditRecurso(r); setShowRecurso(true) } : undefined}>
                     <td data-label="Nombre"><strong className="cell-clamp">{r.nombre}</strong></td>
                     <td data-label="Tipo" className="text-sm-muted">{r.tipo ?? '—'}</td>
                     <td data-label={servicioPlural} className="text-sm-muted">{r.servicio_ids.length === 0 ? 'Todos' : `${r.servicio_ids.length}`}</td>
@@ -1476,10 +1485,12 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                       </div>
                     </td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                        <button className="row-actions-item row-actions-item-danger" onClick={() => setDelRecurso(r)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
-                      </RowActions>
+                      {puedeEditar && (
+                        <RowActions>
+                          <button className="row-actions-item" onClick={() => { setEditRecurso(r); setShowRecurso(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                          <button className="row-actions-item row-actions-item-danger" onClick={() => setDelRecurso(r)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1497,7 +1508,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           <div className="mon-empty">
             <CalendarDays size={36} strokeWidth={1} opacity={0.2} />
             <p>Aún no hay {servicioPlural.toLowerCase()}. Crea los que ofreces (con su duración) para poder agendar. Si solo das un tipo de cita, créalo igualmente como un único servicio (p.ej. «Consulta», 30 min).</p>
-            {data.catalogo.some(c => !c.ya_importado) && (
+            {puedeEditar && data.catalogo.some(c => !c.ya_importado) && (
               <button className="btn btn-secondary btn-sm" onClick={() => setShowImportar(true)}>
                 <Download size={14} strokeWidth={2.5} /> Traerlos de mi catálogo
               </button>
@@ -1511,7 +1522,9 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               </thead>
               <tbody>
                 {data.servicios.map(s => (
-                  <tr key={s.servicio_id} className="table-row-clickable" onClick={() => { setEditServicio(s); setShowServicio(true) }}>
+                  <tr key={s.servicio_id}
+                    className={puedeEditar ? 'table-row-clickable' : undefined}
+                    onClick={puedeEditar ? () => { setEditServicio(s); setShowServicio(true) } : undefined}>
                     <td data-label="Nombre"><strong className="cell-clamp">{s.nombre}</strong></td>
                     <td data-label="Duración" className="col-num tes-monto-cell">
                       {s.duracion_minutos} min
@@ -1520,10 +1533,12 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                     <td data-label="Precio" className="col-num tes-monto-cell cita-precio">{formatPrecio(s.precio, s.moneda)}</td>
                     <td data-label="Estado"><span className={`badge ${s.activo ? 'badge-success' : 'badge-neutral'}`}>{s.activo ? 'Activo' : 'Inactivo'}</span></td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => { setEditServicio(s); setShowServicio(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                        <button className="row-actions-item row-actions-item-danger" onClick={() => setDelServicio(s)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
-                      </RowActions>
+                      {puedeEditar && (
+                        <RowActions>
+                          <button className="row-actions-item" onClick={() => { setEditServicio(s); setShowServicio(true) }}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                          <button className="row-actions-item row-actions-item-danger" onClick={() => setDelServicio(s)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1597,14 +1612,16 @@ export default function CitasView({ data }: { data: CitasPageData }) {
                   <td className="col-actions">
                     <RowActions>
                       <button className="row-actions-item" onClick={copiarEnlace} disabled={isPending}><Copy size={15} strokeWidth={2} /> Copiar enlace</button>
-                      <button className="row-actions-item" onClick={() => setEditandoSlug(true)} disabled={isPending}><Pencil size={15} strokeWidth={2} /> Editar enlace</button>
+                      {puedeEditar && (
+                        <button className="row-actions-item" onClick={() => setEditandoSlug(true)} disabled={isPending}><Pencil size={15} strokeWidth={2} /> Editar enlace</button>
+                      )}
                     </RowActions>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : puedeEditar ? (
           <form onSubmit={handleSlugSubmit}>
             <div className="ter-form-grid res-conf-pad-top">
               <div className="input-group ter-col-full">
@@ -1626,7 +1643,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
               </button>
             </div>
           </form>
-        )}
+        ) : null}
       </div>
 
       {/* QR del enlace, igual que en el catálogo y en Reservas. */}
@@ -1747,7 +1764,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
           onSaved={() => { setMoverCita(null); router.refresh() }} />
       )}
       {detalleCita && (
-        <CitaDetalleModal cita={detalleCita} onClose={() => setDetalleCita(null)}
+        <CitaDetalleModal cita={detalleCita} puedeEditar={puedeEditar} onClose={() => setDetalleCita(null)}
           onCambiarEstado={a => { const c = detalleCita; setDetalleCita(null); setCambioEstado({ cita: c, a }) }}
           onMover={() => { const c = detalleCita; setDetalleCita(null); setMoverCita(c) }} />
       )}
@@ -1806,7 +1823,7 @@ export default function CitasView({ data }: { data: CitasPageData }) {
         </div>
       )}
 
-      {activeTab === 'agenda' && (
+      {activeTab === 'agenda' && puedeEditar && (
         <BulkBar count={sel.count} onClear={sel.clear}>
           <button className="btn btn-secondary btn-sm" disabled={isPending}
             onClick={() => setLoteAccion({ estado: 'CONFIRMADA', label: 'Confirmar' })}>

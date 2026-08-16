@@ -12,13 +12,15 @@ import { resincronizarSnapshot } from '@/app/actions/portal/dossier'
 // dueño no re-teclea nada. Sin base no hay de dónde traer: se le lleva a «Los
 // números» para que los revise a mano.
 export default function DossierDesfase({
-  dossierId, tieneBase, mensaje, onIrANumeros, onActualizado,
+  dossierId, tieneBase, mensaje, onIrANumeros, onActualizado, puedeEditar = true,
 }: {
   dossierId: string
   tieneBase: boolean
   mensaje: ReactNode
   onIrANumeros?: () => void
   onActualizado?: () => void
+  /** Solo-ver: se muestra el aviso, pero sin la acción de actualizar/revisar. */
+  puedeEditar?: boolean
 }) {
   const [pending, startTransition] = useTransition()
 
@@ -36,7 +38,7 @@ export default function DossierDesfase({
     <div className="dos-desfase" role="alert">
       <AlertTriangle size={16} strokeWidth={2} />
       <div className="dos-desfase-texto">{mensaje}</div>
-      {tieneBase ? (
+      {!puedeEditar ? null : tieneBase ? (
         <button type="button" className="btn btn-aviso btn-sm" onClick={actualizar} disabled={pending}>
           {pending ? <Loader2 size={13} strokeWidth={2.5} className="dos-spin" /> : <RefreshCw size={13} strokeWidth={2.5} />}
           Actualizar números

@@ -1,7 +1,7 @@
-import { notFound }       from 'next/navigation'
-import { requireModulo }  from '@/app/actions/portal/auth'
-import { obtenerDossier } from '@/app/actions/portal/dossier'
-import DossierNuevo       from './DossierNuevo'
+import { notFound, redirect } from 'next/navigation'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
+import { obtenerDossier }      from '@/app/actions/portal/dossier'
+import DossierNuevo            from './DossierNuevo'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +12,9 @@ export const dynamic = 'force-dynamic'
 // wizard sin el addon es inofensivo — el botón «Crear dossier» devolverá el aviso
 // de que su suscripción permite uno solo, que es además donde el upsell tiene sentido.
 export default async function DossierNuevoPage() {
-  await requireModulo('dossier')
+  const { puedeEditar } = await requireAccesoModulo('dossier')
+  // Crear es escritura: quien solo puede ver no entra al wizard, vuelve al listado.
+  if (!puedeEditar) redirect('/portal/dossier')
 
   const data = await obtenerDossier()
   if (!data) notFound()

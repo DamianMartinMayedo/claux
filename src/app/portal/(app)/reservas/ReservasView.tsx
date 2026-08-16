@@ -286,12 +286,13 @@ function CambiarEstadoModal({
 // ── Modal: detalle de reserva ──────────────────────────────────────────────────
 
 function ReservaDetalleModal({
-  reserva, onClose, onCambiarEstado, onEditar,
+  reserva, onClose, onCambiarEstado, onEditar, puedeEditar,
 }: {
   reserva:         ReservaConFranja
   onClose:         () => void
   onCambiarEstado: (a: EstadoReserva) => void
   onEditar:        () => void
+  puedeEditar:     boolean
 }) {
   return (
     <div className="modal-backdrop open">
@@ -347,6 +348,7 @@ function ReservaDetalleModal({
             )}
           </div>
         </div>
+        {puedeEditar && (
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary btn-sm" onClick={onEditar}>
             <Pencil size={14} strokeWidth={2} /> Editar
@@ -375,6 +377,7 @@ function ReservaDetalleModal({
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   )
@@ -641,7 +644,7 @@ function ConfirmEliminarFranja({
 
 // ── Página: Reservas ──────────────────────────────────────────────────────────
 
-export default function ReservasView({ data }: { data: ReservaPageData }) {
+export default function ReservasView({ data, puedeEditar }: { data: ReservaPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -936,7 +939,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
             />
           )}
-          {activeTab === 'reservas' && (
+          {activeTab === 'reservas' && puedeEditar && (
             <button className="btn btn-primary" onClick={() => setShowNueva(true)}>
               <Plus size={14} strokeWidth={2.5} /> Nueva reserva
             </button>
@@ -1011,9 +1014,11 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    </th>
+                  )}
                   <th>Fecha</th>
                   <th>Hora</th>
                   <th>Turno</th>
@@ -1027,12 +1032,14 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                 {reservaItems.map(r => (
                   <tr key={r.reserva_id} className="table-row-clickable"
                     onClick={() => setDetalleReserva(r)}>
-                    <td className="col-check" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={sel.isSelected(r.reserva_id)}
-                        onChange={() => sel.toggle(r.reserva_id)}
-                        aria-label={`Seleccionar reserva de ${r.nombre_cliente}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(r.reserva_id)}
+                          onChange={() => sel.toggle(r.reserva_id)}
+                          aria-label={`Seleccionar reserva de ${r.nombre_cliente}`} />
+                      </td>
+                    )}
                     <td data-label="Fecha"><strong>{formatFecha(r.fecha)}</strong></td>
                     <td data-label="Hora" className="tes-nowrap">
                       {r.hora ? `${r.hora.substring(0, 5)}${r.hora_fin ? ` – ${r.hora_fin.substring(0, 5)}` : ''}` : '—'}
@@ -1060,7 +1067,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => setDetalleReserva(r)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-                        {(r.estado === 'PENDIENTE' || r.estado === 'CONFIRMADA') && (
+                        {puedeEditar && (r.estado === 'PENDIENTE' || r.estado === 'CONFIRMADA') && (
                           <>
                             {r.estado === 'PENDIENTE' && (
                               <>
@@ -1084,7 +1091,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                         )}
                         {/* Deshacer: solo si la fecha no ha pasado — recuperar algo de
                             ayer no le sirve a nadie y volvería a ocupar aforo muerto. */}
-                        {ESTADOS_DESHACIBLES.includes(r.estado) && r.fecha >= hoy && (
+                        {puedeEditar && ESTADOS_DESHACIBLES.includes(r.estado) && r.fecha >= hoy && (
                           <button className="row-actions-item"
                             onClick={() => setCambioEstado({ reserva: r, a: 'PENDIENTE' })} disabled={isPending}><Undo2 size={15} strokeWidth={2} /> Deshacer</button>
                         )}
@@ -1112,7 +1119,9 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">Turnos</h2>
-          <button className="btn btn-primary btn-sm" onClick={openNuevaFranja}><Plus size={14} strokeWidth={2.5} /> Nuevo turno</button>
+          {puedeEditar && (
+            <button className="btn btn-primary btn-sm" onClick={openNuevaFranja}><Plus size={14} strokeWidth={2.5} /> Nuevo turno</button>
+          )}
         </div>
         {data.franjas.length === 0 ? (
           <div className="mon-empty">
@@ -1158,11 +1167,13 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                       <span className={`badge ${f.activa ? 'badge-success' : 'badge-neutral'}`}>{f.activa ? 'Activo' : 'Inactivo'}</span>
                     </td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => openEditFranja(f)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                        <button className="row-actions-item row-actions-item-danger"
-                          onClick={() => setDelFranja(f)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
-                      </RowActions>
+                      {puedeEditar && (
+                        <RowActions>
+                          <button className="row-actions-item" onClick={() => openEditFranja(f)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                          <button className="row-actions-item row-actions-item-danger"
+                            onClick={() => setDelFranja(f)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1251,17 +1262,19 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
                         onClick={() => { copiarEnlace(); toastSuccess('Enlace copiado.') }} disabled={isPending}>
                         <Copy size={15} strokeWidth={2} /> Copiar enlace
                       </button>
-                      <button className="row-actions-item"
-                        onClick={() => setEditandoSlug(true)} disabled={isPending}>
-                        <Pencil size={15} strokeWidth={2} /> Editar enlace
-                      </button>
+                      {puedeEditar && (
+                        <button className="row-actions-item"
+                          onClick={() => setEditandoSlug(true)} disabled={isPending}>
+                          <Pencil size={15} strokeWidth={2} /> Editar enlace
+                        </button>
+                      )}
                     </RowActions>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : puedeEditar ? (
           <form onSubmit={handleSlugSubmit}>
             <div className="ter-form-grid res-conf-pad-top">
               <div className="input-group ter-col-full">
@@ -1286,7 +1299,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
               </button>
             </div>
           </form>
-        )}
+        ) : null}
       </div>
 
       {/* QR del enlace: así es como se reparte una dirección en una mesa o un
@@ -1425,7 +1438,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
           onClose={() => setDelFranja(null)} isPending={isPending} />
       )}
       {detalleReserva && (
-        <ReservaDetalleModal reserva={detalleReserva}
+        <ReservaDetalleModal reserva={detalleReserva} puedeEditar={puedeEditar}
           onClose={() => setDetalleReserva(null)}
           onCambiarEstado={(a) => { setDetalleReserva(null); setCambioEstado({ reserva: detalleReserva, a }) }}
           onEditar={() => { setDetalleReserva(null); setEditarReserva(detalleReserva) }} />
@@ -1458,7 +1471,7 @@ export default function ReservasView({ data }: { data: ReservaPageData }) {
         </div>
       )}
 
-      {activeTab === 'reservas' && (
+      {activeTab === 'reservas' && puedeEditar && (
         <BulkBar count={sel.count} onClear={sel.clear}>
           <button className="btn btn-secondary btn-sm" disabled={isPending}
             onClick={() => setLoteAccion({ estado: 'CONFIRMADA', label: 'Confirmar' })}>

@@ -1,5 +1,5 @@
 import { notFound }              from 'next/navigation'
-import { requireAlgunModulo }     from '@/app/actions/portal/auth'
+import { requireAccesoAlgunModulo } from '@/app/actions/portal/auth'
 import { obtenerTerceroDetalle }  from '@/app/actions/portal/terceros'
 import TerceroDetalle             from './TerceroDetalle'
 
@@ -10,9 +10,9 @@ interface Props {
 }
 
 export default async function TerceroDetallePage({ params }: Props) {
-  await requireAlgunModulo(['base', 'inventario', 'servicios'])
+  const { puedeEditar } = await requireAccesoAlgunModulo(['base', 'inventario', 'servicios'])
   const { tercero_id } = await params
   const data = await obtenerTerceroDetalle(tercero_id)
   if (!data) notFound()
-  return <TerceroDetalle data={data} />
+  return <TerceroDetalle data={data} puedeEditar={puedeEditar} />
 }

@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { requireModulo } from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerConteo } from '@/app/actions/portal/conteos'
 import ConteoView from '../ConteoView'
 
@@ -18,7 +18,7 @@ export default async function ActaConteoPage({
 }: {
   params: Promise<{ almacen_id: string; conteo_id: string }>
 }) {
-  await requireModulo('inventario')
+  const { puedeEditar } = await requireAccesoModulo('inventario')
   const { almacen_id, conteo_id } = await params
 
   const data = await obtenerConteo(conteo_id)
@@ -27,5 +27,5 @@ export default async function ActaConteoPage({
   // la tabla enseñaría otro.
   if (data.conteo.almacen_id !== almacen_id) notFound()
 
-  return <ConteoView data={data} />
+  return <ConteoView data={data} puedeEditar={puedeEditar} />
 }

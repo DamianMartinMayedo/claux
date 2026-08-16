@@ -1,5 +1,5 @@
 import { notFound }      from 'next/navigation'
-import { requireModulo } from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerCitasData } from '@/app/actions/portal/citas'
 import { TOPE_VER_MAS }  from '@/lib/listados'
 import { filtrosDeUrl }  from '@/lib/filtros'
@@ -12,7 +12,7 @@ export default async function CitasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('agenda')
+  const { puedeEditar } = await requireAccesoModulo('agenda')
   // Rango y búsqueda viajan en la URL y se aplican EN LA QUERY. Antes esta pantalla se
   // traía la agenda ENTERA y escondía en el navegador todo salvo el día de hoy.
   const sp = await searchParams
@@ -27,5 +27,5 @@ export default async function CitasPage({
     limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
   })
   if (!data) notFound()
-  return <CitasView data={data} />
+  return <CitasView data={data} puedeEditar={puedeEditar} />
 }

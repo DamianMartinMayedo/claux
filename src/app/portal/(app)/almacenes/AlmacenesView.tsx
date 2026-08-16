@@ -220,7 +220,7 @@ function ConfirmArchivar({
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
+export default function AlmacenesView({ data, puedeEditar }: { data: AlmacenesPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -343,9 +343,11 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
             filtro={filtroExport(declaracion)}
             resumen={resumenDe(declaracion)}
           />
-          <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
-            <Plus size={14} strokeWidth={2.5} /> Nuevo almacén
-          </button>
+          {puedeEditar && (
+            <button className="btn btn-primary" onClick={openCreate} disabled={data.empresas.length === 0}>
+              <Plus size={14} strokeWidth={2.5} /> Nuevo almacén
+            </button>
+          )}
         </div>
       </div>
 
@@ -481,7 +483,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                           onClick={() => router.push(`/portal/almacenes/${a.almacen_id}`)}>
                           <Warehouse size={15} strokeWidth={2} /> Ver contenido
                         </button>
-                        {a.activo ? (
+                        {puedeEditar && (a.activo ? (
                           <>
                             <button className="row-actions-item" onClick={() => openEdit(a)}>
                               <Pencil size={15} strokeWidth={2} /> Editar
@@ -496,7 +498,7 @@ export default function AlmacenesView({ data }: { data: AlmacenesPageData }) {
                             onClick={() => handleRestaurar(a)} disabled={isPending}>
                             <RotateCcw size={15} strokeWidth={2} /> Restaurar
                           </button>
-                        )}
+                        ))}
                       </RowActions>
                     </td>
                   </tr>

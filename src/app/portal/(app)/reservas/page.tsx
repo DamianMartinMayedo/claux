@@ -1,5 +1,5 @@
 import { notFound }        from 'next/navigation'
-import { requireModulo }   from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerReservas } from '@/app/actions/portal/reservas'
 import { TOPE_VER_MAS }    from '@/lib/listados'
 import { filtrosDeUrl }    from '@/lib/filtros'
@@ -12,7 +12,7 @@ export default async function ReservasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('reservas_citas')
+  const { puedeEditar } = await requireAccesoModulo('reservas_citas')
   // Rango y búsqueda viajan en la URL y se aplican EN LA QUERY. Antes esta pantalla se
   // traía la historia ENTERA de reservas y escondía en el navegador todo salvo el día de
   // hoy: un negocio con veinte reservas al día son ~7.300 filas al año pagadas en 3G para
@@ -32,5 +32,5 @@ export default async function ReservasPage({
     limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
   })
   if (!data) notFound()
-  return <ReservasView data={data} />
+  return <ReservasView data={data} puedeEditar={puedeEditar} />
 }

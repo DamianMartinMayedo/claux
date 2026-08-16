@@ -1,4 +1,4 @@
-import { requireModulo }  from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerCompras } from '@/app/actions/portal/compras'
 import { TOPE_VER_MAS }   from '@/lib/listados'
 import { filtrosDeUrl }   from '@/lib/filtros'
@@ -13,7 +13,7 @@ export default async function ComprasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('inventario')
+  const { puedeEditar } = await requireAccesoModulo('inventario')
   // El rango viaja en la URL y se aplica EN LA QUERY, no en el cliente: antes se
   // traían TODAS las compras del cliente sin rango ni techo (mismo contrato que los
   // listados de Contabilidad).
@@ -33,7 +33,7 @@ export default async function ComprasPage({
   }
   return (
     <>
-      <ComprasView data={data} />
+      <ComprasView data={data} puedeEditar={puedeEditar} />
       {/* Aquí y no en Movimientos: confirmar una compra es lo que crea el gasto. */}
       <ContabilidadHint genera="tus compras" />
     </>

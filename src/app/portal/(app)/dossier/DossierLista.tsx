@@ -41,10 +41,11 @@ function fechaDia(f: string | null): string {
 }
 
 export default function DossierLista({
-  dossiers, empresas,
+  dossiers, empresas, puedeEditar,
 }: {
   dossiers: ResumenDossier[]
   empresas: { empresa_id: string; nombre: string }[]
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -125,9 +126,11 @@ export default function DossierLista({
             Uno por empresa o por inversor. Cada uno con sus números y su propio enlace.
           </p>
         </div>
-        <Link className="btn btn-primary" href="/portal/dossier/nuevo">
-          <Plus size={14} strokeWidth={2.5} /> Nuevo dossier
-        </Link>
+        {puedeEditar && (
+          <Link className="btn btn-primary" href="/portal/dossier/nuevo">
+            <Plus size={14} strokeWidth={2.5} /> Nuevo dossier
+          </Link>
+        )}
       </div>
 
       <div className="card card-table">
@@ -135,9 +138,11 @@ export default function DossierLista({
           <table className="table">
             <thead>
               <tr>
-                <th className="col-check">
-                  <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                </th>
+                {puedeEditar && (
+                  <th className="col-check">
+                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                  </th>
+                )}
                 <th>Dossier</th>
                 <th>Empresa</th>
                 <th>Período</th>
@@ -150,12 +155,14 @@ export default function DossierLista({
               {dossiers.map(d => (
                 <tr key={d.dossier_id} className="table-row-clickable"
                   onClick={() => router.push(`/portal/dossier/${d.dossier_id}`)}>
-                  <td className="col-check" onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" className="row-check"
-                      checked={sel.isSelected(d.dossier_id)}
-                      onChange={() => sel.toggle(d.dossier_id)}
-                      aria-label={`Seleccionar ${d.titulo}`} />
-                  </td>
+                  {puedeEditar && (
+                    <td className="col-check" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="row-check"
+                        checked={sel.isSelected(d.dossier_id)}
+                        onChange={() => sel.toggle(d.dossier_id)}
+                        aria-label={`Seleccionar ${d.titulo}`} />
+                    </td>
+                  )}
                   <td data-label="Dossier" className="cell-truncate">
                     <Link href={`/portal/dossier/${d.dossier_id}`} onClick={e => e.stopPropagation()}>
                       {d.titulo}
@@ -182,9 +189,11 @@ export default function DossierLista({
                       <Link className="row-actions-item" href={`/portal/dossier/${d.dossier_id}`}>
                         <Pencil size={15} strokeWidth={2} /> Abrir
                       </Link>
-                      <button className="row-actions-item" onClick={() => duplicar(d)} disabled={pending}>
-                        <Files size={15} strokeWidth={2} /> Duplicar
-                      </button>
+                      {puedeEditar && (
+                        <button className="row-actions-item" onClick={() => duplicar(d)} disabled={pending}>
+                          <Files size={15} strokeWidth={2} /> Duplicar
+                        </button>
+                      )}
                       {d.estado === 'PUBLICADO' && d.token && (
                         <>
                           <button className="row-actions-item" onClick={() => copiarEnlace(d.token!)}>
@@ -195,10 +204,12 @@ export default function DossierLista({
                           </a>
                         </>
                       )}
-                      <button className="row-actions-item row-actions-item-danger"
-                        onClick={() => setPorBorrar(d)} disabled={pending}>
-                        <Trash2 size={14} strokeWidth={2} /> Eliminar
-                      </button>
+                      {puedeEditar && (
+                        <button className="row-actions-item row-actions-item-danger"
+                          onClick={() => setPorBorrar(d)} disabled={pending}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      )}
                     </RowActions>
                   </td>
                 </tr>
@@ -208,20 +219,22 @@ export default function DossierLista({
         </div>
       </div>
 
-      <BulkBar count={sel.count} onClear={sel.clear}>
-        <button className="btn btn-secondary btn-sm" disabled={pending}
-          onClick={() => ejecutar(() => duplicarDossiersEnLote(sel.selectedIds))}>
-          <Files size={14} strokeWidth={2} /> Duplicar
-        </button>
-        <button className="btn btn-secondary btn-sm" disabled={pending}
-          onClick={() => ejecutar(() => despublicarDossiersEnLote(sel.selectedIds))}>
-          <EyeOff size={14} strokeWidth={2} /> Despublicar
-        </button>
-        <button className="btn btn-danger-text btn-sm" disabled={pending}
-          onClick={() => setConfirmLote(true)}>
-          <Trash2 size={14} strokeWidth={2} /> Eliminar
-        </button>
-      </BulkBar>
+      {puedeEditar && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          <button className="btn btn-secondary btn-sm" disabled={pending}
+            onClick={() => ejecutar(() => duplicarDossiersEnLote(sel.selectedIds))}>
+            <Files size={14} strokeWidth={2} /> Duplicar
+          </button>
+          <button className="btn btn-secondary btn-sm" disabled={pending}
+            onClick={() => ejecutar(() => despublicarDossiersEnLote(sel.selectedIds))}>
+            <EyeOff size={14} strokeWidth={2} /> Despublicar
+          </button>
+          <button className="btn btn-danger-text btn-sm" disabled={pending}
+            onClick={() => setConfirmLote(true)}>
+            <Trash2 size={14} strokeWidth={2} /> Eliminar
+          </button>
+        </BulkBar>
+      )}
 
       {confirmLote && (
         <ConfirmDialog

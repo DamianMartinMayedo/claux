@@ -7,7 +7,7 @@ import type { IngestaResultado, LotePayload } from '@/lib/caja/ingesta'
 import { fechaEnTz } from '@/lib/fecha-tz'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 
-interface Props { cajas: { caja_id: string; nombre: string }[] }
+interface Props { cajas: { caja_id: string; nombre: string }[]; puedeEditar: boolean }
 // El tipo se IMPORTA. Estaba copiado a mano aquí con cuatro campos, y por eso esta pantalla
 // no se enteró de que la ingesta empezó a devolver `rechazados`: enseñaba un tick verde
 // sobre ventas que el servidor había tirado. Una lista paralela se queda corta en silencio.
@@ -69,7 +69,7 @@ function resumir(payload: LotePayload, destino: string, delArchivo: boolean): Pr
   }
 }
 
-export default function SincronizarView({ cajas }: Props) {
+export default function SincronizarView({ cajas, puedeEditar }: Props) {
   // Solo se usa como respaldo para archivos viejos, que no traen el identificador.
   const [cajaId, setCajaId] = useState(cajas[0]?.caja_id ?? '')
   const [previo, setPrevio] = useState<Previo | null>(null)
@@ -157,6 +157,8 @@ export default function SincronizarView({ cajas }: Props) {
       <div className="card caja-config-section">
         {cajas.length === 0 ? (
           <p className="caja-install-hint">Primero crea un punto de venta en la sección Puntos de venta.</p>
+        ) : !puedeEditar ? (
+          <p className="caja-install-hint">Solo consulta: no tienes permiso para sincronizar archivos en este módulo.</p>
         ) : (
           <div className="caja-install">
             <div className="input-group">
