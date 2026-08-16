@@ -474,7 +474,7 @@ export function ConfirmEliminar({
 
 // ── Página: Personal ─────────────────────────────────────────────────────────────
 
-export default function PersonalView({ data }: { data: PersonalPageData }) {
+export default function PersonalView({ data, puedeEditar }: { data: PersonalPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -619,7 +619,9 @@ export default function PersonalView({ data }: { data: PersonalPageData }) {
             filtro={filtroExport(declaracion, { q: search })}
             resumen={[...resumenDe(declaracion), ...(search ? [`«${search}»`] : [])]}
           />
-          <button className="btn btn-primary" onClick={openNuevo} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
+          {puedeEditar && (
+            <button className="btn btn-primary" onClick={openNuevo} disabled={data.empresas.length === 0 || data.monedas.length === 0}><Plus size={14} strokeWidth={2.5} /> Nuevo empleado</button>
+          )}
         </div>
       </div>
 
@@ -653,9 +655,11 @@ export default function PersonalView({ data }: { data: PersonalPageData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    </th>
+                  )}
                   <th>Empleado</th>
                   {multiempresa && <th>Empresa</th>}
                   <th>Cargo</th>
@@ -671,12 +675,14 @@ export default function PersonalView({ data }: { data: PersonalPageData }) {
                     className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(e.empresa_id)) : undefined}
                     onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}>
-                    <td className="col-check" onClick={ev => ev.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={sel.isSelected(e.empleado_id)}
-                        onChange={() => sel.toggle(e.empleado_id)}
-                        aria-label={`Seleccionar ${nombreCompleto(e)}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={ev => ev.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(e.empleado_id)}
+                          onChange={() => sel.toggle(e.empleado_id)}
+                          aria-label={`Seleccionar ${nombreCompleto(e)}`} />
+                      </td>
+                    )}
                     <td data-label="Empleado">
                       <strong className="cell-clamp">{nombreCompleto(e)}</strong>
                       <div className="tes-mov-sub">
@@ -710,18 +716,20 @@ export default function PersonalView({ data }: { data: PersonalPageData }) {
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => router.push(`/portal/rrhh/${e.empleado_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-                        <button className="row-actions-item" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                        {multiempresa && e.estado === 'ACTIVO' && (
-                          <button className="row-actions-item" onClick={() => setCopiarEmpleado(e)}><Copy size={15} strokeWidth={2} /> Copiar a otra empresa</button>
-                        )}
-                        {e.estado === 'ACTIVO' ? (
-                          <button className="row-actions-item" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
-                        ) : (
-                          <button className="row-actions-item"
-                            onClick={() => reactivar(e.empleado_id)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Reactivar</button>
-                        )}
-                        <button className="row-actions-item row-actions-item-danger"
-                          onClick={() => setConfirmDel(e)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                        {puedeEditar && (<>
+                          <button className="row-actions-item" onClick={() => openEdit(e)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                          {multiempresa && e.estado === 'ACTIVO' && (
+                            <button className="row-actions-item" onClick={() => setCopiarEmpleado(e)}><Copy size={15} strokeWidth={2} /> Copiar a otra empresa</button>
+                          )}
+                          {e.estado === 'ACTIVO' ? (
+                            <button className="row-actions-item" onClick={() => setBaja(e)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
+                          ) : (
+                            <button className="row-actions-item"
+                              onClick={() => reactivar(e.empleado_id)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Reactivar</button>
+                          )}
+                          <button className="row-actions-item row-actions-item-danger"
+                            onClick={() => setConfirmDel(e)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                        </>)}
                       </RowActions>
                     </td>
                   </tr>
@@ -761,30 +769,32 @@ export default function PersonalView({ data }: { data: PersonalPageData }) {
         />
       )}
 
-      <BulkBar count={sel.count} onClear={sel.clear}>
-        {multiempresa && (
-          <button className="btn btn-secondary btn-sm" disabled={isPending}
-            onClick={() => setCopiarLote(true)}>
-            <Copy size={14} strokeWidth={2} /> Copiar a empresa
+      {puedeEditar && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          {multiempresa && (
+            <button className="btn btn-secondary btn-sm" disabled={isPending}
+              onClick={() => setCopiarLote(true)}>
+              <Copy size={14} strokeWidth={2} /> Copiar a empresa
+            </button>
+          )}
+          {hayActivos && (
+            <button className="btn btn-secondary btn-sm" disabled={isPending}
+              onClick={() => setBajaLote(true)}>
+              <UserMinus size={14} strokeWidth={2} /> Dar de baja
+            </button>
+          )}
+          {hayBajas && (
+            <button className="btn btn-secondary btn-sm" disabled={isPending}
+              onClick={() => ejecutarLote(() => reactivarEmpleadosEnLote(sel.selectedIds))}>
+              <RotateCcw size={14} strokeWidth={2} /> Reactivar
+            </button>
+          )}
+          <button className="btn btn-danger-text btn-sm" disabled={isPending}
+            onClick={() => setConfirmLoteDel(true)}>
+            <Trash2 size={14} strokeWidth={2} /> Eliminar
           </button>
-        )}
-        {hayActivos && (
-          <button className="btn btn-secondary btn-sm" disabled={isPending}
-            onClick={() => setBajaLote(true)}>
-            <UserMinus size={14} strokeWidth={2} /> Dar de baja
-          </button>
-        )}
-        {hayBajas && (
-          <button className="btn btn-secondary btn-sm" disabled={isPending}
-            onClick={() => ejecutarLote(() => reactivarEmpleadosEnLote(sel.selectedIds))}>
-            <RotateCcw size={14} strokeWidth={2} /> Reactivar
-          </button>
-        )}
-        <button className="btn btn-danger-text btn-sm" disabled={isPending}
-          onClick={() => setConfirmLoteDel(true)}>
-          <Trash2 size={14} strokeWidth={2} /> Eliminar
-        </button>
-      </BulkBar>
+        </BulkBar>
+      )}
 
       {bajaLote && (
         <BajaLoteModal count={sel.count} onClose={() => setBajaLote(false)} onConfirm={doBajaLote} />

@@ -1,5 +1,5 @@
 import { notFound }             from 'next/navigation'
-import { requireModulo }        from '@/app/actions/portal/auth'
+import { requireAccesoModulo }  from '@/app/actions/portal/auth'
 import { obtenerNominaDetalle } from '@/app/actions/portal/rrhh'
 import NominaDetalleView        from './NominaDetalleView'
 
@@ -10,9 +10,9 @@ interface Props {
 }
 
 export default async function NominaDetallePage({ params }: Props) {
-  await requireModulo('rrhh')
+  const { puedeEditar } = await requireAccesoModulo('rrhh')
   const { nomina_id } = await params
   const detalle = await obtenerNominaDetalle(nomina_id)
   if (!detalle) notFound()
-  return <NominaDetalleView detalle={detalle} />
+  return <NominaDetalleView detalle={detalle} tienePermiso={puedeEditar} />
 }

@@ -481,7 +481,7 @@ function TurnoUnificadoModal({
 
 // ── Página: Turnos ───────────────────────────────────────────────────────────────
 
-export default function TurnosView({ data }: { data: TurnosPageData }) {
+export default function TurnosView({ data, puedeEditar }: { data: TurnosPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
 
@@ -790,9 +790,11 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
                 filtro: { empresa_id: empresaId }, resumen: resumenEmpresa },
             ]}
           />
-          <button className="btn btn-primary" onClick={() => setModalNuevoTurno(true)} disabled={!empresaId}>
-            <Plus size={14} strokeWidth={2.5} /> Nuevo turno
-          </button>
+          {puedeEditar && (
+            <button className="btn btn-primary" onClick={() => setModalNuevoTurno(true)} disabled={!empresaId}>
+              <Plus size={14} strokeWidth={2.5} /> Nuevo turno
+            </button>
+          )}
         </div>
       </div>
 
@@ -850,14 +852,16 @@ export default function TurnosView({ data }: { data: TurnosPageData }) {
                       <td data-label="Cuándo" className="text-sm-muted">{resumenCuando(p)}</td>
                       <td data-label="Personas" className="col-num">{miembrosPorPatron.get(p.patron_id) ?? 0}</td>
                       <td className="col-actions">
-                        <RowActions>
-                          <button className="row-actions-item" onClick={() => setModalTurno(p)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                          <button className="row-actions-item" onClick={() => toggleTurno(p)} disabled={isPending}>
-                            <Power size={15} strokeWidth={2} /> {p.activo ? 'Desactivar' : 'Activar'}
-                          </button>
-                          <button className="row-actions-item row-actions-item-danger"
-                            onClick={() => setDelTurno(p)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
-                        </RowActions>
+                        {puedeEditar && (
+                          <RowActions>
+                            <button className="row-actions-item" onClick={() => setModalTurno(p)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                            <button className="row-actions-item" onClick={() => toggleTurno(p)} disabled={isPending}>
+                              <Power size={15} strokeWidth={2} /> {p.activo ? 'Desactivar' : 'Activar'}
+                            </button>
+                            <button className="row-actions-item row-actions-item-danger"
+                              onClick={() => setDelTurno(p)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /> Eliminar</button>
+                          </RowActions>
+                        )}
                       </td>
                     </tr>
                   )

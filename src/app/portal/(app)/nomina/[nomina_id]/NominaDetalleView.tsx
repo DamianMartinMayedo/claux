@@ -184,7 +184,7 @@ function AgregarIncidenciaModal({
 
 // ── Vista principal ──────────────────────────────────────────────────────────────
 
-export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleData }) {
+export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: NominaDetalleData; tienePermiso: boolean }) {
   const router = useRouter()
   const esConfigurador = useConfigurador()
   const [isPending, startTransition] = useTransition()
@@ -193,8 +193,10 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
 
   const esBorrador  = nomina.estado === 'BORRADOR'
   // Bajo impersonación, una CONFIRMADA se puede corregir sin tocar la base a
-  // mano; en sesión normal, una vez confirmada es de solo lectura.
-  const puedeEditar = esBorrador || esConfigurador
+  // mano; en sesión normal, una vez confirmada es de solo lectura. Y en todos los
+  // casos exige permiso de edición del módulo: sin él (solo-lectura o sin acceso a
+  // RRHH) no se pinta ningún control de escritura, ni siquiera en un borrador.
+  const puedeEditar = tienePermiso && (esBorrador || esConfigurador)
 
   const [incidencias, setIncidencias] = useState<Record<string, IncidenciaEditable>>(() => {
     const out: Record<string, IncidenciaEditable> = {}
@@ -533,7 +535,7 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
           <button className="btn btn-secondary" onClick={exportar} disabled={exportando}>
             <Download size={14} strokeWidth={2} /> Exportar a Excel
           </button>
-          {esBorrador && (
+          {esBorrador && puedeEditar && (
             <button className="btn btn-primary" onClick={() => setConfirmarNom(true)}>
               <CircleCheck size={15} strokeWidth={2} /> Confirmar nómina
             </button>
@@ -547,11 +549,13 @@ export default function NominaDetalleView({ detalle }: { detalle: NominaDetalleD
               <DollarSign size={15} strokeWidth={2} /> Ver en Cuentas por pagar
             </Link>
           )}
-          <RowActions>
-            <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarEliminar(true)}>
-              <Trash2 size={14} strokeWidth={2} /> Eliminar
-            </button>
-          </RowActions>
+          {puedeEditar && (
+            <RowActions>
+              <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmarEliminar(true)}>
+                <Trash2 size={14} strokeWidth={2} /> Eliminar
+              </button>
+            </RowActions>
+          )}
         </div>
       </div>
 

@@ -22,6 +22,7 @@ export interface FacturacionData {
   client_id:        string
   nombre_empresa:   string
   estado:           string
+  es_prueba:        boolean
   suscripcion:      string
   precio_mensual:   number
   ciclo:            string
@@ -41,7 +42,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
 
   const [{ data: cliente }, { data: pagos }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
+      .select('nombre_empresa, estado, es_prueba, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
       .eq('client_id', session.client_id)
       .single(),
     db.from('payments')
@@ -62,6 +63,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
     client_id:        session.client_id,
     nombre_empresa:   cliente.nombre_empresa,
     estado:           cliente.estado,
+    es_prueba:        cliente.es_prueba ?? false,
     suscripcion,
     precio_mensual:   precioMes,
     ciclo,

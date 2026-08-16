@@ -1,5 +1,5 @@
 import { notFound }        from 'next/navigation'
-import { requireModulo }   from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerNominas }  from '@/app/actions/portal/rrhh'
 import { TOPE_VER_MAS }    from '@/lib/listados'
 import NominaView          from './NominaView'
@@ -11,7 +11,7 @@ export default async function NominaPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('rrhh')
+  const { puedeEditar } = await requireAccesoModulo('rrhh')
   // El AÑO es la granularidad de esta pantalla —el período de una nómina no son unos
   // días sueltos—, así que acota EN LA CONSULTA en vez de traerlas todas y filtrar en
   // el navegador. `limite` lo sube «Traer más» desde `<AvisoTope>`: el techo protege el
@@ -24,5 +24,5 @@ export default async function NominaPage({
     limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
   })
   if (!data) notFound()
-  return <NominaView data={data} />
+  return <NominaView data={data} puedeEditar={puedeEditar} />
 }

@@ -988,8 +988,8 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function TesoreriaView({ data, pendientes, gaveta }: {
-  data: TesoreriaPageData; pendientes: Pendientes; gaveta: DatosGaveta
+export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta }: {
+  data: TesoreriaPageData; puedeEditar: boolean; pendientes: Pendientes; gaveta: DatosGaveta
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1208,19 +1208,21 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
               resumen={[verArchivadas ? 'archivadas' : 'activas']}
             />
           )}
-          <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }} disabled={data.empresas.length === 0 || data.monedas.length === 0}>
-            <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
-          </button>
-          {cuentasActivas.length >= 2 && (
-            <button className="btn btn-secondary" onClick={() => setTransferModal(true)}>
-              <ArrowRightLeft size={14} /> Transferencia
+          {puedeEditar && (<>
+            <button className="btn btn-secondary" onClick={() => { setEditCuenta(null); setCuentaModal(true) }} disabled={data.empresas.length === 0 || data.monedas.length === 0}>
+              <Plus size={14} strokeWidth={2.5} /> Nueva cuenta
             </button>
-          )}
-          {hayCuentasActivas && (
-            <button className="btn btn-primary" onClick={() => openMovimiento(null)}>
-              <Plus size={14} strokeWidth={2.5} /> Registrar movimiento
-            </button>
-          )}
+            {cuentasActivas.length >= 2 && (
+              <button className="btn btn-secondary" onClick={() => setTransferModal(true)}>
+                <ArrowRightLeft size={14} /> Transferencia
+              </button>
+            )}
+            {hayCuentasActivas && (
+              <button className="btn btn-primary" onClick={() => openMovimiento(null)}>
+                <Plus size={14} strokeWidth={2.5} /> Registrar movimiento
+              </button>
+            )}
+          </>)}
         </div>
       </div>
 
@@ -1291,9 +1293,11 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={selCuentas.allSelected} indeterminate={selCuentas.someSelected} onChange={selCuentas.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={selCuentas.allSelected} indeterminate={selCuentas.someSelected} onChange={selCuentas.toggleAll} />
+                    </th>
+                  )}
                   <th>Cuenta</th>
                   <th className="col-center">Tipo</th>
                   {multiempresa && <th>Empresa</th>}
@@ -1309,12 +1313,14 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
                   <tr key={c.cuenta_id}
                     className={`${!c.activa ? 'tes-row-archivada ' : ''}${multiempresa ? 'row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(c.empresa_id)) : undefined}>
-                    <td className="col-check" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={selCuentas.isSelected(c.cuenta_id)}
-                        onChange={() => selCuentas.toggle(c.cuenta_id)}
-                        aria-label={`Seleccionar ${c.nombre}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="row-check"
+                          checked={selCuentas.isSelected(c.cuenta_id)}
+                          onChange={() => selCuentas.toggle(c.cuenta_id)}
+                          aria-label={`Seleccionar ${c.nombre}`} />
+                      </td>
+                    )}
                     <td data-label="Cuenta"><strong className="cell-clamp">{c.nombre}</strong></td>
                     <td data-label="Tipo" className="col-center">
                       <span className={`badge ${TIPO_CUENTA_BADGE[c.tipo]}`}>{TIPO_CUENTA_LABEL[c.tipo]}</span>
@@ -1331,25 +1337,27 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
                     <td data-label="Egresos" className="col-num tes-monto-out">{formatMonto(c.total_egresos)}</td>
                     <td data-label="Mov." className="col-num">{c.num_movimientos}</td>
                     <td className="col-actions">
-                      <RowActions>
-                        {c.activa ? (
-                          <>
-                            <button className="row-actions-item" onClick={() => openMovimiento(c.cuenta_id)}>
-                              <Plus size={15} strokeWidth={2} /> Registrar movimiento
+                      {puedeEditar && (
+                        <RowActions>
+                          {c.activa ? (
+                            <>
+                              <button className="row-actions-item" onClick={() => openMovimiento(c.cuenta_id)}>
+                                <Plus size={15} strokeWidth={2} /> Registrar movimiento
+                              </button>
+                              <button className="row-actions-item" onClick={() => { setEditCuenta(c); setCuentaModal(true) }}>
+                                <Pencil size={15} strokeWidth={2} /> Editar
+                              </button>
+                              <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCuenta(c)} disabled={isPending}>
+                                <Archive size={15} strokeWidth={2} /> Archivar
+                              </button>
+                            </>
+                          ) : (
+                            <button className="row-actions-item" onClick={() => handleRestaurar(c)} disabled={isPending}>
+                              <RotateCcw size={15} strokeWidth={2} /> Restaurar
                             </button>
-                            <button className="row-actions-item" onClick={() => { setEditCuenta(c); setCuentaModal(true) }}>
-                              <Pencil size={15} strokeWidth={2} /> Editar
-                            </button>
-                            <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmCuenta(c)} disabled={isPending}>
-                              <Archive size={15} strokeWidth={2} /> Archivar
-                            </button>
-                          </>
-                        ) : (
-                          <button className="row-actions-item" onClick={() => handleRestaurar(c)} disabled={isPending}>
-                            <RotateCcw size={15} strokeWidth={2} /> Restaurar
-                          </button>
-                        )}
-                      </RowActions>
+                          )}
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1387,9 +1395,11 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="col-check">
-                    <HeaderCheck checked={selMov.allSelected} indeterminate={selMov.someSelected} onChange={selMov.toggleAll} />
-                  </th>
+                  {puedeEditar && (
+                    <th className="col-check">
+                      <HeaderCheck checked={selMov.allSelected} indeterminate={selMov.someSelected} onChange={selMov.toggleAll} />
+                    </th>
+                  )}
                   <th>Fecha</th>
                   <th>Concepto</th>
                   <th>Cuenta</th>
@@ -1400,12 +1410,14 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
               <tbody>
                 {pageItems.map(m => (
                   <tr key={m.movimiento_id}>
-                    <td className="col-check">
-                      <input type="checkbox" className="row-check"
-                        checked={selMov.isSelected(m.movimiento_id)}
-                        onChange={() => selMov.toggle(m.movimiento_id)}
-                        aria-label={`Seleccionar ${m.concepto}`} />
-                    </td>
+                    {puedeEditar && (
+                      <td className="col-check">
+                        <input type="checkbox" className="row-check"
+                          checked={selMov.isSelected(m.movimiento_id)}
+                          onChange={() => selMov.toggle(m.movimiento_id)}
+                          aria-label={`Seleccionar ${m.concepto}`} />
+                      </td>
+                    )}
                     <td data-label="Fecha" className="text-sm-muted tes-nowrap">{formatFecha(m.fecha)}</td>
                     <td data-label="Concepto">
                       {/* Dos líneas y elipsis: el concepto y la categoría vienen del catálogo
@@ -1422,19 +1434,21 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
                       {m.tipo === 'INGRESO' ? '+' : '−'}{formatMonto(Number(m.monto))} {m.moneda}
                     </td>
                     <td className="col-actions">
-                      <div className="ter-actions">
-                        {/* Editar solo los MANUALES sin transferencia: mismas guardas que
-                            el borrado, y por lo mismo — un movimiento de cobro/pago es el
-                            reflejo de un documento y se corrige desde él. */}
-                        {m.origen === 'MANUAL' && !m.transfer_grupo && (
-                          <button className="ter-action-btn" title="Editar"
-                            aria-label={`Editar ${m.concepto}`}
-                            onClick={() => setEditMov(m)} disabled={isPending}><Pencil size={14} /></button>
-                        )}
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar"
-                          aria-label={`Eliminar ${m.concepto}`}
-                          onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>
-                      </div>
+                      {puedeEditar && (
+                        <div className="ter-actions">
+                          {/* Editar solo los MANUALES sin transferencia: mismas guardas que
+                              el borrado, y por lo mismo — un movimiento de cobro/pago es el
+                              reflejo de un documento y se corrige desde él. */}
+                          {m.origen === 'MANUAL' && !m.transfer_grupo && (
+                            <button className="ter-action-btn" title="Editar"
+                              aria-label={`Editar ${m.concepto}`}
+                              onClick={() => setEditMov(m)} disabled={isPending}><Pencil size={14} /></button>
+                          )}
+                          <button className="ter-action-btn ter-action-danger" title="Eliminar"
+                            aria-label={`Eliminar ${m.concepto}`}
+                            onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1447,7 +1461,7 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
       </>)}
 
       {/* Barra de acciones en lote (solo pestaña de cuentas) */}
-      {tab === 'cuentas' && (
+      {tab === 'cuentas' && puedeEditar && (
         <BulkBar count={selCuentas.count} onClear={selCuentas.clear}>
           {verArchivadas ? (
             <button className="btn btn-secondary btn-sm" disabled={isPending}
@@ -1476,7 +1490,7 @@ export default function TesoreriaView({ data, pendientes, gaveta }: {
       )}
 
       {/* Barra de acciones en lote (solo pestaña de movimientos) */}
-      {tab === 'movimientos' && (
+      {tab === 'movimientos' && puedeEditar && (
         <BulkBar count={selMov.count} onClear={selMov.clear}>
           <button className="btn btn-danger-text btn-sm" disabled={isPending}
             onClick={() => setConfirmLoteMov(true)}>

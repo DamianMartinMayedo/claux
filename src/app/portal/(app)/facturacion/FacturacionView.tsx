@@ -9,7 +9,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVO:     'Activo',
   TRIAL:      'Período de prueba',
-  GRACIA:     'Período especial',
+  GRACIA:     'Prórroga',
   VENCIDO:    'Vencido',
   DESACTIVADO: 'Desactivado',
 }
@@ -47,7 +47,9 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
   // que hacía salir "Expirado" con el acceso todavía activo.
   const enGracia = data.estado === 'GRACIA' && !!data.fecha_fin_gracia
   const fechaVigencia = enGracia ? data.fecha_fin_gracia : data.fecha_expiracion
-  const dias = diasRestantes(fechaVigencia)
+  // El entorno de PRUEBA no vence nunca (coherente con el layout y la pantalla de bloqueo):
+  // sin esto, un cliente de prueba con `fecha_expiracion` en el pasado veía un falso «Expirado».
+  const dias = data.es_prueba ? null : diasRestantes(fechaVigencia)
 
   const diasCls =
     dias === null         ? ''                :
@@ -82,7 +84,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       {enGracia ? (
         <div className="alert alert-warning alert-cta">
           <span className="alert-cta-texto">
-            Tu suscripción venció, pero tienes un período especial activo hasta el {fmt(data.fecha_fin_gracia)}. Contáctanos para ponerte al día.
+            Tu suscripción venció, pero tienes una prórroga activa hasta el {fmt(data.fecha_fin_gracia)}. Contáctanos para ponerte al día.
           </span>
           <a
             href={`mailto:${data.email_soporte}?subject=${encodeURIComponent(`Quiero renovar mi suscripción — ${data.client_id}`)}`}

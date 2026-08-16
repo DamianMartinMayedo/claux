@@ -1,5 +1,5 @@
 import { notFound }         from 'next/navigation'
-import { requireModulo }     from '@/app/actions/portal/auth'
+import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerTesoreria } from '@/app/actions/portal/tesoreria'
 import { TOPE_VER_MAS }     from '@/lib/listados'
 import { filtrosDeUrl }     from '@/lib/filtros'
@@ -14,7 +14,7 @@ export default async function TesoreriaPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('base')
+  const { puedeEditar } = await requireAccesoModulo('base')
   // El rango acota el LISTADO de movimientos, no los saldos: un saldo es la suma de toda
   // la historia de la cuenta y filtrarlo sería enseñar un saldo que no existe.
   const sp = await searchParams
@@ -46,6 +46,7 @@ export default async function TesoreriaPage({
   return (
     <TesoreriaView
       data={data}
+      puedeEditar={puedeEditar}
       pendientes={{ cobrar: cxc?.documentos ?? [], pagar: cxp?.documentos ?? [] }}
       gaveta={gaveta}
     />

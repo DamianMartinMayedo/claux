@@ -159,10 +159,11 @@ function ReglaModal({
 // `editando` vive en el PADRE: el botón «Nueva regla» va en el `.page-header`, al
 // lado del título y como el resto de las vistas, así que quien lo dispara está
 // fuera de este panel.
-function ReglasPanel({ data, editando, setEditando }: {
+function ReglasPanel({ data, editando, setEditando, puedeEditar }: {
   data:        NominaPageData
   editando:    ReglaDeduccion | 'nueva' | null
   setEditando: (r: ReglaDeduccion | 'nueva' | null) => void
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   // Sin `isPending`: aquí la carga la enseña el toast de `toastLoading`, no un botón
@@ -239,17 +240,19 @@ function ReglasPanel({ data, editando, setEditando }: {
                         : formatMonto(r.valor)}
                     </td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item" onClick={() => setEditando(r)}>
-                          <Pencil size={14} strokeWidth={2} /> Editar
-                        </button>
-                        <button className="row-actions-item" onClick={() => toggle(r)}>
-                          <Power size={14} strokeWidth={2} /> {r.activa ? 'Desactivar' : 'Activar'}
-                        </button>
-                        <button className="row-actions-item row-actions-item-danger" onClick={() => setBorrando(r)}>
-                          <Trash2 size={14} strokeWidth={2} /> Eliminar
-                        </button>
-                      </RowActions>
+                      {puedeEditar && (
+                        <RowActions>
+                          <button className="row-actions-item" onClick={() => setEditando(r)}>
+                            <Pencil size={14} strokeWidth={2} /> Editar
+                          </button>
+                          <button className="row-actions-item" onClick={() => toggle(r)}>
+                            <Power size={14} strokeWidth={2} /> {r.activa ? 'Desactivar' : 'Activar'}
+                          </button>
+                          <button className="row-actions-item row-actions-item-danger" onClick={() => setBorrando(r)}>
+                            <Trash2 size={14} strokeWidth={2} /> Eliminar
+                          </button>
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -287,7 +290,7 @@ function ReglasPanel({ data, editando, setEditando }: {
 // puede tener una en el modelo cubano y el resto en el general. Cambiarlo NO
 // reescribe nada — solo afecta a las nóminas que se generen a partir de ahí.
 
-function ConfigNominaPanel({ data }: { data: NominaPageData }) {
+function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editando, setEditando] = useState<string | null>(null)
@@ -411,11 +414,13 @@ function ConfigNominaPanel({ data }: { data: NominaPageData }) {
                             {cfg.dia_pago ?? <span className="text-xs-muted">Sin fijar</span>}
                           </td>
                           <td className="col-actions">
-                            <button className="ter-action-btn" title="Cambiar"
-                              aria-label={`Cambiar la configuración de ${emp.nombre}`}
-                              onClick={() => setEditando(emp.empresa_id)}>
-                              <Pencil size={14} strokeWidth={2} />
-                            </button>
+                            {puedeEditar && (
+                              <button className="ter-action-btn" title="Cambiar"
+                                aria-label={`Cambiar la configuración de ${emp.nombre}`}
+                                onClick={() => setEditando(emp.empresa_id)}>
+                                <Pencil size={14} strokeWidth={2} />
+                              </button>
+                            )}
                           </td>
                         </>
                       )}
@@ -428,7 +433,7 @@ function ConfigNominaPanel({ data }: { data: NominaPageData }) {
         )}
       </div>
 
-      <MapeoGastosPanel data={data} />
+      <MapeoGastosPanel data={data} puedeEditar={puedeEditar} />
 
       <div className="info-box mt-3">
         <strong className="info-box-title">Sobre el modelo MIPYME cubana</strong>
@@ -453,7 +458,7 @@ function ConfigNominaPanel({ data }: { data: NominaPageData }) {
 // contabilidad. Mandar dos conceptos a la misma categoría es una decisión suya
 // legítima; en blanco, el concepto usa la categoría que crea el sistema.
 
-function MapeoGastosPanel({ data }: { data: NominaPageData }) {
+function MapeoGastosPanel({ data, puedeEditar }: { data: NominaPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -509,7 +514,7 @@ function MapeoGastosPanel({ data }: { data: NominaPageData }) {
           <div key={emp.empresa_id} className="nom-mapeo-empresa">
             <div className="det-meta-row">
               <strong>{emp.nombre}</strong>
-              {!editando && (
+              {puedeEditar && !editando && (
                 <button className="btn btn-ghost btn-sm" onClick={() => setAbierta(emp.empresa_id)}>
                   <Pencil size={14} strokeWidth={2} /> Cambiar reparto
                 </button>
@@ -745,7 +750,7 @@ function ConfirmEliminarNomina({
 
 // ── Página: Nómina ───────────────────────────────────────────────────────────────
 
-export default function NominaView({ data }: { data: NominaPageData }) {
+export default function NominaView({ data, puedeEditar }: { data: NominaPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -900,12 +905,12 @@ export default function NominaView({ data }: { data: NominaPageData }) {
               resumen={resumenDe(declaracion)}
             />
           )}
-          {tab === 'nominas' && (
+          {tab === 'nominas' && puedeEditar && (
             <button className="btn btn-primary" onClick={() => setModalNuevaNomina(true)} disabled={data.empresas.length === 0}>
               <Plus size={14} strokeWidth={2.5} /> Nueva nómina
             </button>
           )}
-          {tab === 'reglas' && (
+          {tab === 'reglas' && puedeEditar && (
             <button className="btn btn-primary" onClick={() => setEditandoRegla('nueva')}>
               <Plus size={14} strokeWidth={2.5} /> Nueva regla
             </button>
@@ -936,9 +941,9 @@ export default function NominaView({ data }: { data: NominaPageData }) {
       )}
 
       {tab === 'reglas' && (
-        <ReglasPanel data={data} editando={editandoRegla} setEditando={setEditandoRegla} />
+        <ReglasPanel data={data} editando={editandoRegla} setEditando={setEditandoRegla} puedeEditar={puedeEditar} />
       )}
-      {tab === 'config' && <ConfigNominaPanel data={data} />}
+      {tab === 'config' && <ConfigNominaPanel data={data} puedeEditar={puedeEditar} />}
 
       {tab === 'nominas' && (
       <>
@@ -960,7 +965,9 @@ export default function NominaView({ data }: { data: NominaPageData }) {
               <thead>
                 <tr>
                   <th className="col-check">
-                    <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    {puedeEditar && (
+                      <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                    )}
                   </th>
                   <th>Período</th>
                   {multiempresa && <th>Empresa</th>}
@@ -979,10 +986,12 @@ export default function NominaView({ data }: { data: NominaPageData }) {
                     onClick={() => router.push(`/portal/nomina/${n.nomina_id}`)}
                   >
                     <td className="col-check" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="row-check"
-                        checked={sel.isSelected(n.nomina_id)}
-                        onChange={() => sel.toggle(n.nomina_id)}
-                        aria-label={`Seleccionar nómina ${formatPeriodo(n.periodo)}`} />
+                      {puedeEditar && (
+                        <input type="checkbox" className="row-check"
+                          checked={sel.isSelected(n.nomina_id)}
+                          onChange={() => sel.toggle(n.nomina_id)}
+                          aria-label={`Seleccionar nómina ${formatPeriodo(n.periodo)}`} />
+                      )}
                     </td>
                     <td data-label="Período"><strong>{formatPeriodo(n.periodo)}</strong></td>
                     {multiempresa && (
@@ -1045,6 +1054,7 @@ export default function NominaView({ data }: { data: NominaPageData }) {
           onClose={() => setDelNomina(null)} isPending={isPending} />
       )}
 
+      {puedeEditar && (
       <BulkBar count={sel.count} onClear={sel.clear}>
         {desactualizadas.length > 0 && (
           <button className="btn btn-secondary btn-sm" disabled={isPending}
@@ -1064,6 +1074,7 @@ export default function NominaView({ data }: { data: NominaPageData }) {
           <Trash2 size={14} strokeWidth={2} /> Eliminar
         </button>
       </BulkBar>
+      )}
 
       {confirmLoteConf && (
         <ConfirmDialog

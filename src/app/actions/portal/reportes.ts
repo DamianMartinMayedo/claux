@@ -5,7 +5,7 @@ import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import {
   cobroEsIngreso, cobroNaceLiquidado, generaSaldo,
 } from '@/lib/gastos-core'
-import { getPortalSession }  from './auth'
+import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { tieneModulo }       from '@/lib/modulos'
 import { enviarEmail }       from '@/lib/email/enviar'
@@ -695,7 +695,14 @@ export async function enviarReportesAsesor(
 ): Promise<{ ok: boolean; error?: string; email?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  // Gating: enviar reportes al asesor ESCRIBE en nombre del cliente (correo + registro),
+  // así que exige permiso de EDICIÓN de Contabilidad (`base`), no solo "no ser solo-lectura".
+  // `puedeEditarModulo` cubre las tres condiciones: no solo-lectura ∧ el tenant tiene `base`
+  // ∧ este usuario puede editar `base` (usuario_modulo). Antes solo miraba `solo_lectura`,
+  // así que un `usuario` sin permiso del módulo colaba.
+  if (!(await puedeEditarModulo('base'))) {
+    return { ok: false, error: 'No tienes permiso para enviar reportes al asesor.' }
+  }
 
   if (!input.incluirPDF && !input.incluirXLSX) {
     return { ok: false, error: 'Selecciona al menos un archivo (PDF o Excel).' }

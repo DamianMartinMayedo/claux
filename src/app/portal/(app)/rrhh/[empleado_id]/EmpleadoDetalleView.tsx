@@ -411,7 +411,7 @@ function AperturaModal({
 }
 
 function IncidenciasSection({
-  empleadoId, moneda, incidencias, esCuba, vacaciones, onChanged,
+  empleadoId, moneda, incidencias, esCuba, vacaciones, onChanged, puedeEditar,
 }: {
   empleadoId:  string
   moneda:      string
@@ -419,6 +419,7 @@ function IncidenciasSection({
   esCuba:      boolean
   vacaciones:  { importe: number; moneda: string; apertura: number; dias: number; apertura_dias: number }
   onChanged:   () => void
+  puedeEditar: boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [editando, setEditando] = useState<IncidenciaConId | 'nueva' | null>(null)
@@ -452,9 +453,11 @@ function IncidenciasSection({
     <div className="det-card">
       <div className="card-header">
         <h2 className="card-title">Incidencias del mes</h2>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditando('nueva')}>
-          <Plus size={14} strokeWidth={2.5} /> Añadir
-        </button>
+        {puedeEditar && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditando('nueva')}>
+            <Plus size={14} strokeWidth={2.5} /> Añadir
+          </button>
+        )}
       </div>
       <p className="text-sm-muted mb-3">
         Lo que cambia en un mes concreto. Se aplica al generar la nómina de ese mes; sin
@@ -472,9 +475,11 @@ function IncidenciasSection({
               Vacaciones acumuladas: {formatMonto(vacaciones.importe)} {vacaciones.moneda}
               {vacaciones.dias > 0.005 && <> · {formatDias(vacaciones.dias)} días</>}
             </strong>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setApertura(true)}>
-              <Pencil size={14} strokeWidth={2} /> Ajustar saldo de apertura
-            </button>
+            {puedeEditar && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setApertura(true)}>
+                <Pencil size={14} strokeWidth={2} /> Ajustar saldo de apertura
+              </button>
+            )}
           </div>
           <span className="text-xs-muted">
             Lo acumulado en las nóminas ya confirmadas, menos lo que se le haya pagado. El día
@@ -511,14 +516,16 @@ function IncidenciasSection({
                   <td data-label="Mes"><strong>{formatPeriodo(i.periodo)}</strong></td>
                   <td data-label="Qué pasó" className="cell-truncate">{resumen(i)}</td>
                   <td className="col-actions">
-                    <RowActions>
-                      <button className="row-actions-item" onClick={() => setEditando(i)}>
-                        <Pencil size={14} strokeWidth={2} /> Editar
-                      </button>
-                      <button className="row-actions-item row-actions-item-danger" onClick={() => setBorrando(i)}>
-                        <Trash2 size={14} strokeWidth={2} /> Eliminar
-                      </button>
-                    </RowActions>
+                    {puedeEditar && (
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setEditando(i)}>
+                          <Pencil size={14} strokeWidth={2} /> Editar
+                        </button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setBorrando(i)}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      </RowActions>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -671,7 +678,7 @@ function ConceptoModal({
 }
 
 function ConceptosSection({
-  empleadoId, moneda, conceptos, desfasadas, onChanged,
+  empleadoId, moneda, conceptos, desfasadas, onChanged, puedeEditar,
 }: {
   empleadoId:   string
   moneda:       string
@@ -679,6 +686,7 @@ function ConceptosSection({
   /** Nóminas en BORRADOR cuya línea suya no cuadra con estos conceptos. */
   desfasadas:   NominaConLineas[]
   onChanged:    () => void
+  puedeEditar:  boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [delId, setDelId]   = useState<ConceptoEmpleado | null>(null)
@@ -719,9 +727,11 @@ function ConceptosSection({
     <div className="det-card">
       <div className="card-header">
         <h2 className="card-title">Conceptos del trabajador</h2>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditando('nuevo')}>
-          <Plus size={14} strokeWidth={2.5} /> Añadir
-        </button>
+        {puedeEditar && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditando('nuevo')}>
+            <Plus size={14} strokeWidth={2.5} /> Añadir
+          </button>
+        )}
       </div>
       <p className="text-sm-muted mb-3">
         Lo que este trabajador tiene <strong>de particular</strong>. Lo que es igual para toda la
@@ -751,17 +761,19 @@ function ConceptosSection({
                   </td>
                   <td data-label="Valor" className="col-num tes-monto-cell">{valorDe(c)}</td>
                   <td className="col-actions">
-                    <RowActions>
-                      <button className="row-actions-item" onClick={() => setEditando(c)}>
-                        <Pencil size={14} strokeWidth={2} /> Editar
-                      </button>
-                      <button className="row-actions-item" onClick={() => handleToggle(c)}>
-                        <RefreshCw size={14} strokeWidth={2} /> {c.activo ? 'Desactivar' : 'Activar'}
-                      </button>
-                      <button className="row-actions-item row-actions-item-danger" onClick={() => setDelId(c)}>
-                        <Trash2 size={14} strokeWidth={2} /> Eliminar
-                      </button>
-                    </RowActions>
+                    {puedeEditar && (
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => setEditando(c)}>
+                          <Pencil size={14} strokeWidth={2} /> Editar
+                        </button>
+                        <button className="row-actions-item" onClick={() => handleToggle(c)}>
+                          <RefreshCw size={14} strokeWidth={2} /> {c.activo ? 'Desactivar' : 'Activar'}
+                        </button>
+                        <button className="row-actions-item row-actions-item-danger" onClick={() => setDelId(c)}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      </RowActions>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -790,11 +802,13 @@ function ConceptosSection({
                         : valorDe(c)}
                     </td>
                     <td className="col-actions">
-                      <button className="ter-action-btn ter-action-danger" title="Quitar la excepción"
-                        aria-label={`Quitar la excepción de ${c.nombre}`}
-                        onClick={() => setDelId(c)} disabled={isPending}>
-                        <Trash2 size={14} strokeWidth={2} />
-                      </button>
+                      {puedeEditar && (
+                        <button className="ter-action-btn ter-action-danger" title="Quitar la excepción"
+                          aria-label={`Quitar la excepción de ${c.nombre}`}
+                          onClick={() => setDelId(c)} disabled={isPending}>
+                          <Trash2 size={14} strokeWidth={2} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -834,7 +848,7 @@ function ConceptosSection({
       {/* Los conceptos se aplican al GENERAR la nómina, así que un borrador ya
           creado se queda como estaba. El aviso sale SOLO si esa línea no cuadra
           con estos conceptos; si cuadra, no hay nada que decir. */}
-      {desfasadas.length > 0 && (
+      {puedeEditar && desfasadas.length > 0 && (
         <div className="alert alert-warning alert-cta mt-3">
           <span className="alert-cta-texto">
             {/* Los meses, dichos: sin ellos «4 nóminas» no dice cuáles se van a
@@ -858,7 +872,7 @@ function ConceptosSection({
 
 // ── Vista de detalle del empleado ────────────────────────────────────────────────
 
-export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDetalleData }) {
+export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle: EmpleadoDetalleData; puedeEditar: boolean }) {
   const router = useRouter()
   const { data, empleado, nominas, contratos, conceptos, incidencias, vacaciones } = detalle
   const { tieneIa, nombreAgente } = useIa()
@@ -1004,18 +1018,20 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
             {empleado.documento && <span>CI: <strong>{empleado.documento}</strong></span>}
           </div>
         </div>
-        <div className="det-actions">
-          <button onClick={() => setShowEdit(true)} className="btn btn-secondary"><Pencil size={14} strokeWidth={2} /> Editar</button>
-          <RowActions>
-            {data.empresas.length > 1 && esActivo && (
-              <button className="row-actions-item" onClick={() => setCopiar(true)}><Copy size={15} strokeWidth={2} /> Copiar a otra empresa</button>
-            )}
-            {esActivo
-              ? <button className="row-actions-item" onClick={() => setShowBaja(true)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
-              : <button className="row-actions-item" onClick={reactivar} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Reactivar</button>}
-            <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}><Trash2 size={15} strokeWidth={2} /> Eliminar</button>
-          </RowActions>
-        </div>
+        {puedeEditar && (
+          <div className="det-actions">
+            <button onClick={() => setShowEdit(true)} className="btn btn-secondary"><Pencil size={14} strokeWidth={2} /> Editar</button>
+            <RowActions>
+              {data.empresas.length > 1 && esActivo && (
+                <button className="row-actions-item" onClick={() => setCopiar(true)}><Copy size={15} strokeWidth={2} /> Copiar a otra empresa</button>
+              )}
+              {esActivo
+                ? <button className="row-actions-item" onClick={() => setShowBaja(true)}><UserMinus size={15} strokeWidth={2} /> Dar de baja</button>
+                : <button className="row-actions-item" onClick={reactivar} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Reactivar</button>}
+              <button className="row-actions-item row-actions-item-danger" onClick={() => setShowDelete(true)} disabled={isPending}><Trash2 size={15} strokeWidth={2} /> Eliminar</button>
+            </RowActions>
+          </div>
+        )}
       </div>
 
       {/* Datos */}
@@ -1058,9 +1074,11 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
       <div className="det-card">
         <div className="card-header">
           <h2 className="card-title">Contratos</h2>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowNuevo(true)}>
-            <Plus size={14} strokeWidth={2.5} /> Nuevo contrato
-          </button>
+          {puedeEditar && (
+            <button className="btn btn-primary btn-sm" onClick={() => setShowNuevo(true)}>
+              <Plus size={14} strokeWidth={2.5} /> Nuevo contrato
+            </button>
+          )}
         </div>
         {contratos.length === 0 ? (
           <div className="mon-empty">
@@ -1092,12 +1110,14 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
                         : <span className="text-faint">Sin PDF</span>}
                     </td>
                     <td className="col-actions">
-                      <div className="ter-actions">
-                        <button className="ter-action-btn" title="Editar contrato"
-                          onClick={() => setEditContrato(c)} disabled={isPending}><Pencil size={14} strokeWidth={2} /></button>
-                        <button className="ter-action-btn ter-action-danger" title="Eliminar contrato"
-                          onClick={() => setDelContrato(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
-                      </div>
+                      {puedeEditar && (
+                        <div className="ter-actions">
+                          <button className="ter-action-btn" title="Editar contrato"
+                            onClick={() => setEditContrato(c)} disabled={isPending}><Pencil size={14} strokeWidth={2} /></button>
+                          <button className="ter-action-btn ter-action-danger" title="Eliminar contrato"
+                            onClick={() => setDelContrato(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1109,12 +1129,12 @@ export default function EmpleadoDetalleView({ detalle }: { detalle: EmpleadoDeta
 
       {/* Conceptos recurrentes */}
       <ConceptosSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
-        conceptos={conceptos} desfasadas={desfasadas} onChanged={refrescar} />
+        conceptos={conceptos} desfasadas={desfasadas} onChanged={refrescar} puedeEditar={puedeEditar} />
 
       {/* Incidencias del mes */}
       <IncidenciasSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
         incidencias={incidencias} esCuba={esCuba} vacaciones={vacaciones}
-        onChanged={refrescar} />
+        onChanged={refrescar} puedeEditar={puedeEditar} />
 
       {/* Nómina del trabajador */}
       <div className="det-card">
