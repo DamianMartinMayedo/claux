@@ -238,6 +238,24 @@ export async function requireAccesoModulo(
   return { session, puedeEditar: acceso.editable.has(modulo) }
 }
 
+// Variante de `requireAlgunModulo` que además dice si el usuario puede EDITAR alguno
+// de los módulos. Para recursos COMPARTIDOS por varios (p. ej. terceros = base ∨
+// inventario ∨ servicios): basta poder editar UNO para que la vista pinte los
+// controles de escritura. Espejo de `puedeEditarAlgunModulo` en el lado de la página.
+export async function requireAccesoAlgunModulo(
+  modulos: string[],
+): Promise<{ session: PortalSession; puedeEditar: boolean }> {
+  const session = await getPortalSession()
+  if (!session) redirect('/portal/login')
+
+  const acceso = await accesoModulosSession(session)
+  const presente = modulos.find(m => acceso.visibles.includes(m))
+  if (!presente) redirect('/portal/dashboard')
+
+  registrarUso(session, presente)
+  return { session, puedeEditar: modulos.some(m => acceso.editable.has(m)) }
+}
+
 // Chequeo de escritura para server actions de mutación de un módulo.
 // Úsalo igual que hoy se chequea `session.solo_lectura` antes de escribir.
 export async function puedeEditarModulo(modulo: string): Promise<boolean> {
