@@ -2,17 +2,19 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPortalSession } from './auth'
+import type { PortalSession } from '@/lib/portal-auth'
+import { getPortalSession, accesoModulosSession } from './auth'
 import {
-  CATALOGO, tiposImplementados, definicion,
+  CATALOGO, tiposImplementados, definicion, categoriasBandeja,
   type Categoria, type Severidad, type TipoClave,
 } from '@/lib/notificaciones/catalogo'
 
-// La bandeja es COMPARTIDA del negocio y solo la ven los admin_empresa: el
-// candado de todas estas acciones es el rol, no un módulo (las notificaciones
-// son plataforma, no algo que se contrate). Cada notificación ya nació filtrada
-// por módulo en crearNotificacion(), así que un tenant nunca ve avisos de algo
-// que no pagó.
+// La bandeja es COMPARTIDA del negocio. El `admin_empresa` la ve entera; un
+// `usuario` ve solo lo operativo de sus módulos (mapa fijo en código, decisión
+// 4: nunca cifras de dinero agregadas). Las PREFERENCIAS —configuración del
+// tenant— siguen siendo solo del admin. Cada notificación ya nació filtrada por
+// módulo en crearNotificacion(), así que un tenant nunca ve avisos de algo que
+// no pagó.
 
 export interface NotificacionFila {
   id:         number
@@ -29,11 +31,28 @@ export interface NotificacionFila {
 
 const COLS = 'id, tipo, categoria, severidad, titulo, cuerpo, enlace, estado, popup_mostrado, created_at'
 
-/** Sesión válida solo si es admin del negocio. */
+/** Sesión válida solo si es admin del negocio (bandeja completa + preferencias). */
 async function sesionAdmin() {
   const session = await getPortalSession()
   if (!session || session.rol !== 'admin_empresa') return null
   return session
+}
+
+/**
+ * Sesión con derecho a VER la bandeja + las categorías que su rol puede ver.
+ * `categorias === null` ⇒ todas (admin_empresa). Un `usuario` ve solo lo
+ * operativo de sus módulos (decisión 4); si no le toca ninguna, no hay bandeja.
+ */
+async function sesionBandeja(): Promise<
+  { session: PortalSession; categorias: Categoria[] | null } | null
+> {
+  const session = await getPortalSession()
+  if (!session) return null
+  if (session.rol === 'admin_empresa') return { session, categorias: null }
+  const acceso = await accesoModulosSession(session)
+  const categorias = categoriasBandeja(session.rol, acceso.visibles)
+  if (!categorias || categorias.length === 0) return null
+  return { session, categorias }
 }
 
 export type FiltroBandeja = 'todas' | 'no_leidas' | Categoria
@@ -42,8 +61,16 @@ export async function listarNotificaciones(
   filtro: FiltroBandeja = 'todas',
   limite = 50,
 ): Promise<NotificacionFila[]> {
-  const session = await sesionAdmin()
-  if (!session) return []
+  const ctx = await sesionBandeja()
+  if (!ctx) return []
+  const { session, categorias } = ctx
+
+  // Un usuario que pide una categoría que su rol no ve: nada (no se le confirma
+  // siquiera que exista).
+  if (categorias && filtro !== 'todas' && filtro !== 'no_leidas'
+      && !categorias.includes(filtro)) {
+    return []
+  }
 
   let q = createAdminClient()
     .from('notificaciones')
@@ -56,20 +83,26 @@ export async function listarNotificaciones(
   else if (filtro === 'todas')    q = q.neq('estado', 'archivada')
   else                            q = q.eq('categoria', filtro).neq('estado', 'archivada')
 
+  if (categorias) q = q.in('categoria', categorias)
+
   const { data } = await q
   return (data ?? []) as NotificacionFila[]
 }
 
 export async function contarNoLeidas(): Promise<number> {
-  const session = await sesionAdmin()
-  if (!session) return 0
+  const ctx = await sesionBandeja()
+  if (!ctx) return 0
+  const { session, categorias } = ctx
 
-  const { count } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .select('id', { count: 'exact', head: true })
     .eq('client_id', session.client_id)
     .eq('estado', 'nueva')
 
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { count } = await q
   return count ?? 0
 }
 
@@ -79,10 +112,11 @@ export async function contarNoLeidas(): Promise<number> {
  *  · `urgente` — cada sesión mientras siga sin leer: es el punto de ser urgente.
  */
 export async function popupsPendientes(): Promise<NotificacionFila[]> {
-  const session = await sesionAdmin()
-  if (!session) return []
+  const ctx = await sesionBandeja()
+  if (!ctx) return []
+  const { session, categorias } = ctx
 
-  const { data } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .select(COLS)
     .eq('client_id', session.client_id)
@@ -91,46 +125,62 @@ export async function popupsPendientes(): Promise<NotificacionFila[]> {
     .order('created_at', { ascending: false })
     .limit(5)
 
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { data } = await q
   return ((data ?? []) as NotificacionFila[])
     .filter(n => n.severidad === 'urgente' || !n.popup_mostrado)
 }
 
 export async function marcarPopupMostrado(ids: number[]): Promise<void> {
-  const session = await sesionAdmin()
-  if (!session || ids.length === 0) return
+  const ctx = await sesionBandeja()
+  if (!ctx || ids.length === 0) return
+  const { session, categorias } = ctx
 
-  await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .update({ popup_mostrado: true })
     .eq('client_id', session.client_id)
     .in('id', ids)
+
+  if (categorias) q = q.in('categoria', categorias)
+  await q
 }
 
 export async function marcarLeida(id: number): Promise<{ ok: boolean }> {
-  const session = await sesionAdmin()
-  if (!session) return { ok: false }
+  const ctx = await sesionBandeja()
+  if (!ctx) return { ok: false }
+  const { session, categorias } = ctx
 
-  const { error } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .update({ estado: 'leida', leida_por: session.email, leida_at: new Date().toISOString() })
     .eq('client_id', session.client_id)
     .eq('id', id)
     .eq('estado', 'nueva')
 
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { error } = await q
   revalidatePath('/portal/notificaciones')
   return { ok: !error }
 }
 
 export async function marcarTodasLeidas(): Promise<{ ok: boolean }> {
-  const session = await sesionAdmin()
-  if (!session) return { ok: false }
+  const ctx = await sesionBandeja()
+  if (!ctx) return { ok: false }
+  const { session, categorias } = ctx
 
-  const { error } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .update({ estado: 'leida', leida_por: session.email, leida_at: new Date().toISOString() })
     .eq('client_id', session.client_id)
     .eq('estado', 'nueva')
 
+  // Un usuario solo marca leídas las suyas: no vacía la bandeja del negocio.
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { error } = await q
   revalidatePath('/portal/notificaciones')
   return { ok: !error }
 }
@@ -141,44 +191,80 @@ export async function marcarTodasLeidas(): Promise<{ ok: boolean }> {
 // de otro tenant aunque alguien mande ids ajenos.
 
 export async function marcarLeidasLote(ids: number[]): Promise<{ ok: boolean }> {
-  const session = await sesionAdmin()
-  if (!session || ids.length === 0) return { ok: false }
+  const ctx = await sesionBandeja()
+  if (!ctx || ids.length === 0) return { ok: false }
+  const { session, categorias } = ctx
 
-  const { error } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .update({ estado: 'leida', leida_por: session.email, leida_at: new Date().toISOString() })
     .eq('client_id', session.client_id)
     .in('id', ids)
     .eq('estado', 'nueva')
 
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { error } = await q
   revalidatePath('/portal/notificaciones')
   return { ok: !error }
 }
 
 export async function archivarLote(ids: number[]): Promise<{ ok: boolean }> {
-  const session = await sesionAdmin()
-  if (!session || ids.length === 0) return { ok: false }
+  const ctx = await sesionBandeja()
+  if (!ctx || ids.length === 0) return { ok: false }
+  const { session, categorias } = ctx
 
-  const { error } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .update({ estado: 'archivada' })
     .eq('client_id', session.client_id)
     .in('id', ids)
 
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { error } = await q
   revalidatePath('/portal/notificaciones')
   return { ok: !error }
 }
 
 export async function archivarNotificacion(id: number): Promise<{ ok: boolean }> {
-  const session = await sesionAdmin()
-  if (!session) return { ok: false }
+  const ctx = await sesionBandeja()
+  if (!ctx) return { ok: false }
+  const { session, categorias } = ctx
 
-  const { error } = await createAdminClient()
+  let q = createAdminClient()
     .from('notificaciones')
     .update({ estado: 'archivada' })
     .eq('client_id', session.client_id)
     .eq('id', id)
 
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { error } = await q
+  revalidatePath('/portal/notificaciones')
+  return { ok: !error }
+}
+
+/**
+ * Deshace un archivado: la deja como LEÍDA (no como «nueva» —ya la habías
+ * visto—). Sostiene el botón «Deshacer» de la bandeja: archivar era irreversible
+ * y silencioso, y es bandeja COMPARTIDA. Mismo candado por rol que archivar.
+ */
+export async function desarchivarNotificacion(id: number): Promise<{ ok: boolean }> {
+  const ctx = await sesionBandeja()
+  if (!ctx) return { ok: false }
+  const { session, categorias } = ctx
+
+  let q = createAdminClient()
+    .from('notificaciones')
+    .update({ estado: 'leida' })
+    .eq('client_id', session.client_id)
+    .eq('id', id)
+    .eq('estado', 'archivada')
+
+  if (categorias) q = q.in('categoria', categorias)
+
+  const { error } = await q
   revalidatePath('/portal/notificaciones')
   return { ok: !error }
 }

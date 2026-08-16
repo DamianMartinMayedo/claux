@@ -12,7 +12,7 @@ import { IconoSeveridad, TiempoRelativo } from '@/components/portal/notificacion
 import { useNotificaciones } from '@/components/portal/notificaciones/NotificacionesContext'
 import {
   listarNotificaciones, guardarPreferencia, guardarPreferenciasLote,
-  marcarLeidasLote, archivarLote,
+  marcarLeidasLote, archivarLote, desarchivarNotificacion,
   type NotificacionFila, type PreferenciaFila, type FiltroBandeja,
 } from '@/app/actions/portal/notificaciones'
 import {
@@ -25,10 +25,14 @@ type Pestana = 'bandeja' | 'preferencias'
 const SEVERIDADES: Severidad[] = ['info', 'aviso', 'urgente']
 
 export default function NotificacionesView({
-  inicial, preferencias,
+  inicial, preferencias, esAdmin, categorias,
 }: {
   inicial: NotificacionFila[]
   preferencias: PreferenciaFila[]
+  /** El admin ve la pestaña Preferencias (config del negocio); un usuario, no. */
+  esAdmin: boolean
+  /** Categorías que este rol ve en la bandeja. `null` = todas (admin). */
+  categorias: Categoria[] | null
 }) {
   const [pestana, setPestana] = useState<Pestana>('bandeja')
   const { noLeidas } = useNotificaciones()
@@ -51,26 +55,30 @@ export default function NotificacionesView({
           </button>
           <h1 className="page-title">Notificaciones</h1>
           <p className="page-subtitle">
-            Avisos de tu negocio. La bandeja es compartida: si la marcas leída, la ven leída todos los administradores.
+            Avisos de tu negocio. La bandeja es compartida: si la marcas leída o la archivas, se ve así para todo el equipo.
           </p>
         </div>
       </div>
 
-      <Tabs<Pestana>
-        tabs={[
-          // Sin `countTone`: el conteo se queda con el tono por defecto, que en la
-          // pestaña activa ya es primary. Mismo criterio que el badge de la
-          // campana — el número dice cuántas hay, no que sean una alarma.
-          { id: 'bandeja', label: 'Bandeja', count: noLeidas || undefined },
-          { id: 'preferencias', label: 'Preferencias' },
-        ]}
-        active={pestana}
-        onChange={setPestana}
-        ariaLabel="Secciones de notificaciones"
-      />
+      {/* La pestaña Preferencias configura los avisos de TODO el negocio: solo el
+          admin. Un usuario ve únicamente su bandeja, sin cabecera de pestañas. */}
+      {esAdmin && (
+        <Tabs<Pestana>
+          tabs={[
+            // Sin `countTone`: el conteo se queda con el tono por defecto, que en la
+            // pestaña activa ya es primary. Mismo criterio que el badge de la
+            // campana — el número dice cuántas hay, no que sean una alarma.
+            { id: 'bandeja', label: 'Bandeja', count: noLeidas || undefined },
+            { id: 'preferencias', label: 'Preferencias' },
+          ]}
+          active={pestana}
+          onChange={setPestana}
+          ariaLabel="Secciones de notificaciones"
+        />
+      )}
 
-      {pestana === 'bandeja'
-        ? <Bandeja inicial={inicial} />
+      {pestana === 'bandeja' || !esAdmin
+        ? <Bandeja inicial={inicial} categorias={categorias} />
         : <Preferencias inicial={preferencias} />}
     </div>
   )
@@ -80,26 +88,35 @@ export default function NotificacionesView({
 
 // Las categorías salen del catálogo, no de una lista a mano: al implementar un
 // generador nuevo su filtro aparece solo, sin que nadie se acuerde de tocar esto.
-const FILTROS: { id: FiltroBandeja; label: string }[] = [
-  { id: 'todas',     label: 'Todas' },
-  { id: 'no_leidas', label: 'Sin leer' },
-  ...[...new Set(tiposImplementados().map(t => CATALOGO[t].categoria))]
-    .map(c => ({ id: c as FiltroBandeja, label: ETIQUETA_CATEGORIA[c] })),
-]
+// `categorias === null` = admin (todas); un usuario solo ve las suyas (decisión 4).
+function filtrosPara(categorias: Categoria[] | null): { id: FiltroBandeja; label: string }[] {
+  const cats = [...new Set(tiposImplementados().map(t => CATALOGO[t].categoria))]
+    .filter(c => categorias === null || categorias.includes(c))
+  return [
+    { id: 'todas',     label: 'Todas' },
+    { id: 'no_leidas', label: 'Sin leer' },
+    ...cats.map(c => ({ id: c as FiltroBandeja, label: ETIQUETA_CATEGORIA[c] })),
+  ]
+}
 
-function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
+function Bandeja({ inicial, categorias }: { inicial: NotificacionFila[]; categorias: Categoria[] | null }) {
   const { leer, leerTodas, archivar, refrescar, noLeidas } = useNotificaciones()
   const [filtro, setFiltro] = useState<FiltroBandeja>('todas')
   const [lista, setLista]   = useState(inicial)
   const [cargando, setCargando] = useState(false)
+  // Última archivada, para el «Deshacer»: archivar era irreversible y silencioso,
+  // y es bandeja COMPARTIDA (podías vaciarle un aviso a un compañero sin querer).
+  const [ultimaArchivada, setUltimaArchivada] = useState<NotificacionFila | null>(null)
   const [, startTransition] = useTransition()
   const router = useRouter()
 
+  const filtros = filtrosPara(categorias)
   const sel = useRowSelection(lista.map(n => String(n.id)))
 
   async function cambiarFiltro(f: FiltroBandeja) {
     setFiltro(f)
     setCargando(true)
+    setUltimaArchivada(null)   // el «Deshacer» era de la lista anterior
     sel.clear()   // la selección era de la lista anterior
     setLista(await listarNotificaciones(f, 100))
     setCargando(false)
@@ -112,6 +129,7 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
     const ids = sel.selectedIds.map(Number)
     if (ids.length === 0) return
     sel.clear()
+    setUltimaArchivada(null)
     if (accion === 'leer') {
       setLista(l => l.map(n => (ids.includes(n.id) ? { ...n, estado: 'leida' as const } : n)))
     } else {
@@ -135,27 +153,53 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
     })
   }
 
-  async function abrir(n: NotificacionFila) {
-    // La barra de carga primero: marcar leída es una ida y vuelta al servidor y
-    // sin esto el clic se queda mudo hasta que llega la página nueva.
+  function abrir(n: NotificacionFila) {
+    // Navegación OPTIMISTA: no esperamos al marcado leído (una ida y vuelta al
+    // servidor) para movernos —con la conexión de Cuba eso deja el clic mudo—.
+    // Marcamos en local, disparamos el «leer» sin bloquear y navegamos ya.
     if (n.enlace) avisarNavegacion()
     if (n.estado === 'nueva') {
-      await leer(n.id)
       setLista(l => l.map(x => (x.id === n.id ? { ...x, estado: 'leida' } : x)))
+      void leer(n.id)
     }
     if (n.enlace) router.push(n.enlace)
   }
 
-  async function quitar(n: NotificacionFila) {
+  function quitar(n: NotificacionFila) {
     setLista(l => l.filter(x => x.id !== n.id))
-    await archivar(n.id)
+    setUltimaArchivada(n)
+    startTransition(async () => {
+      await archivar(n.id)
+      toastSuccess('Notificación archivada.')
+    })
+  }
+
+  function deshacerArchivar() {
+    const n = ultimaArchivada
+    if (!n) return
+    setUltimaArchivada(null)
+    // Vuelve a su sitio en la lista (por fecha desc) solo si encaja en el filtro
+    // actual; si no, el «Deshacer» la restaura igual y el próximo refresco la
+    // colocará donde toque.
+    const encaja = filtro === 'todas'
+      || (filtro === 'no_leidas' ? false : filtro === n.categoria)
+    startTransition(async () => {
+      const r = await desarchivarNotificacion(n.id)
+      if (!r.ok) { toastError('No se pudo deshacer.'); return }
+      if (encaja) {
+        setLista(l => [{ ...n, estado: 'leida' as const }, ...l]
+          .sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      }
+      toastSuccess('Archivado deshecho.')
+      void refrescar()
+    })
   }
 
   return (
     <div className="card">
       <div className="ntf-filtros">
         <div className="ntf-filtros-grupo">
-          {FILTROS.map(f => (
+          {filtros.map(f => (
             <button
               key={f.id}
               type="button"
@@ -190,6 +234,15 @@ function Bandeja({ inicial }: { inicial: NotificacionFila[] }) {
           )}
         </div>
       </div>
+
+      {ultimaArchivada && (
+        <div className="ntf-deshacer" role="status">
+          <span>Archivaste «{ultimaArchivada.titulo}».</span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={deshacerArchivar}>
+            Deshacer
+          </button>
+        </div>
+      )}
 
       {lista.length === 0 ? (
         <div className="ntf-vacio-bloque">

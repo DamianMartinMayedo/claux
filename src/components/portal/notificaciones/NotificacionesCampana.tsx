@@ -9,8 +9,9 @@ import { useNotificaciones } from './NotificacionesContext'
 import { IconoSeveridad, TiempoRelativo } from './presentacion'
 import type { NotificacionFila } from '@/app/actions/portal/notificaciones'
 
-// Campana de la cabecera del portal. Solo la monta el layout para admin_empresa:
-// la bandeja es del negocio, no de cada usuario.
+// Campana de la cabecera del portal. El layout la monta para el admin (bandeja
+// entera) y para un `usuario` con avisos operativos de sus módulos (decisión 4);
+// el filtro por rol vive en las server actions, así que aquí no hay que saberlo.
 export default function NotificacionesCampana() {
   const { noLeidas, recientes, leer, leerTodas } = useNotificaciones()
   const [open, setOpen] = useState(false)
@@ -31,10 +32,12 @@ export default function NotificacionesCampana() {
     }
   }, [])
 
-  async function abrir(n: NotificacionFila) {
+  function abrir(n: NotificacionFila) {
+    // Navegación optimista: no bloqueamos el salto esperando al marcado leído
+    // (la conexión de Cuba lo dejaría mudo). Se dispara y seguimos.
     setOpen(false)
     if (n.enlace) avisarNavegacion()
-    if (n.estado === 'nueva') await leer(n.id)
+    if (n.estado === 'nueva') void leer(n.id)
     if (n.enlace) router.push(n.enlace)
   }
 

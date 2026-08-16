@@ -19,6 +19,7 @@ import { ConfiguradorProvider } from '@/components/portal/ConfiguradorContext'
 import { NotificacionesProvider } from '@/components/portal/notificaciones/NotificacionesContext'
 import NotificacionesPopups  from '@/components/portal/notificaciones/NotificacionesPopups'
 import { contarNoLeidas, listarNotificaciones, popupsPendientes } from '@/app/actions/portal/notificaciones'
+import { categoriasBandeja } from '@/lib/notificaciones/catalogo'
 import { configAgente }      from '@/lib/ia/contexto'
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
@@ -106,10 +107,12 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     cliente.estado === 'VENCIDO' ||
     (expiradoPorFecha && !enGraciaActiva)
 
-  // Notificaciones internas: solo para administradores del negocio (la bandeja es
-  // compartida) y solo si el portal está operativo — con el portal bloqueado, la
-  // pantalla de bloqueo es el único mensaje que toca dar.
-  const verNotificaciones = session.rol === 'admin_empresa' && !bloqueado
+  // Notificaciones internas: el admin ve la bandeja entera; un `usuario` ve solo
+  // lo operativo de sus módulos (mapa fijo, decisión 4), y solo si le toca alguna
+  // categoría. Solo con el portal operativo — bloqueado, la pantalla de bloqueo es
+  // el único mensaje que toca dar.
+  const catsBandeja = categoriasBandeja(session.rol, modulosVisibles)  // null = admin (todas)
+  const verNotificaciones = !bloqueado && (catsBandeja === null || catsBandeja.length > 0)
   const notifInicial = verNotificaciones
     ? await cargaInicialNotificaciones()
     : { noLeidas: 0, recientes: [], popups: [] }

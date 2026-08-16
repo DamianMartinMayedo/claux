@@ -58,11 +58,14 @@ const ALLOWLIST = {
 }
 
 const WRITE = /\.(insert|update|delete|upsert)\s*\(|\.rpc\s*\(/
-// `sesionAdmin()` es el guard de notificaciones.ts: devuelve la sesión SOLO si
-// rol === 'admin_empresa' (si no, null y la acción sale). Cuenta como candado
-// porque es más estricto que un módulo, no una excepción: las notificaciones son
-// plataforma (no se contratan) y su bandeja es del negocio, no del usuario.
-const GATE  = /puedeEditarModulo\s*\(|puedeEditarAlgunModulo\s*\(|tieneModulo\s*\(|require(Modulo|AlgunModulo|AccesoModulo)\s*\(|requireAddonIa\s*\(|rol\s*!==\s*'admin_empresa'|sesionAdmin\s*\(/
+// Guards propios de notificaciones.ts (plataforma, no se contrata; la bandeja es
+// del negocio). Cuentan como candado porque filtran por rol/categoría antes de
+// tocar la fila, no son una excepción:
+//   · `sesionAdmin()`   → solo admin_empresa (Preferencias).
+//   · `sesionBandeja()` → admin_empresa ve todo; un `usuario` solo las categorías
+//     operativas de sus módulos (decisión 4), y toda mutación acota además con
+//     `.in('categoria', categorias)` para que no toque lo que no ve.
+const GATE  = /puedeEditarModulo\s*\(|puedeEditarAlgunModulo\s*\(|tieneModulo\s*\(|require(Modulo|AlgunModulo|AccesoModulo)\s*\(|requireAddonIa\s*\(|rol\s*!==\s*'admin_empresa'|sesion(Admin|Bandeja)\s*\(/
 
 const files = readdirSync(DIR).filter(f => f.endsWith('.ts') && f !== 'auth.ts')
 const holes = []

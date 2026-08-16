@@ -27,9 +27,10 @@ interface Ctx {
 const NotificacionesCtx = createContext<Ctx | null>(null)
 
 /**
- * La campana solo existe para `admin_empresa`, así que el proveedor puede no
- * estar. Un componente compartido —el banner de captación sale para todos— no
- * puede reventar por eso: pide el contexto con esto y si no hay, no refresca.
+ * El proveedor puede no estar: la campana no se monta con el portal bloqueado ni
+ * para un `usuario` sin avisos operativos (decisión 4). Un componente compartido
+ * —el banner de captación sale para todos— no puede reventar por eso: pide el
+ * contexto con esto y si no hay, no refresca.
  */
 export function useNotificacionesOpcional(): Ctx | null {
   return useContext(NotificacionesCtx)

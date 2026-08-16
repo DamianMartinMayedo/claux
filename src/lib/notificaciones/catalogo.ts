@@ -15,7 +15,7 @@ export type Categoria =
   // que no usa. Los compartidos se quedan en `reservas` con texto genérico.
   | 'suscripcion' | 'reservas' | 'citas' | 'finanzas'
   | 'inventario'  | 'rrhh'     | 'terceros'
-  | 'servicios'   | 'dossier'  | 'sistema'
+  | 'servicios'   | 'dossier'
 
 /** Escalón temporal de un aviso de vencimiento. Parte de la clave de dedupe. */
 export type Umbral = '30d' | '15d' | '5d' | '1d' | 'vencido'
@@ -393,6 +393,35 @@ export function umbralParaFecha(
   return null
 }
 
+// ── Bandeja por rol (mapa fijo en código, decisión 4) ───────────────────────
+// Un `usuario` (no administrador) ve en la bandeja SOLO lo operativo de sus
+// módulos y NUNCA cifras de dinero agregadas: finanzas (CxC/CxP/caja/tasas),
+// servicios (ingresos por suscripción), personal (nómina), clientes/proveedores
+// (crédito) y dossier quedan fuera —son cosa del administrador—, igual que la
+// suscripción del negocio a CLAUX. Cada categoría operativa apunta al módulo que
+// la respalda: entra solo si el usuario ve al menos uno de esos módulos.
+const CATEGORIAS_OPERATIVAS_USUARIO: Partial<Record<Categoria, string[]>> = {
+  reservas:   ['reservas_citas', 'agenda'],
+  citas:      ['agenda'],
+  inventario: ['inventario'],
+}
+
+/**
+ * Categorías de bandeja que un rol puede ver. `null` = TODAS (admin_empresa).
+ * Para un `usuario`, la intersección de las categorías operativas con los
+ * módulos que de verdad puede ver (lista vacía = sin bandeja).
+ */
+export function categoriasBandeja(
+  rol: 'admin_empresa' | 'usuario',
+  modulosVisibles: Iterable<string>,
+): Categoria[] | null {
+  if (rol === 'admin_empresa') return null
+  const vis = new Set(modulosVisibles)
+  return (Object.entries(CATEGORIAS_OPERATIVAS_USUARIO) as [Categoria, string[]][])
+    .filter(([, mods]) => mods.some(m => vis.has(m)))
+    .map(([cat]) => cat)
+}
+
 export const ETIQUETA_CATEGORIA: Record<Categoria, string> = {
   suscripcion: 'Suscripción',
   reservas:    'Reservas',
@@ -403,7 +432,6 @@ export const ETIQUETA_CATEGORIA: Record<Categoria, string> = {
   terceros:    'Clientes y proveedores',
   servicios:   'Servicios',
   dossier:     'Dossier',
-  sistema:     'Sistema',
 }
 
 export const ETIQUETA_SEVERIDAD: Record<Severidad, string> = {
