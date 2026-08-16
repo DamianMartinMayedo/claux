@@ -1,6 +1,6 @@
 'use client'
 
-import { toastError, toastLoading } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
@@ -53,12 +53,15 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
 
     const fd = new FormData(e.currentTarget)
 
-    // Validación contraseña en cliente
+    // Validación en cliente antes de salir a la red: en Cuba un round-trip por un error
+    // trivial (contraseña corta o descuadrada) es tiempo y datos tirados.
+    const actual   = (fd.get('password_actual')   as string) ?? ''
     const nueva    = (fd.get('password_nueva')    as string) ?? ''
     const confirma = (fd.get('password_confirma') as string) ?? ''
-    if (nueva && nueva !== confirma) {
-      toastError('Las contraseñas nuevas no coinciden.')
-      return
+    if (nueva) {
+      if (!actual)             { toastError('Introduce tu contraseña actual.'); return }
+      if (nueva.length < 8)    { toastError('La nueva contraseña debe tener al menos 8 caracteres.'); return }
+      if (nueva !== confirma)  { toastError('Las contraseñas nuevas no coinciden.'); return }
     }
 
     const ld = toastLoading('Guardando…')
@@ -67,6 +70,7 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
       await ld.dismiss()
       if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
       setShowPwd(false)
+      toastSuccess('Perfil actualizado')
       router.refresh()
     })
   }
@@ -150,12 +154,18 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
               <input className="input" type="email" value={perfil.email} readOnly />
             </div>
             <div className="input-group">
-              <label>Nombre</label>
+              <div className="form-label-with-help">
+                <label>Nombre</label>
+                {perfil.solo_lectura && (
+                  <FormHelp text="Como usuario de solo lectura no puedes cambiar tu nombre; sí tu contraseña. Pídeselo a quien administra los usuarios." label="Por qué no puedo cambiar mi nombre" />
+                )}
+              </div>
               <input
                 className="input"
                 name="nombre"
                 defaultValue={perfil.nombre ?? ''}
                 placeholder="Tu nombre completo"
+                readOnly={perfil.solo_lectura}
               />
             </div>
           </div>

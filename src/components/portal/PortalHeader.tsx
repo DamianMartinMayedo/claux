@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon, Bell } from 'lucide-react'
+import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon, LogOut } from 'lucide-react'
 import type { PortalSession } from '@/lib/portal-auth'
+import { logoutCliente } from '@/app/actions/portal/auth'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import { empresaColorVar } from './EmpresaTag'
 import MobileNavToggle from '@/components/MobileNavToggle'
 import NotificacionesCampana from './notificaciones/NotificacionesCampana'
@@ -44,9 +46,22 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const [tema, setTema] = useState<'light' | 'dark'>('light')
+  const [, startTransition] = useTransition()
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   useEffect(() => {
     setTema(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
+    // Sincronía entre pestañas: si el tema cambia en otra pestaña, esta se entera por el
+    // evento `storage` (solo se dispara en las demás pestañas, no en la que escribe) y se
+    // pone al día sin recargar. Sin esto, dos pestañas abiertas divergían de tema.
+    function onStorage(e: StorageEvent) {
+      if (e.key !== 'claux-theme' || !e.newValue) return
+      const next = e.newValue === 'dark' ? 'dark' : 'light'
+      document.documentElement.setAttribute('data-theme', next)
+      setTema(next)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
   }, [])
 
   function toggleTema() {
@@ -55,6 +70,8 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
     localStorage.setItem('claux-theme', next)
     setTema(next)
   }
+
+  function confirmLogout() { startTransition(() => { logoutCliente() }) }
 
   // Una sola empresa → su color es la identidad de la cuenta: tiñe el avatar.
   // Varias → el grupo no tiene un color único; avatar neutro + leyenda en el menú.
@@ -74,19 +91,29 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
     }
   }, [])
 
-  // Opciones de cuenta (antes el grupo «Configuración» del sidebar).
-  const opciones = [
-    { ruta: '/portal/perfil',      label: 'Mi perfil',    icon: <User size={16} strokeWidth={2} /> },
-    ...(session.rol === 'admin_empresa'
-      ? [
-          { ruta: '/portal/notificaciones', label: 'Notificaciones', icon: <Bell size={16} strokeWidth={2} /> },
-          { ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> },
-        ]
-      : []),
-    { ruta: '/portal/empresas',    label: 'Mis Empresas', icon: <Building2 size={16} strokeWidth={2} /> },
-    { ruta: '/portal/monedas',     label: 'Monedas y tasas', icon: <DollarSign size={16} strokeWidth={2} /> },
-    { ruta: '/portal/facturacion', label: 'Suscripción',  icon: <CreditCard size={16} strokeWidth={2} /> },
-    { ruta: '/portal/soporte',     label: 'Soporte',      icon: <HelpCircle size={16} strokeWidth={2} /> },
+  // Opciones de cuenta, agrupadas (antes el grupo «Configuración» del sidebar).
+  // «Empresas», «Usuarios» y «Mi plan CLAUX» son cosa del dueño: se ocultan a un `usuario`
+  // no-admin (el candado real de cada página vive en su server guard). «Monedas» se queda:
+  // hasta solo-lectura puede actualizar tasas.
+  const esAdmin = session.rol === 'admin_empresa'
+  type Opcion = { ruta: string; label: string; icon: React.ReactNode }
+  const grupos: { titulo: string; items: Opcion[] }[] = [
+    {
+      titulo: 'Mi cuenta',
+      items: [
+        { ruta: '/portal/perfil',  label: 'Mi perfil', icon: <User size={16} strokeWidth={2} /> },
+        { ruta: '/portal/soporte', label: 'Soporte',   icon: <HelpCircle size={16} strokeWidth={2} /> },
+      ],
+    },
+    {
+      titulo: 'Negocio',
+      items: [
+        ...(esAdmin ? [{ ruta: '/portal/empresas', label: 'Empresas', icon: <Building2 size={16} strokeWidth={2} /> }] : []),
+        { ruta: '/portal/monedas', label: 'Monedas y tasas', icon: <DollarSign size={16} strokeWidth={2} /> },
+        ...(esAdmin ? [{ ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> }] : []),
+        ...(esAdmin ? [{ ruta: '/portal/facturacion', label: 'Mi plan CLAUX', icon: <CreditCard size={16} strokeWidth={2} /> }] : []),
+      ],
+    },
   ]
 
   return (
@@ -130,26 +157,53 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
                 <span className="portal-account-menu-email">{session.email}</span>
               </div>
               <div className="portal-account-menu-list">
-                {opciones.map(o => {
-                  const active = pathname === o.ruta || pathname.startsWith(o.ruta + '/')
-                  return (
-                    <Link
-                      key={o.ruta}
-                      href={o.ruta}
-                      role="menuitem"
-                      onClick={() => setOpen(false)}
-                      className={`portal-account-menu-item${active ? ' active' : ''}`}
-                    >
-                      {o.icon}
-                      <span>{o.label}</span>
-                    </Link>
-                  )
-                })}
+                {grupos.map((g, gi) => (
+                  <div key={g.titulo} className="portal-account-menu-group">
+                    {gi > 0 && <div className="portal-account-menu-sep" />}
+                    <span className="portal-account-menu-group-label">{g.titulo}</span>
+                    {g.items.map(o => {
+                      const active = pathname === o.ruta || pathname.startsWith(o.ruta + '/')
+                      return (
+                        <Link
+                          key={o.ruta}
+                          href={o.ruta}
+                          role="menuitem"
+                          onClick={() => setOpen(false)}
+                          className={`portal-account-menu-item${active ? ' active' : ''}`}
+                        >
+                          {o.icon}
+                          <span>{o.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                ))}
+                <div className="portal-account-menu-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="portal-account-menu-item portal-account-menu-logout"
+                  onClick={() => { setOpen(false); setShowLogoutDialog(true) }}
+                >
+                  <LogOut size={16} strokeWidth={2} />
+                  <span>Cerrar sesión</span>
+                </button>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {showLogoutDialog && (
+        <ConfirmDialog
+          title="Cerrar sesión"
+          body="¿Estás seguro de que deseas cerrar sesión?"
+          confirmLabel="Cerrar sesión"
+          danger
+          onConfirm={confirmLogout}
+          onCancel={() => setShowLogoutDialog(false)}
+        />
+      )}
     </header>
   )
 }

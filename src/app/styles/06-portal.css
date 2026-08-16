@@ -33,6 +33,7 @@
   transition: all var(--transition);
 }
 .theme-toggle-btn:hover { background: var(--color-surface-2); color: var(--color-text); border-color: var(--color-border-strong); }
+.theme-toggle-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .portal-logo {
   display: inline-flex;
   align-items: center;
@@ -126,35 +127,37 @@
 .portal-account-menu-item svg { color: var(--color-text-muted); flex-shrink: 0; }
 .portal-account-menu-item.active svg { color: var(--color-primary-active); }
 
-/* Leyenda de empresas del grupo (color = identidad de cada empresa) */
-.portal-account-empresas {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: 0 var(--space-3) var(--space-3);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-}
-.portal-account-empresas-label {
+/* Grupos del menú de cuenta: título tenue + separador entre bloques y antes de
+   «Cerrar sesión». */
+.portal-account-menu-group { display: flex; flex-direction: column; gap: var(--space-1); }
+.portal-account-menu-group-label {
   font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-faint);
-  padding: var(--space-1) 0;
+  padding: var(--space-1) var(--space-3);
 }
-.portal-account-empresa {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text);
+.portal-account-menu-sep {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-2) calc(-1 * var(--space-2));
 }
-.portal-account-empresa-nombre {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.portal-account-menu-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
 }
+/* «Cerrar sesión»: mismo item, en tono de peligro (es un botón, no un enlace). */
+.portal-account-menu-logout {
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-error);
+}
+.portal-account-menu-logout svg { color: var(--color-error); }
+.portal-account-menu-logout:hover { background: var(--color-error-bg); color: var(--color-error); }
 
 /* ── Sidebar ── */
 .portal-sidebar {

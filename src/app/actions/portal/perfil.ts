@@ -18,7 +18,6 @@ export interface PerfilData {
   estado:           string
   suscripcion:      string
   fecha_expiracion: string | null
-  slug:             string | null
   // Mi usuario (editable)
   user_id:      string
   email:        string
@@ -37,7 +36,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   const [{ data: cliente }, { data: usuario }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, slug')
+      .select('nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
       .eq('client_id', session.client_id)
       .single(),
     db.from('client_users')
@@ -60,7 +59,6 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
     estado:           cliente.estado,
     suscripcion,
     fecha_expiracion: cliente.fecha_expiracion,
-    slug:             cliente.slug ?? null,
     user_id:          session.user_id,
     email:            session.email,
     nombre:           usuario.nombre,
@@ -86,6 +84,10 @@ export async function actualizarMiPerfil(formData: FormData): Promise<{
   // Reservas/Citas (pestaña Configuración de cada una).
   const db = createAdminClient()
 
+  // Solo-lectura puede cambiar SU contraseña (es dato de acceso propio, no de negocio),
+  // pero NO su nombre visible: ese es un dato que gestiona quien administra los usuarios.
+  const puedeCambiarNombre = !session.solo_lectura
+
   if (password_nueva) {
     // Validaciones de contraseña
     if (!password_actual) return { ok: false, error: 'Introduce tu contraseña actual.' }
@@ -109,14 +111,21 @@ export async function actualizarMiPerfil(formData: FormData): Promise<{
       .map(b => b.toString(16).padStart(2, '0')).join('')
     const nuevoHash = await hashPasswordPortal(password_nueva, nuevaSalt)
 
+    // El nombre solo entra en el update si tiene permiso para cambiarlo.
+    const cambios = puedeCambiarNombre
+      ? { nombre, password_hash: nuevoHash, salt: nuevaSalt }
+      : { password_hash: nuevoHash, salt: nuevaSalt }
     const { error } = await db
       .from('client_users')
-      .update({ nombre, password_hash: nuevoHash, salt: nuevaSalt })
+      .update(cambios)
       .eq('user_id', session.user_id)
     if (error) return { ok: false, error: 'Error al actualizar.' }
 
   } else {
-    // Solo actualizar nombre
+    // Sin cambio de contraseña, solo queda el nombre: si no puede tocarlo, no hay nada
+    // que guardar y se le dice por qué (en vez de un «guardado» que no guardó nada).
+    if (!puedeCambiarNombre)
+      return { ok: false, error: 'Como usuario de solo lectura solo puedes cambiar tu contraseña, no tu nombre.' }
     const { error } = await db
       .from('client_users')
       .update({ nombre })
