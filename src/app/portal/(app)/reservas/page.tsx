@@ -4,6 +4,7 @@ import { obtenerReservas } from '@/app/actions/portal/reservas'
 import { TOPE_VER_MAS }    from '@/lib/listados'
 import { filtrosDeUrl }    from '@/lib/filtros'
 import ReservasView        from './ReservasView'
+import SolicitarAcceso      from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,5 +33,9 @@ export default async function ReservasPage({
     limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
   })
   if (!data) notFound()
-  return <ReservasView data={data} puedeEditar={puedeEditar} />
+  return (
+    <ReservasView data={data} puedeEditar={puedeEditar}>
+      {!puedeEditar && <SolicitarAcceso modulo="reservas_citas" />}
+    </ReservasView>
+  )
 }

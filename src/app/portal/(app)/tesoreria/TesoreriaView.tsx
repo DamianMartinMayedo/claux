@@ -988,8 +988,8 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta }: {
-  data: TesoreriaPageData; puedeEditar: boolean; pendientes: Pendientes; gaveta: DatosGaveta
+export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, children }: {
+  data: TesoreriaPageData; puedeEditar: boolean; pendientes: Pendientes; gaveta: DatosGaveta; children?: React.ReactNode
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1225,6 +1225,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta }:
           </>)}
         </div>
       </div>
+      {children}
 
       {/* Va ARRIBA del todo, antes de los saldos: el saldo de la caja ya cuenta con
           esta salida —el efectivo bajó— y lo que falta es el otro lado. Enterarse

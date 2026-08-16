@@ -4,6 +4,7 @@ import { obtenerCitasData } from '@/app/actions/portal/citas'
 import { TOPE_VER_MAS }  from '@/lib/listados'
 import { filtrosDeUrl }  from '@/lib/filtros'
 import CitasView          from './CitasView'
+import SolicitarAcceso     from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,5 +28,9 @@ export default async function CitasPage({
     limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
   })
   if (!data) notFound()
-  return <CitasView data={data} puedeEditar={puedeEditar} />
+  return (
+    <CitasView data={data} puedeEditar={puedeEditar}>
+      {!puedeEditar && <SolicitarAcceso modulo="agenda" />}
+    </CitasView>
+  )
 }

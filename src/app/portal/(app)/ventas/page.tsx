@@ -4,6 +4,7 @@ import { obtenerVentasResumen } from '@/app/actions/portal/ventas'
 import { TOPE_VER_MAS }        from '@/lib/listados'
 import { filtrosDeUrl }        from '@/lib/filtros'
 import VentasView               from './VentasView'
+import SolicitarAcceso           from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,5 +42,9 @@ export default async function VentasPage({
     archivadas: archivadas === '1',
   })
   if (!data) notFound()
-  return <VentasView data={data} initialTab={t === 'facturas' ? 'facturas' : 'ofertas'} puedeEditar={puedeEditar} />
+  return (
+    <VentasView data={data} initialTab={t === 'facturas' ? 'facturas' : 'ofertas'} puedeEditar={puedeEditar}>
+      {!puedeEditar && <SolicitarAcceso modulo="base" />}
+    </VentasView>
+  )
 }

@@ -5,6 +5,7 @@ import { obtenerSuscripciones } from '@/app/actions/portal/suscripciones'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { TOPE_VER_MAS }         from '@/lib/listados'
 import SuscripcionesView        from './SuscripcionesView'
+import SolicitarAcceso           from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,8 @@ export default async function SuscripcionesPage({
   const etiquetas = await obtenerEtiquetasNegocio()
   return (
     <SuscripcionesView data={data} empresaInicial={empresaInicial}
-      etiqueta={etiquetas.suscripcion} puedeEditar={puedeEditar} />
+      etiqueta={etiquetas.suscripcion} puedeEditar={puedeEditar}>
+      {!puedeEditar && <SolicitarAcceso modulo="servicios" />}
+    </SuscripcionesView>
   )
 }

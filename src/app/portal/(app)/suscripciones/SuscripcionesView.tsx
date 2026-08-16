@@ -1203,7 +1203,7 @@ function FacturacionPanel({ data, empresaInicial, puedeEditar }: {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function SuscripcionesView({ data, empresaInicial = '', etiqueta = 'Suscripciones', puedeEditar }: {
+export default function SuscripcionesView({ data, empresaInicial = '', etiqueta = 'Suscripciones', puedeEditar, children }: {
   data: SuscripcionesPageData
   /** Última empresa mirada en «Facturación del período» (cookie `sus_empresa`). */
   empresaInicial?: string
@@ -1211,6 +1211,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
   etiqueta?: string
   /** Permiso de escritura del módulo `servicios` (cubre solo_lectura y falta de módulo). */
   puedeEditar: boolean
+  children?: React.ReactNode
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1420,6 +1421,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
           </div>
         )}
       </div>
+      {children}
 
       {faltaSetup && (
         <PrerequisitoAviso acciones={data.empresas.length === 0

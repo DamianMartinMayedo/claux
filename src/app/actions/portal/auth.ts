@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { devPortalSession } from '@/lib/dev-auth'
-import { modulosDeUsuario, calcularAcceso, type AccesoModulos } from '@/lib/permisos'
+import { modulosDeUsuario, calcularAcceso, type AccesoModulos, type Permiso } from '@/lib/permisos'
 import {
   signPortalToken,
   verifyPortalToken,
@@ -32,7 +32,7 @@ export async function loginCliente(
   // identificamos la cuenta por la contraseña que acompaña a ese email.
   const { data: usuarios } = await db
     .from('client_users')
-    .select('user_id, client_id, email, password_hash, salt, rol, solo_lectura, estado, must_change_password')
+    .select('user_id, client_id, email, password_hash, salt, rol, permiso_defecto, estado, must_change_password')
     .eq('email', email)
     .order('created_at', { ascending: false })
 
@@ -52,12 +52,26 @@ export async function loginCliente(
     return { error: 'Credenciales incorrectas.' }
   }
 
+  // `solo_lectura` del token es DERIVADO: «no puede editar NINGÚN módulo», calculado
+  // una vez aquí (modelo «Por defecto + matriz», ver @/lib/permisos). Es seguro como
+  // chequeo grueso porque cada `if (session.solo_lectura)` de escritura convive con un
+  // `puedeEditarModulo(...)` que recomputa en vivo: una excepción por módulo (puede
+  // editar algo) pasa el chequeo grueso y el portero real es el chequeo por módulo.
+  const [{ data: cli }, overrides] = await Promise.all([
+    db.from('clients').select('modulos_activos').eq('client_id', usuario.client_id).single(),
+    modulosDeUsuario(db, usuario.user_id),
+  ])
+  const activosLogin = Array.isArray(cli?.modulos_activos) ? cli.modulos_activos as string[] : []
+  const rawDefecto = usuario.permiso_defecto
+  const defectoLogin: Permiso = rawDefecto === 'sin_acceso' || rawDefecto === 'ver' || rawDefecto === 'editar' ? rawDefecto : 'editar'
+  const { editable } = calcularAcceso({ rol: usuario.rol }, activosLogin, defectoLogin, overrides)
+
   const token = await signPortalToken({
     user_id:      usuario.user_id,
     client_id:    usuario.client_id,
     email:        usuario.email,
     rol:          usuario.rol,
-    solo_lectura: usuario.solo_lectura ?? false,
+    solo_lectura: editable.size === 0,
   })
 
   const jar = await cookies()
@@ -162,14 +176,17 @@ export async function getPortalSession(): Promise<PortalSession | null> {
 // pestañas con el MISMO conjunto `visibles` que el sidebar, sin re-derivarla.
 export async function accesoModulosSession(session: PortalSession): Promise<AccesoModulos> {
   const db = createAdminClient()
-  const [{ data: cliente }, filas] = await Promise.all([
+  const [{ data: cliente }, { data: usr }, overrides] = await Promise.all([
     db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single(),
+    db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     modulosDeUsuario(db, session.user_id),
   ])
   const activos: string[] = Array.isArray(cliente?.modulos_activos)
     ? (cliente.modulos_activos as string[])
     : []
-  return calcularAcceso(session, activos, filas)
+  const raw = usr?.permiso_defecto
+  const defecto: Permiso = raw === 'sin_acceso' || raw === 'ver' || raw === 'editar' ? raw : 'editar'
+  return calcularAcceso(session, activos, defecto, overrides)
 }
 
 /** Acceso efectivo del usuario actual (para el layout/sidebar). */

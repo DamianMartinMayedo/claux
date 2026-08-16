@@ -220,7 +220,7 @@ function ConfirmArchivar({
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function AlmacenesView({ data, puedeEditar }: { data: AlmacenesPageData; puedeEditar: boolean }) {
+export default function AlmacenesView({ data, puedeEditar, children }: { data: AlmacenesPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -350,6 +350,7 @@ export default function AlmacenesView({ data, puedeEditar }: { data: AlmacenesPa
           )}
         </div>
       </div>
+      {children}
 
       {data.empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>

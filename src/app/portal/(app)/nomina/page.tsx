@@ -3,6 +3,7 @@ import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerNominas }  from '@/app/actions/portal/rrhh'
 import { TOPE_VER_MAS }    from '@/lib/listados'
 import NominaView          from './NominaView'
+import SolicitarAcceso      from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,5 +25,9 @@ export default async function NominaPage({
     limite: Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, TOPE_VER_MAS) : undefined,
   })
   if (!data) notFound()
-  return <NominaView data={data} puedeEditar={puedeEditar} />
+  return (
+    <NominaView data={data} puedeEditar={puedeEditar}>
+      {!puedeEditar && <SolicitarAcceso modulo="rrhh" />}
+    </NominaView>
+  )
 }

@@ -45,7 +45,7 @@ const ESTADO_LABEL: Record<EstadoCompra, string> = {
 
 type Confirm = { title: string; body?: string; confirmLabel: string; danger: boolean; run: () => void }
 
-export default function ComprasView({ data, puedeEditar }: { data: ComprasPageData; puedeEditar: boolean }) {
+export default function ComprasView({ data, puedeEditar, children }: { data: ComprasPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const [modalOpen,    setModalOpen]    = useState(false)
   const [reponiendo,   setReponiendo]   = useState(false)
@@ -155,6 +155,7 @@ export default function ComprasView({ data, puedeEditar }: { data: ComprasPageDa
           </>)}
         </div>
       </div>
+      {children}
 
       {sinAlmacenes && puedeEditar && (
         <PrerequisitoAviso acciones={[{ label: 'Crear almacén', href: '/portal/almacenes' }]}>

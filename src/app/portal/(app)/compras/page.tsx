@@ -5,6 +5,7 @@ import { filtrosDeUrl }   from '@/lib/filtros'
 import ContabilidadHint   from '@/components/portal/ContabilidadHint'
 import EnConstruccion     from '@/components/portal/EnConstruccion'
 import ComprasView        from './ComprasView'
+import SolicitarAcceso     from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,9 @@ export default async function ComprasPage({
   }
   return (
     <>
-      <ComprasView data={data} puedeEditar={puedeEditar} />
+      <ComprasView data={data} puedeEditar={puedeEditar}>
+        {!puedeEditar && <SolicitarAcceso modulo="inventario" />}
+      </ComprasView>
       {/* Aquí y no en Movimientos: confirmar una compra es lo que crea el gasto. */}
       <ContabilidadHint genera="tus compras" />
     </>

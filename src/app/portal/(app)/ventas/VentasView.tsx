@@ -49,7 +49,7 @@ import AvisoTope from '@/components/portal/AvisoTope'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
 import { filtroExport, resumenDe, opcionesTercero, type Filtro } from '@/lib/filtros'
 
-interface Props { data: VentasResumenData; initialTab?: Tab; puedeEditar: boolean }
+interface Props { data: VentasResumenData; initialTab?: Tab; puedeEditar: boolean; children?: React.ReactNode }
 
 type Tab = 'ofertas' | 'facturas'
 
@@ -66,7 +66,7 @@ const FACTURA_ELIMINABLE: EstadoFactura[] = ['BORRADOR']
 
 type Confirm = { title: string; body?: string; confirmLabel: string; danger: boolean; run: () => void }
 
-export default function VentasView({ data, initialTab, puedeEditar }: Props) {
+export default function VentasView({ data, initialTab, puedeEditar, children }: Props) {
   const router = useRouter()
   const [tab,          setTab]          = useState<Tab>(initialTab ?? 'ofertas')
 
@@ -263,6 +263,7 @@ export default function VentasView({ data, initialTab, puedeEditar }: Props) {
         ))}
         </div>
       </div>
+      {children}
 
       {/* ── Prerrequisitos de configuración ── */}
       {sinSetupEmpresas ? (

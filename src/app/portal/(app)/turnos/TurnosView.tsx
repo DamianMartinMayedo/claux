@@ -481,7 +481,7 @@ function TurnoUnificadoModal({
 
 // ── Página: Turnos ───────────────────────────────────────────────────────────────
 
-export default function TurnosView({ data, puedeEditar }: { data: TurnosPageData; puedeEditar: boolean }) {
+export default function TurnosView({ data, puedeEditar, children }: { data: TurnosPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const params = useSearchParams()
 
@@ -797,6 +797,7 @@ export default function TurnosView({ data, puedeEditar }: { data: TurnosPageData
           )}
         </div>
       </div>
+      {children}
 
       {data.empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>

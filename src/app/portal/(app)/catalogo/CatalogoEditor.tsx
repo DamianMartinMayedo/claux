@@ -32,7 +32,7 @@ import ExportarMenu from '@/components/portal/ExportarMenu'
 
 type Tab = 'items' | 'categorias' | 'configuracion'
 
-export default function CatalogoEditor({ data, puedeEditar }: { data: CatalogoData; puedeEditar: boolean }) {
+export default function CatalogoEditor({ data, puedeEditar, children }: { data: CatalogoData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const { tieneIa } = useIa()
   // Etiqueta del ítem en el idioma del negocio («Plato», «Artículo», «Servicio»):
@@ -202,6 +202,7 @@ export default function CatalogoEditor({ data, puedeEditar }: { data: CatalogoDa
           </button>
         )}
       </div>
+      {children}
 
       <Tabs
         ariaLabel="Secciones del catálogo"

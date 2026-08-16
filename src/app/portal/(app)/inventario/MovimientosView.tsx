@@ -385,11 +385,12 @@ function PanelRevisar({
 // ── Vista principal ───────────────────────────────────────────────────────────
 
 export default function MovimientosView({
-  data, revision = [], puedeEditar,
+  data, revision = [], puedeEditar, children,
 }: {
   data: MovimientosPageData
   revision?: AvisoRevision[]
   puedeEditar: boolean
+  children?: React.ReactNode
 }) {
   const router = useRouter()
   const [tab,         setTab]         = useState<'movimientos' | 'revisar'>('movimientos')
@@ -522,6 +523,7 @@ export default function MovimientosView({
           </>)}
         </div>
       </div>
+      {children}
 
       {puedeEditar && (data.almacenes.length === 0 || data.productos.length === 0) && (
         <PrerequisitoAviso acciones={[

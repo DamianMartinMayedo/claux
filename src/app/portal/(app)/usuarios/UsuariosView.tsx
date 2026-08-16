@@ -9,13 +9,14 @@ import {
   resetearPassword,
   type UsuarioPortal,
 } from '@/app/actions/portal/usuarios'
+import type { Permiso } from '@/lib/permisos'
 import type { Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar, EmpresaTag } from '@/components/portal/EmpresaTag'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import FormHelp from '@/components/portal/FormHelp'
 import ModalShell from '@/components/portal/ModalShell'
 import Tabs from '@/components/Tabs'
-import { Info, Key, Pencil, Plus, User } from 'lucide-react'
+import { Info, Key, Pencil, Plus, User, X } from 'lucide-react'
 
 // Módulos/funcionalidades que el tenant tiene contratados (para repartir por usuario).
 export interface ModuloContratado {
@@ -29,6 +30,12 @@ export interface ModuloContratado {
 const ROL_LABEL: Record<string, string> = {
   admin_empresa: 'Administrador',
   usuario:       'Operador',
+}
+
+const PERMISO_LABEL: Record<Permiso, string> = {
+  sin_acceso: 'Sin acceso',
+  ver:        'Lectura',
+  editar:     'Ver y editar',
 }
 
 // Familia canónica `.badge`: se pinta dentro de la tabla, donde el design system apaga
@@ -63,24 +70,21 @@ function UsuarioModal({
   const esEdicion = !!usuario
   const [isPending, startTransition] = useTransition()
   const [rol,       setRol]          = useState<UsuarioPortal['rol']>(usuario?.rol ?? 'usuario')
-  const [soloLectura, setSoloLectura] = useState<boolean>(usuario?.solo_lectura ?? false)
+  const [permisoDefecto, setPermisoDefecto] = useState<Permiso>(usuario?.permiso_defecto ?? 'editar')
   const [empresasSel, setEmpresasSel] = useState<string[]>(usuario?.empresas ?? [])
 
-  // Permisos por módulo. "Todos" = sin filas (acceso a todo lo contratado); es el
-  // estado de los usuarios existentes sin restricción y el default al crear.
-  const [todosModulos, setTodosModulos] = useState<boolean>(
-    esEdicion ? (usuario!.modulos.length === 0) : true,
-  )
-  const [modPerms, setModPerms] = useState<Record<string, 'ver' | 'editar'>>(() => {
-    const m: Record<string, 'ver' | 'editar'> = {}
-    for (const mm of (usuario?.modulos ?? [])) m[mm.clave] = mm.puede_editar ? 'editar' : 'ver'
+  // Excepciones por módulo: solo las que difieren del permiso por defecto. Ausencia de
+  // entrada = ese módulo sigue el defecto (incluidos los que se contraten en el futuro).
+  const [overrides, setOverrides] = useState<Record<string, Permiso>>(() => {
+    const m: Record<string, Permiso> = {}
+    for (const mm of (usuario?.modulos ?? [])) m[mm.clave] = mm.permiso
     return m
   })
-  function setModPerm(clave: string, val: 'no' | 'ver' | 'editar') {
-    setModPerms(prev => {
+  function setOverride(clave: string, val: string) {
+    setOverrides(prev => {
       const next = { ...prev }
-      if (val === 'no') delete next[clave]
-      else next[clave] = val
+      if (val === 'sin_acceso' || val === 'ver' || val === 'editar') next[clave] = val
+      else delete next[clave]  // "defecto"
       return next
     })
   }
@@ -95,19 +99,13 @@ function UsuarioModal({
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set('rol', rol)
+    fd.set('permiso_defecto', permisoDefecto)
     empresasSel.forEach(id => fd.append('empresas', id))
 
-    // Permisos por módulo (solo operador y solo si NO es "acceso a todos").
-    if (rol === 'usuario' && !todosModulos) {
-      const claves = Object.keys(modPerms)
-      if (claves.length === 0) {
-        toastError('Selecciona al menos un módulo o marca «Acceso a todos los módulos».')
-        return
-      }
-      for (const clave of claves) {
-        fd.append('modulos', clave)
-        if (modPerms[clave] === 'editar') fd.append('modulos_editar', clave)
-      }
+    // Excepciones por módulo (solo operador): "clave:permiso", solo las que difieren
+    // del defecto. Sin entradas = todos los módulos siguen el permiso por defecto.
+    if (rol === 'usuario') {
+      for (const [clave, permiso] of Object.entries(overrides)) fd.append('ov', `${clave}:${permiso}`)
     }
 
     const ld = toastLoading(esEdicion ? 'Guardando…' : 'Creando…')
@@ -122,8 +120,13 @@ function UsuarioModal({
     })
   }
 
+  // La lista de excepciones solo pinta los módulos que difieren del defecto; el «+ Añadir
+  // excepción» ofrece el resto. Así no hay scroll aunque el negocio tenga muchos módulos.
+  const modulosConExcepcion = modulosContratados.filter(m => overrides[m.clave] !== undefined)
+  const modulosSinExcepcion = modulosContratados.filter(m => overrides[m.clave] === undefined)
+
   return (
-    <ModalShell title={esEdicion ? 'Editar usuario' : 'Nuevo usuario'} onClose={onClose} size="modal-md">
+    <ModalShell title={esEdicion ? 'Editar usuario' : 'Nuevo usuario'} onClose={onClose} size="modal-lg">
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-body-form">
             {esEdicion && <input type="hidden" name="user_id" value={usuario.user_id} />}
@@ -157,7 +160,11 @@ function UsuarioModal({
 
               <div className="input-group">
                 <label>Rol</label>
-                <select className="input" value={rol} onChange={e => { setRol(e.target.value as UsuarioPortal['rol']); if (e.target.value === 'admin_empresa') setEmpresasSel([]) }}>
+                <select className="input" value={rol} onChange={e => {
+                  const nuevo = e.target.value as UsuarioPortal['rol']
+                  setRol(nuevo)
+                  if (nuevo === 'admin_empresa') { setEmpresasSel([]); if (permisoDefecto === 'sin_acceso') setPermisoDefecto('ver') }
+                }}>
                   <option value="admin_empresa">Administrador — acceso total</option>
                   <option value="usuario">Operador — empresas asignadas</option>
                 </select>
@@ -165,13 +172,19 @@ function UsuarioModal({
 
               <div className="input-group">
                 <div className="form-label-with-help">
-                  <label>Permisos de escritura</label>
-                  <FormHelp text="Solo lectura: puede ver todo pero no ejecutar acciones." label="Qué implica solo lectura" />
+                  <label>Permiso por defecto</label>
+                  <FormHelp
+                    text={rol === 'admin_empresa'
+                      ? 'Se aplica a todos los módulos contratados. «Lectura» convierte al administrador en uno de solo lectura.'
+                      : 'Se aplica a todos los módulos contratados, incluidos los que contrates en el futuro. Abajo puedes hacer excepciones módulo a módulo.'}
+                    label="Qué es el permiso por defecto"
+                  />
                 </div>
-                <select className="input" name="solo_lectura" value={soloLectura ? 'true' : 'false'}
-                  onChange={e => setSoloLectura(e.target.value === 'true')}>
-                  <option value="false">Lectura y escritura</option>
-                  <option value="true">Solo lectura</option>
+                <select className="input" value={permisoDefecto}
+                  onChange={e => setPermisoDefecto(e.target.value as Permiso)}>
+                  {rol === 'usuario' && <option value="sin_acceso">Sin acceso</option>}
+                  <option value="ver">Lectura</option>
+                  <option value="editar">Ver y editar</option>
                 </select>
               </div>
 
@@ -188,7 +201,7 @@ function UsuarioModal({
 
             {/* Empresas asignadas — solo para operadores */}
             {rol === 'usuario' && (
-              <div>
+              <div className="usr-form-seccion">
                 <div className="form-label-with-help">
                   <label className="form-label">Empresas con acceso</label>
                   <FormHelp text="El operador solo verá y operará en estas empresas." label="Alcance de las empresas asignadas" />
@@ -213,56 +226,62 @@ function UsuarioModal({
               </div>
             )}
 
-            {/* Módulos y permisos — solo para operadores */}
+            {/* Excepciones por módulo — solo para operadores. Bajo demanda: la lista solo
+                muestra los módulos que difieren del permiso por defecto; el resto lo siguen.
+                Como las excepciones son pocas por diseño, no hay scroll interno. */}
             {rol === 'usuario' && (
-              <div>
+              <div className="usr-form-seccion">
                 <div className="form-label-with-help">
-                  <label className="form-label">Módulos y permisos</label>
-                  <FormHelp text="Los módulos ocultos siguen funcionando en segundo plano: sus cargas y relaciones con otros módulos se mantienen." label="Qué pasa con los módulos ocultos" />
+                  <label className="form-label">Excepciones por módulo</label>
+                  <FormHelp text="Cada módulo usa el permiso por defecto salvo que le pongas otro aquí. Los módulos que ocultes siguen funcionando en segundo plano: sus cargas y relaciones con otros módulos se mantienen." label="Cómo funcionan las excepciones" />
                 </div>
-                <label className="checkbox-group">
-                  <input
-                    type="checkbox"
-                    checked={todosModulos}
-                    onChange={e => setTodosModulos(e.target.checked)}
-                  />
-                  <span className="checkbox-label">Acceso a todos los módulos contratados</span>
-                </label>
-
-                {/* Con solo-lectura activo, «Ver y editar» no significa nada: el flag es el
-                    interruptor maestro y anula la edición módulo a módulo. Se atenúa la
-                    opción y se avisa, en vez de dejar que el admin crea que da permiso de
-                    editar cuando no lo hace. */}
-                {soloLectura && !todosModulos && modulosContratados.length > 0 && (
-                  <p className="text-xs-muted usr-mod-nota">
-                    Este usuario es de <strong>solo lectura</strong>: verá los módulos marcados pero no podrá
-                    editar ninguno, aunque elijas «Ver y editar».
-                  </p>
-                )}
-
-                {!todosModulos && (
-                  modulosContratados.length === 0 ? (
-                    <p className="text-sm-muted">El negocio no tiene módulos contratados.</p>
-                  ) : (
-                    <div className="usr-mod-list">
-                      {modulosContratados.map(m => (
-                        <div key={m.clave} className="usr-mod-row">
-                          <span>{m.nombre}</span>
-                          <select
-                            className="input usr-mod-select"
-                            aria-label={`Permiso para ${m.nombre}`}
-                            value={modPerms[m.clave] ?? 'no'}
-                            onChange={e => setModPerm(m.clave, e.target.value as 'no' | 'ver' | 'editar')}
-                          >
-                            <option value="no">Sin acceso</option>
-                            <option value="ver">Ver</option>
-                            {/* Atenuada con solo-lectura: el flag maestro la anularía igual. */}
-                            <option value="editar" disabled={soloLectura}>Ver y editar</option>
-                          </select>
-                        </div>
-                      ))}
-                    </div>
-                  )
+                {modulosContratados.length === 0 ? (
+                  <p className="text-sm-muted">El negocio no tiene módulos contratados.</p>
+                ) : (
+                  <>
+                    {modulosConExcepcion.length > 0 && (
+                      <div className="usr-exc-list">
+                        {modulosConExcepcion.map(m => (
+                          <div key={m.clave} className="usr-exc-row">
+                            <span className="usr-exc-nombre">{m.nombre}</span>
+                            <select
+                              className="input usr-mod-select"
+                              aria-label={`Permiso para ${m.nombre}`}
+                              value={overrides[m.clave]}
+                              onChange={e => setOverride(m.clave, e.target.value)}
+                            >
+                              <option value="sin_acceso">Sin acceso</option>
+                              <option value="ver">Lectura</option>
+                              <option value="editar">Ver y editar</option>
+                            </select>
+                            <button
+                              type="button"
+                              className="usr-exc-quitar"
+                              aria-label={`Quitar excepción de ${m.nombre}`}
+                              onClick={() => setOverride(m.clave, 'defecto')}
+                            >
+                              <X size={15} strokeWidth={2} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {modulosSinExcepcion.length > 0 ? (
+                      <select
+                        className="input usr-exc-add"
+                        aria-label="Añadir excepción por módulo"
+                        value=""
+                        onChange={e => { if (e.target.value) setOverride(e.target.value, permisoDefecto === 'editar' ? 'ver' : 'editar') }}
+                      >
+                        <option value="">+ Añadir excepción…</option>
+                        {modulosSinExcepcion.map(m => (
+                          <option key={m.clave} value={m.clave}>{m.nombre}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-xs-muted">Todos los módulos contratados tienen una excepción.</p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -503,38 +522,38 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
               </div>
               <div className="usr-lectura-ejemplo">
                 <RolBadge rol="usuario" soloLectura={false} />
-                <span>Acceso acotado: solo las empresas y los módulos que le asignes (cada módulo, en «Ver» o «Ver y editar»). No gestiona usuarios, empresas ni monedas.</span>
+                <span>Acceso acotado: solo las empresas y los módulos que le asignes (cada módulo, en «Lectura» o «Ver y editar»). No gestiona usuarios, empresas ni monedas.</span>
               </div>
             </div>
           </div>
 
           <div className="card modal-body-wide">
-            <h3 className="text-sm-bold mb-3">Permisos por módulo (operadores)</h3>
+            <h3 className="text-sm-bold mb-3">Permiso por defecto</h3>
             <p className="body-text">
-              A cada operador se le puede definir qué módulos ve y en cuáles puede editar
-              (Sin acceso / Ver / Ver y editar), o darle acceso a todos los contratados.
-              Ocultar un módulo a un operador es solo una cuestión de vista: el módulo sigue
-              existiendo y sus relaciones con el resto (cargas y actualizaciones automáticas)
-              se mantienen intactas.
+              A cada usuario se le fija un permiso por defecto —<strong>Sin acceso</strong>,{' '}
+              <strong>Ver</strong> o <strong>Ver y editar</strong>— que se aplica a todos los módulos
+              contratados, incluidos los que se contraten en el futuro. Es lo único que hace falta
+              para el caso normal: un operador que lo ve y edita todo, o uno de solo lectura.
             </p>
           </div>
 
           <div className="card modal-body-wide">
-            <h3 className="text-sm-bold mb-3">Flag «Solo lectura»</h3>
+            <h3 className="text-sm-bold mb-3">Excepciones por módulo (operadores)</h3>
             <p className="body-text">
-              Interruptor maestro: se puede activar en cualquier rol. Un usuario con solo lectura
-              puede navegar por los módulos a los que tiene acceso, pero no puede crear, editar ni
-              eliminar ningún dato, aunque un módulo esté marcado como «Ver y editar».
-              Es ideal para socios, auditores o supervisores que necesitan visibilidad sin poder modificar.
+              Sobre ese permiso por defecto, a un operador se le puede cambiar módulo a módulo
+              (Sin acceso / Lectura / Ver y editar): por ejemplo «solo lectura salvo Inventario, que
+              edita», o «lo ve todo menos Nómina». Ocultar un módulo es solo una cuestión de vista:
+              el módulo sigue existiendo y sus relaciones con el resto (cargas y actualizaciones
+              automáticas) se mantienen intactas.
             </p>
             <div className="usr-lectura-ejemplos">
               <div className="usr-lectura-ejemplo">
                 <RolBadge rol="admin_empresa" soloLectura={true} />
-                <span>Ve todos los datos del grupo sin poder modificar nada</span>
+                <span>Administrador con permiso por defecto «Lectura»: ve todo el grupo sin poder modificar nada.</span>
               </div>
               <div className="usr-lectura-ejemplo">
                 <RolBadge rol="usuario" soloLectura={true} />
-                <span>Ve solo sus empresas asignadas, sin ejecutar operaciones</span>
+                <span>Operador con permiso por defecto «Lectura»: ve sus empresas asignadas sin ejecutar operaciones.</span>
               </div>
             </div>
           </div>

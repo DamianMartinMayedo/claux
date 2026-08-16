@@ -5,6 +5,7 @@ import { TOPE_VER_MAS }        from '@/lib/listados'
 import { filtrosDeUrl }        from '@/lib/filtros'
 import { resumenGavetaPortal } from '@/app/actions/portal/caja-gaveta'
 import GastosView              from './GastosView'
+import SolicitarAcceso          from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,5 +41,9 @@ export default async function GastosPage({
     resumenGavetaPortal(),
   ])
   if (!data) notFound()
-  return <GastosView data={data} puedeEditar={puedeEditar} gaveta={gaveta} />
+  return (
+    <GastosView data={data} puedeEditar={puedeEditar} gaveta={gaveta}>
+      {!puedeEditar && <SolicitarAcceso modulo="base" />}
+    </GastosView>
+  )
 }

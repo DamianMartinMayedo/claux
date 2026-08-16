@@ -6,6 +6,7 @@ import { filtrosDeUrl }     from '@/lib/filtros'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
 import { obtenerGavetaPendiente } from '@/app/actions/portal/caja-gaveta'
 import TesoreriaView        from './TesoreriaView'
+import SolicitarAcceso      from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,8 @@ export default async function TesoreriaPage({
       puedeEditar={puedeEditar}
       pendientes={{ cobrar: cxc?.documentos ?? [], pagar: cxp?.documentos ?? [] }}
       gaveta={gaveta}
-    />
+    >
+      {!puedeEditar && <SolicitarAcceso modulo="base" />}
+    </TesoreriaView>
   )
 }

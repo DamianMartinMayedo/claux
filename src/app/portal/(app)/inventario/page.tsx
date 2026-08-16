@@ -4,6 +4,7 @@ import EnConstruccion         from '@/components/portal/EnConstruccion'
 import { TOPE_VER_MAS }       from '@/lib/listados'
 import { filtrosDeUrl }       from '@/lib/filtros'
 import MovimientosView        from './MovimientosView'
+import SolicitarAcceso         from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,10 @@ export default async function InventarioPage({
   // los movimientos de almacén, y estaba prometiendo apuntes en la pantalla que no
   // los produce. Vive en /portal/compras.
   return data
-    ? <MovimientosView data={data} revision={revision} puedeEditar={puedeEditar} />
+    ? (
+      <MovimientosView data={data} revision={revision} puedeEditar={puedeEditar}>
+        {!puedeEditar && <SolicitarAcceso modulo="inventario" />}
+      </MovimientosView>
+    )
     : <EnConstruccion titulo="Movimientos" subtitulo="Stock y movimientos de almacén." />
 }

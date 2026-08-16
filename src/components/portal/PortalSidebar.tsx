@@ -224,7 +224,7 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
     </aside>
 
     {showLogoutDialog && (
-      <ConfirmDialog title="Cerrar sesión" body="¿Estás seguro de que deseas cerrar sesión?" confirmLabel="Cerrar sesión" danger onConfirm={confirmLogout} onCancel={() => setShowLogoutDialog(false)} />
+      <ConfirmDialog title="Cerrar sesión" body="¿Estás seguro de que deseas cerrar sesión?" confirmLabel="Cerrar sesión" pendingLabel="Cerrando sesión…" pending={pending} danger onConfirm={confirmLogout} onCancel={() => setShowLogoutDialog(false)} />
     )}
   </>
   )

@@ -474,7 +474,7 @@ export function ConfirmEliminar({
 
 // ── Página: Personal ─────────────────────────────────────────────────────────────
 
-export default function PersonalView({ data, puedeEditar }: { data: PersonalPageData; puedeEditar: boolean }) {
+export default function PersonalView({ data, puedeEditar, children }: { data: PersonalPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -624,6 +624,7 @@ export default function PersonalView({ data, puedeEditar }: { data: PersonalPage
           )}
         </div>
       </div>
+      {children}
 
       {(data.empresas.length === 0 || data.monedas.length === 0) && (
         <PrerequisitoAviso acciones={data.empresas.length === 0

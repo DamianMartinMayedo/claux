@@ -16,11 +16,12 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 // del modal "Enviar al asesor" de Reportes. Cada asesor tiene un ámbito: una empresa
 // concreta o "todas".
 export default function AsesoresView({
-  asesores, empresas, puedeEditar,
+  asesores, empresas, puedeEditar, children,
 }: {
   asesores: Asesor[]
   empresas: { empresa_id: string; nombre: string }[]
   puedeEditar: boolean
+  children?: React.ReactNode
 }) {
   const [lista, setLista] = useState<Asesor[]>(asesores)
   // null = formulario cerrado; 'new' = alta; Asesor = edición.
@@ -87,6 +88,7 @@ export default function AsesoresView({
           </button>
         )}
       </div>
+      {children}
 
       {form && (
         <div className="card env-asesor-add mb-4">

@@ -7,7 +7,7 @@ import { indexarCategorias, esFueraDelResultado, esRolPL, type CategoriaPL } fro
 import { getPortalSession }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
-import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
+import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel }  from '@/lib/billing'
 import { obtenerEtiquetasNegocio } from './sector'
@@ -1192,17 +1192,20 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   // tiene contratado: módulos por permiso efectivo (mismo cálculo que el sidebar,
   // `calcularAcceso`) y datos acotados a sus empresas (igual que cada página del
   // portal). Así cada widget coincide con lo que encuentra al abrir el módulo.
-  const [{ data: cliente }, filasUsuario, empresasAcc] = await Promise.all([
+  const [{ data: cliente }, { data: usr }, filasUsuario, empresasAcc] = await Promise.all([
     db.from('clients')
       .select('nombre_empresa, estado, modulos_activos, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
       .eq('client_id', cid).single(),
+    db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     modulosDeUsuario(db, session.user_id),
     obtenerEmpresas(),
   ])
   if (!cliente) return null
 
   const modulosActivos: string[] = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []
-  const { visibles } = calcularAcceso(session, modulosActivos, filasUsuario)
+  const rawDefecto = usr?.permiso_defecto
+  const defecto: Permiso = rawDefecto === 'sin_acceso' || rawDefecto === 'ver' || rawDefecto === 'editar' ? rawDefecto : 'editar'
+  const { visibles } = calcularAcceso(session, modulosActivos, defecto, filasUsuario)
   const puedeVer = (m: string) => visibles.includes(m)
 
   // Empresas accesibles del usuario. Contabilidad y RRHH acotan sus datos a estas

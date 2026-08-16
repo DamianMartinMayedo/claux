@@ -204,7 +204,7 @@ const PERIODICIDAD_LABEL: Record<string, string> = {
   MENSUAL: 'Mensual', TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
 }
 
-export default function ProductosView({ data, puedeEditar }: { data: ProductosPageData; puedeEditar: boolean }) {
+export default function ProductosView({ data, puedeEditar, children }: { data: ProductosPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const ruta         = usePathname()
@@ -551,6 +551,7 @@ export default function ProductosView({ data, puedeEditar }: { data: ProductosPa
           )}
         </div>
       </div>
+      {children}
 
       {/* ── Tabs ── */}
       <Tabs

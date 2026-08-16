@@ -4,23 +4,28 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
 import { hashPasswordPortal } from '@/lib/portal-auth'
-import type { ModuloPerm } from '@/lib/permisos'
+import { calcularAcceso, type ModuloPerm, type Permiso } from '@/lib/permisos'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
 export interface UsuarioPortal {
-  user_id:      string
-  client_id:    string
-  email:        string
-  nombre:       string | null
-  rol:          'admin_empresa' | 'usuario'
-  solo_lectura: boolean
-  estado:       'ACTIVO' | 'INACTIVO'
-  created_at:   string
-  empresas:     string[]        // empresa_ids asignadas (solo para rol 'usuario')
-  modulos:      ModuloPerm[]    // permisos por módulo (solo rol 'usuario'; vacío = todos)
+  user_id:         string
+  client_id:       string
+  email:           string
+  nombre:          string | null
+  rol:             'admin_empresa' | 'usuario'
+  permiso_defecto: Permiso       // se aplica a todos los módulos contratados (incl. futuros)
+  solo_lectura:    boolean       // derivado: no puede editar NINGÚN módulo (para el badge de la lista)
+  estado:          'ACTIVO' | 'INACTIVO'
+  created_at:      string
+  empresas:        string[]      // empresa_ids asignadas (solo para rol 'usuario')
+  modulos:         ModuloPerm[]  // excepciones por módulo (solo difieren del defecto)
+}
+
+function coercePermiso(v: unknown, fallback: Permiso): Permiso {
+  return v === 'sin_acceso' || v === 'ver' || v === 'editar' ? v : fallback
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -90,7 +95,7 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
 
   const { data: usuarios } = await db
     .from('client_users')
-    .select('user_id, client_id, email, nombre, rol, solo_lectura, estado, created_at')
+    .select('user_id, client_id, email, nombre, rol, solo_lectura, permiso_defecto, estado, created_at')
     .eq('client_id', session.client_id)
     .order('created_at')
 
@@ -99,7 +104,7 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
 
   const [{ data: asignaciones }, { data: permisos }] = await Promise.all([
     db.from('empresa_usuario').select('user_id, empresa_id').in('user_id', idsFiltro),
-    db.from('usuario_modulo').select('user_id, modulo_clave, puede_editar').in('user_id', idsFiltro),
+    db.from('usuario_modulo').select('user_id, modulo_clave, permiso').in('user_id', idsFiltro),
   ])
 
   // Agrupar empresas por usuario
@@ -109,43 +114,70 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
     empresasPorUsuario.get(a.user_id)!.push(a.empresa_id)
   }
 
-  // Agrupar permisos de módulo por usuario
+  // Agrupar excepciones por módulo por usuario
   const modulosPorUsuario = new Map<string, ModuloPerm[]>()
   for (const p of (permisos ?? [])) {
     if (!modulosPorUsuario.has(p.user_id)) modulosPorUsuario.set(p.user_id, [])
-    modulosPorUsuario.get(p.user_id)!.push({ clave: p.modulo_clave, puede_editar: !!p.puede_editar })
+    modulosPorUsuario.get(p.user_id)!.push({ clave: p.modulo_clave, permiso: coercePermiso(p.permiso, 'ver') })
   }
 
   return (usuarios ?? []).map(u => ({
     ...u,
+    permiso_defecto: coercePermiso(u.permiso_defecto, 'editar'),
     solo_lectura: u.solo_lectura ?? false,
     empresas: empresasPorUsuario.get(u.user_id) ?? [],
     modulos:  modulosPorUsuario.get(u.user_id) ?? [],
   })) as UsuarioPortal[]
 }
 
-// Lee los permisos por módulo del formulario y los sincroniza para un usuario.
-// Solo aplica a rol 'usuario'; admin_empresa no lleva filas (= todos los módulos).
-async function sincronizarModulos(
+// Lee del formulario el «permiso por defecto» y las excepciones por módulo, y calcula
+// el acceso efectivo. Las excepciones (input `ov` = "clave:permiso") solo aplican a rol
+// 'usuario'; admin_empresa ignora la matriz (ve todo lo contratado). `soloLectura` es el
+// derivado que persistimos en la columna legado para el badge y el guard del último admin.
+async function computarPermisos(
   db: ReturnType<typeof createAdminClient>,
-  user_id: string,
   rol: UsuarioPortal['rol'],
+  defecto: Permiso,
   formData: FormData,
   clientId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const { error: errorBorrado } = await db.from('usuario_modulo').delete().eq('user_id', user_id)
-  if (errorBorrado) return { ok: false, error: 'No se pudieron actualizar los permisos por módulo.' }
-  if (rol !== 'usuario') return { ok: true }
-
+): Promise<{ overrides: { user_id?: string; modulo_clave: string; permiso: Permiso }[]; soloLectura: boolean }> {
   const { data: cliente } = await db.from('clients').select('modulos_activos')
     .eq('client_id', clientId).maybeSingle()
   const contratados = new Set(Array.isArray(cliente?.modulos_activos) ? cliente.modulos_activos as string[] : [])
-  const modulos    = [...new Set((formData.getAll('modulos') as string[]).filter(m => contratados.has(m)))]
-  const editables  = new Set(formData.getAll('modulos_editar') as string[])
-  if (modulos.length === 0) return { ok: true }
+
+  const overrides: { modulo_clave: string; permiso: Permiso }[] = []
+  if (rol === 'usuario') {
+    const vistos = new Set<string>()
+    for (const raw of formData.getAll('ov') as string[]) {
+      const i = raw.lastIndexOf(':')
+      if (i < 0) continue
+      const clave   = raw.slice(0, i)
+      const permiso = coercePermiso(raw.slice(i + 1), defecto)
+      if (!contratados.has(clave) || vistos.has(clave) || permiso === defecto) continue
+      vistos.add(clave)
+      overrides.push({ modulo_clave: clave, permiso })
+    }
+  }
+
+  const { editable } = calcularAcceso(
+    { rol }, [...contratados], defecto,
+    overrides.map(o => ({ clave: o.modulo_clave, permiso: o.permiso })),
+  )
+  return { overrides, soloLectura: editable.size === 0 }
+}
+
+// Reemplaza las excepciones por módulo de un usuario (borrar + reinsertar).
+async function persistirModulos(
+  db: ReturnType<typeof createAdminClient>,
+  user_id: string,
+  overrides: { modulo_clave: string; permiso: Permiso }[],
+): Promise<{ ok: boolean; error?: string }> {
+  const { error: errorBorrado } = await db.from('usuario_modulo').delete().eq('user_id', user_id)
+  if (errorBorrado) return { ok: false, error: 'No se pudieron actualizar los permisos por módulo.' }
+  if (overrides.length === 0) return { ok: true }
 
   const { error } = await db.from('usuario_modulo').insert(
-    modulos.map(clave => ({ user_id, modulo_clave: clave, puede_editar: editables.has(clave) })),
+    overrides.map(o => ({ user_id, modulo_clave: o.modulo_clave, permiso: o.permiso })),
   )
   return error
     ? { ok: false, error: 'No se pudieron guardar los permisos por módulo.' }
@@ -165,16 +197,19 @@ export async function crearUsuario(formData: FormData): Promise<{
     return { ok: false, error: 'Sin permisos.' }
   }
 
-  const email        = ((formData.get('email')  as string) ?? '').trim().toLowerCase()
-  const nombre       = ((formData.get('nombre') as string) ?? '').trim() || null
-  const rol          = ((formData.get('rol')    as string) ?? 'usuario') as UsuarioPortal['rol']
-  const solo_lectura = formData.get('solo_lectura') === 'true'
-  const empresas     = formData.getAll('empresas') as string[]
+  const email    = ((formData.get('email')  as string) ?? '').trim().toLowerCase()
+  const nombre   = ((formData.get('nombre') as string) ?? '').trim() || null
+  const rol      = ((formData.get('rol')    as string) ?? 'usuario') as UsuarioPortal['rol']
+  const defecto  = coercePermiso(formData.get('permiso_defecto'), 'editar')
+  const empresas = formData.getAll('empresas') as string[]
 
   if (!email) return { ok: false, error: 'El email es obligatorio.' }
   if (!['admin_empresa', 'usuario'].includes(rol)) return { ok: false, error: 'Rol inválido.' }
 
   const db = createAdminClient()
+
+  // Excepciones por módulo + derivado solo_lectura (columna legado para badge/guard).
+  const { overrides, soloLectura } = await computarPermisos(db, rol, defecto, formData, session.client_id)
 
   // Verificar que el email no exista ya en este cliente
   const { data: existe } = await db
@@ -197,7 +232,8 @@ export async function crearUsuario(formData: FormData): Promise<{
     email,
     nombre,
     rol,
-    solo_lectura,
+    permiso_defecto:   defecto,
+    solo_lectura:      soloLectura,
     password_hash:     hash,
     salt,
     estado:            'ACTIVO',
@@ -224,8 +260,8 @@ export async function crearUsuario(formData: FormData): Promise<{
     }
   }
 
-  // Permisos por módulo (solo rol usuario; sin filas = todos los contratados)
-  const modulos = await sincronizarModulos(db, user_id, rol, formData, session.client_id)
+  // Excepciones por módulo (solo rol usuario; sin filas = rige el permiso por defecto)
+  const modulos = await persistirModulos(db, user_id, rol === 'usuario' ? overrides : [])
   if (!modulos.ok) {
     await db.from('client_users').delete().eq('user_id', user_id).eq('client_id', session.client_id)
     return { ok: false, error: modulos.error }
@@ -253,12 +289,12 @@ export async function editarUsuario(formData: FormData): Promise<{
     return { ok: false, error: 'Sin permisos.' }
   }
 
-  const user_id      = ((formData.get('user_id')  as string) ?? '').trim()
-  const nombre       = ((formData.get('nombre')   as string) ?? '').trim() || null
-  const rol          = ((formData.get('rol')       as string) ?? 'usuario') as UsuarioPortal['rol']
-  const solo_lectura = formData.get('solo_lectura') === 'true'
-  const estado       = formData.get('estado') === 'INACTIVO' ? 'INACTIVO' : 'ACTIVO'
-  const empresas     = formData.getAll('empresas') as string[]
+  const user_id  = ((formData.get('user_id')  as string) ?? '').trim()
+  const nombre   = ((formData.get('nombre')   as string) ?? '').trim() || null
+  const rol      = ((formData.get('rol')       as string) ?? 'usuario') as UsuarioPortal['rol']
+  const defecto  = coercePermiso(formData.get('permiso_defecto'), 'editar')
+  const estado   = formData.get('estado') === 'INACTIVO' ? 'INACTIVO' : 'ACTIVO'
+  const empresas = formData.getAll('empresas') as string[]
 
   if (!user_id) return { ok: false, error: 'usuario_id requerido.' }
 
@@ -282,12 +318,16 @@ export async function editarUsuario(formData: FormData): Promise<{
     : []
   if (!empresasValidas) return { ok: false, error: 'Una de las empresas seleccionadas no pertenece a este negocio o está inactiva.' }
 
+  // Excepciones por módulo + derivado solo_lectura (columna legado para badge/guard).
+  const { overrides, soloLectura } = await computarPermisos(db, rol, defecto, formData, session.client_id)
+
   // Guard: el negocio no puede quedarse sin ningún administrador que pueda gestionarlo.
-  // Un admin que pasa a operador, se desactiva o se marca solo-lectura deja de poder
-  // administrar. Si esta edición lo saca de ese estado y no queda ningún otro admin
-  // ACTIVO con escritura, se bloquea. (Editarte a ti mismo ya está vetado arriba, que
-  // hasta ahora era lo único que evitaba dejar la cuenta sin administrador de rebote.)
-  const seguiriaAdministrando = rol === 'admin_empresa' && estado === 'ACTIVO' && !solo_lectura
+  // Un admin que pasa a operador, se desactiva o pierde toda capacidad de edición
+  // (permiso por defecto ≠ editar) deja de poder administrar. Si esta edición lo saca de
+  // ese estado y no queda ningún otro admin ACTIVO con escritura, se bloquea. (Editarte a
+  // ti mismo ya está vetado arriba, que hasta ahora era lo único que evitaba dejar la
+  // cuenta sin administrador de rebote.)
+  const seguiriaAdministrando = rol === 'admin_empresa' && estado === 'ACTIVO' && !soloLectura
   if (!seguiriaAdministrando) {
     const { count } = await db
       .from('client_users')
@@ -295,7 +335,7 @@ export async function editarUsuario(formData: FormData): Promise<{
       .eq('client_id', session.client_id)
       .eq('rol', 'admin_empresa')
       .eq('estado', 'ACTIVO')
-      .eq('solo_lectura', false)
+      .eq('permiso_defecto', 'editar')
       .neq('user_id', user_id)
     if ((count ?? 0) === 0) {
       return { ok: false, error: 'Debe quedar al menos un administrador activo con permiso de escritura. Asciende o activa a otro usuario antes de cambiar este.' }
@@ -304,7 +344,7 @@ export async function editarUsuario(formData: FormData): Promise<{
 
   const { error } = await db
     .from('client_users')
-    .update({ nombre, rol, solo_lectura, estado })
+    .update({ nombre, rol, permiso_defecto: defecto, solo_lectura: soloLectura, estado })
     .eq('user_id', user_id)
     .eq('client_id', session.client_id)
 
@@ -319,8 +359,8 @@ export async function editarUsuario(formData: FormData): Promise<{
     if (errorEmpresas) return { ok: false, error: 'No se pudieron guardar las empresas del usuario.' }
   }
 
-  // Sincronizar permisos por módulo (borrar + reinsertar; admin = sin filas = todos)
-  const modulos = await sincronizarModulos(db, user_id, rol, formData, session.client_id)
+  // Sincronizar excepciones por módulo (borrar + reinsertar; admin = sin filas)
+  const modulos = await persistirModulos(db, user_id, rol === 'usuario' ? overrides : [])
   if (!modulos.ok) return { ok: false, error: modulos.error }
 
   revalidatePath('/portal/usuarios')

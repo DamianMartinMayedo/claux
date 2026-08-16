@@ -16,6 +16,9 @@ export type Categoria =
   | 'suscripcion' | 'reservas' | 'citas' | 'finanzas'
   | 'inventario'  | 'rrhh'     | 'terceros'
   | 'servicios'   | 'dossier'
+  // Gestión del equipo (solicitudes de acceso de un miembro al administrador).
+  // Cosa del administrador: fuera de las categorías operativas de un `usuario`.
+  | 'equipo'
 
 /** Escalón temporal de un aviso de vencimiento. Parte de la clave de dedupe. */
 export type Umbral = '30d' | '15d' | '5d' | '1d' | 'vencido'
@@ -352,6 +355,17 @@ export const CATALOGO = {
     etiqueta: 'Dossier desactualizado',
     descripcion: 'Tu dossier publicado muestra números viejos.',
   },
+
+  // ── Equipo ─────────────────────────────────────────────────────────────────
+  // La pide un miembro del equipo desde el módulo que solo puede consultar. No
+  // depende de un módulo contratado (`modulo: null`): quien la lanza es
+  // precisamente quien no tiene el permiso. La ve el administrador, que la
+  // resuelve en Usuarios.
+  solicitud_acceso: {
+    categoria: 'equipo', modulo: null, severidad: 'aviso', implementado: true,
+    etiqueta: 'Solicitud de acceso',
+    descripcion: 'Un miembro del equipo pide poder editar un módulo que solo puede consultar.',
+  },
 } satisfies Record<string, TipoNotificacion>
 
 export type TipoClave = keyof typeof CATALOGO
@@ -432,6 +446,7 @@ export const ETIQUETA_CATEGORIA: Record<Categoria, string> = {
   terceros:    'Clientes y proveedores',
   servicios:   'Servicios',
   dossier:     'Dossier',
+  equipo:      'Equipo',
 }
 
 export const ETIQUETA_SEVERIDAD: Record<Severidad, string> = {

@@ -815,10 +815,11 @@ function HeaderCheck({ checked, indeterminate, onChange }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function GastosView({ data, puedeEditar, gaveta }: {
+export default function GastosView({ data, puedeEditar, gaveta, children }: {
   data: GastosCobrosPageData
   puedeEditar: boolean
   gaveta: ResumenGaveta
+  children?: React.ReactNode
 }) {
   const router = useRouter()
 
@@ -1187,6 +1188,7 @@ export default function GastosView({ data, puedeEditar, gaveta }: {
           )}
         </div>
       </div>
+      {children}
 
       {/* Tabs */}
       <Tabs

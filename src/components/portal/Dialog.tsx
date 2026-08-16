@@ -11,6 +11,12 @@ interface ConfirmProps {
   confirmLabel?: string
   cancelLabel?:  string
   danger?:       boolean
+  // Carga: mientras la acción confirmada está en curso (una server action que
+  // redirige, como cerrar sesión), el botón muestra un spinner y se deshabilita
+  // —igual que cancelar— para que en conexión mala no se pulse dos veces ni parezca
+  // que no pasó nada. Lo controla el padre (su `isPending` de useTransition).
+  pending?:      boolean
+  pendingLabel?: string
   onConfirm:     () => void
   onCancel:      () => void
 }
@@ -23,6 +29,7 @@ interface AlertProps {
 
 export function ConfirmDialog({
   title, body, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', danger = false,
+  pending = false, pendingLabel,
   onConfirm, onCancel,
 }: ConfirmProps) {
   return (
@@ -42,9 +49,16 @@ export function ConfirmDialog({
           </div>
         )}
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>{cancelLabel}</button>
-          <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} autoFocus>
-            {confirmLabel}
+          <button className="btn btn-secondary" onClick={onCancel} disabled={pending}>{cancelLabel}</button>
+          <button
+            className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
+            onClick={onConfirm}
+            disabled={pending}
+            autoFocus
+          >
+            {pending
+              ? <><span className="spinner spinner-sm" />{pendingLabel ?? confirmLabel}</>
+              : confirmLabel}
           </button>
         </div>
       </div>

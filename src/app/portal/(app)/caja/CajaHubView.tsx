@@ -17,6 +17,7 @@ interface Props {
   empresas: { empresa_id: string; nombre: string }[]
   salud: Record<string, Salud>
   puedeEditar: boolean
+  children?: React.ReactNode
 }
 
 function fechaCorta(s: string | null): string {
@@ -39,7 +40,7 @@ function desdeCuando(s: string | null): { texto: string; viejo: boolean } {
   return { texto: `Hace ${dias} días`, viejo: dias >= 5 }
 }
 
-export default function CajaHubView({ cajas, empresas, salud, puedeEditar }: Props) {
+export default function CajaHubView({ cajas, empresas, salud, puedeEditar, children }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
@@ -73,6 +74,7 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar }: Pro
           </button>
         )}
       </div>
+      {children}
 
       {empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>

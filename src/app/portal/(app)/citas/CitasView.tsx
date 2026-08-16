@@ -989,7 +989,7 @@ function ConfirmEliminar({ titulo, cuerpo, onConfirm, onClose, isPending }: {
 
 // ── Página: Citas ───────────────────────────────────────────────────────────
 
-export default function CitasView({ data, puedeEditar }: { data: CitasPageData; puedeEditar: boolean }) {
+export default function CitasView({ data, puedeEditar, children }: { data: CitasPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const et = data.etiquetas
@@ -1294,6 +1294,7 @@ export default function CitasView({ data, puedeEditar }: { data: CitasPageData; 
           )}
         </div>
       </div>
+      {children}
 
       <Tabs
         ariaLabel="Secciones de citas"

@@ -46,7 +46,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const [tema, setTema] = useState<'light' | 'dark'>('light')
-  const [, startTransition] = useTransition()
+  const [cerrando, startTransition] = useTransition()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   useEffect(() => {
@@ -199,6 +199,8 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
           title="Cerrar sesión"
           body="¿Estás seguro de que deseas cerrar sesión?"
           confirmLabel="Cerrar sesión"
+          pendingLabel="Cerrando sesión…"
+          pending={cerrando}
           danger
           onConfirm={confirmLogout}
           onCancel={() => setShowLogoutDialog(false)}

@@ -644,7 +644,7 @@ function ConfirmEliminarFranja({
 
 // ── Página: Reservas ──────────────────────────────────────────────────────────
 
-export default function ReservasView({ data, puedeEditar }: { data: ReservaPageData; puedeEditar: boolean }) {
+export default function ReservasView({ data, puedeEditar, children }: { data: ReservaPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -946,6 +946,7 @@ export default function ReservasView({ data, puedeEditar }: { data: ReservaPageD
           )}
         </div>
       </div>
+      {children}
 
       <Tabs
         ariaLabel="Secciones de reservas"

@@ -2,19 +2,23 @@
 // Capa de autorización ENCIMA del gating por tenant (clients.modulos_activos):
 // un usuario nunca ve un módulo que el tenant no tiene contratado (intersección).
 //
-// Semántica (retrocompatible, ver migración 082):
-//   admin_empresa      → todos los módulos contratados.
-//   usuario SIN filas  → todos los contratados (no rompe operadores existentes).
-//   usuario CON filas  → solo esas claves ∩ contratados; puede_editar por fila.
-//   'solo_lectura' (client_users.solo_lectura) es el interruptor maestro: si está
-//   activo, no edita nada aunque puede_editar sea TRUE.
+// Modelo «Por defecto + matriz» (ver docs/planes/permisos-por-defecto-y-matriz.md):
+//   client_users.permiso_defecto ∈ {sin_acceso, ver, editar}  → aplica a TODOS los
+//     módulos contratados, incluidos los futuros.
+//   usuario_modulo.permiso       ∈ {sin_acceso, ver, editar}  → excepción por módulo
+//     (sobreescribe el defecto). Solo hay fila cuando difiere del defecto.
+//   Efectivo por módulo = override ?? defecto. visible = ≠ sin_acceso; editable = editar.
+//   admin_empresa: ve SIEMPRE todo lo contratado (matriz ignorada); su `permiso_defecto`
+//     gobierna la escritura global (editar = admin normal, ver = admin de solo lectura).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PortalSession } from '@/lib/portal-auth'
 
+export type Permiso = 'sin_acceso' | 'ver' | 'editar'
+
 export interface ModuloPerm {
-  clave:        string
-  puede_editar: boolean
+  clave:   string
+  permiso: Permiso
 }
 
 export interface AccesoModulos {
@@ -24,19 +28,23 @@ export interface AccesoModulos {
   editable: Set<string>
 }
 
-/** Lee las filas de permisos por módulo de un usuario. Sin filas = "todos" (retrocompat). */
+function esPermiso(v: unknown): v is Permiso {
+  return v === 'sin_acceso' || v === 'ver' || v === 'editar'
+}
+
+/** Lee las excepciones por módulo de un usuario (las que difieren del defecto). */
 export async function modulosDeUsuario(
   db: SupabaseClient,
   user_id: string,
 ): Promise<ModuloPerm[]> {
   const { data } = await db
     .from('usuario_modulo')
-    .select('modulo_clave, puede_editar')
+    .select('modulo_clave, permiso')
     .eq('user_id', user_id)
 
   return (data ?? []).map(r => ({
-    clave:        r.modulo_clave as string,
-    puede_editar: !!r.puede_editar,
+    clave:   r.modulo_clave as string,
+    permiso: esPermiso(r.permiso) ? r.permiso : 'ver',
   }))
 }
 
@@ -45,29 +53,29 @@ export async function modulosDeUsuario(
  * módulos contratados por el tenant. Ver semántica arriba.
  */
 export function calcularAcceso(
-  session: Pick<PortalSession, 'rol' | 'solo_lectura'>,
+  session: Pick<PortalSession, 'rol'>,
   tenantModulos: string[],
-  filas: ModuloPerm[],
+  defecto: Permiso,
+  overrides: ModuloPerm[],
 ): AccesoModulos {
-  const contratados = new Set(tenantModulos)
-
-  // admin_empresa, o usuario sin restricciones explícitas → ve todo lo contratado.
-  const sinRestriccion = session.rol === 'admin_empresa' || filas.length === 0
-
-  const visibles = sinRestriccion
-    ? [...tenantModulos]
-    : filas.map(f => f.clave).filter(c => contratados.has(c))
-
-  // 'Solo lectura' apaga toda edición, sea cual sea el detalle por módulo.
-  if (session.solo_lectura) {
-    return { visibles, editable: new Set<string>() }
+  // admin_empresa: ve todo lo contratado; su escritura la fija el defecto (overrides no aplican).
+  if (session.rol === 'admin_empresa') {
+    return {
+      visibles: [...tenantModulos],
+      editable: defecto === 'editar' ? new Set(tenantModulos) : new Set<string>(),
+    }
   }
 
-  const editable = sinRestriccion
-    ? new Set(visibles)
-    : new Set(
-        filas.filter(f => f.puede_editar).map(f => f.clave).filter(c => contratados.has(c)),
-      )
+  const porModulo = new Map<string, Permiso>()
+  for (const o of overrides) porModulo.set(o.clave, o.permiso)
 
+  const visibles: string[] = []
+  const editable = new Set<string>()
+  for (const clave of tenantModulos) {
+    const p = porModulo.get(clave) ?? defecto
+    if (p === 'sin_acceso') continue
+    visibles.push(clave)
+    if (p === 'editar') editable.add(clave)
+  }
   return { visibles, editable }
 }

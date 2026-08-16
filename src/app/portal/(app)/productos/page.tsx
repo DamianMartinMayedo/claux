@@ -2,6 +2,7 @@ import { redirect }              from 'next/navigation'
 import { requireAccesoModulo }   from '@/app/actions/portal/auth'
 import { obtenerProductos }      from '@/app/actions/portal/productos'
 import ProductosView             from './ProductosView'
+import SolicitarAcceso            from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,5 +13,9 @@ export default async function ProductosPage() {
   const { puedeEditar } = await requireAccesoModulo('inventario')
   const data = await obtenerProductos('PRODUCTO')
   if (!data) redirect('/portal/login')
-  return <ProductosView data={data} puedeEditar={puedeEditar} />
+  return (
+    <ProductosView data={data} puedeEditar={puedeEditar}>
+      {!puedeEditar && <SolicitarAcceso modulo="inventario" />}
+    </ProductosView>
+  )
 }

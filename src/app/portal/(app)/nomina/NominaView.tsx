@@ -750,7 +750,7 @@ function ConfirmEliminarNomina({
 
 // ── Página: Nómina ───────────────────────────────────────────────────────────────
 
-export default function NominaView({ data, puedeEditar }: { data: NominaPageData; puedeEditar: boolean }) {
+export default function NominaView({ data, puedeEditar, children }: { data: NominaPageData; puedeEditar: boolean; children?: React.ReactNode }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
   const multiempresa = data.empresas.length > 1
@@ -917,6 +917,7 @@ export default function NominaView({ data, puedeEditar }: { data: NominaPageData
           )}
         </div>
       </div>
+      {children}
 
       {/* Dos cosas distintas: las nóminas de cada mes y CÓMO funciona la nómina de
           este negocio. La configuración vivía repartida por las fichas, que es lo

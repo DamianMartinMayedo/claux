@@ -2,6 +2,7 @@ import { requireAccesoModulo } from '@/app/actions/portal/auth'
 import { obtenerAsesores } from '@/app/actions/portal/asesores'
 import { obtenerEmpresas } from '@/app/actions/portal/empresas'
 import AsesoresView        from './AsesoresView'
+import SolicitarAcceso      from '@/components/portal/SolicitarAcceso'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ export default async function AsesoresPage() {
       asesores={asesores}
       empresas={empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
       puedeEditar={puedeEditar}
-    />
+    >
+      {!puedeEditar && <SolicitarAcceso modulo="base" />}
+    </AsesoresView>
   )
 }

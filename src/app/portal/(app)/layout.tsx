@@ -4,7 +4,7 @@ import { getPortalSession, debeCambiarPassword } from '@/app/actions/portal/auth
 import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { modulosDeUsuario, calcularAcceso } from '@/lib/permisos'
+import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
@@ -32,12 +32,13 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const [{ data: cliente }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar] = await Promise.all([
+  const [{ data: cliente }, { data: usr }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar] = await Promise.all([
     db
       .from('clients')
       .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, es_prueba')
       .eq('client_id', session.client_id)
       .single(),
+    db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     db
       .from('modulos_catalogo')
       .select('clave, nombre, tipo, paginas, orden')
@@ -66,7 +67,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   // Módulos que ESTE usuario puede ver (tenant ∩ permisos por usuario). El sidebar
   // y los guards de página usan este subconjunto; las cascadas entre módulos NO.
-  const { visibles: modulosVisibles } = calcularAcceso(session, modulosActivos, filasUsuario)
+  const rawDefecto = usr?.permiso_defecto
+  const defecto: Permiso = rawDefecto === 'sin_acceso' || rawDefecto === 'ver' || rawDefecto === 'editar' ? rawDefecto : 'editar'
+  const { visibles: modulosVisibles } = calcularAcceso(session, modulosActivos, defecto, filasUsuario)
 
   // Addon de IA: el chat flotante solo aparece si está contratado Y el usuario
   // tiene permiso para verlo. El nombre del agente es global; por defecto "Claux".
