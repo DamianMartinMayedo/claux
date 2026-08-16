@@ -249,7 +249,10 @@ export async function guardarPar(
   formData: FormData,
 ): Promise<{ ok: boolean; tasa?: number; fecha?: string; error?: string }> {
   const session = await getPortalSession()
-  if (!session || session.rol !== 'admin_empresa') return { ok: false, error: 'Sin permisos.' }
+  // Configurar un par (cambiar su fuente o fijar una tasa manual) es modificar la
+  // configuración: exige admin y NO solo-lectura. La excepción de solo-lectura es solo
+  // el refresco masivo de tasas (`actualizarTasasAuto`), no editar el par a mano.
+  if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) return { ok: false, error: 'Sin permisos.' }
 
   const par_id     = parseInt((formData.get('par_id')  as string) ?? '0')
   const fuente     = ((formData.get('fuente') as string) ?? 'MANUAL') as Par['fuente']
@@ -312,6 +315,13 @@ async function fetchTasaPar(
     const apiKey = process.env.ELTOQUE_API_KEY
     if (!apiKey) return { ok: false, error: 'Sin ELTOQUE_API_KEY configurada.' }
 
+    // El Toque SOLO cotiza moneda_extranjera ↔ CUP. En un par que no toca CUP (p.ej.
+    // USD→EUR) el cálculo de abajo tomaba la tasa CUP del `origen` y la guardaba como si
+    // fuera la del par —una tasa disparatada, en silencio—. Se rechaza antes de pedir nada.
+    if (origen !== 'CUP' && destino !== 'CUP') {
+      return { ok: false, error: 'El Toque solo cotiza pares que incluyan CUP. Usa Frankfurter o una tasa manual.' }
+    }
+
     // El Toque siempre cotiza moneda_extranjera → CUP
     // Si el par es CUP→XXX usamos la tasa inversa
     const esCupOrigen = origen === 'CUP'
@@ -322,6 +332,9 @@ async function fetchTasaPar(
       const res  = await fetch('https://tasas.eltoque.com/v1/trmi', {
         headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
         cache:   'no-store',
+        // Con la conexión de Cuba un fetch sin límite se queda colgado indefinidamente y
+        // el usuario ve el spinner para siempre. 8 s y aborta (lo recoge el catch).
+        signal:  AbortSignal.timeout(8000),
       })
       if (!res.ok) return { ok: false, error: `El Toque HTTP ${res.status}` }
 
@@ -344,7 +357,7 @@ async function fetchTasaPar(
   // FRANKFURTER
   try {
     const url  = `https://api.frankfurter.app/latest?base=${origen}&symbols=${destino}`
-    const res  = await fetch(url, { cache: 'no-store' })
+    const res  = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
     if (!res.ok) return { ok: false, error: `Frankfurter HTTP ${res.status}` }
 
     const json = await res.json() as { rates?: Record<string, number> }
@@ -515,6 +528,28 @@ export async function eliminarMoneda(
         .eq('client_id', session.client_id)
         .eq(ref.col, codigo)
       if (error) return { ok: false, error: `Error al fusionar en ${ref.entidad}.` }
+    }
+
+    // Los puntos de venta van aparte: `monedas_aceptadas` es text[] y NO lo cubre el bucle
+    // de REF_MONEDA (columnas escalares). Sin migrarlo, la caja se queda aceptando un código
+    // que se borra dos líneas más abajo → moneda huérfana en el TPV. Se reescribe el array
+    // de cada punto que la aceptaba, sustituyéndola por el destino (sin duplicar si ya lo
+    // tenía). Se hace en JS porque array_remove/append de Postgres no se expresan en el
+    // update de supabase-js, y el número de cajas por cliente es pequeño.
+    const { data: cajasAfectadas } = await db
+      .from('cajas')
+      .select('caja_id, monedas_aceptadas')
+      .eq('client_id', session.client_id)
+      .contains('monedas_aceptadas', [codigo])
+    for (const caja of cajasAfectadas ?? []) {
+      const actuales = Array.isArray(caja.monedas_aceptadas) ? caja.monedas_aceptadas as string[] : []
+      const nuevas   = Array.from(new Set(actuales.map(c => (c === codigo ? fusionarEn : c))))
+      const { error } = await db
+        .from('cajas')
+        .update({ monedas_aceptadas: nuevas })
+        .eq('client_id', session.client_id)
+        .eq('caja_id', caja.caja_id)
+      if (error) return { ok: false, error: 'Error al fusionar en Puntos de venta.' }
     }
   }
 

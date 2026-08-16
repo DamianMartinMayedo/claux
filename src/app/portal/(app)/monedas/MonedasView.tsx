@@ -5,8 +5,10 @@ import { mensajeTasas, edadTasa, tasaVieja } from '@/lib/tasas-mensaje'
 import { fmtFechaEs } from '@/lib/date-utils'
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCw, Star, ArrowRight, Info, AlertTriangle } from 'lucide-react'
 import FormHelp from '@/components/portal/FormHelp'
+import ModalShell from '@/components/portal/ModalShell'
+import { CampoNumero } from '@/components/portal/CampoNumero'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
 import { puntosVentaConMoneda } from '@/app/actions/portal/caja'
 import {
@@ -101,13 +103,7 @@ function MonedaModal({
   }
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-520" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">{esEdicion ? 'Editar moneda' : 'Añadir moneda'}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
-        </div>
-
+    <ModalShell title={esEdicion ? 'Editar moneda' : 'Añadir moneda'} onClose={onClose} size="modal-520">
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-body-wide">
             {esEdicion && <input type="hidden" name="codigo_original" value={moneda.codigo} />}
@@ -217,8 +213,7 @@ function MonedaModal({
             </div>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -235,13 +230,17 @@ function ParModal({
 }) {
   const [isPending, startTransition] = useTransition()
   const [fuente, setFuente]  = useState<Par['fuente']>(par.fuente)
-  const [tasa,   setTasa]    = useState(par.tasa?.toString() ?? '')
+  const [tasa,   setTasa]    = useState<number>(par.tasa ?? 0)
+
+  // El Toque solo cotiza pares que incluyan CUP. Ofrecerlo en otros (p.ej. USD→EUR)
+  // llevaba a guardar una tasa disparatada; solo se muestra si el par toca CUP.
+  const tocaCup = par.origen === 'CUP' || par.destino === 'CUP'
 
   // Si la fuente cambia a auto, limpiar la tasa manual (en el propio handler,
   // sin setState dentro de un efecto → evita renders en cascada).
   function cambiarFuente(nueva: Par['fuente']) {
     setFuente(nueva)
-    if (nueva !== 'MANUAL') setTasa('')
+    if (nueva !== 'MANUAL') setTasa(0)
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -249,7 +248,7 @@ function ParModal({
     const fd = new FormData()
     fd.set('par_id', par.par_id.toString())
     fd.set('fuente', fuente)
-    if (fuente === 'MANUAL') fd.set('tasa', tasa)
+    if (fuente === 'MANUAL') fd.set('tasa', String(tasa))
 
     const ld = toastLoading(fuente !== 'MANUAL' ? 'Obteniendo…' : 'Guardando…')
     startTransition(async () => {
@@ -263,13 +262,7 @@ function ParModal({
   const esAuto = fuente !== 'MANUAL'
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">Configurar par</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
-        </div>
-
+    <ModalShell title="Configurar par" onClose={onClose} size="modal-sm">
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-body-form">
 
@@ -283,7 +276,7 @@ function ParModal({
             <div className="input-group">
               <label>Fuente de la tasa</label>
               <select className="input" value={fuente} onChange={e => cambiarFuente(e.target.value as Par['fuente'])}>
-                <option value="EL_TOQUE">El Toque — tasas informales CUP</option>
+                {tocaCup && <option value="EL_TOQUE">El Toque — tasas informales CUP</option>}
                 <option value="FRANKFURTER">Frankfurter — mercado internacional</option>
                 <option value="MANUAL">Manual — ingreso directo</option>
               </select>
@@ -295,15 +288,11 @@ function ParModal({
                   <label>Tasa <span className="required">*</span></label>
                   <FormHelp text={`Unidades de ${par.destino} por cada unidad de ${par.origen}.`} label="Cómo se expresa la tasa" />
                 </div>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  min="0.000001"
-                  value={tasa}
-                  onChange={e => setTasa(e.target.value)}
-                  placeholder="Ej: 531.00"
-                  required
+                <CampoNumero
+                  valor={tasa}
+                  onValor={setTasa}
+                  etiqueta={`Tasa: unidades de ${par.destino} por cada ${par.origen}`}
+                  placeholder="Ej: 531,00"
                 />
               </div>
             ) : (
@@ -329,8 +318,7 @@ function ParModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -362,12 +350,7 @@ function ConsolidacionModal({
   }
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">Moneda de consolidación</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
-        </div>
+    <ModalShell title="Moneda de consolidación" onClose={onClose} size="modal-sm">
         <div className="modal-body modal-body-wide">
           <p className="text-sm-muted mb-4">
             Todos los estados consolidados se expresan en esta moneda (IAS 21).
@@ -391,8 +374,7 @@ function ConsolidacionModal({
             {isPending ? <><span className="spinner spinner-sm" />Cambiando…</> : 'Establecer'}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -459,13 +441,7 @@ function EliminarMonedaModal({
   const sinDatos = uso !== null && uso.total === 0
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-xl" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">Eliminar {moneda.codigo}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
-        </div>
-
+    <ModalShell title={`Eliminar ${moneda.codigo}`} onClose={onClose} size="modal-xl">
         <div className="modal-body modal-body-wide">
           {cargando ? (
             <div className="mon-uso-loading"><span className="spinner spinner-sm" /> Comprobando uso…</div>
@@ -563,8 +539,7 @@ function EliminarMonedaModal({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -576,10 +551,15 @@ interface Props {
   monedas: Moneda[]
   pares:   Par[]
   esAdmin: boolean
+  soloLectura: boolean
 }
 
-export default function MonedasView({ monedas: initMonedas, pares: initPares, esAdmin }: Props) {
+export default function MonedasView({ monedas: initMonedas, pares: initPares, esAdmin, soloLectura }: Props) {
   const router = useRouter()
+  // Excepción del portal: solo-lectura NO modifica nada… salvo las tasas de cambio, que
+  // sí puede actualizar («Actualizar» queda visible para todos). El resto de escritura
+  // (crear/editar moneda, consolidación, configurar par) exige ser admin y no solo-lectura.
+  const puedeEditar = esAdmin && !soloLectura
 
   const [modalKind,     setModalKind]     = useState<ModalKind>('none')
   const [monedaEdit,    setMonedaEdit]    = useState<Moneda | null>(null)
@@ -648,7 +628,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
           <button className="btn btn-secondary" onClick={handleActualizarAuto} disabled={autoCargando}>
             {autoCargando ? <><span className="spinner spinner-sm" /> Actualizando…</> : <><RefreshCw size={15} strokeWidth={2} /> Actualizar</>}
           </button>
-          {esAdmin && (
+          {puedeEditar && (
             <button className="btn btn-primary" onClick={() => { setMonedaEdit(null); setModalKind('moneda') }}>
               <Plus size={16} strokeWidth={2} /> Nueva moneda
             </button>
@@ -662,7 +642,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
         <div className="card card-table">
           <div className="mon-card-header">
             <h2 className="mon-section-title">Monedas activas</h2>
-            {esAdmin && initMonedas.some(m => m.activa) && (
+            {puedeEditar && initMonedas.some(m => m.activa) && (
               <button className="btn btn-secondary btn-sm" onClick={() => setModalKind('consolidacion')}>
                 <Star size={13} strokeWidth={2} /> Consolidación
               </button>
@@ -687,7 +667,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                     </div>
                     <div className="mon-nombre">{m.nombre}</div>
                   </div>
-                  {esAdmin && (
+                  {puedeEditar && (
                     <button
                       className="btn btn-secondary btn-xs"
                       onClick={() => { setMonedaEdit(m); setModalKind('moneda') }}
@@ -725,7 +705,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                     <th className="col-num">Tasa</th>
                     <th>Fuente</th>
                     <th>Actualizada</th>
-                    {esAdmin && <th className="col-actions" />}
+                    {puedeEditar && <th className="col-actions" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -757,7 +737,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
                             </>
                           : '—'}
                       </td>
-                      {esAdmin && (
+                      {puedeEditar && (
                         <td className="col-actions">
                           <button
                             className="btn btn-secondary btn-xs"

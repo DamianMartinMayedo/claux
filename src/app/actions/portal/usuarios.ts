@@ -282,6 +282,26 @@ export async function editarUsuario(formData: FormData): Promise<{
     : []
   if (!empresasValidas) return { ok: false, error: 'Una de las empresas seleccionadas no pertenece a este negocio o está inactiva.' }
 
+  // Guard: el negocio no puede quedarse sin ningún administrador que pueda gestionarlo.
+  // Un admin que pasa a operador, se desactiva o se marca solo-lectura deja de poder
+  // administrar. Si esta edición lo saca de ese estado y no queda ningún otro admin
+  // ACTIVO con escritura, se bloquea. (Editarte a ti mismo ya está vetado arriba, que
+  // hasta ahora era lo único que evitaba dejar la cuenta sin administrador de rebote.)
+  const seguiriaAdministrando = rol === 'admin_empresa' && estado === 'ACTIVO' && !solo_lectura
+  if (!seguiriaAdministrando) {
+    const { count } = await db
+      .from('client_users')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id)
+      .eq('rol', 'admin_empresa')
+      .eq('estado', 'ACTIVO')
+      .eq('solo_lectura', false)
+      .neq('user_id', user_id)
+    if ((count ?? 0) === 0) {
+      return { ok: false, error: 'Debe quedar al menos un administrador activo con permiso de escritura. Asciende o activa a otro usuario antes de cambiar este.' }
+    }
+  }
+
   const { error } = await db
     .from('client_users')
     .update({ nombre, rol, solo_lectura, estado })

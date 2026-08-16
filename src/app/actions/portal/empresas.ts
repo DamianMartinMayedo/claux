@@ -229,6 +229,22 @@ export async function guardarEmpresa(
     ? 'INACTIVO'
     : 'ACTIVO'
 
+  // Guard: el cliente no puede quedarse sin NINGUNA empresa ACTIVO. Toda operación
+  // (ventas, caja, tesorería, productos…) cuelga de una empresa activa y sus selectores
+  // se quedaban vacíos —en silencio— al desactivar la última. Si esta se está
+  // desactivando, tiene que quedar al menos otra ACTIVO.
+  if (estado === 'INACTIVO') {
+    const { count: activasRestantes } = await db
+      .from('empresas')
+      .select('empresa_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id)
+      .eq('estado', 'ACTIVO')
+      .neq('empresa_id', empresa_id_form)
+    if ((activasRestantes ?? 0) === 0) {
+      return { ok: false, error: 'No puedes desactivar tu única empresa activa: el portal necesita al menos una para registrar operaciones.' }
+    }
+  }
+
   const { error } = await db
     .from('empresas')
     .update({ ...campos, estado })

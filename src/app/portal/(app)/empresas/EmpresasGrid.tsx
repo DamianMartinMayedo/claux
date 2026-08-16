@@ -1,14 +1,16 @@
 'use client'
 
-import { toastError, toastLoading } from '@/app/contexts/ToastContext'
+import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { guardarEmpresa, subirLogoEmpresa, type Empresa } from '@/app/actions/portal/empresas'
+import { registrarInteresModulo } from '@/app/actions/portal/soporte'
 import { empresaColorVar } from '@/components/portal/EmpresaTag'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
-import { Briefcase, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus, X } from 'lucide-react'
+import { ArrowRight, Briefcase, Check, Coins, Image as ImageIcon, Mail, MapPin, Pencil, Plus } from 'lucide-react'
 import FormHelp from '@/components/portal/FormHelp'
+import ModalShell from '@/components/portal/ModalShell'
 // Debe coincidir con COLORES_EMPRESA en actions/portal/empresas.ts (fuente de verdad).
 const COLORES = [
   '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
@@ -23,6 +25,7 @@ interface Props {
   monedas:     Moneda[]
   maxEmpresas: number | null
   esAdmin:     boolean
+  soloLectura: boolean
 }
 
 function letrasOcupadas(empresas: Empresa[], excludeId?: string): Set<string> {
@@ -37,8 +40,8 @@ function letrasOcupadas(empresas: Empresa[], excludeId?: string): Set<string> {
 // ── Tarjeta ───────────────────────────────────────────────────────────────────
 
 function EmpresaCard({
-  empresa, onEditar,
-}: { empresa: Empresa; onEditar: (e: Empresa) => void }) {
+  empresa, onEditar, puedeEditar,
+}: { empresa: Empresa; onEditar: (e: Empresa) => void; puedeEditar: boolean }) {
   const inicial  = empresa.nombre.charAt(0).toUpperCase()
   const esActiva = empresa.estado === 'ACTIVO'
   const color    = empresa.color ?? COLORES[0]
@@ -107,12 +110,14 @@ function EmpresaCard({
         </div>
       </div>
 
-      <div className="emp-card-footer">
-        <button className="btn btn-secondary btn-sm flex-1" onClick={() => onEditar(empresa)}>
-          <Pencil size={13} />
-          Editar
-        </button>
-      </div>
+      {puedeEditar && (
+        <div className="emp-card-footer">
+          <button className="btn btn-secondary btn-sm flex-1" onClick={() => onEditar(empresa)}>
+            <Pencil size={13} />
+            Editar
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -198,15 +203,7 @@ function EmpresaModal({
   if (!state.open) return null
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-lg" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">{esEdicion ? 'Editar empresa' : 'Nueva empresa'}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar">
-            <X size={20} />
-          </button>
-        </div>
-
+    <ModalShell title={esEdicion ? 'Editar empresa' : 'Nueva empresa'} onClose={onClose} size="modal-lg">
         <form ref={formRef} onSubmit={handleSubmit}>
           <div className="modal-body modal-body-wide">
             {state.empresa && <input type="hidden" name="empresa_id" value={state.empresa.empresa_id} />}
@@ -236,7 +233,15 @@ function EmpresaModal({
                   —que no toma el default de la columna— y saltaba un error de Postgres sin
                   traducir. Se marca obligatoria, que es lo que siempre fue. */}
               <div className="input-group">
-                <label>Moneda funcional <span className="required">*</span></label>
+                <div className="form-label-with-help">
+                  <label>Moneda funcional <span className="required">*</span></label>
+                  {esEdicion && (
+                    <FormHelp
+                      text="Cuidado: si esta empresa ya tiene operaciones registradas, cambiar su moneda funcional puede descuadrar informes y saldos ya calculados. Cámbiala solo si sabes lo que haces."
+                      label="Qué pasa si cambio la moneda funcional"
+                    />
+                  )}
+                </div>
                 {monedas.length === 0 ? (
                   <div className="prd-almacen-req">
                     <p className="input-hint">
@@ -295,8 +300,7 @@ function EmpresaModal({
                 <label>Letra de facturación</label>
                 <div className="emp-letra-input-row">
                   <input
-                    className="input emp-letra-input"
-                    style={{ borderColor: letraDuplicada ? 'var(--color-error)' : undefined }}
+                    className={`input emp-letra-input${letraDuplicada ? ' is-invalid' : ''}`}
                     maxLength={1}
                     value={letra}
                     onChange={e => setLetra(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
@@ -442,21 +446,38 @@ function EmpresaModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
 // ── Grid principal ────────────────────────────────────────────────────────────
 
-export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin }: Props) {
+export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin, soloLectura }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false, empresa: null })
+  // Empresas no la gobierna un módulo: el candado de escritura es «ser admin y no ser
+  // solo-lectura». Un `usuario` no-admin o un solo-lectura la ve, pero sin botones.
+  const puedeEditar       = esAdmin && !soloLectura
   const limiteAlcanzado   = maxEmpresas !== null && init.length >= maxEmpresas
   // Toda operación cuelga de una empresa y necesita una moneda del cliente; sin
   // ninguna moneda, crear la empresa dejaría documentos cayendo a un 'USD' que el
   // cliente no tiene. Se exige ≥1 moneda antes (mismo criterio que RRHH/tesorería).
   const sinMonedas        = monedas.length === 0
   const bloqueado         = limiteAlcanzado || sinMonedas
+
+  // Interés en el addon multiempresa: se registra en el servidor (deja rastro en
+  // /admin/soporte y avisa a comercial), no un texto muerto. Mismo criterio que el
+  // banner del dashboard: nada de `mailto:`, que no deja constancia de quién pidió qué.
+  const [interesEnviado,   setInteresEnviado]   = useState(false)
+  const [enviandoInteres,  startInteres]        = useTransition()
+  function pedirMultiempresa() {
+    if (enviandoInteres || interesEnviado) return
+    startInteres(async () => {
+      const r = await registrarInteresModulo('multiempresa', 'Multiempresa')
+      if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
+      setInteresEnviado(true)
+      toastSuccess('Recibido. Te contactamos enseguida.')
+    })
+  }
 
   function abrirCrear() {
     if (bloqueado) return
@@ -492,7 +513,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
             )}
           </p>
         </div>
-        {esAdmin && (
+        {puedeEditar && (
           <button
             className="btn btn-primary"
             onClick={abrirCrear}
@@ -507,24 +528,39 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
         )}
       </div>
 
-      {sinMonedas && esAdmin && (
+      {sinMonedas && puedeEditar && (
         <PrerequisitoAviso acciones={[{ label: 'Crear moneda', href: '/portal/monedas' }]}>
           Para crear una empresa necesitas <strong>al menos una moneda</strong> configurada.
         </PrerequisitoAviso>
       )}
 
       {limiteAlcanzado && esAdmin && (
-        <div className="alert alert-warning mb-5">
-          Has alcanzado el límite de <strong>{maxEmpresas}</strong> empresa{maxEmpresas === 1 ? '' : 's'} de tu plan. Actualiza tu suscripción para añadir más.
+        <div className="alert alert-warning mb-5 emp-limite-cta">
+          <span>
+            Has alcanzado el límite de <strong>{maxEmpresas}</strong> empresa{maxEmpresas === 1 ? '' : 's'} de tu plan.
+            Con <strong>Multiempresa</strong> puedes gestionar todas las que necesites.
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={pedirMultiempresa}
+            disabled={enviandoInteres || interesEnviado}
+          >
+            {enviandoInteres
+              ? <><span className="spinner spinner-sm" /> Enviando…</>
+              : interesEnviado
+                ? <><Check size={14} strokeWidth={2.5} /> Te contactamos</>
+                : <>Me interesa <ArrowRight size={14} strokeWidth={2.5} /></>}
+          </button>
         </div>
       )}
 
       <div className="emp-grid">
         {init.map(emp => (
-          <EmpresaCard key={emp.empresa_id} empresa={emp} onEditar={abrirEditar} />
+          <EmpresaCard key={emp.empresa_id} empresa={emp} onEditar={abrirEditar} puedeEditar={puedeEditar} />
         ))}
 
-        {esAdmin && !bloqueado && (
+        {puedeEditar && !bloqueado && (
           <button className="emp-card-add" onClick={abrirCrear}>
             <Plus size={28} strokeWidth={1.5} />
             <span className="text-sm-bold">Nueva empresa</span>

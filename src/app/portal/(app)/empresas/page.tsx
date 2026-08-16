@@ -30,6 +30,7 @@ export default async function EmpresasPage() {
       monedas={(monedas ?? []) as { codigo: string; nombre: string; simbolo: string }[]}
       maxEmpresas={maxEmpresas}
       esAdmin={session.rol === 'admin_empresa'}
+      soloLectura={session.solo_lectura}
     />
   )
 }

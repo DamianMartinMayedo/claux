@@ -11,9 +11,11 @@ import {
 } from '@/app/actions/portal/usuarios'
 import type { Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar, EmpresaTag } from '@/components/portal/EmpresaTag'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import FormHelp from '@/components/portal/FormHelp'
+import ModalShell from '@/components/portal/ModalShell'
 import Tabs from '@/components/Tabs'
-import { Info, Key, Pencil, Plus, User, X } from 'lucide-react'
+import { Info, Key, Pencil, Plus, User } from 'lucide-react'
 
 // Módulos/funcionalidades que el tenant tiene contratados (para repartir por usuario).
 export interface ModuloContratado {
@@ -61,6 +63,7 @@ function UsuarioModal({
   const esEdicion = !!usuario
   const [isPending, startTransition] = useTransition()
   const [rol,       setRol]          = useState<UsuarioPortal['rol']>(usuario?.rol ?? 'usuario')
+  const [soloLectura, setSoloLectura] = useState<boolean>(usuario?.solo_lectura ?? false)
   const [empresasSel, setEmpresasSel] = useState<string[]>(usuario?.empresas ?? [])
 
   // Permisos por módulo. "Todos" = sin filas (acceso a todo lo contratado); es el
@@ -120,13 +123,7 @@ function UsuarioModal({
   }
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-md" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">{esEdicion ? 'Editar usuario' : 'Nuevo usuario'}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar"><X size={20} strokeWidth={2} /></button>
-        </div>
-
+    <ModalShell title={esEdicion ? 'Editar usuario' : 'Nuevo usuario'} onClose={onClose} size="modal-md">
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-body-form">
             {esEdicion && <input type="hidden" name="user_id" value={usuario.user_id} />}
@@ -171,7 +168,8 @@ function UsuarioModal({
                   <label>Permisos de escritura</label>
                   <FormHelp text="Solo lectura: puede ver todo pero no ejecutar acciones." label="Qué implica solo lectura" />
                 </div>
-                <select className="input" name="solo_lectura" defaultValue={usuario?.solo_lectura ? 'true' : 'false'}>
+                <select className="input" name="solo_lectura" value={soloLectura ? 'true' : 'false'}
+                  onChange={e => setSoloLectura(e.target.value === 'true')}>
                   <option value="false">Lectura y escritura</option>
                   <option value="true">Solo lectura</option>
                 </select>
@@ -231,6 +229,17 @@ function UsuarioModal({
                   <span className="checkbox-label">Acceso a todos los módulos contratados</span>
                 </label>
 
+                {/* Con solo-lectura activo, «Ver y editar» no significa nada: el flag es el
+                    interruptor maestro y anula la edición módulo a módulo. Se atenúa la
+                    opción y se avisa, en vez de dejar que el admin crea que da permiso de
+                    editar cuando no lo hace. */}
+                {soloLectura && !todosModulos && modulosContratados.length > 0 && (
+                  <p className="text-xs-muted usr-mod-nota">
+                    Este usuario es de <strong>solo lectura</strong>: verá los módulos marcados pero no podrá
+                    editar ninguno, aunque elijas «Ver y editar».
+                  </p>
+                )}
+
                 {!todosModulos && (
                   modulosContratados.length === 0 ? (
                     <p className="text-sm-muted">El negocio no tiene módulos contratados.</p>
@@ -247,7 +256,8 @@ function UsuarioModal({
                           >
                             <option value="no">Sin acceso</option>
                             <option value="ver">Ver</option>
-                            <option value="editar">Ver y editar</option>
+                            {/* Atenuada con solo-lectura: el flag maestro la anularía igual. */}
+                            <option value="editar" disabled={soloLectura}>Ver y editar</option>
                           </select>
                         </div>
                       ))}
@@ -275,8 +285,7 @@ function UsuarioModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -293,11 +302,7 @@ function PasswordModal({ password, emailEnviado, onClose }: { password: string; 
   }
 
   return (
-    <div className="modal-backdrop open">
-      <div className="modal modal-sm" role="dialog" aria-modal>
-        <div className="modal-header">
-          <h2 className="modal-title">Contraseña temporal</h2>
-        </div>
+    <ModalShell title="Contraseña temporal" onClose={onClose} size="modal-sm">
         <div className="modal-body modal-body-form">
           <p className="text-sm-muted">
             Comparte esta contraseña con el usuario de forma segura. No se mostrará de nuevo.
@@ -317,8 +322,7 @@ function PasswordModal({ password, emailEnviado, onClose }: { password: string; 
         <div className="modal-footer">
           <button className="btn btn-primary" onClick={onClose}>Entendido</button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -342,6 +346,9 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
   const [pwdModal,   setPwdModal]  = useState<{ password: string; emailEnviado?: boolean } | null>(null)
   const [resetPending, startResetTrans] = useTransition()
   const [resetTarget, setResetTarget]   = useState<string | null>(null)
+  // Resetear invalida la contraseña actual del compañero al instante: se confirma antes,
+  // que es una acción destructiva de la que no se avisa a la otra persona.
+  const [confirmReset, setConfirmReset] = useState<UsuarioPortal | null>(null)
 
   function abrirNuevo() { setEditTarget(null); setModalOpen(true) }
   function abrirEditar(u: UsuarioPortal) { setEditTarget(u); setModalOpen(true) }
@@ -464,7 +471,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                             </button>
                             <button
                               className="btn btn-secondary btn-xs"
-                              onClick={() => handleReset(u.user_id)}
+                              onClick={() => setConfirmReset(u)}
                               disabled={u.user_id === sessionUserId || (resetPending && resetTarget === u.user_id)}
                               title="Resetear contraseña"
                             >
@@ -548,6 +555,16 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
       )}
       {pwdModal && (
         <PasswordModal password={pwdModal.password} emailEnviado={pwdModal.emailEnviado} onClose={() => { setPwdModal(null); router.refresh() }} />
+      )}
+      {confirmReset && (
+        <ConfirmDialog
+          title="Resetear contraseña"
+          body={<>Se generará una contraseña temporal nueva para <strong>{confirmReset.nombre || confirmReset.email}</strong> y la actual dejará de funcionar. Tendrás que hacérsela llegar tú.</>}
+          confirmLabel="Resetear contraseña"
+          danger
+          onConfirm={() => { const u = confirmReset; setConfirmReset(null); handleReset(u.user_id) }}
+          onCancel={() => setConfirmReset(null)}
+        />
       )}
     </div>
   )

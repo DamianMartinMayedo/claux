@@ -22,6 +22,7 @@ export default async function MonedasPage() {
       monedas={monedas}
       pares={pares}
       esAdmin={session.rol === 'admin_empresa'}
+      soloLectura={session.solo_lectura}
     />
   )
 }

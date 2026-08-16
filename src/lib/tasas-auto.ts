@@ -148,6 +148,9 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
         const res = await fetch('https://tasas.eltoque.com/v1/trmi', {
           headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
           cache:   'no-store',
+          // Corta el fetch a los 8 s: con la conexión de Cuba, sin límite se cuelga y el
+          // cron/la actualización manual no termina nunca.
+          signal:  AbortSignal.timeout(8000),
         })
         if (!res.ok) {
           errores.push(errorFuente('El Toque', res.status))
@@ -208,7 +211,7 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
       const symbols = grupo.map(p => p.destino).join(',')
       try {
         const url = `https://api.frankfurter.app/latest?base=${base}&symbols=${symbols}`
-        const res = await fetch(url, { cache: 'no-store' })
+        const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
         if (!res.ok) { errores.push(errorFuente('Frankfurter', res.status)); continue }
         const json = await res.json() as { rates?: Record<string, number> }
         if (!json.rates) { errores.push('Frankfurter devolvió una respuesta que no se entiende.'); continue }
