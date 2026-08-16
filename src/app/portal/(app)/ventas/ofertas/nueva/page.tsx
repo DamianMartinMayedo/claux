@@ -1,12 +1,16 @@
-import { notFound }                 from 'next/navigation'
-import { requireModulo }            from '@/app/actions/portal/auth'
+import { notFound, redirect }       from 'next/navigation'
+import { requireAccesoModulo }      from '@/app/actions/portal/auth'
 import { obtenerContextoDocumento } from '@/app/actions/portal/ventas'
 import NuevaOfertaPage              from './NuevaOfertaPage'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Page() {
-  await requireModulo('base')
+  // Crear es escritura: quien solo consulta no tiene nada que hacer en esta ruta ni
+  // por URL directa. El candado de servidor de las acciones ya lo pararía al guardar;
+  // esto le ahorra el formulario entero.
+  const { puedeEditar } = await requireAccesoModulo('base')
+  if (!puedeEditar) redirect('/portal/ventas')
   const contexto = await obtenerContextoDocumento()
   if (!contexto) notFound()
   return <NuevaOfertaPage contexto={contexto} />

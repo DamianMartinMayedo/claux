@@ -37,11 +37,12 @@ import {
 import { hoyEnTz } from '@/lib/fecha-tz'
 
 interface Props {
-  data:    FacturaDetalleData
-  cobros:  CobrosFacturaData | null
+  data:         FacturaDetalleData
+  cobros:       CobrosFacturaData | null
+  tienePermiso: boolean
 }
 
-export default function FacturaDetalle({ data, cobros }: Props) {
+export default function FacturaDetalle({ data, cobros, tienePermiso }: Props) {
   const router = useRouter()
   const [isPending,   startTransition] = useTransition()
   const [duplicating, setDuplicating] = useState(false)
@@ -64,7 +65,9 @@ export default function FacturaDetalle({ data, cobros }: Props) {
 
   const { factura, empresa, cliente, lineas, ajustes, oferta } = data
 
-  const puedeEditar  = factura.estado === 'BORRADOR'
+  // Permiso Y estado: `tienePermiso` cubre solo_lectura y falta de módulo; el estado
+  // acota a los momentos en que editar/emitir tiene sentido.
+  const puedeEditar  = tienePermiso && factura.estado === 'BORRADOR'
   const transiciones = TRANSICIONES_FACTURA[factura.estado] ?? []
 
   // Descarga directa: se genera en cliente con los datos ya cargados, sin abrir
@@ -216,11 +219,14 @@ export default function FacturaDetalle({ data, cobros }: Props) {
               borrador, y estaba escondida a dos clics detrás de un icono sin etiqueta.
               Sigue pasando por su ConfirmDialog (explica el número fiscal): «menos pasos»
               es llegar antes a Emitir, no saltarse el borrador. */}
-          {factura.estado === 'BORRADOR' && (
+          {tienePermiso && factura.estado === 'BORRADOR' && (
             <button className="btn btn-primary" onClick={() => cambiarEstado('EMITIDA')} disabled={isPending}>
               <FileCheck size={14} strokeWidth={2} /> Emitir
             </button>
           )}
+          {/* El menú «⋯» solo tiene acciones de escritura (Duplicar y cambios de estado):
+              para quien solo consulta no ofrece nada, así que se oculta entero. */}
+          {tienePermiso && (
           <div className="ven-dropdown-wrap" ref={menuRef}>
             <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)} aria-label="Más acciones">
               <MoreHorizontal size={16} />
@@ -255,6 +261,7 @@ export default function FacturaDetalle({ data, cobros }: Props) {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -365,7 +372,7 @@ export default function FacturaDetalle({ data, cobros }: Props) {
 
       {/* ── Cobros (solo facturas emitidas/cobradas) ── */}
       {cobros && (factura.estado === 'EMITIDA' || factura.estado === 'COBRADA') && (
-        <CobrosFacturaCard cobros={cobros} numero={factura.numero} />
+        <CobrosFacturaCard cobros={cobros} numero={factura.numero} tienePermiso={tienePermiso} />
       )}
 
       {/* Lo que el cliente va a leer en el PDF: se enseña aquí para que el dueño lo vea
@@ -419,14 +426,14 @@ function BadgeFactura({ estado }: { estado: EstadoFactura }) {
 
 // ── Panel de cobros de la factura ───────────────────────────────────────────────
 
-function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; numero: string }) {
+function CobrosFacturaCard({ cobros, numero, tienePermiso }: { cobros: CobrosFacturaData; numero: string; tienePermiso: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
   const [anularLiq, setAnularLiq] = useState<CobrosFacturaData['liquidaciones'][number] | null>(null)
 
   const [liq, setLiq] = useState<LiquidarState | null>(null)
-  const puedeCobrar = cobros.estado === 'EMITIDA' && cobros.saldo > 0.005
+  const puedeCobrar = tienePermiso && cobros.estado === 'EMITIDA' && cobros.saldo > 0.005
 
   // La caja puede ser de otra empresa (está permitido): se avisa, no se filtra.
   const cuentasConEmpresa = cobros.cuentas.map(c => ({
@@ -486,8 +493,10 @@ function CobrosFacturaCard({ cobros, numero }: { cobros: CobrosFacturaData; nume
               <span className="text-sm-muted tes-nowrap">{fmtFechaLargaEs(l.fecha)}</span>
               <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
               <span className="gc-liq-monto">{formatearMoneda(l.monto, cobros.moneda)}</span>
-              <button className="ter-action-btn ter-action-danger" title="Anular cobro"
-                onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+              {tienePermiso && (
+                <button className="ter-action-btn ter-action-danger" title="Anular cobro"
+                  onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
+              )}
             </div>
           ))
         )}

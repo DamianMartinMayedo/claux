@@ -188,7 +188,7 @@ function PagoModal({
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function CuentasView({ data }: { data: CuentasPageData }) {
+export default function CuentasView({ data, puedeEditar }: { data: CuentasPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const { colorOf, nombreOf } = useEmpresas()
   const esCobro = data.modo === 'COBRAR'
@@ -411,13 +411,17 @@ export default function CuentasView({ data }: { data: CuentasPageData }) {
                     <td data-label="Total" className="col-num tes-monto-cell">{formatMonto(d.monto)} {d.moneda}</td>
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
                     <td className="col-actions">
-                      <RowActions>
-                        <button className="row-actions-item"
-                          onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /> {esCobro ? 'Cobrar' : 'Pagar'}</button>
-                        {d.ref_url && d.doc_tipo === 'FACTURA' && (
-                          <Link className="row-actions-item" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /> Ver factura</Link>
-                        )}
-                      </RowActions>
+                      {(puedeEditar || (d.ref_url && d.doc_tipo === 'FACTURA')) && (
+                        <RowActions>
+                          {puedeEditar && (
+                            <button className="row-actions-item"
+                              onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /> {esCobro ? 'Cobrar' : 'Pagar'}</button>
+                          )}
+                          {d.ref_url && d.doc_tipo === 'FACTURA' && (
+                            <Link className="row-actions-item" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /> Ver factura</Link>
+                          )}
+                        </RowActions>
+                      )}
                     </td>
                   </tr>
                 ))}

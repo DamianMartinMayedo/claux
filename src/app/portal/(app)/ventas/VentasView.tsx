@@ -49,7 +49,7 @@ import AvisoTope from '@/components/portal/AvisoTope'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
 import { filtroExport, resumenDe, opcionesTercero, type Filtro } from '@/lib/filtros'
 
-interface Props { data: VentasResumenData; initialTab?: Tab }
+interface Props { data: VentasResumenData; initialTab?: Tab; puedeEditar: boolean }
 
 type Tab = 'ofertas' | 'facturas'
 
@@ -66,7 +66,7 @@ const FACTURA_ELIMINABLE: EstadoFactura[] = ['BORRADOR']
 
 type Confirm = { title: string; body?: string; confirmLabel: string; danger: boolean; run: () => void }
 
-export default function VentasView({ data, initialTab }: Props) {
+export default function VentasView({ data, initialTab, puedeEditar }: Props) {
   const router = useRouter()
   const [tab,          setTab]          = useState<Tab>(initialTab ?? 'ofertas')
 
@@ -232,7 +232,7 @@ export default function VentasView({ data, initialTab }: Props) {
           filtro={filtroExport(declaracion, { desde: data.rango.desde, hasta: data.rango.hasta, q: data.q })}
           resumen={resumenDe(declaracion)}
         />
-        {tab === 'ofertas' ? (
+        {puedeEditar && (tab === 'ofertas' ? (
           sinSetupEmpresas || sinLetra ? (
             <button
               className="btn btn-primary"
@@ -260,7 +260,7 @@ export default function VentasView({ data, initialTab }: Props) {
               <Plus size={18} strokeWidth={2} /> Nueva factura
             </Link>
           )
-        )}
+        ))}
         </div>
       </div>
 
@@ -342,6 +342,7 @@ export default function VentasView({ data, initialTab }: Props) {
               clienteNombres={data.cliente_nombres}
               mostrarEmpresa={data.empresas.length > 1}
               sel={selOfertas}
+              puedeEditar={puedeEditar}
             />
           )
         ) : (
@@ -359,6 +360,7 @@ export default function VentasView({ data, initialTab }: Props) {
               clienteNombres={data.cliente_nombres}
               mostrarEmpresa={data.empresas.length > 1}
               sel={selFacturas}
+              puedeEditar={puedeEditar}
               onEmitir={f => pedirConfirmacion({
                 title: `¿Emitir ${etiquetaNumero(f.numero)}?`,
                 body: 'Recibirá su número fiscal definitivo (el siguiente de la serie) y ya no podrás editarla.',
@@ -381,6 +383,7 @@ export default function VentasView({ data, initialTab }: Props) {
       </div>
 
       {/* ── Barra flotante de acciones en lote ── */}
+      {puedeEditar && (
       <BulkBar count={selData.sel.count} onClear={selData.sel.clear}>
         {tab === 'ofertas'
           ? <AccionesOfertas
@@ -393,6 +396,7 @@ export default function VentasView({ data, initialTab }: Props) {
               ejecutar={fn => ejecutar(fn, selFacturas)} pedirConfirmacion={pedirConfirmacion} />
         }
       </BulkBar>
+      )}
 
       {confirm && (
         <ConfirmDialog
@@ -591,13 +595,14 @@ type SelApi = ReturnType<typeof useRowSelection>
 // ── Tabla de ofertas ──────────────────────────────────────────────────────────
 
 function TablaOfertas({
-  ofertas, empresaNombres, clienteNombres, mostrarEmpresa, sel,
+  ofertas, empresaNombres, clienteNombres, mostrarEmpresa, sel, puedeEditar,
 }: {
   ofertas: Oferta[]
   empresaNombres: Record<string, string>
   clienteNombres: Record<string, string>
   mostrarEmpresa: boolean
   sel: SelApi
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
@@ -608,9 +613,11 @@ function TablaOfertas({
       <table className="table">
         <thead>
           <tr>
-            <th className="col-check">
-              <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-            </th>
+            {puedeEditar && (
+              <th className="col-check">
+                <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+              </th>
+            )}
             <th>Número</th>
             <th>Fecha</th>
             {mostrarEmpresa && <th>Empresa</th>}
@@ -627,12 +634,14 @@ function TablaOfertas({
               style={mostrarEmpresa ? empresaColorVar(colorOf(o.empresa_id)) : undefined}
               onClick={() => router.push(`/portal/ventas/ofertas/${o.oferta_id}`)}
             >
-              <td className="col-check" onClick={e => e.stopPropagation()}>
-                <input type="checkbox" className="row-check"
-                  checked={sel.isSelected(o.oferta_id)}
-                  onChange={() => sel.toggle(o.oferta_id)}
-                  aria-label={`Seleccionar ${o.numero}`} />
-              </td>
+              {puedeEditar && (
+                <td className="col-check" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" className="row-check"
+                    checked={sel.isSelected(o.oferta_id)}
+                    onChange={() => sel.toggle(o.oferta_id)}
+                    aria-label={`Seleccionar ${o.numero}`} />
+                </td>
+              )}
               <td data-label="Número">
                 <Link href={`/portal/ventas/ofertas/${o.oferta_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {o.numero}
@@ -667,7 +676,7 @@ function TablaOfertas({
 // ── Tabla de facturas ─────────────────────────────────────────────────────────
 
 function TablaFacturas({
-  facturas, empresaNombres, clienteNombres, mostrarEmpresa, sel, onEmitir,
+  facturas, empresaNombres, clienteNombres, mostrarEmpresa, sel, onEmitir, puedeEditar,
 }: {
   facturas: FacturaListado[]
   empresaNombres: Record<string, string>
@@ -677,6 +686,7 @@ function TablaFacturas({
   /** Emitir desde la fila. Antes solo existía en lote: para emitir UNA factura había que
    *  seleccionarla o entrar en su ficha, que es el camino más largo al gesto más común. */
   onEmitir: (f: FacturaListado) => void
+  puedeEditar: boolean
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
@@ -687,9 +697,11 @@ function TablaFacturas({
       <table className="table">
         <thead>
           <tr>
-            <th className="col-check">
-              <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-            </th>
+            {puedeEditar && (
+              <th className="col-check">
+                <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+              </th>
+            )}
             <th>Número</th>
             <th>Fecha</th>
             {mostrarEmpresa && <th>Empresa</th>}
@@ -698,7 +710,7 @@ function TablaFacturas({
             <th>Estado</th>
             <th className="col-num">Total</th>
             <th className="col-num">Pendiente</th>
-            <th className="col-actions"></th>
+            {puedeEditar && <th className="col-actions"></th>}
           </tr>
         </thead>
         <tbody>
@@ -709,12 +721,14 @@ function TablaFacturas({
               style={mostrarEmpresa ? empresaColorVar(colorOf(f.empresa_id)) : undefined}
               onClick={() => router.push(`/portal/ventas/facturas/${f.factura_id}`)}
             >
+              {puedeEditar && (
               <td className="col-check" onClick={e => e.stopPropagation()}>
                 <input type="checkbox" className="row-check"
                   checked={sel.isSelected(f.factura_id)}
                   onChange={() => sel.toggle(f.factura_id)}
                   aria-label={`Seleccionar ${etiquetaNumero(f.numero)}`} />
               </td>
+              )}
               <td data-label="Número">
                 <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ven-link-numero" onClick={(e) => e.stopPropagation()}>
                   {etiquetaNumero(f.numero)}
@@ -756,19 +770,21 @@ function TablaFacturas({
               </td>
               {/* Una sola acción → icono directo, sin menú «⋯» (regla de UI §3). Solo en
                   BORRADOR: en cualquier otro estado la fila no tiene nada que ofrecer. */}
-              <td className="col-actions" onClick={e => e.stopPropagation()}>
-                {f.estado === 'BORRADOR' && !f.archivado && (
-                  <button
-                    type="button"
-                    className="ter-action-btn"
-                    onClick={() => onEmitir(f)}
-                    aria-label={`Emitir ${etiquetaNumero(f.numero)}`}
-                    title="Emitir"
-                  >
-                    <FileCheck size={14} strokeWidth={2} />
-                  </button>
-                )}
-              </td>
+              {puedeEditar && (
+                <td className="col-actions" onClick={e => e.stopPropagation()}>
+                  {f.estado === 'BORRADOR' && !f.archivado && (
+                    <button
+                      type="button"
+                      className="ter-action-btn"
+                      onClick={() => onEmitir(f)}
+                      aria-label={`Emitir ${etiquetaNumero(f.numero)}`}
+                      title="Emitir"
+                    >
+                      <FileCheck size={14} strokeWidth={2} />
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

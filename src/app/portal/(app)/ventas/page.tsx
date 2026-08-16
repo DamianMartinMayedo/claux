@@ -1,5 +1,5 @@
 import { notFound }            from 'next/navigation'
-import { requireModulo }        from '@/app/actions/portal/auth'
+import { requireAccesoModulo }  from '@/app/actions/portal/auth'
 import { obtenerVentasResumen } from '@/app/actions/portal/ventas'
 import { TOPE_VER_MAS }        from '@/lib/listados'
 import { filtrosDeUrl }        from '@/lib/filtros'
@@ -12,7 +12,7 @@ export default async function VentasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireModulo('base')
+  const { puedeEditar } = await requireAccesoModulo('base')
   // Pestaña, rango y búsqueda viajan en la URL: volver desde el detalle de una factura, o
   // refrescar, conserva lo que el dueño estaba mirando en vez de saltar al estado inicial.
   // El rango se aplica EN LA QUERY (`obtenerVentasResumen`), no filtrando en el cliente.
@@ -41,5 +41,5 @@ export default async function VentasPage({
     archivadas: archivadas === '1',
   })
   if (!data) notFound()
-  return <VentasView data={data} initialTab={t === 'facturas' ? 'facturas' : 'ofertas'} />
+  return <VentasView data={data} initialTab={t === 'facturas' ? 'facturas' : 'ofertas'} puedeEditar={puedeEditar} />
 }

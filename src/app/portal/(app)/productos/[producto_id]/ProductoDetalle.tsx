@@ -76,12 +76,13 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
 // reparto. Vacío = «este almacén se rige por el global», no «mínimo cero».
 
 function FilaAlmacen({
-  fila, unidad, minimoGlobal, producto_id,
+  fila, unidad, minimoGlobal, producto_id, puedeEditar,
 }: {
   fila: ProductoDetalleData['stock_por_almacen'][number]
   unidad: string
   minimoGlobal: number
   producto_id: string
+  puedeEditar: boolean
 }) {
   const [editando, setEditando] = useState(false)
   const [texto,    setTexto]    = useState(fila.minimo != null ? textoNumeroEs(fila.minimo) : '')
@@ -127,7 +128,7 @@ function FilaAlmacen({
             Cancelar
           </button>
         </span>
-      ) : (
+      ) : puedeEditar ? (
         <button type="button" className="det-stock-alm-min-btn" onClick={() => setEditando(true)}
           aria-label={`Editar el stock mínimo en ${fila.nombre}`}>
           {fila.minimo != null
@@ -135,6 +136,13 @@ function FilaAlmacen({
             : <span className="text-faint">Mín. general</span>}
           <Pencil size={12} strokeWidth={2} />
         </button>
+      ) : (
+        // Sin permiso de edición: el mínimo sigue siendo información, pero no se toca.
+        <span className="det-stock-alm-min">
+          {fila.minimo != null
+            ? <span className="text-xs-muted">Mín. {fila.minimo.toLocaleString('es-ES')}</span>
+            : <span className="text-faint">Mín. general</span>}
+        </span>
       )}
     </div>
   )
@@ -142,7 +150,7 @@ function FilaAlmacen({
 
 // ── Tab: Información ──────────────────────────────────────────────────────────
 
-function TabInfo({ data }: { data: ProductoDetalleData }) {
+function TabInfo({ data, puedeEditar }: { data: ProductoDetalleData; puedeEditar: boolean }) {
   const { producto, categoria, proveedor, stock_por_almacen } = data
   const esServicio = producto.tipo === 'SERVICIO'
   const stockBajo  = producto.stock_actual <= producto.stock_minimo && producto.stock_minimo > 0
@@ -209,7 +217,8 @@ function TabInfo({ data }: { data: ProductoDetalleData }) {
             <div className="det-stock-almacenes">
               {stock_por_almacen.map(s => (
                 <FilaAlmacen key={s.almacen_id} fila={s} unidad={producto.unidad}
-                  minimoGlobal={producto.stock_minimo} producto_id={producto.producto_id} />
+                  minimoGlobal={producto.stock_minimo} producto_id={producto.producto_id}
+                  puedeEditar={puedeEditar} />
               ))}
             </div>
           ) : (
@@ -570,7 +579,7 @@ function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
 
 type TabId = 'info' | 'precios' | 'contratos' | 'movimientos' | 'historial'
 
-export default function ProductoDetalle({ data: initialData }: { data: ProductoDetalleData }) {
+export default function ProductoDetalle({ data: initialData, puedeEditar }: { data: ProductoDetalleData; puedeEditar: boolean }) {
   const [data,        setData]        = useState(initialData)
   const [tab,         setTab]         = useState<TabId>('info')
   const [showEdit,    setShowEdit]    = useState(false)
@@ -654,26 +663,28 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
           </div>
         </div>
 
-        {/* Acciones */}
-        <div className="det-actions">
-          {inv && !esServicio && producto.estado === 'ACTIVO' && (
-            <button onClick={() => setShowStock(true)} className="btn btn-primary">
-              <Layers size={14} strokeWidth={2} /> Ajustar stock
+        {/* Acciones (solo con permiso de edición) */}
+        {puedeEditar && (
+          <div className="det-actions">
+            {inv && !esServicio && producto.estado === 'ACTIVO' && (
+              <button onClick={() => setShowStock(true)} className="btn btn-primary">
+                <Layers size={14} strokeWidth={2} /> Ajustar stock
+              </button>
+            )}
+            <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
+              <Pencil size={14} strokeWidth={2} /> Editar
             </button>
-          )}
-          <button onClick={() => setShowEdit(true)} className="btn btn-secondary">
-            <Pencil size={14} strokeWidth={2} /> Editar
-          </button>
-          <RowActions>
-            <button
-              className={`row-actions-item${producto.estado === 'ACTIVO' ? ' row-actions-item-danger' : ''}`}
-              onClick={toggleEstado}
-              disabled={pending}
-            >
-              {producto.estado === 'ACTIVO' ? <><Archive size={15} strokeWidth={2} /> Archivar</> : <><RotateCcw size={15} strokeWidth={2} /> Restaurar</>}
-            </button>
-          </RowActions>
-        </div>
+            <RowActions>
+              <button
+                className={`row-actions-item${producto.estado === 'ACTIVO' ? ' row-actions-item-danger' : ''}`}
+                onClick={toggleEstado}
+                disabled={pending}
+              >
+                {producto.estado === 'ACTIVO' ? <><Archive size={15} strokeWidth={2} /> Archivar</> : <><RotateCcw size={15} strokeWidth={2} /> Restaurar</>}
+              </button>
+            </RowActions>
+          </div>
+        )}
       </div>
 
       {/* Status message */}
@@ -683,7 +694,7 @@ export default function ProductoDetalle({ data: initialData }: { data: ProductoD
 
 
       {/* Contenido del tab */}
-      {tab === 'info'        && <TabInfo     data={data} />}
+      {tab === 'info'        && <TabInfo     data={data} puedeEditar={puedeEditar} />}
       {tab === 'precios'     && <TabPrecios  data={data} />}
       {tab === 'contratos'   && <TabContratos data={data} />}
       {tab === 'movimientos' && <TabMovimientos data={data} />}

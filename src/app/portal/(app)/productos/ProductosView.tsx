@@ -204,7 +204,7 @@ const PERIODICIDAD_LABEL: Record<string, string> = {
   MENSUAL: 'Mensual', TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
 }
 
-export default function ProductosView({ data }: { data: ProductosPageData }) {
+export default function ProductosView({ data, puedeEditar }: { data: ProductosPageData; puedeEditar: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const ruta         = usePathname()
@@ -545,10 +545,10 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
               ]}
             />
           )}
-          {tab === 'productos'
+          {puedeEditar && (tab === 'productos'
             ? <button className="btn btn-primary" onClick={openCreate}><Plus size={14} strokeWidth={2.5} /> Nuevo</button>
             : <button className="btn btn-primary" onClick={openCreateCat}><Plus size={14} strokeWidth={2.5} /> Nueva categoría</button>
-          }
+          )}
         </div>
       </div>
 
@@ -610,9 +610,11 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th className="col-check">
-                        <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
-                      </th>
+                      {puedeEditar && (
+                        <th className="col-check">
+                          <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
+                        </th>
+                      )}
                       <th>Nombre</th>
                       <th>Código</th>
                       <th>Categoría</th>
@@ -631,12 +633,14 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           onClick={() => router.push(`${basePath}/${p.producto_id}`)}
                         >
                           {/* Selección */}
-                          <td className="col-check" onClick={e => e.stopPropagation()}>
-                            <input type="checkbox" className="row-check"
-                              checked={sel.isSelected(p.producto_id)}
-                              onChange={() => sel.toggle(p.producto_id)}
-                              aria-label={`Seleccionar ${p.nombre}`} />
-                          </td>
+                          {puedeEditar && (
+                            <td className="col-check" onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" className="row-check"
+                                checked={sel.isSelected(p.producto_id)}
+                                onChange={() => sel.toggle(p.producto_id)}
+                                aria-label={`Seleccionar ${p.nombre}`} />
+                            </td>
+                          )}
                           {/* Nombre */}
                           <td data-label="Nombre">
                             <Link
@@ -714,7 +718,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           <td className="col-actions">
                             <RowActions>
                               <button className="row-actions-item" onClick={() => router.push(`${basePath}/${p.producto_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-                              {p.estado === 'ACTIVO' ? (
+                              {puedeEditar && (p.estado === 'ACTIVO' ? (
                                 <>
                                   {esProducto && (
                                     <button className="row-actions-item" onClick={() => setStockProducto(p)}>
@@ -740,7 +744,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                                     <Trash2 size={15} strokeWidth={2} /> Eliminar
                                   </button>
                                 </>
-                              )}
+                              ))}
                             </RowActions>
                           </td>
                         </tr>
@@ -753,7 +757,8 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
             <TablePagination {...prodPag} label={sustantivo} />
           </div>
 
-          {/* Barra de acciones en lote */}
+          {/* Barra de acciones en lote (solo con permiso de edición) */}
+          {puedeEditar && (
           <BulkBar count={sel.count} onClear={sel.clear}>
             {verArchivados ? (
               <>
@@ -775,6 +780,7 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
               </button>
             )}
           </BulkBar>
+          )}
         </>
       )}
 
@@ -831,18 +837,20 @@ export default function ProductosView({ data }: { data: ProductosPageData }) {
                           </span>
                         </td>
                         <td className="col-actions">
-                          <RowActions>
-                            {c.estado === 'ACTIVO' ? (
-                              <>
-                                <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
-                                <button className="row-actions-item row-actions-item-danger"
-                                  onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
-                              </>
-                            ) : (
-                              <button className="row-actions-item"
-                                onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
-                            )}
-                          </RowActions>
+                          {puedeEditar && (
+                            <RowActions>
+                              {c.estado === 'ACTIVO' ? (
+                                <>
+                                  <button className="row-actions-item" onClick={() => openEditCat(c)}><Pencil size={15} strokeWidth={2} /> Editar</button>
+                                  <button className="row-actions-item row-actions-item-danger"
+                                    onClick={() => setConfirmCat(c)} disabled={isPending}><Archive size={15} strokeWidth={2} /> Archivar</button>
+                                </>
+                              ) : (
+                                <button className="row-actions-item"
+                                  onClick={() => handleRestaurarCat(c)} disabled={isPending}><RotateCcw size={15} strokeWidth={2} /> Restaurar</button>
+                              )}
+                            </RowActions>
+                          )}
                         </td>
                       </tr>
                     )

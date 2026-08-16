@@ -25,10 +25,11 @@ import {
 } from '../../_ventas-helpers'
 
 interface Props {
-  data:    OfertaDetalleData
+  data:         OfertaDetalleData
+  tienePermiso: boolean
 }
 
-export default function OfertaDetalle({ data }: Props) {
+export default function OfertaDetalle({ data, tienePermiso }: Props) {
   const router = useRouter()
   const [isPending,    startTransition] = useTransition()
   const [duplicating,  setDuplicating] = useState(false)
@@ -51,7 +52,9 @@ export default function OfertaDetalle({ data }: Props) {
 
   const { oferta, empresa, cliente, lineas, ajustes, factura } = data
 
-  const puedeEditar = oferta.estado === 'BORRADOR' || oferta.estado === 'ENVIADA'
+  // Permiso Y estado: sin permiso de escritura no se edita nada; con permiso, solo en los
+  // estados donde editar tiene sentido. `tienePermiso` cubre solo_lectura y falta de módulo.
+  const puedeEditar = tienePermiso && (oferta.estado === 'BORRADOR' || oferta.estado === 'ENVIADA')
   const transiciones = TRANSICIONES_OFERTA[oferta.estado] ?? []
 
   // Descarga directa: se genera en cliente con los datos ya cargados, sin abrir
@@ -159,6 +162,9 @@ export default function OfertaDetalle({ data }: Props) {
           <button className="btn btn-secondary" onClick={handleDescargarPdf} disabled={descargandoPdf}>
             <Download size={14} strokeWidth={2} /> {descargandoPdf ? 'Generando…' : 'Descargar PDF'}
           </button>
+          {/* El menú «⋯» solo tiene acciones de escritura (Duplicar y cambios de estado):
+              para quien solo consulta no ofrece nada, así que se oculta entero. */}
+          {tienePermiso && (
           <div className="ven-dropdown-wrap" ref={menuRef}>
             <button className="btn btn-secondary" onClick={() => setMenuOpen(v => !v)}>
               <MoreHorizontal size={16} />
@@ -189,6 +195,7 @@ export default function OfertaDetalle({ data }: Props) {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
