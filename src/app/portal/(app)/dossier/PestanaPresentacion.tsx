@@ -37,7 +37,7 @@ import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 export default function PestanaPresentacion({
   dossier, tieneBase, gaveta, aperturas, ultimaApertura, tieneEn, enDesactualizado, onCambio,
-  puedeEditar = true,
+  onIrANumeros, puedeEditar = true,
 }: {
   dossier: DossierBasico
   tieneBase: boolean
@@ -48,6 +48,7 @@ export default function PestanaPresentacion({
   tieneEn: boolean
   enDesactualizado: boolean
   onCambio?: () => void
+  onIrANumeros?: () => void
   /** Solo-ver: puede copiar/ver/descargar el enlace, pero no publicar, despublicar,
    *  cambiar el enlace ni regenerar la traducción. */
   puedeEditar?: boolean
@@ -66,7 +67,7 @@ export default function PestanaPresentacion({
   // Snapshot desfasado: cambió moneda/empresa/período tras congelar. Publicar así
   // enseñaría importes viejos al inversor; y si ya está publicado, el enlace en vivo
   // ya los muestra. El servidor bloquea publicar; aquí lo avisamos y lo deshabilitamos.
-  const desfasado = dossier.snapshot_stale && !!dossier.snapshot_at
+  const desfasado = dossier.frescura.necesitaActualizacion && !!dossier.snapshot_at
   // En el navegador siempre hay origin; el fallback es solo para el render de servidor.
   const url = dossier.token
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/d/${dossier.token}`
@@ -162,11 +163,16 @@ export default function PestanaPresentacion({
           <DossierDesfase
             dossierId={dossier.dossier_id}
             tieneBase={tieneBase}
+            revisarPrimero={dossier.frescura.motivo === 'ANTIGUEDAD'}
+            onIrANumeros={onIrANumeros}
             onActualizado={onCambio}
             puedeEditar={puedeEditar}
             mensaje={
               <>
-                <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período.
+                <strong>{dossier.frescura.motivo === 'ANTIGUEDAD' ? 'Tu dossier necesita una revisión.' : 'Tus números están desfasados.'}</strong>{' '}
+                {dossier.frescura.motivo === 'ANTIGUEDAD'
+                  ? `Lleva ${dossier.frescura.diasDesdeSnapshot ?? 0} días sin actualizarse.`
+                  : 'Cambiaste la moneda, la empresa o el período.'}{' '}
                 {publicado
                   ? ' El enlace en vivo sigue mostrando el snapshot anterior.'
                   : ' No podrás publicar hasta actualizarlos.'}

@@ -8,6 +8,7 @@ import { optimizarImagen } from '@/lib/imagen/optimizar'
 import { getPortalSession, puedeEditarModulo } from './auth'
 import { obtenerEmpresas } from './empresas'
 import { construirSnapshotDesdeBase, type LineaDesglose } from '@/lib/dossier/base'
+import { frescuraDossier, type FrescuraDossier } from '@/lib/dossier/frescura'
 import { esRolPL, type CategoriaPL, type RolPL as _RolPL } from '@/lib/pl/estado'
 import { construirConversor } from '@/lib/tasas'
 import { fusionarSerie, resolverFusion, type FilaSerie, type PlanFusion } from '@/lib/dossier/snapshot'
@@ -47,6 +48,7 @@ export interface DossierBasico {
   // moneda/empresa/período definen el snapshot; si cambian tras congelar, la serie
   // queda desfasada (importes en la moneda vieja, o de otra empresa) hasta reescribirla.
   snapshot_stale:          boolean
+  frescura:                FrescuraDossier
   token:                   string | null
   /** Categorías contables que este dossier no quiere clasificar aquí. No afecta a los números. */
   categorias_excluidas:    string[]
@@ -71,6 +73,7 @@ export interface ResumenDossier {
   periodo_hasta:       string | null
   snapshot_at:         string | null
   snapshot_stale:      boolean
+  frescura:            FrescuraDossier
   token:               string | null
   updated_at:          string
 }
@@ -112,6 +115,7 @@ export interface DossierData {
   ultimaApertura:     string | null            // ISO de la última apertura, o null si nadie lo abrió
   tieneEn:            boolean                   // hay versión inglesa generada (mig. 178)
   enDesactualizado:   boolean                   // se editó el dossier tras generar el inglés
+  frescura:            FrescuraDossier
   /**
    * Salidas de caja del TPV sin clasificar (mig. 193). Va en el EDITOR y solo ahí:
    * congelar o publicar con esto pendiente enseña unos gastos por debajo de lo real.
@@ -328,6 +332,7 @@ export async function obtenerDossiers(): Promise<ResumenDossier[]> {
     // contra la base. Un listado que se queda corto avisando es aceptable; uno que
     // hace N+1 queries, no.
     snapshot_stale: !!r.snapshot_stale,
+    frescura: frescuraDossier({ estado: r.estado as string, snapshotAt: (r.snapshot_at as string) ?? null, snapshotStale: !!r.snapshot_stale }),
     token: (r.token as string) ?? null,
     updated_at: r.updated_at as string,
   }))
@@ -390,7 +395,8 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
       dossier: null, serie: [], lineas: [], secciones: [],
       tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
        monedas, monedaConsolidacion, categoriasCosto: categoriasCatalogoBase, conceptosSector, empresaLogoUrl: null,
-      aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false, gaveta,
+       aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false,
+       frescura: frescuraDossier({ estado: 'BORRADOR', snapshotAt: null, snapshotStale: false }), gaveta,
     }
   }
 
@@ -438,6 +444,11 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     // está toda en la moneda de presentación (mezcla heredada de fusiones previas):
     // en ambos casos hay que re-sincronizar antes de enseñarla.
     snapshot_stale: !!dosRow.snapshot_stale || serie.some(f => f.moneda !== dosRow.moneda_presentacion),
+    frescura: frescuraDossier({
+      estado: dosRow.estado as string,
+      snapshotAt: (dosRow.snapshot_at as string) ?? null,
+      snapshotStale: !!dosRow.snapshot_stale || serie.some(f => f.moneda !== dosRow.moneda_presentacion),
+    }),
     token: dosRow.token ?? null,
     categorias_excluidas: Array.isArray(dosRow.categorias_excluidas)
       ? dosRow.categorias_excluidas as string[] : [],
@@ -468,6 +479,11 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
     // (updated_at cambia con cualquier guardado); basta para invitar a regenerar.
     enDesactualizado: !!dosRow.traduccion_en_at && !!dosRow.updated_at
       && new Date(dosRow.updated_at as string).getTime() > new Date(dosRow.traduccion_en_at as string).getTime(),
+    frescura: frescuraDossier({
+      estado: dosRow.estado as string,
+      snapshotAt: (dosRow.snapshot_at as string) ?? null,
+      snapshotStale: !!dosRow.snapshot_stale || serie.some(f => f.moneda !== dosRow.moneda_presentacion),
+    }),
     gaveta,
   }
 }

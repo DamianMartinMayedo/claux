@@ -9,6 +9,7 @@ import Tabs from '@/components/Tabs'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import DossierWizard from './DossierWizard'
 import DossierSecciones from './DossierSecciones'
+import type { PasoEditable } from '@/lib/dossier/pasos'
 import PestanaEstado from './PestanaEstado'
 import PestanaPresentacion from './PestanaPresentacion'
 
@@ -34,6 +35,12 @@ export default function DossierEditor({ data, volver, puedeEditar = true }: {
   // guardar TAMBIÉN el salto de pestaña, no solo el de sección.
   const [dirty, setDirty] = useState(false)
   const [tabPend, setTabPend] = useState<Tab | null>(null)
+  const [seccionInicial, setSeccionInicial] = useState<PasoEditable>('basicos')
+
+  function irANumeros() {
+    setSeccionInicial('numeros')
+    setTab('dossier')
+  }
 
   function intentarTab(next: string) {
     const t = next as Tab
@@ -114,7 +121,8 @@ export default function DossierEditor({ data, volver, puedeEditar = true }: {
       {tab === 'dossier' && puedeEditar && (
         <DossierSecciones
           data={data} dossier={dossier} simbolo={simbolo} onRefrescar={refrescar}
-          dirty={dirty} setDirty={setDirty}
+          dirty={dirty} setDirty={setDirty} seccionInicial={seccionInicial}
+          onSeccionChange={setSeccionInicial}
         />
       )}
 
@@ -122,7 +130,8 @@ export default function DossierEditor({ data, volver, puedeEditar = true }: {
         <PestanaPresentacion
           dossier={dossier} tieneBase={data.tieneBase} gaveta={data.gaveta}
           aperturas={data.aperturas} ultimaApertura={data.ultimaApertura}
-          tieneEn={data.tieneEn} enDesactualizado={data.enDesactualizado}
+           tieneEn={data.tieneEn} enDesactualizado={data.enDesactualizado}
+           onIrANumeros={irANumeros}
           onCambio={refrescar}
           puedeEditar={puedeEditar}
         />
@@ -137,8 +146,9 @@ export default function DossierEditor({ data, volver, puedeEditar = true }: {
           simbolo={simbolo}
           tieneBase={data.tieneBase}
           hayInventario={data.hayInventario}
-          gaveta={data.gaveta}
-          onRefrescar={refrescar}
+           gaveta={data.gaveta}
+           onRefrescar={refrescar}
+           onIrANumeros={irANumeros}
           puedeEditar={puedeEditar}
         />
       )}

@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Copy, ExternalLink, Pencil, Files, Trash2, Loader2, X, EyeOff } from 'lucide-react'
+import { Plus, Copy, ExternalLink, Pencil, Files, Trash2, Loader2, X, EyeOff, AlertTriangle } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
@@ -55,6 +55,7 @@ export default function DossierLista({
   const ids = useMemo(() => dossiers.map(d => d.dossier_id), [dossiers])
   const sel = useRowSelection(ids)
   const [confirmLote, setConfirmLote] = useState(false)
+  const pendientes = dossiers.filter(d => d.frescura.necesitaActualizacion)
 
   function ejecutar(fn: () => Promise<ResultadoLote>) {
     const ld = toastLoading('Aplicando…')
@@ -133,6 +134,19 @@ export default function DossierLista({
         )}
       </div>
 
+      {pendientes.length > 0 && (
+        <div className="alert alert-warning" role="status">
+          <AlertTriangle size={16} strokeWidth={2} />
+          <span>
+            {pendientes.length === 1 ? 'Hay un dossier que necesita revisión.' : `Hay ${pendientes.length} dossiers que necesitan revisión.`}{' '}
+            Abre cada uno para revisar y actualizar sus números antes de compartirlo.
+          </span>
+          <Link className="btn btn-aviso btn-sm" href={`/portal/dossier/${pendientes[0].dossier_id}`}>
+            Revisar ahora
+          </Link>
+        </div>
+      )}
+
       <div className="card card-table">
         <div className="table-wrapper">
           <table className="table">
@@ -178,8 +192,10 @@ export default function DossierLista({
                       {/* Con varios dossiers, saber de un vistazo cuál tiene los números
                           viejos es media pantalla: es la diferencia entre enviar el
                           enlace bueno y enviar el de la moneda de antes. */}
-                      {d.snapshot_stale && d.snapshot_at && (
-                        <span className="badge badge-warning">Desfasado</span>
+                      {d.frescura.necesitaActualizacion && d.snapshot_at && (
+                        <span className="badge badge-warning">
+                          {d.frescura.motivo === 'ANTIGUEDAD' ? 'Revisar' : 'Desfasado'}
+                        </span>
                       )}
                     </span>
                   </td>

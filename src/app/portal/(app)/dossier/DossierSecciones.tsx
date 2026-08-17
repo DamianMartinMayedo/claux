@@ -21,7 +21,7 @@ import PasoMarca from './PasoMarca'
 // tienen contenido, para que nada parezca perdido tras un proceso de una vez.
 
 export default function DossierSecciones({
-  data, dossier, simbolo, onRefrescar, dirty, setDirty,
+  data, dossier, simbolo, onRefrescar, dirty, setDirty, seccionInicial = 'basicos', onSeccionChange,
 }: {
   data: DossierData
   dossier: DossierBasico
@@ -32,9 +32,11 @@ export default function DossierSecciones({
   // remontar, así que saltar con algo tecleado sin guardar lo perdía en silencio.
   dirty: boolean
   setDirty: (v: boolean) => void
+  seccionInicial?: PasoEditable
+  onSeccionChange?: (seccion: PasoEditable) => void
 }) {
   const pasos = pasosEditables(data.tieneBase)
-  const [activo, setActivo] = useState<PasoEditable>('basicos')
+  const [activo, setActivo] = useState<PasoEditable>(seccionInicial)
   const [pendiente, setPendiente] = useState<PasoEditable | null>(null)
 
   // Un guardado limpia el flag: cada Paso llama a su callback SOLO tras guardar bien,
@@ -47,7 +49,8 @@ export default function DossierSecciones({
     if (p === activo) return
     if (dirty) { setPendiente(p); return }
     setActivo(p)
-  }, [activo, dirty, setPendiente, setActivo])
+    onSeccionChange?.(p)
+  }, [activo, dirty, setPendiente, setActivo, onSeccionChange])
 
   // Defecto de la portada: la empresa del dossier, o el nombre de la cuenta si es
   // consolidado (mismo criterio que deriva el deck cuando no hay nombre fijado).
@@ -57,7 +60,7 @@ export default function DossierSecciones({
 
   // Snapshot desfasado: cambió la moneda/empresa/período tras congelar y la serie
   // todavía es la anterior. Solo tiene sentido si ya hay números que enseñar.
-  const desfasado = dossier.snapshot_stale && data.serie.length > 0
+  const desfasado = data.frescura.necesitaActualizacion && data.serie.length > 0
 
   // Completado = tiene contenido guardado. Heurística suave, solo para el indicador:
   // 'basicos' y 'numeros' existen siempre aquí (se entra a las pestañas con serie).
@@ -84,13 +87,16 @@ export default function DossierSecciones({
         <DossierDesfase
           dossierId={dossier.dossier_id}
           tieneBase={data.tieneBase}
+          revisarPrimero={data.frescura.motivo === 'ANTIGUEDAD'}
           onIrANumeros={() => irA('numeros')}
           onActualizado={marcarGuardado}
           mensaje={
             <>
-              <strong>Tus números están desfasados.</strong> Cambiaste la moneda, la empresa o el período, pero
-              la presentación y el estado de resultados siguen mostrando el snapshot anterior
-              {data.tieneBase ? ' (importes en la moneda o empresa de antes)' : ''}. Sincronízalos para que todo cuadre.
+              <strong>{data.frescura.motivo === 'ANTIGUEDAD' ? 'Tu dossier necesita una revisión.' : 'Tus números están desfasados.'}</strong>{' '}
+              {data.frescura.motivo === 'ANTIGUEDAD'
+                ? `El snapshot lleva ${data.frescura.diasDesdeSnapshot ?? 0} días sin actualizarse.`
+                : 'Cambiaste la moneda, la empresa o el período, pero la presentación y el estado de resultados siguen mostrando el snapshot anterior.'}{' '}
+              {data.tieneBase ? 'Actualízalos para que todo cuadre.' : 'Revísalos antes de volver a publicarlos.'}
             </>
           }
         />

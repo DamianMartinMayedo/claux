@@ -42,7 +42,7 @@ function slug(s: string): string {
 
 export default function PestanaEstado({
   dossier, serie, lineas, empresaNombre, simbolo, tieneBase, hayInventario, gaveta, onRefrescar,
-  puedeEditar = true,
+  onIrANumeros, puedeEditar = true,
 }: {
   dossier: DossierBasico
   serie: FilaSerie[]
@@ -53,6 +53,7 @@ export default function PestanaEstado({
   hayInventario: boolean
   gaveta: ResumenGaveta
   onRefrescar?: () => void
+  onIrANumeros?: () => void
   /** Solo-ver: sin selector de modo (es ajuste de publicación) ni resincronizar. */
   puedeEditar?: boolean
 }) {
@@ -154,16 +155,20 @@ export default function PestanaEstado({
   return (
     <section className="card dos-er-card">
       <div className="dos-body">
-        {dossier.snapshot_stale && (
+        {dossier.frescura.necesitaActualizacion && (
           <DossierDesfase
             dossierId={dossier.dossier_id}
             tieneBase={tieneBase}
+            revisarPrimero={dossier.frescura.motivo === 'ANTIGUEDAD'}
+            onIrANumeros={onIrANumeros}
             onActualizado={onRefrescar}
             puedeEditar={puedeEditar}
             mensaje={
               <>
-                <strong>Datos desfasados.</strong> Cambiaste la moneda, la empresa o el período: este estado
-                (y el PDF que descargues) aún corresponde al snapshot anterior.
+                <strong>{dossier.frescura.motivo === 'ANTIGUEDAD' ? 'Este dossier necesita una revisión.' : 'Datos desfasados.'}</strong>{' '}
+                {dossier.frescura.motivo === 'ANTIGUEDAD'
+                  ? `Lleva ${dossier.frescura.diasDesdeSnapshot ?? 0} días sin actualizarse.`
+                  : 'Cambiaste la moneda, la empresa o el período: este estado y el PDF aún corresponden al snapshot anterior.'}
               </>
             }
           />

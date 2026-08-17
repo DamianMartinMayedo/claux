@@ -17,6 +17,7 @@ import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type Periodicidad
 import { facturadasPorCiclo, rangoPeriodo } from '@/lib/facturacion-suscripciones'
 import { reanudarAcuerdo } from '@/lib/suscripciones-core'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
+import { DIAS_DOSSIER_RANCIO } from '@/lib/dossier/frescura'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -28,7 +29,6 @@ const HORAS_SIN_CONFIRMAR = 12
 /** Días del mes a partir de los cuales se espera tener la nómina hecha. */
 const DIA_AVISO_NOMINA = 25
 /** Un dossier publicado con el snapshot más viejo que esto enseña números rancios. */
-const DIAS_DOSSIER_RANCIO = 45
 
 export function diasHasta(fecha: string, hoy: string): number {
   return Math.round((new Date(fecha).getTime() - new Date(hoy).getTime()) / MS_DIA)

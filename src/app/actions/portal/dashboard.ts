@@ -20,6 +20,7 @@ import { diasDeTasa } from '@/lib/tasas-mensaje'
 import { estadoEfectivo, calcularCobroAcuerdo, type EstadoSub, type PeriodicidadSub, type DescuentoModo } from '@/lib/suscripciones'
 import type { EtiquetasSector } from '@/lib/sector'
 import { resumenGavetaPendiente, textoAvisoGaveta, type ResumenGaveta } from '@/lib/caja/pendientes'
+import { DIAS_DOSSIER_RANCIO } from '@/lib/dossier/frescura'
 
 // Dashboard del portal — ADAPTABLE a los módulos contratados. Solo se calculan
 // y devuelven las secciones de los módulos que el cliente tiene activos, así que
@@ -1020,8 +1021,6 @@ async function resumenOnboarding(
 */
 
 /** Un dossier publicado con el snapshot más viejo que esto enseña números rancios. */
-const DIAS_DOSSIER_RANCIO = 45
-
 /**
  * Estado del dossier. Una sola query a la cabecera: el widget no pinta cifras
  * del negocio (para eso está Reportes), solo si el documento está listo y al día.
