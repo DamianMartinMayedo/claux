@@ -88,7 +88,7 @@ export async function toggleModeloIa(id: string, activo: boolean): Promise<Resp>
 }
 
 export async function crearModeloIa(args: {
-  id: string; nombre: string; gratis: boolean; api_base?: string | null; api_key_env?: string | null
+  id: string; nombre: string; gratis: boolean; api_base?: string | null; api_key_env?: string | null; api_key?: string | null
 }): Promise<Resp> {
   await requirePermiso('ia')
   const id = (args.id || '').trim()
@@ -102,6 +102,44 @@ export async function crearModeloIa(args: {
     activo: true, orden: 100,
   })
   if (error) return { ok: false, error: error.message }
+  // La clave, si la hay, se guarda cifrada en Vault (nunca en la tabla).
+  const key = (args.api_key || '').trim()
+  if (key) {
+    const { error: e2 } = await db.rpc('ia_key_set', { p_id: id, p_key: key })
+    if (e2) return { ok: false, error: `Modelo creado, pero no se pudo guardar la clave: ${e2.message}` }
+  }
+  revalidatePath('/admin/ia')
+  return { ok: true }
+}
+
+// Edita un modelo existente. El id NO se cambia (es la referencia del proveedor y la
+// del secreto en Vault). La clave: si viene texto se guarda/reemplaza; si quitarKey es
+// true se borra; si viene vacía y quitarKey false, se deja como está (no se toca).
+export async function editarModeloIa(args: {
+  id: string; nombre: string; gratis: boolean
+  api_base?: string | null; api_key_env?: string | null
+  api_key?: string | null; quitarKey?: boolean
+}): Promise<Resp> {
+  await requirePermiso('ia')
+  const id = (args.id || '').trim()
+  if (!id) return { ok: false, error: 'El id del modelo es obligatorio.' }
+  const db = createAdminClient()
+  const { error } = await db.from('ia_modelos').update({
+    nombre: (args.nombre || '').trim() || id,
+    gratis: !!args.gratis,
+    api_base: args.api_base?.trim() || null,
+    api_key_env: args.api_key_env?.trim() || null,
+  }).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+
+  const key = (args.api_key || '').trim()
+  if (args.quitarKey) {
+    const { error: e2 } = await db.rpc('ia_key_delete', { p_id: id })
+    if (e2) return { ok: false, error: `Guardado, pero no se pudo quitar la clave: ${e2.message}` }
+  } else if (key) {
+    const { error: e2 } = await db.rpc('ia_key_set', { p_id: id, p_key: key })
+    if (e2) return { ok: false, error: `Guardado, pero no se pudo guardar la clave: ${e2.message}` }
+  }
   revalidatePath('/admin/ia')
   return { ok: true }
 }
@@ -109,6 +147,8 @@ export async function crearModeloIa(args: {
 export async function eliminarModeloIa(id: string): Promise<Resp> {
   await requirePermiso('ia')
   const db = createAdminClient()
+  // Borra primero el secreto en Vault (si lo hay) para no dejarlo huérfano.
+  await db.rpc('ia_key_delete', { p_id: id })
   const { error } = await db.from('ia_modelos').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admin/ia')

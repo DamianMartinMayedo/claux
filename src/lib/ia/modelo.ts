@@ -19,16 +19,35 @@ export interface ModeloResuelto {
   esFallback: boolean   // true = se bajó a gratis por superar el cupo
 }
 
-interface ModeloRow { id: string; activo: boolean; gratis: boolean; api_base: string | null; api_key_env: string | null }
+interface ModeloRow { id: string; activo: boolean; gratis: boolean; api_base: string | null; api_key_env: string | null; key_hint: string | null }
 
 function periodoActual(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Havana', year: 'numeric', month: '2-digit' })
     .format(new Date()).slice(0, 7)
 }
 
-function keyDe(envName: string | null | undefined): string | null {
-  const name = envName || 'OPENCODE_ZEN_API_KEY'
-  return process.env[name] || process.env.OPENCODE_ZEN_API_KEY || process.env.IA_API_KEY || null
+// Resuelve la API key de un modelo, por orden de prioridad:
+//   1. Clave guardada en el sistema (Supabase Vault, vía RPC ia_key_get) — la que se
+//      configura desde el admin. No depende de variables de entorno de Vercel.
+//   2. Variable de entorno nombrada en api_key_env (para quien prefiera el env).
+//   3. Clave por defecto de OpenCode Zen — SOLO para la base de Zen. Antes se usaba
+//      para cualquier modelo sin key: eso mandaba la key de Zen a un proveedor ajeno
+//      (p. ej. Gemini) y devolvía un 401 despistante. Ahora, base ajena sin key = null.
+async function resolverApiKey(
+  db: ReturnType<typeof createAdminClient>,
+  row: ModeloRow | null,
+  base: string,
+): Promise<string | null> {
+  if (row?.key_hint) {
+    const { data, error } = await db.rpc('ia_key_get', { p_id: row.id })
+    if (!error && typeof data === 'string' && data.trim()) return data
+  }
+  const envName = row?.api_key_env
+  if (envName && process.env[envName]) return process.env[envName] as string
+  if (base.startsWith('https://opencode.ai')) {
+    return process.env.OPENCODE_ZEN_API_KEY || process.env.IA_API_KEY || null
+  }
+  return null
 }
 
 // Cupo efectivo del cliente: override en ia_config.cupo, si no el global.
@@ -83,7 +102,7 @@ export async function resolverModelo(clientId?: string): Promise<ModeloResuelto>
   }
 
   const base = (row?.api_base || baseGlobal).replace(/\/$/, '')
-  const apiKey = keyDe(row?.api_key_env)
+  const apiKey = await resolverApiKey(db, row, base)
   return { model: row?.id || DEFAULT_MODEL, base, apiKey, esFallback }
 }
 
@@ -102,10 +121,10 @@ export async function resolverFallbackGratis(): Promise<ModeloResuelto> {
 
   const row = await leerModelo(db, id)
   if (!row || !row.activo) {
-    return { model: DEFAULT_MODEL, base: baseGlobal, apiKey: keyDe(null), esFallback: true }
+    return { model: DEFAULT_MODEL, base: baseGlobal, apiKey: await resolverApiKey(db, null, baseGlobal), esFallback: true }
   }
   const base = (row.api_base || baseGlobal).replace(/\/$/, '')
-  return { model: row.id, base, apiKey: keyDe(row.api_key_env), esFallback: true }
+  return { model: row.id, base, apiKey: await resolverApiKey(db, row, base), esFallback: true }
 }
 
 // Prueba de vida de UN modelo concreto (health-check del admin). Hace la llamada
@@ -127,7 +146,7 @@ export async function probarModelo(id: string): Promise<PruebaModelo> {
     leerModelo(db, id),
   ])
   const base   = ((row?.api_base || setRow?.value || DEFAULT_BASE) as string).replace(/\/$/, '')
-  const apiKey = keyDe(row?.api_key_env)
+  const apiKey = await resolverApiKey(db, row, base)
   if (!apiKey) return { ok: false, status: 0, ms: 0, respondio: false, error: 'Falta la API key del proveedor.' }
 
   // max_tokens holgado: un modelo de razonamiento con poco margen devuelve 200 con
@@ -159,7 +178,7 @@ export async function probarModelo(id: string): Promise<PruebaModelo> {
 }
 
 async function leerModelo(db: ReturnType<typeof createAdminClient>, id: string): Promise<ModeloRow | null> {
-  const { data } = await db.from('ia_modelos').select('id, activo, gratis, api_base, api_key_env').eq('id', id).maybeSingle()
+  const { data } = await db.from('ia_modelos').select('id, activo, gratis, api_base, api_key_env, key_hint').eq('id', id).maybeSingle()
   return (data as ModeloRow | null) ?? null
 }
 

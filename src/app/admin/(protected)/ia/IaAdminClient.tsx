@@ -2,18 +2,20 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, Activity, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, Activity, Loader2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import { RowActions } from '@/components/portal/RowActions'
 import FormHelp from '@/components/portal/FormHelp'
 import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa, probarModeloIa, type PruebaModeloUI } from '@/app/actions/ia-admin'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
+import EditarModeloIaModal from './EditarModeloIaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import DocumentoIaModal from './DocumentoIaModal'
 
 export interface ModeloIa {
   id: string; nombre: string; gratis: boolean; activo: boolean
-  api_base: string | null; api_key_env: string | null; orden: number
+  api_base: string | null; api_key_env: string | null; key_hint: string | null; orden: number
 }
 export interface ConsumoCliente {
   client_id: string; nombre: string; conversaciones: number; tokens: number
@@ -46,6 +48,7 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [fb, setFb]       = useState(fallbackGratis)
   const [cupo, setCupo]   = useState(String(cupoGlobal))
   const [confirmarBorrado, setConfirmarBorrado] = useState<ModeloIa | null>(null)
+  const [editando, setEditando] = useState<ModeloIa | null>(null)
   const [pruebas, setPruebas] = useState<Record<string, PruebaModeloUI | 'cargando'>>({})
 
   // Health-check de un modelo: llamada mínima real al proveedor. Independiente por
@@ -231,12 +234,17 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                     </span>
                   </td>
                   <td className="col-actions">
-                    {m.id !== principal && m.id !== fallbackGratis && (
-                      <button type="button" className="ia-icon-btn" onClick={() => setConfirmarBorrado(m)}
-                              aria-label={`Eliminar ${m.nombre}`} disabled={isPending}>
-                        <Trash2 size={15} strokeWidth={2} />
+                    <RowActions label={`Acciones de ${m.nombre}`}>
+                      <button type="button" className="row-actions-item" onClick={() => setEditando(m)}>
+                        <Pencil size={15} strokeWidth={2} /> Editar
                       </button>
-                    )}
+                      {m.id !== principal && m.id !== fallbackGratis && (
+                        <button type="button" className="row-actions-item row-actions-item-danger"
+                                onClick={() => setConfirmarBorrado(m)} disabled={isPending}>
+                          <Trash2 size={14} strokeWidth={2} /> Eliminar
+                        </button>
+                      )}
+                    </RowActions>
                   </td>
                 </tr>
               ) })}
@@ -297,6 +305,10 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         )}
         <TablePagination {...consumoPag} label="cliente" />
       </div>
+
+      {editando && (
+        <EditarModeloIaModal modelo={editando} onClose={() => setEditando(null)} />
+      )}
 
       {confirmarBorrado && (
         <ConfirmDialog
