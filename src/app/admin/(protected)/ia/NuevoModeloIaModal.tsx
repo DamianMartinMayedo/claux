@@ -33,6 +33,7 @@ export default function NuevoModeloIaModal() {
       nombre: ((fd.get('nombre') as string) ?? '').trim(),
       gratis,
       api_base: ((fd.get('api_base') as string) ?? '').trim() || null,
+      api_key_env: ((fd.get('api_key_env') as string) ?? '').trim() || null,
     })
     setLoading(false)
     if (!r.ok) { toastError(r.error); return }
@@ -64,12 +65,21 @@ export default function NuevoModeloIaModal() {
                 <input name="nombre" className="input" placeholder="Claude Haiku 4.5" />
               </div>
             </div>
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label>Endpoint (opcional)</label>
-                <FormHelp text="Solo si el modelo usa otra API. La key va en variable de entorno del servidor." label="Información sobre el endpoint" />
+            <div className="grid-cols-2">
+              <div className="input-group">
+                <div className="form-label-with-help">
+                  <label>Endpoint (opcional)</label>
+                  <FormHelp text="Solo si el modelo usa otra API. Ej.: el endpoint OpenAI-compatible de Gemini." label="Información sobre el endpoint" />
+                </div>
+                <input name="api_base" className="input" placeholder="vacío = OpenCode Zen" />
               </div>
-              <input name="api_base" className="input" placeholder="vacío = mismo proveedor (OpenCode Zen)" />
+              <div className="input-group">
+                <div className="form-label-with-help">
+                  <label>Variable de la key (opcional)</label>
+                  <FormHelp text="Nombre de la variable de entorno del servidor con la API key de este modelo. Vacío = usa la de OpenCode Zen." label="Información sobre la variable de la key" />
+                </div>
+                <input name="api_key_env" className="input" placeholder="p. ej. GEMINI_API_KEY" />
+              </div>
             </div>
             <label className="ia-check">
               <input type="checkbox" checked={gratis} onChange={e => setGratis(e.target.checked)} />
