@@ -11,16 +11,17 @@ import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import type { ModeloIa } from './IaAdminClient'
 
 // Edición de un modelo de IA. Modal controlado por el padre (se abre desde el menú de
-// acciones de la fila, patrón RowActions): se monta cuando hay `modelo` y se cierra con
-// `onClose`. El id NO se toca (es la referencia del proveedor y la del secreto en Vault).
-// Igual que en el alta, lo obligatorio depende del proveedor:
-//   · OpenCode Zen: solo nombre; al marcarlo se limpian endpoint y clave propia.
-//   · Proveedor propio: endpoint obligatorio y una clave (nueva, ya guardada, o variable).
-// La API key vacía = no se cambia. Con clave guardada, hay casilla para quitarla.
+// acciones de la fila): se monta cuando hay `modelo` y se cierra con `onClose`. El id NO
+// se toca (referencia del proveedor y del secreto en Vault). Lo obligatorio depende del
+// proveedor (Zen vs propio), y la clave tiene dos caminos: guardada cifrada en el sistema
+// (por defecto) o —oculto tras el check «avanzado»— una variable de entorno que gestiona
+// el propietario en Vercel. La API key vacía = no se cambia; con clave guardada hay
+// casilla para quitarla.
 export default function EditarModeloIaModal({ modelo, onClose }: { modelo: ModeloIa; onClose: () => void }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [zen, setZen] = useState(!modelo.api_base)
+  const [usarEnv, setUsarEnv] = useState(!!modelo.api_key_env && !modelo.key_hint)
   const [gratis, setGratis] = useState(modelo.gratis)
   const [quitarKey, setQuitarKey] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
@@ -41,14 +42,20 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
       // Zen no usa clave propia: se limpia cualquier secreto que hubiera guardado.
       quitar = true
     } else {
-      api_base    = ((fd.get('api_base')    as string) ?? '').trim() || null
-      api_key     = ((fd.get('api_key')     as string) ?? '').trim() || null
-      api_key_env = ((fd.get('api_key_env') as string) ?? '').trim() || null
-      quitar = quitarKey
+      api_base = ((fd.get('api_base') as string) ?? '').trim() || null
       if (!api_base) { toastError('Un proveedor propio necesita su endpoint.'); return }
-      const tieneGuardada = !!modelo.key_hint && !quitarKey
-      if (!api_key && !api_key_env && !tieneGuardada) {
-        toastError('Un proveedor propio necesita una API key o su variable de entorno.'); return
+      if (usarEnv) {
+        api_key_env = ((fd.get('api_key_env') as string) ?? '').trim() || null
+        if (!api_key_env) { toastError('Indica el nombre de la variable de entorno.'); return }
+        quitar = true   // al pasar a variable, se borra la clave guardada en el sistema
+      } else {
+        api_key = ((fd.get('api_key') as string) ?? '').trim() || null
+        api_key_env = null   // camino Vault: se descarta cualquier variable configurada
+        quitar = quitarKey
+        const tieneGuardada = !!modelo.key_hint && !quitarKey
+        if (!api_key && !tieneGuardada) {
+          toastError('Un proveedor propio necesita una API key.'); return
+        }
       }
     }
 
@@ -102,29 +109,45 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
                   </div>
                   <input name="api_base" className="input" defaultValue={modelo.api_base ?? ''} placeholder="https://…/v1" />
                 </div>
-                <div className="grid-cols-2">
+
+                {usarEnv ? (
                   <div className="input-group">
                     <div className="form-label-with-help">
-                      <label>API key</label>
-                      <FormHelp text="Se guarda cifrada y nunca se muestra. Déjala vacía para no cambiarla." label="Información sobre la API key" />
-                    </div>
-                    <input name="api_key" type="password" autoComplete="off" className="input" disabled={quitarKey}
-                           placeholder={modelo.key_hint ? `guardada (${modelo.key_hint}) — escribe para cambiarla` : 'se guarda cifrada'} />
-                  </div>
-                  <div className="input-group">
-                    <div className="form-label-with-help">
-                      <label>Variable de la key</label>
-                      <FormHelp text="Alternativa avanzada por variable de entorno. Si usas la API key de al lado, deja esto vacío." label="Información sobre la variable de la key" />
+                      <label>Nombre de la variable <span className="required">*</span></label>
+                      <FormHelp text="El nombre de la variable de entorno del servidor con la clave. La creas tú en Vercel y en .env.local; aquí solo va el nombre." label="Información sobre la variable de entorno" />
                     </div>
                     <input name="api_key_env" className="input" defaultValue={modelo.api_key_env ?? ''} placeholder="p. ej. GEMINI_API_KEY" />
                   </div>
-                </div>
-                {modelo.key_hint && (
-                  <label className="ia-check">
-                    <input type="checkbox" checked={quitarKey} onChange={e => setQuitarKey(e.target.checked)} />
-                    <span>Quitar la clave guardada ({modelo.key_hint})</span>
-                  </label>
+                ) : (
+                  <>
+                    <div className="input-group">
+                      <div className="form-label-with-help">
+                        <label>API key</label>
+                        <FormHelp text="Se guarda cifrada y nunca se muestra. Déjala vacía para no cambiarla." label="Información sobre la API key" />
+                      </div>
+                      <input name="api_key" type="password" autoComplete="off" className="input" disabled={quitarKey}
+                             placeholder={modelo.key_hint ? `guardada (${modelo.key_hint}) — escribe para cambiarla` : 'se guarda cifrada'} />
+                    </div>
+                    {modelo.key_hint && (
+                      <label className="ia-check">
+                        <input type="checkbox" checked={quitarKey} onChange={e => setQuitarKey(e.target.checked)} />
+                        <span>Quitar la clave guardada ({modelo.key_hint})</span>
+                      </label>
+                    )}
+                  </>
                 )}
+
+                <div className="input-group">
+                  <label className="ia-check">
+                    <input type="checkbox" checked={usarEnv} onChange={e => setUsarEnv(e.target.checked)} />
+                    <span>Usar una variable de entorno para la clave (avanzado)</span>
+                  </label>
+                  <p className="config-field-hint">
+                    {usarEnv
+                      ? 'La clave vivirá en una variable de entorno que creas tú en Vercel (y en .env.local para local). Aquí solo pones su nombre; al guardar se borra la clave cifrada.'
+                      : 'La clave se guarda cifrada en el sistema. Recomendado: no hay que tocar Vercel.'}
+                  </p>
+                </div>
               </>
             )}
 

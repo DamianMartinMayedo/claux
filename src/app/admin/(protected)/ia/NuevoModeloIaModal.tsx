@@ -10,21 +10,26 @@ import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 
-// Alta de un modelo de IA. Dos caminos, y qué es obligatorio cambia según cuál:
+// Alta de un modelo de IA. Qué es obligatorio cambia según el proveedor:
 //   · OpenCode Zen (por defecto): basta el id. Endpoint y clave salen de la
-//     configuración por defecto del sistema — no hay nada más que rellenar.
-//   · Proveedor propio (p. ej. Gemini): el endpoint y la API key pasan a ser obligatorios
-//     (la clave se guarda cifrada en el sistema, sin tocar Vercel).
+//     configuración por defecto del sistema.
+//   · Proveedor propio (p. ej. Gemini): endpoint + una clave. La clave, por defecto,
+//     se pega y se guarda cifrada en el sistema (Vault). El camino avanzado «variable
+//     de entorno» (la clave vive en Vercel/.env.local y aquí solo va su nombre) queda
+//     oculto tras un check, porque es justo la dependencia de Vercel que evitamos.
 export default function NuevoModeloIaModal() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [zen, setZen] = useState(true)
+  const [usarEnv, setUsarEnv] = useState(false)
   const [gratis, setGratis] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
   const mounted = useMounted()
 
-  const handleClose = useCallback(() => { setOpen(false); setZen(true); setGratis(false) }, [])
+  const handleClose = useCallback(() => {
+    setOpen(false); setZen(true); setUsarEnv(false); setGratis(false)
+  }, [])
   useModalKeyboard(open, handleClose)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -33,13 +38,18 @@ export default function NuevoModeloIaModal() {
     const id = ((fd.get('id') as string) ?? '').trim()
     if (!id) { toastError('Indica el id del modelo.'); return }
 
-    // Con Zen no hay endpoint ni clave propia; con proveedor propio, ambos importan.
     const api_base    = zen ? null : ((fd.get('api_base')    as string) ?? '').trim() || null
-    const api_key     = zen ? null : ((fd.get('api_key')     as string) ?? '').trim() || null
-    const api_key_env = zen ? null : ((fd.get('api_key_env') as string) ?? '').trim() || null
+    let   api_key     = zen ? null : ((fd.get('api_key')     as string) ?? '').trim() || null
+    let   api_key_env = zen ? null : ((fd.get('api_key_env') as string) ?? '').trim() || null
     if (!zen) {
       if (!api_base) { toastError('Un proveedor propio necesita su endpoint.'); return }
-      if (!api_key && !api_key_env) { toastError('Indica la API key del proveedor (o su variable de entorno).'); return }
+      if (usarEnv) {
+        if (!api_key_env) { toastError('Indica el nombre de la variable de entorno.'); return }
+        api_key = null
+      } else {
+        if (!api_key) { toastError('Indica la API key del proveedor.'); return }
+        api_key_env = null
+      }
     }
 
     setLoading(true)
@@ -95,7 +105,16 @@ export default function NuevoModeloIaModal() {
                   </div>
                   <input name="api_base" className="input" placeholder="https://…/v1" />
                 </div>
-                <div className="grid-cols-2">
+
+                {usarEnv ? (
+                  <div className="input-group">
+                    <div className="form-label-with-help">
+                      <label>Nombre de la variable <span className="required">*</span></label>
+                      <FormHelp text="El nombre de la variable de entorno del servidor con la clave. La creas tú en Vercel y en .env.local; aquí solo va el nombre." label="Información sobre la variable de entorno" />
+                    </div>
+                    <input name="api_key_env" className="input" placeholder="p. ej. GEMINI_API_KEY" />
+                  </div>
+                ) : (
                   <div className="input-group">
                     <div className="form-label-with-help">
                       <label>API key <span className="required">*</span></label>
@@ -103,13 +122,18 @@ export default function NuevoModeloIaModal() {
                     </div>
                     <input name="api_key" type="password" autoComplete="off" className="input" placeholder="se guarda cifrada" />
                   </div>
-                  <div className="input-group">
-                    <div className="form-label-with-help">
-                      <label>Variable de la key</label>
-                      <FormHelp text="Alternativa avanzada: nombre de una variable de entorno del servidor con la clave, en vez de guardarla aquí." label="Información sobre la variable de la key" />
-                    </div>
-                    <input name="api_key_env" className="input" placeholder="p. ej. GEMINI_API_KEY" />
-                  </div>
+                )}
+
+                <div className="input-group">
+                  <label className="ia-check">
+                    <input type="checkbox" checked={usarEnv} onChange={e => setUsarEnv(e.target.checked)} />
+                    <span>Usar una variable de entorno para la clave (avanzado)</span>
+                  </label>
+                  <p className="config-field-hint">
+                    {usarEnv
+                      ? 'La clave vivirá en una variable de entorno que creas tú en Vercel (y en .env.local para local). Aquí solo pones su nombre.'
+                      : 'La clave se guarda cifrada en el sistema. Recomendado: no hay que tocar Vercel.'}
+                  </p>
                 </div>
               </>
             )}
