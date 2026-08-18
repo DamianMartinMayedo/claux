@@ -12,8 +12,10 @@ import {
 } from '@/lib/presupuesto/config'
 import {
   crearPresupuesto,
+  actualizarPresupuesto,
   type ModuloPresupuesto,
   type Comercial,
+  type MigracionInput,
 } from '@/app/actions/presupuestos'
 
 const GRUPOS: { label: string; tipo: string }[] = [
@@ -33,6 +35,15 @@ type Prefill = {
   contacto: string
   modulos: string[]
   tarifa: TarifaTipo | null
+  // Campos que solo trae el modo edición, para reconstruir el snapshot completo del borrador
+  // guardado. En alta van sin definir y caen a los valores por defecto de siempre.
+  formato?: FormatoDatos | null
+  volumenes?: Record<string, number> | null
+  tarifaHora?: number | null
+  descuentoPct?: number | null
+  descuentoMotivo?: string | null
+  fasesExcluidas?: number[] | null
+  migracion?: MigracionInput | null
 }
 
 export default function PresupuestoCalculadora({
@@ -43,6 +54,7 @@ export default function PresupuestoCalculadora({
   parametros,
   descuentoAnualPct,
   prefill,
+  editarId,
 }: {
   modulos: ModuloPresupuesto[]
   comerciales: Comercial[]
@@ -52,34 +64,43 @@ export default function PresupuestoCalculadora({
   parametros: ParametrosPresupuesto
   descuentoAnualPct: number
   prefill: Prefill
+  /** Si viene, se está EDITANDO ese presupuesto (borrador) en vez de creando uno. */
+  editarId?: number | null
 }) {
   const { error: toastError } = useToast()
+  const editando = editarId != null
 
   const [nombreNegocio, setNombreNegocio]         = useState(prefill.nombreNegocio)
   const [nombreResponsable, setNombreResponsable] = useState(prefill.nombreResponsable)
   const [contacto, setContacto]                   = useState(prefill.contacto)
   const [comercialEmail, setComercialEmail]       = useState(comercialEmailDefault)
   const [tarifa, setTarifa]                       = useState<TarifaTipo>(tarifaSugerida)
-  const [formato, setFormato]                     = useState<FormatoDatos>('cero')
+  const [formato, setFormato]                     = useState<FormatoDatos>(prefill.formato ?? 'cero')
 
   const [modulosSel, setModulosSel] = useState<string[]>(prefill.modulos)
-  const [vol, setVol] = useState<Record<string, string>>({ empresas: '1', monedas: '1', cuentas_tesoreria: '1' })
+  // Los volúmenes se guardan como números; el input trabaja con texto. En edición se
+  // restauran los del snapshot; en alta arrancan con una empresa/moneda/cuenta.
+  const [vol, setVol] = useState<Record<string, string>>(
+    prefill.volumenes
+      ? Object.fromEntries(Object.entries(prefill.volumenes).map(([k, v]) => [k, String(v)]))
+      : { empresas: '1', monedas: '1', cuentas_tesoreria: '1' },
+  )
 
   // La palanca comercial: la tarifa arranca en la base configurada y se puede pactar para
   // ESTE cliente. Antes solo se podía saltar de estándar a fundador, $10/h de golpe.
-  const [tarifaHora, setTarifaHora] = useState(String(parametros.tarifaHora))
-  const [descuento, setDescuento]   = useState('')
-  const [dtoMotivo, setDtoMotivo]   = useState('')
+  const [tarifaHora, setTarifaHora] = useState(String(prefill.tarifaHora ?? parametros.tarifaHora))
+  const [descuento, setDescuento]   = useState(prefill.descuentoPct ? String(prefill.descuentoPct) : '')
+  const [dtoMotivo, setDtoMotivo]   = useState(prefill.descuentoMotivo ?? '')
 
   // Fases que este cliente NO contrata. Vacío = las cuatro, que es el caso normal.
-  const [fasesFuera, setFasesFuera] = useState<number[]>([])
+  const [fasesFuera, setFasesFuera] = useState<number[]>(prefill.fasesExcluidas ?? [])
   const enFase = (n: number) => !fasesFuera.includes(n)
 
-  const [migDesea, setMigDesea]     = useState(false)
-  const [migDesde, setMigDesde]     = useState('')
-  const [migHasta, setMigHasta]     = useState('')
-  const [migVolumen, setMigVolumen] = useState('')
-  const [migHoras, setMigHoras]     = useState('')
+  const [migDesea, setMigDesea]     = useState(prefill.migracion?.desea ?? false)
+  const [migDesde, setMigDesde]     = useState(prefill.migracion?.desde ?? '')
+  const [migHasta, setMigHasta]     = useState(prefill.migracion?.hasta ?? '')
+  const [migVolumen, setMigVolumen] = useState(prefill.migracion?.volumen != null ? String(prefill.migracion.volumen) : '')
+  const [migHoras, setMigHoras]     = useState(prefill.migracion?.horasManual != null ? String(prefill.migracion.horasManual) : '')
 
   const [loading, setLoading] = useState(false)
   const [creado, setCreado]   = useState<{ id: number } | null>(null)
@@ -135,7 +156,7 @@ export default function PresupuestoCalculadora({
     if (!nombreNegocio.trim()) { toastError('El nombre del negocio es obligatorio.'); return }
     setLoading(true)
     const comercialNombre = comerciales.find(c => c.email === comercialEmail)?.nombre
-    const r = await crearPresupuesto({
+    const input = {
       diagnosticoId:     prefill.diagnosticoId,
       clientId:          prefill.clientId,
       comercialEmail,
@@ -158,7 +179,10 @@ export default function PresupuestoCalculadora({
         volumen:     migVolumen ? Number(migVolumen) : null,
         horasManual: migHoras ? Number(migHoras) : null,
       },
-    })
+    }
+    const r = editando
+      ? await actualizarPresupuesto(editarId, input)
+      : await crearPresupuesto(input)
     setLoading(false)
     if (!r.ok) { toastError(r.error ?? 'No se pudo guardar.'); return }
     setCreado({ id: r.id! })
@@ -169,13 +193,15 @@ export default function PresupuestoCalculadora({
       <div className="view-container">
         <div className="card card-lg">
           <div className="success-icon-circle"><Check size={28} strokeWidth={2.5} /></div>
-          <h1 className="modal-title modal-success-title">Presupuesto guardado</h1>
+          <h1 className="modal-title modal-success-title">{editando ? 'Cambios guardados' : 'Presupuesto guardado'}</h1>
           <p className="modal-success-description">
             {nombreNegocio} · {resultado.horasTotal}h · {usd(resultado.totalFinalUsd)} de instalación · {usd(cuotaMensual)}/mes.
           </p>
           <div className="pres-acciones-cierre">
             <Link href="/admin/presupuestos" className="btn btn-primary">Ver presupuestos</Link>
-            <Link href="/admin/presupuestos/nuevo" className="btn btn-secondary">Crear otro</Link>
+            {!editando && (
+              <Link href="/admin/presupuestos/nuevo" className="btn btn-secondary">Crear otro</Link>
+            )}
           </div>
         </div>
       </div>
@@ -189,10 +215,14 @@ export default function PresupuestoCalculadora({
           <nav className="breadcrumb" aria-label="Ruta de navegación">
             <Link href="/admin/presupuestos">Presupuestos</Link>
             <ChevronRight className="breadcrumb-sep" />
-            <span className="breadcrumb-current">Nuevo presupuesto</span>
+            <span className="breadcrumb-current">{editando ? 'Editar presupuesto' : 'Nuevo presupuesto'}</span>
           </nav>
-          <h1 className="page-title">Nuevo presupuesto de instalación</h1>
-          <p className="page-subtitle">Calcula horas y coste a partir de los módulos y el volumen.</p>
+          <h1 className="page-title">{editando ? 'Editar presupuesto de instalación' : 'Nuevo presupuesto de instalación'}</h1>
+          <p className="page-subtitle">
+            {editando
+              ? 'Ajusta los módulos, el volumen o el precio; se recalcula al guardar.'
+              : 'Calcula horas y coste a partir de los módulos y el volumen.'}
+          </p>
         </div>
       </div>
 
@@ -230,7 +260,11 @@ export default function PresupuestoCalculadora({
               <div className="input-group">
                 <label htmlFor="p-comercial">Comercial que atiende</label>
                 <select id="p-comercial" className="input" value={comercialEmail} onChange={e => setComercialEmail(e.target.value)}>
-                  {comerciales.length === 0 && <option value={comercialEmailDefault}>{comercialEmailDefault}</option>}
+                  {/* Si el comercial guardado ya no está en la lista de activos (p. ej. al editar
+                      un borrador viejo), se mantiene como opción para no perderlo en silencio. */}
+                  {!comerciales.some(c => c.email === comercialEmail) && (
+                    <option value={comercialEmail}>{comercialEmail}</option>
+                  )}
                   {comerciales.map(c => <option key={c.email} value={c.email}>{c.nombre}</option>)}
                 </select>
               </div>
@@ -509,7 +543,9 @@ export default function PresupuestoCalculadora({
             </div>
 
             <button className="btn btn-primary btn-full" disabled={loading} onClick={handleGuardar}>
-              {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar como presupuesto'}
+              {loading
+                ? <><span className="spinner" /> Guardando...</>
+                : editando ? 'Guardar cambios' : 'Guardar como presupuesto'}
             </button>
           </div>
         </div>

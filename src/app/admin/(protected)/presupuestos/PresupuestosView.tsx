@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Eye, FileText, Plus, UserPlus, X, Download } from 'lucide-react'
+import { Check, Eye, FileText, Pencil, Plus, UserPlus, X, Download } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -260,6 +260,12 @@ export default function PresupuestosView({
                         <button className="row-actions-item" onClick={() => abrir(p.id)}>
                           <Eye size={15} strokeWidth={2} /> Ver detalles
                         </button>
+                        {/* Editar solo en borrador: aprobado/instalado son foto congelada. */}
+                        {p.estado === 'guardado' && (
+                          <Link href={`/admin/presupuestos/${p.id}/editar`} className="row-actions-item">
+                            <Pencil size={15} strokeWidth={2} /> Editar
+                          </Link>
+                        )}
                         {p.estado !== 'instalado' && (
                           p.estado === 'aprobado'
                             ? <button className="row-actions-item" onClick={() => aprobar(p.id, false)}>
@@ -432,9 +438,14 @@ export default function PresupuestosView({
                           </button>
                         </>
                       ) : (
-                        <button className="btn btn-success btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
-                          {aprobando ? <><span className="spinner" /> …</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
-                        </button>
+                        <>
+                          <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
+                            <Pencil size={15} strokeWidth={2} /> Editar
+                          </Link>
+                          <button className="btn btn-success btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
+                            {aprobando ? <><span className="spinner" /> …</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
+                          </button>
+                        </>
                       )}
                     </div>
                   )}

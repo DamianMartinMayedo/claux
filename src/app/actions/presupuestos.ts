@@ -166,19 +166,29 @@ export async function obtenerPresupuesto(id: number) {
   return data
 }
 
-// ── Crear (guardar) un presupuesto: recálculo autoritativo en servidor ──
-export async function crearPresupuesto(
+// ── Validación + recálculo autoritativo, compartido por crear y actualizar ──
+//
+// RECÁLCULO AUTORITATIVO con los parámetros del servidor: lo que llegue del navegador es una
+// propuesta, no el precio. La tarifa pactada sí se respeta —es la palanca comercial—, pero las
+// horas se vuelven a calcular aquí. Las fases excluidas viajan con el resto: si el recálculo
+// del servidor las ignorara, guardaría un presupuesto más caro que el que el comercial acaba de
+// enseñar en pantalla.
+type SnapshotPresupuesto = {
+  tarifa:          TarifaTipo
+  nombreNegocio:   string
+  descuentoPct:    number
+  descuentoMotivo: string
+  cuotaMensual:    number
+  resultado:       ReturnType<typeof calcularInstalacion>
+}
+
+async function calcularSnapshotPresupuesto(
+  db: ReturnType<typeof createAdminClient>,
   input: CrearPresupuestoInput,
-): Promise<{ ok: boolean; id?: number; error?: string }> {
-  const ctx = await requirePermiso('presupuestos')
-
-  const nombre_negocio = (input.nombreNegocio || '').trim()
-  if (!nombre_negocio) return { ok: false, error: 'El nombre del negocio es obligatorio.' }
+): Promise<{ ok: false; error: string } | { ok: true; snap: SnapshotPresupuesto }> {
+  const nombreNegocio = (input.nombreNegocio || '').trim()
+  if (!nombreNegocio) return { ok: false, error: 'El nombre del negocio es obligatorio.' }
   const tarifa: TarifaTipo = input.tarifa === 'fundador' ? 'fundador' : 'estandar'
-
-  const db = createAdminClient()
-
-  const historicoHorasManual = input.migracion?.desea ? Number(input.migracion?.horasManual ?? 0) || 0 : 0
 
   // Un descuento sin motivo es un descuento que dentro de tres meses nadie sabe explicar:
   // por qué ESTE cliente pagó $700 y no $1.000 es justo lo que hay que poder mirar después.
@@ -188,11 +198,7 @@ export async function crearPresupuesto(
     return { ok: false, error: 'Un descuento necesita su motivo.' }
   }
 
-  // RECÁLCULO AUTORITATIVO con los parámetros del servidor: lo que llegue del navegador es
-  // una propuesta, no el precio. La tarifa pactada sí se respeta —es la palanca comercial—,
-  // pero las horas se vuelven a calcular aquí.
-  // Las fases excluidas viajan con el resto: si el recálculo del servidor las ignorara,
-  // guardaría un presupuesto más caro que el que el comercial acaba de enseñar en pantalla.
+  const historicoHorasManual = input.migracion?.desea ? Number(input.migracion?.horasManual ?? 0) || 0 : 0
   const fasesExcluidas = (input.fasesExcluidas ?? [])
     .map(Number)
     .filter(n => n >= 1 && n <= 4)
@@ -210,6 +216,20 @@ export async function crearPresupuesto(
 
   const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], tarifa)
 
+  return { ok: true, snap: { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } }
+}
+
+// ── Crear (guardar) un presupuesto: recálculo autoritativo en servidor ──
+export async function crearPresupuesto(
+  input: CrearPresupuestoInput,
+): Promise<{ ok: boolean; id?: number; error?: string }> {
+  const ctx = await requirePermiso('presupuestos')
+  const db = createAdminClient()
+
+  const calc = await calcularSnapshotPresupuesto(db, input)
+  if (!calc.ok) return { ok: false, error: calc.error }
+  const { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
+
   const { data, error } = await db
     .from('presupuestos_instalacion')
     .insert({
@@ -217,7 +237,7 @@ export async function crearPresupuesto(
       client_id:             input.clientId ?? null,
       comercial_email:       input.comercialEmail ?? ctx.email,
       comercial_nombre:      input.comercialNombre ?? ctx.nombre,
-      nombre_negocio,
+      nombre_negocio:        nombreNegocio,
       nombre_responsable:    (input.nombreResponsable || '').trim() || null,
       contacto:              (input.contacto || '').trim() || null,
       tarifa,
@@ -250,11 +270,80 @@ export async function crearPresupuesto(
     entity:      'presupuesto',
     entity_id:   String(data.id),
     action:      'crear',
-    description: `Guardó presupuesto de ${nombre_negocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
+    description: `Guardó presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
   })
 
   revalidatePath('/admin/presupuestos')
   return { ok: true, id: data.id }
+}
+
+// ── Editar un presupuesto en borrador (solo estado 'guardado') ──
+//
+// Un presupuesto es la foto de lo pactado: una vez APROBADO se congela (es la prueba de lo que
+// se le enseñó al cliente) y una vez INSTALADO ya tiene horas reales registradas. Editar solo
+// tiene sentido mientras es un borrador. Para cambiar uno aprobado se le quita la aprobación
+// antes, o se crea uno nuevo. El recálculo es el mismo autoritativo que al crear.
+export async function actualizarPresupuesto(
+  id: number, input: CrearPresupuestoInput,
+): Promise<{ ok: boolean; id?: number; error?: string }> {
+  const ctx = await requirePermiso('presupuestos')
+  const db = createAdminClient()
+
+  const { data: actual } = await db
+    .from('presupuestos_instalacion')
+    .select('estado')
+    .eq('id', id)
+    .maybeSingle()
+  if (!actual) return { ok: false, error: 'Presupuesto no encontrado.' }
+  if (actual.estado !== 'guardado') {
+    return { ok: false, error: 'Solo se puede editar un presupuesto en borrador. Quítale la aprobación para poder editarlo.' }
+  }
+
+  const calc = await calcularSnapshotPresupuesto(db, input)
+  if (!calc.ok) return { ok: false, error: calc.error }
+  const { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
+
+  // No se tocan `diagnostico_id`, `client_id`, `estado`, `horas_reales` ni `created_at`: son la
+  // identidad y el ciclo de vida del presupuesto, no lo que se está reeditando.
+  const { error } = await db
+    .from('presupuestos_instalacion')
+    .update({
+      comercial_email:       input.comercialEmail ?? ctx.email,
+      comercial_nombre:      input.comercialNombre ?? ctx.nombre,
+      nombre_negocio:        nombreNegocio,
+      nombre_responsable:    (input.nombreResponsable || '').trim() || null,
+      contacto:              (input.contacto || '').trim() || null,
+      tarifa,
+      modulos:               input.modulos ?? [],
+      volumenes:             input.volumenes ?? {},
+      formato_datos:         input.formato,
+      migracion:             input.migracion?.desea ? input.migracion : { desea: false },
+      desglose:              resultado.desglose,
+      revisiones:            resultado.revisiones,
+      horas_total:           resultado.horasTotal,
+      coste_instalacion_usd: resultado.costeInstalacionUsd,
+      cuota_mensual_usd:     cuotaMensual,
+      tarifa_hora_usd:       resultado.tarifaHora,
+      descuento_pct:         descuentoPct,
+      descuento_motivo:      descuentoMotivo || null,
+      total_final_usd:       resultado.totalFinalUsd,
+      updated_at:            new Date().toISOString(),
+    })
+    .eq('id', id)
+    // Candado de concurrencia: si entre la carga y el guardado alguien lo aprobó, no se pisa.
+    .eq('estado', 'guardado')
+  if (error) return { ok: false, error: error.message }
+
+  await logActividad(db, {
+    user_email:  ctx.email,
+    entity:      'presupuesto',
+    entity_id:   String(id),
+    action:      'editar',
+    description: `Editó el presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
+  })
+
+  revalidatePath('/admin/presupuestos')
+  return { ok: true, id }
 }
 
 // ── Aprobar / desaprobar un presupuesto ──
