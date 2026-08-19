@@ -35,14 +35,15 @@ export function construirPresupuestoAnexo(
   prov: DatosProveedor,
   anexo: AnexoInput,
 ): DocumentoResuelto {
-  const responsable = cliente.nombre_responsable?.trim() || 'su representante'
+  const empresa = cliente.razon_social?.trim() || cliente.nombre_empresa
+  const responsable = cliente.representante_nombre?.trim() || 'su representante'
 
   const cuerpo: Elemento[] = [
     {
       tipo: 'seccion',
       parrafos: [
         `Anexo I del Contrato de prestación de servicio entre ${prov.nombre} (CLAUX) y `
-        + `${cliente.nombre_empresa}, representado por ${responsable}.`,
+        + `${empresa}, representado por ${responsable}.`,
         'Detalle de los módulos, addons y funcionalidades activados para el Cliente y sus precios '
         + 'aplicados. Este Anexo forma parte del Contrato y refleja la contratación vigente en la '
         + 'fecha de aceptación.',

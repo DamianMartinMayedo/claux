@@ -6,17 +6,16 @@ import { toastError } from '@/app/contexts/ToastContext'
 import { urlPdfFirmado } from '@/app/actions/documentos-admin'
 
 export default function DescargarFirmaBtn({
-  clientId, tipo, version,
+  clientId, firmaId,
 }: {
   clientId: string
-  tipo: string
-  version: string
+  firmaId: number
 }) {
   const [isPending, startTransition] = useTransition()
 
   function handleClick() {
     startTransition(async () => {
-      const url = await urlPdfFirmado(clientId, tipo, version)
+      const url = await urlPdfFirmado(clientId, firmaId)
       if (!url) { toastError('El PDF firmado aún no está disponible.'); return }
       window.open(url, '_blank', 'noopener')
     })

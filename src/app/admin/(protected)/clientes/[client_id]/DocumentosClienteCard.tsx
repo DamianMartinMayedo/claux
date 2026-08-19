@@ -8,6 +8,7 @@ import { FileSignature } from 'lucide-react'
 import { listarFirmasCliente } from '@/app/actions/documentos-admin'
 import RecordatorioDocumentosBtn from './RecordatorioDocumentosBtn'
 import DescargarFirmaBtn from './DescargarFirmaBtn'
+import ReabrirFirmasBtn from './ReabrirFirmasBtn'
 
 const DOCS: { tipo: string; label: string }[] = [
   { tipo: 'nda',         label: 'Acuerdo de confidencialidad (NDA)' },
@@ -26,12 +27,16 @@ export default async function DocumentosClienteCard({ clientId }: { clientId: st
   for (const f of firmas) if (!ultima.has(f.tipo)) ultima.set(f.tipo, f)
 
   const pendientes = DOCS.filter(d => !ultima.has(d.tipo)).length
+  const hayFirmas = ultima.size > 0
 
   return (
     <div className="card">
       <div className="card-header">
         <h2 className="card-title">Documentos legales</h2>
-        {pendientes > 0 && <RecordatorioDocumentosBtn clientId={clientId} />}
+        <div className="doc-cli-acciones">
+          {pendientes > 0 && <RecordatorioDocumentosBtn clientId={clientId} />}
+          {hayFirmas && <ReabrirFirmasBtn clientId={clientId} />}
+        </div>
       </div>
 
       <div className="table-wrapper table-wrapper-flush">
@@ -62,7 +67,7 @@ export default async function DocumentosClienteCard({ clientId }: { clientId: st
                   </td>
                   <td className="col-actions">
                     {f && f.tiene_pdf && (
-                      <DescargarFirmaBtn clientId={clientId} tipo={d.tipo} version={f.version} />
+                      <DescargarFirmaBtn clientId={clientId} firmaId={f.id} />
                     )}
                   </td>
                 </tr>

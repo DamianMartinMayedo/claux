@@ -5,12 +5,11 @@
 // haría que una firma vieja apunte a un texto que ya no es el que se aceptó.
 
 import { identificacionProveedor } from '../proveedor'
-import { clausulaFirmaElectronica, type DatosCliente, type DatosProveedor, type DocumentoResuelto } from '../render'
+import { clausulaFirmaElectronica, identificacionCliente, type DatosCliente, type DatosProveedor, type DocumentoResuelto } from '../render'
 
 export const VERSION_NDA = 'nda-2026-08'
 
 export function construirNda(cliente: DatosCliente, prov: DatosProveedor): DocumentoResuelto {
-  const responsable = cliente.nombre_responsable?.trim() || 'su representante'
   return {
     tipo: 'nda',
     version: VERSION_NDA,
@@ -22,8 +21,7 @@ export function construirNda(cliente: DatosCliente, prov: DatosProveedor): Docum
         titulo: '1. Partes',
         parrafos: [
           `De una parte, ${identificacionProveedor(prov)}`,
-          `De otra parte, ${cliente.nombre_empresa}, representado por ${responsable} `
-          + '(en adelante, «el Cliente»).',
+          `De otra parte, ${identificacionCliente(cliente)}`,
           'En conjunto, «las Partes».',
         ],
       },

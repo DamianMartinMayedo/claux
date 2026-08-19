@@ -1003,6 +1003,15 @@
 .doc-firma-sello-txt  { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
 .doc-firma-sello-hash { font-size: var(--text-xs); color: var(--color-text-muted); font-family: monospace; word-break: break-all; margin-top: 2px; }
 
+/* Datos fiscales de firma (paso previo en el perfil) */
+.doc-datos-bloque { padding-top: var(--space-4); margin-top: var(--space-4); border-top: 1px solid var(--color-divider); }
+.doc-datos-bloque:first-of-type { padding-top: 0; margin-top: 0; border-top: none; }
+.doc-datos-titulo { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-3); }
+.doc-datos-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.doc-datos-resumen { display: flex; flex-direction: column; gap: var(--space-4); }
+.doc-datos-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+@media (max-width: 640px) { .doc-datos-grid { grid-template-columns: 1fr; } }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MÓDULO FACTURACIÓN
    ═══════════════════════════════════════════════════════════════════════════ */

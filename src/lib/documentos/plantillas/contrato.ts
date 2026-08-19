@@ -6,12 +6,11 @@
 // firma electrónica (eIDAS). El resto del articulado se mantiene, renumerado.
 
 import { identificacionProveedor } from '../proveedor'
-import { clausulaFirmaElectronica, type DatosCliente, type DatosProveedor, type DocumentoResuelto } from '../render'
+import { clausulaFirmaElectronica, identificacionCliente, type DatosCliente, type DatosProveedor, type DocumentoResuelto } from '../render'
 
 export const VERSION_CONTRATO = 'contrato-2026-08'
 
 export function construirContrato(cliente: DatosCliente, prov: DatosProveedor): DocumentoResuelto {
-  const responsable = cliente.nombre_responsable?.trim() || 'su representante'
   return {
     tipo: 'contrato',
     version: VERSION_CONTRATO,
@@ -23,8 +22,7 @@ export function construirContrato(cliente: DatosCliente, prov: DatosProveedor): 
         titulo: '1. Partes',
         parrafos: [
           `De una parte, ${identificacionProveedor(prov)}`,
-          `De otra parte, ${cliente.nombre_empresa}, representado por ${responsable} `
-          + '(en adelante, «el Cliente»).',
+          `De otra parte, ${identificacionCliente(cliente)}`,
           'Ambas partes se reconocen mutuamente capacidad legal suficiente para suscribir el '
           + 'presente contrato (en adelante, el «Contrato»).',
         ],

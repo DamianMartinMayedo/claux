@@ -35,7 +35,32 @@ const BUCKET = 'documentos-firmados'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
 
+// ── Datos fiscales de firma (los rellena el cliente antes de poder firmar) ──
+export interface DatosFirma {
+  razon_social:         string
+  nif:                  string
+  domicilio_fiscal:     string
+  representante_nombre: string
+  representante_doc:    string
+}
+function leerDatosFirma(raw: unknown): DatosFirma {
+  const o = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  return {
+    razon_social:         String(o.razon_social ?? '').trim(),
+    nif:                  String(o.nif ?? '').trim(),
+    domicilio_fiscal:     String(o.domicilio_fiscal ?? '').trim(),
+    representante_nombre: String(o.representante_nombre ?? '').trim(),
+    representante_doc:    String(o.representante_doc ?? '').trim(),
+  }
+}
+/** Los cinco campos son obligatorios para poder ver y firmar. (Interno: un
+ *  fichero 'use server' solo puede EXPORTAR funciones async.) */
+function datosFirmaCompletos(d: DatosFirma): boolean {
+  return !!(d.razon_social && d.nif && d.domicilio_fiscal && d.representante_nombre && d.representante_doc)
+}
+
 export interface FirmaInfo {
+  id:                 number
   version:            string
   doc_hash:           string
   firmado_at:         string
@@ -52,10 +77,19 @@ export interface DocumentoEstado {
 }
 
 export interface EstadoDocumentos {
-  documentos:  DocumentoEstado[]
-  proveedor:   DatosProveedor
-  puedeFirmar: boolean            // solo el admin de la empresa firma
-  pendientes:  number
+  documentos:       DocumentoEstado[]
+  proveedor:        DatosProveedor
+  datosFirma:       DatosFirma
+  datosCompletos:   boolean
+  /** Datos bloqueados (solo lectura): ya hay una firma vigente. */
+  datosBloqueados:  boolean
+  /** Rol admin_empresa Y datos completos: solo entonces se puede firmar. */
+  puedeFirmar:      boolean
+  /** El usuario puede editar los datos fiscales (admin_empresa y no bloqueado). */
+  puedeEditarDatos: boolean
+  /** El usuario es el admin de la empresa (para mensajes de por qué no puede editar). */
+  esAdmin:          boolean
+  pendientes:       number
 }
 
 // ── Construcción del Anexo I (presupuesto) ──────────────────────────────────
@@ -142,19 +176,25 @@ async function construirAnexoInput(
 }
 
 async function resolverDocumentos(db: Db, cid: string): Promise<{
-  cliente: DatosCliente; proveedor: DatosProveedor; docs: Record<TipoDocumento, DocumentoResuelto>
+  cliente: DatosCliente; proveedor: DatosProveedor; datosFirma: DatosFirma
+  docs: Record<TipoDocumento, DocumentoResuelto>
 } | null> {
   const { data: c } = await db
     .from('clients')
-    .select('nombre_empresa, nombre_contacto, email_admin, modulos_activos, precio_mensual_usd, ciclo_facturacion, tarifa')
+    .select('nombre_empresa, email_admin, datos_firma, modulos_activos, precio_mensual_usd, ciclo_facturacion, tarifa')
     .eq('client_id', cid)
     .single()
   if (!c) return null
 
+  const datosFirma = leerDatosFirma(c.datos_firma)
   const cliente: DatosCliente = {
-    nombre_empresa:     c.nombre_empresa,
-    nombre_responsable: c.nombre_contacto,
-    email:              c.email_admin,
+    nombre_empresa:       c.nombre_empresa,
+    razon_social:         datosFirma.razon_social,
+    nif:                  datosFirma.nif,
+    domicilio_fiscal:     datosFirma.domicilio_fiscal,
+    representante_nombre: datosFirma.representante_nombre,
+    representante_doc:    datosFirma.representante_doc,
+    email:                c.email_admin,
   }
   const proveedor = await obtenerDatosProveedor()
   const anexo = await construirAnexoInput(db, cid, {
@@ -167,6 +207,7 @@ async function resolverDocumentos(db: Db, cid: string): Promise<{
   return {
     cliente,
     proveedor,
+    datosFirma,
     docs: {
       nda:         construirNda(cliente, proveedor),
       contrato:    construirContrato(cliente, proveedor),
@@ -184,17 +225,20 @@ export async function estadoDocumentos(): Promise<EstadoDocumentos | null> {
   const resuelto = await resolverDocumentos(db, session.client_id)
   if (!resuelto) return null
 
+  // Solo firmas VIGENTES (no caducadas): una firma caducada por una reapertura del
+  // admin ya no cuenta y el documento vuelve a "pendiente".
   const { data: firmas } = await db
     .from('firmas_documentos')
-    .select('tipo, version, doc_hash, firmado_at, firmado_por_nombre, firmado_por_email, pdf_path')
+    .select('id, tipo, version, doc_hash, firmado_at, firmado_por_nombre, firmado_por_email, pdf_path')
     .eq('client_id', session.client_id)
+    .is('caducada_at', null)
   const firmaDe = new Map<string, Record<string, unknown>>()
   for (const f of (firmas ?? []) as Record<string, unknown>[]) firmaDe.set(f.tipo as string, f)
 
   const documentos: DocumentoEstado[] = TIPOS.map(tipo => {
     const contenido = resuelto.docs[tipo]
     const f = firmaDe.get(tipo)
-    // Firmado solo si la firma corresponde a la versión vigente del documento:
+    // Firmado solo si la firma vigente corresponde a la versión actual del documento:
     // si el presupuesto cambió, la firma vieja no cuenta y vuelve a "pendiente".
     const firmado = !!f && f.version === contenido.version
     return {
@@ -202,6 +246,7 @@ export async function estadoDocumentos(): Promise<EstadoDocumentos | null> {
       contenido,
       firmado,
       firma: firmado ? {
+        id:                 f!.id as number,
         version:            f!.version as string,
         doc_hash:           f!.doc_hash as string,
         firmado_at:         f!.firmado_at as string,
@@ -212,12 +257,64 @@ export async function estadoDocumentos(): Promise<EstadoDocumentos | null> {
     }
   })
 
+  const datosCompletos = datosFirmaCompletos(resuelto.datosFirma)
+  // Bloqueado en cuanto hay al menos una firma vigente: cambiar los datos rompería
+  // la correspondencia con lo ya firmado. El admin puede reabrir (caduca las firmas).
+  const datosBloqueados = (firmas ?? []).length > 0
+  const esAdmin = session.rol === 'admin_empresa'
+
   return {
     documentos,
     proveedor: resuelto.proveedor,
-    puedeFirmar: session.rol === 'admin_empresa',
+    datosFirma: resuelto.datosFirma,
+    datosCompletos,
+    datosBloqueados,
+    puedeFirmar: esAdmin && datosCompletos,
+    puedeEditarDatos: esAdmin && !datosBloqueados,
+    esAdmin,
     pendientes: documentos.filter(d => !d.firmado).length,
   }
+}
+
+// ── Guardar los datos fiscales de firma (self-service, admin de la empresa) ──
+export async function guardarDatosFirma(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (session.rol !== 'admin_empresa') {
+    return { ok: false, error: 'Solo el administrador de la empresa puede editar los datos de firma.' }
+  }
+
+  const db = createAdminClient()
+  // No se pueden cambiar si ya hay una firma vigente (habría que reabrir desde admin).
+  const { count } = await db
+    .from('firmas_documentos')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_id', session.client_id)
+    .is('caducada_at', null)
+  if ((count ?? 0) > 0) {
+    return { ok: false, error: 'Los datos ya no se pueden cambiar: hay documentos firmados. Pide a CLAUX una reapertura.' }
+  }
+
+  const datos: DatosFirma = leerDatosFirma({
+    razon_social:         formData.get('razon_social'),
+    nif:                  formData.get('nif'),
+    domicilio_fiscal:     formData.get('domicilio_fiscal'),
+    representante_nombre: formData.get('representante_nombre'),
+    representante_doc:    formData.get('representante_doc'),
+  })
+  if (!datosFirmaCompletos(datos)) {
+    return { ok: false, error: 'Completa todos los campos: razón social, NIF, domicilio fiscal, nombre y documento del representante.' }
+  }
+
+  const { error } = await db.from('clients').update({ datos_firma: datos }).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: 'No se pudieron guardar los datos.' }
+
+  await logActividad(db, {
+    user_email: session.email, entity: 'firma', entity_id: session.client_id,
+    action: 'guardar_datos_firma', description: `Guardó los datos fiscales de firma (${datos.razon_social}).`,
+  })
+  revalidatePath('/portal/perfil')
+  return { ok: true }
 }
 
 // ── Firmar un documento ─────────────────────────────────────────────────────
@@ -225,7 +322,7 @@ export interface FirmarResultado {
   ok: boolean
   error?: string
   firma?: {
-    version: string; docHash: string; firmadoAt: string
+    id: number; version: string; docHash: string; firmadoAt: string
     firmadoPorNombre: string; firmadoPorEmail: string
   }
   contenido?: DocumentoResuelto
@@ -250,6 +347,12 @@ export async function firmarDocumento(formData: FormData): Promise<FirmarResulta
   const resuelto = await resolverDocumentos(db, session.client_id)
   if (!resuelto) return { ok: false, error: 'No se pudo cargar el documento.' }
 
+  // No se firma sin los datos fiscales completos (defensa en servidor; la UI ya
+  // bloquea el botón, pero el gate real vive aquí).
+  if (!datosFirmaCompletos(resuelto.datosFirma)) {
+    return { ok: false, error: 'Antes de firmar debes completar tus datos fiscales.' }
+  }
+
   const contenido = resuelto.docs[tipo]
   const docHash = await hashDocumento(contenido)
   const firmadoAt = new Date().toISOString()
@@ -257,7 +360,7 @@ export async function firmarDocumento(formData: FormData): Promise<FirmarResulta
   const ip = await clientIp()
   const ua = (await headers()).get('user-agent') ?? ''
 
-  const { error } = await db.from('firmas_documentos').insert({
+  const { data: filaNueva, error } = await db.from('firmas_documentos').insert({
     client_id:          session.client_id,
     tipo,
     version:            contenido.version,
@@ -268,12 +371,12 @@ export async function firmarDocumento(formData: FormData): Promise<FirmarResulta
     firmado_at:         firmadoAt,
     ip,
     user_agent:         ua,
-    snapshot:           { contenido, proveedor: resuelto.proveedor },
-  })
+    snapshot:           { contenido, proveedor: resuelto.proveedor, datosFirma: resuelto.datosFirma },
+  }).select('id').single()
 
-  if (error) {
-    // 23505 = ya firmado este documento-versión: no es un error para el usuario.
-    if (error.code === '23505') return { ok: false, error: 'Este documento ya está firmado.' }
+  if (error || !filaNueva) {
+    // 23505 = ya hay una firma VIGENTE de este documento-versión (índice parcial).
+    if (error?.code === '23505') return { ok: false, error: 'Este documento ya está firmado.' }
     return { ok: false, error: 'No se pudo registrar la firma.' }
   }
 
@@ -291,6 +394,7 @@ export async function firmarDocumento(formData: FormData): Promise<FirmarResulta
   return {
     ok: true,
     firma: {
+      id: filaNueva.id as number,
       version: contenido.version, docHash, firmadoAt,
       firmadoPorNombre: nombre, firmadoPorEmail: session.email,
     },
@@ -308,10 +412,9 @@ export async function subirPdfFirma(formData: FormData): Promise<{ ok: boolean; 
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (session.rol !== 'admin_empresa') return { ok: false, error: 'Sin permiso.' }
 
-  const tipo = String(formData.get('tipo') ?? '') as TipoDocumento
-  const version = String(formData.get('version') ?? '')
+  const firmaId = Number(formData.get('firmaId'))
   const file = formData.get('pdf')
-  if (!TIPOS.includes(tipo) || !version) return { ok: false, error: 'Datos incompletos.' }
+  if (!Number.isFinite(firmaId) || firmaId <= 0) return { ok: false, error: 'Firma no válida.' }
   if (!(file instanceof File)) return { ok: false, error: 'PDF ausente.' }
   if (file.type !== 'application/pdf') return { ok: false, error: 'El archivo debe ser PDF.' }
   if (file.size > 10 * 1024 * 1024) return { ok: false, error: 'El PDF no puede superar los 10 MB.' }
@@ -320,7 +423,9 @@ export async function subirPdfFirma(formData: FormData): Promise<{ ok: boolean; 
   // Blob, no Buffer: en el runtime serverless de Vercel un Buffer corrompe la subida.
   const buffer = Buffer.from(await file.arrayBuffer())
   const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
-  const path = `${session.client_id}/${tipo}-${version}.pdf`
+  // Ruta por ID de firma: cada firma (incluidas las caducadas) conserva su propio
+  // PDF como prueba de lo que se firmó entonces.
+  const path = `${session.client_id}/${firmaId}.pdf`
   const { error: upErr } = await db.storage.from(BUCKET).upload(path, blob, {
     contentType: 'application/pdf', upsert: true,
   })
@@ -328,9 +433,8 @@ export async function subirPdfFirma(formData: FormData): Promise<{ ok: boolean; 
 
   const { error } = await db.from('firmas_documentos')
     .update({ pdf_path: path })
+    .eq('id', firmaId)
     .eq('client_id', session.client_id)
-    .eq('tipo', tipo)
-    .eq('version', version)
   if (error) return { ok: false, error: 'No se pudo guardar la referencia del PDF.' }
 
   revalidatePath('/portal/perfil')

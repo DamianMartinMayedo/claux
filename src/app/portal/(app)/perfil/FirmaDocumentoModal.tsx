@@ -78,16 +78,16 @@ export default function FirmaDocumentoModal({
   const [isPending, startTransition] = useTransition()
   const contenido: DocumentoResuelto = doc.contenido
 
-  // Genera y descarga el PDF firmado (regenerado desde el mismo contenido).
-  async function generarPdf(sello: SelloFirma, subir: boolean) {
+  // Genera y descarga el PDF firmado (regenerado desde el mismo contenido). Si
+  // `firmaId` viene, además lo sube al bucket privado (tras firmar).
+  async function generarPdf(sello: SelloFirma, firmaId?: number) {
     try {
       await descargarDocumentoFirmado(contenido, proveedor, sello)
-      if (subir) {
+      if (firmaId) {
         const blob = await blobDocumentoFirmado(contenido, proveedor, sello)
         const fd = new FormData()
-        fd.append('tipo', contenido.tipo)
-        fd.append('version', contenido.version)
-        fd.append('pdf', new File([blob], `${contenido.tipo}-${contenido.version}.pdf`, { type: 'application/pdf' }))
+        fd.append('firmaId', String(firmaId))
+        fd.append('pdf', new File([blob], `${contenido.tipo}-${firmaId}.pdf`, { type: 'application/pdf' }))
         await subirPdfFirma(fd)
       }
     } catch {
@@ -114,7 +114,7 @@ export default function FirmaDocumentoModal({
         firmadoPorEmail:  res.firma.firmadoPorEmail,
         firmadoAt:        res.firma.firmadoAt,
         docHash:          res.firma.docHash,
-      }, true)
+      }, res.firma.id)
       onFirmado()
       onClose()
     })
@@ -127,7 +127,7 @@ export default function FirmaDocumentoModal({
       firmadoPorEmail:  doc.firma.firmado_por_email,
       firmadoAt:        doc.firma.firmado_at,
       docHash:          doc.firma.doc_hash,
-    }, false)
+    })
   }
 
   return (

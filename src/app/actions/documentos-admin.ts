@@ -17,6 +17,7 @@ import { logActividad }      from '@/lib/audit'
 const BUCKET = 'documentos-firmados'
 
 export interface FirmaClienteRow {
+  id:                 number
   tipo:               string
   version:            string
   firmado_at:         string
@@ -25,16 +26,18 @@ export interface FirmaClienteRow {
   tiene_pdf:          boolean
 }
 
-/** Firmas de un cliente, para la tarjeta de su ficha. */
+/** Firmas VIGENTES de un cliente (las caducadas por una reapertura no cuentan). */
 export async function listarFirmasCliente(clientId: string): Promise<FirmaClienteRow[]> {
   await requirePermiso('clientes')
   const db = createAdminClient()
   const { data } = await db
     .from('firmas_documentos')
-    .select('tipo, version, firmado_at, firmado_por_nombre, firmado_por_email, pdf_path')
+    .select('id, tipo, version, firmado_at, firmado_por_nombre, firmado_por_email, pdf_path')
     .eq('client_id', clientId)
+    .is('caducada_at', null)
     .order('firmado_at', { ascending: false })
   return ((data ?? []) as Record<string, unknown>[]).map(f => ({
+    id:                 f.id as number,
     tipo:               f.tipo as string,
     version:            f.version as string,
     firmado_at:         f.firmado_at as string,
@@ -44,19 +47,57 @@ export async function listarFirmasCliente(clientId: string): Promise<FirmaClient
   }))
 }
 
-/** URL firmada (10 min) para descargar el PDF de una firma concreta. */
-export async function urlPdfFirmado(clientId: string, tipo: string, version: string): Promise<string | null> {
+/** URL firmada (10 min) para descargar el PDF de una firma concreta (por su id). */
+export async function urlPdfFirmado(clientId: string, firmaId: number): Promise<string | null> {
   await requirePermiso('clientes')
   const db = createAdminClient()
   const { data: fila } = await db
     .from('firmas_documentos')
     .select('pdf_path')
-    .eq('client_id', clientId).eq('tipo', tipo).eq('version', version)
+    .eq('client_id', clientId).eq('id', firmaId)
     .maybeSingle()
   const path = (fila as { pdf_path?: string } | null)?.pdf_path
   if (!path) return null
   const { data } = await db.storage.from(BUCKET).createSignedUrl(path, 600)
   return data?.signedUrl ?? null
+}
+
+/**
+ * Reabre la firma de los documentos de un cliente: caduca todas sus firmas
+ * vigentes (marca `caducada_at`), lo que desbloquea la edición de sus datos
+ * fiscales y le obliga a volver a firmar — como un vencimiento. Las firmas
+ * caducadas y sus PDF se conservan como histórico. Reversible solo firmando de
+ * nuevo, no deshaciendo la caducidad.
+ */
+export async function reabrirFirmas(clientId: string): Promise<{ ok: boolean; error?: string; caducadas?: number }> {
+  const ctx = await requirePermiso('clientes')
+  const db = createAdminClient()
+
+  const { data, error } = await db
+    .from('firmas_documentos')
+    .update({ caducada_at: new Date().toISOString() })
+    .eq('client_id', clientId)
+    .is('caducada_at', null)
+    .select('id')
+  if (error) return { ok: false, error: 'No se pudo reabrir la firma.' }
+
+  const caducadas = (data ?? []).length
+
+  // Avisa al cliente de que sus documentos volvieron a estar pendientes.
+  await crearNotificacion({
+    clientId,
+    tipo:   'documentos_firma_pendiente',
+    titulo: 'Debes actualizar y volver a firmar tus documentos',
+    cuerpo: 'Hemos reabierto tus documentos para que actualices tus datos fiscales y los firmes de nuevo.',
+    enlace: '/portal/perfil',
+  })
+
+  await logActividad(db, {
+    user_email: ctx.email, entity: 'firma', entity_id: clientId,
+    action: 'reabrir_firmas', description: `Reabrió la firma de documentos (caducó ${caducadas} firma(s)).`,
+  })
+
+  return { ok: true, caducadas }
 }
 
 const PORTAL_URL = `${(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.es').replace(/\/$/, '')}/portal/perfil`

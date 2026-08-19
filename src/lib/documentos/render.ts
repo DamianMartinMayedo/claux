@@ -19,9 +19,30 @@ export type Elemento =
   | { tipo: 'tabla'; titulo?: string; columnas: string[]; filas: string[][]; nota?: string }
 
 export interface DatosCliente {
-  nombre_empresa:     string
-  nombre_responsable: string | null
-  email:              string
+  /** Nombre comercial de la cuenta (fallback si no hay razón social). */
+  nombre_empresa:       string
+  /** Datos fiscales oficiales, que el cliente rellena antes de firmar. */
+  razon_social:         string
+  nif:                  string
+  domicilio_fiscal:     string
+  representante_nombre: string
+  representante_doc:    string
+  email:                string
+}
+
+/** Frase de identificación del Cliente para la cláusula «Partes»: empresa (razón
+ *  social + NIF + domicilio fiscal) y representante (nombre + documento). */
+export function identificacionCliente(c: DatosCliente): string {
+  const empresa = c.razon_social?.trim() || c.nombre_empresa
+  const partes = [`${empresa}`]
+  if (c.nif) partes.push(`con NIF ${c.nif}`)
+  if (c.domicilio_fiscal) partes.push(`y domicilio fiscal en ${c.domicilio_fiscal}`)
+  let frase = partes.join(' ') + ' (en adelante, «el Cliente»)'
+  if (c.representante_nombre) {
+    frase += `, representada por ${c.representante_nombre}`
+    if (c.representante_doc) frase += `, con documento de identidad ${c.representante_doc}`
+  }
+  return frase + '.'
 }
 
 export interface DatosProveedor {
