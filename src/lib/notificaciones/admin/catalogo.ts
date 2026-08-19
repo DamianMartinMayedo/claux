@@ -58,6 +58,11 @@ export const CATALOGO_ADMIN = {
     etiqueta: 'Un cliente quiere ampliar',
     descripcion: 'Pidió activar un módulo desde su portal.',
   },
+  migracion_ayuda: {
+    categoria: 'ventas', seccion: 'solicitudes', severidad: 'aviso', implementado: true,
+    etiqueta: 'Un cliente pide ayuda para importar',
+    descripcion: 'Pidió que el equipo haga su migración de datos (servicio de pago).',
+  },
 
   // ── Soporte ────────────────────────────────────────────────────────────────
   soporte_mensaje_nuevo: {

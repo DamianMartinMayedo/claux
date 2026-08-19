@@ -137,6 +137,8 @@ export default async function ClienteDetallePage({
               notas:            cliente.notas,
               archivado_at:     cliente.archivado_at,
               es_prueba:        cliente.es_prueba,
+              autoimport_activo: cliente.autoimport_activo,
+              migracion_estado:  cliente.migracion_estado,
             }}
             tienePagosConfirmados={confirmados.length > 0}
           />

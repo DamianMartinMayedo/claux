@@ -102,6 +102,28 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
     ],
     campos: [...propios, ...CAMPOS_COMUNES, ...cobro],
 
+    // Columnas de CONSOLIDACIÓN (plan §7), solo si el cliente tiene moneda de
+    // consolidación: la tasa congelada nativo→esa moneda A LA FECHA DE LA FILA, o
+    // el importe ya consolidado del que se deriva. Dinámicas porque la moneda y su
+    // existencia dependen del cliente (no se saben al cargar el módulo). Sin ejemplo
+    // a propósito: así la fila de muestra no las trae y `esFilaEjemplo` no se confunde.
+    async camposExtra(ctx): Promise<CampoDef[]> {
+      const cons = ctx.monedaConsolidacion
+      if (!cons) return []
+      return [
+        {
+          campo: 'tasa_consolidacion', etiqueta: `Tasa a ${cons}`, obligatorio: false,
+          alias: [`tasa a ${cons.toLowerCase()}`, 'tasa consolidacion', 'tasa consolidación', 'tasa de consolidacion', 'tasa de consolidación'],
+          ayuda: `Opcional. Cuántos ${cons} valía 1 de la moneda de la fila EN SU FECHA (no la de hoy). Congela el histórico para consolidar sin la tasa vigente. Vacío → el informe usa la tasa de hoy.`,
+        },
+        {
+          campo: 'importe_consolidado', etiqueta: `Importe en ${cons}`, obligatorio: false,
+          alias: [`importe en ${cons.toLowerCase()}`, `total en ${cons.toLowerCase()}`, 'importe consolidado', 'monto consolidado'],
+          ayuda: `Opcional, en vez de la tasa: el mismo importe ya pasado a ${cons} a la fecha de la fila. De ahí se calcula la tasa. Si pones los dos, manda «Tasa a ${cons}».`,
+        },
+      ]
+    },
+
     // Totales por moneda: si un «1.500» se hubiera leído como 1,5, el total lo
     // canta antes de escribir nada.
     resumen: filas => {
@@ -113,6 +135,9 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         const plan = (f as unknown as DatosGasto).plan_categoria
         return plan ? nombresNuevos(plan) : []
       }))
+      // Cuántas filas traen tasa de consolidación (plan §7): que se vea si la
+      // columna se mapeó bien antes de escribir, como los totales por moneda.
+      const conTasa = filas.filter(f => (f as unknown as DatosGasto).registro.tasa_consolidacion != null).length
       return [
         ...totalesPor(filas, f => reg(f).moneda as string, f => reg(f).monto as number,
           m => `Total ${esGasto ? 'gastos' : 'cobros'} ${m}`),
@@ -125,6 +150,9 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
           : []),
         ...(cats.size > 0
           ? [{ etiqueta: 'Categorías que se crearán', valor: cats.size, entero: true }]
+          : []),
+        ...(conTasa > 0
+          ? [{ etiqueta: 'Filas con tasa de consolidación', valor: conTasa, entero: true }]
           : []),
       ]
     },
@@ -149,6 +177,30 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
 
       const vencimiento = parseFecha(valores.vencimiento)
       if (vencimiento === undefined) return { ok: false, motivo: 'El vencimiento no se entiende (usa dd/mm/aaaa).' }
+
+      // ── Consolidación multi-moneda (solución B, plan §7) ──────────────────────
+      // Tasa CONGELADA nativo→moneda de consolidación A LA FECHA DE LA FILA. La
+      // aporta el cliente («Tasa a X») o se deriva del importe ya consolidado
+      // («Importe en X» ÷ monto nativo). Solo existe si el cliente tiene moneda de
+      // consolidación (si no, las columnas ni se pintan). La tasa manda sobre el
+      // importe consolidado si vienen las dos. Sin nada → null (Reportes usa la
+      // vigente, como hasta ahora). El importe nativo real (`monto`) no se toca.
+      let tasa_consolidacion: number | null = null
+      const cons = ctx.monedaConsolidacion ?? null
+      if (cons) {
+        const tasaDir = parseNumero(valores.tasa_consolidacion)
+        if (tasaDir === undefined) return { ok: false, motivo: `La "Tasa a ${cons}" no es un número.` }
+        const impCons = parseNumero(valores.importe_consolidado)
+        if (impCons === undefined) return { ok: false, motivo: `El "Importe en ${cons}" no es un número.` }
+        if (tasaDir != null) {
+          if (tasaDir <= 0) return { ok: false, motivo: `La "Tasa a ${cons}" debe ser mayor que cero.` }
+          tasa_consolidacion = tasaDir
+        } else if (impCons != null) {
+          if (impCons <= 0) return { ok: false, motivo: `El "Importe en ${cons}" debe ser mayor que cero.` }
+          // `monto` ya está validado > 0 arriba: sin división por cero.
+          tasa_consolidacion = impCons / monto
+        }
+      }
 
       // Etiqueta y clasificación: el gasto la deriva de su categoría; el cobro
       // lleva concepto libre (misma regla que el alta manual, mismo núcleo). La
@@ -224,6 +276,8 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         concepto:    (valores.concepto ?? '').trim() || descripcion,
         moneda,
         monto,
+        // Tasa congelada de consolidación (plan §7); null si no se aportó.
+        tasa_consolidacion,
         // Si el operador eligió no crear la ficha, el nombre no se tira: queda
         // escrito en las notas, que es donde se puede recuperar después.
         notas: [(valores.notas ?? '').trim(), sinTercero && `${esGasto ? 'Proveedor' : 'Cliente'}: ${sinTercero}`]
@@ -323,6 +377,8 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
       if (d.registro.vencimiento) patch.vencimiento = d.registro.vencimiento
       if (tercero_id)             patch.tercero_id  = tercero_id
       if (d.registro.notas)       patch.notas       = d.registro.notas
+      // Rellena la tasa de consolidación si el archivo la trae (nunca la vacía).
+      if (d.registro.tasa_consolidacion != null) patch.tasa_consolidacion = d.registro.tasa_consolidacion
       const { error } = await ctx.db.from('gastos_cobros').update(patch)
         .eq('registro_id', id).eq('client_id', ctx.client_id)
       if (error) throw new Error(error.message)

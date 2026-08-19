@@ -12,6 +12,7 @@ import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { importeCiclo } from '@/lib/billing'
+import { MIGRACION_ESTADOS_ALTA, MIGRACION_ESTADO_LABEL } from '@/lib/migracion'
 
 export type ModuloCatalogo = {
   clave: string
@@ -433,6 +434,22 @@ export default function ClienteFormModal({
                 </label>
                 </>
                 )}
+
+                {/* Datos de un sistema anterior → migracion_estado. Gobierna el aviso de
+                    bienvenida y si el cliente ve la herramienta para importar. Editable
+                    luego en la ficha. `completada` no es opción de alta (se alcanza al
+                    terminar la migración). */}
+                <div className="input-group">
+                  <div className="form-label-with-help">
+                    <label>Datos de un sistema anterior</label>
+                    <FormHelp text="¿El negocio trae datos de otro sistema y quién los migra? Decide el aviso de bienvenida y si el cliente ve la herramienta para importar sus datos. Se puede cambiar luego en la ficha." label="Qué decide esta pregunta" />
+                  </div>
+                  <select name="migracion_estado" className="input" defaultValue="sin_datos_previos">
+                    {MIGRACION_ESTADOS_ALTA.map(e => (
+                      <option key={e} value={e}>{MIGRACION_ESTADO_LABEL[e]}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="input-group">
                   <label>Notas internas</label>

@@ -65,7 +65,10 @@ const WRITE = /\.(insert|update|delete|upsert)\s*\(|\.rpc\s*\(/
 //   · `sesionBandeja()` → admin_empresa ve todo; un `usuario` solo las categorías
 //     operativas de sus módulos (decisión 4), y toda mutación acota además con
 //     `.in('categoria', categorias)` para que no toque lo que no ve.
-const GATE  = /puedeEditarModulo\s*\(|puedeEditarAlgunModulo\s*\(|tieneModulo\s*\(|require(Modulo|AlgunModulo|AccesoModulo)\s*\(|requireAddonIa\s*\(|rol\s*!==\s*'admin_empresa'|sesion(Admin|Bandeja)\s*\(/
+// `requireImportarEntidad` / `puedeImportar` son el candado del importador de
+// autoservicio (importar-cliente.ts): SIEMPRE intersectan el módulo contratado del
+// tenant con el interruptor por usuario, así que cuentan como candado de módulo.
+const GATE  = /puedeEditarModulo\s*\(|puedeEditarAlgunModulo\s*\(|tieneModulo\s*\(|require(Modulo|AlgunModulo|AccesoModulo|ImportarEntidad)\s*\(|puedeImportar\s*\(|requireAddonIa\s*\(|rol\s*!==\s*'admin_empresa'|sesion(Admin|Bandeja)\s*\(/
 
 const files = readdirSync(DIR).filter(f => f.endsWith('.ts') && f !== 'auth.ts')
 const holes = []

@@ -69,6 +69,28 @@ export async function avisarAmpliacionSolicitada(params: {
   })
 }
 
+/**
+ * «Solicitar ayuda» del importador de autoservicio: el cliente pide que el equipo
+ * haga su migración de datos (servicio de pago). Cae en el buzón de Solicitudes; el
+ * operador la atiende desde la ficha (fija `migracion_estado='a_cargo_equipo'` al
+ * aceptar el presupuesto, `completada` al terminar). Un cliente = una solicitud viva.
+ */
+export async function avisarSolicitudMigracion(params: {
+  clientId: string
+  empresa:  string
+  mensaje?: string | null
+}): Promise<void> {
+  await crearAvisoAdmin({
+    tipo:        'migracion_ayuda',
+    titulo:      `${params.empresa} pide ayuda para importar`,
+    cuerpo:      params.mensaje?.trim() || 'Quiere que el equipo haga su migración de datos.',
+    enlace:      `/admin/clientes/${params.clientId}`,
+    clientId:    params.clientId,
+    entidadTipo: 'migracion',
+    entidadId:   params.clientId,
+  })
+}
+
 /** Mensaje de soporte entrante desde el portal del cliente. */
 export async function avisarSoporteNuevo(params: {
   mensajeId: number

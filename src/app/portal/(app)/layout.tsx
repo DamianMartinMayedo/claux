@@ -5,6 +5,7 @@ import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
+import { accesoImportCliente } from '@/lib/importador/acceso-cliente'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
 import BloqueadoScreen       from '@/components/portal/BloqueadoScreen'
@@ -32,7 +33,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const [{ data: cliente }, { data: usr }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar] = await Promise.all([
+  const [{ data: cliente }, { data: usr }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar, accesoImport] = await Promise.all([
     db
       .from('clients')
       .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, es_prueba')
@@ -51,6 +52,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     // contraseña es del cliente y la define él en su primer acceso. Forzarla aquí
     // bloquearía justo la tarea que viene a hacer el configurador.
     session.imp ? Promise.resolve(false) : debeCambiarPassword(session),
+    // Importador de autoservicio: regla única de visibilidad (misma que el guard de
+    // /portal/importar-datos), para pintar (o no) su entrada en el menú de cuenta.
+    accesoImportCliente(session),
   ])
 
   if (!cliente) redirect('/portal/login')
@@ -114,6 +118,10 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   // lo operativo de sus módulos (mapa fijo, decisión 4), y solo si le toca alguna
   // categoría. Solo con el portal operativo — bloqueado, la pantalla de bloqueo es
   // el único mensaje que toca dar.
+  // Entrada «Importar datos» del menú de cuenta: solo con el portal operativo y si el
+  // importador de autoservicio está disponible (permiso + módulo + no a cargo del equipo).
+  const puedeImportarDatos = !bloqueado && accesoImport.disponible
+
   const catsBandeja = categoriasBandeja(session.rol, modulosVisibles)  // null = admin (todas)
   const verNotificaciones = !bloqueado && (catsBandeja === null || catsBandeja.length > 0)
   const notifInicial = verNotificaciones
@@ -131,6 +139,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         /* La MISMA bandera que monta el proveedor, aquí abajo. La campana la calculaba por
            su cuenta y se olvidaba de `bloqueado`. */
         verNotificaciones={verNotificaciones}
+        puedeImportarDatos={puedeImportarDatos}
       />
       <PortalSidebar
         modulosVisibles={modulosVisibles}

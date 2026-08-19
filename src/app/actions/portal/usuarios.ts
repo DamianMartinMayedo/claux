@@ -18,6 +18,7 @@ export interface UsuarioPortal {
   rol:             'admin_empresa' | 'usuario'
   permiso_defecto: Permiso       // se aplica a todos los módulos contratados (incl. futuros)
   solo_lectura:    boolean       // derivado: no puede editar NINGÚN módulo (para el badge de la lista)
+  puede_importar:  boolean       // interruptor del importador de autoservicio (el admin editor lo tiene implícito)
   estado:          'ACTIVO' | 'INACTIVO'
   created_at:      string
   empresas:        string[]      // empresa_ids asignadas (solo para rol 'usuario')
@@ -95,7 +96,7 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
 
   const { data: usuarios } = await db
     .from('client_users')
-    .select('user_id, client_id, email, nombre, rol, solo_lectura, permiso_defecto, estado, created_at')
+    .select('user_id, client_id, email, nombre, rol, solo_lectura, permiso_defecto, puede_importar, estado, created_at')
     .eq('client_id', session.client_id)
     .order('created_at')
 
@@ -125,6 +126,7 @@ export async function obtenerUsuarios(): Promise<UsuarioPortal[]> {
     ...u,
     permiso_defecto: coercePermiso(u.permiso_defecto, 'editar'),
     solo_lectura: u.solo_lectura ?? false,
+    puede_importar: !!u.puede_importar,
     empresas: empresasPorUsuario.get(u.user_id) ?? [],
     modulos:  modulosPorUsuario.get(u.user_id) ?? [],
   })) as UsuarioPortal[]
@@ -201,6 +203,7 @@ export async function crearUsuario(formData: FormData): Promise<{
   const nombre   = ((formData.get('nombre') as string) ?? '').trim() || null
   const rol      = ((formData.get('rol')    as string) ?? 'usuario') as UsuarioPortal['rol']
   const defecto  = coercePermiso(formData.get('permiso_defecto'), 'editar')
+  const puedeImportarVal = ['on', 'true', '1'].includes(String(formData.get('puede_importar')))
   const empresas = formData.getAll('empresas') as string[]
 
   if (!email) return { ok: false, error: 'El email es obligatorio.' }
@@ -234,6 +237,7 @@ export async function crearUsuario(formData: FormData): Promise<{
     rol,
     permiso_defecto:   defecto,
     solo_lectura:      soloLectura,
+    puede_importar:    puedeImportarVal,
     password_hash:     hash,
     salt,
     estado:            'ACTIVO',
@@ -293,6 +297,7 @@ export async function editarUsuario(formData: FormData): Promise<{
   const nombre   = ((formData.get('nombre')   as string) ?? '').trim() || null
   const rol      = ((formData.get('rol')       as string) ?? 'usuario') as UsuarioPortal['rol']
   const defecto  = coercePermiso(formData.get('permiso_defecto'), 'editar')
+  const puedeImportarVal = ['on', 'true', '1'].includes(String(formData.get('puede_importar')))
   const estado   = formData.get('estado') === 'INACTIVO' ? 'INACTIVO' : 'ACTIVO'
   const empresas = formData.getAll('empresas') as string[]
 
@@ -344,7 +349,7 @@ export async function editarUsuario(formData: FormData): Promise<{
 
   const { error } = await db
     .from('client_users')
-    .update({ nombre, rol, permiso_defecto: defecto, solo_lectura: soloLectura, estado })
+    .update({ nombre, rol, permiso_defecto: defecto, solo_lectura: soloLectura, puede_importar: puedeImportarVal, estado })
     .eq('user_id', user_id)
     .eq('client_id', session.client_id)
 

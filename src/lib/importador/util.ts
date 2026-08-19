@@ -26,6 +26,16 @@ export function claveNombre(s: string | null | undefined): string {
 }
 
 /**
+ * Fragmento aleatorio para ids de negocio con prefijo (`REC-…`, `CATITM-…`,
+ * `CATCAT-…`). Mismo formato EXACTO que los helpers `genId`/`corto` de las
+ * acciones del portal (8 hex en mayúsculas), para que una ficha creada por el
+ * importador sea indistinguible de una creada a mano.
+ */
+export function idCorto(): string {
+  return crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()
+}
+
+/**
  * Distancia de edición (Levenshtein, dos filas). Cuenta cuántas letras hay que
  * cambiar para pasar de un texto a otro: un dedazo («Alquier» por «Alquiler»)
  * queda a 1, y dos palabras distintas quedan lejos.

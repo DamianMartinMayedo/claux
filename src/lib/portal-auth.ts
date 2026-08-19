@@ -26,6 +26,10 @@ export interface PortalSession {
   email:        string
   rol:          'admin_empresa' | 'usuario'
   solo_lectura: boolean
+  // Importador de autoservicio: interruptor por usuario (`client_users.puede_importar`).
+  // Lo rellena `getPortalSession` en sesiones normales; AUSENTE en impersonación (ahí
+  // el equipo usa su propio importador). `puedeImportar()` lo trata como false si falta.
+  puede_importar?: boolean
   // Presente SOLO en sesiones de impersonación (el equipo CLAUX entra al portal
   // del cliente para configurarlo). Ausente en sesiones normales. Sirve para el
   // banner del portal y para EXCLUIR esta actividad de las métricas de uso.

@@ -72,6 +72,11 @@ function UsuarioModal({
   const [rol,       setRol]          = useState<UsuarioPortal['rol']>(usuario?.rol ?? 'usuario')
   const [permisoDefecto, setPermisoDefecto] = useState<Permiso>(usuario?.permiso_defecto ?? 'editar')
   const [empresasSel, setEmpresasSel] = useState<string[]>(usuario?.empresas ?? [])
+  // Interruptor del importador de autoservicio. El admin que edita lo tiene IMPLÍCITO
+  // (coincide con puedeImportar() del backend: admin_empresa && !solo_lectura): para él
+  // el switch va marcado y bloqueado. Al resto se lo concede el admin, uno por uno.
+  const [puedeImportar, setPuedeImportar] = useState(usuario?.puede_importar ?? false)
+  const importImplicito = rol === 'admin_empresa' && permisoDefecto === 'editar'
 
   // Excepciones por módulo: solo las que difieren del permiso por defecto. Ausencia de
   // entrada = ese módulo sigue el defecto (incluidos los que se contraten en el futuro).
@@ -100,6 +105,7 @@ function UsuarioModal({
     const fd = new FormData(e.currentTarget)
     fd.set('rol', rol)
     fd.set('permiso_defecto', permisoDefecto)
+    fd.set('puede_importar', (importImplicito || puedeImportar) ? 'true' : 'false')
     empresasSel.forEach(id => fd.append('empresas', id))
 
     // Excepciones por módulo (solo operador): "clave:permiso", solo las que difieren
@@ -285,6 +291,39 @@ function UsuarioModal({
                 )}
               </div>
             )}
+
+            {/* Importar datos — un solo interruptor por usuario (no una casilla por módulo):
+                la herramienta se abre con TODOS los módulos contratados, así que basta un
+                permiso. El admin que edita lo tiene implícito; al resto se lo concede él. */}
+            <div className="usr-form-seccion">
+              <div className="form-label-with-help">
+                <label className="form-label">Importar datos</label>
+                <FormHelp
+                  text="La herramienta de importación se abre con todos los módulos que el negocio tiene contratados: quien la use podrá cargar datos en cualquiera de ellos desde una hoja de cálculo. Dásela solo a quien haga la carga inicial."
+                  label="Qué permite importar datos"
+                />
+              </div>
+              <div className="mod-row">
+                <div className="mod-row-main">
+                  <span className="mod-row-name">Puede importar datos</span>
+                  <span className="mod-row-desc">
+                    {importImplicito
+                      ? 'El administrador puede importar siempre, sin necesidad de activarlo.'
+                      : 'Permite cargar datos en bloque desde una hoja de cálculo (Excel o CSV).'}
+                  </span>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={importImplicito || puedeImportar}
+                    disabled={isPending || importImplicito}
+                    aria-label="Puede importar datos"
+                    onChange={e => setPuedeImportar(e.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                </label>
+              </div>
+            </div>
 
             {!esEdicion && (
               <div className="usr-pwd-info">

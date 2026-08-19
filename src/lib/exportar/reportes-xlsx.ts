@@ -59,6 +59,22 @@ export async function construirXlsxReportes(
     ? etiquetaAnterior(data.desde, data.hasta)
     : LABEL_COMPARACION[data.comparar]
 
+  // Nota de conversión de la portada, honesta con la tasa congelada (mig. 199):
+  // dice si las cifras salen de la tasa que el cliente registró por fila
+  // (histórica), de la vigente (hoy), o de ambas. Misma semántica que la nota de
+  // pantalla y PDF (fraseConversion en ReportesView), en el estilo compacto de la
+  // portada.
+  const cv = data.convertido
+  const cvCongeladas = (cv?.congeladas?.length ?? 0) > 0
+  const cvVigente    = (cv?.convertidas.length ?? 0) > 0
+  const notaVer = cvCongeladas && cvVigente
+    ? ` · convertido: la tasa registrada por fila y la vigente donde falta`
+    : cvCongeladas
+    ? ` · convertido con la tasa registrada por fila`
+    : cvVigente
+    ? ` · convertido a la tasa vigente`
+    : ''
+
   // ── Hoja 1: portada ──────────────────────────────────────────────────────
   const portada: HojaExcel = {
     nombre: 'Informe',
@@ -70,7 +86,7 @@ export async function construirXlsxReportes(
       [texto('Período', clave),  texto(`${data.desde} — ${data.hasta}`)],
       [texto('Moneda', clave), texto(
         data.ver
-          ? `Todo en ${data.ver}${data.convertido?.convertidas.length ? ` · convertido a la tasa vigente` : ''}${data.convertido?.excluidas.length ? ` · sin tasa hacia ${data.ver} (no incluidas): ${data.convertido.excluidas.join(', ')}` : ''}`
+          ? `Todo en ${data.ver}${notaVer}${data.convertido?.excluidas.length ? ` · sin tasa hacia ${data.ver} (no incluidas): ${data.convertido.excluidas.join(', ')}` : ''}`
           : 'Cada moneda por separado (sin convertir)',
       )],
       [texto('Comparado con', clave), texto(

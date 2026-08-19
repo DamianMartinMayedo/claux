@@ -249,12 +249,24 @@ export interface CategoriaPL {
   rol_pl:       RolPL
 }
 
+/**
+ * Tasa CONGELADA nativo→moneda de consolidación a la fecha de la fila (plan §7).
+ * Solo la traen los apuntes que salen de `gastos_cobros` (los de factura no). La
+ * usa Reportes al «Ver en» la moneda de consolidación: convierte ESA fila a su
+ * tasa histórica en vez de a la vigente. El motor del P&L la IGNORA (opera sobre
+ * `monto`): es metadato que viaja hasta el paso de conversión. null/ausente = no
+ * se aportó → se cae a la tasa vigente.
+ */
+export type TasaCongelada = number | null | undefined
+
 /** Un ingreso ya normalizado. `mes` en formato 'YYYY-MM'. */
 export interface ApunteIngreso {
   moneda: string
   monto:  number
   mes:    string
   fuente: 'VENTA' | 'COBRO'
+  /** Tasa congelada de consolidación de esta fila (§`TasaCongelada`). */
+  tasa_consolidacion?: TasaCongelada
   /**
    * Categoría del COBRO SIN FACTURA (fase 3): `categorias_gastos`, la misma tabla
    * del gasto y la misma que el dueño ya elige al anotar el cobro. `categoria` es
@@ -298,6 +310,8 @@ export interface ApunteGasto {
   mes:          string
   categoria_id: string | null
   categoria:    string | null
+  /** Tasa congelada de consolidación de esta fila (§`TasaCongelada`). */
+  tasa_consolidacion?: TasaCongelada
 }
 
 export interface OpcionesPL {
