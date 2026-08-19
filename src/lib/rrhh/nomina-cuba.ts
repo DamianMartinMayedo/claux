@@ -68,12 +68,21 @@ export interface EntradaCuba {
    * Saldo de vacaciones acumulado ANTES de esta línea (apertura + nóminas
    * confirmadas), en importe y en días. Es lo que fija el VALOR del día que se paga:
    * `valor_dia = saldo_importe ÷ saldo_dias` (promedio del saldo, no el salario del
-   * mes en que se disfruta). Con `saldo_vac_dias = 0` no hay promedio posible y se cae
-   * al valor del día del período (comportamiento anterior y red de seguridad para un
-   * tenant con historia solo en importe).
+   * mes en que se disfruta). Sin promedio válido —`saldo_vac_dias = 0` o
+   * `saldo_vac_importe = 0`— el valor del día es 0: NO se inventa un valor contra el
+   * salario del período (eso enmascaraba al cliente que no trae su acumulado). Con el
+   * pago a 0, el dueño lo corrige mano a mano vía `importe_vacaciones_manual`.
    */
   saldo_vac_importe: number
   saldo_vac_dias: number
+  /**
+   * Importe MANUAL del disfrute de vacaciones de ESTE mes (mig. 202). Cuando no es null,
+   * MANDA sobre el cálculo automático y fija directamente `vacaciones_pagar`, sin pasar
+   * por el valor del día. Es la salida para clientes sin acumulado registrado: el
+   * automático daría 0 y aquí se teclea cuánto pagar. NO toca la liquidación por baja
+   * (`dias_liquidacion`), que sigue saliendo del saldo, ni los días acumulados/pagados.
+   */
+  importe_vacaciones_manual: number | null
 }
 
 export interface ResultadoCuba {
@@ -193,13 +202,23 @@ export function calcularNominaCuba(
 
   // T — lo que se paga por los días de vacaciones. El VALOR del día es el promedio del
   // saldo acumulado (`saldo_importe ÷ saldo_dias`, criterio de Claudia 2026-08-13), NO
-  // el salario del mes en que se disfruta. Sin días de saldo no hay promedio: se cae al
-  // valor del día del período —el comportamiento anterior— como red de seguridad para
-  // un tenant con historia solo en importe.
-  const valorDia = entrada.saldo_vac_dias > 0
+  // el salario del mes en que se disfruta. Sin promedio válido —sin días de saldo o sin
+  // importe acumulado— el valor del día es 0: NO se inventa un valor contra el salario
+  // del período. Ese pago a 0 es el síntoma que el dueño resuelve con el importe manual.
+  const valorDia = entrada.saldo_vac_dias > 0 && entrada.saldo_vac_importe > 0
     ? entrada.saldo_vac_importe / entrada.saldo_vac_dias
-    : (dias_laborables > 0 ? salario_base / dias_laborables : 0)
-  const vacaciones_pagar    = r2(valorDia * (entrada.dias_vacaciones  || 0))
+    : 0
+  // Corrección manual del disfrute (mig. 202): cuando está puesta MANDA sobre el cálculo
+  // automático. Es la salida para clientes sin acumulado —el automático daría 0—. Se
+  // aplica SOLO si hay días de disfrute este mes: pagar un importe con 0 días no es un
+  // disfrute y descuadraría el saldo en días frente al importe. No afecta a la
+  // liquidación por baja, que sigue saliendo del saldo.
+  const diasVac = entrada.dias_vacaciones || 0
+  const vacaciones_pagar    = diasVac <= 0
+    ? 0
+    : (entrada.importe_vacaciones_manual != null
+        ? r2(entrada.importe_vacaciones_manual)
+        : r2(valorDia * diasVac))
   // T' — liquidación por baja: mismo valor del día. Una liquidación COMPLETA lleva
   // `dias_liquidacion = saldo_dias`, así que sale exactamente `saldo_importe` —se paga
   // justo lo acumulado, sin cálculo extra—.

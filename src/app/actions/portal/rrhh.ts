@@ -466,6 +466,8 @@ export interface ContextoCuba {
    *  —`componerLinea` es puro— excluyendo la propia nómina. */
   saldo_vac_importe: number
   saldo_vac_dias:    number
+  /** Importe MANUAL del disfrute de vacaciones del mes (mig. 202). null = automático. */
+  vacaciones_importe_manual: number | null
 }
 
 /**
@@ -483,6 +485,10 @@ export interface IncidenciaMes {
   /** Días de vacaciones que se LIQUIDAN de golpe por causar baja (mig. 194). Normalmente
    *  0; lo rellena el aviso de baja de la hoja de nómina, editable a mano. Solo MIPYME_CUBA. */
   dias_liquidacion: number
+  /** Importe MANUAL del disfrute de vacaciones (mig. 202). null = automático (promedio del
+   *  saldo; 0 si no hay acumulado en importe). Un valor MANDA sobre el cálculo del disfrute.
+   *  Es la corrección para clientes que no traen su acumulado. Solo MIPYME_CUBA. */
+  vacaciones_importe_manual: number | null
   pago_extra:       number
   pago_nocturnidad: number
   feriados:         number
@@ -521,7 +527,7 @@ function itemsDeIncidencia(inc: IncidenciaMes): ItemLinea[] {
 }
 
 const SELECT_INCIDENCIAS =
-  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, dias_liquidacion, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios'
+  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, dias_liquidacion, vacaciones_importe_manual, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios'
 
 /** Los importes llegan como texto (`numeric`): sin esto, todo suma concatenando. */
 function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaMes {
@@ -530,6 +536,7 @@ function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaM
     dias_trabajados:  r.dias_trabajados === null ? null : Number(r.dias_trabajados),
     dias_vacaciones:  Number(r.dias_vacaciones),
     dias_liquidacion: Number(r.dias_liquidacion),
+    vacaciones_importe_manual: r.vacaciones_importe_manual == null ? null : Number(r.vacaciones_importe_manual),
     pago_extra:       Number(r.pago_extra),
     pago_nocturnidad: Number(r.pago_nocturnidad),
     feriados:         Number(r.feriados),
@@ -709,6 +716,7 @@ function componerLinea(opts: {
         dias_liquidacion:  cuba.dias_liquidacion,
         saldo_vac_importe: cuba.saldo_vac_importe,
         saldo_vac_dias:    cuba.saldo_vac_dias,
+        importe_vacaciones_manual: cuba.vacaciones_importe_manual,
       }, cuba.parametros)
     : null
 
@@ -1621,6 +1629,7 @@ async function construirNominas(
             dias_liquidacion: inc?.dias_liquidacion ?? 0,
             saldo_vac_importe: saldoVac!.importe,
             saldo_vac_dias:    saldoVac!.dias,
+            vacaciones_importe_manual: inc?.vacaciones_importe_manual ?? null,
           } : undefined,
         })
       : null
@@ -2669,6 +2678,7 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
       dias_trabajados:  i.dias_trabajados === null ? null : Number(i.dias_trabajados),
       dias_vacaciones:  Number(i.dias_vacaciones),
       dias_liquidacion: Number(i.dias_liquidacion),
+      vacaciones_importe_manual: i.vacaciones_importe_manual == null ? null : Number(i.vacaciones_importe_manual),
       pago_extra:       Number(i.pago_extra),
       pago_nocturnidad: Number(i.pago_nocturnidad),
       feriados:         Number(i.feriados),
@@ -3139,6 +3149,12 @@ export async function guardarIncidencia(
   // no lleva el tope de 31 del disfrute mensual, solo un límite defensivo.
   const dias_liquidacion = num('dias_liquidacion')
   if (dias_liquidacion > 366) return { ok: false, error: 'Los días a liquidar no pueden pasar de 366.' }
+  // Importe MANUAL del disfrute (mig. 202): OPCIONAL. Ausente o vacío = automático (null);
+  // un valor MANDA sobre el cálculo del disfrute. Negativo o no numérico → sin corregir.
+  const vimRaw = (formData.get('vacaciones_importe_manual') as string | null)?.trim()
+  const vacaciones_importe_manual = vimRaw == null || vimRaw === ''
+    ? null
+    : (() => { const n = parseFloat(vimRaw); return isNaN(n) || n < 0 ? null : redondear2(n) })()
 
   const db = createAdminClient()
   const { data: emp } = await db.from('empleados')
@@ -3156,6 +3172,7 @@ export async function guardarIncidencia(
     dias_trabajados,
     dias_vacaciones,
     dias_liquidacion,
+    vacaciones_importe_manual,
     pago_extra:       num('pago_extra'),
     pago_nocturnidad: num('pago_nocturnidad'),
     feriados:         num('feriados'),
@@ -3184,15 +3201,33 @@ export async function guardarIncidencia(
     }
     if (dias_vacaciones > 0 || dias_liquidacion > 0) {
       // El valor del día es el promedio del saldo (`importe ÷ días`), el mismo criterio
-      // que aplica el motor; sin días de saldo se cae al valor del día del período.
+      // que aplica el motor; sin promedio válido —sin días de saldo o sin importe
+      // acumulado— es 0: NO se inventa un valor contra el salario del período (mig. 202).
       const [saldoImporte, saldoDias] = await Promise.all([
         saldoVacacionesAcumulado(db, session.client_id, empleado_id),
         saldoVacacionesDiasAcumulado(db, session.client_id, empleado_id),
       ])
-      const salario_base = redondear2(Number(emp.salario_base))
-      const valorDia = saldoDias > 0 ? saldoImporte / saldoDias : (efectivo > 0 ? salario_base / efectivo : 0)
-      const diasPagados = dias_vacaciones + dias_liquidacion
-      const pago = redondear2(valorDia * diasPagados)
+      const valorDia = saldoDias > 0 && saldoImporte > 0 ? saldoImporte / saldoDias : 0
+      // El disfrute usa la corrección manual si está puesta; la liquidación por baja
+      // siempre sale del saldo (mismo trato que el motor).
+      const pagoDisfrute    = dias_vacaciones <= 0
+        ? 0
+        : (vacaciones_importe_manual != null
+            ? vacaciones_importe_manual
+            : redondear2(valorDia * dias_vacaciones))
+      const pagoLiquidacion = redondear2(valorDia * dias_liquidacion)
+      const pago            = redondear2(pagoDisfrute + pagoLiquidacion)
+      const diasPagados     = dias_vacaciones + dias_liquidacion
+
+      // Sin acumulado en importe y sin corregir a mano: el disfrute saldría 0. Se avisa
+      // aquí para que el dueño marque «Corregir importe» en vez de descubrir el 0 al
+      // generar la nómina.
+      if (dias_vacaciones > 0 && vacaciones_importe_manual == null && valorDia <= 0) {
+        avisos.push(
+          'Este trabajador no tiene saldo de vacaciones acumulado en importe, así que el pago ' +
+          'de los días de vacaciones saldría 0. Marca «Corregir importe de vacaciones» en la ' +
+          'incidencia para fijar a mano cuánto pagarle.')
+      }
       if (diasPagados > saldoDias + EPS) {
         avisos.push(
           `Se pagan ${diasPagados} días de vacaciones y el saldo acumulado es de ${saldoDias.toFixed(2)} ` +
@@ -3890,6 +3925,7 @@ export async function crearNomina(
         dias_liquidacion: inc?.dias_liquidacion ?? 0,
         saldo_vac_importe: saldoVac!.importe,
         saldo_vac_dias:    saldoVac!.dias,
+        vacaciones_importe_manual: inc?.vacaciones_importe_manual ?? null,
       } : undefined,
     })
     for (const it of calc.items) items.push(filaItem(it, linea_id, nomina_id, session.client_id))
@@ -4390,6 +4426,7 @@ async function planificarRecalculo(
         dias_liquidacion: inc?.dias_liquidacion ?? 0,
         saldo_vac_importe: saldoVac!.importe,
         saldo_vac_dias:    saldoVac!.dias,
+        vacaciones_importe_manual: inc?.vacaciones_importe_manual ?? null,
       } : undefined,
     })
 

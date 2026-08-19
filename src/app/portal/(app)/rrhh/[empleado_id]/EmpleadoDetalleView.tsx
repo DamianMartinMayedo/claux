@@ -199,17 +199,40 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
 function mesActualISO(): string { return hoyISO().slice(0, 7) }
 
 function IncidenciaModal({
-  empleadoId, moneda, incidencia, esCuba, onClose, onDone,
+  empleadoId, moneda, incidencia, esCuba, salarioBase, diasLaborables, onClose, onDone,
 }: {
   empleadoId:  string
   moneda:      string
   incidencia:  IncidenciaConId | null
   /** Los DÍAS solo se piden en el modelo cubano: el general no prorratea. */
   esCuba:      boolean
+  /** Salario y días laborables del trabajador, para sugerir el importe manual. */
+  salarioBase:    number
+  diasLaborables: number
   onClose:     () => void
   onDone:      () => void
 }) {
   const [isPending, startTransition] = useTransition()
+
+  // Corrección manual del importe de vacaciones (mig. 202). Por defecto se calcula por
+  // días; al marcar la casilla el dueño teclea el importe —la salida para clientes sin
+  // acumulado, cuyo cálculo automático da 0—. Arranca marcada si ya venía corregido.
+  const [corregir, setCorregir] = useState<boolean>(incidencia?.vacaciones_importe_manual != null)
+  const [diasVac,  setDiasVac]  = useState<number>(incidencia?.dias_vacaciones ?? 0)
+  const [importeManual, setImporteManual] = useState<string>(
+    incidencia?.vacaciones_importe_manual != null ? String(incidencia.vacaciones_importe_manual) : '')
+
+  // Sugerencia = valor del día al salario actual × días de vacaciones. Es solo un punto
+  // de partida al marcar la casilla; nunca se aplica sola (Q del propietario: nada
+  // automático contra el salario).
+  const valorDiaSalario = diasLaborables > 0 ? salarioBase / diasLaborables : 0
+  const sugerencia = Math.round(valorDiaSalario * diasVac * 100) / 100
+
+  function toggleCorregir(on: boolean) {
+    setCorregir(on)
+    // Al activar sin un valor previo, precargamos la sugerencia para no teclear a ciegas.
+    if (on && importeManual.trim() === '' && sugerencia > 0) setImporteManual(String(sugerencia))
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -269,7 +292,8 @@ function IncidenciaModal({
                       <FormHelp text="El disfrute normal del mes." label="Qué son los días de vacaciones que se pagan" />
                     </div>
                     <input className="input" id="inc-vac" name="dias_vacaciones" type="number"
-                      min="0" max="31" step="any" defaultValue={incidencia?.dias_vacaciones ?? 0} />
+                      min="0" max="31" step="any" defaultValue={incidencia?.dias_vacaciones ?? 0}
+                      onChange={e => setDiasVac(parseFloat(e.target.value) || 0)} />
                   </div>
                   <div className="input-group ter-col-span-3">
                     <div className="form-label-with-help">
@@ -279,6 +303,39 @@ function IncidenciaModal({
                     <input className="input" id="inc-liq" name="dias_liquidacion" type="number"
                       min="0" step="any" defaultValue={incidencia?.dias_liquidacion ?? 0} />
                   </div>
+
+                  {/* Corrección manual del importe de vacaciones (mig. 202). Por defecto el
+                      importe se calcula por días contra el saldo acumulado; para clientes que
+                      no traen su acumulado ese cálculo da 0 y aquí se fija a mano. */}
+                  <div className="input-group ter-col-full">
+                    <label className="checkbox-group">
+                      <input type="checkbox" checked={corregir}
+                        onChange={e => toggleCorregir(e.target.checked)} />
+                      <span className="checkbox-label">Corregir importe de vacaciones</span>
+                    </label>
+                    <span className="text-xs-muted">
+                      Sin marcar, el importe de las vacaciones disfrutadas se calcula al promedio
+                      del saldo acumulado. Márcalo si el trabajador no tiene acumulado registrado
+                      (saldría 0) o si quieres fijar tú el importe.
+                    </span>
+                  </div>
+                  {corregir && (
+                    <div className="input-group ter-col-span-3">
+                      <div className="form-label-with-help">
+                        <label htmlFor="inc-vac-imp">Importe de vacaciones a pagar ({moneda})</label>
+                        <FormHelp text="Sustituye al cálculo por días para las vacaciones disfrutadas de este mes. No afecta a los días a liquidar por baja." label="Qué hace el importe manual de vacaciones" />
+                      </div>
+                      <input className="input" id="inc-vac-imp" name="vacaciones_importe_manual" type="number"
+                        min="0" step="any" value={importeManual}
+                        onChange={e => setImporteManual(e.target.value)} />
+                      {valorDiaSalario > 0 && (
+                        <span className="text-xs-muted">
+                          Sugerencia al salario actual: {formatMonto(sugerencia)} {moneda}
+                          {diasVac > 0 && <> ({formatDias(diasVac)} d. × {formatMonto(valorDiaSalario)})</>}.
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -411,13 +468,16 @@ function AperturaModal({
 }
 
 function IncidenciasSection({
-  empleadoId, moneda, incidencias, esCuba, vacaciones, onChanged, puedeEditar,
+  empleadoId, moneda, incidencias, esCuba, vacaciones, salarioBase, diasLaborables, onChanged, puedeEditar,
 }: {
   empleadoId:  string
   moneda:      string
   incidencias: IncidenciaConId[]
   esCuba:      boolean
   vacaciones:  { importe: number; moneda: string; apertura: number; dias: number; apertura_dias: number }
+  /** Para sugerir el importe manual de vacaciones cuando no hay acumulado. */
+  salarioBase:    number
+  diasLaborables: number
   onChanged:   () => void
   puedeEditar: boolean
 }) {
@@ -539,6 +599,8 @@ function IncidenciasSection({
           empleadoId={empleadoId}
           moneda={moneda}
           esCuba={esCuba}
+          salarioBase={salarioBase}
+          diasLaborables={diasLaborables}
           incidencia={editando === 'nueva' ? null : editando}
           onClose={() => setEditando(null)}
           onDone={() => { setEditando(null); onChanged() }}
@@ -1134,6 +1196,7 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
       {/* Incidencias del mes */}
       <IncidenciasSection empleadoId={empleado.empleado_id} moneda={empleado.moneda}
         incidencias={incidencias} esCuba={esCuba} vacaciones={vacaciones}
+        salarioBase={empleado.salario_base} diasLaborables={empleado.dias_laborables ?? diasEmpresa}
         onChanged={refrescar} puedeEditar={puedeEditar} />
 
       {/* Nómina del trabajador */}

@@ -30,6 +30,8 @@ interface IncidenciaEditable {
   dias_trabajados:  number | null
   dias_vacaciones:  number
   dias_liquidacion: number
+  /** Importe manual del disfrute de vacaciones (mig. 202). null = automático. */
+  vacaciones_importe_manual: number | null
   pago_extra:       number
   pago_nocturnidad: number
   feriados:         number
@@ -39,8 +41,8 @@ interface IncidenciaEditable {
 }
 
 const INCIDENCIA_VACIA: IncidenciaEditable = {
-  dias_trabajados: null, dias_vacaciones: 0, dias_liquidacion: 0, pago_extra: 0,
-  pago_nocturnidad: 0, feriados: 0, penalizacion: 0, otros_descuentos: 0, pago_subsidios: 0,
+  dias_trabajados: null, dias_vacaciones: 0, dias_liquidacion: 0, vacaciones_importe_manual: null,
+  pago_extra: 0, pago_nocturnidad: 0, feriados: 0, penalizacion: 0, otros_descuentos: 0, pago_subsidios: 0,
 }
 
 /** Los seis campos en dinero que solo aparecen si alguien los usa este mes. */
@@ -227,6 +229,14 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
     return CAMPOS_DISPERSOS.filter(c => Object.values(incidencias).some(i => (i[c.campo] || 0) > 0))
   }, [incidencias])
 
+  // La columna del importe de vacaciones solo aparece cuando hay algo que pagar o
+  // corregir: alguien con días de vacaciones, o con un importe ya corregido a mano. El
+  // resto del año no roba ancho. Solo bajo el modelo cubano (el general no paga por días).
+  const mostrarImporteVac = useMemo(
+    () => esCuba && Object.values(incidencias).some(
+      i => i.dias_vacaciones > 0 || i.vacaciones_importe_manual != null),
+    [esCuba, incidencias])
+
   const totales = useMemo(() => {
     let devengado = 0, retenciones = 0, aportes = 0, neto = 0
     let vacPagadas = 0, vacAcumuladas = 0
@@ -248,7 +258,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
     }
   }, [nomina.lineas])
 
-  const colSpanFila = 5 + (esCuba ? 2 : 0) + columnasVisibles.length + 1
+  const colSpanFila = 5 + (esCuba ? 2 : 0) + (mostrarImporteVac ? 1 : 0) + columnasVisibles.length + 1
 
   // ── Días sugeridos ─────────────────────────────────────────────────────────────
   // Se filtran contra el estado LOCAL, no solo contra lo que trajo el servidor: si el
@@ -285,6 +295,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
         fd.set('dias_trabajados',  String(s.dias))
         fd.set('dias_vacaciones',  String(previa.dias_vacaciones))
         fd.set('dias_liquidacion', String(previa.dias_liquidacion))
+        fd.set('vacaciones_importe_manual', previa.vacaciones_importe_manual == null ? '' : String(previa.vacaciones_importe_manual))
         fd.set('pago_extra',       String(previa.pago_extra))
         fd.set('pago_nocturnidad', String(previa.pago_nocturnidad))
         fd.set('feriados',         String(previa.feriados))
@@ -328,6 +339,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
         fd.set('dias_trabajados',  previa.dias_trabajados === null ? '' : String(previa.dias_trabajados))
         fd.set('dias_vacaciones',  String(previa.dias_vacaciones))
         fd.set('dias_liquidacion', String(s.dias))
+        fd.set('vacaciones_importe_manual', previa.vacaciones_importe_manual == null ? '' : String(previa.vacaciones_importe_manual))
         fd.set('pago_extra',       String(previa.pago_extra))
         fd.set('pago_nocturnidad', String(previa.pago_nocturnidad))
         fd.set('feriados',         String(previa.feriados))
@@ -364,6 +376,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
     fd.set('dias_trabajados',  nueva.dias_trabajados === null ? '' : String(nueva.dias_trabajados))
     fd.set('dias_vacaciones',  String(nueva.dias_vacaciones))
     fd.set('dias_liquidacion', String(nueva.dias_liquidacion))
+    fd.set('vacaciones_importe_manual', nueva.vacaciones_importe_manual == null ? '' : String(nueva.vacaciones_importe_manual))
     fd.set('pago_extra',       String(nueva.pago_extra))
     fd.set('pago_nocturnidad', String(nueva.pago_nocturnidad))
     fd.set('feriados',         String(nueva.feriados))
@@ -667,6 +680,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
                 <th className="col-num">Salario base</th>
                 {esCuba && <th className="col-num">Días trab.</th>}
                 {esCuba && <th className="col-num">Días vac.</th>}
+                {mostrarImporteVac && <th className="col-num">Importe vac. ({nomina.moneda})</th>}
                 {columnasVisibles.map(c => <th key={c.campo} className="col-num">{c.etiqueta}</th>)}
                 <th className="col-num">Devengado</th>
                 <th className="col-num">Retenciones</th>
@@ -716,6 +730,26 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
                               onBlur={e => guardarCampo(l.empleado_id, 'dias_vacaciones', rellenar(e.currentTarget, 0))}
                               aria-label={`Días de vacaciones de ${l.empleado_nombre}`} />
                           ) : inc.dias_vacaciones}
+                        </td>
+                      )}
+                      {mostrarImporteVac && (
+                        // Importe manual del disfrute (mig. 202): vacío = automático (promedio del
+                        // saldo; 0 si no hay acumulado en importe), un valor MANDA sobre el cálculo.
+                        // Solo editable si esta persona disfruta vacaciones este mes.
+                        <td data-label="Importe vacaciones" className="col-num">
+                          {puedeEditar && inc.dias_vacaciones > 0 ? (
+                            <input className="input nom-input" type="number" min="0" step="any" disabled={ocupado}
+                              defaultValue={inc.vacaciones_importe_manual ?? ''}
+                              placeholder={formatMonto(l.vacaciones_pagadas_periodo)}
+                              onBlur={e => {
+                                const t = e.currentTarget.value.trim()
+                                guardarCampo(l.empleado_id, 'vacaciones_importe_manual', t === '' ? null : (parseFloat(t) || 0))
+                              }}
+                              title="Vacío = automático (promedio del saldo). Escribe un importe para fijarlo a mano."
+                              aria-label={`Importe de vacaciones de ${l.empleado_nombre}`} />
+                          ) : inc.vacaciones_importe_manual != null
+                              ? formatMonto(inc.vacaciones_importe_manual)
+                              : (inc.dias_vacaciones > 0 ? formatMonto(l.vacaciones_pagadas_periodo) : '—')}
                         </td>
                       )}
                       {columnasVisibles.map(c => (
