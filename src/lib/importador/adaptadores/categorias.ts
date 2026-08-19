@@ -24,7 +24,7 @@ import { generarCategoriaGastoId } from '@/lib/gastos-core'
 import { generarCategoriaProductoId, type TipoProducto } from '@/lib/productos-core'
 import { ROL_PL_LABEL, type RolPL } from '@/lib/pl/estado'
 import { registrarAuxiliar } from '../motor'
-import { indicePorNombre, type IndiceNombres } from '../util'
+import { idCorto, indicePorNombre, type IndiceNombres } from '../util'
 import { aFallo, resolverRef, type Opcion } from '../resolver'
 import { politicaCategoria, rolNuevas } from './comunes'
 import type { CtxImport, Preparado } from '../tipos'
@@ -34,6 +34,8 @@ export const ENT_CAT_GASTO      = 'categorias_gasto'
 export const ENT_CAT_GASTO_REAC = 'categorias_gasto_reactivada'
 export const ENT_CAT_PRODUCTO   = 'categorias_producto'
 export const ENT_CAT_PROD_REAC  = 'categorias_producto_reactivada'
+export const ENT_CAT_MENU       = 'categorias_menu'
+export const ENT_CAT_MENU_REAC  = 'categorias_menu_reactivada'
 
 type FichaCatGasto = {
   categoria_id: string; nombre: string; parent_id: string | null; estado: string
@@ -300,6 +302,88 @@ async function asegurarActivaProducto(ficha: FichaCatProducto, ctx: CtxImport): 
   return ficha.categoria_id
 }
 
+// ── Secciones del catálogo público / carta (`catalogo_categorias`) ────────────
+// Las «secciones» de la carta QR son OTRA tabla que las categorías del ERP
+// (`product_categories`): planas, sin `tipo`, y su estado es un booleano `activa`
+// (no un `estado` ARCHIVADO). Misma tarea, columnas distintas — de ahí un bloque
+// aparte en vez de un parámetro más. No hay índice único por nombre, así que aquí
+// no bloquea nada una archivada; aun así se REUSA (y se reactiva) en vez de
+// duplicar, para no llenar la carta de sinónimos.
+
+type FichaCatMenu = { categoria_id: string; nombre: string; activa: boolean }
+
+const opcionMenu = (f: FichaCatMenu): Opcion => ({
+  valor:    f.categoria_id,
+  etiqueta: f.activa ? f.nombre : `${f.nombre} (archivada)`,
+})
+
+async function indiceMenu(ctx: CtxImport): Promise<IndiceNombres<FichaCatMenu>> {
+  return indicePorNombre(ctx, 'catmenu', async () => {
+    const { data } = await ctx.db.from('catalogo_categorias')
+      .select('categoria_id, nombre, activa').eq('client_id', ctx.client_id)
+    return (data ?? []) as FichaCatMenu[]
+  }, c => c.nombre)
+}
+
+/**
+ * Sección de la carta para un ítem. Devuelve el id, o null si el operador la deja
+ * en blanco (la sección es opcional en la carta). `crear` lleva el nombre a dar de
+ * alta al escribir (el dry-run no toca la base).
+ */
+export async function resolverCategoriaMenu(
+  nombre: string, valores: Record<string, string>, ctx: CtxImport,
+): Promise<
+  | { ok: true; categoria_id: string | null; crear: string | null }
+  | Extract<Preparado, { ok: false }>
+> {
+  const idx = await indiceMenu(ctx)
+  const r = resolverRef({
+    tipo:          ENT_CAT_MENU,
+    etiqueta_tipo: 'Sección de la carta',
+    texto:         nombre,
+    coincidencias: idx.buscar(nombre).map(opcionMenu),
+    parecidos:     idx.sugerir(nombre).map(opcionMenu),
+    otras:         idx.todas().map(opcionMenu),
+    creable:       true,
+    omitible:      true,
+    aviso:         'Se creará como sección de la carta.',
+    defecto:       politicaCategoria(valores),
+  }, ctx)
+  const fallo = aFallo(r)
+  if (fallo) return fallo
+
+  if (r.estado === 'USAR')   return { ok: true, categoria_id: r.id, crear: null }
+  if (r.estado === 'OMITIR') return { ok: true, categoria_id: null, crear: null }
+  return { ok: true, categoria_id: null, crear: nombre }
+}
+
+/** Da de alta la sección que el ítem apuntó (o reusa/reactiva la que ya existe). */
+export async function crearCategoriaMenu(nombre: string, ctx: CtxImport): Promise<string> {
+  const idx = await indiceMenu(ctx)
+  const ya  = idx.buscar(nombre)[0]
+  if (ya) return asegurarActivaMenu(ya, ctx)
+
+  const categoria_id = `CATCAT-${idCorto()}`
+  const { error } = await ctx.db.from('catalogo_categorias').insert({
+    categoria_id, client_id: ctx.client_id, nombre, activa: true,
+  })
+  if (error) throw new Error(error.message)
+  idx.anotar(nombre, { categoria_id, nombre, activa: true })
+  await registrarAuxiliar(ctx, ENT_CAT_MENU, categoria_id)
+  return categoria_id
+}
+
+async function asegurarActivaMenu(ficha: FichaCatMenu, ctx: CtxImport): Promise<string> {
+  if (ficha.activa) return ficha.categoria_id
+  const { error } = await ctx.db.from('catalogo_categorias')
+    .update({ activa: true, updated_at: new Date().toISOString() })
+    .eq('categoria_id', ficha.categoria_id).eq('client_id', ctx.client_id)
+  if (error) throw new Error(error.message)
+  ficha.activa = true
+  await registrarAuxiliar(ctx, ENT_CAT_MENU_REAC, ficha.categoria_id)
+  return ficha.categoria_id
+}
+
 // ── Deshacer ──────────────────────────────────────────────────────────────────
 //
 // Se borra la categoría que creó el lote solo si NADIE la usa ya —ni un gasto, ni
@@ -345,6 +429,27 @@ export const DESHACEDORES_CATEGORIA = {
     deshacer: async (pk: string, ctx: CtxImport): Promise<string | null> => {
       const { error } = await ctx.db.from('product_categories')
         .update({ estado: 'ARCHIVADO', updated_at: new Date().toISOString() })
+        .eq('categoria_id', pk).eq('client_id', ctx.client_id)
+      return error ? error.message : null
+    },
+  },
+  [ENT_CAT_MENU]: {
+    deshacer: async (pk: string, ctx: CtxImport): Promise<string | null> => {
+      // La FK de `catalogo_items` es ON DELETE SET NULL: borrar la sección no
+      // rompe nada, pero si ya cuelga algún ítem de ella se deja como está —igual
+      // que la categoría del ERP—, para no descolocar la carta al deshacer.
+      const { count } = await ctx.db.from('catalogo_items')
+        .select('*', { count: 'exact', head: true }).eq('categoria_id', pk)
+      if ((count ?? 0) > 0) return 'La sección ya tiene platos o productos: se queda como está.'
+      const { error } = await ctx.db.from('catalogo_categorias').delete()
+        .eq('categoria_id', pk).eq('client_id', ctx.client_id)
+      return error ? error.message : null
+    },
+  },
+  [ENT_CAT_MENU_REAC]: {
+    deshacer: async (pk: string, ctx: CtxImport): Promise<string | null> => {
+      const { error } = await ctx.db.from('catalogo_categorias')
+        .update({ activa: false, updated_at: new Date().toISOString() })
         .eq('categoria_id', pk).eq('client_id', ctx.client_id)
       return error ? error.message : null
     },

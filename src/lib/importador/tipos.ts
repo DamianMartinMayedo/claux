@@ -210,6 +210,13 @@ export interface CtxImport {
   client_id: string
   empresas:  { empresa_id: string; nombre: string }[]
   monedas:   string[]
+  /**
+   * Código de la moneda de consolidación del cliente (`monedas.es_consolidacion`),
+   * o null si no tiene ninguna. Habilita las columnas de tasa congelada de
+   * gastos/cobros (§`camposExtra`, plan §7). El importador del equipo (importar.ts,
+   * congelado) no la fija: allí queda `undefined` y la consolidación no se ofrece.
+   */
+  monedaConsolidacion?: string | null
   /** Búsquedas repetidas del lote (categoría por nombre, proveedor…) → `memo()`. */
   cache:     Map<string, unknown>
   /** Lote que se está aplicando; lo fija el motor en el commit (traza del ledger). */
@@ -266,6 +273,15 @@ export interface Adaptador {
   revalidar: string       // ruta a revalidar tras aplicar
   campos:    CampoDef[]
   defaults:  DefaultDef[] // valores globales que pide el asistente antes de validar
+  /**
+   * Columnas EXTRA que dependen del cliente (no se saben al cargar el módulo). Se
+   * añaden a `campos` al pintar el mapeo y la plantilla, y el motor las recoge
+   * igual que a cualquier columna mapeada (`construirValores` no distingue). Hoy
+   * solo las usan gastos/cobros para la tasa de consolidación, que existe únicamente
+   * si el cliente tiene moneda de consolidación (plan §7). El importador del equipo
+   * (importar.ts, congelado) no llama a este hook: allí no salen esas columnas.
+   */
+  camposExtra?:    (ctx: CtxImport) => Promise<CampoDef[]>
   /**
    * Valida y arma una fila (sin escribir); devuelve datos listos + clave natural.
    * `deColumna` = campos que trae el archivo (el resto los puso un default).

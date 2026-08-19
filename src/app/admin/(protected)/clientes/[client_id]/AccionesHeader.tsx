@@ -8,6 +8,7 @@ import { cambiarEstadoCliente, aplicarGracia, editarCliente, archivarCliente, de
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
+import { MIGRACION_ESTADOS, MIGRACION_ESTADO_LABEL } from '@/lib/migracion'
 import { useToast } from '@/app/contexts/ToastContext'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
 
@@ -37,6 +38,8 @@ type Props = {
     notas?: string | null
     archivado_at?: string | null
     es_prueba?: boolean
+    autoimport_activo?: boolean
+    migracion_estado?: string
   }
   tienePagosConfirmados?: boolean
 }
@@ -564,6 +567,30 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
             <label className="checkbox-group">
               <input type="checkbox" name="es_prueba" value="true" defaultChecked={!!cliente.es_prueba} />
               <span className="checkbox-label">Cliente de prueba (no cuenta en las estadísticas de CLAUX)</span>
+            </label>
+
+            {/* Importador de autoservicio (§5): situación de migración + interruptor de
+                emergencia. El estado gobierna el aviso de bienvenida y la visibilidad de
+                la herramienta para el cliente. */}
+            <div className="input-group">
+              <div className="form-label-with-help">
+                <label>Datos de un sistema anterior</label>
+                <FormHelp text="Gobierna el aviso de bienvenida y si el cliente ve la herramienta para importar. «Migración a cargo del equipo» la oculta mientras la hacéis vosotros; «completada» la vuelve a mostrar." label="Qué decide el estado de migración" />
+              </div>
+              <select name="migracion_estado" className="input" defaultValue={cliente.migracion_estado ?? 'sin_datos_previos'}>
+                {MIGRACION_ESTADOS.map(e => (
+                  <option key={e} value={e}>{MIGRACION_ESTADO_LABEL[e]}</option>
+                ))}
+              </select>
+            </div>
+            <label className="checkbox-group">
+              <input type="checkbox" name="autoimport_activo" value="true" defaultChecked={cliente.autoimport_activo ?? true} />
+              <span className="checkbox-label">
+                Importación de autoservicio activa
+                <span className="input-hint">
+                  Interruptor de emergencia. Desactívalo para que este cliente no pueda importar datos por su cuenta; el equipo sí puede, por impersonación.
+                </span>
+              </span>
             </label>
           </div>
           <div className="modal-footer">

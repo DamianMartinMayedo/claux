@@ -3,18 +3,25 @@
 
 import { adaptadorTerceros } from './terceros'
 import { adaptadorProductos, adaptadorServicios } from './catalogo'
+import { adaptadorCatalogoMenu } from './menu'
+import { adaptadorProfesionales } from './profesionales'
 import { adaptadorPersonal } from './personal'
 import { adaptadorStockInicial } from './stock'
 import { adaptadorTesoreriaSaldo } from './tesoreria'
 import { adaptadorGastos, adaptadorCobros } from './gastos'
 import { adaptadorSuscripciones } from './suscripciones'
-import { DESHACEDORES_CATEGORIA, ENT_CAT_GASTO, ENT_CAT_GASTO_REAC, ENT_CAT_PRODUCTO, ENT_CAT_PROD_REAC } from './categorias'
+import {
+  DESHACEDORES_CATEGORIA, ENT_CAT_GASTO, ENT_CAT_GASTO_REAC,
+  ENT_CAT_PRODUCTO, ENT_CAT_PROD_REAC, ENT_CAT_MENU, ENT_CAT_MENU_REAC,
+} from './categorias'
 import type { Adaptador } from '../tipos'
 
 export const ADAPTADORES: Record<string, Adaptador> = {
   terceros:        adaptadorTerceros,
   productos:       adaptadorProductos,
   servicios:       adaptadorServicios,
+  catalogo:        adaptadorCatalogoMenu,
+  profesionales:   adaptadorProfesionales,
   personal:        adaptadorPersonal,
   stock_inicial:   adaptadorStockInicial,
   tesoreria_saldo: adaptadorTesoreriaSaldo,
@@ -49,4 +56,6 @@ export const ETIQUETAS_AUXILIARES: Record<string, string> = {
   [ENT_CAT_GASTO_REAC]: 'Categorías de gasto reactivadas',
   [ENT_CAT_PRODUCTO]:      'Categorías de catálogo nuevas',
   [ENT_CAT_PROD_REAC]:     'Categorías de catálogo reactivadas',
+  [ENT_CAT_MENU]:      'Secciones de la carta nuevas',
+  [ENT_CAT_MENU_REAC]: 'Secciones de la carta reactivadas',
 }

@@ -38,6 +38,10 @@ export interface FilaGastoCobroPL {
   fecha: string
   origen_tipo: string | null
   naturaleza: string | null
+  // Tasa congelada de consolidación de la fila (mig. 199). Viaja hasta el apunte
+  // para que Reportes convierta ESTA fila a su tasa histórica al «Ver en» la
+  // moneda de consolidación. El motor la ignora. null/ausente = a la tasa vigente.
+  tasa_consolidacion?: number | null
 }
 
 export interface ApuntesPL {
@@ -156,6 +160,7 @@ export function apuntesDeFilas(
         // facturación como un número suelto sin nada dentro.
         categoria_id: g.categoria_id,
         categoria:    g.categoria,
+        tasa_consolidacion: g.tasa_consolidacion ?? null,
       })
     } else {
       // Un GASTO que es solo DEUDA no es coste: el salario neto y las retenciones de
@@ -165,6 +170,7 @@ export function apuntesDeFilas(
       gastos.push({
         moneda: g.moneda, monto: Number(g.monto), mes: g.fecha.slice(0, 7),
         categoria_id: g.categoria_id, categoria: g.categoria,
+        tasa_consolidacion: g.tasa_consolidacion ?? null,
       })
     }
   }

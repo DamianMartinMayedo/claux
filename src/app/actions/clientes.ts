@@ -13,6 +13,7 @@ import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
 import { avisarClienteNuevo } from '@/lib/notificaciones/admin/eventos'
 import { notificarGraciaActivada } from '@/lib/notificaciones/eventos'
+import { esMigracionEstado, MIGRACION_ESTADOS_ALTA, type MigracionEstado } from '@/lib/migracion'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
 
@@ -90,6 +91,11 @@ export async function crearCliente(formData: FormData) {
   const sector          = (formData.get('sector') as string ?? '').trim() || null
   const pagoSetupRaw    = parseFloat(formData.get('pago_setup_usd') as string ?? '0')
   const pago_setup_usd  = isNaN(pagoSetupRaw) ? 0 : pagoSetupRaw
+  // Situación de migración de datos elegida en el alta (§5 importador de autoservicio).
+  // El alta NO ofrece `completada` (se alcanza al terminar): fuera de la lista → cero.
+  const migRaw          = (formData.get('migracion_estado') as string ?? '').trim()
+  const migracion_estado: MigracionEstado =
+    (MIGRACION_ESTADOS_ALTA as string[]).includes(migRaw) ? (migRaw as MigracionEstado) : 'sin_datos_previos'
 
   if (!nombre_empresa || !email_admin) {
     return { ok: false, error: 'Nombre de empresa y email son obligatorios.' }
@@ -161,6 +167,7 @@ export async function crearCliente(formData: FormData) {
     estado:           estadoInicial,
     es_prueba,
     notas,
+    migracion_estado,
   })
 
   if (errorCliente) return { ok: false, error: errorCliente.message }
@@ -631,6 +638,10 @@ export async function editarCliente(formData: FormData) {
   const email_admin     = (formData.get('email_admin')     as string ?? '').trim().toLowerCase()
   const notas           = (formData.get('notas')           as string ?? '').trim() || null
   const es_prueba       = formData.get('es_prueba') === 'true'
+  // Interruptor de emergencia del autoservicio + situación de migración (§5). El
+  // checkbox siempre viaja desde la ficha: ausente = desmarcado = false.
+  const autoimport_activo = formData.get('autoimport_activo') === 'true'
+  const migRaw            = (formData.get('migracion_estado') as string ?? '').trim()
 
   if (!client_id || !nombre_empresa || !email_admin) {
     return { ok: false, error: 'Nombre de empresa y email son obligatorios.' }
@@ -645,9 +656,14 @@ export async function editarCliente(formData: FormData) {
     .maybeSingle()
   if (otro) return { ok: false, error: 'Ese email ya está en uso por otro cliente.' }
 
+  // `migracion_estado` solo se toca si llega un valor válido: así un formulario sin
+  // el campo (o manipulado) nunca borra el estado que ya tenía el cliente.
+  const patch: Record<string, unknown> = { nombre_empresa, nombre_contacto, email_admin, notas, es_prueba, autoimport_activo }
+  if (esMigracionEstado(migRaw)) patch.migracion_estado = migRaw
+
   const { error } = await supabase
     .from('clients')
-    .update({ nombre_empresa, nombre_contacto, email_admin, notas, es_prueba })
+    .update(patch)
     .eq('client_id', client_id)
 
   if (error) return { ok: false, error: error.message }

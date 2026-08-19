@@ -4797,6 +4797,8 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 /* ── Importador de datos (asistente, modo configuración) ── */
 .imprt-steps { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-5); }
+/* El aviso «¿lo hacemos nosotros?» va bajo la tarjeta del paso: separarlo de ella. */
+.imprt-banner-ayuda { margin-top: var(--space-6); }
 /* Los pasos ya recorridos son botones (se vuelve atrás pinchándolos); los que
    aún no tocan son texto. Misma pinta en los dos casos: lo que cambia es si
    responden, no cómo se ven. */

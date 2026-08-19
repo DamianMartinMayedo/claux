@@ -79,8 +79,14 @@ export interface FlujoMoneda {
  * ya en la moneda vista).
  */
 export interface ConversionVer {
-  convertidas: string[]   // monedas que se convirtieron a la moneda vista
+  convertidas: string[]   // monedas convertidas a la vista con la tasa VIGENTE (hoy)
   excluidas:   string[]   // monedas sin tasa hacia la vista, no incluidas
+  // Monedas de las que AL MENOS una fila se convirtió con su tasa CONGELADA
+  // (mig. 199), no con la vigente: solo al «Ver en» la moneda de consolidación.
+  // Una moneda mixta (unas filas con tasa congelada, otras sin ella) aparece a la
+  // vez aquí y en `convertidas`. La nota lo señala para no dar por vigente lo
+  // que es histórico. Ausente/vacío = no se usó ninguna tasa congelada.
+  congeladas?: string[]
 }
 
 /**
@@ -167,7 +173,7 @@ export async function obtenerReportes(
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .in('estado', ESTADOS_FACTURA_INGRESO)
       .gte('fecha_emision', desdeQ).lte('fecha_emision', hastaQ),
-    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
+    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza, tasa_consolidacion')
       .eq('client_id', session.client_id).in('empresa_id', ids)
       .gte('fecha', desdeQ).lte('fecha', hastaQ),
     db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha, cuenta_id')
@@ -198,7 +204,7 @@ export async function obtenerReportes(
   }))
 
   type FilaFactura = { factura_id: string; moneda: string; total: number; fecha_emision: string }
-  type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null }
+  type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null; tasa_consolidacion: number | null }
 
   const facturas = (facRes.data ?? []) as FilaFactura[]
   const gastosCobros = (gcRes.data ?? []) as FilaGC[]
@@ -524,7 +530,16 @@ export async function obtenerReportes(
     const X = verAplicado
     const convd = new Set<string>()
     const excl  = new Set<string>()
+    const congeladas = new Set<string>()
+    // ¿Se está viendo en la moneda de CONSOLIDACIÓN? Solo entonces entra en juego
+    // la tasa congelada por fila (mig. 199): la que guardamos es nativo→consolidación
+    // a la fecha de la fila. Ver en cualquier otra moneda no tiene tasa histórica
+    // que aplicar, así que se convierte a la vigente como siempre.
+    const alConsolidada = consolCode != null && X === consolCode
     // Convierte apuntes {moneda, monto} a X (o los descarta si no hay tasa).
+    // Al «Ver en» la de consolidación, cada fila con su tasa CONGELADA (histórica);
+    // el resto —y toda otra vista— a la tasa VIGENTE. Así un USD de 2022 se
+    // consolida al valor que tuvo entonces, no al de hoy (la razón de la mig. 199).
     // `track` alimenta la nota "convertido/excluidas" SOLO con lo que se ve como
     // cifra principal: el período comparado (anterior) convierte igual, pero sus
     // monedas no deben aparecer en la nota o menciona monedas que no están en pantalla.
@@ -532,6 +547,15 @@ export async function obtenerReportes(
       const out: T[] = []
       for (const a of arr) {
         if (a.moneda === X) { out.push(a); continue }
+        if (alConsolidada) {
+          // El apunte trae su tasa congelada (los de gastos/cobros); los de factura no.
+          const tc = (a as { tasa_consolidacion?: number | null }).tasa_consolidacion
+          if (tc != null && tc > 0) {
+            if (track) congeladas.add(a.moneda)
+            out.push({ ...a, moneda: X, monto: a.monto * tc })
+            continue
+          }
+        }
         const f = factorEntre(a.moneda, X)
         if (f == null) { if (track) excl.add(a.moneda); continue }
         if (track) convd.add(a.moneda)
@@ -597,8 +621,12 @@ export async function obtenerReportes(
       }] : []
     }
 
-    convertido = (convd.size || excl.size)
-      ? { convertidas: [...convd].sort(), excluidas: [...excl].sort() }
+    convertido = (convd.size || excl.size || congeladas.size)
+      ? {
+          convertidas: [...convd].sort(),
+          excluidas:   [...excl].sort(),
+          ...(congeladas.size ? { congeladas: [...congeladas].sort() } : {}),
+        }
       : null
   }
 

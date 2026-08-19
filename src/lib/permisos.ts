@@ -79,3 +79,20 @@ export function calcularAcceso(
   }
   return { visibles, editable }
 }
+
+/**
+ * ¿Puede este usuario usar el IMPORTADOR de autoservicio? Es UN interruptor por
+ * usuario, no un permiso por módulo: el admin_empresa editor lo tiene IMPLÍCITO;
+ * a cualquier otro usuario se lo enciende su admin (`client_users.puede_importar`).
+ *
+ * El candado comercial NO va aquí: cada entidad se sigue intersectando con el
+ * módulo contratado del tenant en `requireImportarEntidad` (acciones del importador
+ * de cliente). Un «operador solo-importar» es `solo_lectura` en la edición a mano y
+ * aun así importa en masa — la misma excepción estrecha que las tasas de cambio.
+ */
+export function puedeImportar(
+  session: Pick<PortalSession, 'rol' | 'solo_lectura' | 'puede_importar'>,
+): boolean {
+  if (session.rol === 'admin_empresa' && !session.solo_lectura) return true
+  return session.puede_importar === true
+}

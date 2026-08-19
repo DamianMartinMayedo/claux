@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Sun, Moon, LogOut } from 'lucide-react'
+import { User, UsersRound, Building2, DollarSign, CreditCard, HelpCircle, Upload, Sun, Moon, LogOut } from 'lucide-react'
 import type { PortalSession } from '@/lib/portal-auth'
 import { logoutCliente } from '@/app/actions/portal/auth'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -31,6 +31,13 @@ interface Props {
    * couldn't load». Dos condiciones que tienen que ser la misma, ahora son una.
    */
   verNotificaciones: boolean
+  /**
+   * Si el importador de AUTOSERVICIO está disponible para esta sesión (lo decide el
+   * layout con la MISMA regla que el guard de /portal/importar-datos: permiso por
+   * usuario ∩ módulo contratado ∩ autoservicio activo ∩ migración no a cargo del
+   * equipo). Gobierna la entrada «Importar datos» del menú de cuenta.
+   */
+  puedeImportarDatos: boolean
 }
 
 // Iniciales del negocio: primera letra de la primera y la última palabra.
@@ -41,7 +48,7 @@ function inicialesNegocio(nombre: string): string {
   return (palabras[0][0] + palabras[palabras.length - 1][0]).toUpperCase()
 }
 
-export default function PortalHeader({ session, nombreEmpresa, empresas, verNotificaciones }: Props) {
+export default function PortalHeader({ session, nombreEmpresa, empresas, verNotificaciones, puedeImportarDatos }: Props) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -108,6 +115,11 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
     {
       titulo: 'Negocio',
       items: [
+        // Importador de autoservicio: la visibilidad la decide el layout (permiso por
+        // usuario ∩ módulo contratado ∩ autoservicio activo ∩ migración no a cargo del
+        // equipo). No es cosa solo del admin: un «operador solo-importar» (solo_lectura
+        // en el resto) también entra por aquí, por eso NO cuelga de `esAdmin`.
+        ...(puedeImportarDatos ? [{ ruta: '/portal/importar-datos', label: 'Importar datos', icon: <Upload size={16} strokeWidth={2} /> }] : []),
         ...(esAdmin ? [{ ruta: '/portal/empresas', label: 'Empresas', icon: <Building2 size={16} strokeWidth={2} /> }] : []),
         { ruta: '/portal/monedas', label: 'Monedas y tasas', icon: <DollarSign size={16} strokeWidth={2} /> },
         ...(esAdmin ? [{ ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> }] : []),

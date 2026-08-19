@@ -158,7 +158,7 @@ export async function getPortalSession(): Promise<PortalSession | null> {
   // que el administrador cambie esos campos desde «Usuarios».
   if (session.imp) return session
   const { data: usuario } = await createAdminClient().from('client_users')
-    .select('email, rol, solo_lectura, estado')
+    .select('email, rol, solo_lectura, puede_importar, estado')
     .eq('user_id', session.user_id).eq('client_id', session.client_id).maybeSingle()
   if (!usuario || usuario.estado !== 'ACTIVO') return null
   return {
@@ -166,6 +166,7 @@ export async function getPortalSession(): Promise<PortalSession | null> {
     email: usuario.email,
     rol: usuario.rol as PortalSession['rol'],
     solo_lectura: !!usuario.solo_lectura,
+    puede_importar: !!usuario.puede_importar,
   }
 }
 

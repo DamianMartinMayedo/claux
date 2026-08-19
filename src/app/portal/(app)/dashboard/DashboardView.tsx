@@ -13,6 +13,7 @@ import DossierWidget   from './DossierWidget'
 import AgendaWidget from './AgendaWidget'
 import AccesosRapidos from './AccesosRapidos'
 import ContratarMasBanner from './ContratarMasBanner'
+import ImportarBienvenidaBanner from './ImportarBienvenidaBanner'
 import PendienteFranja from './PendienteFranja'
 import DeudasWidget from './DeudasWidget'
 import TasasWidget  from './TasasWidget'
@@ -25,7 +26,7 @@ const ESTADO_BADGE: Record<string, string> = {
   DESACTIVADO: 'badge-error', VENCIDO: 'badge-error',
 }
 
-export default function DashboardView({ data }: { data: DashboardData }) {
+export default function DashboardView({ data, mostrarImportar }: { data: DashboardData; mostrarImportar: boolean }) {
   const { contabilidad, deudas, tasas, inventario, puntoVenta, rrhh, servicios, dossier, catalogo, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos, pendiente, captacion } = data
   const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || servicios || dossier || catalogo || reservas || citas)
 
@@ -124,6 +125,12 @@ export default function DashboardView({ data }: { data: DashboardData }) {
               : <>Configura <strong>una moneda</strong> para registrar importes, ventas y cobros.</>}
         </PrerequisitoAviso>
       )}
+
+      {/* Aviso de bienvenida al importador de autoservicio: debajo del prerrequisito
+          (crear empresa/moneda es más urgente), encima de los datos. Su visibilidad la
+          decide el servidor (migración pendiente + herramienta disponible); el descarte,
+          el usuario en su navegador. */}
+      <ImportarBienvenidaBanner mostrar={mostrarImportar} />
 
       <div className="dash-zonas">
         <PendienteFranja items={pendiente} />

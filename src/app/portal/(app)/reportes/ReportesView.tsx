@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { Download, ChevronDown, BarChart3, Check, Send } from 'lucide-react'
 import { hoyEnTz } from '@/lib/fecha-tz'
-import { generarXlsxReportes, type ReportesData } from '@/app/actions/portal/reportes'
+import { generarXlsxReportes, type ReportesData, type ConversionVer } from '@/app/actions/portal/reportes'
 import type { Asesor }             from '@/app/actions/portal/asesores'
 import EmpresaPills                from '@/components/portal/EmpresaPills'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
@@ -35,6 +35,22 @@ const ORIGEN_LABEL: Record<string, string> = {
 type RangoPreset = 'mes' | 'trimestre' | 'semestre' | 'anio'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * La frase de conversión de la nota «Ver en X», honesta con la tasa congelada
+ * (mig. 199): dice si las cifras salen de la tasa que el cliente REGISTRÓ en cada
+ * fila (histórica), de la VIGENTE (hoy), o de ambas. No incluye la coletilla de
+ * monedas excluidas: esa la pone cada sitio a su manera. Una sola fuente para que
+ * pantalla, PDF y Excel no se contradigan.
+ */
+function fraseConversion(cv: ConversionVer, ver: string): string {
+  const cong = (cv.congeladas?.length ?? 0) > 0
+  const vig  = cv.convertidas.length > 0
+  if (cong && vig) return `Convertido a ${ver}: la tasa que registraste en cada fila, y la vigente donde falta.`
+  if (cong)        return `Convertido a ${ver} con la tasa que registraste en cada fila.`
+  if (vig)         return `Convertido a ${ver} a la tasa vigente.`
+  return ''
+}
 
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -135,8 +151,9 @@ export default function ReportesView({ data, asesores, gaveta }: {
 
       // Moneda de la vista y nota de conversión (lo que ve el dueño).
       if (data.ver) {
+        const fc = data.convertido ? fraseConversion(data.convertido, data.ver) : ''
         cur.nota(`Todo en ${data.ver}.`
-          + (data.convertido?.convertidas.length ? ` Convertido a la tasa vigente.` : '')
+          + (fc ? ` ${fc}` : '')
           + (data.convertido?.excluidas.length ? ` Sin tasa hacia ${data.ver}, no incluidas: ${data.convertido.excluidas.join(', ')}.` : ''))
         cur.salto(2)
       }
@@ -504,9 +521,9 @@ export default function ReportesView({ data, asesores, gaveta }: {
                   >{m}</button>
                 ))}
               </div>
-              {data.convertido && (data.convertido.convertidas.length > 0 || data.convertido.excluidas.length > 0) && (
+              {data.convertido && (data.convertido.convertidas.length > 0 || data.convertido.excluidas.length > 0 || (data.convertido.congeladas?.length ?? 0) > 0) && (
                 <span className="rep-ver-nota">
-                  {data.convertido.convertidas.length > 0 && `Convertido a ${data.ver} a la tasa vigente.`}
+                  {fraseConversion(data.convertido, data.ver)}
                   {data.convertido.excluidas.length > 0 && ` Sin tasa hacia ${data.ver}: ${data.convertido.excluidas.join(', ')} (no incluidas).`}
                 </span>
               )}
