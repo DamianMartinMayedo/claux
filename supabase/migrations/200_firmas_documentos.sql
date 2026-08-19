@@ -1,5 +1,5 @@
 -- ================================================================
--- MIGRACIÓN 198: Firma de documentos legales del cliente
+-- MIGRACIÓN 200: Firma de documentos legales del cliente
 --
 -- Durante el período de prueba (cláusula 3 del contrato) el cliente firma y
 -- acepta, desde su perfil del portal, tres documentos: el NDA, el contrato de
