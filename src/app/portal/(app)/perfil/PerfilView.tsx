@@ -5,7 +5,9 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
 import { type IaPanel } from '@/app/actions/portal/ia'
+import { type EstadoDocumentos } from '@/app/actions/portal/documentos'
 import IaUsoCard from '@/components/portal/ia/IaUsoCard'
+import DocumentosFirmaCard from './DocumentosFirmaCard'
 import EnlacesLegales from '@/components/publico/EnlacesLegales'
 import { Lock } from 'lucide-react'
 import FormHelp from '@/components/portal/FormHelp'
@@ -43,7 +45,7 @@ function fmt(dateStr: string | null) {
 
 // ── Vista principal ───────────────────────────────────────────────────────────
 
-export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; panelIa: IaPanel | null }) {
+export default function PerfilView({ perfil, panelIa, documentos }: { perfil: PerfilData; panelIa: IaPanel | null; documentos: EstadoDocumentos | null }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [showPwd,   setShowPwd]      = useState(false)
@@ -120,6 +122,9 @@ export default function PerfilView({ perfil, panelIa }: { perfil: PerfilData; pa
           </div>
         </div>
       </div>
+
+      {/* ── Documentos y firmas (NDA, contrato, presupuesto) ── */}
+      {documentos && <DocumentosFirmaCard estado={documentos} />}
 
       {/* ── Asistente IA: consumo informativo (solo con el addon contratado) ── */}
       {panelIa && <IaUsoCard panel={panelIa} />}

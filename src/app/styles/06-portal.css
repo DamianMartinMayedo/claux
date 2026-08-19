@@ -960,6 +960,49 @@
    (03-components); aquí solo su hueco. */
 .prf-legal       { margin-top: var(--space-6); }
 
+/* ── Documentos y firmas (NDA, contrato, presupuesto) ── */
+.doc-firma-intro { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-4); }
+.doc-firma-list  { list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.doc-firma-item  {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+}
+.doc-firma-item-icon { color: var(--color-primary-text); flex-shrink: 0; display: flex; }
+.doc-firma-item-info { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.doc-firma-item-titulo { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.doc-firma-item-estado { font-size: var(--text-xs); color: var(--color-text-muted); }
+@media (max-width: 520px) {
+  .doc-firma-item { flex-wrap: wrap; }
+  .doc-firma-item-info { flex-basis: calc(100% - 2rem); }
+}
+
+/* Cuerpo del documento dentro del modal de firma */
+.doc-firma-subtitulo { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
+.doc-firma-cuerpo { display: flex; flex-direction: column; gap: var(--space-4); }
+.doc-firma-seccion { display: flex; flex-direction: column; gap: var(--space-2); }
+.doc-firma-seccion-titulo { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); }
+.doc-firma-parrafo { font-size: var(--text-sm); color: var(--color-text); line-height: 1.6; }
+.doc-firma-lista { padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-text); line-height: 1.6; list-style: disc; }
+.doc-firma-nota { font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; margin-top: var(--space-1); }
+
+/* Formulario de aceptación */
+.doc-firma-form { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.doc-firma-check { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text); cursor: pointer; }
+.doc-firma-check input { margin-top: 3px; flex-shrink: 0; }
+.doc-firma-legal { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
+
+/* Sello de firma (documento ya firmado) */
+.doc-firma-sello {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-success-bg);
+}
+.doc-firma-sello-icon { color: var(--color-success); flex-shrink: 0; margin-top: 2px; }
+.doc-firma-sello-txt  { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.doc-firma-sello-hash { font-size: var(--text-xs); color: var(--color-text-muted); font-family: monospace; word-break: break-all; margin-top: 2px; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MÓDULO FACTURACIÓN
    ═══════════════════════════════════════════════════════════════════════════ */

@@ -9,6 +9,7 @@ import ModulosCard from './ModulosCard'
 import IaClienteCard from './IaClienteCard'
 import UsoClienteCard from './UsoClienteCard'
 import PresupuestosClienteCard from './PresupuestosClienteCard'
+import DocumentosClienteCard from './DocumentosClienteCard'
 import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { getSetting } from '@/app/actions/settings'
@@ -233,6 +234,9 @@ export default async function ClienteDetallePage({
         nombreEmpresa={cliente.nombre_empresa ?? client_id}
         tienePagoConfiguracion={(pagos ?? []).some(p => p.concepto === 'configuracion')}
       />
+
+      {/* ── Documentos legales (NDA, contrato, presupuesto) ── */}
+      <DocumentosClienteCard clientId={client_id} />
 
       {/* ── Módulos contratados ── */}
       {catalogo && catalogo.length > 0 && (

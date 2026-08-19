@@ -1055,3 +1055,7 @@ textarea:focus-visible {
 .sop-asunto { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .sop-asunto > .badge { flex-shrink: 0; }
 .sop-asunto-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Documentos legales en la ficha del cliente ── */
+.doc-cli-nombre { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text); }
+.doc-cli-nombre svg { color: var(--color-text-muted); flex-shrink: 0; }

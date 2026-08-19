@@ -1,11 +1,13 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
-import { Calculator, CreditCard, Lock, Scale, User } from 'lucide-react'
+import { Building2, Calculator, CreditCard, Lock, Scale, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
 import { PAGINAS_LEGALES } from '@/lib/publico/legal'
+import { CLAVES_PROVEEDOR } from '@/lib/documentos/proveedor'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
 import { AJUSTES_PRESUPUESTO } from '@/lib/presupuesto/config'
 import PerfilForm from './PerfilForm'
+import ProveedorForm from './ProveedorForm'
 import FacturacionForm from './FacturacionForm'
 import PresupuestoForm from './PresupuestoForm'
 import LegalForm from './LegalForm'
@@ -22,6 +24,16 @@ export default async function ConfiguracionPage() {
 
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const diasTrial      = parseInt(await getSetting('dias_trial_default', '15'), 10) || 0
+
+  // Datos legales del proveedor (rellenan el contrato y el NDA que firma el cliente).
+  const [provNombre, provNif, provDom, provEmail, provTel, provIae] = await Promise.all([
+    getSetting(CLAVES_PROVEEDOR.nombre,    'Claudia Cuevas Alarcón'),
+    getSetting(CLAVES_PROVEEDOR.nif,       ''),
+    getSetting(CLAVES_PROVEEDOR.domicilio, ''),
+    getSetting(CLAVES_PROVEEDOR.email,     'contacto@claux.es'),
+    getSetting(CLAVES_PROVEEDOR.telefono,  ''),
+    getSetting(CLAVES_PROVEEDOR.iae,       ''),
+  ])
 
   // Los precios del presupuesto de instalación (mig. 168): antes eran constantes del código.
   const parametros = await cargarParametros()
@@ -100,6 +112,26 @@ export default async function ConfiguracionPage() {
                 </div>
                 <PerfilForm email={user?.email ?? ''} initialName={displayName} passwordOnly />
               </div>
+            </section>
+
+            {/* Datos del proveedor (rellenan el contrato y el NDA que firma el cliente) */}
+            <section className="card card-lg config-section">
+              <div className="config-section-header">
+                <div className="config-section-icon">
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <h2 className="config-section-title">Datos del proveedor</h2>
+                  <p className="config-section-sub">
+                    Identificación legal de CLAUX en el contrato y el NDA (parte firmante)
+                  </p>
+                </div>
+              </div>
+
+              <ProveedorForm
+                nombre={provNombre} nif={provNif} domicilio={provDom}
+                email={provEmail} telefono={provTel} iae={provIae}
+              />
             </section>
           </>
         }

@@ -5,6 +5,7 @@ import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { cobroEsIngreso, computaEnResultados } from '@/lib/gastos-core'
 import { indexarCategorias, esFueraDelResultado, esRolPL, type CategoriaPL } from '@/lib/pl/estado'
 import { getPortalSession }  from './auth'
+import { estadoDocumentos }  from './documentos'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
 import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
@@ -1366,6 +1367,19 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       texto: `${servicios.proximasRenovaciones} ${plural(servicios.proximasRenovaciones, 'suscripción renueva', 'suscripciones renuevan')} en 30 días`,
     })
   }
+  // Documentos legales sin firmar (NDA, contrato, presupuesto). Solo el admin de
+  // la empresa puede firmar, así que solo a él se le avisa. Se mantiene SIEMPRE
+  // hasta firmar (no solo en prueba): un contrato sin firmar es un pendiente vivo.
+  if (session.rol === 'admin_empresa') {
+    const docs = await estadoDocumentos()
+    if (docs && docs.pendientes > 0) {
+      pendiente.push({
+        clave: 'firmas', tono: 'aviso', ruta: '/portal/perfil',
+        texto: `${docs.pendientes} ${plural(docs.pendientes, 'documento legal por firmar', 'documentos legales por firmar')}`,
+      })
+    }
+  }
+
   // Lo que duele primero.
   pendiente.sort((a, b) => (a.tono === b.tono ? 0 : a.tono === 'alerta' ? -1 : 1))
 

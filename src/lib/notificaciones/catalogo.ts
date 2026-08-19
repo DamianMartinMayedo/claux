@@ -94,6 +94,13 @@ export const CATALOGO = {
     etiqueta: 'Cupo de IA cerca del tope',
     descripcion: 'Tu consumo mensual del asistente se acerca al límite.',
   },
+  // Documentos legales del alta sin firmar. `modulo: null` = plataforma: aplica a
+  // todo cliente, tenga los módulos que tenga. La lanza el admin como recordatorio.
+  documentos_firma_pendiente: {
+    categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
+    etiqueta: 'Documentos pendientes de firma',
+    descripcion: 'Tienes el NDA, el contrato o el presupuesto sin firmar en tu perfil.',
+  },
 
   // ── Reservas y Citas ───────────────────────────────────────────────────────
   reserva_nueva: {
