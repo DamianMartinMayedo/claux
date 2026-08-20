@@ -63,6 +63,10 @@ export async function obtenerCamposEntidad(
   ok: boolean; error?: string; etiqueta?: string
   campos?:   { campo: string; etiqueta: string; obligatorio: boolean; ayuda?: string; alias?: string[] }[]
   defaults?: DefaultResuelto[]
+  /** Entidad de HECHOS (gastos/cobros): reimportar no debe pisar lo existente por
+   *  defecto. Un MAESTRO (personal, terceros, productos…) sí: lo normal al reimportar
+   *  es rellenar/corregir, así que el asistente arranca en «Actualizar». */
+  repetible?: boolean
 }> {
   const r = await resolverCtx()
   if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
@@ -85,6 +89,7 @@ export async function obtenerCamposEntidad(
     etiqueta: adaptador.etiqueta,
     campos: [...adaptador.campos, ...extra].map(c => ({ campo: c.campo, etiqueta: c.etiqueta, obligatorio: c.obligatorio, ayuda: c.ayuda, alias: c.alias ?? [] })),
     defaults,
+    repetible: !!adaptador.repetible,
   }
 }
 

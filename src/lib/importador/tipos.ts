@@ -164,6 +164,12 @@ export interface ResultadoValidacion {
   errores: number
   /** Filas que no son un error: esperan una decisión sobre un nombre. */
   por_decidir: number
+  /** Desglose de las filas OK por acción, para que el asistente diga QUÉ pasará con
+   *  lo que ya existe (crear vs. actualizar vs. saltar) en vez de un «N listas» que
+   *  esconde que 20 fichas se saltaron sin recibir los datos nuevos del archivo. */
+  nuevos:      number   // no existían → se insertarán
+  actualizar:  number   // ya existen → se actualizarán (política ACTUALIZAR)
+  saltar:      number   // ya existen → se saltarán (política SALTAR); sus datos nuevos NO entran
   filas:   FilaResultado[]
   /** Totales de lo que se va a escribir (importes, unidades) para revisarlo antes. */
   resumen?: TotalResumen[]
