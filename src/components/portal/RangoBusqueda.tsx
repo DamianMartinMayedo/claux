@@ -94,15 +94,20 @@ interface Props {
    * no puede enseñar una caja de búsqueda que no hace nada.
    */
   sinBuscador?: boolean
+  /** Se llama con el pendiente de la navegación (buscar / cambiar rango) para que la
+   *  lista pinte el velo de «cargando» sobre su tabla. */
+  onPendiente?: (v: boolean) => void
 }
 
 export default function RangoBusqueda({
-  desde, hasta, q = '', placeholder = 'Buscar…', presets, sinBuscador,
+  desde, hasta, q = '', placeholder = 'Buscar…', presets, sinBuscador, onPendiente,
 }: Props) {
   const router  = useRouter()
   const params  = useSearchParams()
   const ruta    = usePathname()
-  const [, startTransition] = useTransition()
+  const [pendiente, startTransition] = useTransition()
+
+  useEffect(() => { onPendiente?.(pendiente) }, [pendiente])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // El preset que pidió la URL; si no hay (enlace viejo, rango por defecto del servidor),
   // se deduce de las fechas como antes.

@@ -35,6 +35,7 @@ import { useEmpresas }                 from '@/components/portal/EmpresaColorCon
 import Filtros                         from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
@@ -534,6 +535,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
   }, [data.empleados, search, filtroEstado, filtroEmpresa])
 
   const { pageItems, ...pag } = usePagination(empleados)
+  const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (baja / reactivar / eliminar en lote) ──
   const empleadoIds = useMemo(() => empleados.map(e => e.empleado_id), [empleados])
@@ -641,8 +643,10 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
         filtros={declaracion}
         q={search}
         placeholder="Buscar por nombre, documento, cargo…"
+        onCargando={setCargando}
       />
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {empleados.length === 0 ? (
           <div className="mon-empty">
@@ -741,6 +745,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
         )}
         <TablePagination {...pag} label="empleado" />
       </div>
+      </TablaCargando>
 
       {modalEmpleado && (
         <EmpleadoModal empleado={editEmpleado} data={data}

@@ -18,6 +18,7 @@ import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import EmpresaPills      from '@/components/portal/EmpresaPills'
 import { useEmpresas }   from '@/components/portal/EmpresaColorContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import Filtros from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
@@ -1313,6 +1314,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
   }, [data.suscripciones, search, filtro, empresaFil, soloDeuda])
 
   const { pageItems, ...pag } = usePagination(filtradas)
+  const [cargando, setCargando] = useState(false)
   const sel = useRowSelection(pageItems.map(s => s.suscripcion_id))
 
   /** Previsualiza la subida: el antes → después, acuerdo a acuerdo, antes de escribir. */
@@ -1465,8 +1467,10 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
         placeholder="Buscar por cliente o servicio…"
         presets={PRESETS_FUTURO}
         hayMas={data.hay_mas}
+        onCargando={setCargando}
       />
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">Acuerdos</h2>
@@ -1662,6 +1666,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
         )}
         <TablePagination {...pag} label="suscripción" />
       </div>
+      </TablaCargando>
       </>
       )}
 

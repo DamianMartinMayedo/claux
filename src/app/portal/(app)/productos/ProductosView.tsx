@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link                                  from 'next/link'
@@ -324,6 +325,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
       soloSuscribibles, categoriaMap, tieneAlerta])
 
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
+  const [cargando, setCargando] = useState(false)
   const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
 
   // ── Selección múltiple (archivar/restaurar/eliminar en lote) ──
@@ -572,6 +574,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
             filtros={declaracion}
             q={search}
             placeholder="Buscar por nombre, código, categoría…"
+            onCargando={setCargando}
           />
 
           {/* F1.8 · Un producto sin categoría no desaparece del informe: se queda
@@ -591,6 +594,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
           )}
 
           {/* Tabla */}
+          <TablaCargando activo={cargando}>
           <div className="card card-table">
             <div className="mon-card-header">
               <h2 className="mon-section-title">{verArchivados ? 'Archivados' : 'Catálogo activo'}</h2>
@@ -757,6 +761,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
             )}
             <TablePagination {...prodPag} label={sustantivo} />
           </div>
+          </TablaCargando>
 
           {/* Barra de acciones en lote (solo con permiso de edición) */}
           {puedeEditar && (

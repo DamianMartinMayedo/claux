@@ -53,16 +53,28 @@ interface Props {
   hayMas?: boolean
   /** Cuántos controles se quedan en la fila visible; el resto, al desplegable. */
   visibles?: number
+  /**
+   * Se llama con `true` mientras el servidor recarga por un cambio de filtro o de
+   * búsqueda, y con `false` al terminar. La lista lo usa para pintar el velo de
+   * «cargando» sobre su tabla (`<TablaCargando>`). Combina el pendiente de los
+   * filtros y el del buscador/rango.
+   */
+  onCargando?: (v: boolean) => void
 }
 
 export default function Filtros({
-  filtros, rango, q, placeholder, presets, hayMas = false, visibles = 2,
+  filtros, rango, q, placeholder, presets, hayMas = false, visibles = 2, onCargando,
 }: Props) {
   const router = useRouter()
   const params = useSearchParams()
   const ruta   = usePathname()
-  const [, startTransition] = useTransition()
+  const [filtroPend, startTransition] = useTransition()
+  const [rangoPend,  setRangoPend]    = useState(false)
   const [abierto, setAbierto] = useState(false)
+
+  // El «cargando» de la tabla es la suma: un cambio de filtro (aquí) o de
+  // búsqueda/rango (en `RangoBusqueda`) recarga la misma tabla.
+  useEffect(() => { onCargando?.(filtroPend || rangoPend) }, [filtroPend, rangoPend])  // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Hacia dónde se abre el panel.
@@ -245,6 +257,7 @@ export default function Filtros({
             desde={rango?.desde ?? ''} hasta={rango?.hasta ?? ''} q={q}
             placeholder={placeholder} presets={rango ? presets : []}
             sinBuscador={q === undefined}
+            onPendiente={setRangoPend}
           />
         )}
         {enFila.map(control)}

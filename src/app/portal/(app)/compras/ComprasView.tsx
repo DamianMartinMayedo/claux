@@ -20,6 +20,7 @@ import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { CompraFormModal }              from './_CompraFormModal'
 import { ReposicionModal }              from './_ReposicionModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { RowActions }                   from '@/components/portal/RowActions'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
@@ -73,6 +74,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
   )
 
   const { pageItems, ...pag } = usePagination(filtradas)
+  const [cargando, setCargando] = useState(false)
 
   const sinAlmacenes = data.almacenes.length === 0
 
@@ -164,7 +166,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
       )}
 
       {/* Sin buscador: el servidor de este listado no busca por texto. */}
-      <Filtros filtros={declaracion} rango={data.rango} hayMas={data.hay_mas} />
+      <Filtros filtros={declaracion} rango={data.rango} hayMas={data.hay_mas} onCargando={setCargando} />
 
       {data.hay_mas && (
         <AvisoTope mostrados={data.compras.length} total={data.total}
@@ -173,6 +175,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
         </AvisoTope>
       )}
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">Compras</h2>
@@ -245,6 +248,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
         )}
         <TablePagination {...pag} label="compra" />
       </div>
+      </TablaCargando>
 
       {/* ── Barra flotante de acciones en lote ── */}
       {puedeEditar && (

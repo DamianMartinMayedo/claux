@@ -23,6 +23,7 @@ import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import QrEnlace from '@/components/portal/QrEnlace'
@@ -1086,6 +1087,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
   }), [data.citas, filtroRecurso, filtroEstado])
 
   const { pageItems: citaItems, ...citaPag } = usePagination(citas)
+  const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (cambiar estado en lote) ──
   const citaIds = useMemo(() => citas.map(c => c.reserva_id), [citas])
@@ -1321,6 +1323,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
         placeholder="Buscar por cliente, teléfono o notas…"
         presets={PRESETS_CITAS}
         hayMas={data.hay_mas}
+        onCargando={setCargando}
       />
 
       {data.hay_mas && (
@@ -1345,6 +1348,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
         </div>
       )}
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {citas.length === 0 ? (
           <div className="mon-empty">
@@ -1446,6 +1450,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
         )}
         <TablePagination {...citaPag} label="cita" />
       </div>
+      </TablaCargando>
       </>
       )}
 

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando from '@/components/portal/TablaCargando'
 import Tabs from '@/components/Tabs'
 import GavetaLanzador from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta } from '@/lib/caja/pendientes'
@@ -38,6 +39,7 @@ function estadoBadge(estado: string) {
 
 export default function OperacionesView({ data, gaveta }: Props & { gaveta: ResumenGaveta }) {
   const [tab, setTab] = useState<'ventas' | 'stock'>('ventas')
+  const [cargando, setCargando] = useState(false)
   // Los filtros viven en la URL, como el rango: refrescar ya no los tira.
   const params = useSearchParams()
   const search = params.get('q')      ?? ''
@@ -181,6 +183,7 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
         placeholder="Buscar por punto de venta, producto…"
         hayMas={data.hay_mas}
         visibles={1}
+        onCargando={setCargando}
       />
 
       {data.hay_mas && (
@@ -201,9 +204,11 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
         </div>
       )}
 
-      {tab === 'ventas'
-        ? <VentasTabla items={ventas} cajaNombre={cajaNombre} lineas={data.lineasPorTicket} />
-        : <StockTabla  items={stock}  cajaNombre={cajaNombre} />}
+      <TablaCargando activo={cargando}>
+        {tab === 'ventas'
+          ? <VentasTabla items={ventas} cajaNombre={cajaNombre} lineas={data.lineasPorTicket} />
+          : <StockTabla  items={stock}  cajaNombre={cajaNombre} />}
+      </TablaCargando>
     </div>
   )
 }

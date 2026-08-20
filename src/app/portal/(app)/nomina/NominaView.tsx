@@ -31,6 +31,7 @@ import BulkBar                          from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import AvisoTope                         from '@/components/portal/AvisoTope'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -834,6 +835,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
     [data.nominas, filtroEmpresa])
 
   const { pageItems, ...pag } = usePagination(nominasFiltradas)
+  const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (confirmar / eliminar en lote) ──
   const nominaIds = useMemo(() => nominasFiltradas.map(n => n.nomina_id), [nominasFiltradas])
@@ -950,8 +952,9 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
       <>
       {/* Sin rango de fechas ni buscador: el período de una nómina es el AÑO, no unos días
           sueltos. El año acota EN LA CONSULTA (`donde: 'servidor'`). */}
-      <Filtros filtros={declaracion} hayMas={data.hay_mas} />
+      <Filtros filtros={declaracion} hayMas={data.hay_mas} onCargando={setCargando} />
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {nominasFiltradas.length === 0 ? (
           <div className="mon-empty">
@@ -1038,6 +1041,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
         )}
         <TablePagination {...pag} label="nómina" />
       </div>
+      </TablaCargando>
       {/* El techo dice CUÁNTAS faltan y las trae. Antes esta pantalla no tenía ninguno:
           traía la historia completa y el usuario no podía saber que la había traído. */}
       {data.hay_mas && (

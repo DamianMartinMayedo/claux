@@ -3,6 +3,7 @@
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
@@ -1145,6 +1146,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   }, [data.movimientos, filtroCuenta, filtroTipo, filtroEmpresaMov, filtroCatMov, hijasDeCat])
 
   const { pageItems, ...pag } = usePagination(movimientosFiltrados)
+  const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple de movimientos (eliminar en lote) ──
   // Sobre los movimientos VISIBLES filtrados (persiste entre páginas; se limpia al
@@ -1410,6 +1412,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         q={data.q}
         placeholder="Buscar por concepto, código o importe…"
         hayMas={data.hay_mas}
+        onCargando={setCargando}
       />
 
       {data.hay_mas && (
@@ -1419,6 +1422,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         </AvisoTope>
       )}
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {movimientosFiltrados.length === 0 ? (
           <div className="mon-empty">
@@ -1524,6 +1528,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         )}
         <TablePagination {...pag} label="movimiento" />
       </div>
+      </TablaCargando>
       </>)}
 
       {/* Barra de acciones en lote (solo pestaña de cuentas) */}

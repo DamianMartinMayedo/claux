@@ -21,6 +21,7 @@ import PrerequisitoAviso               from '@/components/portal/PrerequisitoAvi
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import Filtros                         from '@/components/portal/Filtros'
+import TablaCargando                   from '@/components/portal/TablaCargando'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -229,6 +230,7 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
   }))
   const [isPending, startTransition] = useTransition()
 
+  const [cargando,    setCargando]    = useState(false)
   const [modalOpen,   setModalOpen]   = useState(false)
   const [editAlmacen, setEditAlmacen] = useState<Almacen | null>(null)
   const [confirmAlm,  setConfirmAlm]  = useState<Almacen | null>(null)
@@ -387,9 +389,10 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
       )}
 
       {/* Sin rango ni buscador: los almacenes son un catálogo corto, no un histórico. */}
-      <Filtros filtros={declaracion} />
+      <Filtros filtros={declaracion} onCargando={setCargando} />
 
       {/* ── Tabla ── */}
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">
@@ -510,6 +513,7 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
           </div>
         )}
       </div>
+      </TablaCargando>
 
       {/* ── Modales ── */}
       {modalOpen && (

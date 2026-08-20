@@ -1743,6 +1743,10 @@
 /* Aviso de que borrar reabre la cuenta: tinta ámbar, sin caja (ya va dentro del modal). */
 .tes-mov-rollback { margin-top: var(--space-3); color: var(--color-amber-text); }
 
+/* El «cargando» de una tabla (buscar / filtrar) no lleva CSS propio: el componente
+   TablaCargando reutiliza la tarjeta `.card-table` con un `.mon-empty` (spinner +
+   «Cargando…»), el mismo patrón que el resto de estados vacíos del portal. */
+
 /* Preview de transferencia */
 .tes-transfer-preview { margin-top: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: var(--text-sm); }
 .tes-transfer-preview strong { display: block; margin-bottom: var(--space-2); }
@@ -2466,6 +2470,7 @@
   color: var(--color-text-faint); cursor: pointer; transform: translateY(-50%);
   transition: background var(--transition), color var(--transition);
 }
+.rango-limpiar:hover,
 .turno-search-clear:hover { background: var(--color-surface-offset); color: var(--color-text); }
 .turno-persona-wrap { padding-top: var(--space-2); }
 

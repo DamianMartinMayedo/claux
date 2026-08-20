@@ -36,6 +36,7 @@ import {
 import { fmtFechaEs }                  from '@/lib/date-utils'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                    from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
@@ -69,6 +70,7 @@ type Confirm = { title: string; body?: string; confirmLabel: string; danger: boo
 export default function VentasView({ data, initialTab, puedeEditar, children }: Props) {
   const router = useRouter()
   const [tab,          setTab]          = useState<Tab>(initialTab ?? 'ofertas')
+  const [cargando,     setCargando]     = useState(false)
 
   // La pestaña activa se refleja en la URL (`?t=`): así volver desde el detalle
   // de una factura o refrescar conserva la pestaña en vez de saltar a Ofertas.
@@ -298,9 +300,11 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
            «Filtros» acababa suelto al principio de la segunda. Y el cliente ya se busca por
            nombre en la caja de al lado, que es como se llega a él la mayoría de las veces. */
         visibles={1}
+        onCargando={setCargando}
       />
 
       {/* ── Tabla ── */}
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">
@@ -382,6 +386,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
           )
         )}
       </div>
+      </TablaCargando>
 
       {/* ── Barra flotante de acciones en lote ── */}
       {puedeEditar && (

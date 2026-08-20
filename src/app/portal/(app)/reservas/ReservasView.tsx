@@ -35,6 +35,7 @@ import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando from '@/components/portal/TablaCargando'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
 import QrEnlace from '@/components/portal/QrEnlace'
@@ -739,6 +740,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
   }), [data.reservas, filtroFranja, filtroEstado])
 
   const { pageItems: reservaItems, ...reservaPag } = usePagination(reservas)
+  const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (cambiar estado en lote) ──
   const reservaIds = useMemo(() => reservas.map(r => r.reserva_id), [reservas])
@@ -976,6 +978,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         placeholder="Buscar por cliente, teléfono o notas…"
         presets={PRESETS_RESERVAS}
         hayMas={data.hay_mas}
+        onCargando={setCargando}
       />
 
       {data.hay_mas && (
@@ -1002,6 +1005,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         </div>
       )}
 
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {reservas.length === 0 ? (
           <div className="mon-empty">
@@ -1112,6 +1116,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         )}
         <TablePagination {...reservaPag} label="reserva" />
       </div>
+      </TablaCargando>
       </>
       )}
 

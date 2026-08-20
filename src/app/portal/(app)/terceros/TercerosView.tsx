@@ -24,6 +24,7 @@ import { useRowSelection }             from '@/components/portal/useRowSelection
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
 import CopiarLoteEmpresaModal          from '@/components/portal/CopiarLoteEmpresaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Users, X } from 'lucide-react'
@@ -179,6 +180,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
   }, [data.terceros, search, filtroTipo, filtroEmpresa, verArchivados])
 
   const { pageItems, ...pag } = usePagination(tercerosFiltrados)
+  const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (archivar/restaurar en lote) ──
   // La lista muestra activos XOR archivados, así que la acción es homogénea:
@@ -277,9 +279,11 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
         filtros={declaracion}
         q={search}
         placeholder="Buscar por nombre, NIT, email, moneda, vía de pago…"
+        onCargando={setCargando}
       />
 
       {/* ── Tabla ── */}
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">
@@ -448,6 +452,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
         )}
         <TablePagination {...pag} label="registro" />
       </div>
+      </TablaCargando>
 
       {/* ── Barra de acciones en lote ── */}
       {puedeEditar && (
