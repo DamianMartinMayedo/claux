@@ -469,6 +469,7 @@ export default function ImportarWizard() {
 
   const [resultado, setResultado] = useState<{
     total: number; ok: number; errores: number; por_decidir: number
+    nuevos: number; actualizar: number; saltar: number
     filas: FilaMala[]; resumen: Total[]; pendientes: Pendiente[]; repetidas: FilaRepetida[]
   } | null>(null)
   // Decisiones sobre los nombres que el archivo no emparejó. Viajan en el mapeo,
@@ -520,6 +521,11 @@ export default function ImportarWizard() {
     setLoteId(''); setCabeceras([]); setTotal(0); setColumnas({}); setAvisos([]); setResultado(null)
     setResoluciones({})
     setEntidad(en.id); setEtiqueta(res.etiqueta ?? en.etiqueta); setDestino(en.destino); setCampos(res.campos as Campo[])
+    // Un MAESTRO (personal, terceros, productos…) arranca en «Actualizar»: reimportar
+    // sirve para rellenar/corregir, y dejarlo en «Saltar» hacía que 20 fichas que ya
+    // existían se saltaran sin recibir los datos nuevos del archivo. Los HECHOS
+    // (gastos/cobros, `repetible`) siguen en «Saltar»: ahí reimportar no debe pisar.
+    setPolitica(res.repetible ? 'SALTAR' : 'ACTUALIZAR')
     // Los valores globales (empresa, moneda, unidad…) los declara cada entidad.
     // Si solo hay una opción posible, se elige sola.
     const ds = (res.defaults ?? []) as Default[]
@@ -647,13 +653,14 @@ export default function ImportarWizard() {
   async function validar(
     resol: Record<string, Resolucion> = resoluciones,
     rep:   DecisionRepetidas = repetidas,
+    pol:   Politica = politica,
   ) {
     const falta = defs.find(d => d.obligatorio && !(globales[d.campo] ?? '').trim())
     if (falta) { toastError(`Indica ${falta.etiqueta.toLowerCase()}.`); return }
     const mapeo = {
       columnas,
       defaults: Object.fromEntries(Object.entries(globales).filter(([, v]) => v.trim() !== '')),
-      politica,
+      politica: pol,
       resoluciones: resol,
       repetidas:    rep,
     }
@@ -662,7 +669,7 @@ export default function ImportarWizard() {
     // El archivo se valida en tandas (una consulta por fila): se llama en bucle
     // hasta que el servidor dice que no queda nada, enseñando el avance.
     const acc = {
-      total, ok: 0, errores: 0, por_decidir: 0,
+      total, ok: 0, errores: 0, por_decidir: 0, nuevos: 0, actualizar: 0, saltar: 0,
       filas: [] as FilaMala[], resumen: [] as Total[], pendientes: [] as Pendiente[],
       repetidas: [] as FilaRepetida[],
     }
@@ -673,6 +680,7 @@ export default function ImportarWizard() {
       if (!res.ok || !res.trozo) { await ld.dismiss(); setCargando(false); setProgreso(null); toastError(res.error ?? 'Error al validar.'); return }
       const t = res.trozo
       acc.total = t.total; acc.ok += t.ok; acc.errores += t.errores; acc.por_decidir += t.por_decidir
+      acc.nuevos += t.nuevos; acc.actualizar += t.actualizar; acc.saltar += t.saltar
       acc.filas.push(...t.filas.filter(f => !f.ok))   // las buenas no se pintan: solo cuentan
       acc.resumen    = fusionarTotales(acc.resumen, t.resumen ?? [])
       acc.pendientes = fusionarPendientes(acc.pendientes, t.pendientes ?? [])
@@ -960,7 +968,10 @@ export default function ImportarWizard() {
           <div className="card">
             <div className="imprt-tiles">
               <div className="imprt-tile"><strong>{resultado.total}</strong><span>Filas</span></div>
-              <div className="imprt-tile"><strong>{resultado.ok}</strong><span>Listas para importar</span></div>
+              <div className="imprt-tile"><strong>{resultado.nuevos + resultado.actualizar}</strong><span>Se importarán</span></div>
+              {resultado.saltar > 0 && (
+                <div className="imprt-tile"><strong>{resultado.saltar}</strong><span>Ya existen (se saltan)</span></div>
+              )}
               {resultado.por_decidir > 0 && (
                 <div className="imprt-tile"><strong>{resultado.por_decidir}</strong><span>Esperan que decidas</span></div>
               )}
@@ -1083,10 +1094,29 @@ export default function ImportarWizard() {
               <h2 className="card-title card-title-sm">Qué va a pasar al importar</h2>
             </div>
             <ul className="imprt-plan">
-              {resultado.ok > 0 && (
+              {resultado.nuevos > 0 && (
                 <li>
                   <Check size={14} strokeWidth={2.5} />
-                  <span>Se {politica === 'ACTUALIZAR' ? 'crearán o actualizarán' : 'crearán'} <strong>{resultado.ok} {etiquetaEntidad.toLowerCase()}</strong>.</span>
+                  <span>Se {resultado.nuevos === 1 ? 'creará' : 'crearán'} <strong>{resultado.nuevos} {etiquetaEntidad.toLowerCase()}</strong> {resultado.nuevos === 1 ? 'nueva' : 'nuevas'} (no existían).</span>
+                </li>
+              )}
+              {resultado.actualizar > 0 && (
+                <li>
+                  <Check size={14} strokeWidth={2.5} />
+                  <span>Se {resultado.actualizar === 1 ? 'actualizará' : 'actualizarán'} <strong>{resultado.actualizar} {etiquetaEntidad.toLowerCase()}</strong> que ya {resultado.actualizar === 1 ? 'existe' : 'existen'} con los datos del archivo (solo las columnas que trae; lo demás se queda igual).</span>
+                </li>
+              )}
+              {resultado.saltar > 0 && (
+                <li className="imprt-plan-warn">
+                  <AlertTriangle size={14} strokeWidth={2} />
+                  <span>
+                    <strong>{resultado.saltar} {etiquetaEntidad.toLowerCase()}</strong> ya {resultado.saltar === 1 ? 'existe' : 'existen'} y <strong>se {resultado.saltar === 1 ? 'saltará' : 'saltarán'}</strong>: NO recibirán lo que trae el archivo (p. ej. las vacaciones acumuladas).
+                    <button type="button" className="btn btn-sm btn-primary imprt-plan-accion"
+                      disabled={cargando}
+                      onClick={() => { setPolitica('ACTUALIZAR'); validar(resoluciones, repetidas, 'ACTUALIZAR') }}>
+                      Actualizar {resultado.saltar === 1 ? 'esa ficha' : `esas ${resultado.saltar}`} con el archivo
+                    </button>
+                  </span>
                 </li>
               )}
               {deOficio.length > 0 && (
@@ -1110,7 +1140,7 @@ export default function ImportarWizard() {
                   <span><strong>{resultado.errores} filas</strong> se quedan fuera por errores del archivo.</span>
                 </li>
               )}
-              {politica === 'SALTAR' && (
+              {politica === 'SALTAR' && resultado.saltar === 0 && (
                 <li>
                   <Check size={14} strokeWidth={2.5} />
                   <span>Lo que ya exista en CLAUX <strong>no se toca</strong>.</span>
@@ -1157,10 +1187,10 @@ export default function ImportarWizard() {
                     : <>Recalcular con tus decisiones <ArrowRight size={15} strokeWidth={2} /></>}
                 </button>
               ) : (
-                <button type="button" className="btn btn-primary" onClick={aplicar} disabled={cargando || resultado.ok === 0}>
+                <button type="button" className="btn btn-primary" onClick={aplicar} disabled={cargando || (resultado.nuevos + resultado.actualizar) === 0}>
                   {cargando
                     ? <><span className="spinner spinner-sm" /> Importando {etiquetaProgreso}…</>
-                    : <>Importar {resultado.ok} filas</>}
+                    : <>Importar {resultado.nuevos + resultado.actualizar} {(resultado.nuevos + resultado.actualizar) === 1 ? 'ficha' : 'fichas'}</>}
                 </button>
               )}
             </div>

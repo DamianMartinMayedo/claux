@@ -177,8 +177,14 @@ export async function validarLoteFilas(
   }
   const ok         = res.filter(f => f.ok).length
   const porDecidir = res.filter(f => f.decidir).length
+  // Desglose por acción de las filas OK: es lo que deja al asistente decir «20 ya
+  // existen y se saltarán» en vez de esconderlo tras un «20 listas para importar».
+  const nuevos     = res.filter(f => f.ok && f.accion === 'INSERTAR').length
+  const actualizar = res.filter(f => f.ok && f.accion === 'ACTUALIZAR').length
+  const saltar     = res.filter(f => f.ok && f.accion === 'SALTAR').length
   return {
-    total: filas.length, ok, errores: res.length - ok - porDecidir, por_decidir: porDecidir, filas: res,
+    total: filas.length, ok, errores: res.length - ok - porDecidir, por_decidir: porDecidir,
+    nuevos, actualizar, saltar, filas: res,
     resumen:    adaptador.resumen?.(buenas),
     pendientes: [...ctx.pendientes.values()],
     repetidas,

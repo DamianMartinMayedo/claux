@@ -72,6 +72,9 @@ export async function obtenerCamposEntidad(
   ok: boolean; error?: string; etiqueta?: string
   campos?:   { campo: string; etiqueta: string; obligatorio: boolean; ayuda?: string; alias?: string[] }[]
   defaults?: DefaultResuelto[]
+  /** Un MAESTRO arranca en «Actualizar» (reimportar rellena/corrige); los HECHOS
+   *  (`repetible`) en «Saltar» para no pisar lo existente. */
+  repetible?: boolean
 }> {
   const r = await resolverCtxCliente()
   if (!r) return { ok: false, error: 'El importador no está disponible.' }
@@ -94,6 +97,7 @@ export async function obtenerCamposEntidad(
     etiqueta: adaptador.etiqueta,
     campos: [...adaptador.campos, ...extra].map(c => ({ campo: c.campo, etiqueta: c.etiqueta, obligatorio: c.obligatorio, ayuda: c.ayuda, alias: c.alias ?? [] })),
     defaults,
+    repetible: !!adaptador.repetible,
   }
 }
 
