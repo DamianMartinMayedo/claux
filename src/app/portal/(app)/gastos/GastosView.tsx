@@ -1,7 +1,7 @@
 'use client'
 
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo, useEffect } from 'react'
+import { Fragment, useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams }        from 'next/navigation'
 import {
   guardarGastoCobro,
@@ -33,13 +33,14 @@ import { claveCat } from '@/lib/catalogo/emparejar'
 import { PERMITIR_RAIZ_MANUAL } from '@/lib/catalogo/politica'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sprout, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
+import { Archive, ChevronDown, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sprout, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import type { Filtro } from '@/lib/filtros'
 import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
 import FormHelp                        from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import GavetaLanzador                       from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta }            from '@/lib/caja/pendientes'
@@ -62,6 +63,22 @@ const ESTADO_LABEL: Record<EstadoRegistro, string> = {
 }
 const ESTADO_BADGE: Record<EstadoRegistro, string> = {
   PENDIENTE: 'badge-warning', PARCIAL: 'badge-info', LIQUIDADO: 'badge-success',
+}
+// El origen es de dónde salió la fila (mig. 118); en el desplegable se dice en
+// palabras, no con el código crudo. Null = lo escribió el dueño a mano.
+const ORIGEN_TIPO_LABEL: Record<string, string> = {
+  NOMINA:      'Nómina',
+  COMPRA:      'Compra',
+  FACTURA:     'Factura',
+  IMPORTACION: 'Importación de datos',
+  CIERRE_CAJA: 'Cierre de caja',
+}
+// Qué papel cumple la fila (mig. 166): decide si pesa en el resultado, en la
+// deuda, o en las dos cosas.
+const NATURALEZA_LABEL: Record<string, string> = {
+  COSTE: 'Solo resultado (coste)',
+  DEUDA: 'Solo deuda (por pagar/cobrar)',
+  AMBAS: 'Resultado y deuda',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -835,6 +852,11 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
   const [tipoNuevo,     setTipoNuevo]      = useState<TipoRegistro>('GASTO')
   const [liquidar,      setLiquidar]       = useState<GastoCobroConSaldo | null>(null)
   const [confirmDel,    setConfirmDel]     = useState<GastoCobroConSaldo | null>(null)
+  // Qué fila tiene el desplegable abierto (ver el resto de datos sin salir de la
+  // lista). Igual que en Tesorería, disponible también en solo-lectura.
+  const [detalle,       setDetalle]        = useState<string | null>(null)
+  // Velo de «cargando» sobre la tabla mientras el servidor recarga al buscar/filtrar.
+  const [cargando,      setCargando]       = useState(false)
 
   const params = useSearchParams()
   // La pestaña inicial se puede fijar por URL (?tab=categorias): así un CTA de otro
@@ -1243,6 +1265,7 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
         rango={data.rango}
         q={data.q}
         placeholder="Buscar por concepto, notas o importe…"
+        onCargando={setCargando}
         hayMas={data.hay_mas}
         /* Solo la empresa se queda en la fila; el estado baja al panel. Con las píldoras de
            tres empresas MÁS un desplegable, la barra envolvía a dos líneas y «Filtros»
@@ -1261,6 +1284,7 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
       )}
 
       {/* Tabla */}
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {registros.length === 0 ? (
           <div className="mon-empty">
@@ -1295,8 +1319,11 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
               <tbody>
                 {regItems.map(r => {
                   const cs = tab === 'gastos' ? catSubDe(r.categoria_id) : null
+                  const abierto = detalle === r.registro_id
+                  const colDet = 6 + (puedeEditar ? 1 : 0) + (tab === 'gastos' ? 2 : 0) + (multiempresa ? 1 : 0)
                   return (
-                  <tr key={r.registro_id}
+                  <Fragment key={r.registro_id}>
+                  <tr
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
                     {puedeEditar && (
@@ -1334,21 +1361,65 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
                     <td className="col-actions">
-                      {puedeEditar && (
-                        <RowActions>
-                          <button className="row-actions-item" onClick={() => setLiquidar(r)}>
-                            <DollarSign size={15} strokeWidth={2} /> {r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
-                          </button>
-                          <button className="row-actions-item" onClick={() => openEdit(r)}>
-                            <Pencil size={15} strokeWidth={2} /> Editar
-                          </button>
-                          <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmDel(r)} disabled={isPending}>
-                            <Trash2 size={14} strokeWidth={2} /> Eliminar
-                          </button>
-                        </RowActions>
-                      )}
+                      <div className="ter-actions">
+                        {/* Ver el resto de datos del registro sin salir de la lista.
+                            Disponible también en solo-lectura: desplegar no escribe. */}
+                        <button type="button" className="ter-action-btn" title="Ver detalle"
+                          aria-label={`Ver detalle de ${r.concepto || r.descripcion}`} aria-expanded={abierto}
+                          onClick={() => setDetalle(abierto ? null : r.registro_id)}>
+                          <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
+                        </button>
+                        {puedeEditar && (
+                          <RowActions>
+                            <button className="row-actions-item" onClick={() => setLiquidar(r)}>
+                              <DollarSign size={15} strokeWidth={2} /> {r.tipo === 'GASTO' ? 'Pagar' : 'Cobrar'}
+                            </button>
+                            <button className="row-actions-item" onClick={() => openEdit(r)}>
+                              <Pencil size={15} strokeWidth={2} /> Editar
+                            </button>
+                            <button className="row-actions-item row-actions-item-danger" onClick={() => setConfirmDel(r)} disabled={isPending}>
+                              <Trash2 size={14} strokeWidth={2} /> Eliminar
+                            </button>
+                          </RowActions>
+                        )}
+                      </div>
                     </td>
                   </tr>
+                  {abierto && (
+                    <tr className="tes-mov-detalle-fila">
+                      <td colSpan={colDet}>
+                        <dl className="tes-mov-detalle">
+                          {multiempresa && <div><dt>Empresa</dt><dd>{data.empresa_nombres[r.empresa_id] ?? '—'}</dd></div>}
+                          <div><dt>Tipo</dt><dd>{r.tipo === 'GASTO' ? 'Gasto' : 'Cobro'}</dd></div>
+                          {r.tercero_id && <div><dt>Tercero</dt><dd>{terceroNombre[r.tercero_id] ?? '—'}</dd></div>}
+                          <div><dt>Vencimiento</dt><dd>{formatFecha(r.vencimiento)}</dd></div>
+                          {r.categoria && <div><dt>Categoría</dt><dd>{r.categoria}</dd></div>}
+                          <div><dt>Naturaleza</dt><dd>{NATURALEZA_LABEL[r.naturaleza] ?? r.naturaleza}</dd></div>
+                          {r.origen_tipo && <div><dt>Origen</dt><dd>{ORIGEN_TIPO_LABEL[r.origen_tipo] ?? r.origen_tipo}</dd></div>}
+                          <div><dt>Liquidado</dt><dd>{formatMonto(r.monto_liquidado)} {r.moneda}</dd></div>
+                          {r.notas && <div className="tes-mov-detalle-ancho"><dt>Notas</dt><dd>{r.notas}</dd></div>}
+                          {r.liquidaciones.length > 0 && (
+                            <div className="tes-mov-detalle-ancho">
+                              <dt>Movimientos registrados</dt>
+                              <dd>
+                                <ul className="gc-detalle-liq">
+                                  {r.liquidaciones.map(l => (
+                                    <li key={l.movimiento_id}>
+                                      <span className="text-sm-muted tes-nowrap">{formatFecha(l.fecha)}</span>
+                                      <span className="cell-clamp">{l.cuenta_nombre}</span>
+                                      <span className="gc-liq-monto">{formatMonto(l.monto)} {r.moneda}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </dd>
+                            </div>
+                          )}
+                          <div><dt>Registrado</dt><dd>{formatFecha(r.created_at)}</dd></div>
+                        </dl>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                   )
                 })}
               </tbody>
@@ -1357,6 +1428,7 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
         )}
         <TablePagination {...regPag} label="registro" />
       </div>
+      </TablaCargando>
 
       </>)}
 

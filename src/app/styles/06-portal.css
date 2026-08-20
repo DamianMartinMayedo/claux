@@ -1888,6 +1888,11 @@
 .gc-liq-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
 .gc-liq-cuenta { flex: 1; font-size: var(--text-sm); color: var(--color-text); }
 .gc-liq-monto { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Lista de movimientos dentro del desplegable de un registro (reutiliza el
+   .tes-mov-detalle de Tesorería para el resto de la ficha). */
+.gc-detalle-liq { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.gc-detalle-liq li { display: flex; align-items: center; gap: var(--space-3); }
+.gc-detalle-liq li > .cell-clamp { flex: 1; }
 
 /* ════════════════════════════════════════════════════════════════════════
    CUENTAS POR COBRAR / PAGAR — chips de antigüedad (aging)

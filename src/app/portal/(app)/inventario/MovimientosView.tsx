@@ -4,12 +4,13 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando from '@/components/portal/TablaCargando'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
-import { useState, useMemo, useTransition } from 'react'
+import { Fragment, useState, useMemo, useTransition } from 'react'
 import { useRouter, useSearchParams }       from 'next/navigation'
 import {
   Plus, X, Package, RefreshCw, RotateCcw, ClipboardList,
-  ArrowDownToLine, ArrowUpFromLine, Settings2, ArrowRightLeft,
+  ArrowDownToLine, ArrowUpFromLine, Settings2, ArrowRightLeft, ChevronDown,
 } from 'lucide-react'
 import {
   registrarMovimiento,
@@ -404,6 +405,10 @@ export default function MovimientosView({
   const filtroEmpresa = params.get('empresa') ?? ''
   const [ajuste,      setAjuste]      = useState<AvisoRevision | null>(null)
   const [revertir,    setRevertir]    = useState<Movimiento | null>(null)
+  // Qué movimiento tiene el desplegable abierto (coste total, documento de origen y
+  // hora de registro, que no caben en la fila). Disponible también en solo-lectura.
+  const [detalle,     setDetalle]     = useState<string | null>(null)
+  const [cargando,    setCargando]    = useState(false)
   const { colorOf }   = useEmpresas()
   const empresasFiltro = Object.entries(data.empresa_nombres).map(([empresa_id, nombre]) => ({
     empresa_id, nombre, color: colorOf(empresa_id),
@@ -555,6 +560,7 @@ export default function MovimientosView({
         filtros={declaracion}
         rango={data.rango}
         hayMas={data.hay_mas}
+        onCargando={setCargando}
       />
 
       {data.hay_mas && (
@@ -585,6 +591,7 @@ export default function MovimientosView({
       )}
 
       {/* Tabla */}
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">Historial de movimientos</h2>
@@ -620,8 +627,11 @@ export default function MovimientosView({
               <tbody>
                 {pageItems.map(m => {
                   const s = signo(m)
+                  const abierto = detalle === m.movimiento_id
+                  const costeTotal = m.costo_unitario != null ? Math.abs(m.cantidad) * m.costo_unitario : null
                   return (
-                    <tr key={m.movimiento_id}
+                    <Fragment key={m.movimiento_id}>
+                    <tr
                       className={multiempresa ? 'row-empresa-accent' : undefined}
                       style={multiempresa ? empresaColorVar(colorOf(m.empresa_id)) : undefined}>
                       <td data-label="Fecha" className="text-sm-muted">{fmtDate(m.fecha)}</td>
@@ -660,17 +670,40 @@ export default function MovimientosView({
                           : <span className="badge badge-neutral">{m.origen === 'COMPRA' ? 'Compra' : 'Venta'}</span>}
                       </td>
                       <td className="col-actions">
-                        {/* Solo los manuales: compras y ventas se deshacen anulando su
-                            documento, no compensando el movimiento a mano. */}
-                        {puedeEditar && m.origen === 'MANUAL' && (
-                          <RowActions>
-                            <button className="row-actions-item" onClick={() => setRevertir(m)}>
-                              <RotateCcw size={15} strokeWidth={2} /> Revertir
-                            </button>
-                          </RowActions>
-                        )}
+                        <div className="ter-actions">
+                          <button type="button" className="ter-action-btn" title="Ver detalle"
+                            aria-label="Ver detalle del movimiento" aria-expanded={abierto}
+                            onClick={() => setDetalle(abierto ? null : m.movimiento_id)}>
+                            <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
+                          </button>
+                          {/* Solo los manuales: compras y ventas se deshacen anulando su
+                              documento, no compensando el movimiento a mano. */}
+                          {puedeEditar && m.origen === 'MANUAL' && (
+                            <RowActions>
+                              <button className="row-actions-item" onClick={() => setRevertir(m)}>
+                                <RotateCcw size={15} strokeWidth={2} /> Revertir
+                              </button>
+                            </RowActions>
+                          )}
+                        </div>
                       </td>
                     </tr>
+                    {abierto && (
+                      <tr className="tes-mov-detalle-fila">
+                        <td colSpan={multiempresa ? 10 : 9}>
+                          <dl className="tes-mov-detalle">
+                            {multiempresa && <div><dt>Empresa</dt><dd>{data.empresa_nombres[m.empresa_id] ?? '—'}</dd></div>}
+                            <div><dt>Coste unitario</dt><dd>{m.costo_unitario != null ? m.costo_unitario.toLocaleString('es-ES', { maximumFractionDigits: 2 }) : '—'}</dd></div>
+                            <div><dt>Coste total</dt><dd>{costeTotal != null ? costeTotal.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</dd></div>
+                            <div><dt>Origen</dt><dd>{m.origen === 'MANUAL' ? 'Manual' : m.origen === 'COMPRA' ? 'Compra' : 'Venta'}</dd></div>
+                            {m.referencia_id && <div><dt>Documento de origen</dt><dd>{m.referencia_id}</dd></div>}
+                            {m.motivo && <div className="tes-mov-detalle-ancho"><dt>Motivo</dt><dd>{m.motivo}</dd></div>}
+                            <div><dt>Registrado</dt><dd>{new Date(m.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>
+                          </dl>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>
@@ -679,6 +712,7 @@ export default function MovimientosView({
         )}
         <TablePagination {...pag} label="movimiento" />
       </div>
+      </TablaCargando>
       </>
       )}
 

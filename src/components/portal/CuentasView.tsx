@@ -2,10 +2,10 @@
 
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
-import { useState, useTransition, useMemo } from 'react'
+import { Fragment, useState, useTransition, useMemo } from 'react'
 import { useRouter, useSearchParams }       from 'next/navigation'
 import Link                                 from 'next/link'
-import { Check, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
 import {
   registrarPagoDoc,
   anularPagoDoc,
@@ -18,6 +18,7 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import TablaCargando                    from '@/components/portal/TablaCargando'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import ExportarMenu                    from '@/components/portal/ExportarMenu'
 import Filtros                         from '@/components/portal/Filtros'
@@ -198,6 +199,10 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
   }))
 
   const [pagoDoc,      setPagoDoc]      = useState<DocumentoPendiente | null>(null)
+  // Qué documento tiene el desplegable abierto (ver el resto de datos sin abrir el
+  // modal). Disponible también en solo-lectura: desplegar no escribe.
+  const [detalle,      setDetalle]      = useState<string | null>(null)
+  const [cargando,     setCargando]     = useState(false)
 
   // Los filtros viven en la URL, como en el resto del portal: volver de la ficha de una
   // factura, o refrescar en una conexión que se cae, ya no pierde lo que estabas mirando.
@@ -359,10 +364,12 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
           q={busca}
           placeholder="Buscar por documento, tercero o importe…"
           visibles={3}
+          onCargando={setCargando}
         />
       )}
 
       {/* Tabla */}
+      <TablaCargando activo={cargando}>
       <div className="card card-table">
         {documentos.length === 0 ? (
           <div className="mon-empty">
@@ -385,9 +392,11 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map(d => (
+                {pageItems.map(d => {
+                  const abierto = detalle === d.doc_id
+                  return (
+                  <Fragment key={d.doc_id}>
                   <tr
-                    key={d.doc_id}
                     className={multiempresa ? 'row-empresa-accent' : undefined}
                     style={multiempresa ? empresaColorVar(colorOf(d.empresa_id)) : undefined}
                   >
@@ -411,26 +420,68 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
                     <td data-label="Total" className="col-num tes-monto-cell">{formatMonto(d.monto)} {d.moneda}</td>
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
                     <td className="col-actions">
-                      {(puedeEditar || (d.ref_url && d.doc_tipo === 'FACTURA')) && (
-                        <RowActions>
-                          {puedeEditar && (
-                            <button className="row-actions-item"
-                              onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /> {esCobro ? 'Cobrar' : 'Pagar'}</button>
-                          )}
-                          {d.ref_url && d.doc_tipo === 'FACTURA' && (
-                            <Link className="row-actions-item" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /> Ver factura</Link>
-                          )}
-                        </RowActions>
-                      )}
+                      <div className="ter-actions">
+                        <button type="button" className="ter-action-btn" title="Ver detalle"
+                          aria-label={`Ver detalle de ${d.numero}`} aria-expanded={abierto}
+                          onClick={() => setDetalle(abierto ? null : d.doc_id)}>
+                          <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
+                        </button>
+                        {(puedeEditar || (d.ref_url && d.doc_tipo === 'FACTURA')) && (
+                          <RowActions>
+                            {puedeEditar && (
+                              <button className="row-actions-item"
+                                onClick={() => setPagoDoc(d)}><DollarSign size={15} strokeWidth={2} /> {esCobro ? 'Cobrar' : 'Pagar'}</button>
+                            )}
+                            {d.ref_url && d.doc_tipo === 'FACTURA' && (
+                              <Link className="row-actions-item" href={d.ref_url}><ExternalLink size={15} strokeWidth={2} /> Ver factura</Link>
+                            )}
+                          </RowActions>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  {abierto && (
+                    <tr className="tes-mov-detalle-fila">
+                      <td colSpan={6}>
+                        <dl className="tes-mov-detalle">
+                          {multiempresa && <div><dt>Empresa</dt><dd>{nombreOf(d.empresa_id) ?? '—'}</dd></div>}
+                          <div><dt>Documento</dt><dd>{d.doc_tipo === 'FACTURA' ? 'Factura' : 'Registro directo'}</dd></div>
+                          <div><dt>{esCobro ? 'Cliente' : 'Proveedor'}</dt><dd>{d.tercero_nombre ?? '—'}</dd></div>
+                          <div><dt>Fecha</dt><dd>{formatFecha(d.fecha)}</dd></div>
+                          <div><dt>Vencimiento</dt><dd>{formatFecha(d.vencimiento)}{d.dias_vencido != null ? ` · ${d.dias_vencido} d vencida` : ''}</dd></div>
+                          <div><dt>Total</dt><dd>{formatMonto(d.monto)} {d.moneda}</dd></div>
+                          <div><dt>Cobrado / pagado</dt><dd>{formatMonto(d.liquidado)} {d.moneda}</dd></div>
+                          <div><dt>Pendiente</dt><dd>{formatMonto(d.saldo)} {d.moneda}</dd></div>
+                          {d.liquidaciones.length > 0 && (
+                            <div className="tes-mov-detalle-ancho">
+                              <dt>{esCobro ? 'Cobros registrados' : 'Pagos registrados'}</dt>
+                              <dd>
+                                <ul className="gc-detalle-liq">
+                                  {d.liquidaciones.map(l => (
+                                    <li key={l.movimiento_id}>
+                                      <span className="text-sm-muted tes-nowrap">{formatFecha(l.fecha)}</span>
+                                      <span className="cell-clamp">{l.cuenta_nombre}</span>
+                                      <span className="gc-liq-monto">{formatMonto(l.monto)} {d.moneda}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </dd>
+                            </div>
+                          )}
+                        </dl>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
         <TablePagination {...pag} label="documento" />
       </div>
+      </TablaCargando>
 
       {pagoVivo && (
         <PagoModal doc={pagoVivo} cuentas={data.cuentas} modo={data.modo}
