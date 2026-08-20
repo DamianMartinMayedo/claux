@@ -682,7 +682,12 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
                   <Fragment key={l.linea_id}>
                     <tr>
                       <td data-label="Empleado">
-                        <strong className="cell-clamp">{l.empleado_nombre}</strong>
+                        {/* El nombre abre la ficha del trabajador en pestaña nueva: se
+                            consulta un dato suyo sin perder el borrador que se esté editando. */}
+                        <Link href={`/portal/rrhh/${l.empleado_id}`} target="_blank" rel="noopener noreferrer"
+                          className="table-name-link cell-clamp" title={`Ver la ficha de ${l.empleado_nombre} (nueva pestaña)`}>
+                          {l.empleado_nombre}
+                        </Link>
                         {l.cargo && <div className="text-sm-muted">{l.cargo}</div>}
                       </td>
                       <td data-label="Salario base" className="col-num tes-monto-cell">{formatMonto(l.salario_base)}</td>

@@ -1728,6 +1728,24 @@
 .tes-origen-badge { font-size: 10px; }
 .tes-nowrap { white-space: nowrap; }
 
+/* ── Desplegable de detalle de un movimiento ──────────────────────────────────
+   El resto de datos de la operación, bajo su fila, sin una página de detalle: mismo
+   patrón que el desglose de la nómina o el histórico de un acuerdo. */
+.tes-chevron-abierto { transform: rotate(180deg); }
+.tes-mov-detalle-fila > td { background: var(--color-surface-2); padding: var(--space-3) var(--space-4); }
+.tes-mov-detalle {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.tes-mov-detalle > div { display: flex; flex-direction: column; gap: 2px; }
+.tes-mov-detalle-ancho { grid-column: 1 / -1; }
+.tes-mov-detalle dt { font-size: var(--text-xs); color: var(--color-text-faint); }
+.tes-mov-detalle dd { margin: 0; font-size: var(--text-sm); color: var(--color-text); }
+/* Aviso de que borrar reabre la cuenta: tinta ámbar, sin caja (ya va dentro del modal). */
+.tes-mov-rollback { margin-top: var(--space-3); color: var(--color-amber-text); }
+
 /* Preview de transferencia */
 .tes-transfer-preview { margin-top: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: var(--text-sm); }
 .tes-transfer-preview strong { display: block; margin-bottom: var(--space-2); }

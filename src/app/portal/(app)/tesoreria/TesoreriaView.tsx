@@ -12,9 +12,9 @@ import { useRowSelection } from '@/components/portal/useRowSelection'
 import Tabs from '@/components/Tabs'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas } from '@/components/portal/EmpresaColorContext'
-import { useState, useTransition, useMemo, useEffect } from 'react'
+import { Fragment, useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams }       from 'next/navigation'
-import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
+import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, ChevronDown, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
 import {
   guardarCuenta,
   archivarCuenta,
@@ -39,7 +39,7 @@ import { ROL_PL_LABEL, ROL_PL_EFECTO, type RolPL } from '@/lib/pl/estado'
 import { gruposDeCategorias } from '@/lib/pl/agrupar'
 import GavetaLanzador from '@/components/portal/GavetaLanzador'
 import type { DatosGaveta } from '@/app/actions/portal/caja-gaveta'
-import { registrarPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
+import { registrarPagoDoc, anularPagoDoc, type DocumentoPendiente } from '@/app/actions/portal/cobranza'
 import Filtros                        from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
 import ExportarMenu  from '@/components/portal/ExportarMenu'
@@ -103,6 +103,17 @@ function formatFecha(f: string): string {
 function truncar4(n: number): string {
   return String(Math.trunc(n * 10000) / 10000)
 }
+// El `origen` en palabras del dueño, para el desplegable de detalle (el badge de la
+// fila lleva la etiqueta corta). Un cobro/pago es el reflejo de un documento.
+const ORIGEN_LABEL: Record<Movimiento['origen'], string> = {
+  MANUAL:        'Movimiento manual',
+  COBRO:         'Cobro de un documento',
+  PAGO:          'Pago de un documento',
+  TRANSFERENCIA: 'Transferencia entre cuentas',
+}
+// Un timestamp ISO completo (`created_at`) no lo entiende `formatFecha`, que parte por
+// «-»: se le pasa solo la parte de fecha.
+function formatFechaHora(iso: string): string { return formatFecha(iso.slice(0, 10)) }
 
 // ── Modal: Cuenta ───────────────────────────────────────────────────────────────
 
@@ -949,7 +960,10 @@ function ConfirmEliminar({
   onClose:    () => void
   isPending:  boolean
 }) {
-  const esTransfer = !!movimiento.transfer_grupo
+  const esTransfer   = !!movimiento.transfer_grupo
+  // Un cobro/pago que no es una transferencia salda un documento: eliminarlo anula
+  // esa liquidación y la cuenta por cobrar/pagar (o la nómina) vuelve a quedar pendiente.
+  const esLiquidacion = !esTransfer && (movimiento.origen === 'COBRO' || movimiento.origen === 'PAGO')
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-sm" role="dialog" aria-modal>
@@ -962,6 +976,13 @@ function ConfirmEliminar({
             ¿Eliminar <strong>{movimiento.concepto}</strong> ({formatMonto(Number(movimiento.monto))} {movimiento.moneda})?
             {esTransfer && ' Se eliminarán ambas patas de la transferencia.'}
           </p>
+          {esLiquidacion && (
+            <p className="modal-body-text tes-mov-rollback">
+              Este movimiento salda un {movimiento.origen === 'COBRO' ? 'cobro' : 'pago'}: al
+              eliminarlo se anula la liquidación y {movimiento.origen === 'COBRO' ? 'la cuenta por cobrar' : 'la cuenta por pagar'}{' '}
+              vuelve a quedar <strong>pendiente</strong>.
+            </p>
+          )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -1004,6 +1025,8 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   const [confirmCuenta,  setConfirmCuenta]  = useState<CuentaConSaldo | null>(null)
   const [confirmMov,     setConfirmMov]     = useState<Movimiento | null>(null)
   const [editMov,        setEditMov]        = useState<Movimiento | null>(null)
+  // Fila de movimiento con su desplegable de detalle abierto (resto de datos de la operación).
+  const [movDetalle,     setMovDetalle]     = useState<string | null>(null)
 
   const [verArchivadas,  setVerArchivadas]  = useState(false)
   const [tab,            setTab]            = useState<'cuentas' | 'movimientos'>('cuentas')
@@ -1170,8 +1193,19 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   }
   function confirmarEliminarMov() {
     if (!confirmMov) return
+    const m = confirmMov
+    // Una comisión de transferencia es un PAGO CON `transfer_grupo`: la transferencia
+    // manda, y `eliminarMovimiento` borra sus dos patas a la vez. Solo un cobro/pago
+    // SUELTO va por `anularPagoDoc`, que revierte la liquidación y reabre la cuenta.
+    const esLiquidacion = !m.transfer_grupo && (m.origen === 'COBRO' || m.origen === 'PAGO')
+    const ld = toastLoading(esLiquidacion ? 'Anulando la liquidación…' : 'Eliminando…')
     startTransition(async () => {
-      await eliminarMovimiento(confirmMov.movimiento_id)
+      const res = esLiquidacion
+        ? await anularPagoDoc(m.movimiento_id)
+        : await eliminarMovimiento(m.movimiento_id)
+      await ld.dismiss()
+      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      toastSuccess(esLiquidacion ? 'Liquidación anulada · cuenta reabierta' : 'Movimiento eliminado')
       setConfirmMov(null); router.refresh()
     })
   }
@@ -1409,8 +1443,11 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map(m => (
-                  <tr key={m.movimiento_id}>
+                {pageItems.map(m => {
+                  const abierto = movDetalle === m.movimiento_id
+                  return (
+                  <Fragment key={m.movimiento_id}>
+                  <tr>
                     {puedeEditar && (
                       <td className="col-check">
                         <input type="checkbox" className="row-check"
@@ -1435,8 +1472,15 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                       {m.tipo === 'INGRESO' ? '+' : '−'}{formatMonto(Number(m.monto))} {m.moneda}
                     </td>
                     <td className="col-actions">
-                      {puedeEditar && (
-                        <div className="ter-actions">
+                      <div className="ter-actions">
+                        {/* Ver el resto de datos de la operación, sin salir de la lista. Disponible
+                            también en solo-lectura: desplegar no escribe nada. */}
+                        <button type="button" className="ter-action-btn" title="Ver detalle"
+                          aria-label={`Ver detalle de ${m.concepto}`} aria-expanded={abierto}
+                          onClick={() => setMovDetalle(abierto ? null : m.movimiento_id)}>
+                          <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
+                        </button>
+                        {puedeEditar && (<>
                           {/* Editar solo los MANUALES sin transferencia: mismas guardas que
                               el borrado, y por lo mismo — un movimiento de cobro/pago es el
                               reflejo de un documento y se corrige desde él. */}
@@ -1448,11 +1492,32 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                           <button className="ter-action-btn ter-action-danger" title="Eliminar"
                             aria-label={`Eliminar ${m.concepto}`}
                             onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>
-                        </div>
-                      )}
+                        </>)}
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  {abierto && (
+                    <tr className="tes-mov-detalle-fila">
+                      <td colSpan={puedeEditar ? 6 : 5}>
+                        <dl className="tes-mov-detalle">
+                          <div><dt>Empresa</dt><dd>{data.empresa_nombres[m.empresa_id] ?? '—'}</dd></div>
+                          <div><dt>Origen</dt><dd>{ORIGEN_LABEL[m.origen]}</dd></div>
+                          {m.categoria && <div><dt>Categoría</dt><dd>{m.categoria}</dd></div>}
+                          {m.referencia_id && (
+                            <div><dt>Documento</dt><dd>Salda un documento (ver el concepto)</dd></div>
+                          )}
+                          {m.transfer_grupo && (
+                            <div><dt>Transferencia</dt><dd>Parte de una transferencia entre cuentas</dd></div>
+                          )}
+                          {m.notas && <div className="tes-mov-detalle-ancho"><dt>Notas</dt><dd>{m.notas}</dd></div>}
+                          <div><dt>Registrado</dt><dd>{formatFechaHora(m.created_at)}</dd></div>
+                        </dl>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

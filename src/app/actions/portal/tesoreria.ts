@@ -48,6 +48,9 @@ export interface Movimiento {
   tipo:           TipoMovimiento
   monto:          number
   moneda:         string
+  // Importe en la moneda del DOCUMENTO que salda (cobro/pago con cambio de moneda);
+  // igual a `monto` cuando no hubo cambio. Es lo que reduce el saldo de la CxC/CxP.
+  monto_ref:      number | null
   concepto:       string
   categoria:      string | null  // Nombre de categoría (para display)
   categoria_id:   string | null  // FK a categorias_gastos
