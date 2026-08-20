@@ -1297,12 +1297,10 @@
   .rango-boton { width: 100%; justify-content: space-between; }
   .rango-panel { left: 0; right: 0; min-width: 0; }
 }
-.rango-limpiar {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  display: inline-flex; background: none; border: 0; padding: 2px; cursor: pointer;
-  color: var(--color-text-faint); transition: color var(--transition);
-}
-.rango-limpiar:hover { color: var(--color-text); }
+/* El botón de limpiar la búsqueda: mismo tratamiento en todas las listas y en el
+   buscador de Turnos (`.turno-search-clear`) — un chip circular opaco que se apoya
+   DENTRO del input. Antes era un icono suelto sin fondo y se leía como que salía
+   fuera del campo. Fuente única más abajo, agrupada con `.turno-search-clear`. */
 /* El aviso de «hay más filas de las que caben»: no es un error, es un límite —y
    lleva dentro la forma de superarlo, que es lo que le faltaba. */
 .listado-tope {
@@ -1318,7 +1316,6 @@
 .ter-search-wrap {
   position: relative; flex: 1; min-width: 220px;
 }
-.turno-preview-controls .ter-search-wrap .rango-limpiar { right: var(--space-2); }
 .ter-search-wrap svg {
   position: absolute; left: 10px; top: 50%;
   transform: translateY(-50%);
@@ -2449,6 +2446,7 @@
   position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
   color: var(--color-text-muted); pointer-events: none;
 }
+.rango-limpiar,
 .turno-search-clear {
   position: absolute; z-index: 2; top: 50%; right: var(--space-2);
   display: inline-flex; align-items: center; justify-content: center;
