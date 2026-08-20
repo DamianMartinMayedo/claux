@@ -2311,6 +2311,12 @@
 }
 .nom-desglose-add:hover { color: var(--color-primary-text); border-color: var(--color-primary-text); }
 .nom-desglose-vacio { font-size: var(--text-xs); color: var(--color-text-faint); }
+/* Rótulo del bloque «Costes de empresa»: un separador que agrupa los tributos a cargo
+   de la empresa sin repetir la aclaración en cada uno. */
+.nom-desglose-empresa-label {
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted);
+  padding-left: var(--space-2); border-left: 1px solid var(--color-border);
+}
 
 /* Página de detalle de nómina (tabla) */
 .nom-chevron-abierto { transform: rotate(180deg); }

@@ -256,16 +256,19 @@ export function calcularNominaCuba(
     else                         aportes.push(fila)
   }
 
-  // El socio se salta ÚNICAMENTE la CESS. El IRPF, el IUFT y la Contribución SS de
-  // empresa se le calculan igual que a cualquier trabajador.
+  // El socio no cotiza a la Seguridad Social: se salta la CESS del trabajador y,
+  // por el mismo motivo, las dos Contribuciones SS de empresa (12,5 % y 1,5 %). El
+  // IRPF y el IUFT se le calculan igual que a cualquier trabajador.
   if (!es_socio) aplicar('CESS', 'retencion')
   aplicar('IRPF', 'retencion')
 
   // A cargo de la EMPRESA, por encima del bruto: no reducen el neto pero sí son
   // coste de personal. Es el tercer cubo que el modelo no sabía expresar.
-  aplicar('IUFT',           'aporte')
-  aplicar('SS_EMPRESA_125', 'aporte')
-  aplicar('SS_EMPRESA_15',  'aporte')
+  aplicar('IUFT', 'aporte')
+  if (!es_socio) {
+    aplicar('SS_EMPRESA_125', 'aporte')
+    aplicar('SS_EMPRESA_15',  'aporte')
+  }
 
   return {
     salario_devengado,

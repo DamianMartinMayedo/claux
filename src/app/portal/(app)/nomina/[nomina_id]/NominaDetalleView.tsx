@@ -99,10 +99,16 @@ function DesgloseFila({ items, colSpan }: { items: ItemLinea[]; colSpan: number 
               <span>{etiquetaEnTabla(it.clave, it.nombre)}</span>
             </span>
           ))}
+          {/* Un solo rótulo para el bloque, en vez de repetir «(coste de empresa, no reduce
+              su neto)» en cada tributo: dicho una vez, se entiende que los tres van a cargo
+              de la empresa y no tocan el neto del trabajador. */}
+          {empresa.length > 0 && (
+            <span className="nom-desglose-empresa-label">Costes de empresa:</span>
+          )}
           {empresa.map((it, i) => (
             <span key={it.item_id ?? `ae-${i}`} className="nom-desglose-item">
               <span className="nom-desglose-monto text-xs-muted">+{formatMonto(it.monto)}</span>
-              <span className="text-xs-muted">{etiquetaEnTabla(it.clave, it.nombre)} (coste de empresa, no reduce su neto)</span>
+              <span className="text-xs-muted">{etiquetaEnTabla(it.clave, it.nombre)}</span>
             </span>
           ))}
         </div>
