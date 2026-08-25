@@ -10,15 +10,17 @@ const MARGEN = 8
 export default function PresupuestoPdfMenu({
   nombre,
   onDownload,
+  destacado = false,
   children,
 }: {
   nombre: string
   onDownload: (incluir: Incluir) => void
+  /** Cuando la descarga es LA acción del presupuesto (ya instalado: no queda nada que aprobar ni editar). */
+  destacado?: boolean
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const wrapRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -26,6 +28,8 @@ export default function PresupuestoPdfMenu({
 
   useEffect(() => setMounted(true), [])
 
+  // El menú vive en un portal sobre `document.body` (si no, el `overflow` del modal lo
+  // recorta), así que su sitio hay que calcularlo a mano contra el botón que lo abre.
   useLayoutEffect(() => {
     const trigger = triggerRef.current
     const menu = menuRef.current
@@ -34,8 +38,9 @@ export default function PresupuestoPdfMenu({
     const triggerBox = trigger.getBoundingClientRect()
     const menuWidth = menu.offsetWidth
     const menuHeight = menu.offsetHeight
+    // Bordes derechos alineados: el disparador vive en el pie del modal, pegado a la derecha.
     const left = Math.min(
-      Math.max(MARGEN, triggerBox.left),
+      Math.max(MARGEN, triggerBox.right - menuWidth),
       Math.max(MARGEN, window.innerWidth - menuWidth - MARGEN),
     )
     const libreAbajo = window.innerHeight - triggerBox.bottom - HUECO - MARGEN
@@ -54,15 +59,20 @@ export default function PresupuestoPdfMenu({
   useEffect(() => {
     if (!open) return
     function onMouseDown(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node) || menuRef.current?.contains(e.target as Node)) return
+      if (triggerRef.current?.contains(e.target as Node) || menuRef.current?.contains(e.target as Node)) return
       close()
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); triggerRef.current?.focus() }
     }
     function onScroll() { close() }
     document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKeyDown)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', close)
     return () => {
       document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', close)
     }
@@ -74,10 +84,12 @@ export default function PresupuestoPdfMenu({
   }
 
   return (
-    <div className="pres-pdf-wrap" ref={wrapRef}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
-        className="btn btn-secondary btn-sm"
+        className={`btn ${destacado ? 'btn-primary' : 'btn-secondary'}`}
+        aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(value => !value)}
       >
@@ -95,6 +107,6 @@ export default function PresupuestoPdfMenu({
         </div>,
         document.body,
       )}
-    </div>
+    </>
   )
 }

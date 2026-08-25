@@ -963,13 +963,6 @@ textarea:focus-visible {
   letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-faint);
 }
 .pres-totales + .pres-totales { margin-top: var(--space-4); }
-.pres-modal-actions {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
-  margin-top: var(--space-5); padding-top: var(--space-4);
-  border-top: 1px solid var(--color-divider);
-}
-.pres-modal-actions .pres-descargar { margin-top: 0; }
-.pres-descargar { margin-top: var(--space-4); }
 /* La concesión, en el color de una resta; el total a cobrar, destacado — es la cifra que se
    le dice al cliente y la que se cobra, no el coste bruto de encima. */
 .pres-total-dto .pres-total-valor { color: var(--color-success); }

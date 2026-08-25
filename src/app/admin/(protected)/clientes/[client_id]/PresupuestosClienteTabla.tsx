@@ -139,6 +139,13 @@ export default function PresupuestosClienteTabla({
   const desglose: DesgloseFase[] = Array.isArray(detalle?.desglose) ? detalle!.desglose : []
   const revisiones: Revision[] = Array.isArray(detalle?.revisiones) ? detalle!.revisiones : []
   const horasHanCambiado = horasReales !== horasRealesOriginales
+  // La acción principal la fija el ESTADO. «Guardar» va aparte y SIEMPRE en primary
+  // (conviven), pero sí empuja al PDF a secundario. Aquí ya estamos DENTRO del
+  // cliente, así que aprobado no ofrece «crear cliente».
+  const accionPrincipal =
+    detalle?.estado === 'guardado' ? 'aprobar'
+    : horasHanCambiado             ? 'horas'
+    : 'pdf'
 
   return (
     <>
@@ -238,7 +245,7 @@ export default function PresupuestosClienteTabla({
 
       {(detalle || cargando) && (
         <div className="modal-backdrop">
-          <div className="modal modal-560" onClick={e => e.stopPropagation()}>
+          <div className="modal modal-640 modal-fixed-actions" onClick={e => e.stopPropagation()}>
             {cargando || !detalle ? (
               <div className="modal-body">
                 <p className="text-sm-muted"><span className="spinner" /> Cargando…</p>
@@ -311,32 +318,43 @@ export default function PresupuestosClienteTabla({
                     <label htmlFor="cliente-horas-reales">Horas reales de la instalación</label>
                     <input id="cliente-horas-reales" type="number" min="0" step="0.5" className="input" value={horasReales} onChange={e => setHorasReales(e.target.value)} placeholder="Completar al cerrar la instalación" />
                   </div>
-                  <div className="pres-modal-actions">
-                    <PresupuestoPdfMenu nombre={detalle.nombre_negocio} onDownload={descargarPdf}>
-                      <Download size={14} strokeWidth={2} /> Descargar PDF
-                    </PresupuestoPdfMenu>
-                    {detalle.estado === 'guardado' && (
-                      <>
-                        <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
-                          <Pencil size={15} strokeWidth={2} /> Editar
-                        </Link>
-                        <button className="btn btn-primary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
-                          <Check size={15} strokeWidth={2} /> Aprobar presupuesto
-                        </button>
-                      </>
-                    )}
-                    {detalle.estado === 'aprobado' && (
-                      <button className="btn btn-secondary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
-                        <X size={15} strokeWidth={2} /> Quitar aprobación
-                      </button>
-                    )}
-                    {horasHanCambiado && <button type="button" className="btn btn-secondary btn-sm" disabled={guardando} onClick={guardarHoras}>
-                      {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
-                    </button>}
-                  </div>
                 </div>
+                {/* Orden por importancia: lo secundario a la izquierda, la acción principal
+                    la última (a la derecha en escritorio; arriba en móvil, que invierte la
+                    columna). Sin «Cerrar»: para eso está la ✕ de la cabecera. */}
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
+                  <PresupuestoPdfMenu
+                    nombre={detalle.nombre_negocio}
+                    destacado={accionPrincipal === 'pdf'}
+                    onDownload={descargarPdf}
+                  >
+                    <Download size={16} strokeWidth={2} /> Descargar PDF
+                  </PresupuestoPdfMenu>
+                  {detalle.estado === 'aprobado' && (
+                    <button type="button" className="btn btn-secondary" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
+                      <X size={16} strokeWidth={2} /> Quitar aprobación
+                    </button>
+                  )}
+                  {detalle.estado === 'guardado' && (
+                    <>
+                      <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary">
+                        <Pencil size={16} strokeWidth={2} /> Editar
+                      </Link>
+                      <button
+                        type="button"
+                        className={accionPrincipal === 'aprobar' ? 'btn btn-primary' : 'btn btn-secondary'}
+                        disabled={aprobando}
+                        onClick={() => aprobar(detalle.id, true)}
+                      >
+                        <Check size={16} strokeWidth={2} /> Aprobar
+                      </button>
+                    </>
+                  )}
+                  {horasHanCambiado && (
+                    <button type="button" className="btn btn-primary" disabled={guardando} onClick={guardarHoras}>
+                      {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
+                    </button>
+                  )}
                 </div>
               </>
             )}

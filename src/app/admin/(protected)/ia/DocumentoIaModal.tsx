@@ -65,7 +65,7 @@ export default function DocumentoIaModal({
               </span>
             )}
           </div>
-          <div className="modal-footer modal-footer-split">
+          <div className="modal-footer">
             <button type="button" className="btn btn-ghost btn-sm" onClick={restaurar} disabled={loading}>
               Restaurar por defecto
             </button>

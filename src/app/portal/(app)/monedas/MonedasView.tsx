@@ -197,7 +197,7 @@ function MonedaModal({
 
           </div>
 
-          <div className="modal-footer modal-footer-split">
+          <div className="modal-footer">
             {esEdicion && !moneda.es_consolidacion && (
               <button type="button" className="btn btn-danger-text" onClick={onPedirEliminar} disabled={isPending}>
                 <Trash2 size={14} strokeWidth={2} /> Eliminar

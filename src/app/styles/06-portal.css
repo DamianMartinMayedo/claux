@@ -668,9 +668,8 @@
   .mon-elim-side + .mon-elim-side { border-left: none; padding-left: 0; }
 }
 
-/* Footer del modal de editar: el botón eliminar a la izquierda, acciones a la
-   derecha, y wrap para que no se corten en anchos estrechos */
-.modal-footer-split    { flex-wrap: wrap; }
+/* Footer del modal de editar: el botón eliminar a la izquierda y las acciones a la
+   derecha (el wrap lo pone ya el `.modal-footer` base). */
 .modal-footer-actions  { display: flex; gap: var(--space-3); margin-left: auto; }
 
 /* `.btn-xs` vive ahora en `03-components.css`, con el resto de la familia de botones: lo usa
