@@ -1,7 +1,7 @@
 'use client'
 
 import { Check, Eye, FileText, Pencil, Plus, Trash2, UserPlus, X, Download } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
@@ -193,6 +193,23 @@ export default function PresupuestosView({
     if (r.aviso) toastTono(r.avisoTono ?? 'info', r.aviso)
     if (detalle?.id === id) setDetalle({ ...detalle, estado: aprobado ? 'aprobado' : 'guardado' })
     router.refresh()
+  }
+
+  // Ir a la ficha del cliente NAVEGA fuera de aquí: las horas escritas y sin guardar
+  // se irían con la página. Se guardan antes y se navega a mano. Solo se intercepta el
+  // clic simple: con ⌘/Ctrl/⇧/Alt o botón central el enlace abre otra pestaña y este
+  // modal se queda como está, con las horas intactas, así que no hay nada que salvar.
+  async function irAFichaCliente(e: MouseEvent<HTMLAnchorElement>, clientId: string) {
+    if (!detalle || !horasHanCambiado) return
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+    e.preventDefault()
+    setGuardando(true)
+    const val = horasReales.trim() === '' ? null : parseFloat(horasReales)
+    const r = await actualizarHorasReales(detalle.id, val)
+    setGuardando(false)
+    if (!r.ok) { toastError(r.error ?? 'No se pudieron guardar las horas reales'); return }
+    toastSuccess('Horas reales guardadas')
+    router.push(`/admin/clientes/${clientId}`)
   }
 
   // Dar de alta el cliente CIERRA este modal, así que las horas escritas y sin guardar
@@ -482,8 +499,12 @@ export default function PresupuestosView({
                         <Link
                           href={`/admin/clientes/${detalle.client_id}`}
                           className={accionPrincipal === 'cliente' ? 'btn btn-primary' : 'btn btn-secondary'}
+                          aria-disabled={guardando}
+                          onClick={e => irAFichaCliente(e, detalle.client_id)}
                         >
-                          <UserPlus size={16} strokeWidth={2} /> Ver cliente
+                          {guardando
+                            ? <><span className="spinner" /> Guardando...</>
+                            : <><UserPlus size={16} strokeWidth={2} /> Ver cliente</>}
                         </Link>
                       ) : (
                         <button
