@@ -14,6 +14,7 @@ const DEFAULT_ASUNTO: Record<TipoEmail, string> = {
   recordatorio_pago: 'Tu suscripción de CLAUX vence pronto',
   fin_prueba:        'Tu prueba gratuita de CLAUX está por terminar',
   suspension:        'Tu cuenta de CLAUX fue suspendida',
+  periodo_gracia:    'Ampliamos tu acceso a CLAUX hasta el {{fecha_fin}}',
 }
 const DEFAULT_CUERPO: Record<TipoEmail, string> = {
   diagnostico_cita:  'Hola {{nombre}},\n\nGracias por tu diagnóstico. Agenda tu cita aquí: {{link_agenda}}',
@@ -25,6 +26,7 @@ const DEFAULT_CUERPO: Record<TipoEmail, string> = {
   recordatorio_pago: 'La suscripción de {{empresa}} vence en {{dias}} días ({{fecha_expiracion}}).',
   fin_prueba:        'La prueba gratuita de {{empresa}} termina el {{fecha_expiracion}}.',
   suspension:        'La suscripción de {{empresa}} venció y la cuenta quedó suspendida.',
+  periodo_gracia:    'Hola,\n\nLa suscripción de {{empresa}} venció el {{fecha_expiracion}}. Hemos ampliado tu acceso hasta el {{fecha_fin}} para que no interrumpas tu trabajo.\n\nSi necesitas más tiempo o quieres que veamos otra forma de pago, escríbenos.\n\nEl equipo de CLAUX',
 }
 
 function interpolar(texto: string, vars: Record<string, string>): string {

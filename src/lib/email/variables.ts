@@ -8,6 +8,7 @@ export type TipoEmail =
   | 'recordatorio_pago'
   | 'fin_prueba'
   | 'suspension'
+  | 'periodo_gracia'
 
 export const TIPOS_EMAIL: { tipo: TipoEmail; label: string }[] = [
   { tipo: 'diagnostico_cita',  label: 'Diagnóstico → agendar cita' },
@@ -19,6 +20,7 @@ export const TIPOS_EMAIL: { tipo: TipoEmail; label: string }[] = [
   { tipo: 'recordatorio_pago', label: 'Recordatorio de vencimiento' },
   { tipo: 'fin_prueba',        label: 'Fin de prueba (trial)' },
   { tipo: 'suspension',        label: 'Aviso de suspensión' },
+  { tipo: 'periodo_gracia',    label: 'Ampliación de acceso (período especial)' },
 ]
 
 interface VarDef {
@@ -71,5 +73,13 @@ export const PLANTILLAS_VARS: Record<TipoEmail, VarDef[]> = {
   ],
   suspension: [
     { clave: 'empresa', label: 'Nombre de la empresa', ejemplo: 'Restaurante El Sabor' },
+  ],
+  // El motivo del período (cortesía, liquidez, promoción...) NO es una variable
+  // a propósito: es una nota interna del equipo y no se le cuenta al cliente.
+  periodo_gracia: [
+    { clave: 'empresa',          label: 'Nombre de la empresa',      ejemplo: 'Restaurante El Sabor' },
+    { clave: 'fecha_fin',        label: 'Acceso ampliado hasta',     ejemplo: '30 sep 2026' },
+    { clave: 'fecha_expiracion', label: 'Fecha en que venció',       ejemplo: '15 ago 2026' },
+    { clave: 'dias',             label: 'Días de acceso concedidos', ejemplo: '30' },
   ],
 }

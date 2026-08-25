@@ -3,10 +3,11 @@
 import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
-import { addDays, toDateStr } from '@/lib/date-utils'
+import { addDays, toDateStr, fmtFechaEs } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
@@ -578,6 +579,39 @@ export async function aplicarGracia(formData: FormData) {
   // ya tiene acceso extendido.
   after(async () => {
     await notificarGraciaActivada({ clientId: client_id, fechaFinGracia: toDateStr(fechaGracia) })
+  })
+
+  // Y por correo, en un after() aparte para que un fallo de Resend no se lleve el
+  // aviso de la campana: esa solo la ve quien entra, y justo ahora el dueño cree
+  // que le cortaron el acceso, así que puede pasar días sin abrir el portal.
+  // El texto NO nombra el motivo (cortesía, liquidez, promoción...): ese campo es
+  // nota interna del equipo y al cliente solo se le dice hasta cuándo tiene acceso.
+  after(async () => {
+    if (!(await tipoEmailActivo('periodo_gracia'))) return
+    const { data: cli } = await createAdminClient()
+      .from('clients')
+      .select('nombre_empresa, email_admin, fecha_expiracion')
+      .eq('client_id', client_id)
+      .maybeSingle()
+    // Mismo guard que el cron de recordatorios: sin correo no hay a quién escribir,
+    // y sin fecha de vencimiento la primera frase se queda en «venció el {{...}}».
+    if (!cli?.email_admin || !cli.fecha_expiracion) return
+    const { asunto, html } = await renderPlantilla('periodo_gracia', {
+      empresa:          cli.nombre_empresa,
+      fecha_fin:        fmtFechaEs(toDateStr(fechaGracia)),
+      fecha_expiracion: fmtFechaEs(cli.fecha_expiracion),
+      dias:             String(dias),
+    })
+    await enviarEmail({
+      to:       cli.email_admin,
+      subject:  asunto,
+      html,
+      tipo:     'periodo_gracia',
+      clientId: client_id,
+      // Deja en el log a qué período corresponde el envío: dos ampliaciones
+      // seguidas son dos correos distintos, no un duplicado.
+      meta:     { fecha_fin_gracia: toDateStr(fechaGracia) },
+    })
   })
 
   revalidatePath('/admin/clientes')
