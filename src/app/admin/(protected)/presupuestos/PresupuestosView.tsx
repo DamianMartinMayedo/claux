@@ -427,9 +427,7 @@ export default function PresupuestosView({
                       value={horasReales} onChange={e => setHorasReales(e.target.value)}
                       placeholder="Completar al cerrar la instalación" />
                   </div>
-                </div>
-                <div className="modal-footer pres-modal-footer">
-                  <div className="pres-modal-footer-actions">
+                  <div className="pres-modal-actions">
                     <PresupuestoPdfMenu nombre={detalle.nombre_negocio} onDownload={tipo => descargarPdf(detalle, tipo)}>
                       <Download size={14} strokeWidth={2} /> Descargar PDF
                     </PresupuestoPdfMenu>
@@ -463,6 +461,8 @@ export default function PresupuestosView({
                       {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
                     </button>}
                   </div>
+                </div>
+                <div className="modal-footer">
                   <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
                 </div>
               </>

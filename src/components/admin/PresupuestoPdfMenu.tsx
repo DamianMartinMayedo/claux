@@ -49,7 +49,7 @@ export default function PresupuestoPdfMenu({
     menu.style.setProperty('--pres-pdf-left', `${left}px`)
     menu.style.setProperty('--pres-pdf-top', `${top}px`)
     menu.style.setProperty('--pres-pdf-height', `${maxHeight}px`)
-  }, [open])
+  }, [open, mounted])
 
   useEffect(() => {
     if (!open) return
