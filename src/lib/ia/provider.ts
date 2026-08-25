@@ -8,6 +8,7 @@
 // `settings.ia_model` (cero código).
 
 import { resolverModelo, resolverFallbackGratis, type ModeloResuelto } from './modelo'
+import { PRUEBA_LENTA_MS } from './prueba-tipos'
 
 export interface IaMensaje { role: 'system' | 'user' | 'assistant'; content: string }
 export interface IaUsage  { tokensIn: number; tokensOut: number }
@@ -28,6 +29,14 @@ interface ChatOpts {
 }
 
 type Intento = { ok: true; res: IaResultado } | { ok: false; error: string }
+
+// Techo de espera por intento, el MISMO que usa el «Probar» del admin: lo que ves al
+// probar un modelo es lo que le va a pasar al cliente. Sin techo, un modelo que se
+// cuelga (le pasa a algún id de Gemini: acepta la petición y no devuelve un solo byte)
+// deja la petición muerta hasta que Vercel corta la función. Con techo, el intento
+// muere y entra el modelo de respaldo, que contesta en ~1 s. En Cuba, esperar de más
+// no es una opción: más vale respuesta del respaldo que la buena que no llega.
+const TIMEOUT_MS = PRUEBA_LENTA_MS
 
 // Un intento contra UN modelo concreto (con su base/key). Reintenta una vez ante
 // 5xx o error de red; los 4xx se cortan al instante. Una respuesta vacía cuenta
@@ -50,9 +59,17 @@ async function intentarModelo(cfg: ModeloResuelto & { apiKey: string }, opts: Ch
   for (let intento = 0; intento < 2; intento++) {
     let res: Response
     try {
-      res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+      res = await fetch(url, {
+        method: 'POST', headers, body: JSON.stringify(body),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
     } catch (e) {
-      ultimoError = `red: ${(e as Error).message}`
+      const err = e as Error
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        ultimoError = `no contestó en ${TIMEOUT_MS / 1000}s`
+        break // colgado: no se reintenta, que lo coja el modelo de respaldo
+      }
+      ultimoError = `red: ${err.message}`
       continue // reintenta una vez ante fallo de red
     }
 

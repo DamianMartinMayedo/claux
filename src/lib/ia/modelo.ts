@@ -7,6 +7,7 @@
 // (clients.ia_config.cupo).
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { PRUEBA_LENTA_MS } from './prueba-tipos'
 
 const DEFAULT_BASE     = 'https://opencode.ai/zen/v1'
 const DEFAULT_MODEL    = 'deepseek-v4-flash-free'
@@ -136,10 +137,15 @@ export interface PruebaModelo {
   status:    number    // código HTTP (0 = error de red)
   ms:        number    // latencia
   respondio: boolean   // llegó `content` no vacío (los de razonamiento a veces no)
+  agotado?:  boolean   // se agotó el techo de espera (≠ error del proveedor)
   error?:    string
 }
 
-export async function probarModelo(id: string): Promise<PruebaModelo> {
+// `timeoutMs`: techo de espera. Sin él, un proveedor puede aceptar la petición y no
+// devolver un solo byte (les pasa a los modelos recién salidos cuando están
+// saturados), el health-check no termina nunca y la fila del admin se queda girando
+// para siempre — había que recargar la página. Colgado se reporta como caído.
+export async function probarModelo(id: string, timeoutMs = PRUEBA_LENTA_MS): Promise<PruebaModelo> {
   const db = createAdminClient()
   const [{ data: setRow }, row] = await Promise.all([
     db.from('settings').select('value').eq('key', 'ia_api_base').maybeSingle(),
@@ -163,6 +169,7 @@ export async function probarModelo(id: string): Promise<PruebaModelo> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     const ms = Date.now() - t0
     if (!res.ok) {
@@ -173,7 +180,12 @@ export async function probarModelo(id: string): Promise<PruebaModelo> {
     const texto = (data?.choices?.[0]?.message?.content ?? '').trim()
     return { ok: true, status: 200, ms, respondio: !!texto }
   } catch (e) {
-    return { ok: false, status: 0, ms: Date.now() - t0, respondio: false, error: `red: ${(e as Error).message}` }
+    const err = e as Error
+    const ms = Date.now() - t0
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      return { ok: false, status: 0, ms, respondio: false, agotado: true, error: `No contestó en ${Math.round(timeoutMs / 1000)}s: demasiado lento para atender a un cliente.` }
+    }
+    return { ok: false, status: 0, ms, respondio: false, error: `red: ${err.message}` }
   }
 }
 

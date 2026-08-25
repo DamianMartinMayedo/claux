@@ -201,6 +201,9 @@
   .table td:not([data-label])::before,
   .table td[data-label=""]::before { content: none; }
   .table td.col-actions { justify-content: flex-end; width: auto; }
+  /* En tarjeta no hay ancho: estado e id vuelven a poder envolver. */
+  .ia-cell-badges { flex-wrap: wrap; white-space: normal; }
+  .table td.ia-col-id { white-space: normal; }
   .table td.col-actions::before { content: none; }
 
   /* El `width:1%` de la celda del checkbox significa «ocupa lo mínimo» en la tabla

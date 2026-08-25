@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Activity, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, Activity, Loader2, X } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import FormHelp from '@/components/portal/FormHelp'
-import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa, probarModeloIa, type PruebaModeloUI } from '@/app/actions/ia-admin'
+import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
+import { PRUEBA_LENTA_MS, type EstadoPrueba, type PruebaModeloUI, type PruebaModeloResp } from '@/lib/ia/prueba-tipos'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
 import EditarModeloIaModal from './EditarModeloIaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -37,6 +38,29 @@ interface Props {
   consumo: ConsumoCliente[]
 }
 
+// Resultado del health-check en la fila. «Lento» es su propio estado a propósito: un
+// modelo que responde en 40 s sirve, pero no para producción — pintarlo verde miente
+// y pintarlo rojo también.
+const TONO_PRUEBA: Record<EstadoPrueba, string> = {
+  vivo: 'badge-success', lento: 'badge-warning', mudo: 'badge-warning', caido: 'badge-error',
+}
+
+function rotuloPrueba(pr: PruebaModeloUI): string {
+  if (pr.estado === 'vivo')  return `✓ ${pr.ms} ms`
+  if (pr.estado === 'lento') return `Demasiado lento`
+  if (pr.estado === 'mudo')  return 'Vivo, sin texto'
+  return '✗ Caído'
+}
+
+function tituloPrueba(pr: PruebaModeloUI): string | undefined {
+  if (pr.estado === 'lento') {
+    return `No contestó en ${PRUEBA_LENTA_MS / 1000} s. Puede que acabe respondiendo, `
+         + `pero el cliente no va a esperar: con este modelo de principal se tira del respaldo.`
+  }
+  if (pr.estado === 'mudo') return 'Respondió 200 pero sin texto'
+  return pr.detalle
+}
+
 export default function IaAdminClient({ modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, documentos, periodo, consumo }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -50,19 +74,46 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [confirmarBorrado, setConfirmarBorrado] = useState<ModeloIa | null>(null)
   const [editando, setEditando] = useState<ModeloIa | null>(null)
   const [pruebas, setPruebas] = useState<Record<string, PruebaModeloUI | 'cargando'>>({})
+  const [segundos, setSegundos] = useState<Record<string, number>>({})
+  const abortarPrueba = useRef<Record<string, AbortController>>({})
 
-  // Health-check de un modelo: llamada mínima real al proveedor. Independiente por
-  // fila (no usa la transición compartida) para poder probar varios a la vez.
+  // Health-check de un modelo: llamada mínima real al proveedor.
+  //
+  // Va por `fetch` a un ROUTE HANDLER, no por server action. Next despacha las server
+  // actions de una en una por cliente, así que probar un modelo lento dejaba en cola
+  // el activar/desactivar y el guardar de esta misma pantalla: parecía que se colgaba
+  // el admin entero. Por route handler sí se prueban varios a la vez de verdad.
+  //
+  // Un modelo recién salido puede tardar de forma legítima más de 20 s, así que no se
+  // corta a la brava: se enseña el tiempo que lleva y se puede cancelar (regla UX de
+  // no dejar nunca una pantalla congelada sin salida).
   async function probar(id: string) {
+    const ctrl = new AbortController()
+    abortarPrueba.current[id] = ctrl
     setPruebas(p => ({ ...p, [id]: 'cargando' }))
-    const r = await probarModeloIa(id)
-    if (!r.ok) {
-      toastError(r.error)
-      setPruebas(p => { const n = { ...p }; delete n[id]; return n })
-      return
+    setSegundos(s => ({ ...s, [id]: 0 }))
+    const tic = setInterval(() => setSegundos(s => ({ ...s, [id]: (s[id] ?? 0) + 1 })), 1000)
+    try {
+      const res = await fetch(`/api/admin/ia/probar?id=${encodeURIComponent(id)}`, { signal: ctrl.signal })
+      const r = await res.json() as PruebaModeloResp
+      if (!r.ok) { toastError(r.error); olvidarPrueba(id); return }
+      setPruebas(p => ({ ...p, [id]: r.prueba }))
+    } catch (e) {
+      // Cancelar es una decisión del usuario, no un error: la fila vuelve a su sitio.
+      if ((e as Error).name !== 'AbortError') toastError('No se pudo probar el modelo.')
+      olvidarPrueba(id)
+    } finally {
+      clearInterval(tic)
+      delete abortarPrueba.current[id]
     }
-    setPruebas(p => ({ ...p, [id]: r.prueba }))
   }
+
+  function olvidarPrueba(id: string) {
+    setPruebas(p => { const n = { ...p }; delete n[id]; return n })
+    setSegundos(s => { const n = { ...s }; delete n[id]; return n })
+  }
+
+  function cancelarPrueba(id: string) { abortarPrueba.current[id]?.abort() }
 
   const activos = modelos.filter(m => m.activo)
   const activosGratis = activos.filter(m => m.gratis)
@@ -201,13 +252,13 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         <div className="table-wrapper table-wrapper-flush">
           <table className="table">
             <thead>
-              <tr><th>Modelo</th><th>ID</th><th>Tipo</th><th className="col-center">Activo</th><th>Estado</th><th className="col-actions" /></tr>
+              <tr><th>Modelo</th><th className="ia-col-id">ID</th><th>Tipo</th><th className="col-center">Activo</th><th>Estado</th><th className="col-actions" /></tr>
             </thead>
             <tbody>
               {modelos.map(m => { const pr = pruebas[m.id]; return (
                 <tr key={m.id}>
                   <td data-label="Modelo"><span className="ia-cell-badges">{m.nombre}{m.id === principal && <span className="badge badge-info">principal</span>}</span></td>
-                  <td data-label="ID" className="table-muted">{m.id}</td>
+                  <td data-label="ID" className="table-muted ia-col-id">{m.id}</td>
                   <td data-label="Tipo"><span className={`badge ${m.gratis ? 'badge-success' : 'badge-warning'}`}>{m.gratis ? 'Gratis' : 'Pago'}</span></td>
                   <td data-label="Activo" className="col-center">
                     <span className="switch">
@@ -224,11 +275,22 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                           : <Activity size={13} strokeWidth={2} />}
                         Probar
                       </button>
+                      {pr === 'cargando' && (
+                        <>
+                          <span className="table-muted">
+                            {(segundos[m.id] ?? 0) >= 15
+                              ? `Tarda más de lo normal · ${segundos[m.id] ?? 0} s`
+                              : `${segundos[m.id] ?? 0} s`}
+                          </span>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => cancelarPrueba(m.id)}>
+                            <X size={13} strokeWidth={2} />
+                            Cancelar
+                          </button>
+                        </>
+                      )}
                       {pr && pr !== 'cargando' && (
-                        <span
-                          className={`badge ${pr.estado === 'vivo' ? 'badge-success' : pr.estado === 'mudo' ? 'badge-warning' : 'badge-error'}`}
-                          title={pr.detalle ?? (pr.estado === 'mudo' ? 'Respondió 200 pero sin texto' : undefined)}>
-                          {pr.estado === 'vivo' ? `✓ ${pr.ms} ms` : pr.estado === 'mudo' ? 'Vivo, sin texto' : '✗ Caído'}
+                        <span className={`badge ${TONO_PRUEBA[pr.estado]}`} title={tituloPrueba(pr)}>
+                          {rotuloPrueba(pr)}
                         </span>
                       )}
                     </span>

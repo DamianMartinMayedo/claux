@@ -846,7 +846,16 @@ textarea:focus-visible {
 .config-form { display: flex; flex-direction: column; gap: var(--space-5); }
 
 /* Panel de IA del admin (/admin/ia) */
-.ia-cell-badges  { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+/* En una sola línea: la columna Estado tiene sitio de sobra a la derecha, y al envolver
+   («Cancelar» cayendo debajo) la fila crecía al doble mientras se prueba un modelo.
+   En móvil sí envuelve — ahí la tabla es tarjetas y no hay ancho (04-responsive). */
+.ia-cell-badges  { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; white-space: nowrap; }
+/* El id del modelo, entero en una linea: es un identificador que se copia y se compara,
+   y partido en «nemotron-3-ultra-» / «free» deja de leerse de un vistazo. Con esto y el
+   nowrap de arriba, el ancho sobrante se lo queda la columna Modelo, que es la unica
+   que puede envolver sin perder nada. NO darle `width:100%` a Estado: se lo come todo
+   y estruja las demas hasta partirlas (probado, quedaba peor que antes). */
+.table th.ia-col-id, .table td.ia-col-id { white-space: nowrap; }
 .ia-instr-textarea { font-family: 'SF Mono', 'Fira Code', monospace; font-size: var(--text-sm); line-height: 1.6; min-height: 20rem; }
 .ia-doc-list  { display: flex; flex-direction: column; gap: var(--space-2); }
 .ia-doc-row   { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--color-surface-2); border-radius: var(--radius-md); }
