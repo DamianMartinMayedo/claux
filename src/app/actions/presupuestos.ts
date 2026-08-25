@@ -569,7 +569,7 @@ export async function aprobarPresupuesto(
 // exactamente el desajuste que estamos cerrando.
 export async function eliminarPresupuesto(
   id: number,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; yaEliminado?: boolean }> {
   const ctx = await requirePermiso('presupuestos')
   const db = createAdminClient()
 
@@ -578,7 +578,9 @@ export async function eliminarPresupuesto(
     .select('id, estado, nombre_negocio, client_id, total_final_usd')
     .eq('id', id)
     .maybeSingle()
-  if (!pres) return { ok: false, error: 'Presupuesto no encontrado.' }
+  // El listado puede estar abierto en otra pestaña. Si ya se eliminó allí, tratar
+  // la operación como idempotente permite limpiar la fila obsoleta al refrescar.
+  if (!pres) return { ok: true, yaEliminado: true }
   if (pres.estado !== 'guardado') {
     return {
       ok: false,
@@ -601,13 +603,23 @@ export async function eliminarPresupuesto(
     }
   }
 
-  const { error } = await db
+  const { data: eliminado, error } = await db
     .from('presupuestos_instalacion')
     .delete()
     .eq('id', id)
     // Candado de concurrencia: si alguien lo aprobó mientras se confirmaba, no se borra.
     .eq('estado', 'guardado')
+    .select('id')
   if (error) return { ok: false, error: error.message }
+  if (!eliminado || eliminado.length === 0) {
+    const { data: sigue } = await db
+      .from('presupuestos_instalacion')
+      .select('estado')
+      .eq('id', id)
+      .maybeSingle()
+    if (!sigue) return { ok: true, yaEliminado: true }
+    return { ok: false, error: 'El presupuesto cambió mientras se eliminaba. Actualiza la lista e inténtalo de nuevo.' }
+  }
 
   await logActividad(db, {
     user_email:  ctx.email,

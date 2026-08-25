@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
+import PresupuestoPdfMenu from '@/components/admin/PresupuestoPdfMenu'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import FormHelp from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -83,7 +84,6 @@ export default function PresupuestosView({
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
   const [filtro, setFiltro] = useState<Filtro>('todos')
-  const [menuPdf, setMenuPdf] = useState(false)
 
   /**
    * El presupuesto en PDF, con la misma plantilla de marca que la factura.
@@ -118,7 +118,6 @@ export default function PresupuestosView({
         descuentoAnualPct,
         incluir,
       }, `PRE-${String(d.id).padStart(4, '0')}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
-      setMenuPdf(false)
     } catch {
       toastError('No se pudo generar el PDF.')
     }
@@ -126,6 +125,7 @@ export default function PresupuestosView({
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [cargando, setCargando] = useState(false)
   const [horasReales, setHorasReales] = useState('')
+  const [horasRealesOriginales, setHorasRealesOriginales] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [aprobando, setAprobando] = useState(false)
   // El borrador que se está confirmando para borrar: el estado vive aquí, no en la
@@ -154,9 +154,9 @@ export default function PresupuestosView({
     const d = await obtenerPresupuesto(id)
     setCargando(false)
     if (!d) { toastError('No se pudo cargar el presupuesto'); return }
-    setMenuPdf(false)
     setDetalle(d)
     setHorasReales(d.horas_reales != null ? String(d.horas_reales) : '')
+    setHorasRealesOriginales(d.horas_reales != null ? String(d.horas_reales) : '')
   }
 
   async function guardarHoras() {
@@ -177,7 +177,7 @@ export default function PresupuestosView({
     const r = await eliminarPresupuesto(borrar.id)
     setBorrando(false)
     if (!r.ok) { toastError(r.error ?? 'No se pudo eliminar'); return }
-    toastSuccess('Borrador eliminado')
+    toastSuccess(r.yaEliminado ? 'El presupuesto ya no existía; lista actualizada' : 'Borrador eliminado')
     setBorrar(null)
     router.refresh()
   }
@@ -210,6 +210,7 @@ export default function PresupuestosView({
 
   const desglose: DesgloseFase[] = Array.isArray(detalle?.desglose) ? detalle!.desglose : []
   const revisiones: Revision[] = Array.isArray(detalle?.revisiones) ? detalle!.revisiones : []
+  const horasHanCambiado = horasReales !== horasRealesOriginales
 
   return (
     <div className="view-container">
@@ -417,71 +418,6 @@ export default function PresupuestosView({
                     )}
                   </div>
 
-                  {/* Desplegable como el de los reportes: un presupuesto de ampliación a un
-                      cliente que ya paga su cuota no tiene por qué volver a enseñársela, y a
-                      veces solo se manda la parte recurrente. Descarga directa, sin abrir
-                      pestaña: el comercial lo manda por WhatsApp desde el móvil. */}
-                  <div className="pres-modal-actions">
-                  <div className="ven-dropdown-wrap pres-descargar">
-                    <button type="button" className="btn btn-secondary btn-sm"
-                      aria-expanded={menuPdf}
-                      onClick={() => setMenuPdf(v => !v)}>
-                      <Download size={14} strokeWidth={2} /> Descargar PDF
-                    </button>
-                    {menuPdf && (
-                      <div className="ven-dropdown-menu">
-                        <div className="ven-dropdown-ctx">
-                          {detalle.nombre_negocio}
-                          <span className="ven-dropdown-detalle">Qué incluir en el documento</span>
-                        </div>
-                        <button type="button" className="ven-dropdown-item"
-                          onClick={() => descargarPdf(detalle, 'todo')}>
-                          Todo · instalación y suscripción
-                        </button>
-                        <button type="button" className="ven-dropdown-item"
-                          onClick={() => descargarPdf(detalle, 'instalacion')}>
-                          Solo instalación · pago único
-                        </button>
-                        <button type="button" className="ven-dropdown-item"
-                          onClick={() => descargarPdf(detalle, 'suscripcion')}>
-                          Solo suscripción · cuota mensual
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Acciones de venta: aprobar y convertir en cliente (no aplica si ya está instalado) */}
-                  {detalle.estado !== 'instalado' && (
-                    <div className="pres-acciones-cierre">
-                      {detalle.estado === 'aprobado' ? (
-                        <>
-                          {detalle.client_id ? (
-                            <Link href={`/admin/clientes/${detalle.client_id}`} className="btn btn-primary btn-sm">
-                              <UserPlus size={15} strokeWidth={2} /> Ver cliente {detalle.client_id}
-                            </Link>
-                          ) : (
-                            <button className="btn btn-primary btn-sm" onClick={() => abrirClienteConDetalle(detalle)}>
-                              <UserPlus size={15} strokeWidth={2} /> Crear cliente
-                            </button>
-                          )}
-                          <button className="btn btn-secondary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
-                            {aprobando ? <><span className="spinner" /> …</> : <><X size={15} strokeWidth={2} /> Quitar aprobación</>}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
-                            <Pencil size={15} strokeWidth={2} /> Editar
-                          </Link>
-                          <button className="btn btn-success btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
-                            {aprobando ? <><span className="spinner" /> …</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  </div>
-
                   <div className="input-group">
                     <div className="form-label-with-help">
                       <label htmlFor="horas-reales">Horas reales de la instalación</label>
@@ -492,11 +428,42 @@ export default function PresupuestosView({
                       placeholder="Completar al cerrar la instalación" />
                   </div>
                 </div>
-                <div className="modal-footer">
+                <div className="modal-footer pres-modal-footer">
+                  <div className="pres-modal-footer-actions">
+                    <PresupuestoPdfMenu nombre={detalle.nombre_negocio} onDownload={tipo => descargarPdf(detalle, tipo)}>
+                      <Download size={14} strokeWidth={2} /> Descargar PDF
+                    </PresupuestoPdfMenu>
+                    {detalle.estado === 'guardado' && (
+                      <>
+                        <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
+                          <Pencil size={15} strokeWidth={2} /> Editar
+                        </Link>
+                        <button className="btn btn-primary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
+                          {aprobando ? <><span className="spinner" /> …</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
+                        </button>
+                      </>
+                    )}
+                    {detalle.estado === 'aprobado' && (
+                      <>
+                        {detalle.client_id ? (
+                          <Link href={`/admin/clientes/${detalle.client_id}`} className="btn btn-primary btn-sm">
+                            <UserPlus size={15} strokeWidth={2} /> Ver cliente {detalle.client_id}
+                          </Link>
+                        ) : (
+                          <button className="btn btn-primary btn-sm" onClick={() => abrirClienteConDetalle(detalle)}>
+                            <UserPlus size={15} strokeWidth={2} /> Crear cliente
+                          </button>
+                        )}
+                        <button className="btn btn-secondary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
+                          {aprobando ? <><span className="spinner" /> …</> : <><X size={15} strokeWidth={2} /> Quitar aprobación</>}
+                        </button>
+                      </>
+                    )}
+                    {horasHanCambiado && <button className="btn btn-secondary btn-sm" disabled={guardando} onClick={guardarHoras}>
+                      {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
+                    </button>}
+                  </div>
                   <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
-                  <button className="btn btn-primary" disabled={guardando} onClick={guardarHoras}>
-                    {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
-                  </button>
                 </div>
               </>
             )}

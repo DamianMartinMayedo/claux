@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Check, Download, Eye, Pencil, Trash2, X } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
+import PresupuestoPdfMenu from '@/components/admin/PresupuestoPdfMenu'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { useToast, toastTono } from '@/app/contexts/ToastContext'
 import {
@@ -50,8 +51,8 @@ export default function PresupuestosClienteTabla({
   const [cargando, setCargando] = useState(false)
   const [aprobando, setAprobando] = useState(false)
   const [horasReales, setHorasReales] = useState('')
+  const [horasRealesOriginales, setHorasRealesOriginales] = useState('')
   const [guardando, setGuardando] = useState(false)
-  const [menuPdf, setMenuPdf] = useState(false)
   // El borrador que se está confirmando para borrar: el estado vive en el padre,
   // no en la fila ni en el menú (que se desmonta al pulsar y se lo llevaría).
   const [borrar, setBorrar]     = useState<PresupuestoRow | null>(null)
@@ -62,8 +63,8 @@ export default function PresupuestosClienteTabla({
     const d = await obtenerPresupuesto(id)
     setCargando(false)
     if (!d) { toastError('No se pudo cargar el presupuesto'); return }
-    setMenuPdf(false)
     setHorasReales(d.horas_reales != null ? String(d.horas_reales) : '')
+    setHorasRealesOriginales(d.horas_reales != null ? String(d.horas_reales) : '')
     setDetalle(d)
   }
 
@@ -94,7 +95,6 @@ export default function PresupuestosClienteTabla({
         descuentoAnualPct,
         incluir,
       }, `PRE-${String(detalle.id).padStart(4, '0')}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
-      setMenuPdf(false)
     } catch {
       toastError('No se pudo generar el PDF.')
     }
@@ -119,7 +119,7 @@ export default function PresupuestosClienteTabla({
     const r = await eliminarPresupuesto(borrar.id)
     setBorrando(false)
     if (!r.ok) { toastError(r.error ?? 'No se pudo eliminar'); return }
-    toastSuccess('Borrador eliminado')
+    toastSuccess(r.yaEliminado ? 'El presupuesto ya no existía; lista actualizada' : 'Borrador eliminado')
     setBorrar(null)
     router.refresh()
   }
@@ -138,6 +138,7 @@ export default function PresupuestosClienteTabla({
 
   const desglose: DesgloseFase[] = Array.isArray(detalle?.desglose) ? detalle!.desglose : []
   const revisiones: Revision[] = Array.isArray(detalle?.revisiones) ? detalle!.revisiones : []
+  const horasHanCambiado = horasReales !== horasRealesOriginales
 
   return (
     <>
@@ -306,50 +307,36 @@ export default function PresupuestosClienteTabla({
                       <span className="pres-total-valor">{usd(detalle.total_final_usd ?? detalle.coste_instalacion_usd)}</span>
                     </div>
                   </div>
-                  <div className="pres-modal-actions">
-                    <div className="ven-dropdown-wrap pres-descargar">
-                      <button type="button" className="btn btn-secondary btn-sm" aria-expanded={menuPdf} onClick={() => setMenuPdf(v => !v)}>
-                        <Download size={14} strokeWidth={2} /> Descargar PDF
-                      </button>
-                      {menuPdf && (
-                        <div className="ven-dropdown-menu">
-                          <div className="ven-dropdown-ctx">
-                            {detalle.nombre_negocio}
-                            <span className="ven-dropdown-detalle">Qué incluir en el documento</span>
-                          </div>
-                          <button type="button" className="ven-dropdown-item" onClick={() => descargarPdf('todo')}>Todo · instalación y suscripción</button>
-                          <button type="button" className="ven-dropdown-item" onClick={() => descargarPdf('instalacion')}>Solo instalación · pago único</button>
-                          <button type="button" className="ven-dropdown-item" onClick={() => descargarPdf('suscripcion')}>Solo suscripción · cuota mensual</button>
-                        </div>
-                      )}
-                    </div>
-                    {detalle.estado !== 'instalado' && (
-                      <div className="pres-acciones-cierre">
-                        {detalle.estado === 'guardado' && (
-                          <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
-                            <Pencil size={15} strokeWidth={2} /> Editar
-                          </Link>
-                        )}
-                        <button
-                          className={`btn btn-sm ${detalle.estado === 'aprobado' ? 'btn-secondary' : 'btn-success'}`}
-                          disabled={aprobando}
-                          onClick={() => aprobar(detalle.id, detalle.estado !== 'aprobado')}
-                        >
-                          {detalle.estado === 'aprobado' ? <><X size={15} strokeWidth={2} /> Quitar aprobación</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
-                        </button>
-                      </div>
-                    )}
-                  </div>
                   <div className="input-group pres-horas-reales">
                     <label htmlFor="cliente-horas-reales">Horas reales de la instalación</label>
                     <input id="cliente-horas-reales" type="number" min="0" step="0.5" className="input" value={horasReales} onChange={e => setHorasReales(e.target.value)} placeholder="Completar al cerrar la instalación" />
                   </div>
                 </div>
-                <div className="modal-footer">
+                <div className="modal-footer pres-modal-footer">
+                  <div className="pres-modal-footer-actions">
+                    <PresupuestoPdfMenu nombre={detalle.nombre_negocio} onDownload={descargarPdf}>
+                      <Download size={14} strokeWidth={2} /> Descargar PDF
+                    </PresupuestoPdfMenu>
+                    {detalle.estado === 'guardado' && (
+                      <>
+                        <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
+                          <Pencil size={15} strokeWidth={2} /> Editar
+                        </Link>
+                        <button className="btn btn-primary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, true)}>
+                          <Check size={15} strokeWidth={2} /> Aprobar presupuesto
+                        </button>
+                      </>
+                    )}
+                    {detalle.estado === 'aprobado' && (
+                      <button className="btn btn-secondary btn-sm" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
+                        <X size={15} strokeWidth={2} /> Quitar aprobación
+                      </button>
+                    )}
+                    {horasHanCambiado && <button type="button" className="btn btn-secondary btn-sm" disabled={guardando} onClick={guardarHoras}>
+                      {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
+                    </button>}
+                  </div>
                   <button type="button" className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
-                  <button type="button" className="btn btn-primary" disabled={guardando} onClick={guardarHoras}>
-                    {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
-                  </button>
                 </div>
               </>
             )}
