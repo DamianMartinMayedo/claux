@@ -91,6 +91,12 @@ export async function crearCliente(formData: FormData) {
   const sector          = (formData.get('sector') as string ?? '').trim() || null
   const pagoSetupRaw    = parseFloat(formData.get('pago_setup_usd') as string ?? '0')
   const pago_setup_usd  = isNaN(pagoSetupRaw) ? 0 : pagoSetupRaw
+  // El presupuesto del que sale el alta (si viene de uno). Se lee aquí arriba
+  // porque no solo enlaza el cliente al final: es también de donde sale el cobro
+  // de configuración, y ese vínculo es lo que le permite seguir al presupuesto
+  // cuando se edita o se re-aprueba (mig. 204).
+  const presupuestoIdRaw = parseInt((formData.get('presupuesto_id') as string ?? '').trim(), 10)
+  const presupuesto_id   = Number.isFinite(presupuestoIdRaw) && presupuestoIdRaw > 0 ? presupuestoIdRaw : null
   // Situación de migración de datos elegida en el alta (§5 importador de autoservicio).
   // El alta NO ofrece `completada` (se alcanza al terminar): fuera de la lista → cero.
   const migRaw          = (formData.get('migracion_estado') as string ?? '').trim()
@@ -205,6 +211,7 @@ export async function crearCliente(formData: FormData) {
     pagosPre.push({
       pago_id:  nuevoPagoId(),
       client_id,
+      presupuesto_id,
       monto_usd: pago_setup_usd,
       metodo:    'transferencia',
       concepto:  'configuracion',
@@ -297,12 +304,11 @@ export async function crearCliente(formData: FormData) {
 
   // Si el alta viene de un presupuesto aprobado, enlazamos el cliente creado al
   // presupuesto (cierra el embudo ventas → cliente y evita duplicar el alta).
-  const presupuestoId = parseInt((formData.get('presupuesto_id') as string ?? '').trim(), 10)
-  if (Number.isFinite(presupuestoId) && presupuestoId > 0) {
+  if (presupuesto_id) {
     await supabase
       .from('presupuestos_instalacion')
       .update({ client_id })
-      .eq('id', presupuestoId)
+      .eq('id', presupuesto_id)
     revalidatePath('/admin/presupuestos')
   }
 

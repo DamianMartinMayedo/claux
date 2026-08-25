@@ -15,10 +15,14 @@ export default async function PresupuestosClienteCard({
   nombreEmpresa,
   /** Hay un pago de configuración registrado para este cliente. */
   tienePagoConfiguracion,
+  catalogo,
+  descuentoAnualPct,
 }: {
   clientId: string
   nombreEmpresa: string
   tienePagoConfiguracion: boolean
+  catalogo: { clave: string; nombre: string; precio_fundador_usd: number; precio_estandar_usd: number }[]
+  descuentoAnualPct: number
 }) {
   const presupuestos = await listarPresupuestosDeCliente(clientId)
 
@@ -48,7 +52,11 @@ export default async function PresupuestosClienteCard({
           </p>
         </div>
       ) : (
-        <PresupuestosClienteTabla presupuestos={presupuestos} />
+        <PresupuestosClienteTabla
+          presupuestos={presupuestos}
+          catalogo={catalogo}
+          descuentoAnualPct={descuentoAnualPct}
+        />
       )}
     </div>
   )

@@ -963,6 +963,13 @@ textarea:focus-visible {
   letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-faint);
 }
 .pres-totales + .pres-totales { margin-top: var(--space-4); }
+.pres-modal-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+.pres-modal-actions .pres-descargar,
+.pres-modal-actions .pres-acciones-cierre { margin-top: 0; }
 .pres-descargar { margin-top: var(--space-4); }
 /* La concesión, en el color de una resta; el total a cobrar, destacado — es la cifra que se
    le dice al cliente y la que se cobra, no el coste bruto de encima. */
@@ -972,7 +979,8 @@ textarea:focus-visible {
 }
 .pres-total-final .pres-total-label { color: var(--color-text); font-weight: 600; }
 .pres-total-final .pres-total-valor { font-size: var(--text-lg); color: var(--color-primary-text); }
-.pres-acciones-cierre { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+.pres-acciones-cierre { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+.pres-horas-reales { margin-top: var(--space-5); }
 /* El motivo del descuento, pegado a su cifra: es lo que hace que dentro de tres meses se
    entienda por qué ese cliente pagó menos. */
 .pres-dto-motivo { font-style: normal; color: var(--color-text-faint); }

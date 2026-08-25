@@ -1,14 +1,15 @@
 'use client'
 
-import { Check, Eye, FileText, Pencil, Plus, UserPlus, X, Download } from 'lucide-react'
+import { Check, Eye, FileText, Pencil, Plus, Trash2, UserPlus, X, Download } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
+import { ConfirmDialog } from '@/components/portal/Dialog'
 import FormHelp from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import VentasTabs from '@/components/admin/VentasTabs'
-import { useToast } from '@/app/contexts/ToastContext'
+import { useToast, toastTono } from '@/app/contexts/ToastContext'
 import ClienteFormModal, {
   type ModuloCatalogo,
   type PlantillaSector,
@@ -21,6 +22,7 @@ import {
   obtenerPresupuesto,
   actualizarHorasReales,
   aprobarPresupuesto,
+  eliminarPresupuesto,
   type PresupuestoRow,
 } from '@/app/actions/presupuestos'
 
@@ -126,6 +128,10 @@ export default function PresupuestosView({
   const [horasReales, setHorasReales] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [aprobando, setAprobando] = useState(false)
+  // El borrador que se está confirmando para borrar: el estado vive aquí, no en la
+  // fila ni en el menú (que se desmonta al pulsar y se llevaría el diálogo con él).
+  const [borrar, setBorrar]   = useState<PresupuestoRow | null>(null)
+  const [borrando, setBorrando] = useState(false)
 
   // Alta de cliente desde un presupuesto aprobado (modal compartido).
   const [clienteOpen, setClienteOpen] = useState(false)
@@ -165,12 +171,26 @@ export default function PresupuestosView({
     router.refresh()
   }
 
+  async function borrarPresupuesto() {
+    if (!borrar) return
+    setBorrando(true)
+    const r = await eliminarPresupuesto(borrar.id)
+    setBorrando(false)
+    if (!r.ok) { toastError(r.error ?? 'No se pudo eliminar'); return }
+    toastSuccess('Borrador eliminado')
+    setBorrar(null)
+    router.refresh()
+  }
+
   async function aprobar(id: number, aprobado: boolean) {
     setAprobando(true)
     const r = await aprobarPresupuesto(id, aprobado)
     setAprobando(false)
     if (!r.ok) { toastError(r.error ?? 'Error al guardar'); return }
     toastSuccess(aprobado ? 'Presupuesto aprobado' : 'Aprobación retirada')
+    // Aprobar mueve el cobro de configuración (crearlo, ajustarlo o retirarlo).
+    // Si ya estaba confirmado no se toca y el aviso llega en tono de advertencia.
+    if (r.aviso) toastTono(r.avisoTono ?? 'info', r.aviso)
     if (detalle?.id === id) setDetalle({ ...detalle, estado: aprobado ? 'aprobado' : 'guardado' })
     router.refresh()
   }
@@ -285,6 +305,16 @@ export default function PresupuestosView({
                             <UserPlus size={15} strokeWidth={2} /> Ver cliente {p.client_id}
                           </Link>
                         )}
+                        {/* Eliminar solo el borrador: un presupuesto que se hizo por
+                            error no debería quedarse compitiendo por ser «el» del cliente. */}
+                        {p.estado === 'guardado' && (
+                          <button
+                            className="row-actions-item row-actions-item-danger"
+                            onClick={() => setBorrar(p)}
+                          >
+                            <Trash2 size={14} strokeWidth={2} /> Eliminar
+                          </button>
+                        )}
                       </RowActions>
                     </td>
                   </tr>
@@ -391,6 +421,7 @@ export default function PresupuestosView({
                       cliente que ya paga su cuota no tiene por qué volver a enseñársela, y a
                       veces solo se manda la parte recurrente. Descarga directa, sin abrir
                       pestaña: el comercial lo manda por WhatsApp desde el móvil. */}
+                  <div className="pres-modal-actions">
                   <div className="ven-dropdown-wrap pres-descargar">
                     <button type="button" className="btn btn-secondary btn-sm"
                       aria-expanded={menuPdf}
@@ -449,6 +480,7 @@ export default function PresupuestosView({
                       )}
                     </div>
                   )}
+                  </div>
 
                   <div className="input-group">
                     <div className="form-label-with-help">
@@ -470,6 +502,22 @@ export default function PresupuestosView({
             )}
           </div>
         </div>
+      )}
+
+      {borrar && (
+        <ConfirmDialog
+          title={`¿Eliminar el borrador de ${borrar.nombre_negocio}?`}
+          body={<>
+            Se borra el presupuesto de <strong>{usd(borrar.total_final_usd ?? borrar.coste_instalacion_usd)}</strong>{' '}
+            de instalación ({borrar.horas_total}h) guardado el {fmtFecha(borrar.created_at)}. No se puede deshacer.
+          </>}
+          confirmLabel="Eliminar"
+          pendingLabel="Eliminando…"
+          danger
+          pending={borrando}
+          onConfirm={borrarPresupuesto}
+          onCancel={() => setBorrar(null)}
+        />
       )}
 
       <ClienteFormModal

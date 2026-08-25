@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
 import type { FormatoDatos, TarifaTipo } from '@/lib/presupuesto/config'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 export interface ModuloPresupuesto {
   clave:   string
@@ -219,6 +220,162 @@ async function calcularSnapshotPresupuesto(
   return { ok: true, snap: { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } }
 }
 
+// ── El cobro de configuración sigue a su presupuesto ─────────────────────────
+//
+// El pago único de instalación se creaba en el alta con la cifra que tenía el
+// presupuesto ESE día y ahí se quedaba: editar el borrador o aprobar otro
+// presupuesto no lo movía, así que al cliente le llegaba —en su panel, en
+// Suscripción— el número viejo. La regla que cierra el agujero:
+//
+//   un cobro de configuración POR CONFIRMAR ligado a un presupuesto vale
+//   siempre lo que vale ese presupuesto; en cuanto se CONFIRMA (el dinero
+//   entró) se congela y no lo toca nadie.
+//
+// Solo actúa sobre presupuestos que ya tienen cliente: antes del alta no hay a
+// quién cobrarle.
+type AccionCobro = 'ninguna' | 'creado' | 'actualizado' | 'eliminado' | 'congelado'
+
+interface ResultadoCobro {
+  accion:  AccionCobro
+  /** Importe que ha quedado (o el del cobro congelado, para poder avisar). */
+  monto?:  number
+  pagoId?: string
+}
+
+/** Lo que le pasó al cobro, en una frase para el toast (null = no pasó nada que contar). */
+function avisoCobro(r: ResultadoCobro): string | null {
+  const usd = (n?: number) => `$${(n ?? 0).toFixed(2)}`
+  if (r.accion === 'actualizado') return `El cobro de configuración pasa a ${usd(r.monto)}.`
+  if (r.accion === 'creado')      return `Se creó el cobro de configuración ${r.pagoId} por ${usd(r.monto)} (por confirmar).`
+  if (r.accion === 'eliminado')   return 'Se retiró el cobro de configuración: el presupuesto queda en $0.'
+  if (r.accion === 'congelado')   return `Ojo: el cobro de configuración (${usd(r.monto)}) ya está confirmado y no se toca. Ajústalo a mano si procede.`
+  return null
+}
+
+/** Un cobro ya confirmado que deja de cuadrar es lo único que exige mano humana. */
+function tonoCobro(r: ResultadoCobro): 'info' | 'warning' {
+  return r.accion === 'congelado' ? 'warning' : 'info'
+}
+
+/** Siguiente `pago_id` correlativo (PAG-0001, PAG-0002…). */
+async function siguientePagoId(db: ReturnType<typeof createAdminClient>): Promise<string> {
+  const { data } = await db
+    .from('payments').select('pago_id').order('pago_id', { ascending: false }).limit(1).maybeSingle()
+  const m = data?.pago_id?.match(/PAG-(\d+)/)
+  const n = m ? parseInt(m[1], 10) + 1 : 1
+  return `PAG-${String(n).padStart(4, '0')}`
+}
+
+async function sincronizarCobroConfiguracion(
+  db: ReturnType<typeof createAdminClient>,
+  presupuestoId: number,
+  ctx: { email: string },
+): Promise<ResultadoCobro> {
+  const { data: pres } = await db
+    .from('presupuestos_instalacion')
+    .select('id, client_id, estado, total_final_usd, nombre_negocio')
+    .eq('id', presupuestoId)
+    .maybeSingle()
+  if (!pres?.client_id) return { accion: 'ninguna' }
+
+  const total = Number(pres.total_final_usd) || 0
+  // Un BORRADOR no es un compromiso: puede mover el cobro que ya es suyo, pero no
+  // adoptar uno suelto ni inventarse uno nuevo. Si no, editar un presupuesto en
+  // negociación le dejaría al cliente un «pendiente» en su panel —o peor, le
+  // robaría al cobro vivo la cifra del presupuesto que sí está aprobado.
+  const esCompromiso = pres.estado === 'aprobado' || pres.estado === 'instalado'
+
+  // El cobro de ESTE presupuesto. Si no lo hay, se adopta el que dejó el alta
+  // sin ligar (dato anterior a la mig. 204): es el mismo cobro, sin etiqueta.
+  const { data: propio } = await db
+    .from('payments')
+    .select('pago_id, estado, monto_usd')
+    .eq('presupuesto_id', presupuestoId)
+    .eq('concepto', 'configuracion')
+    // Si por lo que sea hubiera dos, manda el confirmado ('confirmado' < 'por_confirmar'):
+    // ante la duda se congela y se avisa, nunca se crea un cobro de más.
+    .order('estado', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  let cobro = propio
+  if (!cobro && esCompromiso) {
+    const { data: suelto } = await db
+      .from('payments')
+      .select('pago_id, estado, monto_usd')
+      .eq('client_id', pres.client_id)
+      .eq('concepto', 'configuracion')
+      .eq('estado', 'por_confirmar')
+      .is('presupuesto_id', null)
+      .order('fecha', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    cobro = suelto
+  }
+
+  // Confirmado = dinero cobrado: es un hecho, no una previsión. Se devuelve para
+  // que quien llame pueda avisar de que la cifra ya no cuadra con el presupuesto.
+  if (cobro && cobro.estado !== 'por_confirmar') {
+    return { accion: 'congelado', monto: Number(cobro.monto_usd) || 0, pagoId: cobro.pago_id }
+  }
+
+  // Presupuesto a cero (100% de descuento, cortesía): no hay nada que cobrar, y
+  // un cobro de $0 en la ficha del cliente es ruido que alguien tendría que ir
+  // tachando a mano.
+  if (total <= 0) {
+    if (!cobro) return { accion: 'ninguna' }
+    await db.from('payments').delete().eq('pago_id', cobro.pago_id)
+    await logActividad(db, {
+      user_email: ctx.email, entity: 'pago', entity_id: cobro.pago_id, action: 'eliminar',
+      description: `Eliminó el cobro de configuración ${cobro.pago_id} — el presupuesto de ${pres.nombre_negocio} queda en $0`,
+    })
+    return { accion: 'eliminado', pagoId: cobro.pago_id }
+  }
+
+  if (cobro) {
+    const antes = Number(cobro.monto_usd) || 0
+    await db.from('payments')
+      .update({ monto_usd: total, presupuesto_id: presupuestoId })
+      .eq('pago_id', cobro.pago_id)
+    if (Math.abs(antes - total) < 0.005) return { accion: 'ninguna', monto: total, pagoId: cobro.pago_id }
+    await logActividad(db, {
+      user_email: ctx.email, entity: 'pago', entity_id: cobro.pago_id, action: 'editar',
+      description: `Ajustó el cobro de configuración ${cobro.pago_id} de $${antes.toFixed(2)} a $${total.toFixed(2)} — presupuesto de ${pres.nombre_negocio}`,
+    })
+    return { accion: 'actualizado', monto: total, pagoId: cobro.pago_id }
+  }
+
+  // No hay cobro que ajustar: se crea, y solo si el presupuesto ya es un
+  // compromiso (aprobado). Al cliente de PRUEBA tampoco, que no es una venta
+  // — igual que en el alta (`crearCliente`), para no dejarle una deuda eterna
+  // en cuentas por cobrar.
+  if (!esCompromiso) return { accion: 'ninguna' }
+
+  const { data: cli } = await db
+    .from('clients').select('es_prueba').eq('client_id', pres.client_id).maybeSingle()
+  if (cli?.es_prueba) return { accion: 'ninguna' }
+
+  const pagoId = await siguientePagoId(db)
+  const { error } = await db.from('payments').insert({
+    pago_id:        pagoId,
+    client_id:      pres.client_id,
+    presupuesto_id: presupuestoId,
+    concepto:       'configuracion',
+    estado:         'por_confirmar',
+    monto_usd:      total,
+    metodo:         'transferencia',
+    fecha:          hoyEnTz(),
+    notas:          'Pago único de configuración inicial',
+  })
+  if (error) return { accion: 'ninguna' }
+
+  await logActividad(db, {
+    user_email: ctx.email, entity: 'pago', entity_id: pagoId, action: 'registrar',
+    description: `Pre-creó el cobro de configuración ${pagoId} (por confirmar) — $${total.toFixed(2)} del presupuesto de ${pres.nombre_negocio}`,
+  })
+  return { accion: 'creado', monto: total, pagoId }
+}
+
 // ── Crear (guardar) un presupuesto: recálculo autoritativo en servidor ──
 export async function crearPresupuesto(
   input: CrearPresupuestoInput,
@@ -285,7 +442,7 @@ export async function crearPresupuesto(
 // antes, o se crea uno nuevo. El recálculo es el mismo autoritativo que al crear.
 export async function actualizarPresupuesto(
   id: number, input: CrearPresupuestoInput,
-): Promise<{ ok: boolean; id?: number; error?: string }> {
+): Promise<{ ok: boolean; id?: number; error?: string; aviso?: string | null; avisoTono?: 'info' | 'warning' }> {
   const ctx = await requirePermiso('presupuestos')
   const db = createAdminClient()
 
@@ -342,8 +499,13 @@ export async function actualizarPresupuesto(
     description: `Editó el presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
   })
 
+  // El cobro por confirmar que cuelga de este presupuesto se mueve con él: si no,
+  // el cliente sigue viendo en su panel la cifra del borrador anterior.
+  const cobro = await sincronizarCobroConfiguracion(db, id, ctx)
+
   revalidatePath('/admin/presupuestos')
-  return { ok: true, id }
+  revalidatePath('/admin/pagos')
+  return { ok: true, id, aviso: avisoCobro(cobro), avisoTono: tonoCobro(cobro) }
 }
 
 // ── Aprobar / desaprobar un presupuesto ──
@@ -351,7 +513,7 @@ export async function actualizarPresupuesto(
 // No se puede tocar un presupuesto ya 'instalado' (tiene horas reales registradas).
 export async function aprobarPresupuesto(
   id: number, aprobado: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; aviso?: string | null; avisoTono?: 'info' | 'warning' }> {
   const ctx = await requirePermiso('presupuestos')
   const db = createAdminClient()
 
@@ -380,8 +542,105 @@ export async function aprobarPresupuesto(
     description: `${aprobado ? 'Aprobó' : 'Quitó la aprobación del'} presupuesto de ${actual.nombre_negocio}`,
   })
 
+  // Aprobar es el momento en que la cifra se vuelve un compromiso: el cobro de
+  // configuración pendiente pasa a decir exactamente eso. Al QUITAR la aprobación
+  // no se toca —borrar registros de dinero por un clic no— pero el admin ya puede
+  // eliminarlo desde la ficha del cliente.
+  const cobro = aprobado
+    ? await sincronizarCobroConfiguracion(db, id, ctx)
+    : { accion: 'ninguna' as const }
+
   revalidatePath('/admin/presupuestos')
+  revalidatePath('/admin/pagos')
+  return { ok: true, aviso: avisoCobro(cobro), avisoTono: tonoCobro(cobro) }
+}
+
+// ── Eliminar un presupuesto (solo borradores) ──
+//
+// Un presupuesto se hace delante del cliente y a veces sale mal: se cotiza el
+// negocio equivocado, se duplica al probar, se guarda a medias. Hasta ahora no
+// había forma de quitarlo y la lista se llenaba de ruido que además compite por
+// ser «el presupuesto de ese cliente».
+//
+// Solo el BORRADOR. Un `aprobado` es la prueba de lo que se pactó y un
+// `instalado` tiene horas reales detrás: eso no se borra, se desaprueba o se
+// deja. Y si tiene un cobro colgando se dice que no: la FK es `on delete set
+// null`, así que borrarlo dejaría un cobro huérfano en silencio — que es
+// exactamente el desajuste que estamos cerrando.
+export async function eliminarPresupuesto(
+  id: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requirePermiso('presupuestos')
+  const db = createAdminClient()
+
+  const { data: pres } = await db
+    .from('presupuestos_instalacion')
+    .select('id, estado, nombre_negocio, client_id, total_final_usd')
+    .eq('id', id)
+    .maybeSingle()
+  if (!pres) return { ok: false, error: 'Presupuesto no encontrado.' }
+  if (pres.estado !== 'guardado') {
+    return {
+      ok: false,
+      error: pres.estado === 'instalado'
+        ? 'Un presupuesto instalado no se elimina: tiene horas reales registradas.'
+        : 'Un presupuesto aprobado no se elimina. Quítale la aprobación primero si de verdad hay que rectificarlo.',
+    }
+  }
+
+  const { data: cobro } = await db
+    .from('payments')
+    .select('pago_id')
+    .eq('presupuesto_id', id)
+    .limit(1)
+    .maybeSingle()
+  if (cobro) {
+    return {
+      ok: false,
+      error: `Tiene el cobro ${cobro.pago_id} enlazado. Resuélvelo en la ficha del cliente (ajustarlo o eliminarlo) antes de borrar el presupuesto.`,
+    }
+  }
+
+  const { error } = await db
+    .from('presupuestos_instalacion')
+    .delete()
+    .eq('id', id)
+    // Candado de concurrencia: si alguien lo aprobó mientras se confirmaba, no se borra.
+    .eq('estado', 'guardado')
+  if (error) return { ok: false, error: error.message }
+
+  await logActividad(db, {
+    user_email:  ctx.email,
+    entity:      'presupuesto',
+    entity_id:   String(id),
+    action:      'eliminar',
+    description: `Eliminó el borrador de presupuesto de ${pres.nombre_negocio} — $${Number(pres.total_final_usd ?? 0).toFixed(2)} de instalación${pres.client_id ? ` · ${pres.client_id}` : ''}`,
+  })
+
+  revalidatePath('/admin/presupuestos')
+  if (pres.client_id) revalidatePath(`/admin/clientes/${pres.client_id}`)
   return { ok: true }
+}
+
+// ── Poner el cobro de configuración al día con su presupuesto (a mano) ──
+//
+// La reparación de lo que quedó descuadrado antes de que el cobro siguiera al
+// presupuesto: se dispara desde el historial de pagos de la ficha del cliente,
+// donde es donde se ve la discrepancia. Toca dinero, así que pide permiso de
+// Pagos, no de Presupuestos.
+export async function ajustarCobroConfiguracion(
+  presupuestoId: number,
+): Promise<{ ok: boolean; error?: string; aviso?: string | null }> {
+  const ctx = await requirePermiso('pagos')
+  const db = createAdminClient()
+
+  const r = await sincronizarCobroConfiguracion(db, presupuestoId, ctx)
+  if (r.accion === 'congelado') return { ok: false, error: avisoCobro(r) ?? 'El cobro ya está confirmado.' }
+
+  revalidatePath('/admin/presupuestos')
+  revalidatePath('/admin/pagos')
+  revalidatePath('/admin/clientes')
+  return { ok: true, aviso: avisoCobro(r) ?? 'El cobro ya coincidía con el presupuesto.' }
 }
 
 // ── Registrar las horas reales de la instalación (cierre) ──

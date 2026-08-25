@@ -1,14 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { X } from 'lucide-react'
-import { useToast } from '@/app/contexts/ToastContext'
-import { obtenerPresupuesto, type PresupuestoRow } from '@/app/actions/presupuestos'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Check, Download, Eye, Pencil, Trash2, X } from 'lucide-react'
+import { RowActions } from '@/components/portal/RowActions'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import { useToast, toastTono } from '@/app/contexts/ToastContext'
+import {
+  obtenerPresupuesto,
+  aprobarPresupuesto,
+  eliminarPresupuesto,
+  actualizarHorasReales,
+  type PresupuestoRow,
+} from '@/app/actions/presupuestos'
+import { descargarPresupuesto } from '@/lib/pdf/presupuesto'
+import { importeCiclo } from '@/lib/billing'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Detalle = Record<string, any>
 type DesgloseFase = { fase: string; horas: number; subtotalUsd: number }
 type Revision = { linea: string; motivo: string }
+type ModuloCatalogo = { clave: string; nombre: string; precio_fundador_usd: number; precio_estandar_usd: number }
 
 const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
 
@@ -22,17 +35,105 @@ function EstadoBadge({ estado }: { estado: string }) {
   return <span className="badge badge-info">Guardado</span>
 }
 
-export default function PresupuestosClienteTabla({ presupuestos }: { presupuestos: PresupuestoRow[] }) {
-  const { error: toastError } = useToast()
+export default function PresupuestosClienteTabla({
+  presupuestos,
+  catalogo,
+  descuentoAnualPct,
+}: {
+  presupuestos: PresupuestoRow[]
+  catalogo: ModuloCatalogo[]
+  descuentoAnualPct: number
+}) {
+  const { error: toastError, success: toastSuccess } = useToast()
+  const router = useRouter()
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [cargando, setCargando] = useState(false)
+  const [aprobando, setAprobando] = useState(false)
+  const [horasReales, setHorasReales] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [menuPdf, setMenuPdf] = useState(false)
+  // El borrador que se está confirmando para borrar: el estado vive en el padre,
+  // no en la fila ni en el menú (que se desmonta al pulsar y se lo llevaría).
+  const [borrar, setBorrar]     = useState<PresupuestoRow | null>(null)
+  const [borrando, setBorrando] = useState(false)
 
   async function abrir(id: number) {
     setCargando(true)
     const d = await obtenerPresupuesto(id)
     setCargando(false)
     if (!d) { toastError('No se pudo cargar el presupuesto'); return }
+    setMenuPdf(false)
+    setHorasReales(d.horas_reales != null ? String(d.horas_reales) : '')
     setDetalle(d)
+  }
+
+  async function descargarPdf(incluir: 'todo' | 'instalacion' | 'suscripcion') {
+    if (!detalle) return
+    const claves: string[] = Array.isArray(detalle.modulos) ? detalle.modulos : []
+    const campo = detalle.tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
+    const mods = catalogo
+      .filter(m => claves.includes(m.clave))
+      .map(m => ({ nombre: m.nombre, precio: Number(m[campo]) || 0 }))
+    const mensual = Number(detalle.cuota_mensual_usd ?? 0)
+    try {
+      await descargarPresupuesto({
+        numero: `PRE-${String(detalle.id).padStart(4, '0')}`,
+        fecha: fmtFecha(detalle.created_at),
+        negocio: detalle.nombre_negocio ?? '',
+        responsable: detalle.nombre_responsable,
+        contacto: detalle.contacto,
+        desglose,
+        horasTotal: Number(detalle.horas_total ?? 0),
+        tarifaHora: Number(detalle.tarifa_hora_usd ?? 0),
+        costeInstalacion: Number(detalle.coste_instalacion_usd ?? 0),
+        descuentoPct: Number(detalle.descuento_pct ?? 0),
+        totalInstalacion: Number(detalle.total_final_usd ?? detalle.coste_instalacion_usd ?? 0),
+        modulos: mods,
+        cuotaMensual: mensual,
+        cuotaAnual: importeCiclo(mensual, 'anual', descuentoAnualPct),
+        descuentoAnualPct,
+        incluir,
+      }, `PRE-${String(detalle.id).padStart(4, '0')}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
+      setMenuPdf(false)
+    } catch {
+      toastError('No se pudo generar el PDF.')
+    }
+  }
+
+  async function aprobar(id: number, aprobado: boolean) {
+    if (aprobando) return
+    setAprobando(true)
+    const r = await aprobarPresupuesto(id, aprobado)
+    setAprobando(false)
+    if (!r.ok) { toastError(r.error ?? 'No se pudo guardar'); return }
+    toastSuccess(aprobado ? 'Presupuesto aprobado' : 'Aprobación retirada')
+    // Aprobar mueve el cobro de configuración de este cliente: se dice aquí mismo,
+    // que es donde se está mirando su historial de pagos.
+    if (r.aviso) toastTono(r.avisoTono ?? 'info', r.aviso)
+    router.refresh()
+  }
+
+  async function borrarPresupuesto() {
+    if (!borrar) return
+    setBorrando(true)
+    const r = await eliminarPresupuesto(borrar.id)
+    setBorrando(false)
+    if (!r.ok) { toastError(r.error ?? 'No se pudo eliminar'); return }
+    toastSuccess('Borrador eliminado')
+    setBorrar(null)
+    router.refresh()
+  }
+
+  async function guardarHoras() {
+    if (!detalle) return
+    setGuardando(true)
+    const val = horasReales.trim() === '' ? null : parseFloat(horasReales.replace(',', '.'))
+    const r = await actualizarHorasReales(detalle.id, val)
+    setGuardando(false)
+    if (!r.ok) { toastError(r.error ?? 'No se pudo guardar'); return }
+    toastSuccess('Horas reales guardadas')
+    setDetalle(null)
+    router.refresh()
   }
 
   const desglose: DesgloseFase[] = Array.isArray(detalle?.desglose) ? detalle!.desglose : []
@@ -49,6 +150,7 @@ export default function PresupuestosClienteTabla({ presupuestos }: { presupuesto
               <th className="col-num">Horas</th>
               <th className="col-num">Reales</th>
               <th className="col-num">Instalación</th>
+              <th className="col-actions" />
             </tr>
           </thead>
           <tbody>
@@ -79,12 +181,59 @@ export default function PresupuestosClienteTabla({ presupuestos }: { presupuesto
                       <span className="text-xs-muted"> · −{Number(p.descuento_pct)}%</span>
                     )}
                   </td>
+                  <td className="col-actions">
+                      <RowActions>
+                        <button className="row-actions-item" onClick={() => abrir(p.id)}>
+                          <Eye size={15} strokeWidth={2} /> Ver detalles
+                        </button>
+                        {/* Editar y eliminar solo en borrador: aprobado es la prueba de
+                            lo pactado e instalado ya tiene horas reales detrás. */}
+                        {p.estado === 'guardado' && (
+                          <Link href={`/admin/presupuestos/${p.id}/editar`} className="row-actions-item">
+                            <Pencil size={15} strokeWidth={2} /> Editar
+                          </Link>
+                        )}
+                        {p.estado !== 'instalado' && (
+                          p.estado === 'aprobado'
+                            ? <button className="row-actions-item" onClick={() => aprobar(p.id, false)}>
+                                <X size={15} strokeWidth={2} /> Quitar aprobación
+                              </button>
+                            : <button className="row-actions-item" onClick={() => aprobar(p.id, true)}>
+                                <Check size={15} strokeWidth={2} /> Aprobar
+                              </button>
+                        )}
+                        {p.estado === 'guardado' && (
+                          <button
+                            className="row-actions-item row-actions-item-danger"
+                            onClick={() => setBorrar(p)}
+                          >
+                            <Trash2 size={14} strokeWidth={2} /> Eliminar
+                          </button>
+                        )}
+                    </RowActions>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {borrar && (
+        <ConfirmDialog
+          title={`¿Eliminar el borrador de ${borrar.nombre_negocio}?`}
+          body={<>
+            Se borra el presupuesto de <strong>{usd(borrar.total_final_usd ?? borrar.coste_instalacion_usd)}</strong>{' '}
+            de instalación ({borrar.horas_total}h) guardado el {fmtFecha(borrar.created_at)}. No se puede deshacer.
+          </>}
+          confirmLabel="Eliminar"
+          pendingLabel="Eliminando…"
+          danger
+          pending={borrando}
+          onConfirm={borrarPresupuesto}
+          onCancel={() => setBorrar(null)}
+        />
+      )}
 
       {(detalle || cargando) && (
         <div className="modal-backdrop">
@@ -157,9 +306,50 @@ export default function PresupuestosClienteTabla({ presupuestos }: { presupuesto
                       <span className="pres-total-valor">{usd(detalle.total_final_usd ?? detalle.coste_instalacion_usd)}</span>
                     </div>
                   </div>
+                  <div className="pres-modal-actions">
+                    <div className="ven-dropdown-wrap pres-descargar">
+                      <button type="button" className="btn btn-secondary btn-sm" aria-expanded={menuPdf} onClick={() => setMenuPdf(v => !v)}>
+                        <Download size={14} strokeWidth={2} /> Descargar PDF
+                      </button>
+                      {menuPdf && (
+                        <div className="ven-dropdown-menu">
+                          <div className="ven-dropdown-ctx">
+                            {detalle.nombre_negocio}
+                            <span className="ven-dropdown-detalle">Qué incluir en el documento</span>
+                          </div>
+                          <button type="button" className="ven-dropdown-item" onClick={() => descargarPdf('todo')}>Todo · instalación y suscripción</button>
+                          <button type="button" className="ven-dropdown-item" onClick={() => descargarPdf('instalacion')}>Solo instalación · pago único</button>
+                          <button type="button" className="ven-dropdown-item" onClick={() => descargarPdf('suscripcion')}>Solo suscripción · cuota mensual</button>
+                        </div>
+                      )}
+                    </div>
+                    {detalle.estado !== 'instalado' && (
+                      <div className="pres-acciones-cierre">
+                        {detalle.estado === 'guardado' && (
+                          <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary btn-sm">
+                            <Pencil size={15} strokeWidth={2} /> Editar
+                          </Link>
+                        )}
+                        <button
+                          className={`btn btn-sm ${detalle.estado === 'aprobado' ? 'btn-secondary' : 'btn-success'}`}
+                          disabled={aprobando}
+                          onClick={() => aprobar(detalle.id, detalle.estado !== 'aprobado')}
+                        >
+                          {detalle.estado === 'aprobado' ? <><X size={15} strokeWidth={2} /> Quitar aprobación</> : <><Check size={15} strokeWidth={2} /> Aprobar presupuesto</>}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="input-group pres-horas-reales">
+                    <label htmlFor="cliente-horas-reales">Horas reales de la instalación</label>
+                    <input id="cliente-horas-reales" type="number" min="0" step="0.5" className="input" value={horasReales} onChange={e => setHorasReales(e.target.value)} placeholder="Completar al cerrar la instalación" />
+                  </div>
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
+                  <button type="button" className="btn btn-primary" disabled={guardando} onClick={guardarHoras}>
+                    {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar horas reales'}
+                  </button>
                 </div>
               </>
             )}

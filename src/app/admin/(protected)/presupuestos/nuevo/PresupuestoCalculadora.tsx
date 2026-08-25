@@ -103,7 +103,7 @@ export default function PresupuestoCalculadora({
   const [migHoras, setMigHoras]     = useState(prefill.migracion?.horasManual != null ? String(prefill.migracion.horasManual) : '')
 
   const [loading, setLoading] = useState(false)
-  const [creado, setCreado]   = useState<{ id: number } | null>(null)
+  const [creado, setCreado]   = useState<{ id: number; aviso?: string | null; tono?: 'info' | 'warning' } | null>(null)
 
   const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
   const modulosElegidos = modulos.filter(m => modulosSel.includes(m.clave))
@@ -185,7 +185,12 @@ export default function PresupuestoCalculadora({
       : await crearPresupuesto(input)
     setLoading(false)
     if (!r.ok) { toastError(r.error ?? 'No se pudo guardar.'); return }
-    setCreado({ id: r.id! })
+    // Editar un presupuesto mueve su cobro de configuración (lo ajusta, lo crea o
+    // lo retira). Se dice aquí, en la pantalla que queda, y no en un toast que se va.
+    // Solo `actualizarPresupuesto` trae aviso: un presupuesto NUEVO nace en
+    // borrador y un borrador no mueve cobros.
+    const cobro = r as { aviso?: string | null; avisoTono?: 'info' | 'warning' }
+    setCreado({ id: r.id!, aviso: cobro.aviso ?? null, tono: cobro.avisoTono ?? 'info' })
   }
 
   if (creado) {
@@ -197,6 +202,11 @@ export default function PresupuestoCalculadora({
           <p className="modal-success-description">
             {nombreNegocio} · {resultado.horasTotal}h · {usd(resultado.totalFinalUsd)} de instalación · {usd(cuotaMensual)}/mes.
           </p>
+          {creado.aviso && (
+            <div className={`alert ${creado.tono === 'warning' ? 'alert-warning' : 'alert-info'}`}>
+              {creado.aviso}
+            </div>
+          )}
           <div className="pres-acciones-cierre">
             <Link href="/admin/presupuestos" className="btn btn-primary">Ver presupuestos</Link>
             {!editando && (

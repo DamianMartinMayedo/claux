@@ -10,8 +10,9 @@ import IaClienteCard from './IaClienteCard'
 import UsoClienteCard from './UsoClienteCard'
 import PresupuestosClienteCard from './PresupuestosClienteCard'
 import DocumentosClienteCard from './DocumentosClienteCard'
-import ConfirmarPagoBtn from '../../pagos/ConfirmarPagoBtn'
+import PagosClienteTabla, { type PagoFicha } from './PagosClienteTabla'
 import { ESTADO_BADGE } from '@/lib/badges'
+import { puedeAcceder } from '@/lib/roles'
 import { getSetting } from '@/app/actions/settings'
 import { suscripcionLabel } from '@/lib/billing'
 
@@ -46,11 +47,16 @@ export default async function ClienteDetallePage({
 }: {
   params: Promise<{ client_id: string }>
 }) {
-  await requireAccesoPagina('clientes')
+  // La ficha se abre con el permiso de Clientes, pero sus tarjetas actúan sobre
+  // Presupuestos y Pagos: sin sus llaves, se enseñan pero no se tocan (las acciones
+  // del servidor lo comprueban igual; esto es para no ofrecer lo que va a fallar).
+  const ctx = await requireAccesoPagina('clientes')
+  const puedePresupuestos = puedeAcceder(ctx, 'presupuestos')
+  const puedePagos        = puedeAcceder(ctx, 'pagos')
   const { client_id } = await params
   const supabase = await createClient()
 
-  const [{ data: cliente }, { data: pagos }, { data: catalogo }, { data: usuarios }] = await Promise.all([
+  const [{ data: cliente }, { data: pagos }, { data: catalogo }, { data: usuarios }, { data: presupuestosOk }] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).single(),
     supabase
       .from('payments')
@@ -67,6 +73,14 @@ export default async function ClienteDetallePage({
       .select('user_id, email, nombre, rol, estado, created_at')
       .eq('client_id', client_id)
       .order('created_at'),
+    // Presupuestos APROBADOS: son la vara con la que se mide el cobro de
+    // configuración pendiente (un borrador todavía no es un acuerdo).
+    supabase
+      .from('presupuestos_instalacion')
+      .select('id, total_final_usd')
+      .eq('client_id', client_id)
+      .in('estado', ['aprobado', 'instalado'])
+      .order('created_at', { ascending: false }),
   ])
 
   if (!cliente) notFound()
@@ -80,6 +94,9 @@ export default async function ClienteDetallePage({
     .filter(p => p.estado === 'por_confirmar')
     .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
   const ultimoPago  = confirmados[0] ?? null
+  const presupuestosRef = (presupuestosOk ?? []).map(p => ({
+    id: p.id as number, total: Number(p.total_final_usd) || 0,
+  }))
   const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
 
   // Datos de IA (solo si el cliente tiene el addon contratado).
@@ -231,11 +248,17 @@ export default async function ClienteDetallePage({
       <UsoClienteCard clientId={client_id} />
 
       {/* ── Presupuestos de este cliente (y la puerta para hacerle uno nuevo) ── */}
-      <PresupuestosClienteCard
-        clientId={client_id}
-        nombreEmpresa={cliente.nombre_empresa ?? client_id}
-        tienePagoConfiguracion={(pagos ?? []).some(p => p.concepto === 'configuracion')}
-      />
+      {/* Sin la llave de Presupuestos la tarjeta no se pinta: sus datos los sirve una
+          acción gateada, así que sin permiso no hay ni lectura que enseñar. */}
+      {puedePresupuestos && (
+        <PresupuestosClienteCard
+          clientId={client_id}
+          nombreEmpresa={cliente.nombre_empresa ?? client_id}
+          tienePagoConfiguracion={(pagos ?? []).some(p => p.concepto === 'configuracion')}
+          catalogo={catalogo ?? []}
+          descuentoAnualPct={descuentoAnual}
+        />
+      )}
 
       {/* ── Documentos legales (NDA, contrato, presupuesto) ── */}
       <DocumentosClienteCard clientId={client_id} />
@@ -283,47 +306,12 @@ export default async function ClienteDetallePage({
               <p>Sin pagos registrados aún.</p>
             </div>
           ) : (
-            <div className="table-wrapper table-wrapper-flush">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th className="col-num">Monto</th>
-                    <th>Estado</th>
-                    <th>Método</th>
-                    <th className="col-actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagos.map(p => (
-                    <tr key={p.pago_id}>
-                      <td data-label="Fecha" className="table-muted">{formatFecha(p.fecha)}</td>
-                      <td data-label="Monto" className="col-num table-price">${p.monto_usd?.toFixed(2)}</td>
-                      <td data-label="Estado">
-                        <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
-                          {p.estado === 'por_confirmar' ? 'Por confirmar' : 'Confirmado'}
-                        </span>
-                      </td>
-                      <td data-label="Método">
-                        <span className="badge badge-neutral">
-                          {METODO_LABEL[p.metodo] ?? p.metodo ?? '—'}
-                        </span>
-                      </td>
-                      <td className="col-actions">
-                        {p.estado === 'por_confirmar' && (
-                          <ConfirmarPagoBtn
-                            pagoId={p.pago_id}
-                            clienteNombre={cliente.nombre_empresa}
-                            monto={p.monto_usd ?? 0}
-                            concepto={p.concepto}
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PagosClienteTabla
+              pagos={pagos as PagoFicha[]}
+              clienteNombre={cliente.nombre_empresa ?? client_id}
+              presupuestos={presupuestosRef}
+              puedeGestionar={puedePagos}
+            />
           )}
         </div>
 
