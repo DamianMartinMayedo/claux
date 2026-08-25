@@ -13,6 +13,7 @@ export interface PagoPortal {
   fecha_inicio_periodo: string | null
   fecha_fin_periodo:    string | null
   concepto:             string | null
+  estado:               string | null
   monto_usd:            number
   metodo:               string
   notas:                string | null
@@ -46,7 +47,10 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
       .eq('client_id', session.client_id)
       .single(),
     db.from('payments')
-      .select('pago_id, fecha, fecha_inicio_periodo, fecha_fin_periodo, concepto, monto_usd, metodo, notas')
+      // `estado` viaja al panel del cliente a propósito: sin él, un cobro POR
+      // CONFIRMAR (el de configuración recién generado, p. ej.) se leía como un
+      // pago ya hecho dentro del «Historial de pagos».
+      .select('pago_id, fecha, fecha_inicio_periodo, fecha_fin_periodo, concepto, estado, monto_usd, metodo, notas')
       .eq('client_id', session.client_id)
       .order('fecha', { ascending: false }),
   ])

@@ -11,8 +11,8 @@
 // portal lo que vio en la landing.
 import {
   ArrowRight, Boxes, Briefcase, Building2, Calculator, Calendar, Check,
-  ChevronDown, Clock, Coffee, Dumbbell, FileText, Flower2, HeartPulse, Key,
-  Layers, MessageSquare, Presentation, Printer, Puzzle, QrCode, Scissors,
+  ChevronDown, Clock, Coffee, Dumbbell, FileText, Flower2, Handshake, HeartPulse,
+  Key, Layers, MessageSquare, Presentation, Printer, Puzzle, QrCode, Scissors,
   Sparkles, Store, Users, UtensilsCrossed, Wine,
   type LucideIcon,
 } from 'lucide-react'
@@ -53,6 +53,7 @@ const SECTOR_ICONS: Record<string, IconCmp> = {
 const MODULO_ICONS: Record<string, IconCmp> = {
   base:                Calculator,
   inventario:          Boxes,
+  servicios:           Handshake,
   rrhh:                Users,
   asistente_ia:        Sparkles,
   multiempresa:        Building2,
@@ -62,6 +63,7 @@ const MODULO_ICONS: Record<string, IconCmp> = {
   documentos_imprenta: Printer,
   caja:                Store,
   dossier:             Presentation,
+  multidossier:        Layers,
 }
 
 /** Acento de color del design system (clases .ld-ac-*). */
@@ -87,6 +89,7 @@ const SECTOR_COLOR: Record<string, ColorModulo> = {
 const MODULO_COLOR: Record<string, ColorModulo> = {
   base:                'teal',
   inventario:          'amber',
+  servicios:           'green',
   rrhh:                'indigo',
   asistente_ia:        'purple',
   multiempresa:        'indigo',
@@ -96,6 +99,7 @@ const MODULO_COLOR: Record<string, ColorModulo> = {
   documentos_imprenta: 'amber',
   caja:                'teal',
   dossier:             'amber',
+  multidossier:        'rose',
 }
 
 export function iconoSector(sector: string): IconCmp {

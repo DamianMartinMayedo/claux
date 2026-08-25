@@ -42,6 +42,12 @@ function diasRestantes(fechaStr: string | null): number | null {
 export default function FacturacionView({ data }: { data: FacturacionData }) {
   const { pageItems, ...pag } = usePagination(data.pagos)
 
+  // Lo que aún no ha entrado. Se suma sobre TODOS los pagos, no sobre la página
+  // visible: el cliente tiene que ver lo que debe aunque esté en la página 3.
+  const pendiente = data.pagos
+    .filter(p => p.estado === 'por_confirmar')
+    .reduce((total, p) => total + Number(p.monto_usd ?? 0), 0)
+
   // En GRACIA, lo vigente es `fecha_fin_gracia` — la suscripción de base ya venció
   // (por eso el cliente está en gracia) y seguir mirando `fecha_expiracion` es lo
   // que hacía salir "Expirado" con el acceso todavía activo.
@@ -128,9 +134,14 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       <div className="card card-table">
         <div className="mon-card-header">
           <h2 className="mon-section-title">Historial de pagos</h2>
-          <span className="text-xs-muted">
-            {data.pagos.length} registro{data.pagos.length !== 1 ? 's' : ''}
-          </span>
+          <div className="flex-center-2">
+            <span className="text-xs-muted">
+              {data.pagos.length} registro{data.pagos.length !== 1 ? 's' : ''}
+            </span>
+            {pendiente > 0 && (
+              <span className="badge badge-warning">{fmtUsd(pendiente)} pendiente</span>
+            )}
+          </div>
         </div>
 
         {data.pagos.length === 0 ? (
@@ -147,6 +158,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                   <th>Fecha</th>
                   <th>Período</th>
                   <th>Concepto</th>
+                  <th>Estado</th>
                   <th className="col-num">Monto</th>
                   <th>Método</th>
                 </tr>
@@ -173,6 +185,11 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                     </td>
                     <td data-label="Concepto" className="text-sm-muted">
                       {p.concepto === 'configuracion' ? 'Configuración' : 'Suscripción'}
+                    </td>
+                    <td data-label="Estado">
+                      <span className={`badge ${p.estado === 'por_confirmar' ? 'badge-warning' : 'badge-success'}`}>
+                        {p.estado === 'por_confirmar' ? 'Pendiente' : 'Pagado'}
+                      </span>
                     </td>
                     <td data-label="Monto" className="col-num">
                       <span className="fac-monto">{fmtUsd(p.monto_usd)}</span>

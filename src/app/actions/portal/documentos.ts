@@ -107,12 +107,15 @@ async function construirAnexoInput(
   const periodicidad = ciclo === 'anual' ? 'Anual' : 'Mensual'
   const precioMes = Number(cliente.precio_mensual_usd) || 0
 
-  // Preferimos el presupuesto de instalación aprobado del cliente (snapshot
-  // congelado con el coste de configuración). El vínculo lo escribe el alta.
+  // Preferimos el presupuesto de instalación APROBADO del cliente. El filtro por
+  // estado no es cosmético: sin él, un borrador nuevo (`guardado`) tapaba al
+  // aprobado y el cliente firmaba un Anexo con cifras que aún se estaban
+  // negociando. Un borrador no es un acuerdo.
   const { data: presu } = await db
     .from('presupuestos_instalacion')
     .select('id, modulos, cuota_mensual_usd, total_final_usd, tarifa, estado, created_at')
     .eq('client_id', cid)
+    .in('estado', ['aprobado', 'instalado'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -146,8 +149,24 @@ async function construirAnexoInput(
     // Importe inicial = primer período + parte de configuración (50% al iniciar,
     // cláusula 6). Se muestra el total de configuración y su reparto en la nota.
     const primerPeriodo = ciclo === 'anual' ? importeCiclo(precioMes, 'anual', descuento) : precioMes
+    // La versión sella el CONTENIDO, no el id: editar un borrador conserva el id
+    // y con `presupuesto-<id>` a secas un Anexo firmado seguía contando como
+    // firmado con otros números dentro. Cualquier cambio de ciclo, tarifa,
+    // módulos o importes mueve la versión y obliga a re-firmar (la firma vieja
+    // queda en histórico como prueba de lo que se firmó). Esta cadena tiene que
+    // coincidir carácter a carácter con la de la migración 204, que renombró las
+    // firmas vigentes para que nadie tuviera que firmar dos veces lo mismo.
+    const version = [
+      `presupuesto-${presu.id}`,
+      ciclo,
+      tarifa,
+      [...claves].sort().join('+'),
+      precioMes.toFixed(2),
+      totalInstal.toFixed(2),
+    ].join('-')
+
     return {
-      version: `presupuesto-${presu.id}`,
+      version,
       fuente: 'presupuesto',
       lineas,
       periodicidad,
