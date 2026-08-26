@@ -21,6 +21,19 @@ function totales(t: Record<string, number>): string {
   return e.length ? e.map(([m, v]) => `${money(v)} ${m}`).join(' · ') : '—'
 }
 
+/**
+ * Quién abrió y quién cerró el turno. Casi siempre es la misma persona y repetir el
+ * nombre dos veces es ruido, así que solo se parten cuando de verdad son dos.
+ */
+function personas(c: Cierre): string {
+  const abre  = c.abierta_por?.trim()
+  const cierra = c.cerrada_por?.trim()
+  if (!abre && !cierra)  return '—'
+  if (!abre)             return cierra as string
+  if (!cierra || abre === cierra) return abre
+  return `${abre} → ${cierra}`
+}
+
 /** Monedas vendidas que todavía no tienen su ingreso en Tesorería. */
 function monedasQueFaltan(c: Cierre): string[] {
   const vendidas = Object.keys(c.total_por_moneda ?? {})
@@ -219,14 +232,15 @@ function CierresTabla({ data, cajaNombre, puedeEditar }: {
       {data.cierres.length === 0 ? (
         <div className="mon-empty">
           <Lock size={36} strokeWidth={1} opacity={0.25} />
-          <p>Sin cierres sincronizados todavía.</p>
+          <p>Sin cierres sincronizados.</p>
         </div>
       ) : (
         <div className="table-wrapper">
           <table className="table">
             <thead>
               <tr>
-                <th>Punto de venta</th><th>Abierta</th><th>Cerrada</th><th>Totales</th>
+                <th>Punto de venta</th><th>Turno</th><th>Abierta</th><th>Cerrada</th><th>Totales</th>
+                <th>Descuentos</th>
                 <th>Contabilidad</th><th>Inventario</th><th className="col-actions"></th>
               </tr>
             </thead>
@@ -238,12 +252,28 @@ function CierresTabla({ data, cajaNombre, puedeEditar }: {
                 const vendidas = Object.keys(c.total_por_moneda ?? {})
                 const faltan   = monedasQueFaltan(c)
                 const hechas   = Object.keys(c.tesoreria_movs ?? {})
+                const hayDto   = Object.keys(c.descuento_total ?? {}).length > 0
                 return (
                   <tr key={c.sesion_uuid}>
                     <td data-label="Punto de venta">{cajaNombre(c.caja_id)}</td>
+                    {/* Quién lo llevó. Pedir un dato obligatorio en el mostrador y no
+                        enseñarlo en ningún sitio es el peor de los dos mundos: sin esta
+                        columna, `cerrada_por` solo aparecía en la descarga de tablas.
+                        «—» en los turnos anteriores a la mig. 208, que no se pueden
+                        backfillear: nadie sabe quién los llevó. */}
+                    <td data-label="Turno">
+                      {personas(c)}
+                    </td>
                     <td data-label="Abierta">{fecha(c.abierta_at)}</td>
                     <td data-label="Cerrada">{fecha(c.cerrada_at)}</td>
                     <td data-label="Totales">{totales(c.total_por_moneda)}</td>
+                    {/* Lo regalado en el turno, pegado a lo vendido. Como no hay techo por
+                        descuento, este número es el control: aquí es donde se ve que un
+                        turno se fue de la mano, y en el mismo sitio donde se mira el
+                        descuadre del efectivo. */}
+                    <td data-label="Descuentos" className={hayDto ? 'text-warning' : undefined}>
+                      {hayDto ? `− ${totales(c.descuento_total)}` : '—'}
+                    </td>
                     <td data-label="Contabilidad">
                       {vendidas.length > 0 && faltan.length === 0
                         ? <span className="badge badge-success">Registrado</span>

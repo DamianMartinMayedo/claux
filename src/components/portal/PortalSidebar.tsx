@@ -37,6 +37,15 @@ function ensurePages(paginas: unknown): PaginaInfo[] {
   return []
 }
 
+/**
+ * «Productos» del mostrador: página REAL (/portal/caja/productos) que no está en
+ * `modulos_catalogo.paginas` de `caja` a propósito. Solo tiene sentido para quien NO
+ * tiene Inventario —con él, los físicos se catalogan en /portal/productos—, y el
+ * catálogo comercial no sabe de esa condición: si se metiera allí, aparecería
+ * duplicada para todos los que tienen los dos módulos. Se inyecta abajo.
+ */
+const CAJA_PRODUCTOS: PaginaInfo = { ruta: '/portal/caja/productos', label: 'Catálogo', orden: 15 }
+
 const STORAGE_KEY = 'claux_sidebar_collapsed'
 
 function readCollapsed(): Record<string, boolean> {
@@ -122,6 +131,14 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
   if (!modulosVisibles.includes('base') &&
       (modulosVisibles.includes('inventario') || modulosVisibles.includes('servicios')))
     navRutas.push('/portal/terceros')
+  // Lo mismo con el catálogo del mostrador: se inyecta en el grupo de Caja (abajo),
+  // así que su ruta tiene que estar aquí o el item nunca saldría activo.
+  // El mostrador cataloga lo que no tiene módulo propio: los físicos si falta Inventario,
+  // los servicios si falta Servicios, los dos si faltan los dos. Con ambos módulos no
+  // cataloga nada y la página redirige (ver `modoCatalogoMostrador`).
+  const cajaCataloga = modulosVisibles.includes('caja')
+    && !(modulosVisibles.includes('inventario') && modulosVisibles.includes('servicios'))
+  if (cajaCataloga) navRutas.push(CAJA_PRODUCTOS.ruta)
   const activeRuta = navRutas
     .filter(r => pathname === r || pathname.startsWith(r + '/'))
     .reduce<string | null>((best, r) => (best === null || r.length > best.length ? r : best), null)
@@ -210,7 +227,21 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
                 tercerosCompartida && anfitrionTerceros === m.clave && m.clave !== 'base'
                   ? [...pages, tercerosCompartida]
                   : pages
-              return renderCollapsibleGroup(m.clave, m.nombre, conCompartida)
+              // Caja sin Inventario: su propio catálogo de artículos, ordenado con el
+              // resto de sus páginas (no al final).
+              // La etiqueta dice lo que la página LLEVA: con Inventario ya solo le quedan
+              // los servicios, con Servicios solo los productos, y sin ninguno de los dos
+              // lleva las dos cosas («Catálogo»).
+              const cajaPagina: PaginaInfo = {
+                ...CAJA_PRODUCTOS,
+                label: modulosVisibles.includes('inventario') ? 'Servicios'
+                     : modulosVisibles.includes('servicios')  ? 'Productos'
+                     :                                          'Catálogo',
+              }
+              const conPaginas = cajaCataloga && m.clave === 'caja'
+                ? [...conCompartida, cajaPagina].sort((a, b) => a.orden - b.orden)
+                : conCompartida
+              return renderCollapsibleGroup(m.clave, m.nombre, conPaginas)
             })
         })()}
       </nav>
@@ -258,6 +289,7 @@ const ICON: Record<string, React.ReactNode> = {
   '/portal/imprenta':    <Printer size={18} strokeWidth={2} />,
   '/portal/dossier':     <Presentation size={18} strokeWidth={2} />,
   '/portal/caja':               <Store size={18} strokeWidth={2} />,
+  '/portal/caja/productos':     <Package size={18} strokeWidth={2} />,
   '/portal/caja/operaciones':   <ReceiptText size={18} strokeWidth={2} />,
   '/portal/caja/cierres':       <Lock size={18} strokeWidth={2} />,
   '/portal/caja/sincronizar':   <RefreshCw size={18} strokeWidth={2} />,

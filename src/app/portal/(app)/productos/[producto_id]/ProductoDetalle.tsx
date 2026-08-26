@@ -177,12 +177,20 @@ function TabInfo({ data, puedeEditar }: { data: ProductoDetalleData; puedeEditar
           } />
           {!esServicio && <Campo label="Unidad" value={producto.unidad} />}
           <Campo label="Categoría"   value={categoria?.nombre} />
-          <Campo label="Proveedor"   value={proveedor ? (
-            <Link href={`/portal/terceros/${proveedor.tercero_id}`} className="link-primary">
-              {proveedor.nombre}
-            </Link>
-          ) : null} />
-          <Campo label="Cód. proveedor" value={producto.codigo_proveedor} />
+          {/* Proveedor: dos filas que en un cliente solo-Caja dicen «—» y nada más. No hay
+              compras ni sugerencias que las lean, y tampoco una página de Terceros donde
+              crear uno. Se enseñan si alguien las usa (`usaCostes`) o si esta ficha trae el
+              dato de antes: un dato que existe no se esconde. */}
+          {(data.usaCostes || proveedor) && (
+            <Campo label="Proveedor" value={proveedor ? (
+              <Link href={`/portal/terceros/${proveedor.tercero_id}`} className="link-primary">
+                {proveedor.nombre}
+              </Link>
+            ) : null} />
+          )}
+          {(data.usaCostes || producto.codigo_proveedor) && (
+            <Campo label="Cód. proveedor" value={producto.codigo_proveedor} />
+          )}
           {esServicio && <Campo label="Se puede suscribir" value={producto.es_suscribible ? 'Sí' : 'No'} />}
         </div>
         {producto.descripcion && (
@@ -244,6 +252,10 @@ function TabInfo({ data, puedeEditar }: { data: ProductoDetalleData; puedeEditar
 
 function TabPrecios({ data }: { data: ProductoDetalleData }) {
   const { producto, monedas } = data
+  // Sin `inventario` ni `base` nadie lee los costes, así que «Costo» y «Margen» eran dos
+  // columnas de guiones. Si la ficha ya tiene costes escritos (importados, o de cuando el
+  // módulo estaba contratado) se enseñan igual: lo que hay, se ve.
+  const conCostes = data.usaCostes || Object.keys(producto.costos).length > 0
 
   const allMonedas = Array.from(new Set([
     ...monedas,
@@ -257,15 +269,15 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
   return (
     <div className="det-tab-body">
       <div className="det-card">
-        <div className="det-section-title">Tabla de precios y costos</div>
+        <div className="det-section-title">{conCostes ? 'Tabla de precios y costos' : 'Tabla de precios'}</div>
         <div className="table-wrapper">
           <table className="table">
             <thead>
               <tr>
                 <th>Moneda</th>
                 <th className="col-num">Precio de venta</th>
-                <th className="col-num">Costo</th>
-                <th className="col-num">Margen</th>
+                {conCostes && <th className="col-num">Costo</th>}
+                {conCostes && <th className="col-num">Margen</th>}
               </tr>
             </thead>
             <tbody>
@@ -283,14 +295,18 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
                     <td data-label="Precio de venta" className="col-num">
                       {precio > 0 ? fmt(precio, mon) : <span className="text-faint">—</span>}
                     </td>
-                    <td data-label="Costo" className="col-num">
-                      {costo > 0 ? fmt(costo, mon) : <span className="text-faint">—</span>}
-                    </td>
-                    <td data-label="Margen" className="col-num">
-                      {margenNum !== null ? (
-                        <span className={`prd-margen ${margenCls}`}>{margenNum.toFixed(1)}%</span>
-                      ) : <span className="text-faint">—</span>}
-                    </td>
+                    {conCostes && (
+                      <td data-label="Costo" className="col-num">
+                        {costo > 0 ? fmt(costo, mon) : <span className="text-faint">—</span>}
+                      </td>
+                    )}
+                    {conCostes && (
+                      <td data-label="Margen" className="col-num">
+                        {margenNum !== null ? (
+                          <span className={`prd-margen ${margenCls}`}>{margenNum.toFixed(1)}%</span>
+                        ) : <span className="text-faint">—</span>}
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -593,12 +609,22 @@ export default function ProductoDetalle({ data: initialData, puedeEditar }: { da
   const { producto } = data
   const esServicio   = producto.tipo === 'SERVICIO'
   const inv          = data.tieneInventario
-  const basePath     = esServicio ? '/portal/servicios' : '/portal/productos'
-  const tituloLista  = esServicio ? `${data.etiquetaServicio}s` : 'Productos'
+  // Una ficha SIN su módulo solo puede venir de la página de Caja: es la que cataloga
+  // lo que el cliente no tiene dónde poner (un físico sin Inventario, un servicio sin
+  // Servicios). Se deduce igual que en la lista.
+  const mostrador    = esServicio ? !data.tieneServicios : !inv
+  const basePath     = mostrador  ? '/portal/caja/productos'
+                     : esServicio ? '/portal/servicios'
+                     :              '/portal/productos'
+  // En el mostrador de quien no tiene ninguno de los dos módulos, la lista lleva los dos
+  // tipos y el rótulo de «volver» tiene que decirlo.
+  const tituloLista  = mostrador && !inv && !data.tieneServicios
+                     ? `Productos y ${data.etiquetaServicio.toLowerCase()}s`
+                     : esServicio ? `${data.etiquetaServicio}s` : 'Productos'
 
   const tabs: TabItem<TabId>[] = [
     { id: 'info',    label: 'Información' },
-    { id: 'precios', label: 'Precios y costos' },
+    { id: 'precios', label: data.usaCostes || Object.keys(producto.costos).length > 0 ? 'Precios y costos' : 'Precios' },
     // «Contratado por» solo en servicios, y solo si alguien lo tiene: una pestaña vacía
     // en el 90 % de las fichas es ruido.
     ...(esServicio && data.contratos.length
@@ -720,8 +746,11 @@ export default function ProductoDetalle({ data: initialData, puedeEditar }: { da
           proveedores={data.proveedores}
           empresas={data.empresas}
           monedas={data.monedas}
+          llevaExistencias={inv}
           hayAlmacenes={data.almacenes.length > 0}
           modo={producto.tipo}
+          usaCostes={data.usaCostes}
+          usaSuscripciones={data.tieneServicios}
           etiquetaServicio={data.etiquetaServicio}
           onClose={() => setShowEdit(false)}
           onSaved={() => {

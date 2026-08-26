@@ -11,6 +11,7 @@ import {
   type Producto,
   type Categoria,
   type TipoProducto,
+  type ModoCatalogo,
 } from '@/app/actions/portal/productos'
 import { autocompletarFichaProducto } from '@/app/actions/portal/ia'
 import { useIa } from '@/components/portal/ia/IaContext'
@@ -157,8 +158,8 @@ export function UnidadSelect({ defaultValue, sugerida }: { defaultValue?: string
 // ── ProductoFormModal ─────────────────────────────────────────────────────────
 
 export function ProductoFormModal({
-  producto, categorias, proveedores, empresas, monedas, hayAlmacenes, modo,
-  etiquetaServicio, onClose, onSaved,
+  producto, categorias, proveedores, empresas, monedas, hayAlmacenes, llevaExistencias, modo,
+  usaCostes, usaSuscripciones, etiquetaServicio, onClose, onSaved,
 }: {
   producto:     Producto | null
   categorias:   Categoria[]
@@ -171,9 +172,22 @@ export function ProductoFormModal({
   empresas:     { empresa_id: string; nombre: string }[]
   monedas:      string[]
   hayAlmacenes: boolean
-  /** Qué se crea/edita en esta página: PRODUCTO (Inventario) o SERVICIO (Servicios).
-   *  El tipo lo fija la página, no hay selector — cada módulo cataloga uno. */
-  modo:             TipoProducto
+  /** ¿El cliente lleva EXISTENCIAS (módulo Inventario)? Sin él, la página de Caja
+   *  cataloga artículos de mostrador: nombre y precio, sin stock ni almacén. */
+  llevaExistencias: boolean
+  /** Qué cataloga esta página: `PRODUCTO` (Inventario o mostrador), `SERVICIO`
+   *  (Servicios) o `AMBOS` (el mostrador de quien no tiene ninguno de los dos
+   *  módulos). En los dos primeros el tipo lo fija la página; en `AMBOS` se pregunta,
+   *  porque es la única forma de que el reparto futuro no sea un volcado. */
+  modo:             ModoCatalogo
+  /** ¿Los costes de este cliente los lee alguien (`inventario` o `base`)? Sin ninguno
+   *  de los dos, «Costos» es una casilla que no va a ningún sitio: no se pinta. Lo que
+   *  hubiera guardado sigue guardado (ver `ProductosPageData.usaCostes`). */
+  usaCostes:        boolean
+  /** ¿Contrató el módulo `servicios`? Es lo que decide si un servicio se puede
+   *  CONTRATAR (acuerdos, periodicidad): en el catálogo del mostrador un servicio es
+   *  una línea de venta con su precio, y no hay suscripciones que gestionar. */
+  usaSuscripciones: boolean
   etiquetaServicio: string
   onClose:      () => void
   onSaved:      () => void
@@ -220,7 +234,10 @@ export function ProductoFormModal({
     const nombre = nombreRef.current?.value.trim() ?? ''
     if (!nombre) { toastError('Escribe primero el nombre.'); return }
     setSugiriendo(true)
-    const r = await autocompletarFichaProducto(nombre, (producto?.tipo ?? modo) === 'SERVICIO', TODAS_UNIDADES)
+    // `tipo`, no `modo`: en el catálogo del mostrador el tipo lo elige el desplegable de
+    // arriba, y pedirle a la IA la ficha de un producto para lo que es un servicio
+    // devolvía unidad de medida y ninguna pista de suscripción.
+    const r = await autocompletarFichaProducto(nombre, tipo === 'SERVICIO', TODAS_UNIDADES)
     setSugiriendo(false)
     if (!r.ok) { toastError(r.error); return }
     const s = r.sugerencia
@@ -241,9 +258,16 @@ export function ProductoFormModal({
   }
 
   const isEdit             = !!producto
-  // El tipo no es una decisión del usuario: lo impone la página. Al editar se
-  // respeta el del producto (que nunca cambia), pero coincide con el modo.
-  const tipo               = producto?.tipo ?? modo
+  // En Inventario y en Servicios el tipo NO es una decisión del usuario: lo impone la
+  // página. En el catálogo del mostrador (`AMBOS`) sí se pregunta —y también al
+  // editar—: ese cliente no tiene Inventario ni Servicios, así que nada cuelga del
+  // tipo todavía (ni stock, ni suscripciones) y equivocarse al crear no puede dejar
+  // «corte de pelo» marcado como físico para siempre.
+  const mixto              = modo === 'AMBOS'
+  const [tipoElegido, setTipoElegido] = useState<TipoProducto>(
+    producto?.tipo ?? (mixto ? 'PRODUCTO' : modo),
+  )
+  const tipo               = mixto ? tipoElegido : (producto?.tipo ?? modo)
   const esServicio         = tipo === 'SERVICIO'
   const nombreTipo         = esServicio ? etiquetaServicio.toLowerCase() : 'producto'
   const categoriasActivas  = categorias.filter(c => c.estado === 'ACTIVO')
@@ -252,10 +276,20 @@ export function ProductoFormModal({
   // (filtrar por ella ya deja pasar a todos). Categoría/Empresa/Proveedor reparten la
   // misma fila de 6 columnas: a dos (sin empresa) o a tres (con ella).
   const provSpan = empresas.length > 1 ? 'ter-col-span-2' : 'ter-col-span-3'
+  // Proveedor: se pinta cuando HAY alguno. Un desplegable cuya única opción es
+  // «— Sin especificar —» y sin forma de añadir nada no es un campo: un cliente
+  // solo-Caja no tiene página de Terceros donde crear uno. Aparece solo el día que
+  // exista un proveedor, sin tocar nada más. Y entonces la categoría se queda sola en
+  // su fila, así que ocupa la mitad y no un tercio.
+  const hayProveedores = proveedores.length > 0
+  const catSpan        = hayProveedores ? provSpan : 'ter-col-span-3'
   const monedasDisponibles = monedas.length ? monedas : MONEDAS_FALLBACK
   // Un producto FÍSICO necesita un almacén donde vivir su stock; un servicio no.
   // Al crear un físico sin almacén, se bloquea el guardado y se ofrece crear uno.
-  const bloqueadoPorAlmacen = !isEdit && tipo === 'PRODUCTO' && !hayAlmacenes
+  // Un físico necesita almacén… solo si el cliente LLEVA existencias. Con Caja a
+  // secas no hay almacenes ni stock: la ficha es nombre y precio para el mostrador,
+  // y exigir un almacén dejaría al cliente sin poder crear su catálogo.
+  const bloqueadoPorAlmacen = !isEdit && tipo === 'PRODUCTO' && llevaExistencias && !hayAlmacenes
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -287,6 +321,17 @@ export function ProductoFormModal({
 
         <form onSubmit={handleSubmit}>
           {producto && <input type="hidden" name="producto_id" value={producto.producto_id} />}
+          {/* Dos campos que este formulario NO pinta y que se guardan igual, porque el
+              guardado escribe la ficha entera: sin esto, editar el precio de un artículo
+              importado le borraba el código del proveedor. El de proveedor se conserva
+              también cuando el desplegable no se pinta (no hay proveedores) y la ficha
+              vieja sí tenía uno: esconder un campo no es motivo para soltar el dato. */}
+          {producto?.codigo_proveedor && (
+            <input type="hidden" name="codigo_proveedor" value={producto.codigo_proveedor} />
+          )}
+          {!hayProveedores && producto?.proveedor_id && (
+            <input type="hidden" name="proveedor_id" value={producto.proveedor_id} />
+          )}
 
           <div className="modal-body">
 
@@ -294,6 +339,21 @@ export function ProductoFormModal({
             <div className="ter-form-section">
               <span className="ter-form-section-title">Identificación</span>
               <div className="ter-form-grid">
+                {/* Lo primero, porque cambia el resto del formulario (unidad, almacén). */}
+                {mixto && (
+                  <div className="input-group ter-col-span-3">
+                    <div className="form-label-with-help">
+                      <label htmlFor="prd-tipo">¿Qué es? <span className="required">*</span></label>
+                      <FormHelp label="Para qué sirve el tipo"
+                        text="Los dos se venden igual en el mostrador. El tipo importa el día que contrates Inventario (los físicos llevan existencias) o Servicios (los servicios se pueden contratar por meses)." />
+                    </div>
+                    <select id="prd-tipo" className="input" value={tipo}
+                      onChange={e => setTipoElegido(e.target.value as TipoProducto)}>
+                      <option value="PRODUCTO">Producto físico</option>
+                      <option value="SERVICIO">Servicio</option>
+                    </select>
+                  </div>
+                )}
                 <div className={`input-group ${esServicio ? 'ter-col-full' : 'ter-col-span-4'}`}>
                   <label>Nombre <span className="required">*</span></label>
                   <input className="input" name="nombre" required autoFocus={!isEdit} ref={nombreRef}
@@ -307,7 +367,7 @@ export function ProductoFormModal({
                     <UnidadSelect defaultValue={producto?.unidad} sugerida={unidadSugerida} />
                   </div>
                 )}
-                <div className={`input-group ${provSpan}`}>
+                <div className={`input-group ${catSpan}`}>
                   <label>Categoría</label>
                   <select className="input" name="categoria_id"
                     value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
@@ -327,7 +387,7 @@ export function ProductoFormModal({
                 {/* Los proveedores son por-empresa (third_parties): con 2+ empresas, se
                     elige primero la empresa para no ofrecer un mismo proveedor real
                     repetido sin decir a cuál pertenece cada fila (patrón de Suscripciones). */}
-                {empresas.length > 1 && (
+                {hayProveedores && empresas.length > 1 && (
                   <div className={`input-group ${provSpan}`}>
                     <label>Empresa del proveedor</label>
                     <select className="input" value={proveedorEmpresaId}
@@ -336,16 +396,18 @@ export function ProductoFormModal({
                     </select>
                   </div>
                 )}
-                <div className={`input-group ${provSpan}`}>
-                  <label>Proveedor</label>
-                  <select className="input" name="proveedor_id" value={proveedorId}
-                    onChange={e => setProveedorId(e.target.value)}>
-                    <option value="">— Sin especificar —</option>
-                    {proveedoresDeEmpresa.map(p => (
-                      <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
-                    ))}
-                  </select>
-                </div>
+                {hayProveedores && (
+                  <div className={`input-group ${provSpan}`}>
+                    <label>Proveedor</label>
+                    <select className="input" name="proveedor_id" value={proveedorId}
+                      onChange={e => setProveedorId(e.target.value)}>
+                      <option value="">— Sin especificar —</option>
+                      {proveedoresDeEmpresa.map(p => (
+                        <option key={p.tercero_id} value={p.tercero_id}>{p.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="input-group ter-col-full">
                   <label>Descripción</label>
                   {tieneIa && (
@@ -365,10 +427,10 @@ export function ProductoFormModal({
               </div>
             </div>
 
-            {/* ── Precios y costos ── */}
+            {/* ── Precios (y costos, si alguien los lee) ── */}
             <div className="ter-form-section">
-              <span className="ter-form-section-title">Precios y costos</span>
-              <div className="grid-cols-2">
+              <span className="ter-form-section-title">{usaCostes ? 'Precios y costos' : 'Precios de venta'}</span>
+              <div className={usaCostes ? 'grid-cols-2' : undefined}>
                 {/* La nota va DENTRO de la columna del editor, no como celda propia de la
                     rejilla: suelta ocupaba el segundo hueco y empujaba «Costos» a la fila
                     de abajo, descuadrando las dos columnas. */}
@@ -386,12 +448,15 @@ export function ProductoFormModal({
                     </span>
                   )}
                 </div>
-                <PreciosCostosEditor label="Costos" rows={costos} onChange={setCostos} monedasDisponibles={monedasDisponibles} />
+                {usaCostes && (
+                  <PreciosCostosEditor label="Costos" rows={costos} onChange={setCostos} monedasDisponibles={monedasDisponibles} />
+                )}
               </div>
             </div>
 
-            {/* ── Suscripción (solo SERVICIO) ── */}
-            {esServicio && (
+            {/* ── Suscripción (solo SERVICIO, y solo con el módulo Servicios: en el
+                catálogo del mostrador no hay acuerdos que contratar) ── */}
+            {esServicio && usaSuscripciones && (
               <div className="ter-form-section">
                 <span className="ter-form-section-title">Suscripción</span>
                 <label className="checkbox-group">
@@ -420,7 +485,7 @@ export function ProductoFormModal({
             )}
 
             {/* ── Stock (solo PRODUCTO físico) ── */}
-            {tipo === 'PRODUCTO' && (
+            {tipo === 'PRODUCTO' && llevaExistencias && (
               <div className="ter-form-section mb-0">
                 <span className="ter-form-section-title">Inventario</span>
                 {bloqueadoPorAlmacen ? (

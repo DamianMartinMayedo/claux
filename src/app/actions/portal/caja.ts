@@ -45,9 +45,24 @@ export interface Ticket {
   fecha:       string
   moneda:      string
   total:       number
+  // Lo que habría costado sin descuentos. En los tickets anteriores a la migración 207
+  // vale lo mismo que el total: no hubo descuento.
+  bruto:       number
+  descuento_importe: number
   medio_pago:  string | null
   sesion_uuid: string | null
   estado:      string   // VIGENTE | ANULADO | RECTIFICACION
+}
+
+/** Una línea de venta tal como se enseña en el detalle desplegado del ticket.
+ *  `subtotal` es el NETO (lo que se cobró por esa línea); `descuento_importe`, lo que se
+ *  le quitó. Los dos, porque uno sin el otro no deja repasar la venta con el cajero. */
+export interface LineaTicket {
+  descripcion:       string
+  cantidad:          number
+  precio_unitario:   number
+  subtotal:          number
+  descuento_importe: number
 }
 
 export interface MovimientoStock {
@@ -71,6 +86,45 @@ export interface Cierre {
   posted_at:        string | null
   tesoreria_movs:   Record<string, string> | null
   stock_movs:       Record<string, string> | null
+  /** Quién abrió y quién cerró el turno (mig. 208). Nombres congelados; `null` en los
+   *  turnos anteriores a la migración, que no se pueden backfillear. */
+  abierta_por:      string | null
+  cerrada_por:      string | null
+  /** Lo que se regaló en el turno, POR MONEDA. No es una columna de `caja_sesiones`: se
+   *  calcula sumando los tickets del turno, porque el cierre lo escribe el dispositivo y
+   *  añadirle un campo obligaría a que todos los móviles se actualizaran para que el dato
+   *  existiera. Al lado del descuadre, que es donde se mira lo que no cuadra. */
+  descuento_total:  Record<string, number>
+}
+
+/** Quién puede manejar una caja. La lista es del CLIENTE; la asignación, de la caja. */
+export interface Operador {
+  operador_id: string
+  nombre:      string
+  /** Vínculo OPCIONAL con RRHH: lo pone «Importar del personal», nunca es requisito. */
+  empleado_id: string | null
+  activo:      boolean
+}
+
+/**
+ * Una campaña de descuento (mig. 210). No es un precio: es una REGLA con su ventana,
+ * y quien la resuelve es el dispositivo — la caja sincroniza solo al cerrar turno, así
+ * que un precio calculado aquí lo aplicaría un aparato que quizá lleva días sin sembrar.
+ */
+export interface CampaniaCaja {
+  descuento_id: string
+  nombre:       string
+  pct:          number
+  ambito:       'TODO' | 'PRODUCTO'
+  ambito_id:    string | null
+  desde:        string | null
+  hasta:        string | null
+  /** 0 = domingo … 6 = sábado. Vacío = todos los días. */
+  dias_semana:  number[]
+  /** El punto de venta al que pertenece. `null` solo en las filas anteriores a que las
+   *  campañas fueran de cada punto: siguen valiendo para todos los de la empresa. */
+  caja_id:      string | null
+  activo:       boolean
 }
 
 export interface CajaConfigData {
@@ -89,9 +143,27 @@ export interface CajaConfigData {
    * COBRO (mig. 149) y la factura de la suscripción cuenta como Ventas.
    */
   suscribiblesActivos: number
+  /**
+   * Cuántos SERVICIOS activos hay en el catálogo del cliente, tenga el módulo Servicios
+   * o no: con solo Caja los cataloga en el mostrador (`modoCatalogoMostrador`). Es lo que
+   * decide si «Qué se vende aquí» es una pregunta real — y si hay que avisar de que esos
+   * servicios no bajan al dispositivo con el ajuste puesto en «solo productos».
+   */
+  serviciosActivos: number
   // ¿Hay cierres ya sincronizados? Solo sirve para que el aviso de cambio de
   // empresa no mienta: sin histórico no hay nada que se quede en la empresa vieja.
   tieneHistorico:  boolean
+  /** Los operadores activos de la EMPRESA de esta caja (la lista completa). */
+  operadores:      Operador[]
+  /** De esos, cuáles manejan ESTA caja: son los únicos que bajan al dispositivo. */
+  operadoresCaja:  string[]
+  /** ¿Se puede ofrecer «Importar del personal»? Solo con el módulo RRHH contratado. */
+  tieneRrhh:       boolean
+  /** Campañas vivas que afectan a ESTA caja: las suyas y las heredadas de cuando una
+   *  campaña podía valer para todos los puntos de venta de la empresa. */
+  campanias:       CampaniaCaja[]
+  /** El catálogo para elegir producto en una campaña de ámbito PRODUCTO. */
+  productos:       { producto_id: string; nombre: string }[]
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -257,7 +329,7 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
   const empresas = await obtenerEmpresas()
   const ids      = empresas.map(e => e.empresa_id)
 
-  const [almRes, cuRes, monRes, cliRes, sesRes] = await Promise.all([
+  const [almRes, cuRes, monRes, cliRes, sesRes, opRes, opCajaRes, dtoRes, prodRes] = await Promise.all([
     db.from('almacenes').select('almacen_id, nombre, empresa_id')
       .eq('client_id', session.client_id).in('empresa_id', ids.length ? ids : ['__none__']).order('nombre'),
     db.from('cuentas').select('cuenta_id, nombre, moneda, empresa_id')
@@ -269,6 +341,25 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
     // head+count: solo interesa si existe alguna, no traer las filas.
     db.from('caja_sesiones').select('sesion_uuid', { count: 'exact', head: true })
       .eq('caja_id', caja_id).eq('client_id', session.client_id),
+    // Operadores de la EMPRESA de la caja: en multiempresa, ofrecer la plantilla
+    // entera es ruido (y el cajero del otro local no pinta nada aquí).
+    db.from('caja_operadores').select('operador_id, nombre, empleado_id, activo')
+      .eq('client_id', session.client_id).eq('empresa_id', caja.empresa_id)
+      .eq('activo', true).order('nombre'),
+    db.from('caja_operadores_cajas').select('operador_id').eq('caja_id', caja_id),
+    // Campañas (mig. 210): las de ESTA caja y las de «todos los puntos de venta».
+    // Se listan también las caducadas mientras sigan activas: el dueño tiene que poder
+    // ver por qué ya no se aplica la del mes pasado, no encontrarse la lista vacía.
+    db.from('caja_descuentos')
+      .select('descuento_id, nombre, pct, ambito, ambito_id, desde, hasta, dias_semana, caja_id, activo')
+      .eq('client_id', session.client_id).eq('empresa_id', caja.empresa_id)
+      .eq('activo', true)
+      .or(`caja_id.is.null,caja_id.eq.${caja_id}`)
+      .order('nombre'),
+    // El catálogo activo: alimenta el selector de campañas por artículo y, con el
+    // `tipo`, el recuento de servicios (una consulta, no dos).
+    db.from('products').select('producto_id, nombre, tipo')
+      .eq('client_id', session.client_id).eq('estado', 'ACTIVO').order('nombre'),
   ])
 
   const modulos = cliRes.data?.modulos_activos
@@ -288,6 +379,8 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
     }
   }
 
+  const catalogo = (prodRes.data ?? []) as { producto_id: string; nombre: string; tipo: string }[]
+
   return {
     caja: caja as Caja,
     empresas:  empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
@@ -299,7 +392,13 @@ export async function obtenerCajaConfig(caja_id: string): Promise<CajaConfigData
     tieneInventario: tieneModulo(modulos, 'inventario'),
     tieneServicios:  tieneModulo(modulos, 'servicios'),
     suscribiblesActivos: suscribibles,
+    serviciosActivos: catalogo.filter(p => p.tipo === 'SERVICIO').length,
     tieneHistorico:  (sesRes.count ?? 0) > 0,
+    operadores:      (opRes.data ?? []) as Operador[],
+    operadoresCaja:  ((opCajaRes.data ?? []) as { operador_id: string }[]).map(o => o.operador_id),
+    tieneRrhh:       tieneModulo(modulos, 'rrhh'),
+    campanias:       ((dtoRes.data ?? []) as CampaniaCaja[]).map(c => ({ ...c, pct: Number(c.pct), dias_semana: c.dias_semana ?? [] })),
+    productos:       catalogo.map(({ producto_id, nombre }) => ({ producto_id, nombre })),
   }
 }
 
@@ -385,6 +484,426 @@ export async function guardarConfigCaja(
   return { ok: true }
 }
 
+// ── Campañas de descuento (mig. 210) ────────────────────────────────────────────
+//
+// El descuento de la fase 1 lo pone el cajero, venta a venta. Esto es el otro: una
+// regla puesta UNA vez desde aquí («−10 % en todo, del 1 al 7»; «este título, −20 %
+// los martes») que el dispositivo aplica solo. No escribe en ningún sitio nuevo: al
+// cobrar rellena el mismo `descuento_pct` de siempre.
+//
+// Como los operadores, estas acciones DEVUELVEN la lista en vez de revalidar la ruta:
+// un `revalidatePath` re-renderiza la página y se lleva por delante la configuración
+// que el dueño tenga a medio cambiar en el mismo formulario.
+
+function generarDescuentoId(): string {
+  return `DTO-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
+}
+
+async function listarCampaniasDe(
+  db: ReturnType<typeof createAdminClient>, client_id: string, empresa_id: string, caja_id: string,
+): Promise<CampaniaCaja[]> {
+  const { data } = await db.from('caja_descuentos')
+    .select('descuento_id, nombre, pct, ambito, ambito_id, desde, hasta, dias_semana, caja_id, activo')
+    .eq('client_id', client_id).eq('empresa_id', empresa_id).eq('activo', true)
+    .or(`caja_id.is.null,caja_id.eq.${caja_id}`)
+    .order('nombre')
+  return ((data ?? []) as CampaniaCaja[]).map(c => ({ ...c, pct: Number(c.pct), dias_semana: c.dias_semana ?? [] }))
+}
+
+/**
+ * Alta o edición de una campaña.
+ *
+ * Se valida aquí y no solo en el formulario porque los CHECK de la migración devuelven
+ * el nombre de la restricción, no una frase: «caja_descuentos_ambito_id_ck» en pantalla
+ * no le dice nada a quien lleva una cafetería.
+ */
+export async function guardarCampaniaCaja(
+  caja_id: string,
+  campania: {
+    descuento_id?: string
+    nombre: string; pct: number
+    ambito: 'TODO' | 'PRODUCTO'; ambito_id: string | null
+    desde: string | null; hasta: string | null
+    dias_semana: number[]
+  },
+): Promise<{ ok: boolean; error?: string; campanias?: CampaniaCaja[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const nombre = campania.nombre.trim()
+  if (!nombre) return { ok: false, error: 'Ponle un nombre a la campaña.' }
+  const pct = Math.round((Number(campania.pct) || 0) * 100) / 100
+  if (!(pct > 0 && pct <= 100)) return { ok: false, error: 'El descuento tiene que estar entre 0 y 100 %.' }
+  if (campania.ambito === 'PRODUCTO' && !campania.ambito_id)
+    return { ok: false, error: 'Elige a qué producto se le aplica.' }
+  if (campania.desde && campania.hasta && campania.hasta < campania.desde)
+    return { ok: false, error: 'La fecha de fin no puede ser anterior a la de inicio.' }
+  const dias = [...new Set(campania.dias_semana)].filter(d => Number.isInteger(d) && d >= 0 && d <= 6).sort()
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+
+  const fila = {
+    nombre, pct,
+    ambito:      campania.ambito,
+    // Un ámbito TODO con producto miente sobre lo que hace: al cambiar de ámbito el
+    // producto se suelta, no se conserva «por si acaso».
+    ambito_id:   campania.ambito === 'PRODUCTO' ? campania.ambito_id : null,
+    desde:       campania.desde || null,
+    hasta:       campania.hasta || null,
+    dias_semana: dias,
+  }
+
+  if (campania.descuento_id) {
+    // El ÁMBITO no se toca al editar. `caja_id` sigue siendo nullable porque quedan filas
+    // de cuando una campaña podía valer para todos los puntos: reescribirlas a esta caja
+    // al corregirles una fecha las quitaría de los otros mostradores sin decir nada.
+    const { error } = await db.from('caja_descuentos').update(fila)
+      .eq('descuento_id', campania.descuento_id).eq('client_id', session.client_id)
+    if (error) return { ok: false, error: error.message }
+  } else {
+    // Una campaña nace SIEMPRE de un punto de venta: se configura desde su ficha, y «los
+    // martes −10 %» en la librería no tiene por qué valer en el almacén de la otra punta.
+    // Pasarla a otro punto es copiarla allí, no marcar una casilla.
+    const { error } = await db.from('caja_descuentos').insert({
+      ...fila, caja_id, descuento_id: generarDescuentoId(),
+      client_id: session.client_id, empresa_id, activo: true,
+    })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  return { ok: true, campanias: await listarCampaniasDe(db, session.client_id, empresa_id, caja_id) }
+}
+
+/**
+ * Retirar una campaña. Se ARCHIVA (`activo = false`), no se borra: los tickets que ya
+ * se cobraron con ella guardan el descuento, y el dueño que mire un cierre viejo tiene
+ * derecho a que la campaña que lo explica siga existiendo.
+ */
+export async function archivarCampaniaCaja(
+  caja_id: string, descuento_id: string,
+): Promise<{ ok: boolean; error?: string; campanias?: CampaniaCaja[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('caja_descuentos').update({ activo: false })
+    .eq('descuento_id', descuento_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+
+  return { ok: true, campanias: await listarCampaniasDe(db, session.client_id, empresa_id, caja_id) }
+}
+
+// ── Operadores (quién maneja la caja) ───────────────────────────────────────────
+//
+// La lista es del CLIENTE y la asignación, de la caja (`caja_operadores_cajas`).
+// Patrón calcado de Citas (`recursos` + `importarPersonalRRHH`): módulo
+// independiente, con RRHH como llenado rápido opcional y nunca como requisito.
+
+function generarOperadorId(): string {
+  return `OPE-${crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase()}`
+}
+
+/**
+ * La lista viva de operadores de una empresa. Las acciones de abajo la DEVUELVEN en
+ * vez de revalidar la ruta: un `revalidatePath` aquí re-renderiza la página entera y
+ * se lleva por delante lo que el dueño tenga a medio escribir en el formulario de
+ * configuración (mismo problema que ya se arregló en la ficha de cliente). La vista
+ * se actualiza con lo que llega, sin recargar nada.
+ */
+async function listarOperadoresDe(db: ReturnType<typeof createAdminClient>, client_id: string, empresa_id: string): Promise<Operador[]> {
+  const { data } = await db.from('caja_operadores')
+    .select('operador_id, nombre, empleado_id, activo')
+    .eq('client_id', client_id).eq('empresa_id', empresa_id)
+    .eq('activo', true).order('nombre')
+  return (data ?? []) as Operador[]
+}
+
+/** La empresa de una caja del cliente en sesión (y de paso, que la caja sea suya). */
+async function empresaDeCaja(client_id: string, caja_id: string): Promise<string | null> {
+  const db = createAdminClient()
+  const { data } = await db.from('cajas').select('empresa_id')
+    .eq('caja_id', caja_id).eq('client_id', client_id).maybeSingle()
+  return (data as { empresa_id: string } | null)?.empresa_id ?? null
+}
+
+/**
+ * Alta o renombrado de un operador. Se crea desde la configuración de la caja, así
+ * que hereda su empresa.
+ *
+ * Un nombre repetido no es un error que enseñar: es el mismo cajero que se archivó
+ * y vuelve. Si existe una ficha inactiva con ese nombre, se REACTIVA en vez de
+ * chocar contra el índice único — así el histórico de turnos sigue apuntando a la
+ * misma persona en lugar de partirse en dos.
+ */
+export async function guardarOperador(
+  caja_id: string,
+  nombre: string,
+  operador_id?: string,
+): Promise<{ ok: boolean; error?: string; operadores?: Operador[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const limpio = nombre.trim()
+  if (!limpio) return { ok: false, error: 'El nombre es obligatorio.' }
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+
+  if (operador_id) {
+    const { error } = await db.from('caja_operadores').update({ nombre: limpio })
+      .eq('operador_id', operador_id).eq('client_id', session.client_id)
+    if (error) return { ok: false, error: error.message }
+    return { ok: true, operadores: await listarOperadoresDe(db, session.client_id, empresa_id) }
+  }
+
+  const { data: previo } = await db.from('caja_operadores').select('operador_id, activo')
+    .eq('client_id', session.client_id).eq('empresa_id', empresa_id)
+    .ilike('nombre', limpio).maybeSingle()
+  if (previo) {
+    const p = previo as { operador_id: string; activo: boolean }
+    if (!p.activo) {
+      await db.from('caja_operadores').update({ activo: true })
+        .eq('operador_id', p.operador_id).eq('client_id', session.client_id)
+    }
+    return { ok: true, operadores: await listarOperadoresDe(db, session.client_id, empresa_id) }
+  }
+
+  const { error } = await db.from('caja_operadores').insert({
+    operador_id: generarOperadorId(), client_id: session.client_id, empresa_id,
+    nombre: limpio, activo: true,
+  })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, operadores: await listarOperadoresDe(db, session.client_id, empresa_id) }
+}
+
+/**
+ * Baja de un operador. Se ARCHIVA, no se borra: los turnos cerrados guardan su id
+ * y su nombre congelado, y borrarlo dejaría huérfano el histórico.
+ */
+export async function archivarOperador(
+  caja_id: string, operador_id: string,
+): Promise<{ ok: boolean; error?: string; operadores?: Operador[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+  const { error } = await db.from('caja_operadores').update({ activo: false })
+    .eq('operador_id', operador_id).eq('client_id', session.client_id)
+  if (error) return { ok: false, error: error.message }
+  // Y deja de manejar cualquier caja: si vuelve, se le vuelve a marcar.
+  await db.from('caja_operadores_cajas').delete()
+    .eq('operador_id', operador_id).eq('client_id', session.client_id)
+  return { ok: true, operadores: await listarOperadoresDe(db, session.client_id, empresa_id) }
+}
+
+/**
+ * Quién maneja ESTA caja. Se reemplaza el conjunto entero (la UI manda casillas,
+ * no altas y bajas): borrar + insertar es más simple que diferenciar, y la tabla
+ * tiene dos columnas.
+ */
+export async function asignarOperadoresCaja(
+  caja_id: string, operador_ids: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+  // Solo operadores REALES del cliente y de la empresa de la caja: la lista llega
+  // del navegador y no se inserta lo que venga.
+  const { data: validos } = await db.from('caja_operadores').select('operador_id')
+    .eq('client_id', session.client_id).eq('empresa_id', empresa_id).eq('activo', true)
+    .in('operador_id', operador_ids.length ? operador_ids : ['__none__'])
+
+  await db.from('caja_operadores_cajas').delete().eq('caja_id', caja_id).eq('client_id', session.client_id)
+  const rows = ((validos ?? []) as { operador_id: string }[]).map(o => ({
+    caja_id, operador_id: o.operador_id, client_id: session.client_id,
+  }))
+  if (rows.length) {
+    const { error } = await db.from('caja_operadores_cajas').insert(rows)
+    if (error) return { ok: false, error: error.message }
+  }
+  return { ok: true }
+}
+
+/**
+ * Un empleado que se puede traer a la lista de cajeros, con lo que hace falta para
+ * decidir: el nombre, a qué se dedica y si ya está.
+ */
+export interface PersonalImportable {
+  empleado_id: string
+  nombre:      string
+  cargo:       string | null
+  /** Ya está en la lista de cajeros de esta empresa. Se enseña igual, apagado: que
+   *  desaparezca de la lista deja la pregunta «¿y Yoandry, por qué no sale?». */
+  ya_operador: boolean
+}
+
+/**
+ * Los empleados de la empresa de esta caja, con su estado. Se pide al ABRIR el modal
+ * de importar, no en cada carga de la configuración: son 500 filas en un cliente con
+ * plantilla grande y la pantalla no las necesita para nada más.
+ *
+ * «Ya está» se mide contra los operadores **activos**. Un cajero al que se le dio de
+ * baja se archiva (`activo = false`) para que sus turnos sigan apuntando a alguien, y
+ * contarlo aquí es lo que hacía que el import dijera «no hay nadie nuevo» con la
+ * lista de cajeros vacía.
+ */
+async function personalImportableDe(
+  db: ReturnType<typeof createAdminClient>, client_id: string, empresa_id: string,
+): Promise<PersonalImportable[]> {
+  const [{ data: emps }, { data: ops }] = await Promise.all([
+    db.from('empleados').select('empleado_id, nombre, apellidos, cargo')
+      .eq('client_id', client_id).eq('empresa_id', empresa_id).is('fecha_baja', null)
+      .order('nombre'),
+    db.from('caja_operadores').select('empleado_id, nombre, activo')
+      .eq('client_id', client_id).eq('empresa_id', empresa_id),
+  ])
+  type Op = { empleado_id: string | null; nombre: string; activo: boolean }
+  const vivos       = ((ops ?? []) as Op[]).filter(o => o.activo)
+  const porEmpleado = new Set(vivos.map(o => o.empleado_id).filter(Boolean) as string[])
+  // Y también por NOMBRE: el dueño pudo teclear «Yoandry» a mano antes de contratar RRHH,
+  // y el índice único de la tabla rechazaría el lote entero por ese duplicado.
+  const porNombre   = new Set(vivos.map(o => o.nombre.toLowerCase()))
+
+  return ((emps ?? []) as { empleado_id: string; nombre: string; apellidos: string | null; cargo: string | null }[])
+    .map(e => {
+      const nombre = [e.nombre, e.apellidos].filter(Boolean).join(' ')
+      return {
+        empleado_id: e.empleado_id,
+        nombre,
+        cargo:       e.cargo,
+        ya_operador: porEmpleado.has(e.empleado_id) || porNombre.has(nombre.toLowerCase()),
+      }
+    })
+}
+
+/** Para el modal de «Importar del personal». Exige RRHH: sin el módulo no hay plantilla. */
+export async function listarPersonalImportable(
+  caja_id: string,
+): Promise<{ ok: boolean; error?: string; personal?: PersonalImportable[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+  const { data: cli } = await db.from('clients').select('modulos_activos')
+    .eq('client_id', session.client_id).single()
+  if (!tieneModulo(cli?.modulos_activos, 'rrhh'))
+    return { ok: false, error: 'El módulo de RRHH no está activo.' }
+
+  return { ok: true, personal: await personalImportableDe(db, session.client_id, empresa_id) }
+}
+
+/**
+ * Llenado rápido desde RRHH: trae los empleados que el dueño ELIGE, no la plantilla
+ * entera. Traerla entera es lo que había, y con 500 trabajadores y 30 puntos de venta
+ * obligaba a quitar uno a uno a los que no atienden ese mostrador.
+ *
+ * Devuelve también los `operador_id` creados para que la vista los marque en ESTA caja:
+ * quien los eligió de una lista titulada «quién maneja este punto» no espera tener que
+ * marcarlos otra vez. La asignación en sí se guarda con el resto de la configuración
+ * (`asignarOperadoresCaja`), como las casillas.
+ *
+ * Caja funciona sin RRHH y RRHH no sabe que Caja existe — la dirección es una sola.
+ */
+export async function importarPersonalRRHH(
+  caja_id: string,
+  empleado_ids: string[],
+): Promise<{ ok: boolean; error?: string; importados?: number; operadores?: Operador[]; nuevos?: string[] }> {
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
+  if (!(await puedeEditarModulo('caja')))
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+
+  const empresa_id = await empresaDeCaja(session.client_id, caja_id)
+  if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
+
+  const db = createAdminClient()
+  const { data: cli } = await db.from('clients').select('modulos_activos')
+    .eq('client_id', session.client_id).single()
+  if (!tieneModulo(cli?.modulos_activos, 'rrhh'))
+    return { ok: false, error: 'El módulo de RRHH no está activo.' }
+
+  // La selección llega del navegador: solo se importa lo que de verdad es un empleado
+  // importable de esta empresa.
+  const pedidos = new Set(empleado_ids)
+  const elegidos = (await personalImportableDe(db, session.client_id, empresa_id))
+    .filter(e => pedidos.has(e.empleado_id) && !e.ya_operador)
+  if (elegidos.length === 0) return { ok: true, importados: 0, nuevos: [] }
+
+  // Fichas ARCHIVADAS que son la misma persona: el mismo cajero que vuelve, no uno
+  // nuevo. Se reactivan en vez de chocar contra el índice único, igual que hace
+  // `guardarOperador`, y así sus turnos anteriores siguen siendo suyos.
+  const { data: archRaw } = await db.from('caja_operadores')
+    .select('operador_id, nombre, empleado_id')
+    .eq('client_id', session.client_id).eq('empresa_id', empresa_id).eq('activo', false)
+  const archivados = (archRaw ?? []) as { operador_id: string; nombre: string; empleado_id: string | null }[]
+  const archivadoDe = (e: PersonalImportable) =>
+    archivados.find(a => a.empleado_id === e.empleado_id)
+    ?? archivados.find(a => a.empleado_id === null && a.nombre.toLowerCase() === e.nombre.toLowerCase())
+
+  const nuevos: string[] = []
+  const insertar: { operador_id: string; client_id: string; empresa_id: string; nombre: string; empleado_id: string; activo: boolean }[] = []
+  const usados = new Set<string>()
+
+  for (const e of elegidos) {
+    const arch = archivadoDe(e)
+    if (arch && !usados.has(arch.operador_id)) {
+      usados.add(arch.operador_id)
+      const { error } = await db.from('caja_operadores')
+        .update({ activo: true, nombre: e.nombre, empleado_id: e.empleado_id })
+        .eq('operador_id', arch.operador_id).eq('client_id', session.client_id)
+      if (error) return { ok: false, error: error.message }
+      nuevos.push(arch.operador_id)
+    } else {
+      const operador_id = generarOperadorId()
+      insertar.push({
+        operador_id, client_id: session.client_id, empresa_id,
+        nombre: e.nombre, empleado_id: e.empleado_id, activo: true,
+      })
+      nuevos.push(operador_id)
+    }
+  }
+
+  if (insertar.length) {
+    const { error } = await db.from('caja_operadores').insert(insertar)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  return {
+    ok: true, importados: elegidos.length, nuevos,
+    operadores: await listarOperadoresDe(db, session.client_id, empresa_id),
+  }
+}
+
 // ── Regenerar token / activar-desactivar ────────────────────────────────────────
 
 export async function regenerarToken(caja_id: string): Promise<{ ok: boolean; token?: string; error?: string }> {
@@ -432,7 +951,7 @@ export async function listarOperaciones(
   filtro?: FiltroListado,
 ): Promise<{
   tickets: Ticket[]; stock: MovimientoStock[]; cajaNombres: Record<string, string>
-  lineasPorTicket: Record<string, { descripcion: string; cantidad: number; precio_unitario: number }[]>
+  lineasPorTicket: Record<string, LineaTicket[]>
   rango: { desde: string; hasta: string }; hay_mas: boolean; total: number; limite: number
 }> {
   const session = await getPortalSession()
@@ -448,7 +967,7 @@ export async function listarOperaciones(
   const limite = limiteDelFiltro(filtro)
 
   let tkQuery = db.from('caja_tickets')
-    .select('ticket_uuid, caja_id, fecha, moneda, total, medio_pago, sesion_uuid, estado', { count: 'exact' })
+    .select('ticket_uuid, caja_id, fecha, moneda, total, bruto, descuento_importe, medio_pago, sesion_uuid, estado', { count: 'exact' })
     .eq('client_id', session.client_id).in('empresa_id', scope)
   // `fecha` es un timestamp: el «hasta» incluye el día entero, o las ventas de hoy se
   // quedarían fuera de un rango que dice llegar hasta hoy. Y los dos extremos van en el
@@ -463,7 +982,13 @@ export async function listarOperaciones(
     db.from('cajas').select('caja_id, nombre').eq('client_id', session.client_id),
   ])
 
-  const tickets = (tkRes.data ?? []) as Ticket[]
+  // `bruto` a cero es un ticket de antes de los descuentos: se normaliza al total aquí y
+  // no en la vista, para que ninguna pantalla tenga que acordarse de este detalle.
+  const tickets = ((tkRes.data ?? []) as Ticket[]).map(t => ({
+    ...t,
+    bruto: Number(t.bruto) > 0 ? Number(t.bruto) : Number(t.total),
+    descuento_importe: Number(t.descuento_importe) || 0,
+  }))
   const cajaNombres: Record<string, string> = {}
   for (const c of (cajasRes.data ?? []) as { caja_id: string; nombre: string }[]) cajaNombres[c.caja_id] = c.nombre
 
@@ -471,18 +996,23 @@ export async function listarOperaciones(
   // tickets ANULADO (rectificados: no movieron stock) y se ordena por fecha desc.
   const uuids = tickets.map(t => t.ticket_uuid)
   let stock: MovimientoStock[] = []
-  let lineasPorTicket: Record<string, { descripcion: string; cantidad: number; precio_unitario: number }[]> = {}
+  let lineasPorTicket: Record<string, LineaTicket[]> = {}
   if (uuids.length) {
     const { data: lineas } = await db.from('caja_ticket_lineas')
-      .select('ticket_uuid, producto_id, descripcion, cantidad, precio_unitario')
+      .select('ticket_uuid, producto_id, descripcion, cantidad, precio_unitario, subtotal, descuento_importe')
       .in('ticket_uuid', uuids)
 
     // Las mismas líneas, agrupadas por ticket: es lo que permite DESPLEGAR una venta y ver
     // qué llevaba sin irse a la otra pestaña a cruzarlo a ojo.
     lineasPorTicket = {}
-    for (const l of ((lineas ?? []) as { ticket_uuid: string; descripcion: string; cantidad: number; precio_unitario: number }[])) {
+    for (const l of ((lineas ?? []) as (LineaTicket & { ticket_uuid: string })[])) {
+      const dto = Number(l.descuento_importe) || 0
       ;(lineasPorTicket[l.ticket_uuid] ??= []).push({
         descripcion: l.descripcion, cantidad: Number(l.cantidad), precio_unitario: Number(l.precio_unitario),
+        // El neto de la línea es lo que se cobró; sin él, «2 × 300» junto a un descuento
+        // no dice cuánto entró de verdad por esa línea.
+        subtotal: Number(l.subtotal) || Math.round((Number(l.cantidad) * Number(l.precio_unitario) - dto) * 100) / 100,
+        descuento_importe: dto,
       })
     }
     const tkMap = new Map(tickets.map(t => [t.ticket_uuid, t]))
@@ -523,7 +1053,7 @@ export async function listarCierres(
 
   const [seRes, cajasRes] = await Promise.all([
     db.from('caja_sesiones')
-      .select('sesion_uuid, caja_id, abierta_at, cerrada_at, estado, total_por_moneda, efectivo_contado, posted_at, tesoreria_movs, stock_movs', { count: 'exact' })
+      .select('sesion_uuid, caja_id, abierta_at, cerrada_at, estado, total_por_moneda, efectivo_contado, posted_at, tesoreria_movs, stock_movs, abierta_por, cerrada_por', { count: 'exact' })
       .eq('client_id', session.client_id).in('empresa_id', scope)
       // **Solo los CERRADOS.** Desde que el dispositivo sube también el turno ABIERTO —lo
       // que permite avisar de que lleva días sin cerrar y rescatarlo—, esta pantalla
@@ -538,6 +1068,26 @@ export async function listarCierres(
   const cajaNombres: Record<string, string> = {}
   for (const c of (cajasRes.data ?? []) as { caja_id: string; nombre: string }[]) cajaNombres[c.caja_id] = c.nombre
   const cierres = (seRes.data ?? []) as Cierre[]
+
+  // Lo regalado en cada turno. Una consulta más sobre los turnos que se están enseñando —no
+  // sobre toda la tabla—, con las anuladas fuera: un ticket rectificado no regaló nada.
+  const sesiones = cierres.map(c => c.sesion_uuid)
+  const dtoPorSesion = new Map<string, Record<string, number>>()
+  if (sesiones.length) {
+    const { data: tks } = await db.from('caja_tickets')
+      .select('sesion_uuid, moneda, total, bruto, estado')
+      .eq('client_id', session.client_id).in('sesion_uuid', sesiones)
+    for (const tk of ((tks ?? []) as { sesion_uuid: string; moneda: string; total: number; bruto: number; estado: string }[])) {
+      if ((tk.estado ?? 'VIGENTE') === 'ANULADO') continue
+      const regalado = (Number(tk.bruto) > 0 ? Number(tk.bruto) : Number(tk.total)) - Number(tk.total)
+      if (!(regalado > 0.005)) continue
+      const acc = dtoPorSesion.get(tk.sesion_uuid) ?? {}
+      acc[tk.moneda] = Math.round(((acc[tk.moneda] ?? 0) + regalado) * 100) / 100
+      dtoPorSesion.set(tk.sesion_uuid, acc)
+    }
+  }
+  for (const c of cierres) c.descuento_total = dtoPorSesion.get(c.sesion_uuid) ?? {}
+
   return {
     cierres, cajaNombres,
     hay_mas: cierres.length >= limite,
@@ -628,6 +1178,18 @@ export async function cerrarYContabilizar(
   const fechas = (tks ?? []) as { fecha: string }[]
   if (!fechas.length) return { ok: false, error: 'Ese turno ya no tiene ventas que contabilizar.' }
 
+  // Quién cerró: aquí NO hay cajero. Este es el camino de rescate —se fue la luz, se
+  // perdió el móvil— y el turno lo está cerrando el dueño desde el portal. Decirlo tal
+  // cual es más honesto que dejarlo vacío o inventar un nombre, y es la razón de que
+  // `cerrada_por` sea nullable en la BD en vez de obligatorio (mig. 208).
+  //
+  // Solo si no hay ya un nombre: un turno que SÍ cerró alguien en el mostrador y que
+  // aquí solo se re-contabiliza no puede perder a su cajero.
+  const { data: yaCerrada } = await db.from('caja_sesiones')
+    .select('cerrada_por').eq('sesion_uuid', sesion_uuid).maybeSingle()
+  const cerradaPor = (yaCerrada as { cerrada_por: string | null } | null)?.cerrada_por
+    ?? `Cerrado desde el portal por ${session.email}`
+
   const { error: sesErr } = await db.from('caja_sesiones').upsert({
     sesion_uuid,
     caja_id:         caja.caja_id,
@@ -636,6 +1198,7 @@ export async function cerrarYContabilizar(
     abierta_at:      fechas[0].fecha,
     cerrada_at:      fechas[fechas.length - 1].fecha,
     estado:          'CERRADA',
+    cerrada_por:     cerradaPor,
     sincronizado_at: new Date().toISOString(),
   }, { onConflict: 'sesion_uuid' })
   if (sesErr) return { ok: false, error: sesErr.message }

@@ -45,12 +45,13 @@ const TIPO_CATEGORIA_LABEL: Record<TipoCategoria, string> = {
 // ── CategoriaModal ────────────────────────────────────────────────────────────
 
 function CategoriaModal({ categoria, modo, onClose, onSaved }: {
-  categoria: Categoria | null; modo: TipoProducto; onClose: () => void; onSaved: () => void
+  categoria: Categoria | null; modo: TipoCategoria; onClose: () => void; onSaved: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const isEdit = !!categoria
   // Al crear desde Servicios, la categoría nace de servicios; desde Inventario, de
-  // productos. Es lo que va a querer el 90 % de las veces, y se puede cambiar.
+  // productos; desde el catálogo del mostrador, de las dos cosas. Es lo que va a querer
+  // el 90 % de las veces, y se puede cambiar.
   const [tipo, setTipo] = useState<TipoCategoria>(categoria?.tipo ?? modo)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -211,13 +212,32 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
   const ruta         = usePathname()
   const [isPending, startTransition] = useTransition()
 
-  // Inventario y Servicios comparten esta vista pero cada uno cataloga UN tipo
+  // Inventario, Servicios y Caja comparten esta vista pero cada uno cataloga UN tipo
   // (data.modo) sobre su propia página. La etiqueta del servicio la pone el sector
   // (Servicio / Tratamiento / Clase…), nunca el código.
   const esProducto   = data.modo === 'PRODUCTO'
-  const basePath     = esProducto ? '/portal/productos' : '/portal/servicios'
-  const sustantivo   = esProducto ? 'producto' : data.etiquetaServicio.toLowerCase()
-  const tituloPagina = esProducto ? 'Productos' : `${data.etiquetaServicio}s`
+  // El catálogo del MOSTRADOR de un cliente sin Inventario ni Servicios: lleva los dos
+  // tipos porque no tiene otro sitio donde ponerlos, y los vende igual (sin Inventario
+  // ninguno descuenta stock). El tipo se guarda de verdad, así que el día que contrate
+  // un módulo cada ficha se va a su página sola, sin migrar nada.
+  const esMixto      = data.modo === 'AMBOS'
+  // ¿Este cliente lleva EXISTENCIAS? Los físicos se catalogan en DOS páginas: con
+  // módulo Inventario en /portal/productos (stock, almacenes, movimientos) y sin él
+  // en /portal/caja/productos, donde la ficha es solo nombre y precio para la
+  // rejilla del mostrador. Se DEDUCE, no se pasa por prop: un físico sin Inventario
+  // no puede estar en ninguna otra página. Todo lo de stock cuelga de aquí, no de
+  // `esProducto`, o la vista de Caja pediría un almacén que ese cliente no tiene.
+  const conExistencias = esProducto && data.tieneInventario
+  // Igual con los servicios: un cliente con Inventario y sin Servicios los cataloga en
+  // el mostrador, y enlazar a /portal/servicios lo mandaría al dashboard (no tiene ese
+  // módulo). La página de Caja es la de todo lo que no tiene módulo propio.
+  const basePath     = esMixto                            ? '/portal/caja/productos'
+                     : !esProducto                        ? (data.tieneServicios ? '/portal/servicios' : '/portal/caja/productos')
+                     : conExistencias                     ? '/portal/productos'
+                     :                                      '/portal/caja/productos'
+  const sustantivo   = esMixto ? 'artículo' : esProducto ? 'producto' : data.etiquetaServicio.toLowerCase()
+  const tituloPagina = esMixto ? `Productos y ${data.etiquetaServicio.toLowerCase()}s`
+                     : esProducto ? 'Productos' : `${data.etiquetaServicio}s`
 
   const [tab,           setTab]          = useState<'productos' | 'categorias'>('productos')
   const [productoModal, setProductoModal] = useState(false)
@@ -235,6 +255,8 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
   // `stock=bajo` se sigue entendiendo: es el enlace que ya reparte el dashboard.
   const soloBajoMinimo = searchParams.get('bajo_minimo') === '1' || searchParams.get('stock') === 'bajo'
   const soloSuscribibles = searchParams.get('suscribibles') === '1'
+  // Solo en el catálogo del mostrador: en las otras dos páginas el tipo ES la página.
+  const filtroTipo     = searchParams.get('tipo')    ?? ''
 
   const [catModal,   setCatModal]   = useState(false)
   const [editCat,    setEditCat]    = useState<Categoria | null>(null)
@@ -312,6 +334,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
         if (p.categoria_id) return false
       } else if (filtroCat && p.categoria_id !== filtroCat) return false
       if (filtroProv && p.proveedor_id !== filtroProv)     return false
+      if (filtroTipo && p.tipo !== filtroTipo)             return false
       if (q) {
         const hay = [
           p.nombre, p.codigo, p.codigo_proveedor, p.descripcion, p.unidad,
@@ -321,7 +344,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
       }
       return true
     })
-  }, [data.productos, search, filtroCat, filtroProv, verArchivados, soloBajoMinimo,
+  }, [data.productos, search, filtroCat, filtroProv, filtroTipo, verArchivados, soloBajoMinimo,
       soloSuscribibles, categoriaMap, tieneAlerta])
 
   const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
@@ -378,8 +401,18 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
    * demás, y el registro de exportación los aplica.
    */
   const declaracion: Filtro[] = useMemo(() => [
-    // La página ES el tipo: Inventario cataloga PRODUCTO y Servicios SERVICIO. Implícito.
-    { clave: 'tipo', label: 'Tipo', valor: data.modo, widget: 'select', donde: 'cliente', implicito: true },
+    // La página ES el tipo en Inventario y en Servicios, así que va implícito. En el
+    // catálogo del mostrador conviven los dos, y entonces sí es una pregunta.
+    esMixto
+      ? {
+          clave: 'tipo', label: 'Productos y servicios', valor: filtroTipo,
+          rotulo: 'Tipo', widget: 'select', donde: 'cliente',
+          opciones: [
+            { valor: 'PRODUCTO', label: 'Solo productos físicos' },
+            { valor: 'SERVICIO', label: `Solo ${data.etiquetaServicio.toLowerCase()}s` },
+          ],
+        }
+      : { clave: 'tipo', label: 'Tipo', valor: data.modo, widget: 'select', donde: 'cliente', implicito: true },
     {
       clave: 'categoria', param: 'cat', label: 'Todas las categorías', valor: filtroCat,
       rotulo: 'Categoría',
@@ -407,22 +440,25 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
       clave: 'bajo_minimo',
       label: bajoMinimoCount > 0 ? `Solo bajo mínimo (${bajoMinimoCount})` : 'Solo bajo mínimo',
       valor: soloBajoMinimo ? '1' : '', widget: 'toggle', donde: 'cliente',
-      ocultarSi: !esProducto,
+      ocultarSi: !conExistencias,
     },
     {
       clave: 'suscribibles',
       label: suscribiblesCount > 0 ? `Solo suscribibles (${suscribiblesCount})` : 'Solo suscribibles',
       valor: soloSuscribibles ? '1' : '', widget: 'toggle', donde: 'cliente',
-      ocultarSi: esProducto,
+      // Sin el módulo Servicios no hay acuerdos que contratar: en el mostrador el
+      // suscribible no existe, aunque la ficha sea de un servicio.
+      ocultarSi: esProducto || !data.tieneServicios,
     },
     {
       clave: 'archivadas',
       label: archivados > 0 ? `Archivados (${archivados})` : 'Archivados',
       valor: verArchivados ? '1' : '', widget: 'toggle', donde: 'cliente',
     },
-  ], [data.modo, data.proveedores, filtroCat, filtroProv, soloBajoMinimo, soloSuscribibles,
+  ], [data.modo, data.proveedores, data.etiquetaServicio, data.tieneServicios, filtroCat, filtroProv, filtroTipo,
+      soloBajoMinimo, soloSuscribibles,
       verArchivados, categoriasActivas, sinCategoriaCount, nombreOf, data.empresas.length,
-      bajoMinimoCount, suscribiblesCount, archivados, esProducto])
+      bajoMinimoCount, suscribiblesCount, archivados, esProducto, esMixto, conExistencias])
 
   // «Ver los artículos de esta categoría» desde la pestaña de Categorías. El filtro vive en
   // la URL, así que esto es una navegación, no un `setState`.
@@ -511,7 +547,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
       {/* ── Cabecera ── */}
       <div className="page-header">
         <div>
-          {esProducto ? (
+          {esProducto || esMixto ? (
             <h1 className="page-title">{tituloPagina}</h1>
           ) : (
             // Inventario, Ventas, Compras, RRHH y Tesorería tienen su punto de IA;
@@ -522,9 +558,10 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
             </div>
           )}
           <p className="page-subtitle">
-            {esProducto
-              ? 'Tus productos físicos, con su precio y existencias.'
-              : 'Tus servicios y su precio. Se cargan solos en ofertas y facturas.'}
+            {esMixto         ? 'Todo lo que vendes —lo que se toca y lo que se hace— con su precio. Se carga solo en la rejilla del punto de venta.'
+             : !esProducto    ? 'Tus servicios y su precio. Se cargan solos en ofertas y facturas.'
+             : conExistencias ? 'Tus productos físicos, con su precio y existencias.'
+             : 'Tus artículos y su precio. Se cargan solos en la rejilla del punto de venta.'}
           </p>
         </div>
         <div className="tes-header-actions">
@@ -533,15 +570,17 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
           {tab === 'categorias' ? (
             <ExportarMenu
               clave="categorias_productos"
-              filtro={{ tipo: data.modo }}
-              resumen={[esProducto ? 'categorías de productos' : 'categorías de servicios']}
+              // En el mostrador mixto no hay un tipo que pedir: sin filtro se lleva las
+              // de productos, las de servicios y las «Ambas», que es lo que enseña la pestaña.
+              filtro={esMixto ? {} : { tipo: data.modo }}
+              resumen={[esMixto ? 'categorías del catálogo' : esProducto ? 'categorías de productos' : 'categorías de servicios']}
             />
           ) : (
             <ExportarMenu
               clave="productos"
               filtro={filtroExport(declaracion, { q: search })}
               resumen={[
-                esProducto ? 'productos' : 'servicios',
+                esMixto ? 'productos y servicios' : esProducto ? 'productos' : 'servicios',
                 ...resumenDe(declaracion),
                 ...(search ? [`«${search}»`] : []),
               ]}
@@ -621,10 +660,14 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
                         </th>
                       )}
                       <th>Nombre</th>
+                      {/* Con los dos tipos en la misma lista hay que poder distinguirlos
+                          de un vistazo: es lo que decide dónde acabará cada ficha el día
+                          que el cliente contrate Inventario o Servicios. */}
+                      {esMixto && <th>Tipo</th>}
                       <th>Código</th>
                       <th>Categoría</th>
                       <th>Precios de venta</th>
-                      {esProducto && <th>Stock</th>}
+                      {conExistencias && <th>Stock</th>}
                       <th className="col-actions"></th>
                     </tr>
                   </thead>
@@ -657,7 +700,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
                             </Link>
                             {/* La insignia dice qué es contratable sin abrir la ficha, y
                                 con su periodicidad por defecto: «Suscribible · Mensual». */}
-                            {!esProducto && p.es_suscribible && (
+                            {p.tipo === 'SERVICIO' && p.es_suscribible && (
                               <span className="badge badge-neutral prd-badge-suscribible">
                                 Suscribible{p.periodicidad_defecto ? ` · ${PERIODICIDAD_LABEL[p.periodicidad_defecto] ?? p.periodicidad_defecto}` : ''}
                               </span>
@@ -666,6 +709,14 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
                               <div className="table-cell-sub">{p.descripcion}</div>
                             )}
                           </td>
+
+                          {esMixto && (
+                            <td data-label="Tipo">
+                              <span className={`badge ${p.tipo === 'SERVICIO' ? 'badge-purple' : 'badge-info'}`}>
+                                {p.tipo === 'SERVICIO' ? data.etiquetaServicio : 'Producto'}
+                              </span>
+                            </td>
+                          )}
 
                           {/* Código */}
                           <td data-label="Código">
@@ -696,8 +747,8 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
                             </div>
                           </td>
 
-                          {/* Stock — solo en la página de productos físicos */}
-                          {esProducto && (
+                          {/* Stock — solo con módulo Inventario (en Caja no hay existencias) */}
+                          {conExistencias && (
                             <td data-label="Stock">
                               <div className="prd-stock-cell">
                                 <span className={`prd-stock-value${stockBajo ? ' prd-stock-low' : ''}`}>
@@ -725,7 +776,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
                               <button className="row-actions-item" onClick={() => router.push(`${basePath}/${p.producto_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                               {puedeEditar && (p.estado === 'ACTIVO' ? (
                                 <>
-                                  {esProducto && (
+                                  {conExistencias && (
                                     <button className="row-actions-item" onClick={() => setStockProducto(p)}>
                                       <Layers size={15} strokeWidth={2} /> Ajustar stock
                                     </button>
@@ -898,8 +949,9 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
       {productoModal && (
         <ProductoFormModal producto={editProducto} categorias={data.categorias}
           proveedores={data.proveedores} empresas={data.empresas} monedas={data.monedas}
-          hayAlmacenes={data.almacenes.length > 0}
-          modo={data.modo} etiquetaServicio={data.etiquetaServicio}
+          hayAlmacenes={data.almacenes.length > 0} llevaExistencias={conExistencias}
+          modo={data.modo} usaCostes={data.usaCostes} usaSuscripciones={data.tieneServicios}
+          etiquetaServicio={data.etiquetaServicio}
           onClose={closeModal} onSaved={onSaved} />
       )}
       {stockProducto && (
@@ -921,8 +973,11 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
         <ConfirmEliminar nombre={eliminarProd.nombre} onConfirm={confirmarEliminar}
           onClose={() => setEliminarProd(null)} isPending={isPending} />
       )}
+      {/* En el mostrador mixto la categoría nueva vale para los dos tipos («Ambas»):
+          es la única respuesta que no obliga a elegir por el dueño. */}
       {catModal && (
-        <CategoriaModal categoria={editCat} modo={data.modo} onClose={closeCatModal} onSaved={onCatSaved} />
+        <CategoriaModal categoria={editCat} modo={data.modo === 'AMBOS' ? 'AMBAS' : data.modo}
+          onClose={closeCatModal} onSaved={onCatSaved} />
       )}
       {confirmCat && (
         <ConfirmArchivar nombre={confirmCat.nombre} onConfirm={confirmarArchivarCat}

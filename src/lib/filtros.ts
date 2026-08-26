@@ -284,5 +284,5 @@ export function filtrosDeUrl(
 
 /** Las claves del contrato que son booleanas, no texto. */
 function esBooleano(clave: keyof FiltroExport): boolean {
-  return clave === 'archivadas' || clave === 'con_saldo'
+  return clave === 'archivadas' || clave === 'con_saldo' || clave === 'con_descuento'
 }

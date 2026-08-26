@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { monedaValida }      from '@/lib/tasas'
 import { getPortalSession, puedeEditarModulo, puedeEditarAlgunModulo }  from './auth'
 import { obtenerEmpresas }    from './empresas'
-import { MODULOS_CATALOGO, tieneModulo } from '@/lib/modulos'
+import { MODULOS_CATALOGO, tieneAlgunModulo, tieneModulo } from '@/lib/modulos'
 import { etiquetasDe }        from '@/lib/sector'
 import { parseNumeroEs }      from '@/lib/numeros'
 import {
@@ -40,6 +40,17 @@ export type TipoProducto = _TipoProducto
 
 /** Para qué sirve una categoría. `AMBAS` = vale para físicos y para servicios. */
 export type TipoCategoria = TipoProducto | 'AMBAS'
+
+/**
+ * Qué cataloga una PÁGINA. Inventario cataloga `PRODUCTO` y Servicios `SERVICIO`;
+ * el catálogo del mostrador (`/portal/caja/productos`) cataloga `AMBOS` cuando el
+ * cliente no tiene ni Inventario ni Servicios, porque entonces no tiene otro sitio
+ * donde poner ni una cerveza ni un corte de pelo. La rejilla del punto de venta los
+ * vende igual: sin Inventario ninguno de los dos descuenta stock. El TIPO se guarda
+ * bien desde el primer día para que el día que contrate un módulo la separación sea
+ * automática y no un volcado de servicios al almacén.
+ */
+export type ModoCatalogo = TipoProducto | 'AMBOS'
 
 export interface Categoria {
   categoria_id: string
@@ -76,9 +87,9 @@ export interface Producto {
 
 export interface ProductosPageData {
   productos:   Producto[]
-  /** Qué cataloga esta página: PRODUCTO (Inventario) o SERVICIO (módulo Servicios).
-   *  Inventario y Servicios comparten la tabla `products` pero NO la página. */
-  modo:        TipoProducto
+  /** Qué cataloga esta página (ver `ModoCatalogo`). Las tres comparten la tabla
+   *  `products` y se reparten por `tipo`; ninguna comparte página con otra. */
+  modo:        ModoCatalogo
   categorias:  Categoria[]
   /** Con `empresa_id`: `third_parties` es por-empresa (mig. 008), así que el MISMO
    *  proveedor real puede tener una ficha en cada empresa. Sin distinguirlas, el
@@ -99,6 +110,17 @@ export interface ProductosPageData {
   /** Con `inventario`: existencias, almacenes y productos físicos. Sin él (pieza
    *  `servicios` a secas) la página es solo la lista de servicios con su precio. */
   tieneInventario: boolean
+  /** ¿Contrató el módulo `servicios`? Los servicios tienen entonces SU página; si no,
+   *  el catálogo del mostrador es el único sitio donde el cliente puede cargarlos. */
+  tieneServicios: boolean
+  /**
+   * ¿Alguien LEE los costes de este cliente? Los lee la valoración de existencias y los
+   * conteos (`inventario`) y el margen que se congela en la línea de factura (`base`).
+   * Sin ninguno de los dos —un cliente solo-Caja— «Costo» y «Margen» son casillas que no
+   * van a ningún sitio: se dejan de pintar, no de guardar. Lo ya escrito sigue ahí el día
+   * que contrate el módulo.
+   */
+  usaCostes: boolean
   /** Etiqueta del sector para «servicio» (Servicio, Tratamiento, Clase…). */
   etiquetaServicio: string
 }
@@ -108,12 +130,12 @@ export interface ProductosPageData {
 /**
  * ¿Este cliente tiene el módulo `inventario` (y no solo la pieza `servicios`)?
  * Decide dos cosas: si puede crear productos FÍSICOS y si la UI enseña existencias.
- * Devuelve también la etiqueta de «servicio» del sector, que casi siempre se pide a
- * la vez (una consulta menos).
+ * Devuelve además si sus costes los lee alguien (`usaCostes`) y la etiqueta de
+ * «servicio» del sector, que casi siempre se piden a la vez (una consulta menos).
  */
 async function contextoCatalogo(
   clientId: string,
-): Promise<{ tieneInventario: boolean; etiquetaServicio: string }> {
+): Promise<{ tieneInventario: boolean; tieneServicios: boolean; usaCostes: boolean; etiquetaServicio: string }> {
   const db = createAdminClient()
   const { data } = await db.from('clients')
     .select('modulos_activos, sector').eq('client_id', clientId).single()
@@ -122,15 +144,64 @@ async function contextoCatalogo(
     : { data: null }
   return {
     tieneInventario:  tieneModulo(data?.modulos_activos, 'inventario'),
+    tieneServicios:   tieneModulo(data?.modulos_activos, 'servicios'),
+    usaCostes:        tieneAlgunModulo(data?.modulos_activos, ['inventario', 'base']),
     etiquetaServicio: etiquetasDe(plantilla?.etiquetas).servicio,
   }
 }
 
+/**
+ * Qué módulos pueden EDITAR una ficha según su TIPO.
+ *
+ * Un producto FÍSICO es de `inventario` **o de `caja`**; un servicio, de `servicios`
+ * **o de `caja`**. Misma idea de recurso compartido que `MODULOS_CATALOGO`: el punto
+ * de venta cataloga los artículos que el cliente no tiene dónde poner, del tipo que
+ * sean, y son filas normales de `products` — el día que contrate el módulo su catálogo
+ * ya está hecho.
+ *
+ * No se exporta: en un fichero 'use server' todo export es un endpoint HTTP.
+ */
+function modulosDelTipo(tipo: TipoProducto): string[] {
+  // `caja` alcanza a los DOS tipos: el mostrador cataloga lo que el cliente no puede
+  // poner en otro sitio, y un barbero con solo Caja tiene que poder meter «corte de
+  // pelo» en la rejilla. Qué página se lo enseña lo decide `ModoCatalogo`; esto solo
+  // dice quién tiene DERECHO a escribir esa fila.
+  return tipo === 'SERVICIO' ? ['servicios', 'caja'] : ['inventario', 'caja']
+}
+
 // ── Obtener ───────────────────────────────────────────────────────────────────
 
-export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise<ProductosPageData | null> {
+/**
+ * Qué cataloga la página del MOSTRADOR para este cliente: exactamente lo que no tiene
+ * otro sitio donde vivir.
+ *
+ * - Con `inventario` los físicos ya tienen su página → el mostrador lleva los SERVICIOS.
+ * - Con `servicios` los servicios ya tienen la suya  → el mostrador lleva los PRODUCTOS.
+ * - Sin ninguno de los dos (el caso normal de quien contrata solo el punto de venta) →
+ *   lleva los DOS, porque un barbero vende cortes y también champú.
+ * - Con los dos módulos no cataloga nada: 'NINGUNO' y la página redirige.
+ *
+ * Se decide por los módulos CONTRATADOS por el cliente, no por los que este usuario
+ * puede ver: si a un cajero le quitan el permiso de Inventario, los productos físicos
+ * siguen viviendo allí y duplicarlos aquí sería un segundo catálogo.
+ */
+export async function modoCatalogoMostrador(): Promise<ModoCatalogo | 'NINGUNO' | null> {
   const session = await getPortalSession()
   if (!session) return null
+  const { tieneInventario, tieneServicios } = await contextoCatalogo(session.client_id)
+  if (tieneInventario && tieneServicios) return 'NINGUNO'
+  if (tieneInventario) return 'SERVICIO'
+  if (tieneServicios) return 'PRODUCTO'
+  return 'AMBOS'
+}
+
+export async function obtenerProductos(modo: ModoCatalogo = 'PRODUCTO'): Promise<ProductosPageData | null> {
+  const session = await getPortalSession()
+  if (!session) return null
+
+  // Una página puede llevar los dos tipos (el mostrador de un cliente sin Inventario
+  // ni Servicios): la consulta va por lista, no por igualdad.
+  const tipos: TipoProducto[] = modo === 'AMBOS' ? ['PRODUCTO', 'SERVICIO'] : [modo]
 
   const db = createAdminClient()
   // obtenerEmpresas() ya resuelve el acceso por rol (admin_empresa ve todas; un
@@ -144,14 +215,14 @@ export async function obtenerProductos(modo: TipoProducto = 'PRODUCTO'): Promise
     db.from('products')
       .select('*')
       .eq('client_id', session.client_id)
-      .eq('tipo', modo)          // Inventario ve físicos; Servicios ve servicios
+      .in('tipo', tipos)         // Inventario ve físicos; Servicios, servicios; el mostrador, los suyos
       .order('nombre'),
     // Y sus categorías: en Servicios no se ofrece «Limpieza», y en Inventario no se
     // ofrece «Consultoría». Las marcadas AMBAS salen en las dos páginas (mig. 122).
     db.from('product_categories')
       .select('*')
       .eq('client_id', session.client_id)
-      .in('tipo', [modo, 'AMBAS'])
+      .in('tipo', [...tipos, 'AMBAS'])
       .order('nombre'),
     db.from('third_parties')
       .select('tercero_id, nombre, empresa_id')
@@ -254,13 +325,13 @@ export async function guardarProducto(
   if (!['PRODUCTO', 'SERVICIO'].includes(tipo))
     return { ok: false, error: 'Tipo inválido.' }
 
-  // Gate PRECISO por tipo: los físicos son del módulo Inventario; los servicios,
-  // del módulo Servicios. Desde la separación total cada página crea un solo tipo,
-  // pero el candado real está aquí (la UI oculta no es control de acceso): sin él,
-  // un POST a mano colaría un tipo del módulo que el cliente no paga.
-  const moduloDelTipo = tipo === 'SERVICIO' ? 'servicios' : 'inventario'
-  if (!(await puedeEditarModulo(moduloDelTipo)))
+  // Gate PRECISO por tipo: los servicios son del módulo Servicios; los físicos, de
+  // Inventario **o de Caja** (el mostrador cataloga los suyos). Cada página crea un
+  // solo tipo, pero el candado real está aquí (la UI oculta no es control de
+  // acceso): sin él, un POST a mano colaría un tipo del módulo que no se paga.
+  if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipo))))
     return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const moduloDelTipo = tipo === 'SERVICIO' ? 'servicios' : 'inventario'   // solo para revalidar
 
   const unidad = ((formData.get('unidad') as string) ?? '').trim()
   // La unidad solo es obligatoria para físicos; un servicio no siempre es medible.
@@ -296,7 +367,12 @@ export async function guardarProducto(
     // Un producto FÍSICO necesita un almacén donde registrar su stock (un servicio
     // no). Guard de servidor además del bloqueo en la UI: no se crea un físico sin
     // que exista al menos un almacén.
-    if (tipo === 'PRODUCTO') {
+    //
+    // Pero SOLO si el cliente lleva existencias: uno que solo tiene Caja cataloga
+    // sus artículos para la rejilla del mostrador y no tiene —ni necesita— almacenes.
+    // Exigirle uno le impediría crear su catálogo, que es justo lo que la fase 0 del
+    // plan de Caja vino a arreglar.
+    if (tipo === 'PRODUCTO' && (await contextoCatalogo(session.client_id)).tieneInventario) {
       const { count } = await db.from('almacenes')
         .select('*', { count: 'exact', head: true })
         .eq('client_id', session.client_id)
@@ -388,16 +464,25 @@ export async function guardarProducto(
  * rompe nada, revalidar de menos enseña datos viejos.
  */
 function revalidarFicha(modulo?: 'inventario' | 'servicios' | null) {
+  // Los físicos viven en DOS páginas según lo contratado: /portal/productos con
+  // Inventario y /portal/caja/productos sin él. Se revalidan las dos — el cliente
+  // solo ve una, y revalidar de más no rompe nada.
   if (modulo !== 'servicios')  revalidatePath('/portal/productos')
+  if (modulo !== 'servicios')  revalidatePath('/portal/caja/productos')
   if (modulo !== 'inventario') revalidatePath('/portal/servicios')
 }
 
-async function moduloDeProducto(client_id: string, producto_id: string): Promise<'inventario' | 'servicios' | null> {
+async function tipoDeProducto(client_id: string, producto_id: string): Promise<TipoProducto | null> {
   const db = createAdminClient()
   const { data: prod } = await db.from('products')
     .select('tipo').eq('producto_id', producto_id).eq('client_id', client_id).maybeSingle()
   if (!prod) return null
-  return prod.tipo === 'SERVICIO' ? 'servicios' : 'inventario'
+  return prod.tipo === 'SERVICIO' ? 'SERVICIO' : 'PRODUCTO'
+}
+
+/** La página donde vive la ficha, para `revalidarFicha`. */
+function moduloDeTipo(tipo: TipoProducto): 'inventario' | 'servicios' {
+  return tipo === 'SERVICIO' ? 'servicios' : 'inventario'
 }
 
 export async function archivarProducto(
@@ -405,10 +490,11 @@ export async function archivarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  const modulo = await moduloDeProducto(session.client_id, producto_id)
-  if (!modulo) return { ok: false, error: 'Producto no encontrado.' }
-  if (!(await puedeEditarModulo(modulo)))
+  const tipoProd = await tipoDeProducto(session.client_id, producto_id)
+  if (!tipoProd) return { ok: false, error: 'Producto no encontrado.' }
+  if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipoProd))))
     return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
   const { error } = await db
@@ -427,10 +513,11 @@ export async function restaurarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  const modulo = await moduloDeProducto(session.client_id, producto_id)
-  if (!modulo) return { ok: false, error: 'Producto no encontrado.' }
-  if (!(await puedeEditarModulo(modulo)))
+  const tipoProd = await tipoDeProducto(session.client_id, producto_id)
+  if (!tipoProd) return { ok: false, error: 'Producto no encontrado.' }
+  if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipoProd))))
     return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
   const { error } = await db
@@ -454,10 +541,11 @@ export async function eliminarProducto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  const modulo = await moduloDeProducto(session.client_id, producto_id)
-  if (!modulo) return { ok: false, error: 'Producto no encontrado.' }
-  if (!(await puedeEditarModulo(modulo)))
+  const tipoProd = await tipoDeProducto(session.client_id, producto_id)
+  if (!tipoProd) return { ok: false, error: 'Producto no encontrado.' }
+  if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipoProd))))
     return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
 
@@ -605,12 +693,15 @@ export async function archivarProductosEnLote(
   const { data: prods } = await db.from('products')
     .select('producto_id, nombre, tipo').eq('client_id', session.client_id).in('producto_id', ids)
   const filas = (prods ?? []) as { producto_id: string; nombre: string; tipo: string }[]
-  const [puedeInv, puedeSrv] = await Promise.all([
-    puedeEditarModulo('inventario'), puedeEditarModulo('servicios'),
+  // Un físico lo puede archivar Inventario O Caja (el mostrador cataloga los
+  // suyos); un servicio, solo Servicios. Mismo reparto que `modulosDelTipo`.
+  const [puedeInv, puedeSrv, puedeCaja] = await Promise.all([
+    puedeEditarModulo('inventario'), puedeEditarModulo('servicios'), puedeEditarModulo('caja'),
   ])
-  const permitidos = filas.filter(p => (p.tipo === 'SERVICIO' ? puedeSrv : puedeInv))
+  const puedeCon = (tipo: string) => (tipo === 'SERVICIO' ? puedeSrv : (puedeInv || puedeCaja))
+  const permitidos = filas.filter(p => puedeCon(p.tipo))
   const omitidas   = filas
-    .filter(p => !(p.tipo === 'SERVICIO' ? puedeSrv : puedeInv))
+    .filter(p => !puedeCon(p.tipo))
     .map(p => ({ nombre: p.nombre, motivo: 'No tienes permiso para editar en este módulo.' }))
   if (!permitidos.length) return { ok: true, hechas: 0, omitidas }
 
@@ -918,6 +1009,16 @@ export interface ProductoDetalleData {
   /** Sin `inventario` la ficha no enseña existencias ni movimientos (ver
    *  `ProductosPageData.tieneInventario`). */
   tieneInventario:   boolean
+  /** Ver `ProductosPageData.tieneServicios`. */
+  tieneServicios:    boolean
+  /**
+   * ¿Alguien LEE los costes de este cliente? Los lee la valoración de existencias y los
+   * conteos (`inventario`) y el margen que se congela en la línea de factura (`base`).
+   * Sin ninguno de los dos —un cliente solo-Caja— «Costo» y «Margen» son casillas que no
+   * van a ningún sitio: se dejan de pintar, no de guardar. Lo ya escrito sigue ahí el día
+   * que contrate el módulo.
+   */
+  usaCostes: boolean
   etiquetaServicio:  string
   // ── Solo servicios ──
   /**

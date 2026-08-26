@@ -14,7 +14,7 @@
 // cierre (resúmenes). Re-sincronizar o re-subir un archivo no duplica.
 
 import { tieneModulo } from '@/lib/modulos'
-import { fechaEnTz } from '@/lib/fecha-tz'
+import { fechaEnTz, hoyEnTz } from '@/lib/fecha-tz'
 import { aplicarMovimiento } from '@/app/actions/portal/_inventario-helpers'
 import { ORIGEN_CIERRE_CAJA, generarRegistroId } from '@/lib/gastos-core'
 
@@ -44,7 +44,14 @@ export interface LineaIn {
   descripcion:     string
   cantidad:        number
   precio_unitario: number
+  // NETO de la línea (cantidad × precio − descuento de línea). Es lo que suma la guardia
+  // de más abajo, así que el descuento de línea NUNCA es una deducción aparte.
   subtotal:        number
+  // Par calcado de `documento_lineas` (mig. 015), con el modo derivado: pct > 0 ⇒
+  // porcentaje, si no monto fijo. Opcionales porque un dispositivo con la versión vieja
+  // instalada sigue enviando líneas sin ellos.
+  descuento_pct?:     number
+  descuento_importe?: number
 }
 export interface TicketIn {
   ticket_uuid:  string
@@ -52,6 +59,17 @@ export interface TicketIn {
   fecha:        string
   moneda:       string
   total:        number
+  // Lo que habría costado sin ningún descuento. Si no viene (dispositivo viejo) se deduce
+  // de las líneas: nunca se guarda 0, que en el listado se leería como avería.
+  bruto?:             number
+  descuento_pct?:     number
+  descuento_importe?: number
+  // Lo que se puso en el mostrador y lo que se devolvió, cada uno con su moneda (mig. 209).
+  // Ausentes = pagó justo en la moneda de la venta, que es el caso de siempre.
+  cobrado_moneda?:  string | null
+  cobrado_importe?: number | null
+  cambio_moneda?:   string | null
+  cambio_importe?:  number | null
   medio_pago?:  string | null
   estado?:      'VIGENTE' | 'ANULADO' | 'RECTIFICACION'
   rectifica_a?: string | null   // ticket_uuid del original (solo en RECTIFICACION)
@@ -64,8 +82,13 @@ export interface CierreIn {
   estado?:           string
   fondo_inicial?:    Record<string, number>
   efectivo_contado?: Record<string, number>
-  /** Quién contó el dinero. Texto libre, como `conteos.contado_por`. */
+  /** Quién contó el dinero. NOMBRE congelado: si el cajero se renombra o se da de
+   *  baja, el turno cerrado tiene que seguir diciendo quién lo cerró. */
   cerrada_por?:      string | null
+  cerrada_por_id?:   string | null
+  /** Y quién lo abrió (mig. 208). Mismo par id + nombre congelado. */
+  abierta_por?:      string | null
+  abierta_por_id?:   string | null
 }
 /** Salidas y entradas de efectivo DURANTE el turno: la otra mitad del arqueo. */
 export interface MovimientoTurnoIn {
@@ -147,20 +170,40 @@ export function getCajaToken(req: Request): string | null {
 
 // ── SEMILLA (Claux → dispositivo) ─────────────────────────────────────────────
 
+interface OpLink   { operador_id: string }
+interface Operador { operador_id: string; nombre: string }
+
+/**
+ * Las filas de una consulta de la semilla, **dejando dicho si falló**.
+ *
+ * Todas usaban `?? []`, así que un error de PostgREST no reventaba nada: el aparato
+ * recibía una lista VACÍA y nadie se enteraba. Así se perdieron los operadores durante
+ * una versión entera (un embed sin FOREIGN KEY), y el mismo `?? []` habría mandado un
+ * catálogo vacío al mostrador con la misma cara de normalidad. Se mantiene la tolerancia
+ * —una semilla a medias es mejor que ninguna delante de una cola— pero el fallo queda en
+ * el log del servidor en vez de desaparecer.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function filas(res: any, que: string): any[] {
+  if (res?.error) console.error(`[caja/semilla] ${que}: ${res.error.message ?? res.error}`)
+  return res?.data ?? []
+}
+
 export async function construirSeed(db: Db, caja: CajaRow) {
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', caja.client_id).maybeSingle()
-  const tieneInv  = tieneModulo(cli?.modulos_activos, 'inventario')
-  const tieneSrv  = tieneModulo(cli?.modulos_activos, 'servicios')
   const tieneBase = tieneModulo(cli?.modulos_activos, 'base')
 
-  // Qué baja al dispositivo (mig. 120). El ajuste del dueño se cruza con lo que tiene
-  // contratado: pedir servicios sin el módulo Servicios no los baja, igual que hoy no
-  // bajan físicos sin Inventario. La caja es un mostrador, pero una peluquería cobra
-  // ahí el corte, no solo el champú.
+  // Qué baja al dispositivo (mig. 120). Lo decide SOLO el ajuste del dueño
+  // (`cajas.tipos_catalogo`), que para eso está: lo que esté catalogado y activo del
+  // tipo que pidió, baja. Ni los PRODUCTO piden `inventario` ni los SERVICIO piden
+  // `servicios` — el módulo Caja cataloga los dos tipos en /portal/caja/productos
+  // (`modoCatalogoMostrador`), así que exigir el módulo dejaba la rejilla VACÍA a quien
+  // sí había cargado su catálogo: la peluquería con solo Caja cobraba el champú y el
+  // corte no le aparecía por ningún sitio.
   const tipos = caja.tipos_catalogo ?? 'PRODUCTO'
   const tiposPermitidos: string[] = []
-  if (tieneInv && tipos !== 'SERVICIO') tiposPermitidos.push('PRODUCTO')
-  if (tieneSrv && tipos !== 'PRODUCTO') tiposPermitidos.push('SERVICIO')
+  if (tipos !== 'SERVICIO') tiposPermitidos.push('PRODUCTO')
+  if (tipos !== 'PRODUCTO') tiposPermitidos.push('SERVICIO')
 
   // Al dispositivo solo bajan las monedas que además tienen su caja de Tesorería
   // asignada, aunque en la configuración estén marcadas. Cobrar en una moneda sin
@@ -171,8 +214,14 @@ export async function construirSeed(db: Db, caja: CajaRow) {
   const monedasCaja = tieneBase
     ? aceptadas.filter(m => Boolean(caja.cuentas_moneda?.[m]))
     : aceptadas
+  // Y se dice CUÁLES se quedaron fuera. Retirarlas en silencio tenía un agujero: cuando
+  // se retiran TODAS, el dispositivo enseña su pantalla de «Sin monedas para cobrar» con
+  // la instrucción; cuando se retira solo alguna, no pasaba nada — el selector de moneda
+  // simplemente desaparecía al llegar la semilla, delante del vendedor, sin una palabra.
+  // Con la lista, el aparato puede enseñar la moneda tachada y decir qué falta en Claux.
+  const monedasSinCuenta = aceptadas.filter(m => !monedasCaja.includes(m))
 
-  const [prodRes, monRes, tasaRes] = await Promise.all([
+  const [prodRes, monRes, tasaRes, opLinkRes, opRes, dtoRes] = await Promise.all([
     tiposPermitidos.length > 0
       ? db.from('products')
           .select('producto_id, codigo, nombre, precios, unidad, tipo, es_suscribible')
@@ -183,12 +232,48 @@ export async function construirSeed(db: Db, caja: CajaRow) {
     db.from('tasas_cambio')
       .select('moneda_origen, moneda_destino, tasa, fecha')
       .eq('client_id', caja.client_id).order('fecha', { ascending: false }),
+    // Los operadores de ESTA caja, no los del cliente: el mostrador de arriba no
+    // enseña a los cajeros del de abajo. Baja la lista para que abrir y cerrar el
+    // turno sea ELEGIR, no teclear — un campo de texto obligatorio en un mostrador
+    // con cola se rellena con «x», y entonces no sirve para ningún informe.
+    //
+    // DOS consultas y el cruce en JS, no un `caja_operadores!inner(...)`: el embed de
+    // PostgREST necesita una FOREIGN KEY declarada y la mig. 208 no la puso, así que la
+    // petición fallaba con «could not find a relationship» y el `?? []` de abajo la
+    // convertía en «esta caja no tiene cajeros» — el dueño ligaba dos trabajadores en el
+    // portal y el desplegable del mostrador no aparecía nunca. La mig. 211 añade la FK,
+    // pero la semilla ya no depende de que PostgREST deduzca nada.
+    db.from('caja_operadores_cajas').select('operador_id').eq('caja_id', caja.caja_id),
+    // Sin filtrar por `empresa_id`: la que manda es la LIGADURA a esta caja. Filtrar
+    // además por la empresa haría desaparecer cajeros en silencio el día que una caja
+    // cambie de empresa, que es la clase de fallo que acabamos de pagar.
+    db.from('caja_operadores').select('operador_id, nombre')
+      .eq('client_id', caja.client_id).eq('activo', true),
+    // Campañas (mig. 210). Bajan como REGLA CON SU VENTANA, no como precio ya
+    // calculado: la caja sincroniza solo al cerrar turno, así que un «hoy este
+    // libro vale 450» resuelto aquí llegaría caducado al dispositivo que no ha
+    // vuelto a sembrar. Se filtra por fecha lo que YA no puede volver a valer
+    // (`hasta` pasado) para no cargar el aparato con campañas muertas, pero
+    // NUNCA por el día de la semana: el móvil se lleva el martes puesto y lo
+    // evalúa cada vez que se cobra.
+    db.from('caja_descuentos')
+      .select('nombre, pct, ambito, ambito_id, desde, hasta, dias_semana, caja_id')
+      .eq('client_id', caja.client_id).eq('empresa_id', caja.empresa_id)
+      .eq('activo', true)
+      .or(`caja_id.is.null,caja_id.eq.${caja.caja_id}`),
   ])
+
+  // «Hoy» en la zona del NEGOCIO: con UTC, a partir de las 20:00 en Cuba ya es mañana
+  // y una campaña que termina hoy se caería de la semilla medio día antes de tiempo.
+  const hoy = hoyEnTz()
+
+  // Quién puede llevar esta caja: los ligados a ella, ya filtrados por activo en la BD.
+  const ligados = new Set(filas(opLinkRes, 'operadores ligados a la caja').map((r: OpLink) => r.operador_id))
 
   // Tasa más reciente por par (primera al venir ordenado por fecha desc).
   const seen = new Set<string>()
   const tasas: { origen: string; destino: string; tasa: number }[] = []
-  for (const t of (tasaRes.data ?? [])) {
+  for (const t of filas(tasaRes, 'tasas de cambio')) {
     const k = `${t.moneda_origen}__${t.moneda_destino}`
     if (seen.has(k)) continue
     seen.add(k)
@@ -201,13 +286,14 @@ export async function construirSeed(db: Db, caja: CajaRow) {
       empresa_id:        caja.empresa_id,
       almacen_id:        caja.almacen_id,
       monedas_aceptadas: monedasCaja,
+      monedas_sin_cuenta: monedasSinCuenta,
       // El dispositivo no puede deducirlo: sin esto, quedarse sin monedas le pedía
       // «asigna la caja de Tesorería» a un cliente que no tiene Contabilidad y por
       // tanto no tiene ninguna cuenta que asignar.
       tiene_base:        tieneBase,
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    productos: (prodRes.data ?? []).map((p: any) => ({
+    productos: filas(prodRes, 'productos').map((p: any) => ({
       producto_id: p.producto_id, codigo: p.codigo, nombre: p.nombre,
       precios: p.precios ?? {}, unidad: p.unidad,
       // El dispositivo necesita el tipo para separar mostrador y servicios: mezclados en
@@ -221,8 +307,26 @@ export async function construirSeed(db: Db, caja: CajaRow) {
       es_suscribible: p.es_suscribible === true,
     })),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    monedas: (monRes.data ?? []).map((m: any) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo })),
+    monedas: filas(monRes, 'monedas').map((m: any) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo })),
     tasas,
+    // La campaña viaja entera —ventana incluida— y el dispositivo la resuelve
+    // contra su reloj. El nombre baja porque es lo único que después distingue
+    // «Semana del libro» de un descuento que puso el cajero a ojo.
+    // Lo ya vencido se queda en el servidor: no es un filtro de negocio (el aparato
+    // vuelve a comprobar la ventana en cada venta), es no cargar el móvil con campañas
+    // que ya no pueden volver a valer. Un solo `.or()` en la consulta y la fecha aquí:
+    // dos `.or()` encadenados en PostgREST no está claro que se combinen con Y.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    descuentos: filas(dtoRes, 'campañas').filter((d: any) => !d.hasta || d.hasta >= hoy).map((d: any) => ({
+      nombre: d.nombre, pct: Number(d.pct),
+      ambito: d.ambito as 'TODO' | 'PRODUCTO', ambito_id: d.ambito_id ?? null,
+      desde: d.desde ?? null, hasta: d.hasta ?? null,
+      dias_semana: (d.dias_semana ?? []) as number[],
+    })),
+    operadores: filas(opRes, 'operadores del cliente')
+      .filter((o: Operador) => ligados.has(o.operador_id))
+      .map((o: Operador) => ({ operador_id: o.operador_id, nombre: o.nombre }))
+      .sort((a: Operador, b: Operador) => a.nombre.localeCompare(b.nombre, 'es')),
   }
 }
 
@@ -274,6 +378,16 @@ export async function ingestarLote(
       rechazar(t.ticket_uuid, `ticket ${t.ticket_uuid}: moneda ${t.moneda}, que este punto de venta no acepta`)
       continue
     }
+    // La misma guardia para la moneda del PAGO y la del VUELTO. Las monedas aceptadas ya
+    // vienen filtradas a las que tienen cuenta de Tesorería (`construirSeed`), justo para
+    // no admitir dinero que el cierre no puede contabilizar; dejar entrar un vuelto en una
+    // moneda sin cuenta recrearía ese mismo agujero por la otra puerta.
+    const monedaMala = [t.cobrado_moneda, t.cambio_moneda]
+      .find(m => m && aceptadas.size > 0 && !aceptadas.has(m))
+    if (monedaMala) {
+      rechazar(t.ticket_uuid, `ticket ${t.ticket_uuid}: cobro o vuelto en ${monedaMala}, que este punto de venta no acepta`)
+      continue
+    }
     const ms = Date.parse(t.fecha)
     if (!Number.isFinite(ms) || ms < HACE_2A || ms > EN_1D) {
       rechazar(t.ticket_uuid, `ticket ${t.ticket_uuid}: fecha fuera de rango (${t.fecha})`)
@@ -282,13 +396,28 @@ export async function ingestarLote(
     // El total manda sobre las líneas SOLO si cuadra con ellas: es el número que acaba en
     // Tesorería, y aceptarlo a ciegas es dejar que el dispositivo escriba el ingreso que
     // quiera. Si no cuadra se guarda el de las líneas y se deja dicho.
+    //
+    // Con descuento de TICKET la cuenta ya no es «suma = total»: el descuento general se
+    // resta DESPUÉS de las líneas (las líneas siguen valiendo lo suyo). La comprobación
+    // pasa a ser `Σ subtotal − descuento_ticket ≈ total`; si se hubiera dejado la vieja,
+    // cualquier venta con descuento general se rechazaría y se quedaría dando vueltas en
+    // la cola del móvil para siempre.
     const lineasT = Array.isArray(t.lineas) ? t.lineas : []
     const suma    = round2(lineasT.reduce((s, l) => s + (Number(l.subtotal) || 0), 0))
+    // Topado a la suma de líneas: un descuento mayor que la venta daría un ingreso
+    // negativo en Tesorería. Y nunca negativo, que sería un recargo por la puerta de atrás.
+    const dtoTk   = Math.min(Math.max(round2(Number(t.descuento_importe) || 0), 0), suma)
     let total     = round2(Number(t.total) || 0)
-    if (lineasT.length > 0 && Math.abs(suma - total) > 0.01) {
-      res.errores.push(`ticket ${t.ticket_uuid}: el total (${total}) no cuadra con sus líneas (${suma}); se registra ${suma}`)
-      total = suma
+    if (lineasT.length > 0 && Math.abs(round2(suma - dtoTk) - total) > 0.01) {
+      res.errores.push(`ticket ${t.ticket_uuid}: el total (${total}) no cuadra con sus líneas (${suma}${dtoTk ? ` − ${dtoTk} de descuento` : ''}); se registra ${round2(suma - dtoTk)}`)
+      total = round2(suma - dtoTk)
     }
+    // El bruto es la suma de lo que valían las líneas ANTES de su propio descuento. Se
+    // recalcula aquí en vez de fiarse del que manda el dispositivo por lo mismo que el
+    // total: es el número contra el que el dueño juzga lo que se regaló.
+    const brutoLineas = round2(lineasT.reduce(
+      (s, l) => s + (Number(l.subtotal) || 0) + Math.max(Number(l.descuento_importe) || 0, 0), 0))
+    const bruto = brutoLineas > 0 ? brutoLineas : round2(Number(t.bruto) || total)
 
     const { data: nuevo, error } = await db.from('caja_tickets').upsert({
       ticket_uuid: t.ticket_uuid,
@@ -299,6 +428,17 @@ export async function ingestarLote(
       fecha:       t.fecha,
       moneda:      t.moneda,
       total,
+      bruto,
+      descuento_pct:     Math.max(Number(t.descuento_pct) || 0, 0),
+      descuento_importe: dtoTk,
+      // Se guardan tal cual llegan, sin aritmética entre monedas: es la decisión de fondo
+      // de la mig. 209 —el sistema registra lo que pasó, no lo recalcula—. Solo se
+      // normaliza el «no hubo» a null, para que la fórmula del arqueo pueda distinguir
+      // «pagó justo» de «cobró cero».
+      cobrado_moneda:  t.cobrado_moneda ?? null,
+      cobrado_importe: Number(t.cobrado_importe) > 0 ? round2(Number(t.cobrado_importe)) : null,
+      cambio_moneda:   t.cambio_moneda ?? null,
+      cambio_importe:  Number(t.cambio_importe)  > 0 ? round2(Number(t.cambio_importe))  : null,
       medio_pago:  t.medio_pago ?? null,
       estado:      t.estado ?? 'VIGENTE',
       rectifica_a: t.rectifica_a ?? null,
@@ -328,6 +468,8 @@ export async function ingestarLote(
         cantidad:        Number(l.cantidad) || 0,
         precio_unitario: Number(l.precio_unitario) || 0,
         subtotal:        Number(l.subtotal) || 0,
+        descuento_pct:     Math.max(Number(l.descuento_pct) || 0, 0),
+        descuento_importe: Math.max(Number(l.descuento_importe) || 0, 0),
       })))
       // NO se rechaza el ticket: su cabecera —con el total, que es lo que llega a
       // Tesorería— sí entró, así que el dinero está bien registrado y solo falta el
@@ -435,7 +577,13 @@ async function ensureCierre(db: Db, caja: CajaRow, c: CierreIn) {
     estado:           entrante,
     fondo_inicial:    c.fondo_inicial ?? {},
     efectivo_contado: c.efectivo_contado ?? {},
+    // Quién abrió y quién cerró (mig. 208). Se guardan id Y nombre: el id sirve para
+    // agrupar por persona; el nombre es la foto del día, y sobrevive al renombrado o
+    // a la baja del cajero. Mismo criterio que el `salario_base` congelado de nómina.
+    abierta_por:      c.abierta_por ?? null,
+    abierta_por_id:   c.abierta_por_id ?? null,
     cerrada_por:      c.cerrada_por ?? null,
+    cerrada_por_id:   c.cerrada_por_id ?? null,
     sincronizado_at:  new Date().toISOString(),
   }, { onConflict: 'sesion_uuid' })
 }
@@ -484,19 +632,49 @@ async function postearResumenCierre(
   // Totales por moneda desde los tickets sincronizados de este cierre. Los ANULADO
   // (rectificados) se excluyen → Tesorería e Inventario reciben el NETO corregido.
   const { data: tks } = await db.from('caja_tickets')
-    .select('ticket_uuid, moneda, total, estado, medio_pago').eq('sesion_uuid', sesionUuid)
+    .select('ticket_uuid, moneda, total, estado, medio_pago, cobrado_moneda, cobrado_importe, cambio_moneda, cambio_importe')
+    .eq('sesion_uuid', sesionUuid)
   const vigentes = (tks ?? []).filter((t: { estado?: string }) => (t.estado ?? 'VIGENTE') !== 'ANULADO')
   const ticketUuids = vigentes.map((t: { ticket_uuid: string }) => t.ticket_uuid)
+
+  // ── Dos preguntas distintas que hasta la mig. 209 eran el mismo número ──
+  //
+  //   INGRESO  (cuánto se VENDIÓ)      → moneda y total del ticket → `gastos_cobros`
+  //   EFECTIVO (dónde ESTÁ el dinero)  → cobrado − cambio          → `movimientos_tesoreria`
+  //
+  // Con una venta en USD cobrada en CUP dejan de coincidir: se vendieron 15 USD y en la
+  // gaveta hay 6.000 CUP menos 300 de vuelto. Es el mismo desdoblamiento que el repo ya
+  // asumió en la mig. 144 (el gasto y la deuda dejan de ser el mismo número). Mientras
+  // nadie use el vuelto cruzado, las dos preguntas dan la misma respuesta y no cambia nada.
   const porMoneda = new Map<string, number>()
-  // Y el mismo total partido por DESTINO: lo cobrado por transferencia no entra en la
-  // gaveta, entra en el banco. Todo lo que no sea «Transferencia» —incluido «Otro»— va al
-  // efectivo, que es lo que hacía el sistema hasta ahora: así, sin configurar nada, nada
-  // cambia de comportamiento.
+  // El efectivo REAL de la gaveta, por moneda de venta y moneda de caja: el ingreso de
+  // Tesorería se indexa por la moneda de la VENTA (es la que liquida el cierre y la que
+  // mira la pantalla de Cierres para decir si quedó algo pendiente), pero el dinero entra
+  // en la cuenta de la moneda en que se recibió.
+  const efectivo = new Map<string, Map<string, number>>()
+  const sumar = (venta: string, caja: string, imp: number) => {
+    const fila = efectivo.get(venta) ?? new Map<string, number>()
+    fila.set(caja, round2((fila.get(caja) ?? 0) + imp))
+    efectivo.set(venta, fila)
+  }
+  // Lo cobrado por transferencia no entra en la gaveta, entra en el banco; todo lo demás va
+  // al efectivo. El dispositivo aplica esta MISMA regla en su arqueo (`arqueoDe`), y no es
+  // casualidad: preguntaba `!== 'Efectivo'` y por eso un ticket con el viejo medio «Otro»
+  // —tercer botón retirado del TPV: nadie lo usó en 53 ventas y nadie sabía definirlo—
+  // salía del arqueo del móvil pero entraba en el del cierre. Cualquier medio que se añada
+  // en el futuro tiene que decidirse aquí y allí a la vez, o vuelve el descuadre fantasma.
   const porMonedaTransf = new Map<string, number>()
   for (const t of vigentes) {
     porMoneda.set(t.moneda, (porMoneda.get(t.moneda) ?? 0) + Number(t.total))
     if ((t.medio_pago ?? 'Efectivo') === 'Transferencia') {
       porMonedaTransf.set(t.moneda, (porMonedaTransf.get(t.moneda) ?? 0) + Number(t.total))
+      continue   // una transferencia no lleva vuelto: el banco no da cambio
+    }
+    // Sin `cobrado_*` el ticket es de antes de la mig. 209 (o se pagó justo): el efectivo
+    // es el total, en la moneda de la venta. Ahí la fórmula nueva ES la vieja.
+    sumar(t.moneda, t.cobrado_moneda ?? t.moneda, round2(Number(t.cobrado_importe ?? t.total)))
+    if (t.cambio_moneda && Number(t.cambio_importe) > 0) {
+      sumar(t.moneda, t.cambio_moneda, -round2(Number(t.cambio_importe)))
     }
   }
 
@@ -513,14 +691,19 @@ async function postearResumenCierre(
     const { data: previos } = await db.from('movimientos_tesoreria')
       .select('movimiento_id, moneda, cuenta_id')
       .eq('client_id', caja.client_id).eq('origen', 'CAJA').eq('referencia_id', sesionUuid)
-    const movs: Record<string, string> = {}
-    // Un cierre puede tener hasta DOS ingresos por moneda (gaveta y banco), así que lo ya
-    // hecho se identifica por moneda **y cuenta**. `movs` sigue indexado por MONEDA porque
-    // es lo que compara la pantalla de Cierres para decir si quedó algo pendiente.
-    const hechos = new Set<string>()
+    // `movs` está indexado por la moneda de la VENTA, que es lo que compara la pantalla de
+    // Cierres contra `total_por_moneda` para decir si quedó algo pendiente. **Ya no se
+    // puede reconstruir desde los movimientos**: desde la mig. 209 el dinero de una venta
+    // en USD puede haber entrado en la cuenta de CUP, así que un mapa hecho con la moneda
+    // de los apuntes diría «hecho CUP, falta USD» para siempre. Se parte de lo ya guardado
+    // en la sesión —que ya está en esta clave— y se completa con lo que se postee ahora.
+    const movs: Record<string, string> = { ...((ses.tesoreria_movs ?? {}) as Record<string, string>) }
+    // La idempotencia, en cambio, SÍ vive en los movimientos reales: un apunte se
+    // identifica por su cuenta y su moneda de caja. Preguntando a los datos y no a un flag,
+    // arreglar el mapeo y volver a contabilizar recupera lo que faltaba sin duplicar nada.
+    const hechos = new Map<string, string>()
     for (const p of (previos ?? []) as { movimiento_id: string; moneda: string; cuenta_id: string }[]) {
-      movs[p.moneda] = p.movimiento_id
-      hechos.add(`${p.moneda}|${p.cuenta_id}`)
+      hechos.set(`${p.moneda}|${p.cuenta_id}`, p.movimiento_id)
     }
 
     // Lo ya CONTABILIZADO se pregunta igual, a los datos: una fila `COBRO` por moneda
@@ -536,8 +719,46 @@ async function postearResumenCierre(
     const contabilizadas = new Set(((regsPrevios ?? []) as { moneda: string }[]).map(r => r.moneda))
     const etiquetaCaja = (caja.nombre ?? '').trim()
 
+    /** Las cuentas por las que el dinero de una moneda de venta tiene que pasar. Es lo que
+     *  decide si esa moneda se puede contabilizar entera o hay que esperar al mapeo. */
+    function cuentasDe(venta: string): (string | undefined)[] {
+      const usadas: (string | undefined)[] = []
+      for (const [mc, imp] of (efectivo.get(venta) ?? new Map<string, number>())) {
+        if (Math.abs(imp) >= 0.005) usadas.push(caja.cuentas_moneda?.[mc])
+      }
+      if (round2(porMonedaTransf.get(venta) ?? 0) > 0) {
+        // La transferencia cae en la cuenta de efectivo si no se configuró otra: así una
+        // caja que nunca tocó esto se comporta exactamente igual que antes.
+        usadas.push(caja.cuentas_transferencia?.[venta] || caja.cuentas_moneda?.[venta])
+      }
+      return usadas
+    }
+    const cuentasListas = (venta: string) => cuentasDe(venta).every(Boolean)
+
+    // Los apuntes de Tesorería, acumulados por cuenta y moneda de caja antes de escribirse.
+    const porCuenta = new Map<string, {
+      cuenta: string; monedaCaja: string; monto: number; ventas: Set<string>; que: string
+    }>()
+    function apuntar(venta: string) {
+      const anota = (cuenta: string | undefined, monedaCaja: string, monto: number, que: string) => {
+        if (!cuenta || Math.abs(monto) < 0.005) return
+        const k = `${monedaCaja}|${cuenta}`
+        const prev = porCuenta.get(k)
+        if (prev) { prev.monto = round2(prev.monto + monto); prev.ventas.add(venta) }
+        else porCuenta.set(k, { cuenta, monedaCaja, monto: round2(monto), ventas: new Set([venta]), que })
+      }
+      for (const [mc, imp] of (efectivo.get(venta) ?? new Map<string, number>())) {
+        anota(caja.cuentas_moneda?.[mc], mc, imp,
+          mc === venta ? 'Ventas de caja' : `Ventas de caja (cobradas o devueltas en ${mc})`)
+      }
+      const enTransf = round2(porMonedaTransf.get(venta) ?? 0)
+      if (enTransf > 0) {
+        anota(caja.cuentas_transferencia?.[venta] || caja.cuentas_moneda?.[venta], venta, enTransf,
+          'Ventas de caja (transferencia)')
+      }
+    }
+
     for (const [moneda, monto] of porMoneda) {
-      const cuentaId = caja.cuentas_moneda?.[moneda]
       // Sin cuenta mapeada NO se postea NADA de esta moneda —ni caja ni contabilidad— y
       // se reintenta en la próxima sincronización. Los dos efectos van juntos a
       // propósito: contabilizar la venta sin que su dinero entre en ninguna caja deja el
@@ -545,7 +766,11 @@ async function postearResumenCierre(
       // «cobrado» un dinero que no está en ningún sitio. Con esto, arreglar el mapeo y
       // pulsar «Contabilizar» en el cierre recupera la moneda entera — resincronizar NO
       // bastaba: el dispositivo no reenvía un cierre que ya dio por enviado (Fase 2).
-      if (!movs[moneda] && !cuentaId) continue
+      //
+      // Las cuentas que hacen falta son las de las monedas en que el dinero ENTRÓ de
+      // verdad, no la de la moneda de la venta: desde la mig. 209 una venta en USD cobrada
+      // en CUP no necesita cuenta en USD para nada.
+      if (!movs[moneda] && !cuentasListas(moneda)) continue
 
       // 1) El registro contable (idempotente por moneda del cierre).
       if (!contabilizadas.has(moneda) && monto > 0) {
@@ -574,39 +799,52 @@ async function postearResumenCierre(
         did = true
       }
 
-      // 2) Los movimientos de Tesorería, uno por DESTINO. La transferencia cae en la
-      //    cuenta de efectivo si no se configuró otra: así una caja que nunca tocó esto se
-      //    comporta exactamente igual que antes.
-      const enTransf   = round2(porMonedaTransf.get(moneda) ?? 0)
-      const cuentaTr   = caja.cuentas_transferencia?.[moneda] || cuentaId
-      const enEfectivo = round2(monto - enTransf)
-      const destinos: { cuenta: string; monto: number; que: string }[] = []
-      if (enEfectivo > 0) destinos.push({ cuenta: cuentaId, monto: enEfectivo, que: 'Ventas de caja' })
-      if (enTransf > 0)   destinos.push({ cuenta: cuentaTr, monto: enTransf,   que: 'Ventas de caja (transferencia)' })
+      // Los apuntes de Tesorería de esta moneda de venta se acumulan y se escriben abajo,
+      // agrupados por cuenta: dos monedas de venta pueden acabar en la misma gaveta.
+      apuntar(moneda)
+    }
 
-      for (const d of destinos) {
-        if (!d.cuenta) continue
-        if (hechos.has(`${moneda}|${d.cuenta}`)) continue   // ya tiene su ingreso
-        const movId = generarMovId()
-        const { error } = await db.from('movimientos_tesoreria').insert({
-          movimiento_id: movId,
-          client_id:     caja.client_id,
-          empresa_id:    caja.empresa_id,
-          cuenta_id:     d.cuenta,
-          fecha,
-          tipo:          'INGRESO',
-          monto:         d.monto,
-          moneda,
-          monto_ref:     d.monto,
-          concepto:      `${d.que} — cierre ${sesionUuid.substring(0, 8)}`,
-          origen:        'CAJA',
-          referencia_id: sesionUuid,
-        })
-        if (error) throw new Error(`tesorería ${moneda}: ${error.message}`)
-        hechos.add(`${moneda}|${d.cuenta}`)
-        movs[moneda] = movId
-        did = true
+    // 2) Los movimientos de Tesorería, UNO POR CUENTA Y MONEDA DE CAJA.
+    //
+    // Agrupados y no uno por destino: con el vuelto cruzado, dos monedas de venta pueden
+    // dejar dinero en la misma cuenta, y dos apuntes con la misma (cuenta, moneda) son
+    // indistinguibles al reintentar —el segundo se tomaría por el primero y no se
+    // escribiría—. Agrupar además arregla de paso el caso de siempre: sin cuenta de
+    // transferencias configurada, la transferencia va a la MISMA cuenta que el efectivo, y
+    // antes su importe se perdía por ese mismo choque de claves.
+    for (const d of porCuenta.values()) {
+      if (!d.cuenta || Math.abs(d.monto) < 0.005) continue
+      const clave = `${d.monedaCaja}|${d.cuenta}`
+      const yaHecho = hechos.get(clave)
+      if (yaHecho) {
+        // Ya estaba puesto: lo que falta es dejar dicho qué ventas liquida, que es lo que
+        // mira la pantalla de Cierres.
+        for (const v of d.ventas) movs[v] ??= yaHecho
+        continue
       }
+      const movId = generarMovId()
+      // Con el vuelto cruzado el neto de una moneda puede ser NEGATIVO: se dio más cambio
+      // en CUP del que entró en CUP. Eso no es un error, es lo que pasó, y la cuenta tiene
+      // que reflejarlo o el saldo de Claux se separa del dinero real.
+      const sale = d.monto < 0
+      const { error } = await db.from('movimientos_tesoreria').insert({
+        movimiento_id: movId,
+        client_id:     caja.client_id,
+        empresa_id:    caja.empresa_id,
+        cuenta_id:     d.cuenta,
+        fecha,
+        tipo:          sale ? 'EGRESO' : 'INGRESO',
+        monto:         Math.abs(d.monto),
+        moneda:        d.monedaCaja,
+        monto_ref:     Math.abs(d.monto),
+        concepto:      `${d.que} — cierre ${sesionUuid.substring(0, 8)}`,
+        origen:        'CAJA',
+        referencia_id: sesionUuid,
+      })
+      if (error) throw new Error(`tesorería ${d.monedaCaja}: ${error.message}`)
+      hechos.set(clave, movId)
+      for (const v of d.ventas) movs[v] ??= movId
+      did = true
     }
     // Se guarda el mapa real, sin el `.is(null)`: ese guardia era lo que congelaba el
     // cierre a medio postear. El mapa dice qué monedas están hechas, y la vista compara

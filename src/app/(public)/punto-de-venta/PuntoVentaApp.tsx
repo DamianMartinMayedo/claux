@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   type CajaConfig, type Producto, type LocalTicket, type LocalSesion, type LocalLinea,
-  type LocalMovimiento,
+  type LocalMovimiento, type Campania,
   metaGet, metaSet, saveProductos, getProductos, putTicket, getTickets, putSesion, getSesiones,
   putMovimiento, getMovimientos, markTicketsSynced, markSesionesSynced, markMovimientosSynced,
 } from './punto-venta-db'
@@ -18,11 +18,33 @@ type Vista = 'vender' | 'ventas' | 'turno' | 'sync'
 type Tema = 'auto' | 'claro' | 'oscuro'
 /** Medios de pago. Fijos por ahora; hacerlos configurables por punto (Transfermóvil,
  *  Enzona, tarjeta…) es la ficha F5 del backlog. */
-const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Otro'] as const
+// Dos, y solo dos. «Otro» era un tercer botón sin definición: ni el dueño sabía qué
+// pago cabía ahí, y en 53 ventas reales no se pulsó jamás. Lo único que decide un medio
+// de pago es DÓNDE está el dinero al cerrar —en la gaveta o en el banco—, y un cajón de
+// sastre no contesta esa pregunta: la caja lo contaba como efectivo y el dispositivo lo
+// escondía del arqueo, así que la misma venta descuadraba en un sitio y no en el otro.
+// Si algún día aparece un medio de verdad (tarjeta, fiado), lleva su nombre y su regla.
+const MEDIOS_PAGO = ['Efectivo', 'Transferencia'] as const
 /** Billetes con los que se paga de verdad aquí. Los atajos del cambio SUMAN, así que dos
  *  toques en «+1000» son dos billetes de mil, igual que en la mano. */
 const BILLETES = [200, 500, 1000, 2000] as const
-interface CartLine { key: string; producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number }
+
+/** Valor del desplegable que significa «no es ninguno de la lista, lo escribo». La lista
+ *  de trabajadores la manda el dueño desde el portal por punto de venta, y el mostrador no
+ *  puede quedarse parado porque hoy cubra el turno el primo del dueño: se elige «Otra
+ *  persona», se teclea el nombre y el turno queda firmado igual. Sin id, claro — no es
+ *  nadie de la plantilla, así que no se puede agrupar por persona. */
+const OTRA_PERSONA = '__otra'
+// El descuento de línea usa el par de la factura (`documento_lineas`, mig. 015) con el
+// modo DERIVADO: pct > 0 ⇒ porcentaje, si no monto fijo. Una tercera bandera diciendo cuál
+// manda sería un estado más que puede contradecir a los otros dos.
+interface CartLine { key: string; producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number
+  descuento_pct?: number; descuento_importe?: number
+  /** Nombre de la campaña que puso este descuento (mig. 210). Vive SOLO en pantalla: al
+   *  ticket no viaja nada nuevo —para el cierre, la contabilidad y los informes un −10 %
+   *  de campaña y un −10 % por tara son el mismo dato—, pero quien cobra necesita saber
+   *  por qué el precio sale tachado antes de que se lo pregunte el cliente. */
+  campania?: string }
 type InstallPromptEvent = Event & { prompt: () => Promise<void> }
 
 // Moneda inicial de venta: preferimos CUP (la de curso legal); si no, la primera
@@ -42,21 +64,50 @@ async function fetchSeed(token: string): Promise<{ config: CajaConfig; productos
   const res = await fetch('/punto-de-venta/api/seed', { headers: { 'x-caja-token': token }, cache: 'no-store' })
   const j = await res.json()
   if (!res.ok || !j.ok) throw new Error(j?.error || 'seed')
-  return { config: { caja: j.seed.caja, monedas: j.seed.monedas, tasas: j.seed.tasas }, productos: j.seed.productos ?? [] }
+  // OJO: la config se arma campo a campo, así que TODO lo que añada la semilla hay que
+  // enumerarlo aquí o se tira al suelo en silencio. Pasó con `operadores` y `descuentos`
+  // (migs. 208 y 210): el servidor los mandaba, el dispositivo los descartaba, y ni los
+  // cajeros nuevos ni las campañas llegaban nunca al mostrador — con el dueño
+  // regenerando el enlace y sincronizando sin que cambiara nada.
+  return {
+    config: {
+      caja: j.seed.caja, monedas: j.seed.monedas, tasas: j.seed.tasas,
+      operadores: j.seed.operadores ?? [], descuentos: j.seed.descuentos ?? [],
+    },
+    productos: j.seed.productos ?? [],
+  }
 }
-const stripTicket = (t: LocalTicket) => ({ ticket_uuid: t.ticket_uuid, sesion_uuid: t.sesion_uuid, fecha: t.fecha, moneda: t.moneda, total: t.total, medio_pago: t.medio_pago, estado: t.estado ?? 'VIGENTE', rectifica_a: t.rectifica_a ?? null, lineas: t.lineas })
-const stripSesion = (s: LocalSesion) => ({ sesion_uuid: s.sesion_uuid, abierta_at: s.abierta_at, cerrada_at: s.cerrada_at, estado: s.estado, fondo_inicial: s.fondo_inicial, efectivo_contado: s.efectivo_contado, cerrada_por: s.cerrada_por ?? null })
+// Se enumeran los campos en vez de mandar el registro entero: `synced` es asunto del
+// dispositivo y no tiene por qué viajar. Los descuentos SÍ viajan —el bruto y el descuento
+// de ticket en la cabecera, y el suyo en cada línea—; sin ellos el servidor solo vería un
+// total más bajo, sin forma de saber si fue un descuento o un precio mal tecleado.
+const stripTicket = (t: LocalTicket) => ({ ticket_uuid: t.ticket_uuid, sesion_uuid: t.sesion_uuid, fecha: t.fecha, moneda: t.moneda, total: t.total, bruto: t.bruto ?? t.total, descuento_pct: t.descuento_pct ?? 0, descuento_importe: t.descuento_importe ?? 0, cobrado_moneda: t.cobrado_moneda ?? null, cobrado_importe: t.cobrado_importe ?? null, cambio_moneda: t.cambio_moneda ?? null, cambio_importe: t.cambio_importe ?? null, medio_pago: t.medio_pago, estado: t.estado ?? 'VIGENTE', rectifica_a: t.rectifica_a ?? null, lineas: t.lineas })
+const stripSesion = (s: LocalSesion) => ({
+  sesion_uuid: s.sesion_uuid, abierta_at: s.abierta_at, cerrada_at: s.cerrada_at, estado: s.estado,
+  fondo_inicial: s.fondo_inicial, efectivo_contado: s.efectivo_contado,
+  // Quién llevó el turno (mig. 208). Si esto no viaja, el dato se queda en el móvil y
+  // el dueño sigue sin poder responder «¿quién estaba en la caja ese día?».
+  abierta_por: s.abierta_por ?? null, abierta_por_id: s.abierta_por_id ?? null,
+  cerrada_por: s.cerrada_por ?? null, cerrada_por_id: s.cerrada_por_id ?? null,
+})
 const stripMov = (m: LocalMovimiento) => ({ movimiento_uuid: m.movimiento_uuid, sesion_uuid: m.sesion_uuid, tipo: m.tipo, moneda: m.moneda, importe: m.importe, motivo: m.motivo, fecha: m.fecha })
 
-interface FilaArqueo { fondo: number; ventas: number; salidas: number; entradas: number; esperado: number }
+interface FilaArqueo { fondo: number; cobrado: number; cambio: number; salidas: number; entradas: number; esperado: number }
 /**
  * EL ARQUEO de un turno. Por moneda: qué debería haber en la gaveta.
  *
- * `esperado = fondo + ventas EN EFECTIVO + entradas − salidas`. La clave es «en efectivo»:
- * comparar lo contado contra el total vendido —que es lo que hacía la fórmula del descuadre
- * que ya se exportaba— le exige a la gaveta el dinero de las transferencias, que nunca pasó
- * por ella; con un solo cobro por Transfermóvil el arqueo salía descuadrado sin que nada
- * estuviera mal.
+ * `esperado = fondo + COBRADO en efectivo + entradas − salidas − CAMBIO dado`. Dos cosas:
+ *
+ * 1. «En efectivo»: comparar lo contado contra el total vendido —que es lo que hacía la
+ *    fórmula del descuadre que ya se exportaba— le exige a la gaveta el dinero de las
+ *    transferencias, que nunca pasó por ella; con un solo cobro por Transfermóvil el arqueo
+ *    salía descuadrado sin que nada estuviera mal.
+ * 2. «Cobrado» y no «vendido» (mig. 209): lo que entra en la gaveta es el billete que puso
+ *    el cliente, y lo que sale es el vuelto —que puede ser en OTRA moneda—. Una venta de 15
+ *    USD pagada con 20 USD y devuelta en 1.900 CUP daba antes dos descuadres a la vez
+ *    (sobran 5 USD, faltan 1.900 CUP) porque la fórmula era estrictamente por moneda de
+ *    venta. Con `cobrado = total` y `cambio = 0` esta fórmula ES la de antes, así que quien
+ *    no dé vuelto cruzado no nota ningún cambio.
  *
  * Fuera del componente y sin estado, a propósito: la pantalla lo pide del turno en curso y
  * el resumen compartible del turno que se acaba de cerrar. Con una copia por sitio, tarde o
@@ -65,12 +116,24 @@ interface FilaArqueo { fondo: number; ventas: number; salidas: number; entradas:
  */
 function arqueoDe(ses: LocalSesion, tks: LocalTicket[], mvs: LocalMovimiento[]): Map<string, FilaArqueo> {
   const filas = new Map<string, FilaArqueo>()
-  const de = (m: string): FilaArqueo => filas.get(m) ?? { fondo: 0, ventas: 0, salidas: 0, entradas: 0, esperado: 0 }
+  const de = (m: string): FilaArqueo => filas.get(m) ?? { fondo: 0, cobrado: 0, cambio: 0, salidas: 0, entradas: 0, esperado: 0 }
 
   for (const [m, v] of Object.entries(ses.fondo_inicial ?? {})) filas.set(m, { ...de(m), fondo: Number(v) || 0 })
   for (const t of tks) {
-    if ((t.medio_pago ?? 'Efectivo') !== 'Efectivo') continue
-    filas.set(t.moneda, { ...de(t.moneda), ventas: round2(de(t.moneda).ventas + Number(t.total)) })
+    // La MISMA regla que el cierre en el servidor (`ingesta.ts`): al banco va lo
+    // transferido y a la gaveta todo lo demás. Preguntando `!== 'Efectivo'` un ticket
+    // heredado con «Otro» desaparecía del arqueo del móvil y sí entraba en el del
+    // cierre: el teléfono daba el turno cuadrado y Claux acusaba un descuadre.
+    if ((t.medio_pago ?? 'Efectivo') === 'Transferencia') continue
+    // Sin `cobrado_*` el ticket es de antes de la mig. 209 o se pagó justo: entró el total
+    // en la moneda de la venta, que es exactamente lo que contaba la fórmula vieja.
+    const mc  = t.cobrado_moneda ?? t.moneda
+    const imp = round2(Number(t.cobrado_importe ?? t.total))
+    filas.set(mc, { ...de(mc), cobrado: round2(de(mc).cobrado + imp) })
+    if (t.cambio_moneda && Number(t.cambio_importe) > 0) {
+      const cm = t.cambio_moneda
+      filas.set(cm, { ...de(cm), cambio: round2(de(cm).cambio + Number(t.cambio_importe)) })
+    }
   }
   for (const mv of mvs) {
     const f = de(mv.moneda)
@@ -78,7 +141,7 @@ function arqueoDe(ses: LocalSesion, tks: LocalTicket[], mvs: LocalMovimiento[]):
       ? { ...f, salidas: round2(f.salidas + mv.importe) }
       : { ...f, entradas: round2(f.entradas + mv.importe) })
   }
-  for (const [m, f] of filas) filas.set(m, { ...f, esperado: round2(f.fondo + f.ventas + f.entradas - f.salidas) })
+  for (const [m, f] of filas) filas.set(m, { ...f, esperado: round2(f.fondo + f.cobrado + f.entradas - f.salidas - f.cambio) })
   return filas
 }
 /** Lo tecleado por una persona: acepta coma decimal, que es como se escribe aquí. */
@@ -110,14 +173,39 @@ export default function PuntoVentaApp() {
   const [librePre, setLibrePre] = useState('')
   const [contado, setContado] = useState<Record<string, string>>({})
   const [fondo, setFondo]     = useState<Record<string, string>>({})   // al ABRIR el turno
+  // Quién abre y quién cierra. El valor es el `operador_id` cuando la caja tiene lista
+  // (lo normal) y el texto tal cual cuando no la tiene: `personaDe` resuelve los dos.
+  const [abiertaPor, setAbiertaPor] = useState('')
   const [cerradaPor, setCerradaPor] = useState('')
+  // El nombre tecleado cuando se elige «Otra persona» en el desplegable. Va aparte del
+  // `operador_id` para que cambiar de idea (elegir a alguien de la lista) no se lleve lo
+  // escrito, y para que el centinela nunca acabe guardado como si fuera un nombre.
+  const [abiertaOtro, setAbiertaOtro] = useState('')
+  const [cerradaOtro, setCerradaOtro] = useState('')
   const [confirmarCierre, setConfirmarCierre] = useState(false)
   const [salidaOpen, setSalidaOpen] = useState(false)
   const [salida, setSalida]   = useState({ moneda: '', importe: '', motivo: '' })
   const [pagaCon, setPagaCon] = useState('')                            // calculadora de cambio
+  // Con QUÉ paga y en qué moneda se le devuelve. Vacíos = la moneda de la venta, que es el
+  // caso de siempre. **No hay tasa**: si el vuelto va en otra moneda, el importe se teclea
+  // —en un mostrador cubano ese número es una negociación, no una fórmula—.
+  const [pagaMon, setPagaMon]     = useState('')
+  const [cambioMon, setCambioMon] = useState('')
+  const [cambioImp, setCambioImp] = useState('')
   const [pagando, setPagando] = useState(false)                         // paso de cobro
   const [resumenVisible, setResumenVisible] = useState(false)
   const [qtyEdit, setQtyEdit] = useState<{ key: string; valor: string } | null>(null)
+  // El ajuste de una línea (precio y descuento). Se abre TOCANDO EL PRECIO en el ticket:
+  // la app ya enseña esa gramática con la cantidad, y un control fijo de descuento por
+  // línea no cabe —la fila ya va a dos renglones por falta de sitio—.
+  const [dtoEdit, setDtoEdit] = useState<{ key: string; modo: 'pct' | 'imp'; valor: string; precio: string } | null>(null)
+  // El descuento del ticket entero vive en el paso de cobro, junto a la moneda y el medio
+  // de pago, porque es una decisión del momento de cobrar y no del armado del ticket.
+  const [dtoTk, setDtoTk] = useState<{ modo: 'pct' | 'imp'; valor: string }>({ modo: 'pct', valor: '' })
+  // El control del descuento general está PLEGADO por defecto: la inmensa mayoría de las
+  // ventas no lleva, y un campo permanente en el paso de cobro es un campo que alguien
+  // rellena sin querer con el dedo.
+  const [dtoTkOpen, setDtoTkOpen] = useState(false)
   const [anular, setAnular]   = useState<LocalTicket | null>(null)
   const [tema, setTema]       = useState<Tema>('auto')
   // La hoja del ticket. Se abre sola al añadir el primer artículo —ver el efecto de
@@ -188,15 +276,173 @@ export default function PuntoVentaApp() {
   // Sin caída a «todas las monedas del cliente»: solo se cobra en las que Claux mandó,
   // que ya vienen filtradas a las que tienen caja de Tesorería asignada.
   const monedas = config?.caja.monedas_aceptadas ?? []
+  // Las que el dueño marcó y la semilla retiró por no tener cuenta. NO son cobrables; se
+  // pintan tachadas para que el selector no se esfume sin explicación: quien monta el
+  // ticket veía tres monedas con la caché vieja y una sola en cuanto entraba la semilla
+  // —justo mientras cargaban los productos, así que parecía que lo había roto la carga—.
+  const sinCuenta = config?.caja.monedas_sin_cuenta ?? []
+  // El orden es el de Claux: primero lo cobrable, después lo que falta por configurar.
+  const monedasVisibles = [...monedas, ...sinCuenta]
+  const enumerar = (xs: string[]) => xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`
   const simbolo = (m: string) => config?.monedas.find(x => x.codigo === m)?.simbolo ?? m
   const precioDe = (p: Producto) => Number(p.precios?.[moneda] ?? 0)
   // El producto no tiene precio guardado en la moneda actual (no inventamos conversión).
   const sinPrecioProd = (p: Producto) => p.precios?.[moneda] == null
   const lineaSinPrecio = (l: CartLine) => l.producto_id != null && productos.find(p => p.producto_id === l.producto_id)?.precios?.[moneda] == null
   const cartInvalido = cart.some(lineaSinPrecio)
-  const cartTotal = round2(cart.reduce((s, l) => s + l.cantidad * l.precio_unitario, 0))
+
+  // ── Descuentos ──
+  //
+  // Dos capas, y en este orden: primero el de cada línea («este libro tiene una tara»),
+  // después el del ticket entero («te dejo la compra en 4.500»). El del ticket se aplica
+  // sobre lo que queda DESPUÉS de los de línea, que es como lo cuenta quien cobra.
+  //
+  // No hay techo ni motivo: decisión del dueño. El TPV no bloquea, hace visible — igual que
+  // con el stock negativo. Por eso lo regalado sale en el pie del ticket, en el resumen del
+  // turno y en el portal, y no solo en la base de datos.
+  const brutoLinea = (l: CartLine) => round2(l.cantidad * l.precio_unitario)
+  /** Topado al bruto de la línea y nunca negativo: un descuento mayor que la línea sería
+   *  cobrar en negativo, y uno negativo, un recargo por la puerta de atrás. */
+  function dtoLinea(l: CartLine): number {
+    const b = brutoLinea(l)
+    const pct = l.descuento_pct ?? 0
+    if (pct > 0) return dtoDePct(b, pct)
+    return Math.min(Math.max(round2(l.descuento_importe ?? 0), 0), b)
+  }
+  /** El mismo descuento en dinero, para quien solo tiene un precio y un porcentaje (la
+   *  rejilla). Se comparte con `dtoLinea` a propósito: si la tarjeta y el ticket no dicen
+   *  lo mismo al céntimo, quien cobra deja de creerse los dos. */
+  function dtoDePct(bruto: number, pct: number): number {
+    return Math.min(Math.max(round2(bruto * (pct / 100)), 0), bruto)
+  }
+  const netoLinea = (l: CartLine) => round2(brutoLinea(l) - dtoLinea(l))
+
+  // ── Campañas (mig. 210) ──
+  //
+  // La campaña NO llega como precio ya rebajado: llega como regla con su ventana y la
+  // resuelve el dispositivo, aquí, contra SU reloj. Es obligado, no una preferencia: la
+  // caja sincroniza solo al cerrar turno, así que un precio calculado en el servidor lo
+  // aplicaría un aparato que quizá lleva días sin sembrar — la campaña nacería caducada.
+  //
+  // Jerarquía, la misma que el menú QR escribió en la mig. 080: el descuento del PRODUCTO
+  // manda sobre el de TODO, y el que pone el cajero a mano manda sobre los dos. La
+  // excepción se elige; no se hereda.
+  const campanias = config?.descuentos ?? []
+  /** «10 %», no «10,00 %»: `money()` es para dinero, y un porcentaje con dos decimales
+   *  forzados en un cartelito de oferta se lee como un precio. */
+  const pctTxt = (n: number) => String(n).replace('.', ',')
+
+  /** ¿Está viva HOY, en este aparato? Fechas y día de la semana en hora LOCAL: en Cuba el
+   *  día local ES el del negocio, y con UTC la campaña del martes arrancaría el lunes a
+   *  las 20:00. Sin campañas esto no llega ni a ejecutarse. */
+  function vigenteHoy(c: Campania, hoy: string, dia: number): boolean {
+    if (c.desde && hoy < c.desde) return false
+    if (c.hasta && hoy > c.hasta) return false
+    return c.dias_semana.length === 0 || c.dias_semana.includes(dia)
+  }
+
+  // La fecha se resuelve UNA vez por render y no una por producto: la rejilla llama a
+  // `campaniaDe` para cada tarjeta, y `hoyEnTz()` monta un formateador de Intl cada vez.
+  // Sin campañas ni siquiera se calcula.
+  //
+  // Y el día de la semana SALE DE ESA MISMA FECHA, no de un `new Date().getDay()` suelto:
+  // si el aparato tiene otro huso —una tablet mal configurada, una prueba desde fuera de
+  // Cuba— la fecha sería la del negocio y el día, el del cacharro, y la campaña «los
+  // martes» se caería justo el martes. `new Date(y, m-1, d)` sobre una fecha suelta es
+  // seguro (medianoche local); es lo que hace el resto del repo.
+  const hoyCamp = campanias.length > 0 ? hoyEnTz() : ''
+  const diaCamp = (() => {
+    if (!hoyCamp) return -1
+    const [y, m, d] = hoyCamp.split('-').map(Number)
+    return new Date(y, m - 1, d).getDay()
+  })()
+
+  /** La campaña que hoy le toca a un producto (null = ninguna). El artículo libre solo
+   *  puede coger las de `TODO`: no hay ficha a la que atarle una de producto. */
+  function campaniaDe(producto_id: string | null): Campania | null {
+    if (campanias.length === 0) return null
+    const vivas = campanias.filter(c => vigenteHoy(c, hoyCamp, diaCamp))
+    const suya  = producto_id != null
+      ? vivas.filter(c => c.ambito === 'PRODUCTO' && c.ambito_id === producto_id)
+      : []
+    // Con dos campañas del mismo ámbito pisándose gana la que más rebaja: entre dos
+    // promesas hechas al cliente, la que le beneficia — discutir la otra en el mostrador
+    // cuesta más que el descuento.
+    const mejor = (xs: Campania[]) => xs.reduce<Campania | null>((a, b) => !a || b.pct > a.pct ? b : a, null)
+    return mejor(suya) ?? mejor(vivas.filter(c => c.ambito === 'TODO'))
+  }
+
+  /** El descuento con el que nace una línea nueva. Devuelve los campos ya listos para
+   *  fusionar, así que sin campaña añade exactamente nada. */
+  function dtoDeCampania(producto_id: string | null): Partial<CartLine> {
+    const c = campaniaDe(producto_id)
+    return c ? { descuento_pct: c.pct, descuento_importe: 0, campania: c.nombre } : {}
+  }
+
+  const cartBruto = round2(cart.reduce((s, l) => s + brutoLinea(l), 0))
+  const cartNeto  = round2(cart.reduce((s, l) => s + netoLinea(l), 0))
+  const dtoTicket = (() => {
+    const v = num(dtoTk.valor)
+    if (!(v > 0)) return 0
+    const bruto = dtoTk.modo === 'pct' ? cartNeto * (v / 100) : v
+    return Math.min(Math.max(round2(bruto), 0), cartNeto)
+  })()
+  const cartTotal    = round2(cartNeto - dtoTicket)
+  /** Lo regalado en esta venta, las dos capas juntas. Es lo que se enseña. */
+  const cartDescuento = round2(cartBruto - cartTotal)
+
+  // ── El pago y el vuelto ──
+  //
+  // La calculadora de cambio solo puede restar cuando el billete y la venta van en la MISMA
+  // moneda y el vuelto también. En cuanto se cruza una moneda, el sistema deja de calcular
+  // y pregunta: es la decisión de fondo de la mig. 209 —registrar lo que pasó, no inventar
+  // una tasa—. Lo que se gana es que el arqueo del cierre pueda cuadrar.
+  const pagaMonSel   = pagaMon   || moneda
+  const cambioMonSel = cambioMon || moneda
+  const cambioAuto   = pagaMonSel === moneda && cambioMonSel === moneda
+    ? round2(num(pagaCon) - cartTotal)
+    : null
+  const cambioFinal  = Math.max(cambioAuto ?? num(cambioImp), 0)
+
+  // Quién puede llevar la caja. Baja con la semilla, así que funciona sin conexión —que
+  // es el único momento en que esto importa: en el mostrador no hay a quién preguntar.
+  const operadores    = config?.operadores ?? []
+  const hayOperadores = operadores.length > 0
+
+  /**
+   * Resuelve lo elegido a la pareja que se guarda: NOMBRE (la foto del día, sobrevive a
+   * que renombren o den de baja al cajero) e ID (lo que permite agrupar por persona).
+   * Con lista, el valor es un `operador_id`; sin ella, el texto tal cual y sin id.
+   */
+  function personaDe(valor: string): { nombre: string | null; id: string | null } {
+    const v = valor.trim()
+    if (!v) return { nombre: null, id: null }
+    const op = operadores.find(o => o.operador_id === v)
+    return op ? { nombre: op.nombre, id: op.operador_id } : { nombre: v, id: null }
+  }
 
   const sesion = useMemo(() => sesiones.find(s => s.estado === 'ABIERTA') ?? null, [sesiones])
+  // Al cerrar, quien abrió viene ya elegido: casi siempre es la misma persona, y en un
+  // cierre a las once de la noche un desplegable en blanco es un paso más para nada. Se
+  // resuelve sin `useEffect`: el estado vacío significa «lo que traía el turno».
+  const cierraSel = cerradaPor || (hayOperadores ? (sesion?.abierta_por_id ?? '') : '')
+  // Lo que de verdad se guarda: el id elegido, o el nombre tecleado si es «Otra persona».
+  const abreNombre  = abiertaPor === OTRA_PERSONA ? abiertaOtro : abiertaPor
+  const cierraNombre = cierraSel === OTRA_PERSONA ? cerradaOtro : cierraSel
+
+  /** Lo regalado en el turno abierto, por moneda. Bruto − total recoge las dos capas
+   *  (línea y ticket) de una vez; las anuladas no cuentan, y los tickets de antes de esta
+   *  versión no traen bruto, que es lo mismo que decir que no tuvieron descuento. */
+  const descuentoTurno = useMemo(() => {
+    const m = new Map<string, number>()
+    if (!sesion) return m
+    for (const t of tickets) {
+      if (t.sesion_uuid !== sesion.sesion_uuid || (t.estado ?? 'VIGENTE') === 'ANULADO') continue
+      const regalado = round2(Number(t.bruto ?? t.total) - Number(t.total))
+      if (regalado > 0) m.set(t.moneda, round2((m.get(t.moneda) ?? 0) + regalado))
+    }
+    return m
+  }, [tickets, sesion])
   // Lo que cuenta como TRABAJO PENDIENTE de enviar. La sesión abierta viaja con el lote
   // (ver `sincronizar`) pero NO se cuenta aquí: un turno en curso no es un pendiente, y
   // pintar «1 cierre sin enviar» durante toda la jornada es enseñar una alarma que no lo es.
@@ -408,14 +654,24 @@ export default function PuntoVentaApp() {
   // el fondo con el que se abre la gaveta para dar cambio salía siempre como descuadre.
   async function abrirTurno() {
     if (busy) return
+    // Quién lleva el turno es OBLIGATORIO, con lista o sin ella. Es la pregunta que el
+    // dueño le hace al cierre («¿quién estaba en la caja cuando faltaron 2.000?») y un
+    // turno anónimo la deja sin respuesta para siempre. Se pide una vez al día, no en
+    // cada venta: no es lo que hace cola en un mostrador.
+    if (!abreNombre.trim()) {
+      setMsg({ t: 'err', x: hayOperadores && abiertaPor !== OTRA_PERSONA ? 'Elige quién lleva el turno.' : 'Pon quién lleva el turno.' })
+      return
+    }
     setBusy(true); setCargando('Abriendo el turno…')
     try {
       const inicial: Record<string, number> = {}
       for (const [k, v] of Object.entries(fondo)) { const n = num(v); if (n > 0) inicial[k] = n }
-      const ses: LocalSesion = { sesion_uuid: uid(), abierta_at: new Date().toISOString(), cerrada_at: null, estado: 'ABIERTA', fondo_inicial: inicial, efectivo_contado: {}, synced: false }
+      const abre = personaDe(abreNombre)
+      const ses: LocalSesion = { sesion_uuid: uid(), abierta_at: new Date().toISOString(), cerrada_at: null, estado: 'ABIERTA', fondo_inicial: inicial, efectivo_contado: {}, synced: false,
+        abierta_por: abre.nombre, abierta_por_id: abre.id }
       // Sin toast: la pantalla pasa al mostrador y el chip de la cabecera dice «Turno
       // abierto». Un mensaje que repite lo que ya se ve es ruido que además tapa sitio.
-      await putSesion(ses); await reload(); setFondo({}); setVista('vender')
+      await putSesion(ses); await reload(); setFondo({}); setAbiertaPor(''); setAbiertaOtro(''); setVista('vender')
       // Un turno EMPIEZA VACÍO. El carrito se guarda en `meta.carrito` para que un apagón
       // no se lleve la venta a medias, pero esa red de seguridad vale dentro del turno:
       // restaurado en el siguiente, aparecen dos artículos de ayer en el ticket y se
@@ -447,20 +703,27 @@ export default function PuntoVentaApp() {
 
   async function cerrarTurno() {
     if (!sesion || busy) return
+    // Mismo criterio que al abrir: el arqueo lo firma alguien. Sin lista viene en blanco
+    // (no hay a quién heredar) y se teclea; con lista llega preseleccionado quien abrió.
+    if (!cierraNombre.trim()) {
+      setMsg({ t: 'err', x: hayOperadores && cierraSel !== OTRA_PERSONA ? 'Elige quién cierra el turno.' : 'Pon quién cuenta el dinero.' })
+      return
+    }
     setConfirmarCierre(false)
     setBusy(true); setCargando('Cerrando el turno…')
     try {
       const efectivo: Record<string, number> = {}
       for (const [k, v] of Object.entries(contado)) { const n = num(v); if (v.trim() !== '') efectivo[k] = n }
+      const cierra = personaDe(cierraNombre)
       const cerrada = { ...sesion, cerrada_at: new Date().toISOString(), estado: 'CERRADA' as const,
-        efectivo_contado: efectivo, cerrada_por: cerradaPor.trim() || null, synced: false }
+        efectivo_contado: efectivo, cerrada_por: cierra.nombre, cerrada_por_id: cierra.id, synced: false }
       await putSesion(cerrada)
-      // El resumen se escribe AQUÍ, con `contado` y `cerradaPor` todavía llenos: dos líneas
+      // El resumen se escribe AQUÍ, con `contado` y el nombre todavía llenos: dos líneas
       // más abajo se vacían, y calcularlo después daba un arqueo sin dinero contado.
-      const texto = resumenTurno(cerrada, contado, cerradaPor)
+      const texto = resumenTurno(cerrada, contado, cierra.nombre ?? '')
       await metaSet('resumen_cierre', texto); setResumenCierre(texto)
       // Lo que quedara empezado se descarta: el turno donde se iba a cobrar ya no existe.
-      await reload(); setContado({}); setCerradaPor(''); limpiarTicket(); setVista('sync')
+      await reload(); setContado({}); setCerradaPor(''); setCerradaOtro(''); limpiarTicket(); setVista('sync')
       setMsg(navigator.onLine
         ? { t: 'ok', x: 'Turno cerrado. Sincronizando…' }
         : { t: 'warn', x: 'Turno cerrado. Sincronízalo cuando tengas conexión.' })
@@ -505,13 +768,19 @@ export default function PuntoVentaApp() {
     setCart(prev => {
       const i = prev.findIndex(l => l.producto_id === p.producto_id)
       if (i >= 0) { const c = [...prev]; c[i] = { ...c[i], cantidad: c[i].cantidad + 1 }; return c }
-      return [...prev, { key: uid(), producto_id: p.producto_id, descripcion: p.nombre, cantidad: 1, precio_unitario: precioDe(p) }]
+      // La campaña se resuelve al AÑADIR, no al pintar: si el turno cruza la medianoche y
+      // la campaña termina, lo que ya está en el ticket no puede cambiar de precio en la
+      // mano del cliente. Y al repetir producto (rama de arriba) solo sube la cantidad:
+      // así un descuento que el cajero hubiera quitado a mano no vuelve solo.
+      return [...prev, { key: uid(), producto_id: p.producto_id, descripcion: p.nombre, cantidad: 1, precio_unitario: precioDe(p),
+        ...dtoDeCampania(p.producto_id) }]
     })
   }
   function addLibre() {
     const precio = parseFloat(librePre)
     if (!libreNom.trim() || isNaN(precio) || precio < 0) { setMsg({ t: 'err', x: 'Pon nombre y precio válidos.' }); return }
-    setCart(prev => [...prev, { key: uid(), producto_id: null, descripcion: libreNom.trim(), cantidad: 1, precio_unitario: round2(precio) }])
+    setCart(prev => [...prev, { key: uid(), producto_id: null, descripcion: libreNom.trim(), cantidad: 1, precio_unitario: round2(precio),
+      ...dtoDeCampania(null) }])
     setLibreNom(''); setLibrePre(''); setLibre(false)
   }
   function changeQty(key: string, d: number) {
@@ -523,26 +792,74 @@ export default function PuntoVentaApp() {
   }
   function removeLine(key: string) { setCart(prev => prev.filter(l => l.key !== key)) }
 
+  /** Guarda el ajuste de una línea: el precio de venta y su descuento. Los dos juntos
+   *  porque son la misma conversación en el mostrador («¿cuánto vale? te lo dejo en…»),
+   *  y separarlos obligaría a dos diálogos para una sola decisión. */
+  function aplicarAjusteLinea() {
+    if (!dtoEdit) return
+    const precio = Math.max(round2(num(dtoEdit.precio)), 0)
+    const v      = Math.max(num(dtoEdit.valor), 0)
+    setCart(prev => prev.map(l => l.key !== dtoEdit.key ? l : ({
+      ...l,
+      precio_unitario:   precio,
+      // Modo derivado: solo una de las dos columnas lleva valor. Guardar las dos sería
+      // dejar dos verdades sobre el mismo descuento.
+      descuento_pct:     dtoEdit.modo === 'pct' ? v : 0,
+      descuento_importe: dtoEdit.modo === 'imp' ? v : 0,
+      // Tocado a mano deja de ser de la campaña, aunque coincida la cifra: el cartelito
+      // «Semana del libro» sobre un precio que puso el cajero es una explicación falsa.
+      campania:          undefined,
+    })))
+    setDtoEdit(null)
+  }
+
   // Cargar una venta del turno en el carrito para corregirla (cantidad/precio/moneda).
   function rectificar(t: LocalTicket) {
     if (!sesion || t.sesion_uuid !== sesion.sesion_uuid) return
-    setCart(t.lineas.map(l => ({ key: uid(), producto_id: l.producto_id, descripcion: l.descripcion, cantidad: l.cantidad, precio_unitario: l.precio_unitario })))
+    // Los descuentos viajan con la copia: rectificar es corregir la venta, no rehacer la
+    // negociación. Si se pierden, el cajero vuelve a teclearlos —y casi nunca igual—.
+    setCart(t.lineas.map(l => ({ key: uid(), producto_id: l.producto_id, descripcion: l.descripcion, cantidad: l.cantidad, precio_unitario: l.precio_unitario, descuento_pct: l.descuento_pct ?? 0, descuento_importe: l.descuento_importe ?? 0 })))
+    setDtoTk((t.descuento_pct ?? 0) > 0
+      ? { modo: 'pct', valor: String(t.descuento_pct) }
+      : { modo: 'imp', valor: (t.descuento_importe ?? 0) > 0 ? String(t.descuento_importe) : '' })
+    setDtoTkOpen((t.descuento_pct ?? 0) > 0 || (t.descuento_importe ?? 0) > 0)
     setMoneda(t.moneda); setMedio(t.medio_pago ?? 'Efectivo'); setRectiUuid(t.ticket_uuid)
     setVista('vender'); setMsg({ t: 'warn', x: 'Rectificando la venta: ajústala y cobra de nuevo. La original quedará anulada.' })
   }
-  function cancelarRecti() { setRectiUuid(null); setCart([]); setMsg(null) }
+  function cancelarRecti() { setRectiUuid(null); setCart([]); setDtoTk({ modo: 'pct', valor: '' }); setDtoTkOpen(false); setMsg(null) }
 
   async function cobrar() {
     if (!cart.length || busy || !sesion) return
     if (cartInvalido) { setMsg({ t: 'err', x: `Hay artículos sin precio en ${moneda}. Cambia la moneda o quítalos.` }); return }
     setBusy(true); setCargando('Registrando el cobro…')
     try {
-      const lineas: LocalLinea[] = cart.map(l => ({ producto_id: l.producto_id, descripcion: l.descripcion, cantidad: l.cantidad, precio_unitario: l.precio_unitario, subtotal: round2(l.cantidad * l.precio_unitario) }))
-      const total = round2(lineas.reduce((s, l) => s + l.subtotal, 0))
+      // `subtotal` es el NETO de la línea: es lo que suma la guardia del servidor
+      // (`Σ subtotal − descuento_ticket ≈ total`). El descuento se guarda además
+      // desglosado para poder enseñar después qué se regaló y por qué salía ese número.
+      const lineas: LocalLinea[] = cart.map(l => ({
+        producto_id: l.producto_id, descripcion: l.descripcion, cantidad: l.cantidad,
+        precio_unitario: l.precio_unitario, subtotal: netoLinea(l),
+        descuento_pct: l.descuento_pct ?? 0, descuento_importe: dtoLinea(l),
+      }))
+      const total = cartTotal
       const esRecti = rectiUuid != null
       const t: LocalTicket = {
         ticket_uuid: uid(), sesion_uuid: sesion.sesion_uuid, fecha: new Date().toISOString(),
         moneda, total, medio_pago: medioPago, lineas, synced: false,
+        bruto: cartBruto,
+        // Solo se guarda lo que aporta algo: en efectivo, con qué se pagó y qué se
+        // devolvió. Una transferencia no lleva vuelto y su importe ES el total, así que
+        // escribirlo sería repetir el mismo número en dos columnas.
+        cobrado_moneda:  medioPago === 'Efectivo' ? pagaMonSel : null,
+        cobrado_importe: medioPago === 'Efectivo'
+          ? (num(pagaCon) > 0 ? round2(num(pagaCon)) : (pagaMonSel === moneda ? cartTotal : null))
+          : null,
+        cambio_moneda:   medioPago === 'Efectivo' && cambioFinal > 0 ? cambioMonSel : null,
+        cambio_importe:  medioPago === 'Efectivo' && cambioFinal > 0 ? round2(cambioFinal) : null,
+        // Se guarda el PORCENTAJE tecleado (si lo hubo) y el importe ya resuelto: el
+        // porcentaje explica la decisión, el importe es el dinero.
+        descuento_pct:     dtoTk.modo === 'pct' ? Math.max(num(dtoTk.valor), 0) : 0,
+        descuento_importe: dtoTicket,
         estado: esRecti ? 'RECTIFICACION' : 'VIGENTE', rectifica_a: rectiUuid,
       }
       await putTicket(t)
@@ -550,12 +867,20 @@ export default function PuntoVentaApp() {
       if (esRecti) { const orig = tickets.find(x => x.ticket_uuid === rectiUuid); if (orig) await putTicket({ ...orig, estado: 'ANULADO', synced: false }) }
       await reload()
       setCart([]); setRectiUuid(null); setPagaCon(''); setSheetOpen(false); setPagando(false)
+      setPagaMon(''); setCambioMon(''); setCambioImp('')
+      setDtoTk({ modo: 'pct', valor: '' }); setDtoTkOpen(false)
       // **La moneda vuelve siempre a la de por defecto (CUP).** Se quedaba pegada a la de
       // la última venta, así que después de cobrar en EUR la siguiente empezaba en EUR y
       // el vendedor tenía que acordarse de cambiarla. En un mostrador cubano la moneda
       // normal es una y las demás son la excepción: la excepción se elige, no se hereda.
       setMoneda(monedaPorDefecto(config))
-      setMsg({ t: 'ok', x: esRecti ? `Rectificado · nuevo total ${simbolo(moneda)} ${money(total)}` : `Cobrado ${simbolo(moneda)} ${money(total)}` })
+      // Y el medio de pago, por lo mismo y con más motivo: se quedaba pegado, así que
+      // tras una transferencia la siguiente venta nacía marcada como transferencia y el
+      // dinero de la gaveta se iba al banco en el cierre sin que nadie tocara nada.
+      setMedio('Efectivo')
+      const regalado = round2(cartBruto - total)
+      const colaDto  = regalado > 0 ? ` · ${money(regalado)} de descuento` : ''
+      setMsg({ t: 'ok', x: (esRecti ? `Rectificado · nuevo total ${simbolo(moneda)} ${money(total)}` : `Cobrado ${simbolo(moneda)} ${money(total)}`) + colaDto })
     } catch { setMsg({ t: 'err', x: 'No se pudo registrar el cobro.' }) }
     finally { setBusy(false); setCargando(null) }
   }
@@ -774,15 +1099,15 @@ export default function PuntoVentaApp() {
   // recupera al arrancar.
   useEffect(() => {
     if (!ready) return
-    const t = setTimeout(() => { void metaSet('carrito', { moneda, medioPago, rectiUuid, lineas: cart }) }, 400)
+    const t = setTimeout(() => { void metaSet('carrito', { moneda, medioPago, rectiUuid, lineas: cart, dtoTk }) }, 400)
     return () => clearTimeout(t)
-  }, [cart, moneda, medioPago, rectiUuid, ready])
+  }, [cart, moneda, medioPago, rectiUuid, dtoTk, ready])
 
   useEffect(() => {
     if (!ready) return
     let vivo = true
     ;(async () => {
-      const g = await metaGet<{ moneda: string; medioPago: string; rectiUuid: string | null; lineas: CartLine[] }>('carrito')
+      const g = await metaGet<{ moneda: string; medioPago: string; rectiUuid: string | null; lineas: CartLine[]; dtoTk?: { modo: 'pct' | 'imp'; valor: string } }>('carrito')
       if (!vivo || !g?.lineas?.length) return
       // Solo se restaura si el carrito de ahora está vacío: si ya se empezó otra venta,
       // recuperar la vieja encima sería peor que perderla.
@@ -790,6 +1115,7 @@ export default function PuntoVentaApp() {
       if (g.moneda) setMoneda(m => m || g.moneda)
       if (g.medioPago) setMedio(g.medioPago)
       setRectiUuid(g.rectiUuid ?? null)
+      if (g.dtoTk) setDtoTk(g.dtoTk)
     })()
     return () => { vivo = false }
     // Solo al quedar lista: es una restauración, no una sincronización continua.
@@ -824,8 +1150,12 @@ export default function PuntoVentaApp() {
           <div className="ca-gate-title">Sin monedas para cobrar</div>
           <p className="ca-gate-text">
             {config.caja.tiene_base
-              ? <>Ninguna moneda de este punto de venta tiene su caja de Tesorería asignada, así
-                  que las ventas no llegarían a tu contabilidad. Asígnala en Claux (Puntos de
+              ? <>{sinCuenta.length > 0
+                    ? <>{enumerar(sinCuenta)} {sinCuenta.length > 1 ? 'están marcadas' : 'está marcada'} en
+                        este punto de venta, pero {sinCuenta.length > 1 ? 'ninguna tiene' : 'no tiene'} caja
+                        de Tesorería asignada, </>
+                    : <>Ninguna moneda de este punto de venta tiene su caja de Tesorería asignada, </>}
+                  así que las ventas no llegarían a tu contabilidad. Asígnala en Claux (Puntos de
                   venta → Configurar).</>
               : <>Este punto de venta no tiene ninguna moneda marcada. Márcala en Claux (Puntos
                   de venta → Configurar); si no tienes ninguna creada, añádela antes en Monedas
@@ -939,7 +1269,7 @@ export default function PuntoVentaApp() {
    * El dueño no está en el local, y hasta ahora cerrar el turno no producía **nada** que se
    * le pudiera enseñar: tenía que esperar a que el móvil sincronizara y entrar al portal.
    */
-  function resumenTurno(ses = sesion, contadoAhora = contado, quien = cerradaPor): string {
+  function resumenTurno(ses = sesion, contadoAhora = contado, quien = personaDe(cierraSel).nombre ?? ''): string {
     if (!ses) return ''
     const tks = tickets.filter(t => t.sesion_uuid === ses.sesion_uuid && (t.estado ?? 'VIGENTE') !== 'ANULADO')
     const mvs = movs.filter(m => m.sesion_uuid === ses.sesion_uuid)
@@ -952,15 +1282,23 @@ export default function PuntoVentaApp() {
       `${config?.caja.nombre ?? 'Punto de venta'} — cierre del ${fechaLarga(cuando)}`,
       `Turno de ${hora(ses.abierta_at)}${ses.cerrada_at ? ` a ${hora(ses.cerrada_at)}` : ' (todavía abierto)'}`,
     ]
+    // Quién lo llevó, arriba del todo: esto es lo que el dueño lee desde casa, y era el
+    // único sitio donde el dato pedido en el mostrador no aparecía.
+    if (ses.abierta_por) l.push(`Abierto por ${ses.abierta_por}`)
 
     // Ventas por moneda y, dentro, POR MEDIO DE PAGO. El desglose lo pedía el plan y
     // faltaba: sin él, quien lee el resumen no puede cuadrar el efectivo de la gaveta
     // contra el total vendido, que es justo para lo que se manda esto.
-    const porMoneda = new Map<string, { n: number; total: number; medios: Map<string, number> }>()
+    const porMoneda = new Map<string, { n: number; total: number; medios: Map<string, number>; dto: number; nDto: number }>()
     for (const t of tks) {
-      const e = porMoneda.get(t.moneda) ?? { n: 0, total: 0, medios: new Map<string, number>() }
+      const e = porMoneda.get(t.moneda) ?? { n: 0, total: 0, medios: new Map<string, number>(), dto: 0, nDto: 0 }
       const medio = t.medio_pago ?? 'Efectivo'
       e.n += 1; e.total += Number(t.total)
+      // Lo regalado es bruto − total: recoge las dos capas (línea y ticket) sin tener que
+      // sumarlas por separado. Los tickets de antes de esta versión no traen bruto, y
+      // entonces no hubo descuento.
+      const regalado = round2(Number(t.bruto ?? t.total) - Number(t.total))
+      if (regalado > 0) { e.dto += regalado; e.nDto += 1 }
       e.medios.set(medio, (e.medios.get(medio) ?? 0) + Number(t.total))
       porMoneda.set(t.moneda, e)
     }
@@ -970,6 +1308,9 @@ export default function PuntoVentaApp() {
       if (v.medios.size > 1) {
         for (const [medio, imp] of v.medios) l.push(`  · ${medio}: ${simbolo(m)} ${money(round2(imp))}`)
       }
+      // Sin techo por descuento, ESTA línea es el aviso temprano del dueño: es lo que lee
+      // desde casa el mismo día, no a fin de mes en un informe.
+      if (v.dto > 0) l.push(`  · descuentos: ${simbolo(m)} ${money(round2(v.dto))} en ${v.nDto} ${v.nDto === 1 ? 'venta' : 'ventas'}`)
     }
 
     // El arqueo, con el FONDO a la vista: «esperado 5.400» a secas no se puede comprobar
@@ -977,7 +1318,7 @@ export default function PuntoVentaApp() {
     for (const [m, a] of arqueoDe(ses, tks, mvs)) {
       const escrito = (contadoAhora[m] ?? '').trim() !== ''
       const dif = escrito ? round2(num(contadoAhora[m]) - a.esperado) : null
-      const detalle = `fondo ${money(a.fondo)} + ventas ${money(a.ventas)}${a.entradas ? ` + entradas ${money(a.entradas)}` : ''}${a.salidas ? ` − salidas ${money(a.salidas)}` : ''}`
+      const detalle = `fondo ${money(a.fondo)} + cobrado ${money(a.cobrado)}${a.entradas ? ` + entradas ${money(a.entradas)}` : ''}${a.salidas ? ` − salidas ${money(a.salidas)}` : ''}${a.cambio ? ` − cambio ${money(a.cambio)}` : ''}`
       l.push(`Efectivo ${m}: esperado ${money(a.esperado)} (${detalle})`)
       if (escrito) {
         l.push(`  · contado ${money(num(contadoAhora[m]))}${dif === 0 ? ' · cuadra' : ` · ${dif! > 0 ? 'sobran' : 'faltan'} ${money(Math.abs(dif!))}`}`)
@@ -989,7 +1330,7 @@ export default function PuntoVentaApp() {
     for (const mv of mvs) {
       l.push(`${mv.tipo === 'ENTRADA' ? 'Entrada' : 'Salida'}: ${mv.motivo ?? 'sin motivo'} — ${simbolo(mv.moneda)} ${money(mv.importe)}`)
     }
-    if (quien.trim()) l.push(`Contado por ${quien.trim()}`)
+    if (quien.trim()) l.push(`Cerrado y contado por ${quien.trim()}`)
     return l.join('\n')
   }
 
@@ -1047,6 +1388,34 @@ export default function PuntoVentaApp() {
         <div className="ca-gate-step">Paso 1</div>
         <div className="ca-gate-title">Abre el turno</div>
         <p className="ca-gate-text">Para empezar a cobrar necesitas abrir el turno. Al final del día lo cierras y sincronizas.</p>
+        {/* Quién lleva el turno. Con lista es un DESPLEGABLE —el dueño manda al punto de
+            venta quién puede llevarlo y baja con la semilla, así que funciona sin conexión—
+            y sin lista, un campo libre. Con lista queda además «Otra persona»: el que cubre
+            hoy y no está dado de alta tiene que poder abrir turno igual, o la caja se para.
+            En los tres casos es OBLIGATORIO: un turno sin nombre no responde a «¿quién
+            estaba en la caja?», que es justo para lo que se guarda. */}
+        <div className="ca-field">
+          <label className="ca-label" htmlFor="abierta-por">
+            ¿Quién lleva el turno? <span className="ca-req">*</span>
+          </label>
+          {hayOperadores ? (
+            <>
+              <select id="abierta-por" className="ca-input" value={abiertaPor}
+                onChange={e => setAbiertaPor(e.target.value)}>
+                <option value="">— Elige —</option>
+                {operadores.map(o => <option key={o.operador_id} value={o.operador_id}>{o.nombre}</option>)}
+                <option value={OTRA_PERSONA}>Otra persona…</option>
+              </select>
+              {abiertaPor === OTRA_PERSONA && (
+                <input className="ca-input" placeholder="Nombre de quien lleva el turno" aria-label="Nombre de quien lleva el turno"
+                  value={abiertaOtro} onChange={e => setAbiertaOtro(e.target.value)} />
+              )}
+            </>
+          ) : (
+            <input id="abierta-por" className="ca-input" placeholder="Nombre"
+              value={abiertaPor} onChange={e => setAbiertaPor(e.target.value)} />
+          )}
+        </div>
         {/* El fondo con el que se abre la gaveta para dar cambio. Es opcional, pero sin él
             el arqueo del cierre lo cuenta como dinero de más y siempre sale descuadrado. */}
         <div className="ca-field">
@@ -1074,7 +1443,15 @@ export default function PuntoVentaApp() {
   const pos = (
     <div className="ca-pos">
       <section className="ca-productos">
-        <input className="ca-search" placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)} aria-label="Buscar producto" />
+        {/* Buscar y «Artículo libre», en la misma barra. El botón vivía al FONDO de la
+            rejilla: con el catálogo cargado había que bajar toda la lista para teclear la
+            venta que NO está en el catálogo —justo la que corre prisa—, y el formulario se
+            abría en el sitio del botón, más abajo todavía. Ahora está arriba y pide los
+            datos en un diálogo, como todo lo demás en esta app. */}
+        <div className="ca-buscar-row">
+          <input className="ca-search" placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)} aria-label="Buscar producto" />
+          <button className="ca-btn ca-libre-btn" onClick={() => setLibre(true)}>＋ Artículo libre</button>
+        </div>
         {/* De cuándo son los precios. Con la inflación de aquí, un dispositivo que lleva
             tres semanas sin bajar el catálogo está COBRANDO MAL y hasta ahora nada lo decía. */}
         {seedAt && diasSeed !== null && (
@@ -1094,6 +1471,12 @@ export default function PuntoVentaApp() {
                 // producto y se retiró — decoraba sin ayudar, y le quitaba ancho justo al
                 // nombre, que es lo que se lee. El código solo sale si lo hay, y en pequeño:
                 // nadie busca por código en un mostrador.
+                // La campaña se enseña en la rejilla, no solo al añadir: quien cobra tiene
+                // que poder contestar «¿ese está de oferta?» sin meterlo en el ticket para
+                // verlo, y el cliente que mira la pantalla ve lo mismo que él.
+                const camp = campaniaDe(p.producto_id)
+                const base = precioDe(p)
+                const neto = camp && !miss ? round2(base - dtoDePct(round2(base), camp.pct)) : base
                 return (
                   <button key={p.producto_id} className="ca-prod" onClick={() => addProducto(p)} disabled={miss}>
                     <span className="ca-prod-name">{p.nombre}</span>
@@ -1105,7 +1488,24 @@ export default function PuntoVentaApp() {
                     {p.es_suscribible
                       ? <span className="ca-prod-susc">Va por suscripción</span>
                       : p.codigo ? <span className="ca-prod-code">{p.codigo}</span> : null}
-                    <span className={`ca-prod-price${miss ? ' miss' : ''}`}>{miss ? `Sin precio en ${moneda}` : `${simbolo(moneda)} ${money(precioDe(p))}`}</span>
+                    {/* El PRECIO QUE SE COBRA, en grande, y el de antes tachado encima. La
+                        rejilla enseñaba el precio sin rebajar con un «−45 %» al lado, así que
+                        quien cobra tenía que hacer la cuenta de cabeza —o cantar 2.700 y cobrar
+                        1.485—. El porcentaje se queda, en pequeño y junto a lo tachado: en el
+                        mostrador la pregunta es «¿cuánto vale?», no «¿cuánto le quitan?». */}
+                    {miss ? (
+                      <span className="ca-prod-price miss">Sin precio en {moneda}</span>
+                    ) : camp ? (
+                      <>
+                        <span className="ca-prod-antes">
+                          <s>{simbolo(moneda)} {money(base)}</s>
+                          <span className="ca-prod-camp">−{pctTxt(camp.pct)} %</span>
+                        </span>
+                        <span className="ca-prod-price">{simbolo(moneda)} {money(neto)}</span>
+                      </>
+                    ) : (
+                      <span className="ca-prod-price">{simbolo(moneda)} {money(base)}</span>
+                    )}
                   </button>
                 )
               })}
@@ -1118,26 +1518,6 @@ export default function PuntoVentaApp() {
           </p>
         )}
         {productos.length === 0 && <p className="ca-empty">Sin nada cargado. Usa «Artículo libre» para teclear la venta.</p>}
-        {libreOpen ? (
-          <div className="ca-libre">
-            <input className="ca-input" placeholder="Nombre del artículo" aria-label="Nombre del artículo" value={libreNom} onChange={e => setLibreNom(e.target.value)} />
-            {monedas.length > 1 && (
-              <div className="ca-segmento" role="group" aria-label="Moneda del artículo">
-                {monedas.map(m => (
-                  <button key={m} type="button" className={`ca-seg-btn${m === moneda ? ' activo' : ''}`}
-                    aria-pressed={m === moneda} onClick={() => cambiarMoneda(m)}>{m}</button>
-                ))}
-              </div>
-            )}
-            <input className="ca-input" type="text" inputMode="decimal" placeholder={`Precio (${moneda})`} value={librePre} onChange={e => setLibrePre(e.target.value)} />
-            <div className="ca-pay-row">
-              <button className="ca-btn ca-btn-primary" onClick={addLibre}>Añadir</button>
-              <button className="ca-btn" onClick={() => setLibre(false)}>Cancelar</button>
-            </div>
-          </div>
-        ) : (
-          <button className="ca-btn ca-btn-block" onClick={() => setLibre(true)}>＋ Artículo libre</button>
-        )}
       </section>
 
       {/* En móvil el ticket es una HOJA INFERIOR: colapsada deja a la vista lo único que
@@ -1175,11 +1555,30 @@ export default function PuntoVentaApp() {
               // subtotal y la «×»— se comían 230 px, así que en la columna del ticket
               // (360 px en escritorio, menos en tablet) al nombre le quedaban cien y
               // «Café en grano 1kg» salía partido en cuatro renglones.
+              const dto = dtoLinea(l)
               return (
               <div key={l.key} className="ca-tick-item">
                 <div className="ca-tick-info">
                   <div className="ca-tick-name">{l.descripcion}</div>
-                  <div className={`ca-tick-unit${miss ? ' miss' : ''}`}>{miss ? `Sin precio en ${moneda}` : `${simbolo(moneda)} ${money(l.precio_unitario)}`}</div>
+                  {/* Por qué sale tachado. Sin esto el cliente pregunta y quien cobra no
+                      sabe qué contestar: el descuento se lo puso el portal, no él. */}
+                  {l.campania && <div className="ca-tick-camp">{l.campania}</div>}
+                  {/* TOCAR EL PRECIO abre el ajuste de la línea (precio y descuento). Es la
+                      misma gramática que la cantidad, y no gasta ni un píxel de la fila:
+                      con dos botones de 44, la cantidad, el subtotal y la «×» no cabía un
+                      control permanente de descuento. */}
+                  <button type="button" className={`ca-tick-unit${miss ? ' miss' : ''}`}
+                    onClick={() => setDtoEdit({
+                      key: l.key,
+                      modo: (l.descuento_pct ?? 0) > 0 ? 'pct' : 'imp',
+                      valor: (l.descuento_pct ?? 0) > 0 ? String(l.descuento_pct)
+                           : (l.descuento_importe ?? 0) > 0 ? String(l.descuento_importe) : '',
+                      precio: String(l.precio_unitario),
+                    })}
+                    aria-label={`Ajustar precio o descuento de ${l.descripcion}`}>
+                    {miss ? `Sin precio en ${moneda}` : `${simbolo(moneda)} ${money(l.precio_unitario)}`}
+                    {dto > 0 && <span className="ca-tick-dto"> −{money(dto)}</span>}
+                  </button>
                 </div>
                 <button className="ca-tick-x" onClick={() => removeLine(l.key)} aria-label={`Quitar ${l.descripcion}`}>×</button>
                 <div className="ca-tick-acciones">
@@ -1199,7 +1598,10 @@ export default function PuntoVentaApp() {
                   )}
                   <button className="ca-step-btn" onClick={() => changeQty(l.key, 1)} aria-label="Añadir uno">+</button>
                 </div>
-                <span className="ca-tick-sub">{money(l.cantidad * l.precio_unitario)}</span>
+                <span className="ca-tick-sub">
+                  {dto > 0 && <span className="ca-tachado">{money(brutoLinea(l))}</span>}
+                  {money(netoLinea(l))}
+                </span>
                 </div>
               </div>
               )
@@ -1212,6 +1614,49 @@ export default function PuntoVentaApp() {
               <button className="ca-recti-cancel" onClick={cancelarRecti}>Cancelar</button>
             </div>
           )}
+          {/* LA MONEDA ES DEL TICKET, no del cobro. Estaba en el diálogo de pagar y ahí
+              llegaba tarde por dos motivos. Uno: la moneda decide el precio que el cliente
+              ve en la rejilla («Sin precio en USD»), así que se elige antes de tocar el
+              primer producto, no al terminar. Dos: `cartInvalido` apaga «Cobrar» en cuanto
+              una línea no tiene precio en la moneda puesta —y con el selector dentro del
+              diálogo no había vuelta atrás: el aviso decía «cambia la moneda» y el único
+              sitio para cambiarla estaba detrás del botón apagado.
+              Y se pinta con las monedas VISIBLES, no solo con las cobrables: si el dueño
+              marcó tres y solo una tiene cuenta de Tesorería, las otras dos siguen ahí
+              tachadas. Que la pastilla desapareciera dejaba el selector con una sola opción
+              —o sin ninguna— y sin una palabra, justo cuando entra la semilla: aparece
+              mientras cargan los productos, así que se le achaca a la carga. */}
+          {monedasVisibles.length > 1 && (
+            <div className="ca-segmento" role="group" aria-label="Moneda de la venta">
+              {monedasVisibles.map(m => {
+                const veto = !monedas.includes(m)
+                return (
+                  <button key={m} type="button" disabled={veto}
+                    className={`ca-seg-btn${m === moneda ? ' activo' : ''}`}
+                    title={veto ? `${m} no tiene caja de Tesorería asignada en Claux` : undefined}
+                    aria-pressed={m === moneda} onClick={() => cambiarMoneda(m)}>{m}</button>
+                )
+              })}
+            </div>
+          )}
+          {/* Y el motivo, con nombre y sitio donde arreglarlo. Sin esta línea la pastilla
+              tachada es otro misterio, solo que más pequeño. */}
+          {sinCuenta.length > 0 && (
+            <p className="ca-seed aviso">
+              {enumerar(sinCuenta)} {sinCuenta.length > 1 ? 'no tienen' : 'no tiene'} caja de
+              Tesorería en Claux, así que de momento no se puede cobrar
+              {sinCuenta.length > 1 ? ' en ellas' : ' en ella'}. Asigna la cuenta en Puntos de venta →
+              Configurar y vuelve a abrir esto con conexión.
+            </p>
+          )}
+          {/* Lo regalado se ve ANTES de cobrar. Sin techo, esta línea es medio control:
+              un «10» tecleado donde iba «1,0» se caza aquí y no en el cierre. */}
+          {cartDescuento > 0 && (
+            <div className="ca-total-row">
+              <span className="ca-total-lbl">Descuento</span>
+              <span className="ca-dto-imp">− {simbolo(moneda)} {money(cartDescuento)}</span>
+            </div>
+          )}
           <div className="ca-total-row"><span className="ca-total-lbl">Total</span><span className="ca-total">{simbolo(moneda)} {money(cartTotal)}</span></div>
           {/* El PAGO se ha ido a su propio paso (el diálogo de abajo). Aquí queda lo justo:
               cuánto es y el botón. Con la moneda, el medio de pago y la calculadora de
@@ -1219,7 +1664,7 @@ export default function PuntoVentaApp() {
               un móvil **no se veían los productos que faltaban por añadir**. Construir la
               venta y cobrarla son dos momentos distintos y ahora son dos pantallas. */}
           <button className="ca-cobrar" disabled={busy || cart.length === 0 || cartInvalido}
-            onClick={() => { setPagaCon(''); setPagando(true) }}>
+            onClick={() => { setPagaCon(''); setPagaMon(''); setCambioMon(''); setCambioImp(''); setPagando(true) }}>
             {rectiUuid ? 'Guardar rectificación' : 'Cobrar'}
           </button>
         </div>
@@ -1284,8 +1729,18 @@ export default function PuntoVentaApp() {
             Ahora dice lo que TIENE que haber —fondo + ventas en efectivo + entradas −
             salidas— y enseña el descuadre ANTES de cerrar, que es cuando se puede buscar. */}
         <div className="ca-muted">Cuenta el efectivo de la gaveta y escríbelo. Las transferencias no cuentan: no pasaron por aquí.</div>
+        {/* Lo regalado en el turno, junto al descuadre. Los dos responden a la misma
+            pregunta —«¿falta dinero?»— y tienen respuestas distintas: uno es un error de
+            caja, el otro una decisión que alguien tomó. Verlos separados evita que un
+            descuento se busque como si fuera un descuadre. */}
+        {[...descuentoTurno.entries()].map(([m, v]) => (
+          <div className="ca-arqueo-linea" key={`dto-${m}`}>
+            <span className="ca-muted">Descuentos del turno en {m}</span>
+            <span className="ca-dto-imp">− {money(v)}</span>
+          </div>
+        ))}
         {monedas.map(m => {
-          const a = arqueo.get(m) ?? { fondo: 0, ventas: 0, salidas: 0, entradas: 0, esperado: 0 }
+          const a = arqueo.get(m) ?? { fondo: 0, cobrado: 0, cambio: 0, salidas: 0, entradas: 0, esperado: 0 }
           const escrito = (contado[m] ?? '').trim() !== ''
           const dif = escrito ? round2(num(contado[m]) - a.esperado) : null
           return (
@@ -1293,9 +1748,12 @@ export default function PuntoVentaApp() {
               <label className="ca-label" htmlFor={`contado-${m}`}>Efectivo contado {m}</label>
               <div className="ca-arqueo-linea">
                 <span className="ca-muted">
-                  Fondo {money(a.fondo)} + ventas {money(a.ventas)}
+                  Fondo {money(a.fondo)} + cobrado {money(a.cobrado)}
                   {a.entradas > 0 ? ` + entradas ${money(a.entradas)}` : ''}
                   {a.salidas > 0 ? ` − salidas ${money(a.salidas)}` : ''}
+                  {/* El vuelto salió de esta gaveta aunque la venta fuera en otra moneda:
+                      es la línea que explica por qué el esperado no es lo vendido. */}
+                  {a.cambio > 0 ? ` − cambio ${money(a.cambio)}` : ''}
                 </span>
                 <span className="ca-arqueo-esperado">= {money(a.esperado)}</span>
               </div>
@@ -1309,11 +1767,10 @@ export default function PuntoVentaApp() {
             </div>
           )
         })}
-        <div className="ca-field">
-          <label className="ca-label" htmlFor="cerrada-por">¿Quién cuenta el dinero? (opcional)</label>
-          <input id="cerrada-por" className="ca-input" placeholder="Nombre"
-            value={cerradaPor} onChange={e => setCerradaPor(e.target.value)} />
-        </div>
+        {/* Quién cierra y cuenta el dinero NO se pide aquí: se pide en el diálogo de
+            confirmar, que es donde se firma. Preguntado antes, se rellenaba al entrar en el
+            panel —al abrirlo para mirar el arqueo a media tarde— y quedaba puesto de una
+            vez para un cierre que llega horas después y que a lo mejor hace otro. */}
         {/* Cerrar es lo único irreversible del dispositivo y estaba a un solo toque: uno
             accidental a media tarde partía el día en dos turnos. Ahora confirma. */}
         <button className="ca-btn ca-btn-primary ca-btn-block" disabled={busy} onClick={() => setConfirmarCierre(true)}>Cerrar turno</button>
@@ -1697,6 +2154,40 @@ export default function PuntoVentaApp() {
                 )
               })}
             </div>
+            {/* QUIÉN FIRMA EL ARQUEO. Se pregunta aquí, en el último paso, y no en el panel
+                de arriba: el panel se abre a media tarde para mirar el descuadre, y lo que
+                se rellenara entonces se quedaba puesto para un cierre que puede llegar
+                horas después y hacerlo otra persona. Viene preseleccionado quien abrió
+                —casi siempre es el mismo— y hay «Otra persona» para el relevo que no está
+                en la lista. */}
+            <div className="ca-field">
+              <label className="ca-label" htmlFor="cerrada-por">
+                {hayOperadores ? '¿Quién cierra y cuenta el dinero?' : '¿Quién cuenta el dinero?'}{' '}
+                <span className="ca-req">*</span>
+              </label>
+              {hayOperadores ? (
+                <>
+                  <select id="cerrada-por" className="ca-input" value={cierraSel}
+                    onChange={e => setCerradaPor(e.target.value)}>
+                    <option value="">— Elige —</option>
+                    {operadores.map(o => <option key={o.operador_id} value={o.operador_id}>{o.nombre}</option>)}
+                    {/* Quien abrió el turno pero ya no está en la lista (le dieron de baja a
+                        media jornada) tiene que poder seguir cerrándolo. */}
+                    {sesion.abierta_por_id && !operadores.some(o => o.operador_id === sesion.abierta_por_id) && (
+                      <option value={sesion.abierta_por_id}>{sesion.abierta_por ?? 'Quien abrió el turno'}</option>
+                    )}
+                    <option value={OTRA_PERSONA}>Otra persona…</option>
+                  </select>
+                  {cierraSel === OTRA_PERSONA && (
+                    <input className="ca-input" placeholder="Nombre de quien cierra" aria-label="Nombre de quien cierra"
+                      value={cerradaOtro} onChange={e => setCerradaOtro(e.target.value)} />
+                  )}
+                </>
+              ) : (
+                <input id="cerrada-por" className="ca-input" placeholder="Nombre"
+                  value={cerradaPor} onChange={e => setCerradaPor(e.target.value)} />
+              )}
+            </div>
             {/* Aquí había un párrafo explicando qué se enviaba y que no se duplica. Fuera:
                 quien está cerrando el turno mira el descuadre, no la mecánica del envío —y
                 el envío no es una decisión suya, sale solo. La contabilidad del cierre se
@@ -1707,23 +2198,95 @@ export default function PuntoVentaApp() {
         </div>
       )}
 
-      {/* ── El COBRO, en su propio paso ── */}
-      {pagando && (
-        <div className="ca-dialogo" role="dialog" aria-modal aria-label="Cobrar">
+      {/* ── Artículo libre: lo que no está en el catálogo ── */}
+      {libreOpen && (
+        <div className="ca-dialogo" role="dialog" aria-modal aria-label="Artículo libre">
           <div className="ca-dialogo-card">
-            <div className="ca-total-row">
-              <span className="ca-total-lbl">A cobrar</span>
-              <span className="ca-total">{simbolo(moneda)} {money(cartTotal)}</span>
-            </div>
-
+            <div className="ca-gate-title">Artículo libre</div>
+            <p className="ca-gate-text">Para lo que no está en el catálogo. Se cobra igual que el resto, pero no mueve existencias de ningún producto.</p>
+            <input className="ca-input" placeholder="Nombre del artículo" aria-label="Nombre del artículo"
+              value={libreNom} onChange={e => setLibreNom(e.target.value)} />
             {monedas.length > 1 && (
-              <div className="ca-segmento" role="group" aria-label="Moneda">
+              <div className="ca-segmento" role="group" aria-label="Moneda del artículo">
                 {monedas.map(m => (
                   <button key={m} type="button" className={`ca-seg-btn${m === moneda ? ' activo' : ''}`}
                     aria-pressed={m === moneda} onClick={() => cambiarMoneda(m)}>{m}</button>
                 ))}
               </div>
             )}
+            <input className="ca-input" type="text" inputMode="decimal" placeholder={`Precio (${moneda})`}
+              aria-label={`Precio en ${moneda}`} value={librePre} onChange={e => setLibrePre(e.target.value)} />
+            <button className="ca-btn ca-btn-primary ca-btn-lg ca-btn-block" onClick={addLibre}>Añadir al ticket</button>
+            <button className="ca-btn ca-btn-block" onClick={() => { setLibre(false); setLibreNom(''); setLibrePre('') }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ajuste de una línea: precio y descuento ── */}
+      {dtoEdit && (() => {
+        const l = cart.find(x => x.key === dtoEdit.key)
+        if (!l) return null
+        // Vista previa con lo tecleado AHORA, no con lo guardado: el cajero está mirando
+        // el número que va a decir en voz alta.
+        const prov: CartLine = {
+          ...l,
+          precio_unitario: Math.max(round2(num(dtoEdit.precio)), 0),
+          descuento_pct:     dtoEdit.modo === 'pct' ? Math.max(num(dtoEdit.valor), 0) : 0,
+          descuento_importe: dtoEdit.modo === 'imp' ? Math.max(num(dtoEdit.valor), 0) : 0,
+        }
+        return (
+        <div className="ca-dialogo" role="dialog" aria-modal aria-label={`Ajustar ${l.descripcion}`}>
+          <div className="ca-dialogo-card">
+            <div className="ca-gate-title">{l.descripcion}</div>
+            <div className="ca-field">
+              <label className="ca-label" htmlFor="dto-precio">Precio por unidad</label>
+              <input id="dto-precio" className="ca-input" type="text" inputMode="decimal" autoFocus
+                value={dtoEdit.precio} onChange={e => setDtoEdit({ ...dtoEdit, precio: e.target.value })} />
+            </div>
+            <div className="ca-field">
+              <span className="ca-label">Descuento</span>
+              <div className="ca-segmento" role="group" aria-label="Tipo de descuento">
+                <button type="button" className={`ca-seg-btn${dtoEdit.modo === 'pct' ? ' activo' : ''}`}
+                  aria-pressed={dtoEdit.modo === 'pct'} onClick={() => setDtoEdit({ ...dtoEdit, modo: 'pct' })}>%</button>
+                <button type="button" className={`ca-seg-btn${dtoEdit.modo === 'imp' ? ' activo' : ''}`}
+                  aria-pressed={dtoEdit.modo === 'imp'} onClick={() => setDtoEdit({ ...dtoEdit, modo: 'imp' })}>{simbolo(moneda)}</button>
+              </div>
+              <input className="ca-input" type="text" inputMode="decimal"
+                aria-label={dtoEdit.modo === 'pct' ? 'Porcentaje de descuento' : 'Importe del descuento'}
+                placeholder={dtoEdit.modo === 'pct' ? 'Por ejemplo, 10' : 'Cuánto se le quita'}
+                value={dtoEdit.valor} onChange={e => setDtoEdit({ ...dtoEdit, valor: e.target.value })} />
+            </div>
+            <div className="ca-total-row">
+              <span className="ca-total-lbl">Queda en</span>
+              <span className="ca-total">
+                {dtoLinea(prov) > 0 && <span className="ca-tachado">{money(brutoLinea(prov))}</span>}
+                {simbolo(moneda)} {money(netoLinea(prov))}
+              </span>
+            </div>
+            <button className="ca-btn ca-btn-primary ca-btn-lg ca-btn-block" onClick={aplicarAjusteLinea}>Aplicar</button>
+            {/* Quitar el descuento tiene que ser UN toque: rectificar borrando el campo a
+                mano es donde se cuela el «0,5» que nadie ve. */}
+            {dtoLinea(l) > 0 && (
+              <button className="ca-btn ca-btn-block" onClick={() => setDtoEdit({ ...dtoEdit, valor: '' })}>Quitar el descuento</button>
+            )}
+            <button className="ca-btn ca-btn-block" onClick={() => setDtoEdit(null)}>Cancelar</button>
+          </div>
+        </div>
+        )
+      })()}
+
+      {/* ── El COBRO, en su propio paso ── */}
+      {pagando && (
+        <div className="ca-dialogo" role="dialog" aria-modal aria-label="Cobrar">
+          <div className="ca-dialogo-card">
+            <div className="ca-total-row">
+              <span className="ca-total-lbl">A cobrar</span>
+              <span className="ca-total">
+                {cartDescuento > 0 && <span className="ca-tachado">{money(cartBruto)}</span>}
+                {simbolo(moneda)} {money(cartTotal)}
+              </span>
+            </div>
+
             <div className="ca-segmento" role="group" aria-label="Medio de pago">
               {MEDIOS_PAGO.map(m => (
                 <button key={m} type="button" className={`ca-seg-btn${m === medioPago ? ' activo' : ''}`}
@@ -1731,13 +2294,59 @@ export default function PuntoVentaApp() {
               ))}
             </div>
 
+            {/* Descuento de la compra entera. Plegado mientras no se use. */}
+            {!dtoTkOpen && dtoTicket === 0 ? (
+              <button className="ca-btn ca-btn-block" onClick={() => setDtoTkOpen(true)}>Hacer un descuento</button>
+            ) : (
+              <div className="ca-cambio">
+                <div className="ca-segmento" role="group" aria-label="Tipo de descuento">
+                  <button type="button" className={`ca-seg-btn${dtoTk.modo === 'pct' ? ' activo' : ''}`}
+                    aria-pressed={dtoTk.modo === 'pct'} onClick={() => setDtoTk({ ...dtoTk, modo: 'pct' })}>%</button>
+                  <button type="button" className={`ca-seg-btn${dtoTk.modo === 'imp' ? ' activo' : ''}`}
+                    aria-pressed={dtoTk.modo === 'imp'} onClick={() => setDtoTk({ ...dtoTk, modo: 'imp' })}>{simbolo(moneda)}</button>
+                </div>
+                <div className="ca-pay-row">
+                  <input className="ca-input" type="text" inputMode="decimal"
+                    aria-label={dtoTk.modo === 'pct' ? 'Porcentaje de descuento' : 'Importe del descuento'}
+                    placeholder={dtoTk.modo === 'pct' ? 'Por ejemplo, 10' : 'Cuánto se le quita'}
+                    value={dtoTk.valor} onChange={e => setDtoTk({ ...dtoTk, valor: e.target.value })} />
+                  <button className="ca-btn" onClick={() => { setDtoTk({ modo: 'pct', valor: '' }); setDtoTkOpen(false) }}>Quitar</button>
+                </div>
+                {cartDescuento > 0 && (
+                  <div className="ca-total-row">
+                    <span className="ca-total-lbl">Se le quita</span>
+                    <span className="ca-dto-imp">− {simbolo(moneda)} {money(cartDescuento)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {medioPago === 'Efectivo' && (
               <div className="ca-cambio">
+                {/* Los selectores de moneda del pago y del vuelto SOLO salen si el punto de
+                    venta acepta más de una: en un mostrador de una sola moneda esto es la
+                    pantalla de siempre, sin un control de más. */}
+                {monedas.length > 1 && (
+                  <>
+                    <span className="ca-label">Paga con</span>
+                    <div className="ca-segmento" role="group" aria-label="Moneda con la que paga">
+                      {monedas.map(m => (
+                        <button key={m} type="button" className={`ca-seg-btn${m === pagaMonSel ? ' activo' : ''}`}
+                          aria-pressed={m === pagaMonSel} onClick={() => setPagaMon(m)}>{m}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <div className="ca-pay-row">
-                  <input className="ca-input" type="text" inputMode="decimal" placeholder="Paga con…"
+                  <input className="ca-input" type="text" inputMode="decimal"
+                    placeholder={`Paga con… (${pagaMonSel})`}
                     aria-label="Con cuánto paga" value={pagaCon}
                     onChange={e => setPagaCon(e.target.value)} />
-                  <button className="ca-btn" onClick={() => setPagaCon(String(cartTotal))}>Justo</button>
+                  {/* «Justo» solo tiene sentido si paga en la moneda de la venta: con otra
+                      moneda no hay ningún importe que el sistema pueda dar por bueno. */}
+                  {pagaMonSel === moneda && (
+                    <button className="ca-btn" onClick={() => setPagaCon(String(cartTotal))}>Justo</button>
+                  )}
                 </div>
                 {/* Los atajos SUMAN, no sustituyen: quien paga con dos billetes de 1000 y
                     uno de 500 toca +1000, +1000, +500 — que es literalmente lo que hace con
@@ -1749,20 +2358,40 @@ export default function PuntoVentaApp() {
                       onClick={() => setPagaCon(String(round2(num(pagaCon) + v)))}>+{money(v)}</button>
                   ))}
                 </div>
+                {monedas.length > 1 && (
+                  <>
+                    <span className="ca-label">Vuelto en</span>
+                    <div className="ca-segmento" role="group" aria-label="Moneda del vuelto">
+                      {monedas.map(m => (
+                        <button key={m} type="button" className={`ca-seg-btn${m === cambioMonSel ? ' activo' : ''}`}
+                          aria-pressed={m === cambioMonSel} onClick={() => setCambioMon(m)}>{m}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <div className="ca-total-row">
                   <span className="ca-total-lbl">Cambio</span>
-                  {pagaCon.trim() === '' ? (
+                  {cambioAuto === null ? (
+                    /* Moneda cruzada: el sistema NO calcula. Se teclea lo que se devuelve,
+                       que es lo que se hace con la mano y lo que hace falta para que el
+                       arqueo del cierre cuadre. */
+                    <input className="ca-input ca-input-corto" type="text" inputMode="decimal"
+                      placeholder={`Cuánto se devuelve (${cambioMonSel})`}
+                      aria-label={`Cuánto se devuelve en ${cambioMonSel}`}
+                      value={cambioImp} onChange={e => setCambioImp(e.target.value)} />
+                  ) : pagaCon.trim() === '' ? (
                     <span className="ca-muted">—</span>
                   ) : (
                     <span className={`ca-cambio-imp${num(pagaCon) < cartTotal ? ' falta' : ''}`}>
                       {num(pagaCon) < cartTotal
                         ? `Faltan ${simbolo(moneda)} ${money(cartTotal - num(pagaCon))}`
-                        : `${simbolo(moneda)} ${money(num(pagaCon) - cartTotal)}`}
+                        : `${simbolo(moneda)} ${money(cambioAuto)}`}
                     </span>
                   )}
                 </div>
-                {pagaCon.trim() !== '' && (
-                  <button className="ca-btn ca-btn-sm" onClick={() => setPagaCon('')}>Borrar lo tecleado</button>
+                {(pagaCon.trim() !== '' || cambioImp.trim() !== '') && (
+                  <button className="ca-btn ca-btn-sm"
+                    onClick={() => { setPagaCon(''); setCambioImp('') }}>Borrar lo tecleado</button>
                 )}
               </div>
             )}

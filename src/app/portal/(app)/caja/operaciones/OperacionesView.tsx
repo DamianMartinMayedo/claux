@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ReceiptText, Boxes } from 'lucide-react'
-import type { Ticket, MovimientoStock } from '@/app/actions/portal/caja'
+import type { Ticket, MovimientoStock, LineaTicket } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import TablaCargando from '@/components/portal/TablaCargando'
 import Tabs from '@/components/Tabs'
@@ -14,7 +14,7 @@ import Filtros from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
 
-type Linea = { descripcion: string; cantidad: number; precio_unitario: number }
+type Linea = LineaTicket
 
 interface Props {
   data: {
@@ -46,6 +46,10 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
   const punto  = params.get('punto')  ?? ''   // '' = todos
   const estado = params.get('estado') ?? ''
   const medio  = params.get('medio')  ?? ''
+  const dto    = params.get('dto')    ?? ''   // '1' = solo las ventas con descuento
+  const conDescuentoCount = useMemo(
+    () => data.tickets.filter(t => Number(t.bruto) - Number(t.total) > 0.005).length,
+    [data.tickets])
   const cajaNombre = (id: string) => data.cajaNombres[id] ?? id
 
   /**
@@ -90,10 +94,18 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
       opciones: [
         { valor: 'Efectivo',      label: 'Efectivo' },
         { valor: 'Transferencia', label: 'Transferencia' },
-        { valor: 'Otro',          label: 'Otro' },
       ],
     },
-  ], [punto, estado, medio, data.cajaNombres])
+    // Sin techo por descuento, el control es poder VER lo que se regaló. Una columna más
+    // no se lee en un listado de 400 ventas: hace falta pedir las once que interesan.
+    {
+      clave: 'con_descuento', param: 'dto',
+      label: conDescuentoCount > 0 ? `Solo con descuento (${conDescuentoCount})` : 'Solo con descuento',
+      valor: dto, widget: 'toggle', donde: 'cliente',
+      // Un negocio que nunca hace descuentos no necesita el interruptor.
+      ocultarSi: conDescuentoCount === 0,
+    },
+  ], [punto, estado, medio, dto, conDescuentoCount, data.cajaNombres])
 
   // El buscador mira TAMBIÉN el producto, que es lo que el `placeholder` prometía y la
   // pestaña de Ventas no hacía: se buscaba «cerveza» y no salía nada, con la caja de texto
@@ -109,9 +121,10 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
       (!punto  || t.caja_id === punto) &&
       (!estado || (t.estado ?? 'VIGENTE') === estado) &&
       (!medio  || (t.medio_pago ?? '') === medio) &&
+      (dto !== '1' || Number(t.bruto) - Number(t.total) > 0.005) &&
       (!q || textoDe(t).includes(q)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.tickets, data.lineasPorTicket, search, punto, estado, medio])
+  }, [data.tickets, data.lineasPorTicket, search, punto, estado, medio, dto])
 
   // Totales por moneda de lo que se está viendo. La pantalla que responde «cuánto vendí»
   // no lo decía: había que sumar la columna a mano. Las anuladas no cuentan.
@@ -226,7 +239,7 @@ function VentasTabla({ items, cajaNombre, lineas }: {
       {items.length === 0 ? (
         <div className="mon-empty">
           <ReceiptText size={36} strokeWidth={1} opacity={0.25} />
-          <p>Sin ventas sincronizadas todavía.</p>
+          <p>Sin ventas sincronizadas.</p>
         </div>
       ) : (
         <div className="table-wrapper">
@@ -234,6 +247,7 @@ function VentasTabla({ items, cajaNombre, lineas }: {
             <thead>
               <tr>
                 <th>Fecha</th><th>Punto de venta</th><th>Medio de pago</th>
+                <th className="col-num">Descuento</th>
                 <th className="col-num">Total</th><th>Moneda</th><th>Estado</th>
               </tr>
             </thead>
@@ -241,6 +255,9 @@ function VentasTabla({ items, cajaNombre, lineas }: {
               {pageItems.map(t => {
                 const suyas = lineas[t.ticket_uuid] ?? []
                 const abre  = abierta === t.ticket_uuid
+                // Las dos capas juntas (línea y ticket): bruto − total. Es la cifra que
+                // el dueño quiere, y no obliga a sumar dos columnas mentalmente.
+                const regalado = Math.round((Number(t.bruto) - Number(t.total)) * 100) / 100
                 return (
                   <Fragment key={t.ticket_uuid}>
                     <tr className={suyas.length ? 'table-row-clickable' : undefined}
@@ -248,20 +265,43 @@ function VentasTabla({ items, cajaNombre, lineas }: {
                       <td data-label="Fecha">{fecha(t.fecha)}</td>
                       <td data-label="Punto de venta">{cajaNombre(t.caja_id)}</td>
                       <td data-label="Medio de pago">{t.medio_pago ?? '—'}</td>
+                      <td data-label="Descuento" className="col-num">{regalado > 0 ? `− ${money(regalado)}` : '—'}</td>
                       <td data-label="Total" className="col-num">{money(t.total)}</td>
                       <td data-label="Moneda">{t.moneda}</td>
                       <td data-label="Estado">{estadoBadge(t.estado)}</td>
                     </tr>
                     {abre && (
                       <tr className="caja-detalle-fila">
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <ul className="caja-detalle-lineas">
                             {suyas.map((l, i) => (
                               <li key={i}>
-                                <span>{qty(l.cantidad)} × {l.descripcion}</span>
-                                <span className="col-num">{money(l.cantidad * l.precio_unitario)} {t.moneda}</span>
+                                <span>
+                                  {qty(l.cantidad)} × {l.descripcion}
+                                  {/* Lo que se le quitó A ESTA LÍNEA. Sin esto, repasar
+                                      una venta con el cajero es imposible: el neto solo
+                                      dice que el número no es el del catálogo. */}
+                                  {l.descuento_importe > 0 && (
+                                    <span className="caja-detalle-dto"> · descuento {money(l.descuento_importe)}</span>
+                                  )}
+                                </span>
+                                <span className="col-num">{money(l.subtotal)} {t.moneda}</span>
                               </li>
                             ))}
+                            {/* El descuento de la compra entera va aparte de las líneas,
+                                que es exactamente como se aplicó. */}
+                            {Number(t.descuento_importe) > 0 && (
+                              <li>
+                                <span>Descuento de la venta</span>
+                                <span className="col-num">− {money(t.descuento_importe)} {t.moneda}</span>
+                              </li>
+                            )}
+                            {regalado > 0 && (
+                              <li className="caja-detalle-total">
+                                <span>Se cobró (antes, {money(t.bruto)})</span>
+                                <span className="col-num">{money(t.total)} {t.moneda}</span>
+                              </li>
+                            )}
                           </ul>
                         </td>
                       </tr>
@@ -285,7 +325,7 @@ function StockTabla({ items, cajaNombre }: { items: MovimientoStock[]; cajaNombr
       {items.length === 0 ? (
         <div className="mon-empty">
           <Boxes size={36} strokeWidth={1} opacity={0.25} />
-          <p>Sin movimientos de stock. Aparecen aquí las líneas de cada venta.</p>
+          <p>Sin movimientos de stock. Aquí aparecen las líneas de cada venta.</p>
         </div>
       ) : (
         <div className="table-wrapper">

@@ -103,6 +103,9 @@ export interface FiltroExport {
   con_saldo?:  boolean
   /** Catálogo: solo lo que está en o por debajo de su mínimo de stock. */
   bajo_minimo?: boolean
+  /** Punto de venta: solo las ventas donde se hizo un descuento. Sin techo por descuento,
+   *  poder aislarlas ES el control — en un listado de 400 tickets una columna no se lee. */
+  con_descuento?: boolean
   /** Catálogo de servicios: solo los que se pueden contratar como suscripción. */
   suscribibles?: boolean
   /** Turnos: forma visible del calendario que se está descargando. */
@@ -615,8 +618,10 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     etiqueta: 'Productos y servicios',
     archivo: f => f?.tipo === 'SERVICIO' ? 'servicios' : 'productos',
     // Inventario y Servicios comparten la tabla `products` y la vista; cada página
-    // cataloga un `tipo` y lo pasa en el filtro.
-    modulos: ['inventario', 'servicios'],
+    // cataloga un `tipo` y lo pasa en el filtro. `caja` también: el catálogo del
+    // mostrador es la misma tabla, y sin esto el cliente que solo tiene el punto de
+    // venta pulsaba Exportar y le saltaba «no tienes el módulo».
+    modulos: ['inventario', 'servicios', 'caja'],
     // OJO: la columna de estado es `estado` ('ACTIVO'/'INACTIVO'), NO `activo` — esta
     // entrada pedía `activo` y la exportación fallaba entera («no se pudieron leer los
     // datos») desde que se escribió. Ver `supabase/migrations/010_productos.sql`.
@@ -663,8 +668,9 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
   {
     clave: 'categorias_productos',
     etiqueta: 'Categorías del catálogo',
-    archivo: f => f?.tipo === 'SERVICIO' ? 'categorias-servicios' : 'categorias-productos',
-    modulos: ['inventario', 'servicios'],
+    archivo: f => f?.tipo === 'SERVICIO' ? 'categorias-servicios'
+      : f?.tipo === 'PRODUCTO' ? 'categorias-productos' : 'categorias-catalogo',
+    modulos: ['inventario', 'servicios', 'caja'],
     cabeceras: ['Código', 'Categoría', 'Se usa en', 'Estado', 'Descripción'],
     cargar: async (db, cid, filtro) => {
       // Igual que la pestaña: las del tipo de la página MÁS las marcadas «Ambas»
@@ -1323,18 +1329,33 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     clave: 'operaciones_caja',
     etiqueta: 'Ventas del punto de venta',
     modulos: ['caja'],
-    cabeceras: ['Fecha', 'Punto de venta', 'Moneda', 'Total', 'Medio de pago', 'Estado'],
+    // `Antes de descuento` y `Descuento` van ANTES del total: es el orden en que se lee una
+    // venta rebajada, y sin ellos el fichero no puede responder «cuánto regalé este mes»,
+    // que —al no haber techo por descuento— es la pregunta que sustituye al control.
+    cabeceras: ['Fecha', 'Punto de venta', 'Moneda', 'Antes de descuento', 'Descuento', 'Total', 'Medio de pago', 'Estado'],
     cargar: async (db, cid, filtro) => {
       const [filas, cajas] = await Promise.all([
-        leer(db, 'caja_tickets', cid, 'fecha, caja_id, moneda, total, medio_pago, estado', 'fecha',
+        leer(db, 'caja_tickets', cid, 'fecha, caja_id, moneda, total, bruto, medio_pago, estado', 'fecha',
           filtro, 'fecha', ['medio_pago', 'moneda'],
           { caja_id: filtro?.cuenta_id, estado: filtro?.estado, medio_pago: filtro?.medio_pago }),
         diccionario(db, 'cajas', cid, 'caja_id', 'nombre'),
       ])
-      return filas.map(f => [
-        f.fecha as string, cajas.get(f.caja_id as string) ?? (f.caja_id as string),
-        f.moneda as string, f.total as number, f.medio_pago as string, f.estado as string,
-      ])
+      return filas
+        // El interruptor de la pantalla también aquí, o se filtra «solo con descuento» y el
+        // fichero se baja las 400 ventas: exactamente la clase de fallo que este contrato
+        // existe para cerrar.
+        .filter(f => !filtro?.con_descuento
+          || Number(f.bruto ?? f.total) - Number(f.total) > 0.005)
+        .map(f => {
+          // Los tickets anteriores a la migración 207 tienen `bruto` a cero: no hubo
+          // descuento, así que su bruto es su total.
+          const bruto = Number(f.bruto) > 0 ? Number(f.bruto) : Number(f.total)
+          return [
+            f.fecha as string, cajas.get(f.caja_id as string) ?? (f.caja_id as string),
+            f.moneda as string, bruto, Math.round((bruto - Number(f.total)) * 100) / 100, f.total as number,
+            f.medio_pago as string, f.estado as string,
+          ]
+        })
     },
   },
   {
@@ -1390,13 +1411,13 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     modulos: ['caja'],
     // Los totales son `jsonb` POR MONEDA: no caben en una columna «total» sin mentir
     // (sumar CUP con USD no es una cifra). Se vuelca una fila por cierre y moneda.
-    cabeceras: ['Cierre nº', 'Punto de venta', 'Abierta', 'Cerrada', 'Contado por', 'Estado', 'Moneda',
+    cabeceras: ['Cierre nº', 'Punto de venta', 'Abierta', 'Cerrada', 'Abierta por', 'Contado por', 'Estado', 'Moneda',
       'Fondo inicial', 'Ventas', 'Ventas en efectivo', 'Salidas de efectivo', 'Efectivo esperado',
       'Efectivo contado', 'Descuadre'],
     cargar: async (db, cid, filtro) => {
       const [filas, cajas] = await Promise.all([
         leer(db, 'caja_sesiones', cid,
-          'sesion_uuid, numero_z, caja_id, abierta_at, cerrada_at, cerrada_por, estado, fondo_inicial, total_por_moneda, efectivo_contado', 'abierta_at',
+          'sesion_uuid, numero_z, caja_id, abierta_at, cerrada_at, abierta_por, cerrada_por, estado, fondo_inicial, total_por_moneda, efectivo_contado', 'abierta_at',
           // `?? 'CERRADA'`: el dispositivo sube también el turno ABIERTO (para poder avisar
           // y rescatarlo), y un turno en curso no es un cierre — en la serie Z saldría como
           // una fila vacía que nadie sabría leer. La pantalla filtra igual.
@@ -1449,7 +1470,8 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         ])].sort()
         const base = [
           f.numero_z as number, cajas.get(f.caja_id as string) ?? (f.caja_id as string),
-          f.abierta_at as string, f.cerrada_at as string, (f.cerrada_por as string) ?? '',
+          f.abierta_at as string, f.cerrada_at as string,
+          (f.abierta_por as string) ?? '', (f.cerrada_por as string) ?? '',
           f.estado as string,
         ]
         // Un cierre sin ninguna moneda sigue saliendo: que no haya vendido nada es

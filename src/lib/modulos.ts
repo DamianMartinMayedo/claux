@@ -17,13 +17,20 @@ export function tieneAlgunModulo(modulos: unknown, claves: string[]): boolean {
 }
 
 /**
- * Los dos módulos que ponen artículos vendibles en la tabla `products`:
- * `inventario` (productos físicos, con existencias) y `servicios` (servicios, sin
- * stock). Desde la separación total tienen PÁGINAS distintas (/portal/productos y
- * /portal/servicios) y comparten solo la TABLA, filtrada por `tipo`. Esta lista se
- * usa allí donde importa «¿el cliente tiene algo que vender del catálogo?», sin que
- * importe cuál de los dos: el selector de productos de ofertas/facturas y el import
- * del catálogo QR (ambos leen `products` de cualquier tipo). El gate de cada PÁGINA,
- * en cambio, es su módulo a secas (`requireModulo`), no esta lista.
+ * Los módulos que ponen artículos vendibles en la tabla `products`:
+ * `inventario` (productos físicos, con existencias), `servicios` (servicios, sin
+ * stock) y `caja` (el mostrador cataloga los suyos cuando el cliente NO tiene
+ * Inventario: sin esto la rejilla del punto de venta bajaba **vacía** y solo se
+ * podía vender tecleando nombre y precio en cada venta). Cada uno tiene su PÁGINA
+ * (/portal/productos, /portal/servicios y /portal/caja/productos) y comparten solo
+ * la TABLA, filtrada por `tipo`. Esta lista se usa allí donde importa «¿el cliente
+ * tiene algo que vender del catálogo?», sin que importe cuál: el selector de
+ * productos de ofertas/facturas y el import del catálogo QR (ambos leen `products`
+ * de cualquier tipo). El gate de cada PÁGINA, en cambio, es su módulo a secas
+ * (`requireModulo`), no esta lista.
+ *
+ * Ojo al añadir: esto NO decide quién puede editar QUÉ tipo — eso es
+ * `modulosDelTipo` en `actions/portal/productos.ts`, y `caja` solo alcanza a los
+ * PRODUCTO. Un cliente solo-Caja no puede tocar servicios.
  */
-export const MODULOS_CATALOGO: string[] = ['inventario', 'servicios']
+export const MODULOS_CATALOGO: string[] = ['inventario', 'servicios', 'caja']

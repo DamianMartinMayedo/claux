@@ -173,7 +173,11 @@
    salía a media pantalla de donde estabas mirando, y no se veía. Abajo es donde está el
    pulgar y donde se mira después de pulsar. */
 .ca-msg {
-  position: fixed; left: 16px; right: 16px; z-index: 30;
+  /* Por ENCIMA del diálogo (50). Iba en 30 y los avisos de los diálogos —«elige quién
+     cierra el turno», «pon nombre y precio»— salían por debajo de la hoja: se pulsaba,
+     no pasaba nada visible, y se volvía a pulsar. Un aviso que responde a lo que acabas
+     de tocar tiene que estar delante de lo que estás tocando. */
+  position: fixed; left: 16px; right: 16px; z-index: 60;
   bottom: calc(var(--ca-tap) + var(--ca-seguro-abajo) + 12px);
   max-width: 440px; margin-inline: auto;
   padding: 12px 14px; border-radius: var(--ca-radius);
@@ -219,7 +223,7 @@
 .ca-alerta::before { content: '!'; flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: currentColor; color: var(--ca-warn-bg); font-size: 12px; font-weight: 800; display: grid; place-items: center; }
 
 .ca-seed { font-size: 12px; color: var(--ca-faint); margin: 0; }
-.ca-seed.vieja { color: var(--ca-warn); font-weight: 600; }
+.ca-seed.vieja, .ca-seed.aviso { color: var(--ca-warn); font-weight: 600; }
 
 /* ── Portada / gate ────────────────────────────────────────────────────────── */
 /* `gap`: sobre la tarjeta de abrir turno puede ir el aviso de lo que quedó sin
@@ -270,6 +274,14 @@
 .ca-pos { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .ca-productos { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px 16px; gap: 10px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
+/* Buscar y «Artículo libre» comparten renglón: el buscador se come lo que sobra y el
+   botón no se encoge. En un móvil estrecho el botón se va a la línea de abajo y ocupa
+   todo el ancho, que sigue siendo un objetivo de dedo entero. */
+.ca-buscar-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ca-buscar-row .ca-search { flex: 1 1 180px; width: auto; }
+.ca-libre-btn { flex: 1 0 auto; white-space: nowrap; }
+@media (min-width: 420px) { .ca-libre-btn { flex: 0 0 auto; } }
+
 .ca-search {
   width: 100%; min-height: var(--ca-tap);
   padding: 12px 14px; border-radius: var(--ca-radius);
@@ -307,15 +319,29 @@
 }
 .ca-prod-code { font-size: 11px; color: var(--ca-faint); font-variant-numeric: tabular-nums; }
 .ca-prod-susc { font-size: 11px; font-weight: 700; color: var(--ca-warn); }
+/* La campaña (mig. 210). Va con el verde del dinero y no con el ámbar del aviso: no es
+   una advertencia, es la buena noticia — y así no compite con «Va por suscripción», que
+   sí lo es. Cabe en la misma ranura porque es una línea corta («−10 %»). */
+.ca-prod-camp { font-size: 11px; font-weight: 800; color: var(--ca-money); }
+/* Con campaña, encima del precio va lo que valía antes, tachado, y el porcentaje pequeño
+   al lado. El grande de abajo es SIEMPRE lo que se cobra: si la tarjeta canta el precio
+   sin rebajar, el operador lo dice en voz alta y luego el ticket dice otra cosa. */
+.ca-prod-antes {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  font-size: 11px; color: var(--ca-faint); font-variant-numeric: tabular-nums;
+  margin-top: auto;
+}
 /* El precio es el segundo dato que se mira y va con el peso que le toca. */
 .ca-prod-price { font-weight: 800; font-size: 16px; color: var(--ca-money); font-variant-numeric: tabular-nums; margin-top: auto; }
+/* Cuando hay «antes», ese bloque ya empuja hacia abajo: el precio se pega a él y crece,
+   porque es el número que se canta. */
+.ca-prod-antes + .ca-prod-price { margin-top: 0; font-size: 19px; }
 .ca-prod-price.miss { color: var(--ca-danger); font-size: 12px; font-weight: 600; }
 
 .ca-empty { color: var(--ca-faint); font-size: 14px; padding: 24px 4px; text-align: center; margin: 0; }
 
 /* Artículo libre: un formulario de tres campos no tiene por qué medir lo que mida la
    pantalla. En un portátil se estiraba a 1.500 px y las pastillas de moneda con él. */
-.ca-libre { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 460px; }
 
 /* ── El ticket ─────────────────────────────────────────────────────────────── */
 /* En MÓVIL es una hoja inferior: colapsada deja a la vista lo único que importa
@@ -369,8 +395,27 @@
 .ca-tick-info { min-width: 0; }
 .ca-tick-acciones { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ca-tick-name { font-weight: 600; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
-.ca-tick-unit { font-size: 12px; color: var(--ca-faint); font-variant-numeric: tabular-nums; }
+/* El precio es un BOTÓN (abre el ajuste de la línea), pero no debe parecerlo: en la fila
+   del ticket lo que se lee es el precio, no un control. Se resetea el aspecto de botón y
+   se deja el área táctil que hace falta. */
+.ca-tick-unit {
+  font-size: 12px; color: var(--ca-faint); font-variant-numeric: tabular-nums;
+  border: none; background: none; padding: 2px 0; margin: 0; font-family: inherit;
+  text-align: left; cursor: pointer; min-height: 24px;
+}
+.ca-tick-unit:active { color: var(--ca-text); }
 .ca-tick-unit.miss { color: var(--ca-danger); font-weight: 600; }
+.ca-tick-dto { color: var(--ca-money); font-weight: 700; }
+/* Por qué está tachado el precio. Debajo del nombre y en pequeño: es una nota al pie del
+   producto, no un dato de la venta — el importe ya lo cuenta la fila de abajo. */
+.ca-tick-camp { font-size: 11px; font-weight: 700; color: var(--ca-money); line-height: 1.3; }
+/* El bruto tachado va DELANTE del neto y en pequeño: la cifra que manda es la que se
+   cobra, y el tachado solo explica de dónde sale. */
+.ca-tachado {
+  text-decoration: line-through; color: var(--ca-faint); font-weight: 500;
+  font-size: .75em; margin-right: 6px;
+}
+.ca-dto-imp { font-size: 16px; font-weight: 700; color: var(--ca-money); font-variant-numeric: tabular-nums; }
 .ca-stepper { display: flex; align-items: center; gap: 4px; }
 /* 44px, no 30: con un dedo, «quitar uno» y «añadir uno» a 30px se confunden. */
 .ca-step-btn {
@@ -414,6 +459,10 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ca-seg-btn.activo { background: var(--ca-surface); color: var(--ca-text); box-shadow: var(--ca-elev); }
+/* Moneda marcada por el dueño pero sin caja de Tesorería. Se VE y no se pulsa: que la
+   pastilla desapareciera dejaba el selector con una sola opción —o sin ninguna— sin
+   decir qué había pasado. Tachada, la ausencia se explica sola. */
+.ca-seg-btn:disabled { color: var(--ca-faint); text-decoration: line-through; cursor: not-allowed; }
 
 /* Calculadora de cambio: lo que el cajero hace de cabeza en cada venta en efectivo. */
 .ca-cambio { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--ca-border); }
@@ -486,6 +535,12 @@
 /* ── Formularios y botones ─────────────────────────────────────────────────── */
 .ca-field { display: flex; flex-direction: column; gap: 6px; }
 .ca-label { font-size: 13px; font-weight: 600; color: var(--ca-muted); }
+/* El asterisco de campo obligatorio. Solo lo lleva «quién lleva el turno»: en el
+   mostrador el resto se puede dejar en blanco, y marcar todo no marca nada. */
+.ca-req { color: var(--ca-danger); font-weight: 700; }
+/* El importe del vuelto cuando se devuelve en otra moneda: va en la misma fila que su
+   rótulo («Cambio»), así que no puede ocupar todo el ancho como el resto de los campos. */
+.ca-input-corto { max-width: 12rem; text-align: right; }
 .ca-input {
   width: 100%; min-height: var(--ca-tap);
   padding: 11px 13px; border-radius: var(--ca-radius-sm);

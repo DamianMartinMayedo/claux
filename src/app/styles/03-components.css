@@ -919,6 +919,7 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .text-default    { color: var(--color-text); }
 .text-primary    { color: var(--color-primary); }
 .text-error      { color: var(--color-error); }
+.text-warning    { color: var(--color-warning); }
 .text-sm-bold    { font-size: var(--text-sm); font-weight: 700; }
 .text-sm-muted   { font-size: var(--text-sm); color: var(--color-text-muted); }
 .text-xs-muted   { font-size: var(--text-xs); color: var(--color-text-muted); }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, type ChangeEvent } from 'react'
+import Link from 'next/link'
 import { AlertTriangle, CheckCircle2, FileJson, Upload } from 'lucide-react'
 import { ingestarLoteArchivo } from '@/app/actions/portal/caja'
 import type { IngestaResultado, LotePayload } from '@/lib/caja/ingesta'
@@ -156,9 +157,12 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
 
       <div className="card caja-config-section">
         {cajas.length === 0 ? (
-          <p className="caja-install-hint">Primero crea un punto de venta en la sección Puntos de venta.</p>
+          <p className="caja-install-hint">
+            Antes de sincronizar tienes que{' '}
+            <Link href="/portal/caja" className="link-primary">crear un punto de venta</Link>.
+          </p>
         ) : !puedeEditar ? (
-          <p className="caja-install-hint">Solo consulta: no tienes permiso para sincronizar archivos en este módulo.</p>
+          <p className="caja-install-hint">Solo consulta: no tienes permiso para sincronizar archivos.</p>
         ) : (
           <div className="caja-install">
             <div className="input-group">
@@ -189,7 +193,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
       {/* LA CONFIRMACIÓN. Qué trae el archivo y a dónde va, antes de escribir nada. */}
       {previo && (
         <div className="card caja-previo">
-          <h2 className="mon-section-title">Esto es lo que se va a registrar</h2>
+          <h2 className="mon-section-title">Lo que se va a registrar</h2>
 
           <div className={`alert ${previo.delArchivo ? 'alert-info' : 'alert-warning'} alert-intro`}>
             <FileJson size={16} strokeWidth={2} />
@@ -215,7 +219,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
             </li>
             <li>
               <span>{previo.cierres} {previo.cierres === 1 ? 'cierre de turno' : 'cierres de turno'}</span>
-              <span className="caja-previo-nota">es lo que lleva el dinero a tu contabilidad</span>
+              <span className="caja-previo-nota">llevan el dinero a la contabilidad</span>
             </li>
             {previo.abiertos > 0 && (
               <li>
@@ -242,8 +246,8 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
           )}
 
           <p className="caja-install-hint">
-            Lo que ya esté registrado no se duplica: cada venta y cada cierre se reconocen por
-            su identificador. Si vuelves a subir el mismo archivo, se queda todo como está.
+            Lo ya registrado no se duplica: cada venta y cada cierre se reconocen por su
+            identificador, así que subir dos veces el mismo archivo no cambia nada.
           </p>
 
           <div className="caja-actions">
@@ -275,7 +279,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
                   <><strong>{rechazados} {rechazados === 1 ? 'venta no se registró' : 'ventas no se registraron'}</strong>. </>
                 )}
                 {resultado.tickets_nuevos} ventas nuevas · {resultado.cierres_posteados} cierres registrados · {resultado.duplicados} ya existentes
-                {rechazados > 0 && '. Lo rechazado sigue en el dispositivo: corrige lo de abajo y vuelve a sincronizar.'}
+                {rechazados > 0 && '. Lo rechazado sigue en el dispositivo: corrige el motivo y vuelve a sincronizar.'}
               </span>
             </div>
             {resultado.errores.length > 0 && (

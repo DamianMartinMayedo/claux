@@ -4,9 +4,32 @@
 // (tx aparte) y escribimos en una tx sin awaits intermedios.
 
 export interface CajaConfig {
-  caja:    { caja_id: string; nombre?: string; empresa_id: string; almacen_id: string | null; monedas_aceptadas: string[]; tiene_base?: boolean }
+  caja:    { caja_id: string; nombre?: string; empresa_id: string; almacen_id: string | null; monedas_aceptadas: string[]; tiene_base?: boolean
+             /** Monedas que el dueño marcó en Claux y la semilla NO manda porque no tienen
+              *  caja de Tesorería asignada. No son cobrables: viajan solo para poder decirlo.
+              *  Opcional: una semilla vieja no las trae y el selector se comporta como antes. */
+             monedas_sin_cuenta?: string[] }
   monedas: { codigo: string; simbolo: string }[]
   tasas:   { origen: string; destino: string; tasa: number }[]
+  /** Quién maneja ESTE punto de venta (mig. 208). Baja con la semilla para que abrir y
+   *  cerrar el turno sea ELEGIR y no teclear: sin conexión no hay a quién preguntar, y
+   *  un campo libre en un mostrador con cola se rellena con «x». Opcional: una semilla
+   *  vieja no lo trae y el dispositivo vuelve al campo de texto de siempre. */
+  operadores?: { operador_id: string; nombre: string }[]
+  /** Campañas vigentes (mig. 210). Bajan como REGLA CON SU VENTANA, no como precio ya
+   *  rebajado: la caja sincroniza solo al cerrar turno, así que un precio resuelto en
+   *  el servidor llegaría caducado al aparato que no ha vuelto a sembrar. Es el
+   *  dispositivo quien las evalúa contra su propio reloj, igual que ya fecha cada
+   *  ticket. Opcional: una semilla vieja no las trae y no hay nada que aplicar. */
+  descuentos?: Campania[]
+}
+export interface Campania {
+  nombre: string; pct: number
+  ambito: 'TODO' | 'PRODUCTO'; ambito_id: string | null
+  /** Ventana en fechas locales `YYYY-MM-DD`; null = sin límite por ese lado. */
+  desde: string | null; hasta: string | null
+  /** 0 = domingo … 6 = sábado (`getDay()`). Vacío = todos los días. */
+  dias_semana: number[]
 }
 export interface Producto {
   producto_id: string; codigo: string; nombre: string; precios: Record<string, number>; unidad?: string
@@ -19,11 +42,26 @@ export interface Producto {
   es_suscribible?: boolean
 }
 export interface LocalLinea {
+  // `subtotal` es el NETO de la línea (cantidad × precio − descuento). El descuento se
+  // guarda además desglosado para poder enseñar «precio tachado → neto» y para que el
+  // dueño sepa cuánto se regaló; el par (pct, importe) es el mismo de la factura, con el
+  // modo derivado: pct > 0 ⇒ porcentaje, si no monto fijo.
   producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number
+  descuento_pct?: number; descuento_importe?: number
 }
 export interface LocalTicket {
   ticket_uuid: string; sesion_uuid: string | null; fecha: string; moneda: string; total: number
   medio_pago: string | null; lineas: LocalLinea[]; synced: boolean
+  // Descuento de TICKET: se resta después de las líneas. `bruto` es lo que habría costado
+  // sin ningún descuento (ni de línea ni de ticket).
+  bruto?: number; descuento_pct?: number; descuento_importe?: number
+  // Qué se PUSO en el mostrador y qué se DEVOLVIÓ, cada uno con su moneda (mig. 209). El
+  // vuelto puede ir en otra moneda —en Cuba, casi siempre CUP—, y sin registrarlo el
+  // arqueo no puede cuadrar: la venta en USD dejaría «sobran 5 USD, faltan 1.900 CUP».
+  // Ausentes = pagó justo, en la moneda de la venta. No hay tasa: no se calcula nada
+  // entre monedas, se guarda lo que el cajero tecleó.
+  cobrado_moneda?: string | null; cobrado_importe?: number | null
+  cambio_moneda?: string | null;  cambio_importe?: number | null
   // Rectificación: el original queda 'ANULADO' y se crea uno 'RECTIFICACION' que
   // apunta al original en rectifica_a. Tickets antiguos sin campo → 'VIGENTE'.
   estado?: 'VIGENTE' | 'ANULADO' | 'RECTIFICACION'; rectifica_a?: string | null
@@ -31,8 +69,14 @@ export interface LocalTicket {
 export interface LocalSesion {
   sesion_uuid: string; abierta_at: string; cerrada_at: string | null; estado: 'ABIERTA' | 'CERRADA'
   fondo_inicial: Record<string, number>; efectivo_contado: Record<string, number>; synced: boolean
-  /** Quién contó el dinero al cerrar. Texto libre: quien cuenta rara vez es quien teclea. */
+  /** Quién contó el dinero al cerrar. Quien cuenta rara vez es quien teclea. */
   cerrada_por?: string | null
+  /** Y quién abrió el turno. Se guardan NOMBRE e id (mig. 208): el nombre es la foto
+   *  del día —sobrevive a que renombren o den de baja al cajero— y el id es lo que
+   *  permite agrupar por persona. */
+  abierta_por?: string | null
+  abierta_por_id?: string | null
+  cerrada_por_id?: string | null
 }
 /** Salida o entrada de efectivo DURANTE el turno (pagar al proveedor, retirar, meter cambio).
  *  Es la otra mitad de por qué una caja no cuadra, y hasta ahora no existía. */

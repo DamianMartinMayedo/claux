@@ -78,7 +78,7 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
 
       {empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear un punto de venta necesitas <strong>una empresa</strong>. El almacén es opcional: solo hace falta si quieres que las ventas descuenten stock.
+          Para crear un punto de venta necesitas <strong>una empresa</strong>. El almacén es opcional: solo se necesita para que las ventas descuenten stock.
         </PrerequisitoAviso>
       )}
 
@@ -86,7 +86,8 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
         {cajas.length === 0 ? (
           <div className="mon-empty">
             <Store size={36} strokeWidth={1} opacity={0.25} />
-            <p>Aún no tienes puntos de venta. Crea el primero y obtén su enlace de instalación.</p>
+            <p className="table-empty-title">Sin puntos de venta</p>
+            <p>Crea el primero para obtener su enlace de instalación.</p>
           </div>
         ) : (
           <div className="table-wrapper">
