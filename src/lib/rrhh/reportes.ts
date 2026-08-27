@@ -111,6 +111,45 @@ export interface ReportesRrhh {
   }
   /** Como `porDepto`, pero por puesto. */
   porCargo:    { cargo: string; activos: number; coste: MontoMoneda[] }[]
+  /**
+   * El FONDO DEL 1,5 % (provisión de Seguridad Social para subsidios por enfermedad).
+   *
+   * No es un impuesto que se ingrese al Estado: es una provisión interna que se acumula
+   * con cada nómina y de la que salen los subsidios por certificado médico. Devengo, mismo
+   * patrón que vacaciones: la provisión del 1,5 % ALIMENTA el fondo y el subsidio de
+   * enfermedad lo REBAJA (la maternidad no lo toca: la reembolsa el Estado). El saldo puede
+   * quedar NEGATIVO —la empresa lo absorbe y lo compensa con lo que acumulará— y no se
+   * liquida nunca. Solo bajo modelo cubano. Vacío si el negocio no acumula 1,5 %.
+   */
+  fondoSubsidios: {
+    /** El saldo VIVO al cierre del año, por moneda. Puede ser negativo. */
+    total: MontoMoneda[]
+    /** El submayor: saldo que se abre, se provisiona, se paga y se cierra, por moneda. */
+    porMoneda: {
+      moneda: string
+      inicial: number
+      provisionadoAnio: number
+      pagadoAnio: number
+      final: number
+    }[]
+  }
+}
+
+/**
+ * Movimiento del fondo del 1,5 % ya partido a un lado y otro del 1 de enero del año, por
+ * moneda: lo anterior abre el saldo, lo del año es el movimiento. Lo deriva el llamador
+ * (recorre las nóminas confirmadas); vacío si la empresa no usa el modelo cubano.
+ */
+export interface MovFondoSubsidio {
+  moneda: string
+  /** Provisión del 1,5 % ANTERIOR al año. */
+  iniProvision: number
+  /** Subsidios por enfermedad pagados ANTES del año. */
+  iniPagado: number
+  /** Provisión del 1,5 % DEL año. */
+  provision: number
+  /** Subsidios por enfermedad pagados EN el año. */
+  pagado: number
 }
 
 /** Lo que hace falta de un ítem de nómina para el resumen de ONAT. */
@@ -187,6 +226,8 @@ export function construirReportesRrhh(
   itemsFiscales: ItemFiscalRrhh[] = [],
   /** Saldos de vacaciones ya derivados, de la plantilla filtrada. */
   saldosVacaciones: SaldoVacaciones[] = [],
+  /** Movimiento del fondo del 1,5 % ya partido por año, por moneda (vacío si no hay Cuba). */
+  movimientosFondo: MovFondoSubsidio[] = [],
   /**
    * «Hoy» en la zona del NEGOCIO, para la antigüedad. Se pasa y no se lee del reloj: este
    * módulo es puro (lo consumen pantalla, Excel y PDF) y el reloj del navegador ya mintió
@@ -359,9 +400,42 @@ export function construirReportesRrhh(
     .sort()
     .map(c => ({ cargo: c, activos: headcountCargo.get(c) ?? 0, coste: porMoneda(costeCargo.get(c) ?? []) }))
 
+  // ── El fondo del 1,5 % ────────────────────────────────────────────────────────
+  // Se agrega por MONEDA (un fondo es dinero, no se mezclan monedas en un número). El
+  // saldo inicial = provisión anterior − subsidios de enfermedad pagados antes; el final
+  // suma el movimiento del año. Puede ser negativo, y así se muestra: es una deuda de la
+  // empresa consigo misma, no un error.
+  const fondoAcc = new Map<string, MovFondoSubsidio>()
+  for (const m of movimientosFondo) {
+    const a = fondoAcc.get(m.moneda) ?? { moneda: m.moneda, iniProvision: 0, iniPagado: 0, provision: 0, pagado: 0 }
+    a.iniProvision += m.iniProvision
+    a.iniPagado    += m.iniPagado
+    a.provision    += m.provision
+    a.pagado       += m.pagado
+    fondoAcc.set(m.moneda, a)
+  }
+  const fondoPorMoneda = Array.from(fondoAcc.values())
+    .map(m => {
+      const inicial = m.iniProvision - m.iniPagado
+      return {
+        moneda: m.moneda,
+        inicial,
+        provisionadoAnio: m.provision,
+        pagadoAnio: m.pagado,
+        final: inicial + m.provision - m.pagado,
+      }
+    })
+    .filter(f => Math.abs(f.inicial) > 0.005 || Math.abs(f.provisionadoAnio) > 0.005
+      || Math.abs(f.pagadoAnio) > 0.005 || Math.abs(f.final) > 0.005)
+    .sort((a, b) => a.moneda.localeCompare(b.moneda))
+  const fondoSubsidios = {
+    total: fondoPorMoneda.map(f => ({ moneda: f.moneda, monto: f.final })),
+    porMoneda: fondoPorMoneda,
+  }
+
   return {
     plantilla, altas, bajas, costeAnual, costePorMes, porDepto, porEmpresa, vacaciones, onat,
-    costeMedio, rotacion, antiguedad, porCargo,
+    costeMedio, rotacion, antiguedad, porCargo, fondoSubsidios,
   }
 }
 

@@ -16,7 +16,7 @@ import {
 import {
   construirReportesRrhh,
   type ReportesRrhh, type EmpleadoRrhh, type NominaRrhh,
-  type ItemFiscalRrhh, type SaldoVacaciones, type MontoMoneda,
+  type ItemFiscalRrhh, type SaldoVacaciones, type MontoMoneda, type MovFondoSubsidio,
 } from '@/lib/rrhh/reportes'
 // El techo de filas de un listado se decide con el MISMO helper que el resto del
 // portal: RRHH era el único módulo fuera de este contrato y por eso su carga no
@@ -179,8 +179,11 @@ export interface NominaLinea {
   /** Solo MIPYME_CUBA: lo acumulado y lo pagado de vacaciones en ESTE período. */
   vacaciones_acumuladas_periodo: number
   vacaciones_pagadas_periodo:    number
-  /** Adelantado al trabajador, recuperable de la Seguridad Social. Suma al neto. */
+  /** Subsidio adelantado al trabajador. Suma al neto. Se reparte en dos caras (mig. 212):
+   *  la de maternidad la reembolsa el Estado; el resto (enfermedad) sale del fondo del 1,5 %. */
   subsidios:                     number
+  /** Porción de `subsidios` que es maternidad (la reembolsa el Estado, mig. 144/212). */
+  subsidios_maternidad:          number
   /**
    * La línea NO coincide con los conceptos vigentes del trabajador: le falta (o le
    * sobra) un bono o una deducción. Es lo que decide si sale el aviso de actualizar.
@@ -495,11 +498,15 @@ export interface IncidenciaMes {
   penalizacion:     number
   otros_descuentos: number
   /**
-   * Subsidio que la empresa ADELANTA al trabajador y luego recupera de la Seguridad
-   * Social. Se le suma al neto —lo cobra— pero NO es coste de la empresa, así que
-   * no entra en el gasto de Salarios: genera su propia cuenta por cobrar (mig. 144).
+   * Subsidio que la empresa le paga al trabajador. Se le suma al neto —lo cobra— pero
+   * NO es coste al pagarlo (mig. 144/212). Tiene dos caras según `subsidio_maternidad`:
+   * enfermedad (sale del fondo del 1,5 %, no se recupera) o maternidad (cuenta por
+   * cobrar contra la Seguridad Social, la reembolsa el Estado).
    */
   pago_subsidios:   number
+  /** true = licencia de maternidad (la reembolsa el Estado, mecanismo mig. 144).
+   *  false = enfermedad/certificado médico (sale del fondo del 1,5 %, mig. 212). */
+  subsidio_maternidad: boolean
 }
 
 /** Los importes de una incidencia, como ítems. Valen en LOS DOS modelos: son datos
@@ -527,7 +534,7 @@ function itemsDeIncidencia(inc: IncidenciaMes): ItemLinea[] {
 }
 
 const SELECT_INCIDENCIAS =
-  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, dias_liquidacion, vacaciones_importe_manual, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios'
+  'incidencia_id, empleado_id, periodo, dias_trabajados, dias_vacaciones, dias_liquidacion, vacaciones_importe_manual, pago_extra, pago_nocturnidad, feriados, penalizacion, otros_descuentos, pago_subsidios, subsidio_maternidad'
 
 /** Los importes llegan como texto (`numeric`): sin esto, todo suma concatenando. */
 function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaMes {
@@ -543,6 +550,7 @@ function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaM
     penalizacion:     Number(r.penalizacion),
     otros_descuentos: Number(r.otros_descuentos),
     pago_subsidios:   Number(r.pago_subsidios),
+    subsidio_maternidad: Boolean(r.subsidio_maternidad),
   }
 }
 
@@ -824,11 +832,16 @@ function componerLinea(opts: {
   // recupera. Por eso no es un ítem DEVENGO —lo sería si contara como coste— y por
   // eso al confirmar genera una cuenta por cobrar en vez de engordar el gasto.
   const subsidios = redondear2(incidencia?.pago_subsidios ?? 0)
+  // La cara de maternidad la reembolsa el Estado (mig. 144); la de enfermedad sale del
+  // fondo del 1,5 % (mig. 212). El booleano de la incidencia enruta TODO su subsidio;
+  // la línea guarda la porción como importe para que confirmar reparta sumando.
+  const subsidios_maternidad = incidencia?.subsidio_maternidad ? subsidios : 0
 
   return {
     devengado,
     deducciones,
     subsidios,
+    subsidios_maternidad,
     neto:      redondear2(Math.max(0, devengado - deducciones + subsidios)),
     recortada,
     // El ajuste por días es NEGATIVO y tiene que sobrevivir al filtro de ceros, o
@@ -1648,6 +1661,7 @@ async function construirNominas(
       vacaciones_acumuladas_periodo: Number(l.vacaciones_acumuladas_periodo ?? 0),
       vacaciones_pagadas_periodo:    Number(l.vacaciones_pagadas_periodo ?? 0),
       subsidios:                     Number(l.subsidios ?? 0),
+      subsidios_maternidad:          Number(l.subsidios_maternidad ?? 0),
       desfasada:       !!calc && (Math.abs(devengado - calc.devengado) > EPS
                                || Math.abs(deducciones - calc.deducciones) > EPS),
     })
@@ -1978,6 +1992,7 @@ export async function obtenerReportesRrhh(
   // vez. Se incluye a los de BAJA (a diferencia de la deuda viva de antes): un trabajador
   // liquidado este año es justo lo que un submayor tiene que mostrar.
   let saldos: SaldoVacaciones[] = []
+  let movimientosFondo: MovFondoSubsidio[] = []
   if (hayCuba) {
     const { data: fichas } = await db.from('empleados')
       .select('empleado_id, nombre, apellidos, moneda, vacaciones_apertura, vacaciones_apertura_dias, fecha_baja')
@@ -1990,11 +2005,15 @@ export async function obtenerReportesRrhh(
       !empresaId || empleados.some(e => e.empleado_id === f.empleado_id && e.empresa_id === empresaId))
 
     // Confirmadas con su PERÍODO: hace falta para saber si la línea abre o mueve el saldo.
+    // La moneda y la empresa entran por el fondo del 1,5 %, que se agrega por moneda y
+    // respeta el filtro de empresa.
     const { data: confirmadas } = await db.from('nominas')
-      .select('nomina_id, periodo').eq('client_id', session.client_id)
+      .select('nomina_id, periodo, moneda, empresa_id').eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro).eq('estado', 'CONFIRMADA')
-    const periodoDe = new Map(((confirmadas ?? []) as { nomina_id: string; periodo: string }[])
-      .map(n => [n.nomina_id, n.periodo]))
+    const metaNom = new Map(((confirmadas ?? []) as {
+      nomina_id: string; periodo: string; moneda: string; empresa_id: string
+    }[]).map(n => [n.nomina_id, n]))
+    const periodoDe = new Map(Array.from(metaNom.values()).map(n => [n.nomina_id, n.periodo]))
     const idsConf = Array.from(periodoDe.keys())
 
     // Cada persona con su cuatro-en-uno: inicial (importe/días) y movimiento del año.
@@ -2003,14 +2022,24 @@ export async function obtenerReportesRrhh(
     const movidoPor = new Map<string, Mov>()
     const enero = `${anio}-01`
     const dic   = `${anio}-12`
+    // El fondo del 1,5 %, por moneda: la parte de PAGO (subsidios de enfermedad) sale de
+    // las líneas; la provisión, de los conceptos (más abajo). Respeta el filtro de empresa.
+    const fondoMov = new Map<string, MovFondoSubsidio>()
+    const fondoDe = (moneda: string): MovFondoSubsidio => {
+      const f = fondoMov.get(moneda)
+        ?? { moneda, iniProvision: 0, iniPagado: 0, provision: 0, pagado: 0 }
+      fondoMov.set(moneda, f)
+      return f
+    }
     if (idsConf.length) {
       const { data: lns } = await db.from('nomina_lineas')
-        .select('empleado_id, nomina_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo, vacaciones_dias_acumulados_periodo, vacaciones_dias_pagados_periodo')
+        .select('empleado_id, nomina_id, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo, vacaciones_dias_acumulados_periodo, vacaciones_dias_pagados_periodo, subsidios, subsidios_maternidad')
         .eq('client_id', session.client_id).in('nomina_id', idsConf)
       for (const l of (lns ?? []) as {
         empleado_id: string; nomina_id: string
         vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
         vacaciones_dias_acumulados_periodo: number | null; vacaciones_dias_pagados_periodo: number | null
+        subsidios: number | null; subsidios_maternidad: number | null
       }[]) {
         const periodo = periodoDe.get(l.nomina_id)
         if (!periodo) continue
@@ -2027,8 +2056,40 @@ export async function obtenerReportesRrhh(
           m.acuI += acuI; m.acuD += acuD; m.pagI += pagI; m.pagD += pagD
         }
         movidoPor.set(l.empleado_id, m)
+
+        // Fondo: el subsidio de ENFERMEDAD (total − maternidad) rebaja el fondo. La
+        // maternidad no, que la reembolsa el Estado. Solo de la empresa mirada.
+        const meta = metaNom.get(l.nomina_id)
+        if (meta && (!empresaId || meta.empresa_id === empresaId)) {
+          const enfermedad = Number(l.subsidios ?? 0) - Number(l.subsidios_maternidad ?? 0)
+          if (enfermedad > 0.005) {
+            const f = fondoDe(meta.moneda)
+            if (periodo < enero) f.iniPagado += enfermedad
+            else if (periodo <= dic) f.pagado += enfermedad
+          }
+        }
+      }
+
+      // La PROVISIÓN del 1,5 %: sale de los conceptos (aporte de empresa), por su CLAVE.
+      const { data: prov } = await db.from('nomina_linea_conceptos')
+        .select('nomina_id, monto, concepto_clave, nombre, tipo')
+        .eq('client_id', session.client_id).in('nomina_id', idsConf)
+      for (const c of (prov ?? []) as {
+        nomina_id: string; monto: number
+        concepto_clave: ConceptoClave | null; nombre: string; tipo: TipoItemLinea
+      }[]) {
+        if (c.tipo !== 'APORTE_EMPRESA') continue
+        const clave = c.concepto_clave ?? claveDeNombre(c.nombre)
+        if (clave !== 'SS_EMPRESA_15') continue
+        const meta = metaNom.get(c.nomina_id)
+        if (!meta || (empresaId && meta.empresa_id !== empresaId)) continue
+        const periodo = meta.periodo
+        const f = fondoDe(meta.moneda)
+        if (periodo < enero) f.iniProvision += Number(c.monto)
+        else if (periodo <= dic) f.provision += Number(c.monto)
       }
     }
+    movimientosFondo = Array.from(fondoMov.values())
     saldos = visibles.map(f => {
       const m = movidoPor.get(f.empleado_id) ?? vacio()
       const iniImporte = Number(f.vacaciones_apertura ?? 0) + m.iniI
@@ -2052,7 +2113,7 @@ export async function obtenerReportesRrhh(
     empleados, nominas,
     empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     { empresaId, anio },
-    itemsFiscales, saldos,
+    itemsFiscales, saldos, movimientosFondo,
     // «Hoy» del NEGOCIO para la antigüedad, nunca el reloj del navegador.
     hoyEnTz(),
   )
@@ -3179,6 +3240,7 @@ export async function guardarIncidencia(
     penalizacion:     num('penalizacion'),
     otros_descuentos: num('otros_descuentos'),
     pago_subsidios:   num('pago_subsidios'),
+    subsidio_maternidad: formData.get('subsidio_maternidad') === 'on',
     updated_at:       new Date().toISOString(),
   }, { onConflict: 'client_id,empleado_id,periodo' })
   if (error) return { ok: false, error: error.message }
@@ -3945,6 +4007,7 @@ export async function crearNomina(
       vacaciones_dias_acumulados_periodo: calc.vacaciones_dias_acumuladas,
       vacaciones_dias_pagados_periodo:    calc.vacaciones_dias_pagadas,
       subsidios:                     calc.subsidios,
+      subsidios_maternidad:          calc.subsidios_maternidad,
     }
   })
   const total = redondear2(lineas.reduce((s, l) => s + l.neto, 0))
@@ -4410,7 +4473,8 @@ async function planificarRecalculo(
     // deducción no cabe entera antes de aplicar nada.
     const { devengado, deducciones, neto, recortada, items,
             vacaciones_acumuladas, vacaciones_pagadas,
-            vacaciones_dias_acumuladas, vacaciones_dias_pagadas, subsidios } = componerLinea({
+            vacaciones_dias_acumuladas, vacaciones_dias_pagadas, subsidios,
+            subsidios_maternidad } = componerLinea({
       salario_base: base,
       reglas:       reglasEmpresa,
       conceptos:    porEmpleado.get(f.empleado_id) ?? [],
@@ -4449,6 +4513,7 @@ async function planificarRecalculo(
       vacaciones_dias_acumuladas,
       vacaciones_dias_pagadas,
       subsidios,
+      subsidios_maternidad,
       recortada,
       cambia: Math.abs(Number(f.salario_base) - base) > EPS
         || Math.abs(devAntes - devengado) > EPS || Math.abs(dedAntes - deducciones) > EPS,
@@ -4484,6 +4549,7 @@ async function aplicarRecalculo(
         vacaciones_dias_acumulados_periodo: l.vacaciones_dias_acumuladas,
         vacaciones_dias_pagados_periodo:    l.vacaciones_dias_pagadas,
         subsidios:                     l.subsidios,
+        subsidios_maternidad:          l.subsidios_maternidad,
       })
       .eq('linea_id', l.linea_id)
       .eq('client_id', client_id)
@@ -4696,11 +4762,12 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   if (nomina.estado !== 'BORRADOR')  return { ok: false, error: 'La nómina ya está confirmada.' }
 
   const { data: lineas } = await db.from('nomina_lineas')
-    .select('devengado, deducciones, neto, subsidios, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
+    .select('devengado, deducciones, neto, subsidios, subsidios_maternidad, vacaciones_acumuladas_periodo, vacaciones_pagadas_periodo')
     .eq('nomina_id', nomina_id)
     .eq('client_id', session.client_id)
   const filas = (lineas ?? []) as {
-    devengado: number; deducciones: number; neto: number; subsidios: number
+    devengado: number; deducciones: number; neto: number
+    subsidios: number; subsidios_maternidad: number | null
     vacaciones_acumuladas_periodo: number | null; vacaciones_pagadas_periodo: number | null
   }[]
   // Las columnas de vacaciones son nullables en el histórico, así que el extractor
@@ -4711,6 +4778,12 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   const retenido    = suma(l => l.deducciones)
   const total       = suma(l => l.neto)
   const subsidios   = suma(l => l.subsidios)
+  // El subsidio tiene dos caras (mig. 212): la de MATERNIDAD la reembolsa el Estado
+  // (cuenta por cobrar, mig. 144); la de ENFERMEDAD sale del fondo del 1,5 % —dinero
+  // que la empresa paga y no recupera de nadie, cuyo coste ya se reconoció al acumular
+  // el 1,5 %—. Se reparte aquí para postear cada cara donde le toca.
+  const subsMaternidad = suma(l => l.subsidios_maternidad)
+  const subsEnfermedad = redondear2(subsidios - subsMaternidad)
   // Las dos piezas que separan el coste de la deuda (mig. 166): lo que se acumula este
   // mes es coste sin pago, y lo que se disfruta es pago cuyo coste ya se reconoció.
   const vacAcumuladas = suma(l => l.vacaciones_acumuladas_periodo)
@@ -4855,17 +4928,17 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     'salario devengado del período, sin las vacaciones disfrutadas')
   filaCoste('VACACIONES', vacAcumuladas, 'Vacaciones acumuladas',
     'provisión del período; se paga cuando se disfruten')
-  // Los tres aportes en filas SEPARADAS aunque el mapeo los mande a la misma categoría:
+  // IUFT y 12,5 % en filas SEPARADAS aunque el mapeo los mande a la misma categoría:
   // agrupar en el informe es reversible, fusionar las filas destruiría la separación de
-  // la deuda — y cada uno se liquida ante un organismo distinto.
-  for (const clave of ['IUFT', 'SS_EMPRESA_125', 'SS_EMPRESA_15'] as const) {
+  // la deuda — y cada uno se liquida ante un organismo distinto. Van AMBAS: son coste
+  // Y deuda por el mismo importe, con un acreedor real (el Estado).
+  for (const clave of ['IUFT', 'SS_EMPRESA_125'] as const) {
     const monto = aportePorClave(clave)
     if (monto <= EPS) continue
     const cat = mapeo.get(clave)
     aInsertar.push({
       ...base,
       registro_id:  generarGastoId(),
-      // AMBAS: es coste y es deuda por el mismo importe, con un acreedor real.
       naturaleza:   'AMBAS',
       categoria:    cat?.nombre ?? NOMBRE_CONCEPTO[clave],
       categoria_id: cat?.categoria_id ?? null,
@@ -4875,6 +4948,11 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
       notas:        `Nómina ${nomina_id} · a cargo de la empresa`,
     })
   }
+  // El 1,5 % NO es un impuesto que se ingrese al Estado (mig. 212): es una PROVISIÓN.
+  // Va como COSTE puro —como la acumulación de vacaciones—, sin generar deuda con
+  // nadie. De ese fondo salen los subsidios por enfermedad cuando se pagan.
+  filaCoste('SS_EMPRESA_15', aportePorClave('SS_EMPRESA_15'), NOMBRE_CONCEPTO.SS_EMPRESA_15,
+    'provisión del 1,5 %; fondo para subsidios por enfermedad')
 
   // DEUDA. El salario neto incluye las vacaciones disfrutadas: es dinero que el
   // trabajador cobra ahora, aunque su coste sea de otro mes.
@@ -4887,7 +4965,17 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     filaDeuda(redondear2(Number(r.monto)), r.nombre, 'retenido del salario, a ingresar')
   }
 
-  // ── El subsidio NO es un gasto: es un ACTIVO (mig. 144) ──────────────────────
+  // ── Subsidio por ENFERMEDAD: sale del fondo del 1,5 % (mig. 212) ─────────────
+  // Es dinero que el trabajador cobra ahora (va en su neto) pero que la empresa NO
+  // recupera de nadie: su coste ya se reconoció al acumular el 1,5 %. Por eso es DEUDA
+  // pura —cash que sale, sin coste nuevo y sin cuenta por cobrar—, como una retención
+  // por el signo contrario. Va en su propia fila, identificable en Tesorería, y así el
+  // fondo se puede auditar (acumulado del 1,5 % − pagos por enfermedad). El fondo puede
+  // quedar negativo: la empresa asume el diferencial y lo compensa a futuro (Claudia).
+  filaDeuda(subsEnfermedad, 'Subsidio por enfermedad',
+    'pagado al trabajador, con cargo al fondo del 1,5 %')
+
+  // ── Subsidio por MATERNIDAD: lo reembolsa el ESTADO, es un ACTIVO (mig. 144) ──
   // La empresa se lo adelanta al trabajador —va dentro de su neto— y luego se lo
   // cobra a la Seguridad Social. Meterlo en el gasto de Salarios inflaría el coste
   // de personal del estado de resultados por un dinero que la empresa recupera; por
@@ -4904,7 +4992,7 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   // subsidio deja de ser una excepción escrita a mano —una lista de orígenes que todo
   // consumidor nuevo tenía que recordar— y pasa a ser el primer caso normal de la regla
   // general que aplican `computaEnResultados`/`generaSaldo`.
-  if (subsidios > EPS) {
+  if (subsMaternidad > EPS) {
     aInsertar.push({
       ...base,
       tipo:         'COBRO',
@@ -4912,9 +5000,9 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
       naturaleza:   'DEUDA',
       categoria:    'Subsidios por cobrar',
       categoria_id: null,
-      descripcion:  `Subsidios adelantados ${nomina.periodo}`,
-      monto:        subsidios,
-      notas:        `Nómina ${nomina_id} · adelantado a la plantilla, a recuperar de la Seguridad Social`,
+      descripcion:  `Subsidios de maternidad ${nomina.periodo}`,
+      monto:        subsMaternidad,
+      notas:        `Nómina ${nomina_id} · maternidad adelantada a la plantilla, a recuperar de la Seguridad Social`,
     })
   }
 
@@ -4926,10 +5014,14 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
   const sumaPor = (n: string) => redondear2(aInsertar
     .filter(g => g.tipo === 'GASTO' && (g.naturaleza === n || g.naturaleza === 'AMBAS'))
     .reduce((s, g) => s + Number(g.monto), 0))
-  const totalAportes = redondear2(
+  // COSTE lleva los tres aportes: los tres son coste de personal (el 1,5 % como
+  // provisión, mig. 212). La DEUDA solo lleva los DOS que se le pagan al Estado —el
+  // 1,5 % ya no genera deuda— más el subsidio por enfermedad, que es cash sin coste.
+  const totalAportes  = redondear2(
     aportePorClave('IUFT') + aportePorClave('SS_EMPRESA_125') + aportePorClave('SS_EMPRESA_15'))
+  const aportesDeuda  = redondear2(aportePorClave('IUFT') + aportePorClave('SS_EMPRESA_125'))
   const costeEsperado = redondear2(devengado - vacPagadas + vacAcumuladas + totalAportes)
-  const deudaEsperada = redondear2(devengado - retenidoTercero + retenidoTercero + totalAportes)
+  const deudaEsperada = redondear2(devengado - retenidoTercero + retenidoTercero + subsEnfermedad + aportesDeuda)
   if (Math.abs(sumaPor('COSTE') - costeEsperado) > EPS
       || Math.abs(sumaPor('DEUDA') - deudaEsperada) > EPS) {
     return {

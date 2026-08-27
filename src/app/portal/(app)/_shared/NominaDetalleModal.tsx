@@ -136,9 +136,11 @@ function filasQueSeEscriben(nomina: NominaConLineas): {
     // La acumulación de vacaciones es COSTE sin pago: se reconoce cuando se acumula y
     // sale cuando se disfruta, así que no tiene acreedor a quien liquidar.
     sumar('__vac__', 'Acumulación de vacaciones', null, l.vacaciones_acumuladas_periodo)
-    // El subsidio lo cobra el trabajador pero no le cuesta a la empresa: nace como
-    // cuenta por COBRAR a la Seguridad Social.
-    sumar('__sub__', 'Subsidio por cobrar', 'Lo cobras tú de la Seguridad Social', l.subsidios)
+    // El subsidio lo cobra el trabajador pero no le cuesta a la empresa al pagarlo. Tiene
+    // dos caras (mig. 212): la de maternidad la reembolsa el Estado (cuenta por COBRAR); la
+    // de enfermedad sale del fondo del 1,5 % que la empresa fue acumulando, no se recupera.
+    sumar('__sub_mat__', 'Subsidio de maternidad', 'Lo cobras tú de la Seguridad Social', l.subsidios_maternidad)
+    sumar('__sub_enf__', 'Subsidio por enfermedad', 'Del fondo del 1,5 %', l.subsidios - l.subsidios_maternidad)
     for (const it of l.items) {
       if (it.tipo === 'RETENCION') {
         sumar(`r:${it.clave ?? it.nombre}`, it.nombre, 'La agencia tributaria', it.monto)

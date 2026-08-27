@@ -59,7 +59,8 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
   // completa de nómina —con su desglose y su desfase recalculado— para sumarla en el
   // navegador: la pantalla que menos filas necesitaba era la que más traía.
   const { plantilla, altas, bajas, costeAnual, costePorMes, porDepto, porEmpresa,
-          vacaciones, onat, costeMedio, rotacion, antiguedad, porCargo } = data.reportes
+          vacaciones, onat, costeMedio, rotacion, antiguedad, porCargo,
+          fondoSubsidios } = data.reportes
   const sinDatos = data.sinDatos
 
   const empresaNombre = filtroEmpresa
@@ -280,6 +281,16 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
                 ))}
               </div>
             )}
+            {/* El fondo del 1,5 %: la provisión de subsidios por enfermedad, un saldo interno
+                que no se paga al Estado y que puede quedar en negativo (lo absorbe la empresa). */}
+            {fondoSubsidios.total.length > 0 && (
+              <div className="gc-stat-card">
+                <div className="gc-stat-label">Fondo del 1,5 % (subsidios)</div>
+                {fondoSubsidios.total.map(c => (
+                  <div key={c.moneda} className="gc-stat-line"><span>{c.moneda}</span><strong>{formatMonto(c.monto)}</strong></div>
+                ))}
+              </div>
+            )}
             {/* El coste medio se divide por la plantilla MEDIA del año, no por la de hoy:
                 un negocio que empezó con 4 y acabó con 12 no reparte el coste entre 12. */}
             {costeMedio.length > 0 && (
@@ -451,6 +462,42 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Submayor del fondo del 1,5 %: la provisión se abre, se acumula, se paga y se
+              cierra, por moneda. El saldo puede ser negativo —lo absorbe la empresa— y no se
+              liquida nunca al Estado; por eso NO va en «Tributos de nómina». */}
+          {fondoSubsidios.porMoneda.length > 0 && (
+            <div className="card card-table rrhh-card-gap">
+              <div className="ter-card-head"><span className="ter-form-section-title">Fondo del 1,5 % · {anio}</span></div>
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Moneda</th>
+                      <th className="col-num">Saldo inicial</th>
+                      <th className="col-num">Provisionado</th>
+                      <th className="col-num">Subsidios de enfermedad</th>
+                      <th className="col-num">Saldo final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fondoSubsidios.porMoneda.map(f => (
+                      <tr key={f.moneda}>
+                        <td data-label="Moneda"><strong>{f.moneda}</strong></td>
+                        <td data-label="Saldo inicial" className="col-num tes-monto-cell">{formatMonto(f.inicial)}</td>
+                        <td data-label="Provisionado" className="col-num tes-monto-cell">{formatMonto(f.provisionadoAnio)}</td>
+                        <td data-label="Subsidios de enfermedad" className="col-num tes-monto-cell">{formatMonto(f.pagadoAnio)}</td>
+                        <td data-label="Saldo final" className="col-num tes-monto-cell"><strong>{formatMonto(f.final)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="info-box">
+                <span className="text-xs-muted">El 1,5 % de Seguridad Social no se ingresa al Estado: es una <strong>provisión</strong> que alimenta este fondo y de la que salen los <strong>subsidios por enfermedad</strong>. La maternidad no lo toca (la reembolsa el Estado). Un saldo negativo es normal: la empresa lo absorbe y lo compensa con lo que acumulará.</span>
               </div>
             </div>
           )}

@@ -2347,6 +2347,10 @@
 /* Turnos */
 .rrhh-card-gap { margin-bottom: var(--space-4); }
 .ter-card-head { padding: var(--space-4) var(--space-4) 0; }
+/* En escritorio el .table-wrapper no lleva padding (solo lo pone el móvil), así que
+   la banda gris del thead quedaba pegada al título de la tarjeta. Damos aire cuando
+   la tabla va justo debajo del encabezado. */
+.ter-card-head + .table-wrapper { padding-top: var(--space-3); }
 .turno-name { display: flex; align-items: center; gap: var(--space-2); }
 .turno-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;

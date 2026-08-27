@@ -38,11 +38,13 @@ interface IncidenciaEditable {
   penalizacion:     number
   otros_descuentos: number
   pago_subsidios:   number
+  subsidio_maternidad: boolean
 }
 
 const INCIDENCIA_VACIA: IncidenciaEditable = {
   dias_trabajados: null, dias_vacaciones: 0, dias_liquidacion: 0, vacaciones_importe_manual: null,
   pago_extra: 0, pago_nocturnidad: 0, feriados: 0, penalizacion: 0, otros_descuentos: 0, pago_subsidios: 0,
+  subsidio_maternidad: false,
 }
 
 /** Los seis campos en dinero que solo aparecen si alguien los usa este mes. */
@@ -308,6 +310,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
         fd.set('penalizacion',     String(previa.penalizacion))
         fd.set('otros_descuentos', String(previa.otros_descuentos))
         fd.set('pago_subsidios',   String(previa.pago_subsidios))
+        fd.set('subsidio_maternidad', previa.subsidio_maternidad ? 'on' : '')
         const res = await guardarIncidenciaDeLinea(fd)
         if (res.ok) hechas++
         else fallos.push(`${nombreCorto(empleadoId)}: ${res.error ?? 'error'}`)
@@ -352,6 +355,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
         fd.set('penalizacion',     String(previa.penalizacion))
         fd.set('otros_descuentos', String(previa.otros_descuentos))
         fd.set('pago_subsidios',   String(previa.pago_subsidios))
+        fd.set('subsidio_maternidad', previa.subsidio_maternidad ? 'on' : '')
         const res = await guardarIncidenciaDeLinea(fd)
         if (res.ok) hechas++
         else fallos.push(`${nombreCorto(empleadoId)}: ${res.error ?? 'error'}`)
@@ -389,6 +393,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
     fd.set('penalizacion',     String(nueva.penalizacion))
     fd.set('otros_descuentos', String(nueva.otros_descuentos))
     fd.set('pago_subsidios',   String(nueva.pago_subsidios))
+    fd.set('subsidio_maternidad', nueva.subsidio_maternidad ? 'on' : '')
 
     setGuardando(empleado_id)
     // El toast de carga se crea FUERA de la transición: dentro no llega a pintarse,

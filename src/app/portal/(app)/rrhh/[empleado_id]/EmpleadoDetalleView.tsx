@@ -369,10 +369,18 @@ function IncidenciaModal({
                 <div className="input-group ter-col-full">
                   <div className="form-label-with-help">
                     <label htmlFor="inc-subs">Subsidios adelantados ({moneda})</label>
-                    <FormHelp text="Se le suma al neto porque lo cobra, pero no cuenta como coste: al confirmar la nómina queda como pendiente de cobro a la Seguridad Social, y lo liquidas en Tesorería cuando llegue el reembolso." label="Cómo funcionan los subsidios adelantados" />
+                    <FormHelp text="Se le suma al neto porque lo cobra. Por enfermedad (certificado médico) sale del fondo del 1,5 % de la Seguridad Social que la empresa va acumulando cada mes, y no se recupera de nadie. Por maternidad la reembolsa el Estado: marca la casilla y quedará como pendiente de cobro a la Seguridad Social, para liquidarlo en Tesorería cuando llegue el reembolso." label="Cómo funcionan los subsidios adelantados" />
                   </div>
                   <input className="input" id="inc-subs" name="pago_subsidios" type="number" min="0" step="any"
                     defaultValue={incidencia?.pago_subsidios ?? 0} />
+                  <label className="checkbox-group">
+                    <input type="checkbox" name="subsidio_maternidad"
+                      defaultChecked={incidencia?.subsidio_maternidad ?? false} />
+                    <span className="checkbox-label">Es licencia de maternidad</span>
+                  </label>
+                  <span className="text-xs-muted">
+                    Sin marcar, se trata como subsidio por enfermedad y sale del fondo del 1,5 %.
+                  </span>
                 </div>
               )}
             </div>
