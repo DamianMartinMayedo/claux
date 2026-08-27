@@ -147,16 +147,22 @@ function AgregarIncidenciaModal({
     CAMPOS_DISPERSOS.map(c => [c.campo, String(valores[id]?.[c.campo] || '')])) as Record<string, string>
   const [campos, setCampos] = useState<Record<string, string>>(() =>
     empleadoId ? desde(empleadoId) : vacio())
+  // El booleano va aparte de `campos` (que son los seis campos NUMÉRICOS): si el subsidio
+  // es por maternidad se cobra al Estado, si no, sale del fondo del 1,5 % (mig. 212).
+  const [maternidad, setMaternidad] = useState<boolean>(() =>
+    empleadoId ? Boolean(valores[empleadoId]?.subsidio_maternidad) : false)
 
   function cambiarEmpleado(id: string) {
     setEmpleadoId(id)
     setCampos(desde(id))
+    setMaternidad(Boolean(valores[id]?.subsidio_maternidad))
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const cambios: Partial<IncidenciaEditable> = {}
     for (const c of CAMPOS_DISPERSOS) cambios[c.campo] = num(campos[c.campo] ?? '') as never
+    cambios.subsidio_maternidad = maternidad
     onGuardar(empleadoId, cambios)
   }
 
@@ -184,6 +190,16 @@ function AgregarIncidenciaModal({
                     onChange={e => setCampos(p => ({ ...p, [c.campo]: e.target.value }))} />
                 </div>
               ))}
+              {num(campos.pago_subsidios ?? '') > 0 && (
+                <div className="input-group ter-col-full">
+                  <label className="checkbox-group">
+                    <input type="checkbox" checked={maternidad}
+                      onChange={e => setMaternidad(e.target.checked)} />
+                    <span className="checkbox-label">Es licencia de maternidad</span>
+                  </label>
+                  <span className="text-xs-muted">Sin marcar, se trata como subsidio por enfermedad y sale del fondo del 1,5 %.</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="modal-footer">
