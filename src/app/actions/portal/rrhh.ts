@@ -451,6 +451,9 @@ export interface ComposicionLinea {
   /** Adelantado al trabajador y recuperable de la Seguridad Social. Suma al neto,
    *  NO al coste: por eso viaja aparte y no como ítem DEVENGO. */
   subsidios:             number
+  /** Porción de `subsidios` que es maternidad (la reembolsa el Estado, mig. 144/212);
+   *  el resto es enfermedad, que sale del fondo del 1,5 %. */
+  subsidios_maternidad:  number
   /** Algún tributo aplicado usa un tipo de relleno: no se puede postear. */
   provisional: boolean
 }
@@ -4359,6 +4362,8 @@ export interface RecalculoLineaNomina {
   vacaciones_dias_acumuladas: number
   vacaciones_dias_pagadas:    number
   subsidios:             number
+  /** Porción de `subsidios` que es maternidad (la reembolsa el Estado, mig. 212). */
+  subsidios_maternidad:  number
   /** Las deducciones superaban el devengado y se recortan a él. */
   recortada:           boolean
   cambia:              boolean

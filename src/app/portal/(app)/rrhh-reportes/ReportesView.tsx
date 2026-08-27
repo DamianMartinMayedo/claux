@@ -524,7 +524,7 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
           )}
 
           {/* Plantilla y coste por departamento */}
-          <div className="card card-table">
+          <div className="card card-table rrhh-card-gap">
             <div className="ter-card-head"><span className="ter-form-section-title">Plantilla por departamento</span></div>
             <div className="table-wrapper">
               <table className="table">

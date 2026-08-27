@@ -48,7 +48,13 @@ const INCIDENCIA_VACIA: IncidenciaEditable = {
 }
 
 /** Los seis campos en dinero que solo aparecen si alguien los usa este mes. */
-const CAMPOS_DISPERSOS: { campo: keyof IncidenciaEditable; etiqueta: string }[] = [
+// Solo las claves NUMÉRICAS de la incidencia son columnas dispersas: `subsidio_maternidad`
+// es un booleano (se marca en la ficha, no se teclea aquí) y colarlo rompía el `> 0` y el
+// `defaultValue` del input de esta tabla.
+type CampoNumericoIncidencia = {
+  [K in keyof IncidenciaEditable]: IncidenciaEditable[K] extends number ? K : never
+}[keyof IncidenciaEditable]
+const CAMPOS_DISPERSOS: { campo: CampoNumericoIncidencia; etiqueta: string }[] = [
   { campo: 'pago_extra',       etiqueta: 'Pago extra' },
   { campo: 'pago_nocturnidad', etiqueta: 'Nocturnidad' },
   { campo: 'feriados',         etiqueta: 'Feriados' },
