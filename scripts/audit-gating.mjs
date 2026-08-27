@@ -47,6 +47,12 @@ const ALLOWLIST = {
   // acciones que SÍ escriben datos del cliente (crear/validar/aplicar/deshacer
   // lote) llevan además `puedeEditarAlgunModulo` de la entidad destino.
   'importar.ts': ['guardarPlantillaImport', 'eliminarPlantillaImport'],
+  // Recuperar contraseña: las dos pantallas son PÚBLICAS (quien las usa no puede
+  // entrar, justamente). El candado no es de módulo sino el token del correo:
+  // aleatorio, guardado en hash, de un solo uso y caducado (mig. 217). Además
+  // hay control de frecuencia por correo y la respuesta es siempre la misma,
+  // exista la cuenta o no.
+  'password-reset.ts': ['solicitarResetPortal', 'restablecerPasswordPortal'],
   // LECTURA pura que el detector marca por el `.rpc(`: `caja_pendientes_contabilizar` es
   // una función `stable` que solo agrega (qué ventas del TPV no han llegado a los libros).
   // Es un anti-join, y por eso vive en la base y no en el código: hacerlo desde Next

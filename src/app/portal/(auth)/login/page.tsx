@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { loginCliente }            from '@/app/actions/portal/auth'
+import { solicitarResetPortal }    from '@/app/actions/portal/password-reset'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function PortalLoginPage() {
@@ -10,6 +11,10 @@ export default function PortalLoginPage() {
   const [isPending, startTransition] = useTransition()
   const [error,    setError]    = useState('')
   const [showPass, setShowPass] = useState(false)
+  // La recuperación vive en esta misma tarjeta (no en otra ruta): quien no puede
+  // entrar ya está aquí, y volver atrás es un clic.
+  const [modo,     setModo]     = useState<'login' | 'recuperar'>('login')
+  const [enviado,  setEnviado]  = useState('')
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -27,6 +32,22 @@ export default function PortalLoginPage() {
     })
   }
 
+  function handleRecuperar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+    const fd    = new FormData(e.currentTarget)
+    const email = ((fd.get('email') as string) ?? '').trim()
+    startTransition(async () => {
+      const result = await solicitarResetPortal(fd)
+      if (!result.ok) { setError(result.error ?? 'No se pudo enviar el enlace.'); return }
+      setEnviado(email)
+    })
+  }
+
+  function volverALogin() {
+    setModo('login'); setError(''); setEnviado('')
+  }
+
   return (
     <div className="login-container">
       <div className="login-box">
@@ -39,57 +60,127 @@ export default function PortalLoginPage() {
         </div>
 
         <div className="card card-lg">
-          <h1 className="login-card-title">Iniciar sesión</h1>
+          {modo === 'login' ? (
+            <>
+              <h1 className="login-card-title">Iniciar sesión</h1>
 
-          <form onSubmit={handleSubmit} className="login-form" noValidate>
+              <form onSubmit={handleSubmit} className="login-form" noValidate>
 
-            <div className="form-group">
-              <label className="form-label">Email <span className="required">*</span></label>
-              <input
-                className="form-input"
-                type="email"
-                name="email"
-                autoComplete="email"
-                placeholder="tu@empresa.com"
-                required
-              />
-            </div>
+                <div className="form-group">
+                  <label className="form-label">Email <span className="required">*</span></label>
+                  <input
+                    className="form-input"
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    placeholder="tu@empresa.com"
+                    required
+                  />
+                </div>
 
-            <div className="form-group">
-              <label className="form-label">Contraseña <span className="required">*</span></label>
-              <div className="input-pwd-wrap">
-                <input
-                  className="form-input input-pwd"
-                  type={showPass ? 'text' : 'password'}
-                  name="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  required
-                />
+                <div className="form-group">
+                  <label className="form-label">Contraseña <span className="required">*</span></label>
+                  <div className="input-pwd-wrap">
+                    <input
+                      className="form-input input-pwd"
+                      type={showPass ? 'text' : 'password'}
+                      name="password"
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(v => !v)}
+                      className="input-eye-btn"
+                      aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      {showPass ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <div className="alert alert-error">{error}</div>}
+
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="btn btn-primary btn-full btn-lg"
+                >
+                  {isPending
+                    ? <><span className="spinner spinner-sm" /> Entrando…</>
+                    : 'Iniciar sesión'}
+                </button>
+
                 <button
                   type="button"
-                  onClick={() => setShowPass(v => !v)}
-                  className="input-eye-btn"
-                  aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  className="login-forgot-link"
+                  onClick={() => { setModo('recuperar'); setError('') }}
                 >
-                  {showPass ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+                  ¿Olvidaste tu contraseña?
                 </button>
-              </div>
-            </div>
 
-            {error && <div className="alert alert-error">{error}</div>}
+              </form>
+            </>
+          ) : (
+            <>
+              <h1 className="login-card-title">Recuperar contraseña</h1>
 
-            <button
-              type="submit"
-              disabled={isPending}
-              className="btn btn-primary btn-full btn-lg"
-            >
-              {isPending
-                ? <><span className="spinner spinner-sm" /> Entrando…</>
-                : 'Iniciar sesión'}
-            </button>
+              {enviado ? (
+                <>
+                  <div className="alert alert-success">
+                    Si <strong>{enviado}</strong> tiene una cuenta, le llega un enlace para
+                    definir una contraseña nueva. Caduca en una hora y solo sirve una vez.
+                  </div>
+                  <p className="text-sm-muted">
+                    ¿No aparece? Revisa el correo no deseado antes de volver a pedirlo.
+                  </p>
+                  <button
+                    type="button"
+                    className="login-forgot-link link-full-center mt-5"
+                    onClick={volverALogin}
+                  >
+                    ← Volver al inicio de sesión
+                  </button>
+                </>
+              ) : (
+                <form onSubmit={handleRecuperar} className="login-form" noValidate>
+                  <p className="text-sm-muted">
+                    Escribe el email con el que entras y te enviamos un enlace para
+                    ponerle una contraseña nueva.
+                  </p>
 
-          </form>
+                  <div className="form-group">
+                    <label className="form-label">Email <span className="required">*</span></label>
+                    <input
+                      className="form-input"
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      placeholder="tu@empresa.com"
+                      required
+                    />
+                  </div>
+
+                  {error && <div className="alert alert-error">{error}</div>}
+
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    className="btn btn-primary btn-full btn-lg"
+                  >
+                    {isPending
+                      ? <><span className="spinner spinner-sm" /> Enviando…</>
+                      : 'Enviar enlace'}
+                  </button>
+
+                  <button type="button" className="login-forgot-link" onClick={volverALogin}>
+                    ← Volver al inicio de sesión
+                  </button>
+                </form>
+              )}
+            </>
+          )}
         </div>
 
         <p className="login-footer">
@@ -100,4 +191,3 @@ export default function PortalLoginPage() {
     </div>
   )
 }
-

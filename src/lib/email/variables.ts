@@ -2,6 +2,7 @@ export type TipoEmail =
   | 'diagnostico_cita'
   | 'bienvenida'
   | 'password_reset'
+  | 'password_reset_link'
   | 'respuesta_soporte'
   | 'confirmacion_pago'
   | 'reactivacion'
@@ -14,6 +15,7 @@ export const TIPOS_EMAIL: { tipo: TipoEmail; label: string }[] = [
   { tipo: 'diagnostico_cita',  label: 'Diagnóstico → agendar cita' },
   { tipo: 'bienvenida',        label: 'Bienvenida (nuevo cliente)' },
   { tipo: 'password_reset',    label: 'Nueva contraseña' },
+  { tipo: 'password_reset_link', label: 'Recuperar contraseña (enlace)' },
   { tipo: 'respuesta_soporte', label: 'Respuesta de soporte' },
   { tipo: 'confirmacion_pago', label: 'Confirmación de pago' },
   { tipo: 'reactivacion',      label: 'Reactivación de cuenta' },
@@ -48,6 +50,14 @@ export const PLANTILLAS_VARS: Record<TipoEmail, VarDef[]> = {
     { clave: 'usuario',           label: 'Email de usuario',     ejemplo: 'maria@elsabor.com' },
     { clave: 'password_temporal', label: 'Contraseña temporal',  ejemplo: 'Xk29pTqw' },
     { clave: 'link_portal',       label: 'Link al portal',       ejemplo: 'https://claux.es/portal/login' },
+  ],
+  // El correo que se manda solo cuando el usuario lo pide desde «¿Olvidaste tu
+  // contraseña?». No lleva contraseña dentro a propósito: lleva un enlace de un
+  // solo uso, y el usuario elige la suya al final del camino.
+  password_reset_link: [
+    { clave: 'usuario',    label: 'Email de usuario',      ejemplo: 'maria@elsabor.com' },
+    { clave: 'link_reset', label: 'Enlace para cambiarla',  ejemplo: 'https://claux.es/portal/recuperar/8f3c…' },
+    { clave: 'minutos',    label: 'Minutos de validez',     ejemplo: '60' },
   ],
   respuesta_soporte: [
     { clave: 'nombre',        label: 'Nombre de contacto',        ejemplo: 'María Pérez' },

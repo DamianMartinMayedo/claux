@@ -30,7 +30,7 @@ type Props = {
 export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
   const mounted = useMounted()
   const [resetting, setResetting] = useState<string | null>(null)
-  const [resultado, setResultado] = useState<{ email: string; password: string } | null>(null)
+  const [resultado, setResultado] = useState<{ email: string; password: string; emailEnviado: boolean } | null>(null)
   const [copiado, setCopiado]     = useState(false)
   const [confirmEntrar, setConfirmEntrar] = useState(false)
   const [entrando, setEntrando]           = useState(false)
@@ -61,7 +61,7 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
       toastError(res.error ?? 'No se pudo regenerar la contraseña.')
       return
     }
-    setResultado({ email: u.email, password: res.passwordTemporal })
+    setResultado({ email: u.email, password: res.passwordTemporal, emailEnviado: !!res.emailEnviado })
   }
 
   function copiar() {
@@ -83,8 +83,13 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
         </div>
         <div className="modal-body">
           <p className="text-sm-muted">
-            Comparte esta contraseña con <strong>{resultado.email}</strong> de forma segura.
-            No se mostrará de nuevo.
+            La contraseña no se mostrará de nuevo. El usuario definirá la suya en el
+            próximo acceso.
+          </p>
+          <p className={`alert ${resultado.emailEnviado ? 'alert-success' : 'alert-warning'}`} role="alert">
+            {resultado.emailEnviado
+              ? <>Le enviamos estos datos de acceso a <strong>{resultado.email}</strong>.</>
+              : <>No pudimos enviarle el correo. Comparte la contraseña con <strong>{resultado.email}</strong> de forma segura.</>}
           </p>
           <div className="code-block">
             <div className="code-block-field">

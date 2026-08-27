@@ -327,11 +327,14 @@ export async function crearCliente(formData: FormData) {
 // Resuelve el huevo-y-la-gallina: si el admin principal del tenant pierde su
 // clave, aquí (panel admin) se le genera una temporal. must_change_password:true
 // → el cliente definirá su propia contraseña en el primer acceso.
-// Reutilizable como base de un futuro auto-servicio por email (no construido aún).
+// El mismo correo `password_reset` que manda el portal sale también desde aquí, y
+// se espera la respuesta de Resend para poder decirle al admin si llegó o no
+// (mismo criterio que el reset del portal): saber si tiene que dictar la
+// contraseña por otra vía es justo lo que necesita en ese momento.
 export async function regenerarPasswordCliente(
   user_id: string,
   client_id: string,
-): Promise<{ ok: boolean; passwordTemporal?: string; error?: string }> {
+): Promise<{ ok: boolean; passwordTemporal?: string; emailEnviado?: boolean; error?: string }> {
   await requirePermiso('clientes')
   const supabase = await createClient()
 
@@ -368,10 +371,12 @@ export async function regenerarPasswordCliente(
     description: `Regeneró la contraseña del usuario ${usuario.email} (${user_id}) del cliente ${client_id}`,
   })
 
-  // after(): garantiza el envío tras la respuesta (un `void` suelto se pierde en
-  // Vercel). Un fallo de Resend no debe romper la regeneración.
-  after(async () => {
-    if (!(await tipoEmailActivo('password_reset'))) return
+  // El envío va esperado (no en after()) para poder devolver `emailEnviado`: la
+  // contraseña temporal ya está puesta, así que un fallo de Resend no rompe nada
+  // —solo cambia lo que el modal le dice al admin—. `enviarEmail` nunca lanza;
+  // deja el motivo en emails_log.
+  let emailEnviado = false
+  if (await tipoEmailActivo('password_reset')) {
     const { data: cliente } = await supabase
       .from('clients')
       .select('nombre_empresa')
@@ -384,17 +389,18 @@ export async function regenerarPasswordCliente(
       password_temporal: passwordTemporal,
       link_portal: LINK_PORTAL,
     })
-    await enviarEmail({
+    const envio = await enviarEmail({
       to: usuario.email,
       subject: asunto,
       html,
       tipo: 'password_reset',
       clientId: client_id,
     })
-  })
+    emailEnviado = envio.ok
+  }
 
   revalidatePath(`/admin/clientes/${client_id}`)
-  return { ok: true, passwordTemporal }
+  return { ok: true, passwordTemporal, emailEnviado }
 }
 
 // ── Desactivar cliente ───────────────────────────────────────────────
