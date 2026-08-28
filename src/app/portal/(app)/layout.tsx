@@ -26,6 +26,7 @@ import { configAgente }      from '@/lib/ia/contexto'
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { accesoBloqueado, COLUMNAS_ACCESO } from '@/lib/clientes/ciclo-vida'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -36,7 +37,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const [{ data: cliente }, { data: usr }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar, accesoImport] = await Promise.all([
     db
       .from('clients')
-      .select('nombre_empresa, estado, modulos_activos, tarifa, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, es_prueba')
+      .select(`nombre_empresa, modulos_activos, precio_mensual_usd, ciclo_facturacion, ${COLUMNAS_ACCESO}`)
       .eq('client_id', session.client_id)
       .single(),
     db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
@@ -90,29 +91,13 @@ export default async function PortalAppLayout({ children }: { children: React.Re
     if (modulosActivos.includes('reservas_citas') || modulosActivos.includes('agenda')) sugerenciasIa.push('¿Cuántas reservas tengo hoy?')
   }
 
-  // Bloqueo basado en estado Y en fecha, sin depender de expiración automática:
-  // · DESACTIVADO → siempre bloqueado (nunca han pagado o el admin los desactivó)
-  // · VENCIDO    → siempre bloqueado (estado legado; ya no se genera automáticamente)
-  // · Fecha expirada → bloqueado, salvo que estén en GRACIA con fecha_fin_gracia vigente
+  // Quién entra y por qué se le cierra: una sola regla, en `lib/clientes/ciclo-vida`,
+  // la misma que decide a quién se le puede escribir DESACTIVADO. Estuvo aquí
+  // suelta y acabó discrepando del barrido —el barrido escribía, el guardia leía,
+  // y ganaba el que escribía—; así fue como un Socio CLAUX vigente se encontró la
+  // pantalla de «Cuenta suspendida» (DEUS, 2026-08-28).
   const hoy = hoyEnTz()
-  const enGraciaActiva =
-    cliente.estado === 'GRACIA' &&
-    !!cliente.fecha_fin_gracia &&
-    cliente.fecha_fin_gracia.split('T')[0] >= hoy
-  // El cliente de PRUEBA no vence NUNCA por fecha: es un entorno interno de por vida.
-  // Se comprueba aquí y no solo al crearlo porque `es_prueba` se puede marcar
-  // después, sobre un cliente que ya tiene fecha guardada — así nació CLI-0003
-  // (Negocio Test), con expiración puesta. Mirando solo la fecha, se bloquearía solo
-  // el día que llegue, y nadie se acordaría de por qué.
-  // Un DESACTIVADO o VENCIDO explícito sí lo bloquea: eso lo decide una persona.
-  const expiradoPorFecha =
-    !cliente.es_prueba &&
-    !!cliente.fecha_expiracion &&
-    cliente.fecha_expiracion.split('T')[0] < hoy
-  const bloqueado =
-    cliente.estado === 'DESACTIVADO' ||
-    cliente.estado === 'VENCIDO' ||
-    (expiradoPorFecha && !enGraciaActiva)
+  const { bloqueado, motivo: motivoBloqueo } = accesoBloqueado(cliente, hoy)
 
   // Notificaciones internas: el admin ve la bandeja entera; un `usuario` ve solo
   // lo operativo de sus módulos (mapa fijo, decisión 4), y solo si le toca alguna
@@ -158,7 +143,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         )}
         <PortalToastWrapper>
         {bloqueado
-          ? <BloqueadoScreen estado={cliente.estado} />
+          ? <BloqueadoScreen motivo={motivoBloqueo} />
           : <EmpresaColorProvider empresas={empresas}>
               <ConfiguradorProvider value={!!session.imp}>
                 <IaProvider value={{ tieneIa, nombreAgente }}>{children}</IaProvider>

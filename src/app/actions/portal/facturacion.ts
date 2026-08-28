@@ -3,7 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { leerSetting }       from '@/lib/settings'
-import { suscripcionLabel }  from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { cargarContextoLimites, usoDeLimites, DIMENSIONES, type UsoDimension } from '@/lib/limites'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,13 @@ export interface FacturacionData {
   ciclo:            string
   fecha_expiracion: string | null
   fecha_fin_gracia: string | null
+  /** Socio CLAUX: no se le genera cobro. Bandera, no estado (§10 del plan). */
+  es_socio:         boolean
+  socio_hasta:      string | null
+  /** Nombre humano del nivel contratado («Empresa»), no la clave. */
+  nivel_nombre:     string
+  /** Uso y tope de cada dimensión, ya filtrado a los módulos que tiene. `null` si falló el conteo. */
+  capacidad:        UsoDimension[] | null
   email_soporte:    string
   pagos:            PagoPortal[]
 }
@@ -43,7 +51,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
 
   const [{ data: cliente }, { data: pagos }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, estado, es_prueba, precio_mensual_usd, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia')
+      .select(`nombre_empresa, estado, es_prueba, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, nivel, modulos_activos`)
       .eq('client_id', session.client_id)
       .single(),
     db.from('payments')
@@ -57,11 +65,36 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
 
   if (!cliente) return null
 
-  const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
+  // Lo que paga, no lo que cuesta: aquí el cliente mira su factura.
+  const precioMes   = precioMensualEfectivo(cliente)
   const ciclo       = cliente.ciclo_facturacion ?? 'mensual'
   const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const suscripcion = suscripcionLabel(precioMes, ciclo, descuento)
   const emailSoporte = await leerSetting('email_soporte', 'soporte@claux.es')
+
+  // Su nivel y lo que le cabe. Hasta ahora el dueño solo se enteraba de en qué
+  // nivel estaba el día que chocaba con un tope («el máximo de tu nivel Empresa»),
+  // que es la peor manera posible de descubrir lo que has comprado. Aquí lo tiene
+  // antes de chocar, y de paso ve cuánto le queda.
+  //
+  // Se filtra a los módulos que de verdad tiene: enseñarle «0 de 300 trabajadores»
+  // a quien no contrató RRHH no es informar, es ofrecerle un tope de algo que no
+  // puede usar. Las dimensiones sin módulo (`modulo: null`) valen para todos.
+  const ctx = await cargarContextoLimites(db, session.client_id)
+  const modulos = Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos as string[] : []
+  let capacidad: UsoDimension[] | null = null
+  try {
+    // El conteo puede fallar (`contarActivos` propaga a propósito: un cero falso
+    // es el tope desapareciendo en silencio). Si falla, la tarjeta no se pinta —
+    // pero el resto de la página, que es su factura, sí.
+    const uso = await usoDeLimites(db, session.client_id)
+    capacidad = uso.filter(u => {
+      const mod = DIMENSIONES[u.dimension as keyof typeof DIMENSIONES]?.modulo
+      return !mod || modulos.includes(mod)
+    })
+  } catch (e) {
+    console.error('[facturacion] no se pudo contar el uso', e)
+  }
 
   return {
     client_id:        session.client_id,
@@ -73,6 +106,12 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
     ciclo,
     fecha_expiracion: cliente.fecha_expiracion ?? null,
     fecha_fin_gracia: cliente.fecha_fin_gracia ?? null,
+    // `esSocioHoy` y no `es_socio` a secas: la condición caduca, y el día después
+    // de `socio_hasta` el cliente vuelve al flujo normal de cobro.
+    es_socio:         esSocioHoy(cliente),
+    socio_hasta:      cliente.socio_hasta ?? null,
+    nivel_nombre:     ctx.nivelNombre,
+    capacidad,
     email_soporte:    emailSoporte,
     pagos:            (pagos ?? []) as PagoPortal[],
   }

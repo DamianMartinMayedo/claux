@@ -52,10 +52,20 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
   // (por eso el cliente está en gracia) y seguir mirando `fecha_expiracion` es lo
   // que hacía salir "Expirado" con el acceso todavía activo.
   const enGracia = data.estado === 'GRACIA' && !!data.fecha_fin_gracia
-  const fechaVigencia = enGracia ? data.fecha_fin_gracia : data.fecha_expiracion
+  // Y en SOCIO manda `socio_hasta`, por delante de todo lo demás: a un socio le
+  // hemos dicho que no pague, así que su `fecha_expiracion` —hasta cuándo pagó—
+  // se quedó atrás a propósito y enseñarla decía «Expirado» a alguien que tiene
+  // el portal entero. Es la tercera vez que asoma el mismo fallo (gracia, prueba
+  // y ahora socio): la fecha que se pinta es la que MANDA, no la de cobro.
+  const fechaVigencia =
+    data.es_socio ? data.socio_hasta :
+    enGracia      ? data.fecha_fin_gracia :
+                    data.fecha_expiracion
   // El entorno de PRUEBA no vence nunca (coherente con el layout y la pantalla de bloqueo):
   // sin esto, un cliente de prueba con `fecha_expiracion` en el pasado veía un falso «Expirado».
-  const dias = data.es_prueba ? null : diasRestantes(fechaVigencia)
+  // El socio sin fecha tampoco: su condición es indefinida hasta que se le ponga uno.
+  const sinCaducidad = data.es_prueba || (data.es_socio && !data.socio_hasta)
+  const dias = sinCaducidad ? null : diasRestantes(fechaVigencia)
 
   const diasCls =
     dias === null         ? ''                :
@@ -68,6 +78,12 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
     dias <= 0     ? 'Expirado' :
     dias === 1    ? '1 día restante' :
                     `${dias} días restantes`
+
+  // La capacidad puede no venir (falló un conteo): entonces la tarjeta no se pinta,
+  // pero la página —que es su factura— sí.
+  const capacidad = data.capacidad
+  const excedidas = capacidad?.filter(f => f.excedido) ?? []
+  const cercanas  = capacidad?.filter(f => f.cerca)    ?? []
 
   const estadoCls =
     data.estado === 'ACTIVO'                              ? 'prf-badge-activo'   :
@@ -87,7 +103,15 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       </div>
 
       {/* ── Alerta: período especial, o vence pronto / ya venció ── */}
-      {enGracia ? (
+      {/* Ser Socio CLAUX manda sobre lo demás: si no se le cobra, el aviso de gracia
+          («venció, ponte al día») diría justo lo contrario de lo pactado. */}
+      {data.es_socio ? (
+        <div className="alert alert-success">
+          <strong className="alert-titulo">Eres Socio CLAUX</strong>
+          Tienes el portal completo y no se te genera ningún cobro
+          {data.socio_hasta ? ` hasta el ${fmt(data.socio_hasta)}` : ''}.
+        </div>
+      ) : enGracia ? (
         <div className="alert alert-warning alert-cta">
           <span className="alert-cta-texto">
             Tu suscripción venció, pero tienes una prórroga activa hasta el {fmt(data.fecha_fin_gracia)}. Contáctanos para ponerte al día.
@@ -114,6 +138,11 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
             <div className="fac-plan-title-row">
               <h2 className="fac-plan-name">{data.suscripcion}</h2>
               <span className={`prf-badge ${estadoCls}`}>{ESTADO_LABEL[data.estado] ?? data.estado}</span>
+              {data.es_socio && <span className="prf-badge prf-badge-socio">Socio CLAUX</span>}
+              {/* El nivel es lo que de verdad ha contratado; el importe de arriba solo
+                  dice cuánto le cuesta. A un Socio le cuesta cero y aun así tiene nivel:
+                  es gratis, no ilimitado. */}
+              <span className="prf-badge prf-badge-nivel">Nivel {data.nivel_nombre}</span>
             </div>
             <p className="fac-plan-id">{data.client_id}</p>
           </div>
@@ -121,7 +150,9 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
           <div className="fac-plan-right">
             <div className="fac-expiry-block">
               <span className="fac-expiry-label">Vigente hasta</span>
-              <span className="fac-expiry-date">{fmt(fechaVigencia)}</span>
+              <span className="fac-expiry-date">
+                {data.es_socio && !data.socio_hasta ? 'Sin fecha límite' : fmt(fechaVigencia)}
+              </span>
               {diasLabel && (
                 <span className={`fac-dias ${diasCls}`}>{diasLabel}</span>
               )}
@@ -129,6 +160,80 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
           </div>
         </div>
       </div>
+
+      {/* ── Lo que cabe en su nivel ──
+          Antes esto solo se sabía chocando: el aviso «has llegado al máximo de tu
+          nivel Empresa» era el primer y único sitio donde se le nombraba el nivel.
+          Aquí lo tiene antes de chocar, y de paso ve por dónde va. Solo lectura:
+          quien cambia límites es el equipo, desde la ficha del cliente.
+          `card` a secas y no `card-table`: esa anula el padding con `!important`
+          y aquí hay párrafo, aviso y pie que se quedarían pegados al borde. */}
+      {capacidad && capacidad.length > 0 && (
+        <div className="card mb-5">
+          <div className="card-header">
+            <h2 className="card-title card-title-sm">Lo que cabe en tu nivel</h2>
+            <span className={`badge ${excedidas.length ? 'badge-error' : cercanas.length ? 'badge-warning' : 'badge-neutral'}`}>
+              {excedidas.length
+                ? `${excedidas.length} por encima`
+                : cercanas.length
+                  ? `${cercanas.length} al límite`
+                  : 'Con sitio de sobra'}
+            </span>
+          </div>
+
+          <p className="text-sm-muted mb-4">
+            Tu nivel <strong>{data.nivel_nombre}</strong> llega hasta aquí, contando solo lo
+            que tienes activo. Si necesitas más, escríbenos y lo subimos.
+          </p>
+
+          {excedidas.length > 0 && (
+            <div className="alert alert-warning">
+              <strong className="alert-titulo">Vas por encima del tope en {excedidas.length}</strong>
+              {excedidas.map(f => `${f.etiqueta} (${f.usado} de ${f.limite})`).join(' · ')}.
+              No se te rompe nada: sigues trabajando con lo que ya tienes, pero no puedes añadir más de eso.
+            </div>
+          )}
+
+          <div className="table-wrapper table-wrapper-flush">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Concepto</th>
+                  <th className="col-num">En uso</th>
+                  <th className="col-num">Tope</th>
+                  <th>Disponible</th>
+                </tr>
+              </thead>
+              <tbody>
+                {capacidad.map(f => (
+                  <tr key={f.dimension}>
+                    <td data-label="Concepto">
+                      {f.etiqueta.charAt(0).toUpperCase() + f.etiqueta.slice(1)}
+                    </td>
+                    <td data-label="En uso" className="col-num">{f.usado.toLocaleString('es-ES')}</td>
+                    <td data-label="Tope"   className="col-num">
+                      {f.limite === null ? 'Sin tope' : f.limite.toLocaleString('es-ES')}
+                    </td>
+                    <td data-label="Disponible">
+                      {f.limite === null
+                        ? <span className="table-muted">Ilimitado</span>
+                        : f.excedido
+                          ? <span className="badge badge-error">Por encima</span>
+                          : f.cerca
+                            ? <span className="badge badge-warning">Te quedan {(f.limite - f.usado).toLocaleString('es-ES')}</span>
+                            : <span className="table-muted">Te quedan {(f.limite - f.usado).toLocaleString('es-ES')}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-xs-hint mt-4">
+            Solo se cuenta lo activo: lo que archivas deja de ocupar sitio.
+          </p>
+        </div>
+      )}
 
       {/* ── Historial de pagos ── */}
       <div className="card card-table">

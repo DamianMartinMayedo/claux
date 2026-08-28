@@ -4,12 +4,18 @@ import { useState, useTransition } from 'react'
 import { Lock, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { pedirReactivacion } from '@/app/actions/portal/soporte'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
+import type { MotivoBloqueo } from '@/lib/clientes/ciclo-vida'
 
 const CORREO = 'contacto@claux.es'
 
 // El texto apunta al BOTÓN, no al correo: la renovación es de un clic y sin escribir
 // nada, y decir «escríbenos» de entrada mandaba al camino más largo de los dos.
-const MENSAJES: Record<string, { titulo: string; texto: string }> = {
+// Las claves son el MOTIVO del bloqueo, no el `estado` de la fila. No es lo mismo:
+// el guardia bloquea también por FECHA, con el estado todavía en ACTIVO, y ese es
+// justo el caso más frecuente —la ventana entre que vence y que el barrido de
+// mañana lo escribe—. Pasando el estado crudo, a ese cliente le salía el cartel
+// genérico «Acceso restringido» en el momento en que más claro hay que hablarle.
+const MENSAJES: Record<MotivoBloqueo, { titulo: string; texto: string }> = {
   DESACTIVADO: {
     titulo: 'Cuenta suspendida',
     texto:  'Tu suscripción está suspendida. Pide la renovación y te contactamos para reactivarla; tus datos siguen aquí.',
@@ -18,7 +24,12 @@ const MENSAJES: Record<string, { titulo: string; texto: string }> = {
     titulo: 'Suscripción vencida',
     texto:  'Tu período de suscripción ha expirado. Pide la renovación y sigues donde lo dejaste; tus datos siguen aquí.',
   },
+  EXPIRADO: {
+    titulo: 'Suscripción vencida',
+    texto:  'Tu período de suscripción ha expirado. Pide la renovación y sigues donde lo dejaste; tus datos siguen aquí.',
+  },
 }
+
 
 /**
  * Lo único que ve un cliente suspendido o vencido. Hasta ahora era un cartel sin salida:
@@ -31,14 +42,11 @@ const MENSAJES: Record<string, { titulo: string; texto: string }> = {
  * para quien prefiera escribir por su cuenta — es el final del embudo de cobro y no puede
  * depender de que un clic funcione.
  */
-export default function BloqueadoScreen({ estado }: { estado: string }) {
+export default function BloqueadoScreen({ motivo }: { motivo: MotivoBloqueo }) {
   const [pedido, setPedido] = useState(false)
   const [enviando, startTransition] = useTransition()
 
-  const msg = MENSAJES[estado] ?? {
-    titulo: 'Acceso restringido',
-    texto:  'Tu cuenta no tiene acceso activo. Pide la renovación y lo resolvemos.',
-  }
+  const msg = MENSAJES[motivo]
 
   function contactar() {
     // El toast de carga se crea ANTES de la transición: dentro no llega a pintarse.

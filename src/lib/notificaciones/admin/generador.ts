@@ -11,6 +11,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
+import { enviarAvisoInterno } from '@/lib/email/enviar'
+import { esSocioHoy } from '@/lib/billing'
 import { umbralAdminParaFecha } from './catalogo'
 import {
   crearAvisoAdmin, cargarPrefsAdmin, resolverAvisosAdmin,
@@ -60,6 +62,7 @@ export async function generarAvisosAdmin(): Promise<ResumenAvisosAdmin> {
   creados += await escanearLeads(db, prefs)
   creados += await escanearSoporte(db, prefs)
   creados += await escanearClientes(db, prefs, hoy)
+  creados += await escanearSocios(db, prefs, hoy)
   creados += await escanearInactividad(db, prefs)
   creados += await escanearCorreos(db, prefs, hoy)
 
@@ -164,18 +167,25 @@ interface FilaCliente {
   estado:           string
   es_prueba:        boolean
   fecha_expiracion: string | null
+  es_socio:         boolean | null
+  socio_hasta:      string | null
 }
 
 async function escanearClientes(db: Db, prefs: Prefs, hoy: string): Promise<number> {
   const { data } = await db
     .from('clients')
-    .select('client_id, nombre_empresa, estado, es_prueba, fecha_expiracion')
+    .select('client_id, nombre_empresa, estado, es_prueba, fecha_expiracion, es_socio, socio_hasta')
     .eq('es_prueba', false)
     .not('fecha_expiracion', 'is', null)
     .is('archivado_at', null)
 
   let creados = 0
   for (const c of (data ?? []) as FilaCliente[]) {
+    // El socio vigente tiene su propio escáner (`escanearSocios`) y su propio
+    // reloj. Su `fecha_expiracion` es la del último ciclo que pagó y se queda
+    // atrás para siempre, así que sin este corte la bandeja diría «Punto y Aparte
+    // está vencido» de un cliente que no debe nada, todos los días.
+    if (esSocioHoy(c)) continue
     const fecha = c.fecha_expiracion!
     const dias  = diasHasta(fecha, hoy)
     // La entidad lleva la FECHA del ciclo: al renovar cambia y el aviso del ciclo
@@ -227,6 +237,83 @@ async function escanearClientes(db: Db, prefs: Prefs, hoy: string): Promise<numb
       sustituyeA:  [tipo],
     }, prefs)
     if (ok) creados++
+  }
+  return creados
+}
+
+// ── Socios: se les acaba el período gratuito ──────────────────────────────────
+//
+// Un socio no tiene factura que renovar, tiene una relación que se acaba: hay que
+// decidir si se prorroga, si pasa a pagar o si se cierra. Por eso este escáner es
+// aparte del de suscripciones y empieza a los 30 días.
+//
+// Va también POR CORREO, y no solo a la campana, porque el aviso solo sirve si
+// llega: la bandeja del panel se ve al entrar al panel, y a un socio se le acaba
+// el plazo tanto si esa semana entras como si no. El correo se manda SOLO cuando
+// `crearAvisoAdmin` devuelve true —es decir, cuando de verdad ha creado un aviso
+// nuevo—, así que sale uno por escalón y no uno al día durante un mes. La
+// idempotencia la garantiza el índice único de la BD, no este código.
+
+interface FilaSocio {
+  client_id:      string
+  nombre_empresa: string
+  socio_hasta:    string | null
+  socio_motivo:   string | null
+}
+
+async function escanearSocios(db: Db, prefs: Prefs, hoy: string): Promise<number> {
+  const { data } = await db
+    .from('clients')
+    .select('client_id, nombre_empresa, socio_hasta, socio_motivo')
+    .eq('es_socio', true)
+    // Sin fecha es socio indefinido: no se acaba, así que no hay nada que avisar.
+    .not('socio_hasta', 'is', null)
+    .eq('es_prueba', false)
+    .is('archivado_at', null)
+
+  let creados = 0
+  for (const c of (data ?? []) as FilaSocio[]) {
+    const fecha = c.socio_hasta!
+    const dias  = diasHasta(fecha, hoy)
+    const umbral = umbralAdminParaFecha('socio_termina', dias)
+    if (!umbral) continue
+
+    const vencido = dias < 0
+    const cuando  = dias === 0 ? 'hoy' : `en ${dias} día${dias === 1 ? '' : 's'}`
+    const titulo  = vencido
+      ? `${c.nombre_empresa} ya no es Socio CLAUX`
+      : `${c.nombre_empresa} deja de ser Socio CLAUX ${cuando}`
+    const cuerpo = vencido
+      ? `Su condición de socio terminó el ${fmtFechaEs(fecha)}. Vuelve al flujo normal: `
+        + 'se le empieza a facturar la cuota de su nivel y se le puede cortar por fecha. '
+        + 'Si sigue siendo socio, prorroga la fecha en su ficha.'
+      : `Termina el ${fmtFechaEs(fecha)}${c.socio_motivo ? ` (${c.socio_motivo})` : ''}. `
+        + 'Toca decidir: prorrogar, pasarlo a cliente de pago o cerrar la relación. '
+        + 'Ese día vuelve a facturársele la cuota de su nivel.'
+
+    const ok = await crearAvisoAdmin({
+      tipo:   'socio_termina',
+      titulo,
+      cuerpo,
+      enlace:      `/admin/clientes/${c.client_id}?tab=cuota`,
+      clientId:    c.client_id,
+      entidadTipo: 'socio',
+      // La fecha va en la entidad: al prorrogar cambia, y la nueva cuenta atrás
+      // vuelve a ser elegible sola. Con solo el client_id, un socio al que se le
+      // prorroga tres veces avisaría una única vez en su vida.
+      entidadId:   `${c.client_id}:${fecha}`,
+      umbral,
+      sustituyeA:  ['socio_termina'],
+    }, prefs)
+
+    if (!ok) continue
+    creados++
+    await enviarAvisoInterno({
+      tipo:     'socio_termina',
+      asunto:   titulo,
+      cuerpo:   `${cuerpo}\n\nFicha del cliente: /admin/clientes/${c.client_id}`,
+      clientId: c.client_id,
+    })
   }
   return creados
 }

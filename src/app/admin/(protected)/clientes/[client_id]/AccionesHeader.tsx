@@ -1,10 +1,12 @@
 'use client'
 
-import { AlertTriangle, Archive, ArchiveRestore, Ban, Clock, DollarSign, Info, MoreVertical, Pencil, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Archive, ArchiveRestore, Ban, Clock, ClockAlert, DollarSign, Info, MoreVertical, Pencil, Trash2, X } from 'lucide-react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { cambiarEstadoCliente, aplicarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
+import { cambiarEstadoCliente, aplicarGracia, retirarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
+import { estadoAlRetirarGracia } from '@/lib/clientes/ciclo-vida'
+import { hoyEnTz } from '@/lib/fecha-tz'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
@@ -38,13 +40,15 @@ type Props = {
     notas?: string | null
     archivado_at?: string | null
     es_prueba?: boolean
+    es_socio?: boolean
+    socio_hasta?: string | null
     autoimport_activo?: boolean
     migracion_estado?: string
   }
   tienePagosConfirmados?: boolean
 }
 
-type ModalType = 'gracia' | 'estado' | 'pago' | 'editar' | 'archivar' | 'borrar' | null
+type ModalType = 'gracia' | 'quitar-gracia' | 'estado' | 'pago' | 'editar' | 'archivar' | 'borrar' | null
 
 // ── Utilidades de fecha ─────────────────────────────────────────────
 function parseYMD(dateStr: string): Date {
@@ -189,6 +193,11 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setModal('gracia')
   }
 
+  function openQuitarGracia() {
+    setMenuMovilOpen(false)
+    setModal('quitar-gracia')
+  }
+
   function openEditar() {
     setMenuMovilOpen(false)
     setModal('editar')
@@ -263,6 +272,17 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(false)
     if (!res.ok) { toastError(res.error ?? 'Error al aplicar período'); return }
     toastSuccess(`Período especial aplicado hasta ${formatDateES(res.hasta ?? '')}`)
+    setTimeout(() => { handleClose(); router.refresh() }, 1400)
+  }
+
+  async function handleQuitarGracia() {
+    setLoading(true)
+    const res = await retirarGracia(cliente.client_id)
+    setLoading(false)
+    if (!res.ok) { toastError(res.error ?? 'Error al retirar el período'); return }
+    toastSuccess(res.estado === 'DESACTIVADO'
+      ? 'Período retirado — el cliente queda desactivado'
+      : `Período retirado — el cliente queda en ${res.estado}`)
     setTimeout(() => { handleClose(); router.refresh() }, 1400)
   }
 
@@ -674,7 +694,75 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     </div>
   )
 
+  // Lo que va a pasar al retirar el período, calculado ANTES de pulsar y con la
+  // MISMA función que usa el servidor. `hoyEnTz` y no `toYMD(new Date())`: el
+  // servidor decide con el día de La Habana, y si aquí se usara el del navegador,
+  // un admin en España a las dos de la mañana leería un estado y obtendría otro.
+  const estadoTrasRetirar = estadoAlRetirarGracia(
+    {
+      es_prueba:        cliente.es_prueba,
+      es_socio:         cliente.es_socio,
+      socio_hasta:      cliente.socio_hasta,
+      fecha_expiracion: cliente.fecha_expiracion,
+    },
+    hoyEnTz(),
+  )
+  const retirarDejaFuera = estadoTrasRetirar === 'DESACTIVADO'
+
+  const modalQuitarGracia = (
+    <div className="modal-backdrop">
+      <div className="modal modal-420">
+        <div className="modal-header">
+          <h2 className="modal-title">Retirar período especial</h2>
+          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-body">
+          {clienteInfo}
+          {retirarDejaFuera ? (
+            /* El caso corriente y el peligroso: la gracia era lo único que lo
+               sostenía. Se dice con la palabra que duele —«pierde el acceso hoy
+               mismo»— y no con un «volverá a su estado anterior» que no significa
+               nada para quien está a punto de pulsar. */
+            <div className="alert alert-warning alert-flex">
+              <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
+              <span>
+                Su fecha pagada ya venció, así que el período especial es lo único que le da
+                acceso. Al retirarlo queda <strong>DESACTIVADO</strong> y pierde el acceso al
+                portal hoy mismo. Para devolvérselo habría que registrar un pago o aplicarle
+                otro período.
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm-muted">
+              Queda en <strong>{estadoTrasRetirar}</strong>
+              {cliente.es_socio
+                ? ': es Socio CLAUX, y esa condición ya le da acceso por su cuenta.'
+                : ': su fecha pagada sigue vigente, así que no pierde acceso.'}
+            </p>
+          )}
+          <p className="text-sm-muted">
+            Se borran el motivo y las notas del período. Esto no se puede deshacer: si vuelve
+            a necesitarlo, se le aplica uno nuevo.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button
+            className={`btn ${retirarDejaFuera ? 'btn-danger' : 'btn-primary'}`}
+            onClick={handleQuitarGracia}
+            disabled={loading}
+          >
+            {loading ? <><span className="spinner" /> Retirando...</> : 'Retirar período'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   const activeModal = modal === 'gracia' ? modalGracia
+    : modal === 'quitar-gracia' ? modalQuitarGracia
     : modal === 'estado'   ? modalSuspender
     : modal === 'pago'     ? modalPago
     : modal === 'editar'   ? modalEditar
@@ -710,6 +798,18 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     >
       <Clock size={14} />
       Período especial
+    </button>
+  ) : null
+
+  // Solo cuando hay algo que retirar. Es una acción de estado, no un ajuste: vive
+  // al lado de la que lo aplicó para que se lean como pareja.
+  const btnQuitarGracia = cliente.estado === 'GRACIA' && !esPrueba ? (
+    <button
+      className="btn btn-secondary btn-sm header-action"
+      onClick={openQuitarGracia}
+    >
+      <ClockAlert size={14} />
+      Retirar período
     </button>
   ) : null
 
@@ -757,6 +857,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
         {btnEditar}
         {btnSuspender}
         {btnGracia}
+        {btnQuitarGracia}
         {btnPago}
         {btnArchivar}
         {btnBorrar}
@@ -788,6 +889,11 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
               {puedeGracia && !esPrueba && (
                 <button className="dropdown-item" onClick={openGracia}>
                   Período especial
+                </button>
+              )}
+              {cliente.estado === 'GRACIA' && !esPrueba && (
+                <button className="dropdown-item" onClick={openQuitarGracia}>
+                  Retirar período
                 </button>
               )}
               {!esPrueba && (

@@ -1,7 +1,9 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
-import { AlertTriangle, CheckCircle, Clock, CreditCard, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, CreditCard, GraduationCap, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting }   from '@/app/actions/settings'
+import { precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { COLUMNAS_EXENCION } from '@/lib/clientes/ciclo-vida'
 import ProximosVencer   from './ProximosVencer'
 
 export default async function DashboardPage() {
@@ -26,7 +28,7 @@ export default async function DashboardPage() {
     { count: clientesActivos },
     { count: enTrial },
     { count: totalModulos },
-    { count: proximosVencer },
+    { data: proximosVencerData },
     { count: suspendidos },
     { data: clientesActivosDatos },
     { data: pagosData },
@@ -39,17 +41,21 @@ export default async function DashboardPage() {
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'ACTIVO').eq('es_prueba', false),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'TRIAL').eq('es_prueba', false),
     supabase.from('modulos_catalogo').select('*', { count: 'exact', head: true }).eq('activo', true),
-    supabase.from('clients').select('*', { count: 'exact', head: true })
+    // Trae las filas en vez de contarlas: el socio hay que descartarlo con la misma
+    // función que el resto de la pantalla, y una regla escrita a la vez en SQL y en
+    // TypeScript es una regla que se separa. Son las que vencen en pocos días, no
+    // la cartera entera.
+    supabase.from('clients').select(COLUMNAS_EXENCION)
       .in('estado', ['ACTIVO', 'TRIAL'])
       .eq('es_prueba', false)
       .gte('fecha_expiracion', fechaHoyStr)
       .lte('fecha_expiracion', fechaAvisoStr),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'DESACTIVADO').eq('es_prueba', false),
-    supabase.from('clients').select('precio_mensual_usd').in('estado', ['ACTIVO', 'TRIAL']).eq('es_prueba', false),
+    supabase.from('clients').select(COLUMNAS_CONDICIONES).in('estado', ['ACTIVO', 'TRIAL']).eq('es_prueba', false),
     supabase.from('payments').select('monto_usd, fecha, estado, client_id'),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)
     supabase.from('clients')
-      .select('client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia')
+      .select(`client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia, ${COLUMNAS_EXENCION}`)
       .in('estado', ['ACTIVO', 'TRIAL'])
       .eq('es_prueba', false)
       .gte('fecha_expiracion', fechaHoyStr)
@@ -57,7 +63,7 @@ export default async function DashboardPage() {
       .order('fecha_expiracion', { ascending: true }),
     // Trial / Gracia: en esos estados, ordenados por urgencia
     supabase.from('clients')
-      .select('client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia')
+      .select(`client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia, ${COLUMNAS_EXENCION}`)
       .in('estado', ['TRIAL', 'GRACIA'])
       .eq('es_prueba', false)
       .order('fecha_expiracion', { ascending: true }),
@@ -66,10 +72,23 @@ export default async function DashboardPage() {
   ])
 
   const idsPrueba = new Set((clientesPruebaData ?? []).map(c => c.client_id))
+  // Un Socio CLAUX en GRACIA no es una urgencia: no debe nada, y su fecha de
+  // gracia se queda atrás para siempre porque el barrido ya no lo toca. Sin este
+  // filtro se quedaría clavado en rojo —«Vencido»— en la lista de lo que hay que
+  // atender, que es la manera más rápida de que la lista deje de mirarse.
+  const trialGracia = (trialGraciaData ?? []).filter(c => !esSocioHoy(c))
+  // Y por lo mismo, fuera de «Vencen pronto»: al socio se le sigue calculando la
+  // fecha de su ciclo, así que a la vuelta de un mes de haberlo marcado entra solo
+  // en la ventana de 14 días y aparece como cobro urgente. Este filtro estaba en
+  // la lista de al lado pero no en esta, en la misma pantalla.
+  const vencenPronto   = (vencenProntoData ?? []).filter(c => !esSocioHoy(c))
+  const proximosVencer = (proximosVencerData ?? []).filter(c => !esSocioHoy(c)).length
 
-  // Ingresos mensuales estimados (MRR): suma del precio mensual de activos + trial
+  // MRR: suma de la cuota EFECTIVA de activos + trial. Con el precio de catálogo el MRR
+  // contaba dinero que nadie ingresa —un Socio CLAUX no paga y un descuento pactado no se
+  // cobra—, y esa cifra es la que se mira para decidir.
   const ingresosEstimados = (clientesActivosDatos ?? []).reduce(
-    (sum, c) => sum + Number(c.precio_mensual_usd ?? 0), 0
+    (sum, c) => sum + precioMensualEfectivo(c), 0
   )
 
   // Ingresos del mes actual
@@ -89,6 +108,10 @@ export default async function DashboardPage() {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Resumen general del sistema CLAUX</p>
         </div>
+        <a href="/academia" target="_blank" rel="noopener" className="acad-entry enlace-sobre-banda">
+          <GraduationCap size={18} />
+          <span>Academia</span>
+        </a>
       </div>
 
       {/* ── Fila 1: Total clientes · Activos · Suspendidos · Planes ── */}
@@ -173,8 +196,8 @@ export default async function DashboardPage() {
       <div className="dashboard-bento-bottom">
         <div className="dashboard-bento-cell">
           <ProximosVencer
-            vencenPronto={vencenProntoData ?? []}
-            trialGracia={trialGraciaData ?? []}
+            vencenPronto={vencenPronto}
+            trialGracia={trialGracia}
           />
         </div>
       </div>

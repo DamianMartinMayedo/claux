@@ -8,7 +8,7 @@ import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
 import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
-import { diasCiclo, importeCiclo } from '@/lib/billing'
+import { diasCiclo, importeCiclo, precioMensualEfectivo, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { notificarPagoConfirmado } from '@/lib/notificaciones/eventos'
@@ -16,8 +16,9 @@ import { avisarPagoRegistrado } from '@/lib/notificaciones/admin/eventos'
 
 
 // ── Datos por defecto para pre-rellenar el formulario de pago ────────
-// Modelo base + módulos: el importe sugerido sale del precio_mensual_usd del cliente y su ciclo
-// (mensual = precio; anual = precio × 12 con descuento). La duración del período la marca el ciclo.
+// Modelo base + módulos: el importe sugerido sale de la cuota EFECTIVA del cliente (catálogo
+// menos descuento pactado; cero si es Socio CLAUX) y su ciclo — mensual = cuota; anual = cuota
+// × 12 con el descuento anual. La duración del período la marca el ciclo.
 // fecha_inicio = día siguiente a la fecha_expiracion actual (o hoy si no hay).
 export async function obtenerDatosPagoDefecto(clientId: string) {
   await requirePermiso('pagos')
@@ -25,7 +26,7 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
 
   const { data: cliente } = await supabase
     .from('clients')
-    .select('precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
+    .select(`${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion`)
     .eq('client_id', clientId)
     .single()
 
@@ -34,7 +35,7 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   const ciclo        = cliente.ciclo_facturacion ?? 'mensual'
   const duracionDias = diasCiclo(ciclo)
   const descuento    = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
-  const montoSugerido = importeCiclo(Number(cliente.precio_mensual_usd ?? 0), ciclo, descuento)
+  const montoSugerido = importeCiclo(precioMensualEfectivo(cliente), ciclo, descuento)
 
   // fecha_inicio = día siguiente a la expiración actual (o hoy si no hay expiración)
   let fechaBase: Date
@@ -122,7 +123,7 @@ export async function registrarPago(formData: FormData) {
   // ── Verificar cliente ────────────────────────────────────────────
   const { data: cliente } = await supabase
     .from('clients')
-    .select('client_id, estado, fecha_expiracion, nombre_empresa, email_admin')
+    .select('client_id, estado, fecha_expiracion, nombre_empresa, email_admin, es_prueba')
     .eq('client_id', client_id)
     .single()
   if (!cliente) return { ok: false as const, error: 'Cliente no encontrado.' }
@@ -175,9 +176,13 @@ export async function registrarPago(formData: FormData) {
   if (errorPago) return { ok: false as const, error: errorPago.message }
 
   // ── Actualizar cliente ───────────────────────────────────────────
-  // Reactivar si estaba en cualquier estado no-activo (igual que el original)
+  // Reactivar si estaba en cualquier estado no-activo (igual que el original).
+  // Salvo el cliente de PRUEBA: TRIAL es su estado de por vida, no un estado del
+  // que haya que rescatarlo. Registrarle un pago (una simulación, un cobro de
+  // instalación) lo sacaba de TRIAL y ya no volvía nunca — y a partir de ahí el
+  // barrido lo trataba como a un cliente de pago normal.
   const estadosReactivar = ['VENCIDO', 'DESACTIVADO', 'TRIAL', 'GRACIA']
-  const seReactiva = estadosReactivar.includes(cliente.estado)
+  const seReactiva = !cliente.es_prueba && estadosReactivar.includes(cliente.estado)
   const nuevoEstado = seReactiva ? 'ACTIVO' : cliente.estado
 
   await supabase
@@ -285,10 +290,10 @@ export async function confirmarPago(pagoId: string) {
   if (pago.concepto === 'suscripcion' && pago.fecha_fin_periodo) {
     const { data: clienteActual } = await supabase
       .from('clients')
-      .select('estado')
+      .select('estado, es_prueba')
       .eq('client_id', pago.client_id)
       .single()
-    if (clienteActual?.estado === 'DESACTIVADO') {
+    if (clienteActual?.estado === 'DESACTIVADO' && !clienteActual.es_prueba) {
       seReactivo = true
       await supabase
         .from('clients')

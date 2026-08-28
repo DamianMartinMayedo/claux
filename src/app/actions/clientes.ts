@@ -9,12 +9,16 @@ import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
 import { addDays, toDateStr, fmtFechaEs } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
-import { diasCiclo, importeCiclo } from '@/lib/billing'
+import { diasCiclo, importeCiclo, esSocioHoy } from '@/lib/billing'
+import { normalizarNivel, nombreNivel, sumarModulos, type ModuloPrecios } from '@/lib/niveles'
+import { DIMENSIONES, usoDeLimites } from '@/lib/limites'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
 import { avisarClienteNuevo } from '@/lib/notificaciones/admin/eventos'
 import { notificarGraciaActivada } from '@/lib/notificaciones/eventos'
 import { esMigracionEstado, MIGRACION_ESTADOS_ALTA, type MigracionEstado } from '@/lib/migracion'
+import { COLUMNAS_EXENCION, desactivable, estadoAlRetirarGracia, socioMalSuspendido } from '@/lib/clientes/ciclo-vida'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
 
@@ -56,24 +60,24 @@ function emailConSufijo(email: string, client_id: string): string {
 
 
 // ── Helper: precio mensual a partir de los módulos activos ───────────
-// Suma los módulos/funcionalidades activos según la tarifa. Precios desde modulos_catalogo
-// (nunca hardcodeados). Todos los módulos son opcionales, incluida la contabilidad ('base').
+// Suma los módulos/funcionalidades activos por la columna de su NIVEL. Precios
+// desde modulos_catalogo (nunca hardcodeados). Todos los módulos son opcionales,
+// incluida la contabilidad ('base').
+//
+// Devuelve el precio de CATÁLOGO, sin descuento ni condición de socio: eso lo
+// resuelve `precioMensualEfectivo` al leer, porque tiene fecha de caducidad y un
+// número cacheado no caduca solo (§`lib/billing.ts`).
 async function calcularPrecioMensual(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   modulosActivos: string[],
-  tarifa: string,
+  nivel: string,
 ): Promise<number> {
   const { data: catalogo } = await supabase
     .from('modulos_catalogo')
-    .select('clave, precio_fundador_usd, precio_estandar_usd, activo')
+    .select('clave, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, activo')
     .eq('activo', true)
-  const campo = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
-  return (catalogo ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((m: any) => modulosActivos.includes(m.clave))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .reduce((sum: number, m: any) => sum + Number(m[campo] ?? 0), 0)
+  return sumarModulos((catalogo ?? []) as ModuloPrecios[], modulosActivos, nivel)
 }
 
 // ── Crear cliente ────────────────────────────────────────────────────
@@ -87,7 +91,7 @@ export async function crearCliente(formData: FormData) {
   const notas           = (formData.get('notas')           as string ?? '').trim() || null
   const es_trial        = formData.get('es_trial') === 'true'
   const es_prueba       = formData.get('es_prueba') === 'true'
-  const tarifa          = (formData.get('tarifa') as string ?? 'estandar').trim()
+  const nivel           = normalizarNivel(formData.get('nivel') ?? formData.get('tarifa'))
   const ciclo           = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
   const sector          = (formData.get('sector') as string ?? '').trim() || null
   const pagoSetupRaw    = parseFloat(formData.get('pago_setup_usd') as string ?? '0')
@@ -107,7 +111,6 @@ export async function crearCliente(formData: FormData) {
   if (!nombre_empresa || !email_admin) {
     return { ok: false, error: 'Nombre de empresa y email son obligatorios.' }
   }
-  if (!['fundador', 'estandar'].includes(tarifa)) return { ok: false, error: 'Tarifa inválida.' }
   if (!['mensual', 'anual'].includes(ciclo))      return { ok: false, error: 'Ciclo de facturación inválido.' }
 
   // Generar client_id secuencial. Va antes que la resolución del email porque el
@@ -141,7 +144,7 @@ export async function crearCliente(formData: FormData) {
   // módulo) y precio mensual resultante. Se normalizan igual que en el toggle:
   // el alta también compone un conjunto y lo convierte en la primera cuota.
   const modulos_activos = formData.getAll('modulos') as string[]
-  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
+  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, nivel)
 
   // Estado y vigencia: trial → TRIAL por días configurables; sin trial → DESACTIVADO hasta que
   // se confirme el primer pago de suscripción (confirmarPago lo pasa a ACTIVO).
@@ -166,7 +169,7 @@ export async function crearCliente(formData: FormData) {
     email_admin: email_final,
     sector,
     modulos_activos,
-    tarifa,
+    nivel,
     ciclo_facturacion: ciclo,
     precio_mensual_usd,
     fecha_inicio:     toDateStr(hoy),
@@ -185,7 +188,7 @@ export async function crearCliente(formData: FormData) {
     entity:      'cliente',
     entity_id:   client_id,
     action:      'crear',
-    description: `Creó cliente ${nombre_empresa} (${client_id}) — ${modulos_activos.length} módulo(s) · tarifa ${tarifa}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — Estado: ${estadoInicial}`,
+    description: `Creó cliente ${nombre_empresa} (${client_id}) — ${modulos_activos.length} módulo(s) · nivel ${nivel}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — Estado: ${estadoInicial}`,
   })
 
   // ── Pre-crear los cobros esperados como "por confirmar" ──────────────
@@ -292,14 +295,14 @@ export async function crearCliente(formData: FormData) {
   after(() => avisarClienteNuevo({
     clientId: client_id,
     empresa:  nombre_empresa,
-    tarifa,
+    nivel,
     ciclo,
   }))
 
   after(() => enviarAvisoInterno({
     tipo: 'aviso_cliente',
     asunto: `Nuevo cliente creado: ${nombre_empresa}`,
-    cuerpo: `Se creó el cliente ${nombre_empresa} (${client_id}).\n\nContacto: ${nombre_contacto || '—'}\nEmail: ${email_final}\nTarifa: ${tarifa}/${ciclo}\nMódulos: ${modulos_activos.join(', ') || '—'}\nEstado inicial: ${estadoInicial}`,
+    cuerpo: `Se creó el cliente ${nombre_empresa} (${client_id}).\n\nContacto: ${nombre_contacto || '—'}\nEmail: ${email_final}\nNivel: ${nombreNivel(nivel)}/${ciclo}\nMódulos: ${modulos_activos.join(', ') || '—'}\nEstado inicial: ${estadoInicial}`,
     clientId: client_id,
   }))
 
@@ -413,6 +416,25 @@ export async function cambiarEstadoCliente(formData: FormData) {
 
   if (!client_id || nuevo_estado !== 'DESACTIVADO') {
     return { ok: false, error: 'Datos inválidos.' }
+  }
+
+  // A un Socio CLAUX vigente no se le suspende por aquí, y no es una regla de
+  // cortesía: el guardia del portal lo deja entrar igual (mira la bandera, no el
+  // estado) y el barrido lo devuelve a ACTIVO en el siguiente refresco del admin.
+  // Sin este corte el botón parecía funcionar, la ficha decía DESACTIVADO, y al
+  // rato volvía solo — con una línea en la auditoría que nadie había pedido.
+  // Para cortarle a un socio hay que quitarle la bandera o ponerle fecha de fin,
+  // que es la decisión que sí dice lo que quiere decir.
+  const { data: previo } = await supabase
+    .from('clients')
+    .select(COLUMNAS_EXENCION)
+    .eq('client_id', client_id)
+    .maybeSingle()
+  if (previo && esSocioHoy(previo)) {
+    return {
+      ok: false,
+      error: 'Es Socio CLAUX vigente: retírale la condición de socio (o ponle fecha de fin) en «Condiciones comerciales» antes de suspenderlo.',
+    }
   }
 
   const { error } = await supabase
@@ -541,6 +563,62 @@ export async function eliminarCliente(
 }
 
 // ── Aplicar período especial (GRACIA) ────────────────────────────────
+/**
+ * Retira el período especial de un cliente y lo devuelve al estado que le toque.
+ *
+ * No es «deshacer»: `aplicarGracia` no guarda de dónde venía, así que el estado de
+ * vuelta se DEDUCE (ver `estadoAlRetirarGracia`). En el caso corriente —un cliente
+ * cuya fecha pagada ya pasó— retirarla lo deja DESACTIVADO hoy mismo, sin
+ * transición y sin poder volver atrás salvo aplicando otro período. Por eso el
+ * modal que llama aquí enseña el estado resultante ANTES de pulsar, y por eso el
+ * estado se recalcula aquí en servidor en lugar de aceptar el que mande el
+ * navegador: lo que se enseña es un aviso, no la fuente de la verdad.
+ */
+export async function retirarGracia(client_id: string) {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+
+  const { data: cliente, error: errLeer } = await supabase
+    .from('clients')
+    .select(`estado, fecha_expiracion, ${COLUMNAS_EXENCION}`)
+    .eq('client_id', client_id)
+    .maybeSingle()
+
+  if (errLeer)  return { ok: false as const, error: errLeer.message }
+  if (!cliente) return { ok: false as const, error: 'No se encontró el cliente.' }
+  if (cliente.estado !== 'GRACIA') {
+    return { ok: false as const, error: 'Este cliente no tiene un período especial activo.' }
+  }
+
+  const nuevoEstado = estadoAlRetirarGracia(cliente, hoyEnTz())
+
+  const { error } = await supabase
+    .from('clients')
+    .update({
+      estado:           nuevoEstado,
+      fecha_fin_gracia: null,
+      motivo_gracia:    null,
+      notas_gracia:     null,
+    })
+    .eq('client_id', client_id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'gracia',
+    description: `Retiró el período especial del cliente ${client_id} — queda en ${nuevoEstado}`,
+  })
+
+  revalidatePath('/admin/clientes')
+  revalidatePath(`/admin/clientes/${client_id}`)
+  revalidatePath('/admin/dashboard')
+  return { ok: true as const, estado: nuevoEstado }
+}
+
 export async function aplicarGracia(formData: FormData) {
   await requirePermiso('clientes')
   const supabase = await createClient()
@@ -557,7 +635,10 @@ export async function aplicarGracia(formData: FormData) {
     return { ok: false, error: 'El motivo es obligatorio.' }
   }
 
-  const fechaGracia = addDays(new Date(), dias)
+  // Los días se cuentan desde el hoy del NEGOCIO: con `new Date()` a secas, una
+  // gracia aplicada de noche en Cuba (ya día siguiente en UTC) terminaba una
+  // jornada antes de la que se le había dicho al cliente.
+  const fechaGracia = addDays(new Date(`${hoyEnTz()}T12:00:00`), dias)
 
   const { error } = await supabase
     .from('clients')
@@ -632,11 +713,10 @@ export async function setModulosCliente(formData: FormData) {
   const supabase = await createClient()
 
   const client_id = (formData.get('client_id') as string ?? '').trim()
-  const tarifa    = (formData.get('tarifa')    as string ?? 'estandar').trim()
+  const nivel     = normalizarNivel(formData.get('nivel') ?? formData.get('tarifa'))
   const ciclo     = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
 
   if (!client_id) return { ok: false, error: 'client_id requerido.' }
-  if (!['fundador', 'estandar'].includes(tarifa)) return { ok: false, error: 'Tarifa inválida.' }
   if (!['mensual', 'anual'].includes(ciclo))      return { ok: false, error: 'Ciclo de facturación inválido.' }
 
   // Los módulos activos vienen como checkboxes: múltiples values con name="modulos".
@@ -648,12 +728,12 @@ export async function setModulosCliente(formData: FormData) {
   // NADA: los físicos, almacenes y movimientos se quedan y dejan de mostrarse.
   const modulos_activos = formData.getAll('modulos') as string[]
 
-  // precio = Σ módulos activos según tarifa (siempre desde el catálogo)
-  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, tarifa)
+  // precio = Σ módulos activos por la columna del nivel (siempre desde el catálogo)
+  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, nivel)
 
   const { error } = await supabase
     .from('clients')
-    .update({ modulos_activos, tarifa, ciclo_facturacion: ciclo, precio_mensual_usd })
+    .update({ modulos_activos, nivel, ciclo_facturacion: ciclo, precio_mensual_usd })
     .eq('client_id', client_id)
 
   if (error) return { ok: false, error: error.message }
@@ -664,7 +744,7 @@ export async function setModulosCliente(formData: FormData) {
     entity:      'cliente',
     entity_id:   client_id,
     action:      'modulos',
-    description: `Actualizó módulos del cliente ${client_id} — tarifa ${tarifa}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — módulos: [${modulos_activos.join(', ')}]`,
+    description: `Actualizó módulos del cliente ${client_id} — nivel ${nivel}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — módulos: [${modulos_activos.join(', ')}]`,
   })
 
   revalidatePath(`/admin/clientes/${client_id}`)
@@ -734,48 +814,66 @@ export async function editarCliente(formData: FormData) {
 export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendidos: number }> {
   await requirePermiso('clientes')
   const supabase = await createClient()
-  const hoy = toDateStr(new Date())
+  // El hoy del NEGOCIO, no el del servidor. Este barrido corre en CADA carga del
+  // admin, a cualquier hora: con la fecha UTC, cualquier refresco entre las 20:00
+  // y la medianoche cubanas veía ya el día siguiente y suspendía esa misma tarde
+  // a quien vencía HOY. Su gemelo del cron usa exactamente el mismo reloj.
+  const hoy = hoyEnTz()
 
-  // 1. Clientes con GRACIA vencida → DESACTIVADO
-  const { data: graciaVencidos, error: errGracia } = await supabase
+  // Campos que dejan de tener sentido cuando la gracia termina.
+  const LIMPIAR_GRACIA = { fecha_fin_gracia: null, motivo_gracia: null, notas_gracia: null }
+
+  // 1. Clientes con GRACIA vencida → al estado que los sostenga POR DEBAJO. No a
+  // DESACTIVADO por defecto: quien tenía el mes pagado y encima recibió la gracia
+  // no pierde el mes porque se acabe el extra. Y el exento (prueba / socio) sale
+  // de GRACIA igual, en vez de quedarse ahí para siempre enseñando una fecha de
+  // período especial ya pasada. La regla va en JS y no en SQL porque es la MISMA
+  // función que usa el botón de la ficha y el barrido del cron: una regla con dos
+  // redacciones es una regla que se separa.
+  const { data: graciaRaw, error: errGracia } = await supabase
     .from('clients')
-    .select('client_id, nombre_empresa')
+    .select(`client_id, nombre_empresa, fecha_expiracion, ${COLUMNAS_EXENCION}`)
     .eq('estado', 'GRACIA')
     .lt('fecha_fin_gracia', hoy)
+  const filasGracia = errGracia ? [] : (graciaRaw ?? [])
 
-  if (!errGracia && graciaVencidos && graciaVencidos.length > 0) {
-    const clientIds = graciaVencidos.map(c => c.client_id)
-    await supabase
-      .from('clients')
-      .update({
-        estado:           'DESACTIVADO',
-        fecha_fin_gracia: null,
-        motivo_gracia:    null,
-        notas_gracia:     null,
-      })
-      .in('client_id', clientIds)
+  if (filasGracia.length > 0) {
+    // Agrupadas por destino para no escribir una a una.
+    const porDestino = new Map<string, string[]>()
+    for (const c of filasGracia) {
+      const destino = estadoAlRetirarGracia(c, hoy)
+      porDestino.set(destino, [...(porDestino.get(destino) ?? []), c.client_id])
+    }
+    for (const [estado, ids] of porDestino) {
+      await supabase.from('clients').update({ estado, ...LIMPIAR_GRACIA }).in('client_id', ids)
+    }
 
-    // Log de auditoría
     const { data: { user } } = await supabase.auth.getUser()
-    for (const c of graciaVencidos) {
+    for (const c of filasGracia) {
+      const destino = estadoAlRetirarGracia(c, hoy)
       await logActividad(supabase, {
         user_email:  user?.email ?? 'sistema',
         entity:      'cliente',
         entity_id:   c.client_id,
-        action:      'suspender',
-        description: `Desactivó automáticamente al cliente ${c.client_id} (${c.nombre_empresa}) — período de gracia vencido`,
+        action:      destino === 'DESACTIVADO' ? 'suspender' : 'gracia',
+        description: destino === 'DESACTIVADO'
+          ? `Desactivó automáticamente al cliente ${c.client_id} (${c.nombre_empresa}) — período de gracia vencido`
+          : `Cerró el período especial vencido del cliente ${c.client_id} (${c.nombre_empresa}) — queda en ${destino}`,
       })
     }
   }
+  const graciaVencidos = filasGracia.filter(c => estadoAlRetirarGracia(c, hoy) === 'DESACTIVADO')
+  const graciaExentos  = filasGracia.length - graciaVencidos.length
 
   // 2. Clientes con ACTIVO/TRIAL y fecha_expiracion < hoy → DESACTIVADO
-  const { data: expVencidos, error: errExp } = await supabase
+  const { data: expRaw, error: errExp } = await supabase
     .from('clients')
-    .select('client_id, nombre_empresa')
+    .select(`client_id, nombre_empresa, ${COLUMNAS_EXENCION}`)
     .in('estado', ['ACTIVO', 'TRIAL'])
     .lt('fecha_expiracion', hoy)
+  const expVencidos = errExp ? [] : (expRaw ?? []).filter(desactivable)
 
-  if (!errExp && expVencidos && expVencidos.length > 0) {
+  if (expVencidos.length > 0) {
     const clientIds = expVencidos.map(c => c.client_id)
     await supabase
       .from('clients')
@@ -795,13 +893,242 @@ export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendi
     }
   }
 
-  const totalSuspendidos = (graciaVencidos?.length ?? 0) + (expVencidos?.length ?? 0)
+  // 3. La operación inversa: socio vigente que quedó DESACTIVADO/VENCIDO → ACTIVO.
+  // Un barrido que solo sabe suspender deja para siempre la contradicción que él
+  // mismo pudo escribir antes de que la exención existiera (así quedó DEUS el
+  // 2026-08-28, con producción corriendo todavía el código sin exención). El
+  // guardia del portal ya lo deja entrar, pero sin esto la ficha y el dashboard
+  // seguirían enseñando «suspendido» a un socio.
+  const { data: socioRaw, error: errSocio } = await supabase
+    .from('clients')
+    .select(`client_id, nombre_empresa, estado, ${COLUMNAS_EXENCION}`)
+    .in('estado', ['DESACTIVADO', 'VENCIDO'])
+    .eq('es_socio', true)
+  const rescatados = errSocio ? [] : (socioRaw ?? []).filter(c => socioMalSuspendido(c, hoy))
+
+  if (rescatados.length > 0) {
+    await supabase
+      .from('clients')
+      .update({ estado: 'ACTIVO' })
+      .in('client_id', rescatados.map(c => c.client_id))
+
+    const { data: { user } } = await supabase.auth.getUser()
+    for (const c of rescatados) {
+      await logActividad(supabase, {
+        user_email:  user?.email ?? 'sistema',
+        entity:      'cliente',
+        entity_id:   c.client_id,
+        action:      'reactivar',
+        description: `Reactivó al cliente ${c.client_id} (${c.nombre_empresa}) — es Socio CLAUX vigente y estaba en ${c.estado}`,
+      })
+    }
+  }
+
+  const totalSuspendidos = graciaVencidos.length + expVencidos.length
 
   // Revalidar paths si hubo cambios
-  if (totalSuspendidos > 0) {
+  if (totalSuspendidos > 0 || rescatados.length > 0 || graciaExentos > 0) {
     revalidatePath('/admin/clientes')
     revalidatePath('/admin/dashboard')
   }
 
   return { ok: true, suspendidos: totalSuspendidos }
+}
+
+// ── Condiciones comerciales del cliente: descuento y Socio CLAUX ─────
+// Plan §7.2 y §10. Son DOS cosas distintas y no se mezclan:
+//
+//   · **Descuento**: un porcentaje sobre la cuota mensual, con ventana de
+//     fechas. No se cachea nunca (`lib/billing.ts`): un número guardado no
+//     caduca solo, y este caduca.
+//   · **Socio CLAUX**: no paga cuota. Es una BANDERA, no un estado — el cliente
+//     sigue ACTIVO y con todo su portal; lo único que no se genera es el cobro.
+//     `precio_mensual_usd` se le sigue calculando, que es lo que hace falta
+//     saber el día que se negocie la conversión.
+//
+// Ojo con la palabra «socio»: NO es `admin_users.rol = 'partner'` (mig. 205), que
+// es el revendedor externo y es otra cosa.
+export async function guardarCondicionesCliente(formData: FormData) {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+
+  const client_id = (formData.get('client_id') as string ?? '').trim()
+  if (!client_id) return { ok: false as const, error: 'client_id requerido.' }
+
+  const pct = Number(formData.get('descuento_pct') ?? 0) || 0
+  if (pct < 0 || pct > 100) return { ok: false as const, error: 'El descuento va de 0 a 100.' }
+
+  const desde = (formData.get('descuento_desde') as string ?? '').trim() || null
+  const hasta = (formData.get('descuento_hasta') as string ?? '').trim() || null
+  if (desde && hasta && hasta < desde) {
+    return { ok: false as const, error: 'El descuento no puede terminar antes de empezar.' }
+  }
+
+  const es_socio    = formData.get('es_socio') === 'true'
+  const socio_hasta = (formData.get('socio_hasta') as string ?? '').trim() || null
+
+  // Cómo estaba ANTES, para saber si esto es una prórroga o solo un retoque del
+  // motivo. Sin esta lectura, cada vez que se guardase la card saldría un correo
+  // diciéndole al cliente algo que ya sabía.
+  const { data: antes } = await supabase
+    .from('clients')
+    .select('es_socio, socio_hasta')
+    .eq('client_id', client_id)
+    .maybeSingle()
+  const esProrroga = es_socio && !!socio_hasta
+    && (!antes?.es_socio || !antes.socio_hasta || socio_hasta > antes.socio_hasta)
+
+  const update = {
+    descuento_pct:    pct,
+    descuento_desde:  pct > 0 ? desde : null,
+    descuento_hasta:  pct > 0 ? hasta : null,
+    descuento_motivo: (formData.get('descuento_motivo') as string ?? '').trim() || null,
+    es_socio,
+    socio_hasta:      es_socio ? socio_hasta : null,
+    socio_motivo:     es_socio ? ((formData.get('socio_motivo') as string ?? '').trim() || null) : null,
+  }
+
+  const { error } = await supabase.from('clients').update(update).eq('client_id', client_id)
+  if (error) return { ok: false as const, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'condiciones',
+    description: es_socio
+      ? `Marcó ${client_id} como Socio CLAUX${socio_hasta ? ` hasta ${socio_hasta}` : ' (indefinido)'} — no se le genera cobro`
+      : `Condiciones de ${client_id} — descuento ${pct}%${desde || hasta ? ` (${desde ?? 'ya'} → ${hasta ?? 'indefinido'})` : ''}`,
+  })
+
+  // Aviso al cliente de que la condición sigue viva. Solo cuando hay fecha nueva:
+  // el asunto es «Sigues como Socio CLAUX hasta el ...», y sin fecha no hay correo
+  // que escribir. Un socio indefinido no necesita que le recuerden nada.
+  if (esProrroga) {
+    after(async () => {
+      if (!(await tipoEmailActivo('socio_ampliado'))) return
+      const { data: cli } = await createAdminClient()
+        .from('clients')
+        .select('nombre_empresa, email_admin')
+        .eq('client_id', client_id)
+        .maybeSingle()
+      if (!cli?.email_admin) return
+      const { asunto, html } = await renderPlantilla('socio_ampliado', {
+        empresa:   cli.nombre_empresa,
+        fecha_fin: fmtFechaEs(socio_hasta),
+      })
+      await enviarEmail({
+        to:       cli.email_admin,
+        subject:  asunto,
+        html,
+        tipo:     'socio_ampliado',
+        clientId: client_id,
+        // Igual que en `aplicarGracia`: deja en el log hasta cuándo llega esta
+        // prórroga, para que dos ampliaciones seguidas no parezcan un duplicado.
+        meta:     { socio_hasta },
+      })
+    })
+  }
+
+  revalidatePath(`/admin/clientes/${client_id}`)
+  revalidatePath('/admin/clientes')
+  revalidatePath('/admin/dashboard')
+  return { ok: true as const }
+}
+
+// ── Excepciones de límite de un cliente ──────────────────────────────
+// La válvula del salto Inicial→Empresa: quien solo se pasa en UNA dimensión no
+// tiene por qué doblar la factura. Gana sobre `nivel_limites`.
+export async function guardarLimitesOverride(formData: FormData) {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+
+  const client_id = (formData.get('client_id') as string ?? '').trim()
+  if (!client_id) return { ok: false as const, error: 'client_id requerido.' }
+
+  let entradas: { dimension: string; valor: number | null; motivo: string }[]
+  try {
+    entradas = JSON.parse((formData.get('overrides') as string) ?? '[]')
+  } catch {
+    return { ok: false as const, error: 'No se pudieron leer las excepciones.' }
+  }
+  if (!Array.isArray(entradas)) return { ok: false as const, error: 'Excepciones inválidas.' }
+  // Contra `DIMENSIONES`, no contra `DIMENSIONES_LIMITE`: `ia_conversaciones` tiene
+  // fila en `nivel_limites` pero su excepción por cliente vive en `ia_config.cupo`
+  // (card «Asistente IA»). Aceptarla aquí crearía un segundo sitio donde tocar lo
+  // mismo, y el que se guardase aquí no lo leería nadie.
+  if (entradas.some(e => !(e.dimension in DIMENSIONES))) {
+    return { ok: false as const, error: 'Hay una dimensión que no existe.' }
+  }
+  if (entradas.some(e => e.valor !== null && !(Number(e.valor) > 0))) {
+    return { ok: false as const, error: 'Una excepción es un número mayor que cero, o nada.' }
+  }
+
+  // Solo viajan las que tienen valor: una excepción vacía es una excepción que se
+  // retira, y se retira BORRÁNDOLA, no guardando un null que luego hay que
+  // interpretar en tres sitios.
+  const puestas = entradas.filter(e => e.valor !== null)
+  const override: Record<string, unknown> = Object.fromEntries(
+    puestas.map(e => [e.dimension, Math.floor(Number(e.valor))]),
+  )
+  const motivos = Object.fromEntries(
+    puestas.filter(e => e.motivo?.trim()).map(e => [e.dimension, e.motivo.trim()]),
+  )
+  if (Object.keys(motivos).length) override._motivos = motivos
+
+  const { error } = await supabase
+    .from('clients')
+    .update({ limites_override: override })
+    .eq('client_id', client_id)
+  if (error) return { ok: false as const, error: error.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  await logActividad(supabase, {
+    user_email:  user?.email ?? 'sistema',
+    entity:      'cliente',
+    entity_id:   client_id,
+    action:      'limites',
+    description: puestas.length
+      ? `Excepciones de límite de ${client_id}: ${puestas.map(e => `${e.dimension}=${e.valor}`).join(', ')}`
+      : `Retiró todas las excepciones de límite de ${client_id}`,
+  })
+
+  revalidatePath(`/admin/clientes/${client_id}`)
+  return { ok: true as const }
+}
+
+// ── «¿Y si le subo de nivel?» ────────────────────────────────────────
+// Lo que hay que enseñar ANTES de cambiar el nivel: cuánto pasa a costar la
+// misma cesta y en qué dimensiones quedaría por encima del límite. Bajar de
+// nivel no rompe nada —nadie pierde datos— pero deja de poder añadir, y eso se
+// dice antes y no después.
+export async function simularNivel(client_id: string, nivel: string) {
+  await requirePermiso('clientes')
+  const supabase = await createClient()
+  const destino = normalizarNivel(nivel)
+
+  const { data: cli } = await supabase
+    .from('clients')
+    .select('modulos_activos, nivel, precio_mensual_usd')
+    .eq('client_id', client_id)
+    .maybeSingle()
+  if (!cli) return { ok: false as const, error: 'Cliente no encontrado.' }
+
+  const modulos = Array.isArray(cli.modulos_activos) ? cli.modulos_activos as string[] : []
+  // El conteo va por el cliente de servicio: las tablas del tenant tienen RLS por
+  // `client_id` y la sesión de un admin no las ve. Aquí ya se pasó `requirePermiso`.
+  const [cuota, uso] = await Promise.all([
+    calcularPrecioMensual(supabase, modulos, destino),
+    usoDeLimites(createAdminClient(), client_id, destino),
+  ])
+
+  return {
+    ok: true as const,
+    actual:  Number(cli.precio_mensual_usd ?? 0) || 0,
+    cuota,
+    excedidas: uso.filter(u => u.excedido).map(u => ({
+      etiqueta: u.etiqueta, usado: u.usado, limite: u.limite ?? 0,
+    })),
+  }
 }

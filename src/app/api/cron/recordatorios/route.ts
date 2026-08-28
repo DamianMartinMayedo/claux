@@ -4,6 +4,8 @@ import { leerSetting } from '@/lib/settings'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { barrerVencidos } from '@/lib/clientes/vencimientos'
+import { COLUMNAS_EXENCION } from '@/lib/clientes/ciclo-vida'
+import { esSocioHoy } from '@/lib/billing'
 import { generarNotificacionesInternas } from '@/lib/notificaciones/generador'
 import { generarAvisosAdmin } from '@/lib/notificaciones/admin/generador'
 import { barrerReservas } from '@/lib/reservas/barrido'
@@ -32,6 +34,8 @@ interface ClienteVenc {
   nombre_empresa:   string
   email_admin:      string | null
   fecha_expiracion: string | null
+  es_socio:         boolean | null
+  socio_hasta:      string | null
 }
 
 // ¿Ya se envió (con éxito) este tipo a este cliente por este vencimiento?
@@ -84,16 +88,22 @@ export async function GET(req: NextRequest) {
 
   // 0. Sincronizar estados (GRACIA/ACTIVO/TRIAL vencidos → DESACTIVADO) para que
   //    los que expiran hoy no cuenten como "próximos a vencer".
-  const { suspendidos } = await barrerVencidos()
+  //    Y de paso deshace la contradicción inversa: socio vigente con estado
+  //    DESACTIVADO/VENCIDO heredado vuelve a ACTIVO.
+  const { suspendidos, rescatados } = await barrerVencidos()
 
   const diasAviso = parseInt(await leerSetting('dias_aviso', '5'), 10) || 5
   const limite = toDateStr(addDays(new Date(), diasAviso))
 
-  const resumen = { suspendidos, recordatorio_pago: 0, fin_prueba: 0, suspension: 0 }
+  const resumen = { suspendidos, rescatados, recordatorio_pago: 0, fin_prueba: 0, suspension: 0 }
 
   // Envía un aviso por vencimiento, respetando toggle + idempotencia.
   async function avisar(tipo: TipoCron, c: ClienteVenc, vars: Record<string, string>) {
     if (!c.email_admin || !c.fecha_expiracion) return
+    // Al Socio CLAUX no se le reclama un pago que le hemos dicho que no haga. El
+    // corte va aquí, en el embudo, y no en cada consulta: los tres avisos de este
+    // cron son de dinero, y el que se añada mañana también lo será.
+    if (esSocioHoy(c)) return
     if (await yaAvisado(db, tipo, c.client_id, c.fecha_expiracion)) return
     const { asunto, html } = await renderPlantilla(tipo, vars)
     const r = await enviarEmail({
@@ -107,7 +117,7 @@ export async function GET(req: NextRequest) {
   if (await tipoEmailActivo('recordatorio_pago')) {
     const { data } = await db
       .from('clients')
-      .select('client_id, nombre_empresa, email_admin, fecha_expiracion')
+      .select(`client_id, nombre_empresa, email_admin, fecha_expiracion, ${COLUMNAS_EXENCION}`)
       .eq('estado', 'ACTIVO')
       .eq('es_prueba', false)
       .gte('fecha_expiracion', hoy)
@@ -128,7 +138,7 @@ export async function GET(req: NextRequest) {
   if (await tipoEmailActivo('fin_prueba')) {
     const { data } = await db
       .from('clients')
-      .select('client_id, nombre_empresa, email_admin, fecha_expiracion')
+      .select(`client_id, nombre_empresa, email_admin, fecha_expiracion, ${COLUMNAS_EXENCION}`)
       .eq('estado', 'TRIAL')
       .eq('es_prueba', false)
       .gte('fecha_expiracion', hoy)
@@ -148,7 +158,7 @@ export async function GET(req: NextRequest) {
     const desde = toDateStr(addDays(new Date(), -DIAS_LOOKBACK_SUSPENSION))
     const { data } = await db
       .from('clients')
-      .select('client_id, nombre_empresa, email_admin, fecha_expiracion')
+      .select(`client_id, nombre_empresa, email_admin, fecha_expiracion, ${COLUMNAS_EXENCION}`)
       .eq('estado', 'DESACTIVADO')
       .eq('es_prueba', false)
       .gte('fecha_expiracion', desde)

@@ -10,7 +10,8 @@ import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
 import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
-import { suscripcionLabel }  from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { etiquetaDimension, type Dimension } from '@/lib/limites'
 import { obtenerEtiquetasNegocio } from './sector'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { historialPorAcuerdo } from '@/lib/facturacion-suscripciones'
@@ -26,7 +27,7 @@ import { DIAS_DOSSIER_RANCIO } from '@/lib/dossier/frescura'
 // Dashboard del portal — ADAPTABLE a los módulos contratados. Solo se calculan
 // y devuelven las secciones de los módulos que el cliente tiene activos, así que
 // un cliente con una sola funcionalidad ve un dashboard útil (no vacío) y uno
-// con todo ve todas las secciones. Addons (multiempresa) e IA quedan fuera.
+// con todo ve todas las secciones. Los addons y la IA quedan fuera.
 // La contabilidad ('base') es un módulo más: solo aparece si está contratada.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -285,7 +286,7 @@ export interface DashboardData {
 }
 
 // Accesos rápidos de fallback (módulos sin widget propio o cliente sin widgets).
-// Fuera: addons (multiempresa) e IA (asistente_ia).
+// Fuera: los addons y la IA (asistente_ia).
 const ACCESOS: Record<string, { label: string; ruta: string }> = {
   base:               { label: 'Contabilidad', ruta: '/portal/ventas' },
   inventario:         { label: 'Inventario',   ruta: '/portal/inventario' },
@@ -299,7 +300,7 @@ const ACCESOS: Record<string, { label: string; ruta: string }> = {
 
 // Módulos que aportan panel propio al dashboard. Es lo que se cuenta para decidir
 // si el banner de captación va destacado: un cliente puede tener tres cosas
-// contratadas (IA, imprenta, multiempresa) y el dashboard seguir casi vacío, así
+// contratadas (IA, imprenta, catálogo) y el dashboard seguir casi vacío, así
 // que contar «lo contratado» a secas daría la respuesta equivocada.
 const MODULOS_CON_PANEL = ['base', 'inventario', 'caja', 'rrhh', 'reservas_citas', 'agenda', 'servicios', 'dossier', 'catalogo_qr']
 
@@ -308,10 +309,11 @@ const MODULOS_CON_PANEL = ['base', 'inventario', 'caja', 'rrhh', 'reservas_citas
 // Fuera: `documentos_imprenta`, que sale solo (su fila del catálogo está inactiva:
 // la página es EnConstruccion y no se vende lo que no existe).
 //
-// Los ADDONS sí se ofrecen, pero los que amplían otro módulo llevan `requiere`:
-// ofrecer «Multidossier» a quien no tiene Dossier es vender un accesorio de algo
-// que no tiene. `multiempresa` no lleva requisito porque no amplía un módulo: es
-// de la cuenta, y llevar dos negocios es justo el caso de quien aún tiene uno.
+// Los ADDONS que amplían otro módulo llevan `requiere`: ofrecer un accesorio de
+// algo que el cliente no tiene es no ofrecer nada. Hoy solo queda el asistente de
+// IA: «Multiempresa» y «Multidossier» ya no se venden aparte, porque cuántas
+// empresas o cuántos dossiers caben lo decide el NIVEL. Cuando alguno de esos
+// topes se llena, lo que se ofrece es subir de nivel (ver `OFERTA_NIVEL`).
 // Los nombres son los del CATÁLOGO comercial (`modulos_catalogo`): es lo que el
 // cliente verá al contratar y en su factura, así que llamarlo de otra forma aquí
 // sería venderle algo con un nombre que luego no encuentra. Si un nombre no gusta,
@@ -330,9 +332,19 @@ const OFERTA: { clave: string; label: string; gancho: string; requiere?: string 
   { clave: 'catalogo_qr',    label: 'Catálogo',       gancho: 'Tu carta con un QR, siempre al día y sin reimprimir.' },
   { clave: 'dossier',        label: 'Dossier',        gancho: 'Presenta tus números a un banco o a un socio.' },
   { clave: 'asistente_ia',   label: 'Asistente IA',   gancho: 'Pregúntale a tus datos en lenguaje normal.' },
-  { clave: 'multiempresa',   label: 'Multiempresa',   gancho: 'Lleva varios negocios desde la misma cuenta, cada uno con sus números.' },
-  { clave: 'multidossier',   label: 'Multidossier',   gancho: 'Un dossier distinto para cada interlocutor: banco, socio, proveedor.', requiere: 'dossier' },
 ]
+
+/**
+ * La oferta que NO es un módulo: subir de nivel. Se añade cuando al cliente se le
+ * está llenando algo, y se cuela DESPUÉS de `ordenarOferta` porque no tiene fila
+ * en `modulos_catalogo` y el orden comercial no la alcanza.
+ *
+ * La señal sale de la bandeja, no de nueve conteos: el escáner diario ya calculó
+ * quién está al 90 % y lo dejó escrito. El dashboard es la página más abierta del
+ * portal y no puede permitirse contar productos, empleados y cuentas en cada
+ * carga para enseñar un cartel.
+ */
+const OFERTA_NIVEL = 'nivel_superior'
 
 // Se ofrece primero lo que MÁS resuelve: primero los módulos (capacidad ERP
 // completa), después las funcionalidades por su importancia comercial, y al final
@@ -1194,7 +1206,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   // portal). Así cada widget coincide con lo que encuentra al abrir el módulo.
   const [{ data: cliente }, { data: usr }, filasUsuario, empresasAcc] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, estado, modulos_activos, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
+      .select(`nombre_empresa, estado, modulos_activos, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion`)
       .eq('client_id', cid).single(),
     db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     modulosDeUsuario(db, session.user_id),
@@ -1216,7 +1228,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios] = await Promise.all([
+  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios, avisosLimite] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
@@ -1246,6 +1258,12 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       .eq('client_id', cid)
       .not('modulo_clave', 'is', null)
       .order('created_at', { ascending: false }),
+    // ¿Se le está llenando algo? Lo dice la bandeja, que el cron ya calculó.
+    db.from('notificaciones')
+      .select('tipo, entidad_id')
+      .eq('client_id', cid)
+      .eq('entidad_tipo', 'limite')
+      .eq('resuelta', false),
   ])
   // Aviso de setup: datos base que solo el admin puede crear. Empresa siempre;
   // moneda solo si hay módulos que la usan (base/rrhh/catálogo/dossier). La query
@@ -1265,9 +1283,13 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   }
 
   const descuento = parseInt(descuentoRaw, 10) || 0
-  const precioMes = Number(cliente.precio_mensual_usd ?? 0)
-  const diasRestantes = cliente.fecha_expiracion
-    ? Math.ceil((new Date(cliente.fecha_expiracion).getTime() - Date.now()) / 86_400_000)
+  const precioMes = precioMensualEfectivo(cliente)
+  // La cuenta atrás sale de la fecha que MANDA: en un socio es `socio_hasta`, no
+  // `fecha_expiracion` —que dice hasta cuándo pagó, y a él le hemos dicho que no
+  // pague—. Un socio sin fecha no tiene cuenta atrás que dar.
+  const fechaTope = esSocioHoy(cliente) ? cliente.socio_hasta : cliente.fecha_expiracion
+  const diasRestantes = fechaTope
+    ? Math.ceil((new Date(fechaTope).getTime() - Date.now()) / 86_400_000)
     : null
 
   // La etiqueta del acceso respeta el vocabulario del sector (Menú/Carta en vez
@@ -1405,6 +1427,27 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       })),
     (catalogoModulos.data ?? []) as FilaCatalogo[],
   )
+
+  // Subir de nivel va la PRIMERA cuando algo se ha llenado del todo: a quien no le
+  // caben más productos no le sirve que le ofrezcan Citas. `entidad_id` es
+  // «dimension:AAAA-MM», y de ahí sale el nombre de lo que se llenó.
+  const avisos = (avisosLimite.data ?? []) as { tipo: string; entidad_id: string }[]
+  if (avisos.length > 0) {
+    const dims = [...new Set(avisos.map(a => a.entidad_id.split(':')[0] as Dimension))]
+    const lleno = avisos.some(a => a.tipo === 'limite_alcanzado')
+    const nombres = dims.map(etiquetaDimension)
+    const lista = nombres.length === 1
+      ? nombres[0]
+      : `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`
+    faltan.unshift({
+      clave:    OFERTA_NIVEL,
+      label:    'Subir de nivel',
+      gancho:   lleno
+        ? `Te has quedado sin sitio en ${lista}. Con el siguiente nivel cabe mucho más.`
+        : `Te quedan pocos huecos en ${lista}. El siguiente nivel te da más margen.`,
+      pedidoEl: fechaCortaDeISO(pedidoPorModulo.get(OFERTA_NIVEL)),
+    })
+  }
 
   return {
     nombreEmpresa: cliente.nombre_empresa,

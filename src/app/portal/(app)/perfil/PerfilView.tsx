@@ -112,13 +112,34 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
             <span className="prf-label">Suscripción</span>
             <span className="prf-value prf-value-strong">{perfil.suscripcion}</span>
           </div>
+          {/* El nivel dice lo que da de sí el portal (cuántas empresas, cuántos
+              productos…); la suscripción de arriba solo dice lo que cuesta. Sin
+              esto el dueño solo se enteraba de su nivel el día que chocaba con un
+              tope. Los topes con detalle están en «Mi plan CLAUX». */}
           <div className="prf-field">
-            <span className="prf-label">Estado</span>
-            <EstadoBadge estado={perfil.estado} />
+            <span className="prf-label">Nivel</span>
+            <span className="prf-value prf-value-strong">{perfil.nivel_nombre}</span>
           </div>
           <div className="prf-field">
+            <span className="prf-label">Estado</span>
+            <div className="prf-badge-row">
+              <EstadoBadge estado={perfil.estado} />
+              {perfil.es_socio && <span className="prf-badge prf-badge-socio">Socio CLAUX</span>}
+            </div>
+          </div>
+          {/* La fecha que MANDA, no la de cobro: en socio manda `socio_hasta` y en
+              prórroga `fecha_fin_gracia`. `fecha_expiracion` dice hasta cuándo ha
+              pagado, y a un socio le hemos dicho que no pague — enseñarla le
+              ponía una fecha del año pasado en su propia ficha. */}
+          <div className="prf-field">
             <span className="prf-label">Vigente hasta</span>
-            <span className="prf-value">{fmt(perfil.fecha_expiracion)}</span>
+            <span className="prf-value">
+              {perfil.es_socio
+                ? (perfil.socio_hasta ? fmt(perfil.socio_hasta) : 'Sin fecha límite')
+                : perfil.estado === 'GRACIA' && perfil.fecha_fin_gracia
+                  ? fmt(perfil.fecha_fin_gracia)
+                  : fmt(perfil.fecha_expiracion)}
+            </span>
           </div>
         </div>
       </div>

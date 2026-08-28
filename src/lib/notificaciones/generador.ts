@@ -13,12 +13,14 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
 import { umbralParaFecha, type Severidad } from './catalogo'
 import { crearNotificacion, type ContextoTenant, type Preferencia } from './crear'
+import { esSocioHoy } from '@/lib/billing'
 import {
   diasHasta,
   escanearBorradoresEstancados, escanearContratosTerceros, escanearCuentas, escanearOfertas, escanearCaja,
   escanearCajaContabilidad, escanearCajaConfig,
   escanearStock, escanearRrhh, escanearCredito, escanearReservas, escanearAgendaSalud,
   escanearIa, escanearDossier, escanearServicios, reanudarProgramadas, escanearRenovaciones,
+  escanearLimites,
 } from './escaneres'
 import { facturarAutomatico } from '@/lib/facturacion-suscripciones'
 
@@ -42,6 +44,9 @@ interface Tenant {
   estado:           string
   fecha_expiracion: string | null
   modulos_activos:  unknown
+  es_prueba:        boolean | null
+  es_socio:         boolean | null
+  socio_hasta:      string | null
 }
 
 /**
@@ -57,7 +62,7 @@ export async function generarNotificacionesInternas(
 
   const qClientes = db
     .from('clients')
-    .select('client_id, nombre_empresa, estado, fecha_expiracion, modulos_activos')
+    .select('client_id, nombre_empresa, estado, fecha_expiracion, modulos_activos, es_prueba, es_socio, socio_hasta')
   const qPrefs = db
     .from('notificacion_config')
     .select('client_id, tipo, activa, severidad_override')
@@ -132,6 +137,11 @@ export async function generarNotificacionesInternas(
   creadas += await escanearIa(con('asistente_ia'))
   creadas += await escanearDossier(db, con('dossier'))
 
+  // La capacidad del nivel va la ÚLTIMA y sobre TODOS los tenants: no depende de
+  // ningún módulo (el propio escáner descarta las dimensiones que el tenant no
+  // tiene contratadas) y es la única que puede acabar mandando un correo.
+  creadas += await escanearLimites(db, contextos, hoy.slice(0, 7))
+
   const purgadas = await purgarAntiguas(db, soloCliente)
   return { tenants: tenants.length, creadas, purgadas }
 }
@@ -171,6 +181,19 @@ async function escanearSuscripciones(
 
   for (const t of tenants) {
     if (!t.fecha_expiracion) continue
+    // Al Socio CLAUX no se le reclama. Su `fecha_expiracion` es la del último
+    // ciclo que pagó y se queda ahí atrás para siempre, así que sin este corte la
+    // campana le dice «tu suscripción ha vencido, ponte al día» al mismo cliente
+    // al que su propia pantalla de facturación le dice que no le cobramos nada.
+    // El día que caduque `socio_hasta` vuelve a entrar por aquí, y entonces el
+    // aviso es verdad.
+    if (esSocioHoy(t)) continue
+    // Y al cliente de PRUEBA tampoco: su portal no vence nunca (el guardia lo deja
+    // pasar mire la fecha que mire), pero `es_prueba` se marca a menudo sobre un
+    // cliente que YA tenía fecha guardada —así nació CLI-0003—, y esa fecha se
+    // queda atrás para siempre. Sin este corte, su campana le reclamaría a diario
+    // una suscripción vencida que su propio acceso desmiente.
+    if (t.es_prueba) continue
     const dias = diasHasta(t.fecha_expiracion, hoy)
     const ctx  = ctxDe.get(t.client_id)
 

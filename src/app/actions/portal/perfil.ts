@@ -4,7 +4,8 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { leerSetting }       from '@/lib/settings'
-import { suscripcionLabel }  from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { cargarContextoLimites } from '@/lib/limites'
 import { hashPasswordPortal } from '@/lib/portal-auth'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -18,6 +19,12 @@ export interface PerfilData {
   estado:           string
   suscripcion:      string
   fecha_expiracion: string | null
+  /** Nombre humano del nivel («Empresa»), no la clave. */
+  nivel_nombre:     string
+  /** Socio CLAUX vigente hoy: bandera, no estado — convive con `estado`. */
+  es_socio:         boolean
+  socio_hasta:      string | null
+  fecha_fin_gracia: string | null
   // Mi usuario (editable)
   user_id:      string
   email:        string
@@ -36,7 +43,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   const [{ data: cliente }, { data: usuario }] = await Promise.all([
     db.from('clients')
-      .select('nombre_empresa, nombre_contacto, email_admin, estado, precio_mensual_usd, ciclo_facturacion, fecha_expiracion')
+      .select(`nombre_empresa, nombre_contacto, email_admin, estado, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, nivel`)
       .eq('client_id', session.client_id)
       .single(),
     db.from('client_users')
@@ -47,7 +54,10 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   if (!cliente || !usuario) return null
 
-  const precioMes   = Number(cliente.precio_mensual_usd ?? 0)
+  // El nivel se enseña aquí y no solo en «Mi plan CLAUX»: esta ficha la ve todo
+  // usuario del portal, y aquella solo el administrador de la empresa.
+  const ctx         = await cargarContextoLimites(db, session.client_id)
+  const precioMes   = precioMensualEfectivo(cliente)
   const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento)
 
@@ -59,6 +69,10 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
     estado:           cliente.estado,
     suscripcion,
     fecha_expiracion: cliente.fecha_expiracion,
+    nivel_nombre:     ctx.nivelNombre,
+    es_socio:         esSocioHoy(cliente),
+    socio_hasta:      cliente.socio_hasta ?? null,
+    fecha_fin_gracia: cliente.fecha_fin_gracia ?? null,
     user_id:          session.user_id,
     email:            session.email,
     nombre:           usuario.nombre,
