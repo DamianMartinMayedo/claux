@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia, retirarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
 import { estadoAlRetirarGracia } from '@/lib/clientes/ciclo-vida'
+import { esSocioHoy } from '@/lib/billing'
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
@@ -737,7 +738,13 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
           ) : (
             <p className="text-sm-muted">
               Queda en <strong>{estadoTrasRetirar}</strong>
-              {cliente.es_socio
+              {/* `esSocioHoy` y no `cliente.es_socio`: la bandera sobrevive a su
+                  propia fecha. Con la condición ya caducada, la frase de socio
+                  explicaba el acceso con algo que ya no lo sostiene —lo sostiene
+                  la fecha pagada— y el admin leía un motivo falso justo antes de
+                  pulsar. La DECISIÓN de arriba ya iba bien; era el porqué el que
+                  se había quedado atrás. */}
+              {esSocioHoy(cliente, hoyEnTz())
                 ? ': es Socio CLAUX, y esa condición ya le da acceso por su cuenta.'
                 : ': su fecha pagada sigue vigente, así que no pierde acceso.'}
             </p>
