@@ -124,10 +124,15 @@ function ValueSection() {
         <h2 className="ld-section-title">
           Todo lo que necesitas para operar, en un solo lugar
         </h2>
+        {/* El título ya dice «en un solo lugar»; el párrafo lo repetía con otras
+            palabras («unifica la gestión») y arrancaba con un «olvídate de usar
+            cinco herramientas» — un número inventado que le pide al visitante que
+            se reconozca en un problema que a lo mejor no tiene. Ahora dice lo que
+            «en un solo lugar» significa de verdad, que es lo único que el título
+            no puede decir: que el dato viaja solo. */}
         <p className="ld-section-text">
-          Olvídate de usar cinco herramientas distintas. CLAUX unifica la gestión
-          de tu negocio: desde las cuentas hasta el catálogo que escanean tus
-          clientes.
+          Lo que cobras en el mostrador ya está en tus cuentas y descontado del
+          almacén, sin volver a teclearlo.
         </p>
       </Reveal>
 
@@ -207,10 +212,12 @@ function ModulesSection({ modulos }: { modulos: ModuloPublico[] }) {
         <h2 className="ld-section-title">
           Los módulos que tú eliges
         </h2>
+        {/* Sin la lista entre guiones: nombraba cuatro módulos que están dibujados
+            justo debajo, cada uno con su icono y su descripción. Y «activas los que
+            necesitas» es el título otra vez. Queda lo que ninguno de los dos dice:
+            que no pagas los demás, y que esto no es una decisión de una sola vez. */}
         <p className="ld-section-text">
-          Cada módulo funciona por su cuenta: activas los que necesitas —punto de
-          venta, contabilidad, reservas, presentación para inversores…— y pagas
-          solo por esos.
+          Pagas solo por los que actives. Puedes añadir más cuando el negocio lo pida.
         </p>
       </Reveal>
 
