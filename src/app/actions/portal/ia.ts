@@ -3,6 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { tieneModulo }       from '@/lib/modulos'
+import { puedeImportar }     from '@/lib/permisos'
+import type { AccesoCuenta } from '@/lib/ia/mapa'
 import { configAgente }      from '@/lib/ia/contexto'
 import { generarInsight, responderChat, type TipoInsight, type TurnoChat } from '@/lib/ia/agente'
 import { sugerirDatosItem, type SugerenciaItem } from '@/lib/ia/catalogo'
@@ -41,16 +43,27 @@ export interface ConversacionCompleta {
 
 // El addon de IA NO es un módulo del sidebar: se gatea en cada punto con
 // tieneModulo('asistente_ia'). Helper común para todas las actions.
-async function requireAddonIa(): Promise<{ clientId: string; nombreUsuario: string | null } | { error: string }> {
+async function requireAddonIa(): Promise<{ clientId: string; nombreUsuario: string | null; cuenta: AccesoCuenta } | { error: string }> {
   const session = await getPortalSession()
   if (!session) return { error: 'Sin sesión.' }
   const db = createAdminClient()
   const [{ data: cliente }, { data: usuario }] = await Promise.all([
-    db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single(),
+    db.from('clients').select('modulos_activos, autoimport_activo, migracion_estado').eq('client_id', session.client_id).single(),
     db.from('client_users').select('nombre').eq('user_id', session.user_id).maybeSingle(),
   ])
   if (!tieneModulo(cliente?.modulos_activos, 'asistente_ia')) return { error: 'El asistente IA no está contratado.' }
-  return { clientId: session.client_id, nombreUsuario: (usuario?.nombre as string | null) ?? null }
+  // Qué entradas del menú de la cuenta ve este usuario, para el mapa del portal que
+  // lee el chat. Sale de lo que YA se consultó aquí: `puedeImportar` es puro sobre la
+  // sesión y las dos columnas del importador viajan en el mismo select. La regla larga
+  // vive en `accesoImportCliente`; aquí basta con si la entrada se pinta o no.
+  const cuenta: AccesoCuenta = {
+    esAdmin: session.rol === 'admin_empresa',
+    // El interruptor de emergencia es DEFAULT true: solo un `false` explícito lo apaga.
+    puedeImportar: puedeImportar(session)
+      && cliente?.autoimport_activo !== false
+      && cliente?.migracion_estado !== 'a_cargo_equipo',
+  }
+  return { clientId: session.client_id, nombreUsuario: (usuario?.nombre as string | null) ?? null, cuenta }
 }
 
 function mensajeError(e: unknown): string {
@@ -81,7 +94,7 @@ export async function chatAgenteIa(historial: TurnoChat[], mensaje: string): Pro
   if (!texto0) return { ok: false, error: 'Escribe un mensaje.' }
   try {
     const hist = Array.isArray(historial) ? historial.slice(-8) : []
-    const texto = await responderChat(guard.clientId, hist, texto0, guard.nombreUsuario)
+    const texto = await responderChat(guard.clientId, hist, texto0, guard.nombreUsuario, guard.cuenta)
     return { ok: true, texto }
   } catch (e) {
     console.error('[ia] chatAgente', e)

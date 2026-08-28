@@ -260,6 +260,14 @@ export interface DashboardData {
   setupPendiente: { empresa: boolean; moneda: boolean }
   fecha: string
   etiquetas: EtiquetasSector
+  /**
+   * Módulos que ESTE usuario ve en la navegación (tenant ∩ permisos), el mismo
+   * `calcularAcceso` que usa el sidebar. Se expone porque el mapa del portal que
+   * se le entrega a la IA (`lib/ia/mapa.ts`) tiene que listar exactamente las
+   * pantallas que este usuario encuentra al mirar: ya estaba calculado aquí, así
+   * que no cuesta una consulta más.
+   */
+  modulosVisibles: string[]
   suscripcion: {
     estado: string
     diasRestantes: number | null
@@ -1465,6 +1473,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     setupPendiente,
     fecha: hoy,
     etiquetas,
+    modulosVisibles: visibles,
     suscripcion: {
       estado: cliente.estado ?? '—',
       diasRestantes,

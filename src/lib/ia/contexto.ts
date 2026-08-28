@@ -9,6 +9,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { obtenerDashboard, type DashboardData } from '@/app/actions/portal/dashboard'
 import { normalizarModulos } from '@/lib/modulos'
 import { INSTRUCCIONES_DEFAULT } from './documentos'
+import { construirMapaPortal, type AccesoCuenta, type GrupoMapa } from './mapa'
+import { ETIQUETAS_DEFAULT } from '@/lib/sector'
 
 // Resumen compacto del catálogo público (solo si el módulo catalogo_qr está
 // activo). Diseñado como base "pública-segura": ni cifras financieras ni datos de
@@ -33,6 +35,8 @@ export interface ContextoNegocio {
   modulos: string[]
   data: DashboardData | null
   catalogo: CatalogoResumen | null
+  /** Dónde está cada pantalla para ESTE usuario. Solo lo pide el chat libre (ver `mapa.ts`). */
+  mapa: GrupoMapa[] | null
 }
 
 export const NOMBRE_AGENTE_DEFAULT = 'Claux'
@@ -51,7 +55,16 @@ export async function configAgente(): Promise<{ nombreAgente: string; tono: stri
   }
 }
 
-export async function construirContexto(clientId: string, nombreUsuario?: string | null): Promise<ContextoNegocio> {
+/**
+ * `cuenta` solo lo pasa el CHAT libre: es lo que enciende el mapa del portal (una
+ * consulta más al catálogo de módulos). Los insights de sección analizan cifras dentro
+ * de su propia pantalla, no preguntan dónde está nada, y no lo pagan.
+ */
+export async function construirContexto(
+  clientId: string,
+  nombreUsuario?: string | null,
+  cuenta?: AccesoCuenta,
+): Promise<ContextoNegocio> {
   const db = createAdminClient()
   const [{ data: cliente }, data, agente] = await Promise.all([
     db.from('clients').select('nombre_empresa, modulos_activos').eq('client_id', clientId).single(),
@@ -70,6 +83,11 @@ export async function construirContexto(clientId: string, nombreUsuario?: string
     modulos,
     data,
     catalogo: modulos.includes('catalogo_qr') ? await resumenCatalogo(db, clientId) : null,
+    // Los módulos VISIBLES (tenant ∩ permisos del usuario) los trae el dashboard ya
+    // calculados; sin él —cliente sin nada contratado— vale la lista del tenant.
+    mapa: cuenta
+      ? await construirMapaPortal(data?.modulosVisibles ?? modulos, data?.etiquetas ?? ETIQUETAS_DEFAULT, cuenta)
+      : null,
   }
 }
 

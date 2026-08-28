@@ -8,6 +8,7 @@ import { chat, type IaMensaje } from './provider'
 import { registrarUso } from './uso'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { construirContexto, contextoComoTexto, type ContextoNegocio, type FocoContexto } from './contexto'
+import { mapaComoTexto, REGLAS_MAPA, type AccesoCuenta } from './mapa'
 import { PROMPTS_INSIGHT_DEFAULT, claveSeccion, type TipoInsight } from './documentos'
 
 export type { TipoInsight }
@@ -61,11 +62,17 @@ export interface TurnoChat { rol: 'user' | 'assistant'; texto: string }
 
 // Chat libre del dueño (botón flotante). `historial` son los turnos previos de la
 // MISMA conversación; solo el primer turno cuenta como conversación nueva.
-export async function responderChat(clientId: string, historial: TurnoChat[], mensaje: string, nombreUsuario?: string | null): Promise<string> {
-  const ctx = await construirContexto(clientId, nombreUsuario)
+export async function responderChat(clientId: string, historial: TurnoChat[], mensaje: string, nombreUsuario?: string | null, cuenta?: AccesoCuenta): Promise<string> {
+  const ctx = await construirContexto(clientId, nombreUsuario, cuenta)
   const contexto = contextoComoTexto(ctx, 'general')
+  // El mapa del portal y sus reglas se inyectan POR CÓDIGO, no desde el documento de
+  // personalidad: ese es editable en /admin y una versión guardada allí se llevaría
+  // por delante cualquier arreglo que se haga aquí. Ver `mapa.ts`.
+  const guia = ctx.mapa?.length
+    ? `\n\nMapa del portal (dónde está cada pantalla para este usuario):\n${mapaComoTexto(ctx.mapa)}\n\n${REGLAS_MAPA}`
+    : ''
   const mensajes: IaMensaje[] = [
-    { role: 'system', content: `${systemPrompt(ctx)}\n\nContexto del negocio (JSON):\n${contexto}` },
+    { role: 'system', content: `${systemPrompt(ctx)}\n\nContexto del negocio (JSON):\n${contexto}${guia}` },
     ...historial.map<IaMensaje>(t => ({ role: t.rol, content: t.texto })),
     { role: 'user', content: mensaje },
   ]

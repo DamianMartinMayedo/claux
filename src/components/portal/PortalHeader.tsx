@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { empresaColorVar } from './EmpresaTag'
 import MobileNavToggle from '@/components/MobileNavToggle'
 import NotificacionesCampana from './notificaciones/NotificacionesCampana'
+import { paginasCuentaVisibles, GRUPOS_CUENTA } from '@/lib/portal/paginas-cuenta'
 
 interface EmpresaLite {
   empresa_id: string
@@ -99,34 +100,27 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
   }, [])
 
   // Opciones de cuenta, agrupadas (antes el grupo «Configuración» del sidebar).
-  // «Empresas», «Usuarios» y «Mi plan CLAUX» son cosa del dueño: se ocultan a un `usuario`
-  // no-admin (el candado real de cada página vive en su server guard). «Monedas» se queda:
+  // La LISTA vive en `lib/portal/paginas-cuenta` porque no la pinta solo este menú:
+  // el mapa del portal que se le entrega a la IA sale de la misma tabla. Aquí solo
+  // se le pone icono. «Empresas», «Usuarios» y «Mi plan CLAUX» son cosa del dueño
+  // (el candado real vive en el server guard de cada página); «Monedas» se queda:
   // hasta solo-lectura puede actualizar tasas.
-  const esAdmin = session.rol === 'admin_empresa'
-  type Opcion = { ruta: string; label: string; icon: React.ReactNode }
-  const grupos: { titulo: string; items: Opcion[] }[] = [
-    {
-      titulo: 'Mi cuenta',
-      items: [
-        { ruta: '/portal/perfil',  label: 'Mi perfil', icon: <User size={16} strokeWidth={2} /> },
-        { ruta: '/portal/soporte', label: 'Soporte',   icon: <HelpCircle size={16} strokeWidth={2} /> },
-      ],
-    },
-    {
-      titulo: 'Negocio',
-      items: [
-        // Importador de autoservicio: la visibilidad la decide el layout (permiso por
-        // usuario ∩ módulo contratado ∩ autoservicio activo ∩ migración no a cargo del
-        // equipo). No es cosa solo del admin: un «operador solo-importar» (solo_lectura
-        // en el resto) también entra por aquí, por eso NO cuelga de `esAdmin`.
-        ...(puedeImportarDatos ? [{ ruta: '/portal/importar-datos', label: 'Importar datos', icon: <Upload size={16} strokeWidth={2} /> }] : []),
-        ...(esAdmin ? [{ ruta: '/portal/empresas', label: 'Empresas', icon: <Building2 size={16} strokeWidth={2} /> }] : []),
-        { ruta: '/portal/monedas', label: 'Monedas y tasas', icon: <DollarSign size={16} strokeWidth={2} /> },
-        ...(esAdmin ? [{ ruta: '/portal/usuarios', label: 'Usuarios', icon: <UsersRound size={16} strokeWidth={2} /> }] : []),
-        ...(esAdmin ? [{ ruta: '/portal/facturacion', label: 'Mi plan CLAUX', icon: <CreditCard size={16} strokeWidth={2} /> }] : []),
-      ],
-    },
-  ]
+  const ICONOS: Record<string, React.ReactNode> = {
+    '/portal/perfil':         <User size={16} strokeWidth={2} />,
+    '/portal/soporte':        <HelpCircle size={16} strokeWidth={2} />,
+    '/portal/importar-datos': <Upload size={16} strokeWidth={2} />,
+    '/portal/empresas':       <Building2 size={16} strokeWidth={2} />,
+    '/portal/monedas':        <DollarSign size={16} strokeWidth={2} />,
+    '/portal/usuarios':       <UsersRound size={16} strokeWidth={2} />,
+    '/portal/facturacion':    <CreditCard size={16} strokeWidth={2} />,
+  }
+  const visibles = paginasCuentaVisibles({
+    esAdmin: session.rol === 'admin_empresa',
+    puedeImportar: puedeImportarDatos,
+  })
+  const grupos = GRUPOS_CUENTA
+    .map(titulo => ({ titulo, items: visibles.filter(p => p.grupo === titulo) }))
+    .filter(g => g.items.length > 0)
 
   return (
     <header className="portal-header">
@@ -183,7 +177,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
                           onClick={() => setOpen(false)}
                           className={`portal-account-menu-item${active ? ' active' : ''}`}
                         >
-                          {o.icon}
+                          {ICONOS[o.ruta]}
                           <span>{o.label}</span>
                         </Link>
                       )

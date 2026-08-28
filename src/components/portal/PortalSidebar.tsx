@@ -6,6 +6,10 @@ import { useState, useTransition, useEffect, useRef } from 'react'
 import { logoutCliente } from '@/app/actions/portal/auth'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import {
+  construirNavegacion, rutasDe,
+  type ModuloNav, type PaginaNav,
+} from '@/lib/portal/navegacion'
+import {
   LayoutDashboard, ShoppingCart, TrendingDown, ArrowUpRight, ArrowDownLeft,
   Wallet, FileText, Users, DollarSign, Package, Warehouse, ShoppingBag,
   Boxes, UserCircle, Building2, User, UsersRound, CreditCard, HelpCircle,
@@ -14,37 +18,8 @@ import {
   Store, ReceiptText, Lock, RefreshCw, Presentation, Contact,
 } from 'lucide-react'
 
-interface PaginaInfo {
-  ruta: string
-  label: string
-  orden: number
-}
-
-export interface CatalogoItem {
-  clave: string
-  nombre: string
-  tipo: 'base' | 'modulo' | 'funcionalidad' | 'addon'
-  paginas: PaginaInfo[] | null
-  orden: number
-}
-
-function ensurePages(paginas: unknown): PaginaInfo[] {
-  if (Array.isArray(paginas)) return paginas
-  if (typeof paginas === 'string') {
-    try { const p = JSON.parse(paginas); return Array.isArray(p) ? p : [] }
-    catch { return [] }
-  }
-  return []
-}
-
-/**
- * «Productos» del mostrador: página REAL (/portal/caja/productos) que no está en
- * `modulos_catalogo.paginas` de `caja` a propósito. Solo tiene sentido para quien NO
- * tiene Inventario —con él, los físicos se catalogan en /portal/productos—, y el
- * catálogo comercial no sabe de esa condición: si se metiera allí, aparecería
- * duplicada para todos los que tienen los dos módulos. Se inyecta abajo.
- */
-const CAJA_PRODUCTOS: PaginaInfo = { ruta: '/portal/caja/productos', label: 'Catálogo', orden: 15 }
+// El catálogo comercial tal cual llega de `modulos_catalogo` (lo carga el layout).
+export type CatalogoItem = ModuloNav
 
 const STORAGE_KEY = 'claux_sidebar_collapsed'
 
@@ -72,6 +47,15 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
   const [pending, startTransition] = useTransition()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
+  // Qué se pinta y en qué grupo: `lib/portal/navegacion`. Aquí solo quedan los
+  // iconos, el colapso y la ruta activa; las reglas de contenido son compartidas
+  // con el mapa del portal que lee la IA.
+  const nav = construirNavegacion({
+    catalogo,
+    modulosVisibles,
+    etiquetas: { catalogo: catalogoEtiqueta ?? '', suscripcion: suscripcionEtiqueta ?? '' },
+  })
+
   // ── Colapso de grupos ──
   // Estado inicial DETERMINISTA: idéntico en el servidor y en el primer render del
   // cliente (base expandido, resto colapsado) → evita el hydration mismatch. Las
@@ -95,9 +79,8 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
 
   // Auto-expandir el grupo que contiene la ruta activa (sync navegación → UI; intencional).
   useEffect(() => {
-    for (const m of catalogo) {
-      const pages = m.tipo === 'modulo' ? (m.paginas ?? []) : []
-      const activeInGroup = pages.some(p => pathname === p.ruta || pathname.startsWith(p.ruta + '/'))
+    for (const m of nav.grupos) {
+      const activeInGroup = m.paginas.some(p => pathname === p.ruta || pathname.startsWith(p.ruta + '/'))
       if (activeInGroup && collapsed[m.clave]) {
         setCollapsed(prev => { const next = { ...prev, [m.clave]: false }; saveCollapsed(next); return next })
       }
@@ -110,55 +93,27 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
   function handleLogout() { setShowLogoutDialog(true) }
   function confirmLogout() { startTransition(() => { logoutCliente() }) }
 
-  // Separar catálogo por tipo. La contabilidad es un módulo más (tipo='modulo',
-  // clave 'base'), así que entra por el camino normal de módulos.
-  const catalogItems = catalogo
-  const modulos       = catalogItems.filter(c => c.tipo === 'modulo')
-  const funcionalidades = catalogItems.filter(c => c.tipo === 'funcionalidad')
-  // addons no generan items de navegación
-
   // Ruta activa = la coincidencia de prefijo MÁS específica (la más larga). Sin esto,
   // un hub como /portal/caja se quedaría "enganchado" como activo al navegar a una
   // subpágina hermana (/portal/caja/operaciones), que también empieza por /portal/caja.
   // Con el match más largo cada subpágina gana a su hub; el drill-down /portal/caja/<id>
   // (sin item propio) sigue activando el hub. El resto de módulos no anida rutas, así que
   // su comportamiento no cambia. Solo consideramos rutas de items realmente pintados.
-  const navRutas: string[] = ['/portal/dashboard']
-  for (const f of funcionalidades) if (modulosVisibles.includes(f.clave)) for (const p of ensurePages(f.paginas)) navRutas.push(p.ruta)
-  for (const m of modulos)         if (modulosVisibles.includes(m.clave)) for (const p of ensurePages(m.paginas)) navRutas.push(p.ruta)
-  // «Clientes y proveedores» se inyecta en el grupo anfitrión cuando no hay base
-  // (abajo), así que su ruta debe entrar en navRutas para que se resalte activa.
-  if (!modulosVisibles.includes('base') &&
-      (modulosVisibles.includes('inventario') || modulosVisibles.includes('servicios')))
-    navRutas.push('/portal/terceros')
-  // Lo mismo con el catálogo del mostrador: se inyecta en el grupo de Caja (abajo),
-  // así que su ruta tiene que estar aquí o el item nunca saldría activo.
-  // El mostrador cataloga lo que no tiene módulo propio: los físicos si falta Inventario,
-  // los servicios si falta Servicios, los dos si faltan los dos. Con ambos módulos no
-  // cataloga nada y la página redirige (ver `modoCatalogoMostrador`).
-  const cajaCataloga = modulosVisibles.includes('caja')
-    && !(modulosVisibles.includes('inventario') && modulosVisibles.includes('servicios'))
-  if (cajaCataloga) navRutas.push(CAJA_PRODUCTOS.ruta)
+  const navRutas = rutasDe(nav)
   const activeRuta = navRutas
     .filter(r => pathname === r || pathname.startsWith(r + '/'))
     .reduce<string | null>((best, r) => (best === null || r.length > best.length ? r : best), null)
 
-  const isDashboardActive = activeRuta === '/portal/dashboard'
-
   // Helper para renderizar una página (como Link en el sidebar). Solo se pintan
   // las páginas de módulos contratados, así que no hay estado "bloqueado".
   function renderPage(ruta: string, label: string, icon: React.ReactNode) {
-    // Catálogo → nombre e icono por sector: restaurante "Menú digital" + cubiertos;
-    // resto "Catálogo/Servicios digital" + QR. El label estático viene del catálogo de módulos.
+    // El NOMBRE ya lo resolvió `construirNavegacion` (por sector). Aquí solo el icono:
+    // restaurante → cubiertos, resto → QR.
     if (ruta === '/portal/catalogo' && catalogoEtiqueta) {
-      label = `${catalogoEtiqueta} digital`
       icon = catalogoIcono === 'comida'
         ? <UtensilsCrossed size={18} strokeWidth={2} />
         : <QrCode size={18} strokeWidth={2} />
     }
-    // La etiqueta la nombra el negocio: un gimnasio dice «Membresías» y una peluquería
-    // «Bonos». Nunca «Contratos» — esa entrada ya existe y es de RRHH.
-    if (ruta === '/portal/suscripciones' && suscripcionEtiqueta) label = suscripcionEtiqueta
     const active = ruta === activeRuta
     return (
       <Link key={ruta} href={ruta} className={`nav-item${active ? ' active' : ''}`}>
@@ -168,7 +123,7 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
     )
   }
 
-  function renderCollapsibleGroup(clave: string, nombre: string, pages: PaginaInfo[]) {
+  function renderCollapsibleGroup(clave: string, nombre: string, pages: PaginaNav[]) {
     const isCollapsed = collapsed[clave] ?? true
     return (
       <div key={clave}>
@@ -192,58 +147,13 @@ export default function PortalSidebar({ modulosVisibles, catalogo, catalogoEtiqu
     <aside className="portal-sidebar" id="portal-nav">
       <nav className="flex-1">
 
-        {/* Dashboard — standalone */}
-        <Link href="/portal/dashboard" className={`nav-item${isDashboardActive ? ' active' : ''}`}>
-          <LayoutDashboard size={18} strokeWidth={2} />
-          <span className="flex-1">Dashboard</span>
-        </Link>
+        {/* Dashboard y funcionalidades contratadas: sueltas, sin grupo. */}
+        {nav.sueltas.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta)))}
 
-        {/* Funcionalidades — standalone, solo visibles si contratadas. */}
-        {funcionalidades
-          .filter(f => modulosVisibles.includes(f.clave))
-          .map(f => {
-            const pages = ensurePages(f.paginas).sort((a, b) => a.orden - b.orden)
-            return pages.map(p => renderPage(p.ruta, p.label, iconFor(p.ruta)))
-          })}
+        {/* Módulos (incluida Contabilidad) — grupos colapsables; solo los contratados,
+            sin candados. Qué página cae en qué grupo lo decide `construirNavegacion`. */}
+        {nav.grupos.map(g => renderCollapsibleGroup(g.clave, g.nombre, g.paginas))}
 
-        {/* Módulos (incluida Contabilidad) — grupos colapsables; solo los
-            contratados, sin candados.
-            «Clientes y proveedores» (/portal/terceros) es una ruta COMPARTIDA por
-            base, Inventario y Servicios: se pinta UNA sola vez, en el grupo del primer
-            módulo contratado de su lista de prioridad. Vive en las paginas de base; si
-            base no está, se inyecta en el grupo anfitrión (Inventario › Servicios). */}
-        {(() => {
-          const tercerosCompartida = ensurePages(modulos.find(x => x.clave === 'base')?.paginas)
-            .find(p => p.ruta === '/portal/terceros')
-          const anfitrionTerceros = ['base', 'inventario', 'servicios']
-            .find(c => modulosVisibles.includes(c))
-          return modulos
-            .filter(m => modulosVisibles.includes(m.clave))
-            .map(m => {
-              const pages = ensurePages(m.paginas).sort((a, b) => a.orden - b.orden)
-              // base ya trae terceros en sus paginas; si el anfitrión es otro módulo,
-              // se la inyectamos solo a ese, para no duplicarla.
-              const conCompartida =
-                tercerosCompartida && anfitrionTerceros === m.clave && m.clave !== 'base'
-                  ? [...pages, tercerosCompartida]
-                  : pages
-              // Caja sin Inventario: su propio catálogo de artículos, ordenado con el
-              // resto de sus páginas (no al final).
-              // La etiqueta dice lo que la página LLEVA: con Inventario ya solo le quedan
-              // los servicios, con Servicios solo los productos, y sin ninguno de los dos
-              // lleva las dos cosas («Catálogo»).
-              const cajaPagina: PaginaInfo = {
-                ...CAJA_PRODUCTOS,
-                label: modulosVisibles.includes('inventario') ? 'Servicios'
-                     : modulosVisibles.includes('servicios')  ? 'Productos'
-                     :                                          'Catálogo',
-              }
-              const conPaginas = cajaCataloga && m.clave === 'caja'
-                ? [...conCompartida, cajaPagina].sort((a, b) => a.orden - b.orden)
-                : conCompartida
-              return renderCollapsibleGroup(m.clave, m.nombre, conPaginas)
-            })
-        })()}
       </nav>
 
       <div className="sidebar-footer-nav">
