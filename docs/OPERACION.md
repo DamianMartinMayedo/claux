@@ -66,6 +66,60 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
   el de Productos se traducía a cadena vacía al mandarlo, o sea que pedir «Sin categoría»
   descargaba todo el catálogo. Usa `SIN_CATEGORIA` / `SIN_TERCERO` de `lib/listados.ts`.
 
+```bash
+npm run audit:limites
+```
+
+Centinela de los topes de nivel. Obligatorio al añadir una **dimensión con límite**, una
+**tabla limitada** o una acción que cree en una de ellas. Mira las dos mitades del asunto:
+
+- La tabla `DIMENSIONES` de `lib/limites.ts` contra la BD viva: que existan la tabla, la
+  `pk`, el `client_id` y **cada columna de filtro**. Es el punto frágil declarado del
+  fichero —no hay convención para «esto está activo»: `estado`, `activo`, `activa`,
+  `fecha_baja is null`— y una columna que sobra hace que PostgREST falle la consulta
+  entera: el conteo cae a 0, `usado + 1 <= limite` siempre se cumple y **el límite deja de
+  existir en silencio**.
+- Que cada dimensión tenga fila en `nivel_limites` para los tres niveles (sin fila, es
+  ilimitada por accidente), que no haya filas huérfanas (un número que el dueño edita en
+  /admin y no aplica nadie) y que ninguna dimensión declarada se quede sin comprobarse
+  nunca.
+- Que todo `insert`/`upsert` en tabla limitada pase por `comprobarLimite` o
+  `huecoDisponible`. Lo que a propósito no comprueba —el alta del primer usuario del
+  cliente, la cuenta técnica de Apertura, los adaptadores cuyo cupo aplica el motor del
+  importador— va en el ALLOWLIST del script con su motivo.
+
+```bash
+npm run audit:nivel
+```
+
+Centinela del catálogo comercial. Obligatorio al **retirar, renombrar o añadir un módulo**.
+El catálogo es vivo (el dueño lo edita desde /admin), y lo que lo referencia por clave no se
+entera: `tieneModulo(modulos, 'x')` con una clave retirada devuelve `false` para siempre, así
+que la funcionalidad **no se rompe, se apaga** — y apagada se parece mucho a «aún no la han
+contratado». Comprueba las claves citadas en el código, las de `plantillas_sector` y
+`diagnostico_necesidades` (que alimentan la recomendación pública), las de
+`clients.modulos_activos`, y que todo módulo activo tenga sus **tres precios** sin nulos,
+sin ceros y sin bajar al subir de nivel.
+
+```bash
+npm run audit:precios
+```
+
+Ningún importe de CLAUX cableado en el código: ni en un campo (`precio_*_usd`,
+`cuota_mensual_usd`, `tarifa_hora_usd`…) ni escrito en un texto que el usuario lee («$35/mes»).
+El precio vive en `modulos_catalogo` y en `settings`; una copia en el código empieza siendo
+verdad y deja de serlo el día que el dueño cambia el precio en el admin, sin que nada
+enfrente las dos cifras.
+
+```bash
+npm run audit
+```
+
+**Los seis de una vez**, en paralelo y con la salida ordenada. Es el que hay que recordar:
+seis comandos sueltos que hay que acordarse de ejecutar no son una regla, son una nota.
+Rojo si falla cualquiera, pero todos llegan a correr — enterarte de los seis problemas de
+una vez es media hora menos que enterarte de uno por vuelta.
+
 `npx eslint <ficheros>` para lo tocado. El build de este proyecto es pesado: si el proceso
 muere con **exit 137** es la máquina quedándose sin memoria, no un fallo del código.
 
@@ -132,6 +186,8 @@ El cron de tasas es el ejemplo a copiar.
 | `tsc` da «Duplicate identifier» y el código está bien | Ficheros « 2» de iCloud dentro de `.next`; borra la caché |
 | Un bot de Telegram no responde | Su webhook, apuntado al dominio viejo: pestaña del bot → Comprobar / Reparar |
 | Un listado sale del revés o le faltan filas viejas | El orden lo fija el rango (`ordenDelRango`) y el techo, `limiteDelFiltro` (`lib/listados.ts`) |
+| Un cliente crea por encima de su tope | Una columna de filtro de esa dimensión que ya no existe: PostgREST falla el conteo, sale 0 y el límite deja de existir. `npm run audit:limites` |
+| Una funcionalidad desapareció sin dar ningún error | Su clave de módulo, retirada o renombrada en el catálogo vivo: `tieneModulo` devuelve `false` para siempre. `npm run audit:nivel` |
 
 ## Convenciones
 
