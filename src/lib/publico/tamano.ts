@@ -32,11 +32,15 @@ export interface PreguntaTamano {
   pregunta: string
   /** Qué se está contando, para la etiqueta de cada opción («… negocios»). */
   cosa: string
+  /** Rótulo corto, para una ficha en dos columnas. La pregunta entera no sirve
+      ahí: la columna de rótulos son sustantivos («Estado», «Teléfono»), y una
+      interrogación de seis palabras en versalitas rompe el bloque entero. */
+  etiqueta: string
 }
 
 export const PREGUNTAS_TAMANO_BASE: PreguntaTamano[] = [
-  { clave: 'empresas',     dim: 'empresas',     pregunta: '¿Cuántos negocios o locales llevas?',   cosa: 'negocios' },
-  { clave: 'trabajadores', dim: 'trabajadores', pregunta: '¿Cuántas personas trabajan contigo?',   cosa: 'personas' },
+  { clave: 'empresas',     dim: 'empresas',     pregunta: '¿Cuántos negocios o locales llevas?',   cosa: 'negocios', etiqueta: 'Negocios o locales' },
+  { clave: 'trabajadores', dim: 'trabajadores', pregunta: '¿Cuántas personas trabajan contigo?',   cosa: 'personas', etiqueta: 'Personas en el equipo' },
 ]
 
 /**
@@ -48,8 +52,8 @@ export const PREGUNTAS_TAMANO_BASE: PreguntaTamano[] = [
 export function preguntaCatalogo(modulosDelSector: string[]): PreguntaTamano {
   const soloServicios = modulosDelSector.includes('servicios') && !modulosDelSector.includes('inventario')
   return soloServicios
-    ? { clave: 'catalogo', dim: 'servicios', pregunta: '¿Cuántos servicios distintos ofreces?', cosa: 'servicios' }
-    : { clave: 'catalogo', dim: 'productos', pregunta: '¿Cuántos productos distintos vendes?',  cosa: 'productos' }
+    ? { clave: 'catalogo', dim: 'servicios', pregunta: '¿Cuántos servicios distintos ofreces?', cosa: 'servicios', etiqueta: 'Servicios distintos' }
+    : { clave: 'catalogo', dim: 'productos', pregunta: '¿Cuántos productos distintos vendes?',  cosa: 'productos', etiqueta: 'Productos distintos' }
 }
 
 export interface OpcionTamano {
@@ -113,4 +117,55 @@ export function nivelRecomendado(
   const indices = Object.values(respuestas).filter((v): v is number => typeof v === 'number')
   if (niveles.length === 0 || indices.length === 0) return null
   return niveles[Math.min(Math.max(...indices), niveles.length - 1)] ?? null
+}
+
+/**
+ * Las respuestas del paso de tamaño, en lenguaje humano.
+ *
+ * `diagnosticos.tamano` guarda ÍNDICES de nivel («2»), que es lo que hace falta
+ * para calcular la recomendación y lo único ilegible que hay en la ficha de un
+ * lead. Aquí se reconstruye la banda que el visitante leyó y pulsó, con los
+ * mismos topes vivos con los que se pintó el formulario.
+ *
+ * Un índice que ya no tiene banda —porque el tope de ese nivel cambió y dejó de
+ * separar— se omite en vez de inventarse una cifra. El nivel recomendado se
+ * guardó aparte, en `nivel_rec`, y ese sí es la respuesta congelada.
+ *
+ * Detalle conocido: si el ÚLTIMO nivel tuviera tope finito, su índice tendría
+ * dos bandas («Entre X e Y» y «Más de Y») y aquí se enseñaría la primera. Hoy
+ * no pasa —el último nivel es sin tope en las tres dimensiones—, y el nivel
+ * recomendado sería el mismo de todas formas.
+ */
+export interface RespuestaTamano {
+  /** La pregunta entera, tal cual se le hizo. Para el correo, que no tiene columnas. */
+  pregunta: string
+  /** Rótulo corto, para una ficha en dos columnas. */
+  etiqueta: string
+  /** Solo la banda: «Hasta 3», «Entre 4 y 5», «Más de 5». */
+  banda: string
+  /** La banda con lo que se cuenta: «Hasta 3 negocios». Se lee sola. */
+  respuesta: string
+}
+
+export function tamanoComoTexto(
+  niveles: NivelPublico[],
+  modulosDelSector: string[],
+  respuestas: Record<string, number> | null | undefined,
+): RespuestaTamano[] {
+  if (!respuestas) return []
+  const lineas: RespuestaTamano[] = []
+
+  for (const q of [...PREGUNTAS_TAMANO_BASE, preguntaCatalogo(modulosDelSector)]) {
+    const idx = respuestas[q.clave]
+    if (typeof idx !== 'number') continue
+    const banda = opcionesTamano(niveles, q.dim).find((o) => o.nivelIdx === idx)
+    if (!banda) continue
+    lineas.push({
+      pregunta:  q.pregunta,
+      etiqueta:  q.etiqueta,
+      banda:     banda.label,
+      respuesta: `${banda.label} ${q.cosa}`,
+    })
+  }
+  return lineas
 }

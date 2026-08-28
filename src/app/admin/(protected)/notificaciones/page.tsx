@@ -25,9 +25,11 @@ export default async function NotificacionesPage() {
 
   const esSuperAdmin = ctx.rol === 'super_admin'
 
-  const [diasAviso, emailAvisosInternos, emailContratacion, plantillas, avisos, preferencias, ...toggles] = await Promise.all([
+  const [diasAviso, emailAvisosInternos, emailAvisosLeads, emailContratacion, plantillas, avisos, preferencias, ...toggles] = await Promise.all([
     getSetting('dias_aviso', '5').then(v => parseInt(v, 10)),
     getSetting('email_avisos_internos', 'contacto@claux.es'),
+    // Buzones que reciben SOLO los avisos de lead. Vacío = nadie más.
+    getSetting('email_avisos_leads', ''),
     // Buzón comercial al que escribe el cliente desde el banner del dashboard.
     getSetting('email_contratacion', 'contacto@claux.es'),
     listarPlantillas(),
@@ -55,6 +57,7 @@ export default async function NotificacionesPage() {
       <NotificacionesForm
         diasAviso={diasAviso}
         emailAvisosInternos={emailAvisosInternos}
+        emailAvisosLeads={emailAvisosLeads}
         emailContratacion={emailContratacion}
         togglesIniciales={togglesIniciales}
         plantillas={plantillas}

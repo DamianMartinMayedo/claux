@@ -9,6 +9,8 @@ import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import VentasTabs from '@/components/admin/VentasTabs'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
+import { etiquetaModo } from '@/lib/publico/modos'
+import type { RespuestaTamano } from '@/lib/publico/tamano'
 import {
   actualizarEstadoDiagnostico,
   type DiagnosticoLead,
@@ -23,6 +25,12 @@ function fmtFecha(iso: string): string {
   })
 }
 
+/** Lista de claves → lista de rótulos. La clave que no esté en el mapa se queda
+    como está: es un dato del lead y perderlo sería peor que verlo en crudo. */
+function rotular(claves: string[] | null, mapa: Record<string, string>): string {
+  return (claves ?? []).map((c) => mapa[c] ?? c).join(', ') || '—'
+}
+
 function EstadoBadge({ estado }: { estado: EstadoLead }) {
   return estado === 'contactado'
     ? <span className="badge badge-success">Contactado</span>
@@ -34,12 +42,22 @@ export default function SolicitudesView({
   rol,
   permisos,
   nombresNivel,
+  tamanos,
+  etiquetas,
 }: {
   leads: DiagnosticoLead[]
   rol: RolAdmin
   permisos: SeccionKey[]
   /** Nombres vivos de los niveles: el lead guarda la clave, no el rótulo. */
   nombresNivel: Record<string, string>
+  /** Por id de lead, el tamaño que declaró ya traducido a bandas legibles. */
+  tamanos: Record<number, RespuestaTamano[]>
+  /** Rótulos vivos por clave: el lead guarda claves, no lo que el visitante leyó. */
+  etiquetas: {
+    sectores:    Record<string, string>
+    necesidades: Record<string, string>
+    modulos:     Record<string, string>
+  }
 }) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
@@ -147,7 +165,7 @@ export default function SolicitudesView({
 
       {detalle && (
         <div className="modal-backdrop">
-          <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-xl" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{detalle.nombre}</h2>
               <button onClick={() => setDetalle(null)} className="modal-close" aria-label="Cerrar">
@@ -178,31 +196,64 @@ export default function SolicitudesView({
                 )}
                 <div className="sol-row">
                   <span className="sol-label">Sector</span>
-                  <span className="sol-value">{detalle.sector}</span>
+                  <span className="sol-value">{etiquetas.sectores[detalle.sector] ?? detalle.sector}</span>
                 </div>
                 <div className="sol-row">
                   <span className="sol-label">Necesidades</span>
-                  <span className="sol-value">{(detalle.necesidades ?? []).join(', ') || '—'}</span>
+                  <span className="sol-value">{rotular(detalle.necesidades, etiquetas.necesidades)}</span>
                 </div>
                 <div className="sol-row">
                   <span className="sol-label">Cómo lo hace hoy</span>
-                  <span className="sol-value">{detalle.modo_actual || '—'}</span>
+                  <span className="sol-value">{detalle.modo_actual ? etiquetaModo(detalle.modo_actual) : '—'}</span>
                 </div>
                 <div className="sol-row">
                   <span className="sol-label">Módulos recomendados</span>
-                  <span className="sol-value">{(detalle.modulos_rec ?? []).join(', ') || '—'}</span>
+                  <span className="sol-value">{rotular(detalle.modulos_rec, etiquetas.modulos)}</span>
                 </div>
-                {/* Solo si el lead lo trae: los anteriores al paso de tamaño
-                    (mig. 219) no lo respondieron y no se les inventa uno. */}
-                {detalle.nivel_rec && (
+                {/* Lo que declaró de tamaño, antes del nivel: primero el dato,
+                    después la conclusión que sale de él. La tercera fila cambia
+                    con el sector —servicios o productos—, porque son dos topes
+                    distintos y la pregunta se le hizo según el suyo.
+
+                    Y si no hay nada, se DICE. Ocultar las filas dejaba la ficha
+                    idéntica a la de antes en los 27 leads anteriores al paso de
+                    tamaño, que es exactamente como se ve una función rota. */}
+                {(tamanos[detalle.id] ?? []).length > 0 ? (
+                  (tamanos[detalle.id] ?? []).map((t) => (
+                    <div key={t.etiqueta} className="sol-row">
+                      <span className="sol-label">{t.etiqueta}</span>
+                      <span className="sol-value">{t.banda}</span>
+                    </div>
+                  ))
+                ) : (
                   <div className="sol-row">
-                    <span className="sol-label">Nivel que le encaja</span>
-                    <span className="sol-value">{nombresNivel[detalle.nivel_rec] ?? detalle.nivel_rec}</span>
+                    <span className="sol-label">Tamaño</span>
+                    <span className="sol-value">No se le preguntó: hizo el diagnóstico antes de que existiera este paso</span>
                   </div>
                 )}
                 <div className="sol-row">
-                  <span className="sol-label">Fecha</span>
+                  <span className="sol-label">Nivel que le corresponde</span>
+                  <span className="sol-value">
+                    {detalle.nivel_rec
+                      ? (nombresNivel[detalle.nivel_rec] ?? detalle.nivel_rec)
+                      : 'Sin calcular'}
+                  </span>
+                </div>
+                <div className="sol-row">
+                  <span className="sol-label">Hizo el diagnóstico</span>
                   <span className="sol-value">{fmtFecha(detalle.created_at)}</span>
+                </div>
+                {/* Las dos fechas juntas, y ésta la última: es la que manda.
+                    Un lead que pidió que le llamemos está esperando; uno que
+                    hizo el diagnóstico y se fue, no. Se guardaba desde el
+                    principio y no se enseñaba en ninguna pantalla. */}
+                <div className="sol-row">
+                  <span className="sol-label">Pidió que le llamemos</span>
+                  <span className="sol-value">
+                    {detalle.contacto_solicitado_at
+                      ? fmtFecha(detalle.contacto_solicitado_at)
+                      : 'No lo ha pedido'}
+                  </span>
                 </div>
               </div>
             </div>

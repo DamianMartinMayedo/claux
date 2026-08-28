@@ -117,7 +117,11 @@ export const DIMENSIONES: Record<Exclude<Dimension, 'ia_conversaciones'>, DefDim
     filtros: [{ col: 'activa', igual: true }, { col: 'es_apertura', igual: false }],
   },
   usuarios_portal: {
-    uno: 'usuario', varios: 'usuarios', genero: 'm',
+    // «Usuarios» a secas se lee mal donde más importa: en la comparativa de la
+    // landing cae justo debajo de «Trabajadores», y el visitante no tiene forma de
+    // saber que son cosas distintas —25 en la nómina, 3 que entran a CLAUX—. «Del
+    // portal» tampoco servía ahí: la landing no usa esa palabra en ningún sitio.
+    uno: 'usuario con acceso', varios: 'usuarios con acceso', genero: 'm',
     tabla: 'client_users', pk: 'user_id', modulo: null,
     filtros: [{ col: 'estado', igual: 'ACTIVO' }],
   },

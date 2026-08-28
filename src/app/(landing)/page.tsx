@@ -141,13 +141,13 @@ function ValueSection() {
           icon={<CalculatorIcon />}
           color="teal"
           title="Contabilidad simple y completa"
-          text="Ventas, gastos, tesorería y reportes. Sin partidas dobles ni complicaciones."
+          text="Ventas, gastos, tesorería y reportes. Sin registros dobles ni complicaciones."
         />
         <ValueItem
           icon={<PuzzleIcon />}
           color="amber"
           title="Solo lo que necesitas"
-          text="Cada módulo funciona por su cuenta: activas los que quieras y pagas solo por esos."
+          text="Cada módulo funciona independiente: activas y pagas solo por lo que necesitas."
         />
         <ValueItem
           icon={<CajaIcon />}
@@ -273,7 +273,7 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
     <section className="ld-section ld-section-niveles" id="niveles">
       <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Tamaño de tu negocio</div>
-        <h2 className="ld-section-title">Tres niveles, según lo que tengas</h2>
+        <h2 className="ld-section-title">Tres niveles, adaptados a tu negocio</h2>
         {/* UNA línea, y la única que el rótulo y el título no dicen ya. Aquí había
             tres frases que repetían «eliges por el tamaño» por tercera vez y
             remataban con un ejemplo de quién paga más — precios, en la única
@@ -283,7 +283,7 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
             por esos»: lo que quería decir es que el NIVEL no capa funciones, y
             dicho así parecía justo lo contrario. */}
         <p className="ld-section-text">
-          El nivel no cambia lo que puedes activar, solo cuánto te cabe dentro.
+          El nivel no cambia los módulos que puedes activar, solo la capacidad de cada uno.
         </p>
       </Reveal>
 
@@ -337,7 +337,14 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
               <table className="ld-comparativa-tabla">
                 <thead>
                   <tr>
-                    <th scope="col">Cuánto cabe</th>
+                    {/* La esquina va VACÍA, como en cualquier tabla de doble entrada:
+                        la columna de la izquierda no es un dato, es el nombre de cada
+                        fila, y lo que hay debajo (Empresas, Trabajadores…) ya se lee
+                        solo. Aquí decía «Cuánto cabe» — un rótulo que no encabeza
+                        nada, porque las cifras cuelgan de las columnas de nivel, no
+                        de esta. Y va como `td`: un `th` vacío le anuncia al lector de
+                        pantalla un encabezado que no existe. */}
+                    <td />
                     {niveles.map((n) => <th key={n.clave} scope="col">{n.nombre}</th>)}
                   </tr>
                 </thead>
@@ -365,13 +372,19 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
           se autoclasifique (¿12 productos es mucho?) y le promete una compra que no
           existe —el nivel no se vende suelto y el cobro es manual—. Esto lleva al
           diagnóstico, que ya se lo calcula con tres preguntas de verdad (cuántos
-          locales · cuánta gente · cuántos productos) contra los topes vivos. */}
+          locales · cuánta gente · cuántos productos) contra los topes vivos.
+
+          El texto NO promete «en 3 preguntas» aunque el cálculo sean tres: el
+          nivel no se enseña al responderlas, sino al final del diagnóstico
+          —cinco pasos y sus datos de contacto—. Prometer una cifra que no se
+          cumple quema al que hace clic. «2 minutos» sí es cierto y es lo que ya
+          promete el resto de la página. */}
       <Reveal className="ld-niveles-cta">
         <p className="ld-niveles-cta-texto">
-          ¿Cuál es el tuyo? Te lo decimos en 3 preguntas.
+          ¿Qué nivel necesito? El diagnóstico te lo dice en 2 minutos.
         </p>
         <Link href="/diagnostico" className="btn btn-primary btn-lg">
-          Ver qué nivel me toca
+          Ver mi nivel
           <ArrowRightIcon size={18} />
         </Link>
       </Reveal>
@@ -442,9 +455,9 @@ function IaSection() {
           <h2 className="ld-spotlight-title">El asistente que atiende por ti</h2>
           <p className="ld-spotlight-text">
             Un chat con IA que habla con tus clientes por Telegram y desde tu
-            propio catálogo: responde dudas y toma reservas y pedidos escribiendo
-            normal. Y a ti te ayuda a decidir, con los números de tu negocio
-            delante.
+            propio catálogo: responde dudas y toma reservas y pedidos conversando
+            en lenguaje natural. Y a ti te ayuda a decidir, con los números de tu
+            negocio delante.
           </p>
           <ul className="ld-spotlight-list">
             <li>
@@ -505,7 +518,7 @@ function StepsSection() {
       <Reveal stagger className="ld-steps">
         <div className="ld-step">
           <div className="ld-step-number ld-ac-teal">1</div>
-          <h3>Cuéntanos tu negocio</h3>
+          <h3>Cuéntanos de tu negocio</h3>
           <p>
             Responde unas preguntas rápidas sobre qué haces y qué necesitas. Sin
             escribir, solo seleccionar.
@@ -572,7 +585,7 @@ function FaqSection() {
     <section className="ld-section">
       <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Preguntas frecuentes</div>
-        <h2 className="ld-section-title">Lo que la gente nos pregunta</h2>
+        <h2 className="ld-section-title">Lo que más nos preguntan</h2>
       </Reveal>
       <Reveal className="ld-faq">
         {faqs.map((f) => (

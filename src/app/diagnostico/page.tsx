@@ -6,11 +6,11 @@ import { DiagnosticoForm } from './DiagnosticoForm'
 export const metadata: Metadata = {
   title: 'Diagnóstico gratuito para tu negocio',
   description:
-    'Responde 4 preguntas y descubre qué módulos de CLAUX encajan con tu negocio. Sin compromiso, en 2 minutos.',
+    'Responde unas preguntas y descubre qué módulos de CLAUX encajan con tu negocio y qué nivel te corresponde. Sin compromiso, en 2 minutos.',
   alternates: { canonical: '/diagnostico' },
   openGraph: {
     title: 'CLAUX — Diagnóstico gratuito para tu negocio',
-    description: 'Responde 4 preguntas y descubre qué módulos de CLAUX encajan con tu negocio.',
+    description: 'Responde unas preguntas y descubre qué módulos de CLAUX encajan con tu negocio y qué nivel te corresponde.',
     url: '/diagnostico',
   },
 }

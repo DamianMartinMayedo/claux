@@ -21,11 +21,14 @@ export async function avisarLeadNuevo(params: {
   sector:  string
   /** Cómo lo hace hoy, si lo dijo: es el gancho de la llamada. */
   modo?:   string | null
+  /** Nombre del nivel al que apuntó su tamaño. Es lo que dimensiona la oferta. */
+  nivel?:  string | null
 }): Promise<void> {
   await crearAvisoAdmin({
     tipo:        'lead_nuevo',
     titulo:      `Nuevo lead — ${params.nombre}`,
-    cuerpo:      [params.sector, params.modo || null].filter(Boolean).join(' · '),
+    cuerpo:      [params.sector, params.modo || null, params.nivel ? `Nivel ${params.nivel}` : null]
+      .filter(Boolean).join(' · '),
     enlace:      '/admin/solicitudes',
     entidadTipo: 'lead',
     entidadId:   String(params.id),
@@ -37,11 +40,14 @@ export async function avisarLeadPideContacto(params: {
   id:       number
   nombre:   string
   telefono: string
+  /** Nombre del nivel al que apuntó su tamaño, si respondió el paso. */
+  nivel?:   string | null
 }): Promise<void> {
   await crearAvisoAdmin({
     tipo:        'lead_pide_contacto',
     titulo:      `${params.nombre} pide que le llamemos`,
-    cuerpo:      `Teléfono: ${params.telefono}`,
+    cuerpo:      [`Teléfono: ${params.telefono}`, params.nivel ? `Nivel ${params.nivel}` : null]
+      .filter(Boolean).join(' · '),
     enlace:      '/admin/solicitudes',
     entidadTipo: 'lead',
     entidadId:   String(params.id),

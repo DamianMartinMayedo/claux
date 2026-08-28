@@ -373,11 +373,22 @@
   background: var(--gradient-band-alt);
   color: #fff;
   border-radius: var(--radius-2xl);
-  max-width: var(--content-max);
+  /* Banda-tarjeta: fondo y esquinas redondeadas, así que NUNCA debe tocar el
+     borde de la pantalla. `.ld-section` se lo garantiza con el truco del
+     `padding: max(gutter, (100% - content-max)/2)`, que aquí no vale —ese
+     relleno caería DENTRO del color—; el equivalente para una tarjeta centrada
+     es meter el canal en el propio ancho.
+
+     Antes era `max-width: var(--content-max)` + `width: 100%`, y eso deja la
+     banda a ras de los dos bordes en todo el tramo de 769px a 1199px. Peor aún
+     en móvil: la media query le ponía `margin: var(--space-4)`, que pisa el
+     `auto` lateral —el margen deja de repartir el hueco sobrante y se SUMA al
+     100%—, y la banda se salía 2rem de la pantalla. Ese era el desbordamiento.
+
+     Con `min()` el ancho es 1200px cuando cabe y «lo que haya menos 1,5rem a
+     cada lado» cuando no; el `auto` lateral se queda solo para centrar. */
+  width: min(var(--content-max), 100% - var(--space-12));
   margin: var(--space-16) auto;
-  /* .ld-page es flex column: un hijo con márgenes laterales `auto` deja de
-     estirarse y se encoge a su contenido. Sin esto la banda saldría estrecha. */
-  width: 100%;
 }
 .ld-cta-title {
   font-family: var(--font-display);
@@ -1190,16 +1201,28 @@ input.dg-option-input {
 /* Los titulares NO se pisan aquí: --text-hero y --text-section son clamp() y ya
    resuelven el móvil solos. Pisarlos con media queries es lo que los aplastaba a
    30px/24px justo donde está el 95% del tráfico. */
+/* OJO: este bloque solo puede pisar lo que está ESCRITO ANTES que él. Una media
+   query con la misma especificidad que precede a la regla que quiere corregir no
+   corrige nada —gana la última—. Lo de las secciones escritas más abajo (NIVELES,
+   spotlight) va en «RESPONSIVE — secciones nuevas», al pie del fichero. */
 @media (max-width: 768px) {
   /* Aire generoso, pero no el del escritorio: 6rem arriba y abajo en una
      pantalla de 360px se come el viewport entero. */
   .ld-hero { padding: var(--space-16) var(--space-4) var(--space-12); }
   .ld-section { padding: var(--space-16) var(--space-4); }
   .ld-modules-grid { grid-template-columns: 1fr; }
-  .ld-niveles-grid { grid-template-columns: 1fr; }
   .ld-steps { grid-template-columns: 1fr; gap: var(--space-10); }
   .ld-value-grid { grid-template-columns: 1fr; }
-  .ld-cta { padding: var(--space-16) var(--space-5); margin: var(--space-4); border-radius: var(--radius-xl); }
+  /* El canal lateral lo lleva ya el `width` de la regla base; aquí solo se
+     aprieta a 1rem por lado y se recorta el aire de arriba y abajo. El
+     `margin` NO puede volver a ser de cuatro valores: pisaría el `auto`
+     lateral y la banda se saldría de la pantalla otra vez. */
+  .ld-cta {
+    width: min(var(--content-max), 100% - var(--space-8));
+    padding: var(--space-16) var(--space-5);
+    margin: var(--space-4) auto;
+    border-radius: var(--radius-xl);
+  }
 }
 
 @media (max-width: 1024px) {
@@ -1563,9 +1586,25 @@ input.dg-option-input {
 /* ═══════════════════════════════════════════════════
    RESPONSIVE — secciones nuevas
    ═══════════════════════════════════════════════════ */
+/* NIVELES no baja a dos columnas en ningún punto a propósito: son TRES, y la
+   tercera tarjeta se quedaría sola en una segunda fila —que es justo lo que rompe
+   la lectura de una escalera—. Estas dos reglas vivían arriba, en el bloque
+   RESPONSIVE general, PRECEDIENDO a la rejilla de tres columnas: misma
+   especificidad y antes en el fichero, así que no pisaban nada y el móvil se
+   quedó en tres columnas desde que nació la sección. Con 24px de lado apretaba;
+   al darle a la tarjeta el marco que pide su contenido, dejó de caber. */
 @media (max-width: 900px) {
   .ld-spotlight-inner { grid-template-columns: 1fr; gap: var(--space-8); }
   .ld-spotlight-visual { order: -1; }
+  /* El marco de escritorio se va antes que la rejilla: las cifras van en cuerpo
+     de titular y lo que necesitan es ancho, no margen. */
+  .ld-nivel-card   { padding: var(--space-8) var(--space-6); }
+  .ld-niveles-grid { gap: var(--space-5); }
+}
+@media (max-width: 768px) {
+  .ld-niveles-grid { grid-template-columns: 1fr; }
+  /* Apiladas, la sección ya es larga: el cierre no necesita tanto aire delante. */
+  .ld-niveles-cta  { margin-top: var(--space-8); }
 }
 @media (max-width: 600px) {
   .ld-header-cta { display: none; }

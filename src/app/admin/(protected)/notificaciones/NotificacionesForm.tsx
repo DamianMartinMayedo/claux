@@ -4,6 +4,7 @@ import { AlertTriangle, Bell, Mail } from 'lucide-react'
 import { useState, useTransition, type ReactNode } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
 import { TIPOS_EMAIL, type TipoEmail } from '@/lib/email/variables'
+import { buzonesDe } from '@/lib/email/buzones'
 import type { PlantillaEmailAdmin } from '@/app/actions/email-plantillas'
 import { useAvisos } from '@/components/admin/notificaciones/AvisosContext'
 import PlantillasEditor from './PlantillasEditor'
@@ -14,6 +15,7 @@ type Tab = 'bandeja' | 'preferencias' | 'correos' | 'plantillas'
 type Props = {
   diasAviso:            number
   emailAvisosInternos:  string
+  emailAvisosLeads:     string
   emailContratacion:    string
   togglesIniciales:     Record<TipoEmail, boolean>
   plantillas:           PlantillaEmailAdmin[]
@@ -32,7 +34,7 @@ type Props = {
 // segunda mitad, y la bandeja iba a vivir en otra ruta: tener «notificaciones» en
 // dos sitios distintos era garantía de no encontrar ninguna.
 export default function NotificacionesForm({
-  diasAviso, emailAvisosInternos, emailContratacion, togglesIniciales, plantillas,
+  diasAviso, emailAvisosInternos, emailAvisosLeads, emailContratacion, togglesIniciales, plantillas,
   bandeja, preferencias, esSuperAdmin, puedeCorreos,
 }: Props) {
   const [tab, setTab] = useState<Tab>('bandeja')
@@ -40,6 +42,7 @@ export default function NotificacionesForm({
 
   const [dias, setDias]         = useState(String(diasAviso))
   const [emailAvisos, setEmailAvisos] = useState(emailAvisosInternos)
+  const [emailLeads, setEmailLeads]   = useState(emailAvisosLeads)
   const [emailContrat, setEmailContrat] = useState(emailContratacion)
   const [loading, setLoading]   = useState(false)
   const [msg, setMsg]           = useState<{ ok: boolean; text: string } | null>(null)
@@ -58,8 +61,22 @@ export default function NotificacionesForm({
     const email = emailAvisos.trim()
     const contrat = emailContrat.trim()
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!EMAIL_RE.test(email)) {
-      setMsg({ ok: false, text: 'El correo de avisos internos no es válido.' })
+    // Avisos internos admite VARIOS separados por comas. Se valida uno a uno y
+    // se dice CUÁL falla: con una lista de cuatro, «no es válido» a secas
+    // obligaría a revisarlas todas a ojo.
+    const buzones = email ? buzonesDe(email, '') : []
+    const malo = buzones.find((b) => !EMAIL_RE.test(b))
+    if (buzones.length === 0 || malo) {
+      setMsg({ ok: false, text: malo
+        ? `«${malo}» no es un correo válido.`
+        : 'Hace falta al menos un correo de avisos internos.' })
+      return
+    }
+    // La lista de leads sí puede quedar vacía: es un extra, no el buzón del equipo.
+    const leads = emailLeads.trim() ? buzonesDe(emailLeads.trim(), '') : []
+    const maloLead = leads.find((b) => !EMAIL_RE.test(b))
+    if (maloLead) {
+      setMsg({ ok: false, text: `«${maloLead}» no es un correo válido.` })
       return
     }
     if (!EMAIL_RE.test(contrat)) {
@@ -67,15 +84,16 @@ export default function NotificacionesForm({
       return
     }
     setLoading(true); setMsg(null)
-    const [r1, r2, r3] = await Promise.all([
+    const [r1, r2, r3, r4] = await Promise.all([
       guardarSetting('dias_aviso', String(val)),
-      guardarSetting('email_avisos_internos', email),
+      guardarSetting('email_avisos_internos', buzones.join(', ')),
+      guardarSetting('email_avisos_leads', leads.join(', ')),
       guardarSetting('email_contratacion', contrat),
     ])
     setLoading(false)
-    setMsg(r1.ok && r2.ok && r3.ok
+    setMsg(r1.ok && r2.ok && r3.ok && r4.ok
       ? { ok: true,  text: 'Configuración guardada correctamente.' }
-      : { ok: false, text: r1.error ?? r2.error ?? r3.error ?? 'Error al guardar.' })
+      : { ok: false, text: r1.error ?? r2.error ?? r3.error ?? r4.error ?? 'Error al guardar.' })
   }
 
   function handleToggle(tipo: TipoEmail, activo: boolean) {
@@ -159,20 +177,44 @@ export default function NotificacionesForm({
                   </div>
                   <div>
                     <p className="notif-section-title">Avisos internos al equipo</p>
-                    <p className="notif-section-sub">Buzón que recibe los avisos de nuevo lead, nuevo cliente y nuevo mensaje de soporte</p>
+                    <p className="notif-section-sub">Buzones que reciben los avisos de nuevo lead, nuevo cliente y nuevo mensaje de soporte</p>
                   </div>
                 </div>
 
                 <div className="input-group">
-                  <label htmlFor="email-avisos-internos">Correo de avisos internos</label>
+                  <label htmlFor="email-avisos-internos">Correos de avisos internos</label>
+                  {/* `multiple` no es decorativo: sin él el propio navegador
+                      rechaza la lista antes de que el formulario la vea. */}
                   <input
                     id="email-avisos-internos"
                     type="email"
+                    multiple
                     className="input"
                     value={emailAvisos}
                     onChange={e => { setEmailAvisos(e.target.value); setMsg(null) }}
+                    aria-describedby="email-avisos-ayuda"
                     required
                   />
+                  <p id="email-avisos-ayuda" className="form-hint">
+                    Varios separados por comas. Reciben TODOS los avisos: leads, altas de cliente, salud de la IA.
+                  </p>
+                </div>
+
+                <div className="input-group">
+                  <label htmlFor="email-avisos-leads">Correos solo para avisos de nuevo contacto</label>
+                  <input
+                    id="email-avisos-leads"
+                    type="email"
+                    multiple
+                    className="input"
+                    value={emailLeads}
+                    onChange={e => { setEmailLeads(e.target.value); setMsg(null) }}
+                    aria-describedby="email-leads-ayuda"
+                    placeholder="Vacío: solo los buzones de arriba"
+                  />
+                  <p id="email-leads-ayuda" className="form-hint">
+                    Correos personales que quieren enterarse de que alguien pide que le llamen, y de nada más.
+                  </p>
                 </div>
               </div>
 

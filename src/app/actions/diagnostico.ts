@@ -4,12 +4,52 @@ import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
 import { renderPlantilla } from '@/lib/email/render'
-import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
+import { enviarEmail, enviarAvisoInterno, tipoEmailActivo, TIPO_AVISO_LEAD } from '@/lib/email/enviar'
 import { avisarLeadNuevo, avisarLeadPideContacto } from '@/lib/notificaciones/admin/eventos'
+import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
+import { tamanoComoTexto } from '@/lib/publico/tamano'
+import { etiquetaModo } from '@/lib/publico/modos'
 
 const LINK_AGENDA = 'https://calendar.app.google/nqrnpDat4JoYtd1Y8'
 
 export type EstadoLead = 'nuevo' | 'contactado'
+
+/**
+ * Todo lo que el lead guarda por CLAVE, traducido a lo que el visitante leyó.
+ *
+ * Hace falta el catálogo vivo porque el lead no guarda texto: `tamano` son
+ * índices de nivel, `nivel_rec` una clave, y sector/necesidades/módulos son las
+ * etiquetas internas de sus tablas. Nada de eso se puede leer en un correo —un
+ * aviso que dice «Sector: servicios · Módulos: catalogo_qr, rrhh» obliga a abrir
+ * el panel para entenderlo, que es justo lo que el aviso venía a evitar—.
+ *
+ * Va detrás de `obtenerCatalogoPublico`, que degrada a vacío si la lectura
+ * falla: entonces cada rótulo cae a su propia clave y el aviso sale en crudo.
+ * Feo, pero sale — perder el aviso sería mucho peor.
+ */
+async function contextoLead(
+  sector: string,
+  tamano: Record<string, number> | null,
+  nivelRec: string | null,
+): Promise<{
+  nivelNombre: string | null
+  lineas: { pregunta: string; respuesta: string }[]
+  sectorNombre: string
+  rotular: (claves: unknown, cual: 'necesidades' | 'modulos') => string
+}> {
+  const { sectores, niveles, necesidades, modulos } = await obtenerCatalogoPublico()
+  const mapas = {
+    necesidades: new Map(necesidades.map((n) => [n.clave, n.etiqueta])),
+    modulos:     new Map(modulos.map((m) => [m.clave, m.nombre])),
+  }
+  return {
+    nivelNombre: niveles.find((n) => n.clave === nivelRec)?.nombre ?? nivelRec,
+    lineas: tamanoComoTexto(niveles, sectores.find((s) => s.sector === sector)?.modulos ?? [], tamano),
+    sectorNombre: sectores.find((s) => s.sector === sector)?.nombre ?? sector,
+    rotular: (claves, cual) =>
+      (claves as string[] | null)?.map((c) => mapas[cual].get(c) ?? c).join(', ') || '—',
+  }
+}
 
 export interface DiagnosticoLead {
   id: number
@@ -26,6 +66,10 @@ export interface DiagnosticoLead {
   tamano: Record<string, number> | null
   estado: EstadoLead
   created_at: string
+  /** Cuándo pulsó «Quiero que me contacten». Null si hizo el diagnóstico y se
+      fue sin pedirlo: es la diferencia entre un curioso y alguien esperando una
+      llamada, y hasta ahora no se veía en ninguna pantalla. */
+  contacto_solicitado_at: string | null
 }
 
 // Lista de solicitudes de diagnóstico (leads) para el admin. El guardado lo hace
@@ -35,7 +79,7 @@ export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('diagnosticos')
-    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, nivel_rec, tamano, estado, created_at')
+    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, nivel_rec, tamano, estado, created_at, contacto_solicitado_at')
     .order('created_at', { ascending: false })
   return (data ?? []) as DiagnosticoLead[]
 }
@@ -108,12 +152,19 @@ export async function guardarDiagnostico(
   // se escriba un aviso interno. Severidad `info` a propósito: mirar el informe no
   // es pedir nada, y no debe saltarle un popup a nadie (ver catálogo del admin).
   const leadId = data.id as number
-  after(() => avisarLeadNuevo({
-    id:     leadId,
-    nombre: nombre.trim(),
-    sector,
-    modo:   modoActual,
-  }))
+  after(async () => {
+    // El nivel se resuelve aquí y no se acepta del formulario: viene de una
+    // pantalla pública sin sesión, y el nombre de un nivel escrito por quien
+    // sea acabaría pintado en la bandeja del equipo como si fuera nuestro.
+    const { nivelNombre, sectorNombre } = await contextoLead(sector, tamano ?? null, nivelRec ?? null)
+    await avisarLeadNuevo({
+      id:     leadId,
+      nombre: nombre.trim(),
+      sector: sectorNombre,
+      modo:   modoActual ? etiquetaModo(modoActual) : null,
+      nivel:  nivelNombre,
+    })
+  })
 
   return { ok: true, id: leadId }
 }
@@ -147,7 +198,7 @@ export async function solicitarContactoDiagnostico(
   // saber de qué va la llamada.
   const { data: lead, error } = await db
     .from('diagnosticos')
-    .select('nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, contacto_solicitado_at')
+    .select('nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, nivel_rec, tamano, contacto_solicitado_at')
     .eq('id', id)
     .single()
 
@@ -186,7 +237,22 @@ export async function solicitarContactoDiagnostico(
     })
   }
 
-  const lista = (v: unknown) => (v as string[] | null)?.join(', ') || '—'
+  // El TAMAÑO que declaró y el nivel al que apunta. Se guardaban desde la
+  // mig. 219 y no salían por ninguna parte: ni en el correo —este select ni
+  // siquiera los pedía— ni en la bandeja. O sea que quien recibía el aviso
+  // tenía delante «qué necesita» pero no «de qué tamaño es», que es justo lo
+  // que decide la oferta, y había que entrar al panel a mirarlo. Un lead real
+  // pasó así el 2026-08-28.
+  const { nivelNombre, lineas, sectorNombre, rotular } = await contextoLead(
+    lead.sector as string,
+    (lead.tamano as Record<string, number> | null) ?? null,
+    (lead.nivel_rec as string | null) ?? null,
+  )
+
+  const bloqueTamano = lineas.length
+    ? `\n\n── De qué tamaño es ──\n` + lineas.map((l) => `${l.pregunta} ${l.respuesta}`).join('\n')
+    : ''
+  const lineaNivel = nivelNombre ? `\nNivel que le corresponde: ${nivelNombre}` : ''
 
   // La bandeja del panel, además del correo: el correo es para enterarse con el
   // panel cerrado, la bandeja es donde queda pendiente hasta que alguien lo mueva.
@@ -194,19 +260,22 @@ export async function solicitarContactoDiagnostico(
     id,
     nombre,
     telefono: lead.telefono as string,
+    nivel: nivelNombre,
   }))
 
   after(() => enviarAvisoInterno({
-    tipo: 'aviso_lead',
+    tipo: TIPO_AVISO_LEAD,
     asunto: `Nuevo contacto: ${nombre}`,
     cuerpo: `${nombre} ha pedido que le contactéis desde su informe de diagnóstico.\n\n`
       + `── Cómo contactarle ──\n`
       + `Nombre: ${nombre}\nTeléfono: ${lead.telefono}\nEmail: ${email || '—'}\n\n`
       + `── Qué necesita ──\n`
-      + `Sector: ${lead.sector}\n`
-      + `Necesidades: ${lista(lead.necesidades)}\n`
-      + `Cómo lo hace hoy: ${lead.modo_actual || '—'}\n`
-      + `Módulos recomendados: ${lista(lead.modulos_rec)}`,
+      + `Sector: ${sectorNombre}\n`
+      + `Necesidades: ${rotular(lead.necesidades, 'necesidades')}\n`
+      + `Cómo lo hace hoy: ${lead.modo_actual ? etiquetaModo(lead.modo_actual as string) : '—'}\n`
+      + `Módulos recomendados: ${rotular(lead.modulos_rec, 'modulos')}`
+      + bloqueTamano
+      + lineaNivel,
   }))
 
   return { ok: true }

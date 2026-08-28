@@ -2,10 +2,16 @@ import { getResend } from './client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { leerSetting } from '@/lib/settings'
 import { envolverEmail, textoAHtml } from './layout'
+import { buzonesDe } from './buzones'
 import type { TipoEmail } from './variables'
 
 interface EnviarEmailInput {
-  to:        string
+  // Uno o varios. Resend admite hasta 50 destinatarios en un solo envío, y los
+  // pone a todos en el «Para». Se usa para los avisos internos, que van al
+  // equipo: un único envío y un único registro en `emails_log`, no N copias.
+  // Para correos AL CLIENTE se sigue mandando de uno en uno — ahí un «Para» con
+  // varias direcciones enseñaría los correos de unos clientes a otros.
+  to:        string | string[]
   subject:   string
   html:      string
   from?:     string
@@ -26,6 +32,11 @@ interface EnviarEmailInput {
 
 const REMITENTE_DEFAULT = 'CLAUX <notificaciones@claux.es>'
 
+/** El aviso de «alguien pide que le llamemos». Es el único que reparte la lista
+    extra de `email_avisos_leads`, así que la etiqueta no puede escribirse suelta
+    en dos sitios: si se separan, la lista extra deja de recibir en silencio. */
+export const TIPO_AVISO_LEAD = 'aviso_lead'
+
 // Toggle on/off por tipo de correo, editable en la pestaña "Alertas" del admin
 // (`email_on_<tipo>`, setting global). Por defecto ON si nunca se ha tocado.
 export async function tipoEmailActivo(tipo: TipoEmail): Promise<boolean> {
@@ -37,6 +48,9 @@ export async function tipoEmailActivo(tipo: TipoEmail): Promise<boolean> {
 // dejar de completar su operación principal por un correo caído.
 export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolean }> {
   const db = createAdminClient()
+
+  // `emails_log.destinatario` es texto: con varios destinos guarda la lista.
+  const destinatario = Array.isArray(input.to) ? input.to.join(', ') : input.to
 
   try {
     const resend = getResend()
@@ -52,7 +66,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
     if (error) {
       await db.from('emails_log').insert({
         client_id:    input.clientId ?? null,
-        destinatario: input.to,
+        destinatario,
         tipo:         input.tipo,
         estado:       'fallido',
         error:        error.message,
@@ -62,7 +76,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
 
     await db.from('emails_log').insert({
       client_id:    input.clientId ?? null,
-      destinatario: input.to,
+      destinatario,
       tipo:         input.tipo,
       estado:       'enviado',
       resend_id:    data?.id ?? null,
@@ -73,7 +87,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
     try {
       await db.from('emails_log').insert({
         client_id:    input.clientId ?? null,
-        destinatario: input.to,
+        destinatario,
         tipo:         input.tipo,
         estado:       'fallido',
         error:        err instanceof Error ? err.message : 'Error desconocido',
@@ -86,16 +100,33 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
 }
 
 // Aviso interno al equipo de CLAUX (nuevo lead, nuevo mensaje de soporte, nuevo
-// cliente). Contenido fijo en código — no es una plantilla editable. Se envía al
-// buzón configurado en `email_avisos_internos` (setting), con `contacto@claux.es`
-// como valor por defecto.
+// cliente). Contenido fijo en código — no es una plantilla editable.
+//
+// DOS listas, y la segunda es la que importa:
+//
+//   · `email_avisos_internos` — el buzón del equipo. Recibe TODO: leads, altas
+//     de cliente, salud de la IA, socios que vencen. Por defecto contacto@claux.es.
+//   · `email_avisos_leads` — buzones que reciben SOLO los avisos de lead. Es
+//     para correos personales: quien quiere enterarse de que alguien pide que le
+//     llamen, no de que un cron reporta la salud de la IA. Vacío por defecto.
+//
+// Ambas admiten varios separados por comas y van en el mismo «Para»: es correo
+// interno del equipo, aquí no hay nada que ocultarse entre destinatarios.
 export async function enviarAvisoInterno(params: {
   tipo:    string
   asunto:  string
   cuerpo:  string
   clientId?: string | null
 }): Promise<{ ok: boolean }> {
-  const destino = await leerSetting('email_avisos_internos', 'contacto@claux.es')
+  const [internos, leads] = await Promise.all([
+    leerSetting('email_avisos_internos', 'contacto@claux.es'),
+    params.tipo === TIPO_AVISO_LEAD ? leerSetting('email_avisos_leads', '') : Promise.resolve(''),
+  ])
+  // Set: si el mismo correo está en las dos listas, recibe UNA copia.
+  const destino = [...new Set([
+    ...buzonesDe(internos, 'contacto@claux.es'),
+    ...(leads.trim() ? buzonesDe(leads, '') : []),
+  ])]
   return enviarEmail({
     to:      destino,
     from:    'CLAUX <contacto@claux.es>',

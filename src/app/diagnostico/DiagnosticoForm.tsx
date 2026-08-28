@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { guardarDiagnostico, solicitarContactoDiagnostico } from '@/app/actions/diagnostico'
+import { MODOS } from '@/lib/publico/modos'
 import { generarRecomendacion } from '@/lib/publico/recomendacion'
 import type {
   EtiquetasSector,
@@ -24,15 +25,8 @@ import { CheckIcon, ArrowRightIcon, ArrowLeftIcon, SendIcon } from './icons'
    Datos fijos (no del catálogo): pasos y modo actual
    ════════════════════════════════════════════════ */
 
-const STEPS = ['Tipo de negocio', '¿Qué necesitas?', 'Tu tamaño', '¿Cómo lo haces hoy?', 'Tus datos', 'Informe']
+const STEPS = ['Tipo de negocio', 'Necesidades', 'Tamaño', 'Situación actual', 'Tus datos', 'Informe']
 const TOTAL_STEPS = STEPS.length
-
-const MODOS = [
-  { id: 'papel', label: 'Papel / libreta', desc: 'Apuntas todo a mano' },
-  { id: 'excel', label: 'Excel / Hojas de cálculo', desc: 'Llevas las cuentas en hojas de cálculo' },
-  { id: 'nada', label: 'Nada, empiezo desde cero', desc: 'No tienes nada digitalizado aún' },
-  { id: 'otra', label: 'Otra herramienta', desc: 'Usas otro sistema pero quieres cambiar' },
-]
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -43,7 +37,7 @@ function adaptarModulo(m: ModuloPublico, et: EtiquetasSector): { nombre: string;
       // Ni «incluida siempre» ni «la base»: la contabilidad es un módulo más y
       // solo se recomienda si el cliente marca esa necesidad (ver la nota de
       // generarRecomendacion en lib/publico/recomendacion.ts).
-      return { nombre: 'Contabilidad', desc: 'Ventas, gastos, tesorería y reportes. Sin partidas dobles ni complicaciones.' }
+      return { nombre: 'Contabilidad', desc: 'Ventas, gastos, tesorería y reportes. Sin registros dobles ni complicaciones.' }
     case 'catalogo_qr':
       return {
         // «Menú digital» / «Catálogo digital» según el sector, en vez de
@@ -123,7 +117,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
     if (step === 0 && !sector) errs.sector = 'Selecciona el tipo de negocio.'
     if (step === 1 && necesidades.length === 0) errs.necesidades = 'Selecciona al menos una opción.'
     if (step === 2 && preguntasTamano.some((q) => tamano[q.clave] === undefined)) {
-      errs.tamano = 'Responde las tres para saber qué nivel te encaja.'
+      errs.tamano = 'Responde todas para saber qué nivel te corresponde.'
     }
     if (step === 3 && !modoActual) errs.modoActual = 'Selecciona una opción.'
     if (step === 4) {
@@ -268,7 +262,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
         <div className="dg-step-content">
           <h2 className="dg-step-title">¿Qué necesitas para tu negocio?</h2>
           <p className="dg-step-subtitle">
-            Marca lo que te interesa. Te recomendaremos los módulos que mejor se adaptan.
+            Marca todas las que te interesen. Puedes elegir varias.
           </p>
           <fieldset className="dg-fieldset">
             <legend className="dg-sr-only">Necesidades</legend>
@@ -324,7 +318,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
         <div className="dg-step-content">
           <h2 className="dg-step-title">¿De qué tamaño es tu negocio?</h2>
           <p className="dg-step-subtitle">
-            Aproximado, sin pensarlo mucho. Es para saber qué nivel te encaja.
+            Una cifra aproximada basta. Con esto sabemos qué nivel te corresponde.
           </p>
 
           {preguntasTamano.map((q) => (
@@ -418,7 +412,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
         <div className="dg-step-content">
           <h2 className="dg-step-title">¿Dónde te contactamos?</h2>
           <p className="dg-step-subtitle">
-            Déjanos tus datos y te contactamos lo antes posible para preparar tu solución.
+            Déjanos tus datos y te escribimos para preparar la puesta en marcha.
           </p>
           <div className="dg-form">
             <div className="dg-form-group">
@@ -489,7 +483,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
             <button className="btn btn-primary" onClick={next} disabled={submitting}>
               {submitting ? (
                 <>
-                  <span className="spinner spinner-sm" /> Guardando...
+                  <span className="spinner spinner-sm" /> Guardando…
                 </>
               ) : (
                 <>
@@ -512,8 +506,8 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
               {nombre.split(' ')[0]}, esto es lo que CLAUX puede hacer por ti
             </h2>
             <p className="dg-report-subtitle">
-              Según lo que nos has contado{sectorSel ? ` para tu ${sectorSel.nombre.toLowerCase()}` : ''},
-              estos son los módulos que mejor se adaptan a tu negocio.
+              Según lo que nos has contado{sectorSel ? ` para el sector ${sectorSel.nombre}` : ''},
+              estos son los módulos que mejor encajan con tu negocio.
             </p>
           </div>
 
@@ -547,7 +541,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
               Si no hay recomendación —niveles sin cargar— no se pinta nada. */}
           {nivelRec && (
             <div className="dg-report-nivel">
-              <p className="dg-report-nivel-label">El nivel que te encaja</p>
+              <p className="dg-report-nivel-label">El nivel que te corresponde</p>
               <p className="dg-report-nivel-nombre">{nivelRec.nombre}</p>
               {nivelRec.descripcion && (
                 <p className="dg-report-nivel-desc">{nivelRec.descripcion}</p>
@@ -559,17 +553,17 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
             {contactado ? (
               <div className="dg-report-confirm">
                 <p className="dg-report-confirm-title">
-                  ¡Gracias, {nombre.split(' ')[0]}!
+                  Gracias, {nombre.split(' ')[0]}.
                 </p>
                 <p className="dg-report-confirm-sub">
-                  Te contactaremos lo antes posible para agendar tu cita.
+                  Te contactamos lo antes posible para hablar de tu caso.
                 </p>
               </div>
             ) : (
               <>
                 <p className="dg-report-cta-text">
-                  Demos el siguiente paso juntos. Te contactamos para ayudarte a
-                  ponerlo en marcha. Sin compromiso.
+                  Te contactamos para ayudarte a ponerlo en marcha. Sin
+                  compromiso.
                 </p>
                 {contactoError && <p className="dg-report-cta-error">{contactoError}</p>}
                 <div className="dg-report-actions">
@@ -579,7 +573,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
                     onClick={pedirContacto}
                     disabled={contactando}
                   >
-                    {contactando ? 'Enviando…' : 'Quiero que me contacten gratis'}
+                    {contactando ? 'Enviando…' : 'Quiero que me contacten'}
                   </button>
                   {/* Botón de agendar cita (Calendly u otro) — oculto por ahora,
                       NO borrar; reactivar cuando esté conectado:
