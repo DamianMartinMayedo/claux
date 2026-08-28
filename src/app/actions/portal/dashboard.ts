@@ -11,7 +11,7 @@ import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData }
 import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
-import { etiquetaDimension, type Dimension } from '@/lib/limites'
+import { etiquetaDimension, OFERTA_NIVEL, type Dimension } from '@/lib/limites'
 import { obtenerEtiquetasNegocio } from './sector'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { historialPorAcuerdo } from '@/lib/facturacion-suscripciones'
@@ -260,7 +260,15 @@ export interface DashboardData {
   setupPendiente: { empresa: boolean; moneda: boolean }
   fecha: string
   etiquetas: EtiquetasSector
-  suscripcion: { estado: string; diasRestantes: number | null; label: string }
+  suscripcion: {
+    estado: string
+    diasRestantes: number | null
+    label: string
+    /** Socio CLAUX HOY (la condición caduca), no la bandera cruda. */
+    esSocio: boolean
+    /** Nombre de cara al cliente («Empresa»), editable en /admin/niveles. */
+    nivelNombre: string
+  }
   tieneIa: boolean
   /** Lo accionable de TODOS los módulos, en una franja arriba. */
   pendiente: Pendiente[]
@@ -334,17 +342,15 @@ const OFERTA: { clave: string; label: string; gancho: string; requiere?: string 
   { clave: 'asistente_ia',   label: 'Asistente IA',   gancho: 'Pregúntale a tus datos en lenguaje normal.' },
 ]
 
-/**
- * La oferta que NO es un módulo: subir de nivel. Se añade cuando al cliente se le
- * está llenando algo, y se cuela DESPUÉS de `ordenarOferta` porque no tiene fila
- * en `modulos_catalogo` y el orden comercial no la alcanza.
- *
- * La señal sale de la bandeja, no de nueve conteos: el escáner diario ya calculó
- * quién está al 90 % y lo dejó escrito. El dashboard es la página más abierta del
- * portal y no puede permitirse contar productos, empleados y cuentas en cada
- * carga para enseñar un cartel.
- */
-const OFERTA_NIVEL = 'nivel_superior'
+// `OFERTA_NIVEL` (de `@/lib/limites`) es la oferta que NO es un módulo: subir de
+// nivel. Se añade cuando al cliente se le está llenando algo, y se cuela DESPUÉS
+// de `ordenarOferta` porque no tiene fila en `modulos_catalogo` y el orden
+// comercial no la alcanza.
+//
+// La señal sale de la bandeja, no de nueve conteos: el escáner diario ya calculó
+// quién está al 90 % y lo dejó escrito. El dashboard es la página más abierta del
+// portal y no puede permitirse contar productos, empleados y cuentas en cada carga
+// para enseñar un cartel.
 
 // Se ofrece primero lo que MÁS resuelve: primero los módulos (capacidad ERP
 // completa), después las funcionalidades por su importancia comercial, y al final
@@ -1206,7 +1212,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   // portal). Así cada widget coincide con lo que encuentra al abrir el módulo.
   const [{ data: cliente }, { data: usr }, filasUsuario, empresasAcc] = await Promise.all([
     db.from('clients')
-      .select(`nombre_empresa, estado, modulos_activos, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion`)
+      .select(`nombre_empresa, estado, modulos_activos, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, nivel`)
       .eq('client_id', cid).single(),
     db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     modulosDeUsuario(db, session.user_id),
@@ -1228,7 +1234,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios, avisosLimite] = await Promise.all([
+  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios, avisosLimite, nivelRow] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
@@ -1264,6 +1270,10 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       .eq('client_id', cid)
       .eq('entidad_tipo', 'limite')
       .eq('resuelta', false),
+    // El nombre del nivel se LEE, no se deduce de la clave: es de cara al cliente
+    // y el dueño lo cambia desde /admin/niveles sin desplegar. Una fila de una
+    // tabla global de tres, dentro del Promise.all que ya estaba: no añade espera.
+    db.from('niveles').select('nombre').eq('clave', cliente.nivel ?? 'inicial').maybeSingle(),
   ])
   // Aviso de setup: datos base que solo el admin puede crear. Empresa siempre;
   // moneda solo si hay módulos que la usan (base/rrhh/catálogo/dossier). La query
@@ -1459,6 +1469,11 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       estado: cliente.estado ?? '—',
       diasRestantes,
       label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
+      // Lo que el dueño tiene contratado, en su cabecera y no escondido en
+      // Facturación: hasta ahora el nivel solo aparecía el día que chocaba con un
+      // tope, y la condición de socio solo en la página de la factura.
+      esSocio:     esSocioHoy(cliente),
+      nivelNombre: typeof nivelRow.data?.nombre === 'string' ? nivelRow.data.nombre : 'Inicial',
     },
     tieneIa: puedeVer('asistente_ia'),
     pendiente,

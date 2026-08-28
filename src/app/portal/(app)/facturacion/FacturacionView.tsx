@@ -1,8 +1,18 @@
 'use client'
 
 import type { FacturacionData } from '@/app/actions/portal/facturacion'
-import { Receipt } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { Receipt, ArrowRight, Check, TrendingUp } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { registrarInteresModulo } from '@/app/actions/portal/soporte'
+import { useNotificacionesOpcional } from '@/components/portal/notificaciones/NotificacionesContext'
+import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+
+// La clave con la que «subir de nivel» viaja por el circuito de contratación.
+// Es la MISMA que usa el banner del dashboard (`OFERTA_NIVEL` de `@/lib/limites`),
+// y no se importa de allí porque ese módulo arrastra el cliente de servidor: aquí
+// solo hace falta la cadena. Si cambia, cambia en los dos sitios.
+const CLAVE_NIVEL = 'nivel_superior'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +51,29 @@ function diasRestantes(fechaStr: string | null): number | null {
 
 export default function FacturacionView({ data }: { data: FacturacionData }) {
   const { pageItems, ...pag } = usePagination(data.pagos)
+
+  // Arranca con lo que YA pidió (viene del servidor): si vive solo en memoria, al
+  // recargar vuelve a decir «lo quiero» y el dueño no sabe si su clic sirvió.
+  const [pedido, setPedido]     = useState<string | null>(data.nivel_pedido_el)
+  const [enviando, setEnviando] = useState(false)
+  const [, startTransition]     = useTransition()
+  // La campana solo se refresca al volver a la pestaña (throttle de 60 s): sin
+  // esto el acuse existe en BD pero no aparece hasta más tarde, que para el dueño
+  // es lo mismo que no existir.
+  const notificaciones = useNotificacionesOpcional()
+
+  function pedirNivel(nombre: string) {
+    if (enviando || pedido) return
+    setEnviando(true)
+    startTransition(async () => {
+      const r = await registrarInteresModulo(CLAVE_NIVEL, `el nivel ${nombre}`)
+      setEnviando(false)
+      if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
+      setPedido('ahora')
+      toastSuccess('Recibido. Te contactamos enseguida.')
+      void notificaciones?.refrescar()
+    })
+  }
 
   // Lo que aún no ha entrado. Se suma sobre TODOS los pagos, no sobre la página
   // visible: el cliente tiene que ver lo que debe aunque esté en la página 3.
@@ -182,8 +215,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
           </div>
 
           <p className="text-sm-muted mb-4">
-            Tu nivel <strong>{data.nivel_nombre}</strong> llega hasta aquí, contando solo lo
-            que tienes activo. Si necesitas más, escríbenos y lo subimos.
+            Esto es lo que te cabe con el nivel <strong>{data.nivel_nombre}</strong>.
           </p>
 
           {excedidas.length > 0 && (
@@ -229,9 +261,41 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
             </table>
           </div>
 
-          <p className="text-xs-hint mt-4">
-            Solo se cuenta lo activo: lo que archivas deja de ocupar sitio.
-          </p>
+          {/* Subir de nivel se pide DESDE AQUÍ, que es donde el dueño se entera de
+              que se le está llenando algo. Hasta ahora la salida era «escríbenos»:
+              un correo que hay que redactar es una puerta cerrada.
+
+              El botón NO cambia el nivel. El cobro es manual, así que lo que hace es
+              registrar la petición por el mismo circuito que cualquier contratación
+              (`soporte_mensajes` → /admin/ventas/ampliaciones → campana del equipo) y
+              el nivel lo sube el equipo al cobrar. Aplicarlo solo y cobrar después
+              sería regalar capacidad a quien no pague y, peor, prometer un automatismo
+              que no existe. Misma clave que el banner del dashboard: pedirlo en un
+              sitio se ve en el otro, porque es la misma petición. */}
+          {data.nivel_siguiente && (
+            <div className="alert alert-info alert-cta mt-4">
+              <span className="alert-cta-texto">
+                <strong className="alert-titulo">¿Se te queda pequeño?</strong>
+                El nivel {data.nivel_siguiente.nombre} te da más de todo, con lo que ya tienes
+                dentro y sin parar de trabajar. Lo activamos nosotros.
+                {pedido && pedido !== 'ahora' && (
+                  <span className="alert-cta-nota">Lo pediste el {fmt(pedido)}.</span>
+                )}
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => pedirNivel(data.nivel_siguiente!.nombre)}
+                disabled={enviando || !!pedido}
+              >
+                {enviando
+                  ? <><span className="spinner spinner-sm" /> Enviando…</>
+                  : pedido
+                    ? <><Check size={14} aria-hidden="true" /> Te contactamos</>
+                    : <><TrendingUp size={14} aria-hidden="true" /> Quiero el nivel {data.nivel_siguiente.nombre} <ArrowRight size={14} aria-hidden="true" /></>}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

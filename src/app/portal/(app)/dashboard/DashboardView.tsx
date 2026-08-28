@@ -108,9 +108,19 @@ export default function DashboardView({ data, mostrarImportar }: { data: Dashboa
             </div>
           )}
         </div>
-        <span className={`badge badge-dot ${ESTADO_BADGE[suscripcion.estado] ?? 'badge-neutral'}`}>
-          {suscripcion.estado}{subSuscripcion}
-        </span>
+        {/* Las tres etiquetas van en UN contenedor, no sueltas: `.page-header`
+            reparte título ↔ acción con `space-between`, y tres hermanos se
+            separarían entre sí a lo ancho de la cabecera. `page-header-acciones`
+            existe justo para esto. El estado se queda el último —a la derecha del
+            todo, donde el dueño ya lo busca—: lo nuevo se le pone al lado, no en
+            su sitio. */}
+        <div className="page-header-acciones">
+          {suscripcion.esSocio && <span className="badge badge-purple">Socio CLAUX</span>}
+          <span className="badge badge-indigo">Nivel {suscripcion.nivelNombre}</span>
+          <span className={`badge badge-dot ${ESTADO_BADGE[suscripcion.estado] ?? 'badge-neutral'}`}>
+            {suscripcion.estado}{subSuscripcion}
+          </span>
+        </div>
       </div>
 
       {(setupPendiente.empresa || setupPendiente.moneda) && (

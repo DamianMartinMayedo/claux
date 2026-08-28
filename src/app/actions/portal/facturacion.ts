@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
-import { cargarContextoLimites, usoDeLimites, DIMENSIONES, type UsoDimension } from '@/lib/limites'
+import { cargarContextoLimites, usoDeLimites, DIMENSIONES, OFERTA_NIVEL, type UsoDimension } from '@/lib/limites'
+import { fechaEnTz }        from '@/lib/fecha-tz'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,10 @@ export interface FacturacionData {
   nivel_nombre:     string
   /** Uso y tope de cada dimensión, ya filtrado a los módulos que tiene. `null` si falló el conteo. */
   capacidad:        UsoDimension[] | null
+  /** El escalón de arriba, o `null` si ya está en el más alto (no hay nada que ofrecer). */
+  nivel_siguiente:  { clave: string; nombre: string; descripcion: string | null } | null
+  /** Día (YYYY-MM-DD) en que ya pidió subir, o `null`. Hace que el acuse sobreviva a la recarga. */
+  nivel_pedido_el:  string | null
   email_soporte:    string
   pagos:            PagoPortal[]
 }
@@ -96,6 +101,28 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
     console.error('[facturacion] no se pudo contar el uso', e)
   }
 
+  // ── Subir de nivel ──────────────────────────────────────────────────────────
+  // Cuál es el escalón de arriba lo dice la TABLA, por `orden`, no una lista aquí:
+  // si mañana aparece un cuarto nivel, esto lo encuentra solo. En el nivel más alto
+  // `siguiente` es null y el botón no se pinta — no se ofrece lo que no existe.
+  //
+  // Y se lee si YA lo pidió, por la misma razón que en el banner del dashboard: sin
+  // esto el «te contactamos» vivía en el estado del componente y al recargar volvía
+  // a decir «lo quiero», como si el clic no hubiera pasado nunca.
+  const [{ data: niveles }, { data: pedido }] = await Promise.all([
+    db.from('niveles').select('clave, nombre, descripcion, orden').eq('activo', true).order('orden'),
+    db.from('soporte_mensajes')
+      .select('created_at')
+      .eq('client_id', session.client_id)
+      .eq('modulo_clave', OFERTA_NIVEL)
+      .order('created_at', { ascending: false })
+      .limit(1).maybeSingle(),
+  ])
+  type FilaNivel = { clave: string; nombre: string; descripcion: string | null }
+  const escalera  = (niveles ?? []) as FilaNivel[]
+  const iActual   = escalera.findIndex(n => n.clave === ctx.nivel)
+  const siguiente = iActual >= 0 ? escalera[iActual + 1] ?? null : null
+
   return {
     client_id:        session.client_id,
     nombre_empresa:   cliente.nombre_empresa,
@@ -112,6 +139,12 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
     socio_hasta:      cliente.socio_hasta ?? null,
     nivel_nombre:     ctx.nivelNombre,
     capacidad,
+    nivel_siguiente:  siguiente
+      ? { clave: siguiente.clave, nombre: siguiente.nombre, descripcion: siguiente.descripcion ?? null }
+      : null,
+    // `fechaEnTz`: `created_at` es un instante UTC y el día que se le enseña al
+    // dueño tiene que ser el suyo, no el del servidor.
+    nivel_pedido_el:  pedido?.created_at ? fechaEnTz(pedido.created_at as string) : null,
     email_soporte:    emailSoporte,
     pagos:            (pagos ?? []) as PagoPortal[],
   }

@@ -160,6 +160,17 @@ export function etiquetaDimension(dim: Dimension): string {
     : DIMENSIONES[dim].varios
 }
 
+/**
+ * Clave con la que «subir de nivel» viaja por el circuito de contratación
+ * (`soporte_mensajes.modulo_clave`). No es un módulo del catálogo —no tiene fila
+ * en `modulos_catalogo`—, es el nivel.
+ *
+ * Vive aquí y no en el dashboard porque la piden DOS pantallas: el banner de
+ * captación y la tarjeta de capacidad de Facturación. Y las dos tienen que usar
+ * la misma cadena, o «ya lo pediste» se vería en una y no en la otra.
+ */
+export const OFERTA_NIVEL = 'nivel_superior'
+
 // ── Contexto: nivel del cliente y sus límites ya resueltos ──────────────────
 
 export interface ContextoLimites {
