@@ -266,11 +266,17 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
     <section className="ld-section ld-section-niveles" id="niveles">
       <Reveal stagger className="ld-section-head">
         <div className="ld-section-label">Tamaño de tu negocio</div>
-        <h2 className="ld-section-title">Tres niveles, según lo que necesites</h2>
+        <h2 className="ld-section-title">Tres niveles, según lo que tengas</h2>
+        {/* UNA línea, y la única que el rótulo y el título no dicen ya. Aquí había
+            tres frases que repetían «eliges por el tamaño» por tercera vez y
+            remataban con un ejemplo de quién paga más — precios, en la única
+            sección donde a propósito no hay ninguno.
+            Y «los tres traen los mismos módulos» chocaba de frente con la sección
+            de módulos, que acaba de decir «activas los que necesitas y pagas solo
+            por esos»: lo que quería decir es que el NIVEL no capa funciones, y
+            dicho así parecía justo lo contrario. */}
         <p className="ld-section-text">
-          Los tres traen los mismos módulos y funcionan igual. Eliges por el
-          tamaño de tu negocio: un puesto con veinte productos no paga lo mismo
-          que uno con tres almacenes y quince empleados.
+          El nivel no cambia lo que puedes activar, solo cuánto te cabe dentro.
         </p>
       </Reveal>
 
