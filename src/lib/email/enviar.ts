@@ -125,7 +125,7 @@ export async function enviarAvisoInterno(params: {
   // Set: si el mismo correo está en las dos listas, recibe UNA copia.
   const destino = [...new Set([
     ...buzonesDe(internos, 'contacto@claux.es'),
-    ...(leads.trim() ? buzonesDe(leads, '') : []),
+    ...buzonesDe(leads, ''),
   ])]
   return enviarEmail({
     to:      destino,

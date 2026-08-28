@@ -8,12 +8,15 @@
  * admiten los tres porque el que escribe la lista no tiene por qué saber cuál
  * esperamos, y pegar desde otro sitio trae el separador que trae.
  *
- * Devuelve `[porDefecto]` si no queda ninguno: un aviso interno sin destino es
- * un aviso perdido, y el fallo se notaría tarde y mal.
+ * Si no queda ninguno cae en `porDefecto` — un aviso interno sin destino es un
+ * aviso perdido, y el fallo se notaría tarde y mal—. Salvo que `porDefecto` sea
+ * la cadena vacía, que significa «esta lista puede estar vacía»: devolver `['']`
+ * ahí pintaría una pastilla en blanco y guardaría un destinatario fantasma.
  */
 export function buzonesDe(valor: string, porDefecto: string): string[] {
   const lista = [...new Set(
     valor.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean),
   )]
-  return lista.length ? lista : [porDefecto]
+  if (lista.length) return lista
+  return porDefecto ? [porDefecto] : []
 }

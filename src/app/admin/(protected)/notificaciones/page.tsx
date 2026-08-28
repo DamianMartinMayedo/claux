@@ -54,6 +54,12 @@ export default async function NotificacionesPage() {
         </div>
       </div>
 
+      {/* Las `key` de `bandeja` y `preferencias` no son decorativas aunque no
+          haya ningún `.map` a la vista: los crea un Server Component y viajan
+          como props hasta un componente cliente, que los pone entre sus hijos.
+          React los ve entonces como elementos de una lista sin identidad y avisa
+          («unique key prop») señalando esta llamada. Con una clave fija cada uno
+          se identifica solo. */}
       <NotificacionesForm
         diasAviso={diasAviso}
         emailAvisosInternos={emailAvisosInternos}
@@ -63,8 +69,8 @@ export default async function NotificacionesPage() {
         plantillas={plantillas}
         esSuperAdmin={esSuperAdmin}
         puedeCorreos={puedeCorreos}
-        bandeja={<BandejaAvisos inicial={avisos} />}
-        preferencias={<PreferenciasAvisos inicial={preferencias} />}
+        bandeja={<BandejaAvisos key="bandeja" inicial={avisos} />}
+        preferencias={<PreferenciasAvisos key="preferencias" inicial={preferencias} />}
       />
     </div>
   )

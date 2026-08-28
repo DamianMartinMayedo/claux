@@ -136,6 +136,47 @@ select.input {
 }
 textarea.input { resize: vertical; min-height: 80px; }
 
+/* ── Campo de varios valores: cada uno, una pastilla ─────────────────────────
+   Para listas cortas que hasta ahora eran una cadena separada por comas (los
+   buzones de avisos internos). «a@x.com, b@y.com, c@z.com» en una línea se lee
+   mal y se corrige peor: quitar el del medio obliga a cazar la coma correcta y
+   a no dejarse un espacio. Como pastillas, cada valor es una cosa que se ve
+   entera y se quita de un clic.
+
+   Donde se ESCRIBE es un `.input` normal, INDEPENDIENTE de las pastillas.
+   Meterlo dentro del mismo recuadro que ellas se probó y falla justo cuando
+   hace falta: con dos correos largos cada pastilla ocupa su línea, el hueco de
+   escribir cae debajo sin borde ni marcador de posición, y el campo se vuelve
+   invisible. Separado, está siempre en el mismo sitio y no se desplaza según
+   cuántas pastillas haya debajo. */
+.chips-lista {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  margin: var(--space-2) 0 0; padding: 0; list-style: none;
+}
+.chips-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  max-width: 100%; min-width: 0;
+  padding: 3px var(--space-1) 3px var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-full);
+  background: var(--color-surface-2); color: var(--color-text-muted);
+  font-size: var(--text-xs); font-weight: 600;
+}
+/* Un correo largo encoge con puntos suspensivos en vez de estirar la pastilla
+   fuera de la tarjeta. El valor entero sigue disponible en el `title`. */
+.chips-chip-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips-quitar {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; padding: 2px; border: 0; border-radius: var(--radius-full);
+  background: none; color: var(--color-text-muted); cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+.chips-quitar:hover,
+.chips-quitar:focus-visible { color: var(--color-error); background: var(--color-error-bg); }
+/* El motivo por el que lo escrito no entró, pegado al campo y no en el aviso
+   general del formulario: el error es de ESTE valor, y el de arriba solo sale
+   al guardar. */
+.chips-error { font-size: var(--text-xs); color: var(--color-error); margin-top: var(--space-1); }
+
 /* Ayuda contextual para etiquetas de formularios. La burbuja se posiciona con
    coordenadas de runtime para escapar de modales con scroll sin perder el contexto del campo. */
 .form-label-with-help { display: flex; align-items: center; gap: var(--space-1); }

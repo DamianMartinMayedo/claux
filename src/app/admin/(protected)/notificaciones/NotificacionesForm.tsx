@@ -5,10 +5,18 @@ import { useState, useTransition, type ReactNode } from 'react'
 import { guardarSetting } from '@/app/actions/settings'
 import { TIPOS_EMAIL, type TipoEmail } from '@/lib/email/variables'
 import { buzonesDe } from '@/lib/email/buzones'
+import ChipsInput from '@/components/ChipsInput'
 import type { PlantillaEmailAdmin } from '@/app/actions/email-plantillas'
 import { useAvisos } from '@/components/admin/notificaciones/AvisosContext'
 import PlantillasEditor from './PlantillasEditor'
 import Tabs from '@/components/Tabs'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Lo que se le dice a quien escribe algo que no es un correo, en su propio campo. */
+function validarCorreo(v: string): string | null {
+  return EMAIL_RE.test(v) ? null : `«${v}» no es un correo válido.`
+}
 
 type Tab = 'bandeja' | 'preferencias' | 'correos' | 'plantillas'
 
@@ -41,8 +49,10 @@ export default function NotificacionesForm({
   const { noLeidas } = useAvisos()
 
   const [dias, setDias]         = useState(String(diasAviso))
-  const [emailAvisos, setEmailAvisos] = useState(emailAvisosInternos)
-  const [emailLeads, setEmailLeads]   = useState(emailAvisosLeads)
+  // Listas, no cadenas: el setting sigue guardándose separado por comas, pero
+  // dentro del formulario cada buzón es un elemento que se añade y se quita.
+  const [emailAvisos, setEmailAvisos] = useState(() => buzonesDe(emailAvisosInternos, ''))
+  const [emailLeads, setEmailLeads]   = useState(() => buzonesDe(emailAvisosLeads, ''))
   const [emailContrat, setEmailContrat] = useState(emailContratacion)
   const [loading, setLoading]   = useState(false)
   const [msg, setMsg]           = useState<{ ok: boolean; text: string } | null>(null)
@@ -58,25 +68,13 @@ export default function NotificacionesForm({
       setMsg({ ok: false, text: 'Los días de aviso deben estar entre 1 y 60.' })
       return
     }
-    const email = emailAvisos.trim()
     const contrat = emailContrat.trim()
-    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    // Avisos internos admite VARIOS separados por comas. Se valida uno a uno y
-    // se dice CUÁL falla: con una lista de cuatro, «no es válido» a secas
-    // obligaría a revisarlas todas a ojo.
-    const buzones = email ? buzonesDe(email, '') : []
-    const malo = buzones.find((b) => !EMAIL_RE.test(b))
-    if (buzones.length === 0 || malo) {
-      setMsg({ ok: false, text: malo
-        ? `«${malo}» no es un correo válido.`
-        : 'Hace falta al menos un correo de avisos internos.' })
-      return
-    }
-    // La lista de leads sí puede quedar vacía: es un extra, no el buzón del equipo.
-    const leads = emailLeads.trim() ? buzonesDe(emailLeads.trim(), '') : []
-    const maloLead = leads.find((b) => !EMAIL_RE.test(b))
-    if (maloLead) {
-      setMsg({ ok: false, text: `«${maloLead}» no es un correo válido.` })
+    // Los dos campos de buzones se validan al añadir cada pastilla, así que aquí
+    // solo queda lo que ninguna pastilla puede comprobar: que no se quede
+    // ninguno. La lista de leads SÍ puede ir vacía —es un extra—; la del equipo
+    // no: un aviso interno sin destino es un aviso perdido.
+    if (emailAvisos.length === 0) {
+      setMsg({ ok: false, text: 'Hace falta al menos un correo de avisos internos.' })
       return
     }
     if (!EMAIL_RE.test(contrat)) {
@@ -86,8 +84,8 @@ export default function NotificacionesForm({
     setLoading(true); setMsg(null)
     const [r1, r2, r3, r4] = await Promise.all([
       guardarSetting('dias_aviso', String(val)),
-      guardarSetting('email_avisos_internos', buzones.join(', ')),
-      guardarSetting('email_avisos_leads', leads.join(', ')),
+      guardarSetting('email_avisos_internos', emailAvisos.join(', ')),
+      guardarSetting('email_avisos_leads', emailLeads.join(', ')),
       guardarSetting('email_contratacion', contrat),
     ])
     setLoading(false)
@@ -183,37 +181,34 @@ export default function NotificacionesForm({
 
                 <div className="input-group">
                   <label htmlFor="email-avisos-internos">Correos de avisos internos</label>
-                  {/* `multiple` no es decorativo: sin él el propio navegador
-                      rechaza la lista antes de que el formulario la vea. */}
-                  <input
+                  <ChipsInput
                     id="email-avisos-internos"
-                    type="email"
-                    multiple
-                    className="input"
-                    value={emailAvisos}
-                    onChange={e => { setEmailAvisos(e.target.value); setMsg(null) }}
-                    aria-describedby="email-avisos-ayuda"
-                    required
+                    valores={emailAvisos}
+                    onChange={v => { setEmailAvisos(v); setMsg(null) }}
+                    validar={validarCorreo}
+                    describedBy="email-avisos-ayuda"
+                    placeholder="Escribe un correo y pulsa Enter"
+                    etiquetaQuitar={v => `Quitar el correo ${v}`}
                   />
                   <p id="email-avisos-ayuda" className="form-hint">
-                    Varios separados por comas. Reciben TODOS los avisos: leads, altas de cliente, salud de la IA.
+                    Reciben TODOS los avisos: leads, altas de cliente, salud de la IA.
                   </p>
                 </div>
 
                 <div className="input-group">
                   <label htmlFor="email-avisos-leads">Correos solo para avisos de nuevo contacto</label>
-                  <input
+                  <ChipsInput
                     id="email-avisos-leads"
-                    type="email"
-                    multiple
-                    className="input"
-                    value={emailLeads}
-                    onChange={e => { setEmailLeads(e.target.value); setMsg(null) }}
-                    aria-describedby="email-leads-ayuda"
-                    placeholder="Vacío: solo los buzones de arriba"
+                    valores={emailLeads}
+                    onChange={v => { setEmailLeads(v); setMsg(null) }}
+                    validar={validarCorreo}
+                    describedBy="email-leads-ayuda"
+                    placeholder="Escribe un correo y pulsa Enter"
+                    etiquetaQuitar={v => `Quitar el correo ${v}`}
                   />
                   <p id="email-leads-ayuda" className="form-hint">
-                    Correos personales que quieren enterarse de que alguien pide que le llamen, y de nada más.
+                    Correos personales que quieren enterarse de que alguien pide que le llamen,
+                    y de nada más. Si lo dejas vacío, esos avisos van solo a los buzones de arriba.
                   </p>
                 </div>
               </div>
