@@ -924,9 +924,13 @@
 .prf-badge-trial  { background: var(--color-info-bg); color: var(--color-primary); }
 .prf-badge-gracia { background: var(--color-warning-bg); color: var(--color-warning); }
 .prf-badge-vencido { background: var(--color-error-bg); color: var(--color-error); }
-/* Socio CLAUX: bandera, no estado — convive con el badge de estado, por eso
-   lleva color propio (violeta) y no reutiliza ninguno de los cuatro de arriba. */
-.prf-badge-socio  { background: var(--color-purple-bg); color: var(--color-purple); }
+/* Socio CLAUX: bandera, no estado — convive con el badge de estado, por eso lleva
+   color propio y no reutiliza ninguno de los cuatro de arriba. Va con el TEAL DE
+   MARCA y en relleno sólido, igual que `.badge-marca` en la cabecera del dashboard:
+   ser socio es una condición nuestra, no un estado del ciclo, y tiene que
+   reconocerse como CLAUX esté donde esté. Sólido y no pálido porque `prf-badge-trial`
+   ya es teal claro y los dos se pintan juntos. */
+.prf-badge-socio  { background: var(--color-primary-active); color: var(--color-text-on-brand); }
 /* Nivel contratado: tampoco es estado, va siempre y convive con los de arriba.
    Índigo, que es el acento con el que ya se pinta la capacidad en la Academia. */
 .prf-badge-nivel  { background: var(--color-indigo-bg); color: var(--color-indigo); }

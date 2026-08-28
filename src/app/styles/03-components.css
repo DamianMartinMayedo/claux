@@ -84,6 +84,16 @@
 .badge-purple  { color: var(--color-purple);  background: var(--color-purple-bg); }
 .badge-indigo  { color: var(--color-indigo);  background: var(--color-indigo-bg); }
 .badge-rose    { color: var(--color-rose);    background: var(--color-rose-bg); }
+/* MARCA — el único badge de relleno sólido de la familia, y el único que es CLAUX
+   y no un estado. Es para lo que tiene que reconocerse como nuestro de un vistazo
+   (hoy: Socio CLAUX).
+   Por qué sólido y no un chip pálido como los demás: `--color-info` YA es el teal
+   de marca, así que un «Socio» en teal claro sería idéntico al badge de TRIAL que
+   se pinta a su lado, y la etiqueta dejaría de identificar nada.
+   Por qué `-active` y no `--color-primary`: el blanco sobre #00AFAA da 2.4:1 y no
+   se lee. `-active` es el tono estable pensado justo para llevar blanco encima
+   (ver la nota del token en 01-tokens.css). */
+.badge-marca   { color: var(--color-text-on-brand); background: var(--color-primary-active); }
 
 /* Fila de badges que envuelve (lista de etiquetas dentro de un formulario o ficha).
    Va con la familia y no en el parcial de cada vista: `.usr-empresas-list`

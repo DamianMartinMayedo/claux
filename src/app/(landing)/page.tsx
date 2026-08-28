@@ -254,12 +254,13 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
   // vacía en la comparativa es una promesa a medias.
   const comparables = DIMENSIONES_LIMITE.filter((d) => niveles.some((n) => d in n.limites))
 
-  // La de en medio va resaltada, como en cualquier tabla de precios. Se elige por
-  // POSICIÓN y no por la clave del nivel: si mañana se renombran o se reordenan
-  // desde /admin/niveles, el resalte sigue cayendo en el del medio en vez de
-  // quedarse pegado a un nombre que ya no existe. Con un número par de niveles no
-  // hay «medio» y no se resalta ninguno.
-  const destacado = niveles.length % 2 === 1 ? Math.floor(niveles.length / 2) : -1
+  // AQUÍ NO SE DESTACA NINGUNO, y es deliberado. Antes la del medio iba con banda
+  // de color y un «RECOMENDADO» encima, como en cualquier tabla de precios — pero
+  // se elegía por POSICIÓN (`length / 2`), no por nada del visitante. Y el párrafo
+  // de arriba dice justo lo contrario: «eliges por el tamaño de tu negocio». Un
+  // tamaño no se recomienda; el que te toca depende de cuántos locales, cuánta
+  // gente y cuántos productos tengas, que es lo que pregunta el diagnóstico.
+  // La escalera la cuenta el medidor de cada tarjeta, que sí es un hecho.
 
   return (
     <section className="ld-section ld-section-niveles" id="niveles">
@@ -275,11 +276,7 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
 
       <Reveal stagger className="ld-niveles-grid">
         {niveles.map((n, i) => (
-          <div
-            key={n.clave}
-            className={`ld-nivel-card${i === destacado ? ' ld-nivel-card-destacado' : ''}`}
-          >
-            {i === destacado && <span className="ld-nivel-badge">Recomendado</span>}
+          <div key={n.clave} className="ld-nivel-card">
             {/* Medidor de tamaño: tantos tramos como niveles hay, y encendidos
                 hasta el suyo. De un vistazo dice «este es más grande que aquel»,
                 que es lo único que los separa, sin tener que leer las cifras. */}
@@ -346,6 +343,25 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
           </details>
         </Reveal>
       )}
+
+      {/* La salida que no tenía. El visitante que llega aquí acaba de preguntarse
+          «¿y yo cuál soy?» y hasta ahora no tenía dónde hacer clic: el siguiente
+          botón estaba al final de la página.
+
+          UNO al pie y no un «lo quiero» por tarjeta: un botón por nivel le pide que
+          se autoclasifique (¿12 productos es mucho?) y le promete una compra que no
+          existe —el nivel no se vende suelto y el cobro es manual—. Esto lleva al
+          diagnóstico, que ya se lo calcula con tres preguntas de verdad (cuántos
+          locales · cuánta gente · cuántos productos) contra los topes vivos. */}
+      <Reveal className="ld-niveles-cta">
+        <p className="ld-niveles-cta-texto">
+          ¿Cuál es el tuyo? Te lo decimos en 3 preguntas.
+        </p>
+        <Link href="/diagnostico" className="btn btn-primary btn-lg">
+          Ver qué nivel me toca
+          <ArrowRightIcon size={18} />
+        </Link>
+      </Reveal>
     </section>
   )
 }

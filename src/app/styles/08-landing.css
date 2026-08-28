@@ -1197,9 +1197,6 @@ input.dg-option-input {
   .ld-section { padding: var(--space-16) var(--space-4); }
   .ld-modules-grid { grid-template-columns: 1fr; }
   .ld-niveles-grid { grid-template-columns: 1fr; }
-  /* Apiladas ya no hay «la del medio»: el relieve sobra y el margen
-     negativo solaparía una tarjeta con la siguiente. */
-  .ld-nivel-card-destacado { margin: 0; }
   .ld-steps { grid-template-columns: 1fr; gap: var(--space-10); }
   .ld-value-grid { grid-template-columns: 1fr; }
   .ld-cta { padding: var(--space-16) var(--space-5); margin: var(--space-4); border-radius: var(--radius-xl); }
@@ -1429,9 +1426,12 @@ input.dg-option-input {
 .ld-niveles-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-5);
+  gap: var(--space-8);
   margin-top: var(--space-12);
 }
+/* El padding no es decoración: la tarjeta mide medio metro de ancho en escritorio
+   y con 24px de lado las cifras —que van en cuerpo de titular— arrancaban pegadas
+   al borde. El contenido pesa, así que el marco tiene que pesar también. */
 .ld-nivel-card {
   position: relative;
   display: flex;
@@ -1439,7 +1439,7 @@ input.dg-option-input {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-2xl);
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-10) var(--space-8);
   transition: box-shadow var(--transition), transform var(--transition), border-color var(--transition);
 }
 .ld-nivel-card:hover {
@@ -1447,40 +1447,13 @@ input.dg-option-input {
   transform: translateY(-4px);
   border-color: var(--color-border-strong);
 }
-/* La del medio, resaltada. Va sobre `--gradient-band`, el MISMO degradado del
-   hero y del spotlight de IA: la página remata con el color con el que abre en
-   vez de estrenar uno. Es un par de tonos `-active`, de los que no cambian con
-   el tema porque siempre llevan blanco encima (01-tokens.css).
-   El relieve se hace con márgenes NEGATIVOS y nunca con `transform`: el reveal
-   al hacer scroll anima con `transform` y termina en `transform: none`, así que
-   cualquier escala en reposo se perdería en cuanto la tarjeta entrase en vista. */
-.ld-nivel-card-destacado {
-  margin: calc(-1 * var(--space-5)) 0;
-  padding: var(--space-10) var(--space-6);
-  background: var(--gradient-band);
-  border-color: transparent;
-  box-shadow: var(--shadow-xl);
-}
-.ld-nivel-card-destacado:hover {
-  border-color: transparent;
-  box-shadow: var(--shadow-xl);
-}
-.ld-nivel-badge {
-  position: absolute;
-  top: calc(-1 * var(--space-3));
-  left: 50%;
-  transform: translateX(-50%);
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--color-amber-active);
-  color: var(--color-text-on-brand);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  box-shadow: var(--shadow-md);
-}
+/* AQUÍ NO HAY TARJETA DESTACADA, y es a propósito. Había una banda de color en la
+   del medio con un «RECOMENDADO» encima, elegida por posición en el array. Las
+   tres son el mismo producto a distinta capacidad: destacar una es recomendar un
+   tamaño, que no se puede recomendar sin conocer el negocio. El resalte gritaba
+   la recomendación más fuerte todavía que el rótulo, así que se van los dos.
+   Lo que ordena la escalera es `.ld-nivel-medidor`, que dice «este es más grande
+   que aquel» sin decir cuál te conviene. Ver el comentario del JSX. */
 /* Medidor de tamaño: un tramo por nivel, encendidos hasta el suyo. */
 .ld-nivel-medidor {
   display: flex;
@@ -1494,8 +1467,6 @@ input.dg-option-input {
   background: var(--color-border);
 }
 .ld-nivel-tramo.is-on { background: var(--color-primary); }
-.ld-nivel-card-destacado .ld-nivel-tramo { background: rgba(255, 255, 255, 0.28); }
-.ld-nivel-card-destacado .ld-nivel-tramo.is-on { background: var(--color-text-on-brand); }
 .ld-nivel-nombre {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
@@ -1524,7 +1495,7 @@ input.dg-option-input {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
   border-bottom: 1px solid var(--color-divider);
 }
 .ld-nivel-item:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -1545,11 +1516,6 @@ input.dg-option-input {
   color: var(--color-text-muted);
   line-height: 1.4;
 }
-.ld-nivel-card-destacado .ld-nivel-nombre { color: var(--color-text-on-brand); }
-.ld-nivel-card-destacado .ld-nivel-desc   { color: rgba(255, 255, 255, 0.9); }
-.ld-nivel-card-destacado .ld-nivel-item   { border-bottom-color: rgba(255, 255, 255, 0.22); }
-.ld-nivel-card-destacado .ld-nivel-cifra  { color: var(--color-text-on-brand); }
-.ld-nivel-card-destacado .ld-nivel-que    { color: rgba(255, 255, 255, 0.85); }
 /* A todo el ancho de la sección (que ya lo acota `--content-max`): es una tabla
    de comparación y estrecharla a 720px obligaba a desplazarla en horizontal
    para ver tres columnas que caben de sobra. */
@@ -1558,12 +1524,20 @@ input.dg-option-input {
    el desplegable va suelto: no hay siguiente, y ese margen solo suma vacío. */
 .ld-comparativa .ld-faq-item { margin-bottom: 0; }
 
-/* Esta sección cierra con una barra fina —el desplegable, unos 60px— y no con
-   contenido de peso. Con el `padding-bottom` normal (80px) más el `padding-top`
-   de la sección siguiente quedaban 160px de blanco detrás de esa línea, que el
-   ojo lee como un agujero y no como aire. Se recorta SOLO el de abajo y solo
-   aquí: el ritmo entre las demás secciones no se toca. */
-.ld-section-niveles { padding-bottom: var(--space-12); }
+/* CTA de cierre. Va DESPUÉS de la comparativa a propósito: primero todo lo que
+   hay que saber, y la acción de último, que es lo que queda en la mano al salir.
+   (Aquí vivía un `padding-bottom` recortado porque la sección terminaba en la
+   barra fina del desplegable y sobraba blanco detrás. Ya no: cierra con un botón,
+   que pesa, y el ritmo normal entre secciones vuelve a ser el correcto.) */
+.ld-niveles-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-10);
+  text-align: center;
+}
+.ld-niveles-cta-texto { font-size: var(--text-base); color: var(--color-text-muted); }
 /* Reaprovecha `.ld-faq-item` / `.ld-faq-q` del acordeón de preguntas: es el
    mismo gesto y no merece un segundo juego de reglas. */
 .ld-comparativa-scroll { overflow-x: auto; padding: 0 var(--space-5) var(--space-5); }

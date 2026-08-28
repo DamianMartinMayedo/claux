@@ -115,7 +115,7 @@ export default function DashboardView({ data, mostrarImportar }: { data: Dashboa
             todo, donde el dueño ya lo busca—: lo nuevo se le pone al lado, no en
             su sitio. */}
         <div className="page-header-acciones">
-          {suscripcion.esSocio && <span className="badge badge-purple">Socio CLAUX</span>}
+          {suscripcion.esSocio && <span className="badge badge-marca">Socio CLAUX</span>}
           <span className="badge badge-indigo">Nivel {suscripcion.nivelNombre}</span>
           <span className={`badge badge-dot ${ESTADO_BADGE[suscripcion.estado] ?? 'badge-neutral'}`}>
             {suscripcion.estado}{subSuscripcion}
