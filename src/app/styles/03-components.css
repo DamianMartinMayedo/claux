@@ -1038,6 +1038,11 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 .input-pwd-wrap      { position: relative; }
 .input-pwd           { padding-right: 2.5rem; }
 .input-eye-btn       { position: absolute; right: var(--space-3); top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; color: var(--color-text-muted); cursor: pointer; line-height: 1; }
+/* Edge pinta su PROPIO ojo dentro del campo de contraseña. Junto al nuestro salían
+   dos, y el suyo solo destapa su campo: en «repite la contraseña» quedaban
+   descoordinados. Se oculta donde ya ponemos el nuestro (`CampoPassword`). */
+.input-pwd::-ms-reveal,
+.input-pwd::-ms-clear { display: none; }
 .table-name-link      { font-size: var(--text-sm); font-weight: 600; color: var(--color-primary); text-decoration: none; }
 .table-cell-sub       { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-cell-secondary { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }

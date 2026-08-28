@@ -5,6 +5,7 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarModeloIa } from '@/app/actions/ia-admin'
+import CampoPassword from '@/components/CampoPassword'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
@@ -125,7 +126,7 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
                         <label>API key</label>
                         <FormHelp text="Se guarda cifrada y nunca se muestra. Déjala vacía para no cambiarla." label="Información sobre la API key" />
                       </div>
-                      <input name="api_key" type="password" autoComplete="off" className="input" disabled={quitarKey}
+                      <CampoPassword name="api_key" autoComplete="off" className="input" disabled={quitarKey}
                              placeholder={modelo.key_hint ? `guardada (${modelo.key_hint}) — escribe para cambiarla` : 'se guarda cifrada'} />
                     </div>
                     {modelo.key_hint && (

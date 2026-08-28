@@ -1,6 +1,7 @@
 'use client'
 
 import { Info, XCircle } from 'lucide-react'
+import CampoPassword from '@/components/CampoPassword'
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -90,17 +91,19 @@ function ResetPasswordForm() {
             <form onSubmit={handleSubmit} className="login-form mt-2">
               <div className="form-group">
                 <label className="form-label">Nueva contraseña</label>
-                <input
-                  className="form-input" type="password" value={password}
+                <CampoPassword
+                  value={password}
                   onChange={e => setPassword(e.target.value)}
+                  autoComplete="new-password"
                   placeholder="Mínimo 8 caracteres" required autoFocus
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">Confirmar contraseña</label>
-                <input
-                  className="form-input" type="password" value={confirm}
+                <CampoPassword
+                  value={confirm}
                   onChange={e => setConfirm(e.target.value)}
+                  autoComplete="new-password"
                   placeholder="Repite la contraseña" required
                 />
               </div>

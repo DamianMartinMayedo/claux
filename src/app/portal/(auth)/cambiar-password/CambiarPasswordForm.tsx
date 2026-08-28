@@ -3,13 +3,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { cambiarPasswordObligatorio } from '@/app/actions/portal/auth'
-import { Eye, EyeOff } from 'lucide-react'
+import CampoPassword from '@/components/CampoPassword'
 
 export default function CambiarPasswordForm({ email }: { email: string }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error,    setError]    = useState('')
-  const [showPass, setShowPass] = useState(false)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -49,32 +48,18 @@ export default function CambiarPasswordForm({ email }: { email: string }) {
 
             <div className="form-group">
               <label className="form-label">Nueva contraseña <span className="required">*</span></label>
-              <div className="input-pwd-wrap">
-                <input
-                  className="form-input input-pwd"
-                  type={showPass ? 'text' : 'password'}
-                  name="password_nueva"
-                  autoComplete="new-password"
-                  placeholder="Mínimo 8 caracteres"
-                  minLength={8}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPass(v => !v)}
-                  className="input-eye-btn"
-                  aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showPass ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
-                </button>
-              </div>
+              <CampoPassword
+                name="password_nueva"
+                autoComplete="new-password"
+                placeholder="Mínimo 8 caracteres"
+                minLength={8}
+                required
+              />
             </div>
 
             <div className="form-group">
               <label className="form-label">Repite la contraseña <span className="required">*</span></label>
-              <input
-                className="form-input"
-                type={showPass ? 'text' : 'password'}
+              <CampoPassword
                 name="password_confirm"
                 autoComplete="new-password"
                 placeholder="••••••••"

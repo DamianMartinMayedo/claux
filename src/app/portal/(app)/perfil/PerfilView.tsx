@@ -9,6 +9,7 @@ import { type EstadoDocumentos } from '@/app/actions/portal/documentos'
 import IaUsoCard from '@/components/portal/ia/IaUsoCard'
 import DocumentosFirmaCard from './DocumentosFirmaCard'
 import EnlacesLegales from '@/components/publico/EnlacesLegales'
+import CampoPassword from '@/components/CampoPassword'
 import { Lock } from 'lucide-react'
 import FormHelp from '@/components/portal/FormHelp'
 
@@ -218,18 +219,18 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
               <div className="prf-pwd-grid">
                 <div className="input-group">
                   <label>Contraseña actual <span className="required">*</span></label>
-                  <input className="input" type="password" name="password_actual" autoComplete="current-password" />
+                  <CampoPassword className="input" name="password_actual" autoComplete="current-password" />
                 </div>
                 <div className="input-group">
                   <div className="form-label-with-help">
                     <label>Contraseña nueva <span className="required">*</span></label>
                     <FormHelp text="Mínimo 8 caracteres." label="Requisitos de la contraseña" />
                   </div>
-                  <input className="input" type="password" name="password_nueva" autoComplete="new-password" minLength={8} />
+                  <CampoPassword className="input" name="password_nueva" autoComplete="new-password" minLength={8} />
                 </div>
                 <div className="input-group">
                   <label>Confirmar nueva <span className="required">*</span></label>
-                  <input className="input" type="password" name="password_confirma" autoComplete="new-password" />
+                  <CampoPassword className="input" name="password_confirma" autoComplete="new-password" />
                 </div>
               </div>
             </div>

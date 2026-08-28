@@ -1,6 +1,7 @@
 'use client'
 
 import { Mail } from 'lucide-react'
+import CampoPassword from '@/components/CampoPassword'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -83,9 +84,10 @@ export default function LoginCuenta({ subtitulo, destino, pie }: {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Contraseña</label>
-                  <input
-                    className="form-input" type="password" value={password}
+                  <CampoPassword
+                    value={password}
                     onChange={e => setPassword(e.target.value)}
+                    autoComplete="current-password"
                     required placeholder="••••••••"
                   />
                 </div>

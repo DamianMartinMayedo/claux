@@ -4,13 +4,12 @@ import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { loginCliente }            from '@/app/actions/portal/auth'
 import { solicitarResetPortal }    from '@/app/actions/portal/password-reset'
-import { Eye, EyeOff } from 'lucide-react'
+import CampoPassword           from '@/components/CampoPassword'
 
 export default function PortalLoginPage() {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error,    setError]    = useState('')
-  const [showPass, setShowPass] = useState(false)
   // La recuperación vive en esta misma tarjeta (no en otra ruta): quien no puede
   // entrar ya está aquí, y volver atrás es un clic.
   const [modo,     setModo]     = useState<'login' | 'recuperar'>('login')
@@ -80,24 +79,12 @@ export default function PortalLoginPage() {
 
                 <div className="form-group">
                   <label className="form-label">Contraseña <span className="required">*</span></label>
-                  <div className="input-pwd-wrap">
-                    <input
-                      className="form-input input-pwd"
-                      type={showPass ? 'text' : 'password'}
-                      name="password"
-                      autoComplete="current-password"
-                      placeholder="••••••••"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass(v => !v)}
-                      className="input-eye-btn"
-                      aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    >
-                      {showPass ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
-                    </button>
-                  </div>
+                  <CampoPassword
+                    name="password"
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    required
+                  />
                 </div>
 
                 {error && <div className="alert alert-error">{error}</div>}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import CampoPassword from '@/components/CampoPassword'
 import { restablecerPasswordPortal } from '@/app/actions/portal/password-reset'
 import type { CuentaReset } from '@/lib/portal-reset'
 
@@ -13,7 +13,6 @@ export default function NuevaPasswordForm({ token, email, cuentas }: {
 }) {
   const [isPending, startTransition] = useTransition()
   const [error,    setError]    = useState('')
-  const [showPass, setShowPass] = useState(false)
   const [listo,    setListo]    = useState(false)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -85,32 +84,18 @@ export default function NuevaPasswordForm({ token, email, cuentas }: {
 
                 <div className="form-group">
                   <label className="form-label">Nueva contraseña <span className="required">*</span></label>
-                  <div className="input-pwd-wrap">
-                    <input
-                      className="form-input input-pwd"
-                      type={showPass ? 'text' : 'password'}
-                      name="password_nueva"
-                      autoComplete="new-password"
-                      placeholder="Mínimo 8 caracteres"
-                      minLength={8}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass(v => !v)}
-                      className="input-eye-btn"
-                      aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    >
-                      {showPass ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
-                    </button>
-                  </div>
+                  <CampoPassword
+                    name="password_nueva"
+                    autoComplete="new-password"
+                    placeholder="Mínimo 8 caracteres"
+                    minLength={8}
+                    required
+                  />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Repite la contraseña <span className="required">*</span></label>
-                  <input
-                    className="form-input"
-                    type={showPass ? 'text' : 'password'}
+                  <CampoPassword
                     name="password_confirm"
                     autoComplete="new-password"
                     placeholder="••••••••"

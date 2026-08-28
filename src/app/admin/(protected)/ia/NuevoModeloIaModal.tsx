@@ -5,6 +5,7 @@ import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearModeloIa } from '@/app/actions/ia-admin'
+import CampoPassword from '@/components/CampoPassword'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
@@ -120,7 +121,7 @@ export default function NuevoModeloIaModal() {
                       <label>API key <span className="required">*</span></label>
                       <FormHelp text="La clave del proveedor. Se guarda cifrada en el sistema y nunca se vuelve a mostrar. No hace falta tocar Vercel." label="Información sobre la API key" />
                     </div>
-                    <input name="api_key" type="password" autoComplete="off" className="input" placeholder="se guarda cifrada" />
+                    <CampoPassword name="api_key" autoComplete="off" className="input" placeholder="se guarda cifrada" />
                   </div>
                 )}
 
