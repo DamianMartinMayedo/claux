@@ -79,10 +79,15 @@
    justo donde más tiene que destacar. Sobre fondo de marca se invierte: botón
    blanco con el texto en el teal profundo. --color-primary-active no cambia con
    el tema, así que el contraste es el mismo en claro y oscuro. */
+/* La Academia se viste igual y necesita la misma inversión. Va aquí, con el
+   resto de la familia, en vez de copiada en 09-academia.css: dos copias de la
+   misma regla acaban diciendo cosas distintas. */
 .ld-hero-zona .btn-primary,
 .ld-band-amber .btn-primary,
 .ld-spotlight .btn-primary,
-.ld-cta .btn-primary {
+.ld-cta .btn-primary,
+.acad-hero .btn-primary,
+.acad-cierre .btn-primary {
   background: #fff;
   border-color: #fff;
   color: var(--color-primary-active);
@@ -90,7 +95,9 @@
 .ld-hero-zona .btn-primary:hover:not(:disabled),
 .ld-band-amber .btn-primary:hover:not(:disabled),
 .ld-spotlight .btn-primary:hover:not(:disabled),
-.ld-cta .btn-primary:hover:not(:disabled) {
+.ld-cta .btn-primary:hover:not(:disabled),
+.acad-hero .btn-primary:hover:not(:disabled),
+.acad-cierre .btn-primary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.88);
   border-color: rgba(255, 255, 255, 0.88);
   color: var(--color-primary-active);
@@ -717,6 +724,19 @@
 
 /* ── Inputs accesibles (radio/checkbox nativos, ocultos pero enfocables) ── */
 .dg-fieldset { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+/* Paso de tamaño: tres preguntas en una misma pantalla, cada una con su grupo
+   de opciones. El aire entre bloques es lo único que las separa —un borde por
+   pregunta convertiría el paso en un formulario de tres cajas—. */
+.dg-tamano-bloque + .dg-tamano-bloque { margin-top: var(--space-6); }
+.dg-tamano-pregunta {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+  padding: 0;
+}
 .dg-sr-only {
   position: absolute;
   width: 1px;
@@ -1057,6 +1077,38 @@ input.dg-option-input {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
+/* Nivel recomendado dentro del informe. No usa `--color-surface` como las
+   tarjetas de módulo: sobre la banda con degradado tiene que leerse como el
+   remate, no como una tarjeta más de la lista de arriba. */
+.dg-report-nivel {
+  text-align: center;
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.12);
+}
+.dg-report-nivel-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: var(--space-1);
+}
+.dg-report-nivel-nombre {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-text-on-brand);
+}
+.dg-report-nivel-desc {
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.55;
+  margin-top: var(--space-1);
+}
+
 .dg-report-cta {
   text-align: center;
 }
@@ -1144,6 +1196,10 @@ input.dg-option-input {
   .ld-hero { padding: var(--space-16) var(--space-4) var(--space-12); }
   .ld-section { padding: var(--space-16) var(--space-4); }
   .ld-modules-grid { grid-template-columns: 1fr; }
+  .ld-niveles-grid { grid-template-columns: 1fr; }
+  /* Apiladas ya no hay «la del medio»: el relieve sobra y el margen
+     negativo solaparía una tarjeta con la siguiente. */
+  .ld-nivel-card-destacado { margin: 0; }
   .ld-steps { grid-template-columns: 1fr; gap: var(--space-10); }
   .ld-value-grid { grid-template-columns: 1fr; }
   .ld-cta { padding: var(--space-16) var(--space-5); margin: var(--space-4); border-radius: var(--radius-xl); }
@@ -1366,6 +1422,163 @@ input.dg-option-input {
   color: var(--color-text-muted);
   line-height: 1.65;
 }
+
+/* ═══════════════════════════════════════════════════
+   NIVELES — la tabla de precios
+   ═══════════════════════════════════════════════════ */
+.ld-niveles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-5);
+  margin-top: var(--space-12);
+}
+.ld-nivel-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8) var(--space-6);
+  transition: box-shadow var(--transition), transform var(--transition), border-color var(--transition);
+}
+.ld-nivel-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
+  border-color: var(--color-border-strong);
+}
+/* La del medio, resaltada. Va sobre `--gradient-band`, el MISMO degradado del
+   hero y del spotlight de IA: la página remata con el color con el que abre en
+   vez de estrenar uno. Es un par de tonos `-active`, de los que no cambian con
+   el tema porque siempre llevan blanco encima (01-tokens.css).
+   El relieve se hace con márgenes NEGATIVOS y nunca con `transform`: el reveal
+   al hacer scroll anima con `transform` y termina en `transform: none`, así que
+   cualquier escala en reposo se perdería en cuanto la tarjeta entrase en vista. */
+.ld-nivel-card-destacado {
+  margin: calc(-1 * var(--space-5)) 0;
+  padding: var(--space-10) var(--space-6);
+  background: var(--gradient-band);
+  border-color: transparent;
+  box-shadow: var(--shadow-xl);
+}
+.ld-nivel-card-destacado:hover {
+  border-color: transparent;
+  box-shadow: var(--shadow-xl);
+}
+.ld-nivel-badge {
+  position: absolute;
+  top: calc(-1 * var(--space-3));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-amber-active);
+  color: var(--color-text-on-brand);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+}
+/* Medidor de tamaño: un tramo por nivel, encendidos hasta el suyo. */
+.ld-nivel-medidor {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+.ld-nivel-tramo {
+  flex: 1;
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+}
+.ld-nivel-tramo.is-on { background: var(--color-primary); }
+.ld-nivel-card-destacado .ld-nivel-tramo { background: rgba(255, 255, 255, 0.28); }
+.ld-nivel-card-destacado .ld-nivel-tramo.is-on { background: var(--color-text-on-brand); }
+.ld-nivel-nombre {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+.ld-nivel-desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.55;
+  margin-bottom: var(--space-6);
+}
+/* Las cifras son el contenido, no un adorno: van en la tipografía de titular y
+   separadas por una línea cada una, como las filas de una ficha. El icono de
+   check que había antes decía «incluido», que aquí no es la pregunta —lo que
+   se compara es CUÁNTO—, así que sobra. */
+.ld-nivel-lista {
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+  list-style: none;
+  padding: 0;
+}
+.ld-nivel-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.ld-nivel-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.ld-nivel-cifra {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+/* «Sin límite» no es una cifra: en el cuerpo de titular ocuparía dos líneas y
+   descuadraría la fila. Baja un peldaño y se lee como lo que es. */
+.ld-nivel-cifra-inf { font-size: var(--text-base); }
+.ld-nivel-que {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+.ld-nivel-card-destacado .ld-nivel-nombre { color: var(--color-text-on-brand); }
+.ld-nivel-card-destacado .ld-nivel-desc   { color: rgba(255, 255, 255, 0.9); }
+.ld-nivel-card-destacado .ld-nivel-item   { border-bottom-color: rgba(255, 255, 255, 0.22); }
+.ld-nivel-card-destacado .ld-nivel-cifra  { color: var(--color-text-on-brand); }
+.ld-nivel-card-destacado .ld-nivel-que    { color: rgba(255, 255, 255, 0.85); }
+/* A todo el ancho de la sección (que ya lo acota `--content-max`): es una tabla
+   de comparación y estrecharla a 720px obligaba a desplazarla en horizontal
+   para ver tres columnas que caben de sobra. */
+.ld-comparativa { display: block; margin: var(--space-8) 0 0; }
+/* El `margin-bottom` de `.ld-faq-item` separa una pregunta de la SIGUIENTE. Aquí
+   el desplegable va suelto: no hay siguiente, y ese margen solo suma vacío. */
+.ld-comparativa .ld-faq-item { margin-bottom: 0; }
+
+/* Esta sección cierra con una barra fina —el desplegable, unos 60px— y no con
+   contenido de peso. Con el `padding-bottom` normal (80px) más el `padding-top`
+   de la sección siguiente quedaban 160px de blanco detrás de esa línea, que el
+   ojo lee como un agujero y no como aire. Se recorta SOLO el de abajo y solo
+   aquí: el ritmo entre las demás secciones no se toca. */
+.ld-section-niveles { padding-bottom: var(--space-12); }
+/* Reaprovecha `.ld-faq-item` / `.ld-faq-q` del acordeón de preguntas: es el
+   mismo gesto y no merece un segundo juego de reglas. */
+.ld-comparativa-scroll { overflow-x: auto; padding: 0 var(--space-5) var(--space-5); }
+.ld-comparativa-tabla { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.ld-comparativa-tabla th,
+.ld-comparativa-tabla td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: right;
+  white-space: nowrap;
+}
+.ld-comparativa-tabla thead th { color: var(--color-text-muted); font-weight: 600; }
+.ld-comparativa-tabla tbody th { text-align: left; font-weight: 500; color: var(--color-text); }
+.ld-comparativa-tabla tbody tr:last-child th,
+.ld-comparativa-tabla tbody tr:last-child td { border-bottom: 0; }
 
 /* ── Footer / header extras ── */
 .ld-footer-logo { justify-content: center; margin-bottom: var(--space-3); }

@@ -5,12 +5,16 @@
 // documentos se generan y firman desde el portal del cliente; aquí solo se ven.
 
 import { FileSignature } from 'lucide-react'
-import { listarFirmasCliente } from '@/app/actions/documentos-admin'
+import type { FirmaClienteRow } from '@/app/actions/documentos-admin'
 import RecordatorioDocumentosBtn from './RecordatorioDocumentosBtn'
 import DescargarFirmaBtn from './DescargarFirmaBtn'
 import ReabrirFirmasBtn from './ReabrirFirmasBtn'
 
-const DOCS: { tipo: string; label: string }[] = [
+/** Los tres papeles del alta. Exportado porque la ficha cuenta con ellos los que
+ *  faltan por firmar para el aviso de la pestaña: el número y esta lista tienen
+ *  que salir del mismo sitio o el día que se añada un cuarto documento el aviso
+ *  se queda corto sin que nadie lo note. */
+export const DOCS: { tipo: string; label: string }[] = [
   { tipo: 'nda',         label: 'Acuerdo de confidencialidad (NDA)' },
   { tipo: 'contrato',    label: 'Contrato de prestación de servicio' },
   { tipo: 'presupuesto', label: 'Presupuesto (Anexo I)' },
@@ -20,8 +24,12 @@ function fmtFecha(iso: string) {
   return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default async function DocumentosClienteCard({ clientId }: { clientId: string }) {
-  const firmas = await listarFirmasCliente(clientId)
+export default function DocumentosClienteCard(
+  /** Las firmas llegan leídas de la página: allí ya hacen falta para contar los
+   *  documentos pendientes de la solapa, y pedirlas otra vez aquí sería la misma
+   *  consulta dos veces en el mismo render. */
+  { clientId, firmas }: { clientId: string; firmas: FirmaClienteRow[] },
+) {
   // La más reciente por tipo (vienen ordenadas por fecha desc).
   const ultima = new Map<string, typeof firmas[number]>()
   for (const f of firmas) if (!ultima.has(f.tipo)) ultima.set(f.tipo, f)

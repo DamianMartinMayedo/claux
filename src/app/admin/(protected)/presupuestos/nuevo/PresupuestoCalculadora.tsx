@@ -8,8 +8,11 @@ import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { importeCiclo } from '@/lib/billing'
 import {
   FORMATOS, FASES_INSTALACION,
-  type FormatoDatos, type TarifaTipo, type ParametrosPresupuesto,
+  dimensionesApretadas, nivelMinimoPorVolumenes,
+  type FormatoDatos, type ParametrosPresupuesto,
 } from '@/lib/presupuesto/config'
+import { etiquetaDimension, type Dimension } from '@/lib/limites'
+import { NIVELES, precioModulo, type Nivel } from '@/lib/niveles'
 import {
   crearPresupuesto,
   actualizarPresupuesto,
@@ -34,7 +37,7 @@ type Prefill = {
   nombreResponsable: string
   contacto: string
   modulos: string[]
-  tarifa: TarifaTipo | null
+  nivel: Nivel | null
   // Campos que solo trae el modo edición, para reconstruir el snapshot completo del borrador
   // guardado. En alta van sin definir y caen a los valores por defecto de siempre.
   formato?: FormatoDatos | null
@@ -50,7 +53,9 @@ export default function PresupuestoCalculadora({
   modulos,
   comerciales,
   comercialEmailDefault,
-  tarifaSugerida,
+  nivelSugerido,
+  nombresNivel,
+  limitesNivel,
   parametros,
   descuentoAnualPct,
   prefill,
@@ -59,7 +64,12 @@ export default function PresupuestoCalculadora({
   modulos: ModuloPresupuesto[]
   comerciales: Comercial[]
   comercialEmailDefault: string
-  tarifaSugerida: TarifaTipo
+  nivelSugerido: Nivel
+  /** Cómo se llama hoy cada nivel (`niveles.nombre`, editable desde /admin). */
+  nombresNivel: Record<Nivel, string>
+  /** Topes de cada nivel (`nivel_limites`). Vacío si no se pudieron leer: entonces
+   *  no se sugiere nada, que es mejor que sugerir con media matriz. */
+  limitesNivel: Record<string, Record<string, number | null>>
   /** Precios vigentes, cargados en el servidor. */
   parametros: ParametrosPresupuesto
   descuentoAnualPct: number
@@ -74,7 +84,7 @@ export default function PresupuestoCalculadora({
   const [nombreResponsable, setNombreResponsable] = useState(prefill.nombreResponsable)
   const [contacto, setContacto]                   = useState(prefill.contacto)
   const [comercialEmail, setComercialEmail]       = useState(comercialEmailDefault)
-  const [tarifa, setTarifa]                       = useState<TarifaTipo>(tarifaSugerida)
+  const [nivel, setNivel]                         = useState<Nivel>(nivelSugerido)
   const [formato, setFormato]                     = useState<FormatoDatos>(prefill.formato ?? 'cero')
 
   const [modulosSel, setModulosSel] = useState<string[]>(prefill.modulos)
@@ -86,8 +96,8 @@ export default function PresupuestoCalculadora({
       : { empresas: '1', monedas: '1', cuentas_tesoreria: '1' },
   )
 
-  // La palanca comercial: la tarifa arranca en la base configurada y se puede pactar para
-  // ESTE cliente. Antes solo se podía saltar de estándar a fundador, $10/h de golpe.
+  // La palanca comercial: la tarifa/hora arranca en la base configurada y se puede pactar
+  // para ESTE cliente, al céntimo. Antes solo se podía saltar de un escalón a otro.
   const [tarifaHora, setTarifaHora] = useState(String(prefill.tarifaHora ?? parametros.tarifaHora))
   const [descuento, setDescuento]   = useState(prefill.descuentoPct ? String(prefill.descuentoPct) : '')
   const [dtoMotivo, setDtoMotivo]   = useState(prefill.descuentoMotivo ?? '')
@@ -105,15 +115,31 @@ export default function PresupuestoCalculadora({
   const [loading, setLoading] = useState(false)
   const [creado, setCreado]   = useState<{ id: number; aviso?: string | null; tono?: 'info' | 'warning' } | null>(null)
 
-  const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
+
   const modulosElegidos = modulos.filter(m => modulosSel.includes(m.clave))
-  const cuotaMensual = modulosElegidos.reduce((s, m) => s + Number(m[precioField] ?? 0), 0)
+  const cuotaMensual = modulosElegidos.reduce((s, m) => s + precioModulo(m, nivel), 0)
   const cuotaAnual   = importeCiclo(cuotaMensual, 'anual', descuentoAnualPct)
   const ahorroAnual  = Math.max(0, cuotaMensual * 12 - cuotaAnual)
 
   const volNum = useMemo(
     () => Object.fromEntries(Object.entries(vol).map(([k, v]) => [k, Number(v) || 0])),
     [vol],
+  )
+
+  // ¿Cabe el negocio en el nivel elegido? Los volúmenes ya están tecleados para
+  // calcular la instalación; compararlos con los topes del nivel es gratis y evita
+  // el error caro: cotizar Inicial a quien el día 1 no va a poder dar de alta a su
+  // gente. No cambia el nivel solo — el nivel es una decisión comercial y a veces
+  // se pacta a la baja a propósito —, avisa y ofrece el cambio.
+  const apretadas = useMemo(
+    () => dimensionesApretadas(limitesNivel[nivel] ?? {}, volNum),
+    [limitesNivel, nivel, volNum],
+  )
+  const nivelMinimo = useMemo(
+    () => Object.keys(limitesNivel).length
+      ? (nivelMinimoPorVolumenes([...NIVELES], limitesNivel, volNum) as Nivel | null)
+      : null,
+    [limitesNivel, volNum],
   )
 
   const resultado = useMemo(() => calcularInstalacion({
@@ -164,7 +190,7 @@ export default function PresupuestoCalculadora({
       nombreNegocio,
       nombreResponsable,
       contacto,
-      tarifa,
+      nivel,
       modulos: modulosSel,
       volumenes: volNum,
       formato,
@@ -279,15 +305,32 @@ export default function PresupuestoCalculadora({
                 </select>
               </div>
               <div className="seg-field">
-                <span className="seg-field-label">Tarifa</span>
+                <span className="seg-field-label">Nivel</span>
                 <div className="seg">
-                  {(['estandar', 'fundador'] as const).map(t => (
+                  {NIVELES.map(t => (
                     <label key={t} className="seg-opt">
-                      <input type="radio" name="tarifa" value={t} checked={tarifa === t} onChange={() => setTarifa(t)} />
-                      <span>{t === 'estandar' ? 'Estándar' : 'Fundador'}</span>
+                      <input type="radio" name="nivel" value={t} checked={nivel === t} onChange={() => setNivel(t)} />
+                      <span>{nombresNivel[t]}</span>
                     </label>
                   ))}
                 </div>
+                {apretadas.length > 0 && nivelMinimo && (
+                  <div className="alert alert-warning mt-4">
+                    <strong className="alert-titulo">
+                      Con estos volúmenes no cabe en {nombresNivel[nivel]}
+                    </strong>
+                    {apretadas.map(d => (
+                      <span key={d.dimension} className="pres-apretada">
+                        {etiquetaDimension(d.dimension as Dimension)}: {d.volumen} y el tope son {d.tope}
+                      </span>
+                    ))}
+                    {nivelMinimo !== nivel && (
+                      <button type="button" className="btn btn-aviso btn-sm" onClick={() => setNivel(nivelMinimo)}>
+                        Pasar a {nombresNivel[nivelMinimo]}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -303,7 +346,7 @@ export default function PresupuestoCalculadora({
                   <p className="mod-list-label">{g.label}</p>
                   {items.map(m => {
                     const activo = modulosSel.includes(m.clave)
-                    const precio = Number(m[precioField] ?? 0)
+                    const precio = precioModulo(m, nivel)
                     return (
                       <label key={m.clave} className="mod-row">
                         <span className="mod-row-main">

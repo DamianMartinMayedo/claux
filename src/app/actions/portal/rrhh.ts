@@ -38,6 +38,7 @@ import { tieneModulo }         from '@/lib/modulos'
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { comprobarLimite } from '@/lib/limites'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -1270,6 +1271,11 @@ export async function copiarEmpleadoAEmpresa(
     ? redondear2(salario)
     : redondear2(src.salario_base as number)
 
+  // Copiar a otra empresa es dar de alta un trabajador más: el cupo es del
+  // cliente entero, no de cada empresa.
+  const tope = await comprobarLimite(db, session.client_id, 'trabajadores')
+  if (tope) return { ok: false, error: tope }
+
   const nuevo_id = generarEmpleadoId()
   const ahora    = new Date().toISOString()
 
@@ -2277,6 +2283,9 @@ export async function guardarEmpleado(
     if (!await monedaValida(db, session.client_id, moneda)) {
       return { ok: false, error: `La moneda "${moneda}" no está configurada en Monedas y Tasas.` }
     }
+    const tope = await comprobarLimite(db, session.client_id, 'trabajadores')
+    if (tope) return { ok: false, error: tope }
+
     const nuevoId = generarEmpleadoId()
     const { error } = await db.from('empleados').insert({
       empleado_id: nuevoId,
@@ -2386,6 +2395,13 @@ export async function reactivarEmpleado(empleado_id: string): Promise<{ ok: bool
   if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
   const db = createAdminClient()
+
+  // Reincorporar ocupa plaza igual que contratar. Si no, dar de baja a media
+  // plantilla en enero para contratar en febrero y readmitirla en marzo salta el
+  // límite sin que nadie lo note.
+  const tope = await comprobarLimite(db, session.client_id, 'trabajadores', 1, 'desarchivar')
+  if (tope) return { ok: false, error: tope }
+
   const { error } = await db.from('empleados')
     .update({ fecha_baja: null, motivo_baja: null, updated_at: new Date().toISOString() })
     .eq('empleado_id', empleado_id)
@@ -2451,7 +2467,20 @@ export async function reactivarEmpleadosEnLote(ids: string[]): Promise<Resultado
   if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
-  const { data, error } = await createAdminClient().from('empleados')
+  const db = createAdminClient()
+
+  // El lote se comprueba ENTERO antes de tocar nada. Reincorporar a la mitad de
+  // los seleccionados y callar cuáles sería peor que no hacerlo: aquí el dueño
+  // eligió personas concretas, no un montón intercambiable.
+  const { count: aReactivar } = await db.from('empleados')
+    .select('empleado_id', { count: 'exact', head: true })
+    .eq('client_id', session.client_id).in('empleado_id', ids).not('fecha_baja', 'is', null)
+  if (aReactivar) {
+    const tope = await comprobarLimite(db, session.client_id, 'trabajadores', aReactivar, 'desarchivar')
+    if (tope) return loteVacio(tope)
+  }
+
+  const { data, error } = await db.from('empleados')
     .update({ fecha_baja: null, motivo_baja: null, updated_at: new Date().toISOString() })
     .eq('client_id', session.client_id).in('empleado_id', ids).not('fecha_baja', 'is', null)
     .select('empleado_id')

@@ -17,12 +17,13 @@ import {
 } from '@/app/actions/presupuestos'
 import { descargarPresupuesto } from '@/lib/pdf/presupuesto'
 import { importeCiclo } from '@/lib/billing'
+import { normalizarNivel, precioModulo, type Nivel, type ModuloPrecios } from '@/lib/niveles'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Detalle = Record<string, any>
 type DesgloseFase = { fase: string; horas: number; subtotalUsd: number }
 type Revision = { linea: string; motivo: string }
-type ModuloCatalogo = { clave: string; nombre: string; precio_fundador_usd: number; precio_estandar_usd: number }
+export type ModuloCatalogo = ModuloPrecios & { nombre: string }
 
 const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
 
@@ -39,10 +40,12 @@ function EstadoBadge({ estado }: { estado: string }) {
 export default function PresupuestosClienteTabla({
   presupuestos,
   catalogo,
+  nombresNivel,
   descuentoAnualPct,
 }: {
   presupuestos: PresupuestoRow[]
   catalogo: ModuloCatalogo[]
+  nombresNivel: Record<Nivel, string>
   descuentoAnualPct: number
 }) {
   const { error: toastError, success: toastSuccess } = useToast()
@@ -71,10 +74,9 @@ export default function PresupuestosClienteTabla({
   async function descargarPdf(incluir: 'todo' | 'instalacion' | 'suscripcion') {
     if (!detalle) return
     const claves: string[] = Array.isArray(detalle.modulos) ? detalle.modulos : []
-    const campo = detalle.tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
     const mods = catalogo
       .filter(m => claves.includes(m.clave))
-      .map(m => ({ nombre: m.nombre, precio: Number(m[campo]) || 0 }))
+      .map(m => ({ nombre: m.nombre, precio: precioModulo(m, detalle.nivel) }))
     const mensual = Number(detalle.cuota_mensual_usd ?? 0)
     try {
       await descargarPresupuesto({
@@ -264,7 +266,7 @@ export default function PresupuestosClienteTabla({
                     <div className="sol-row"><span className="sol-label">Comercial</span><span className="sol-value">{detalle.comercial_nombre ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Responsable</span><span className="sol-value">{detalle.nombre_responsable ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Contacto</span><span className="sol-value">{detalle.contacto ?? '—'}</span></div>
-                    <div className="sol-row"><span className="sol-label">Tarifa</span><span className="sol-value">{detalle.tarifa === 'fundador' ? 'Fundador' : 'Estándar'}</span></div>
+                    <div className="sol-row"><span className="sol-label">Nivel</span><span className="sol-value">{nombresNivel[normalizarNivel(detalle.nivel)]}</span></div>
                     <div className="sol-row"><span className="sol-label">Módulos</span><span className="sol-value">{(detalle.modulos ?? []).join(', ') || '—'}</span></div>
                     {detalle.client_id && (
                       <div className="sol-row"><span className="sol-label">Cliente</span><span className="sol-value">{detalle.client_id}</span></div>

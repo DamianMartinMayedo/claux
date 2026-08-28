@@ -10,9 +10,13 @@
 // `reservas_citas`): qué línea existe y a qué módulo pertenece no es una cifra que el dueño
 // ajuste, es una consecuencia de qué módulos vende el producto.
 
-/** Tarifa comercial del cliente. Ya NO afecta a la hora de instalación —esa es única y
- *  configurable—: solo elige el precio de los módulos en la cuota mensual. */
-export type TarifaTipo = 'fundador' | 'estandar'
+/**
+ * Nivel comercial del cliente. Ya NO afecta a la hora de instalación —esa es única
+ * y configurable—: solo elige la COLUMNA de precio de los módulos en la cuota
+ * mensual. El tipo vive en `lib/niveles.ts`; aquí solo se reexporta para no
+ * romper a quien ya lo importaba de este módulo.
+ */
+export type { Nivel } from '@/lib/niveles'
 
 export type FormatoDatos = 'excel' | 'papel' | 'sistema' | 'cero'
 
@@ -22,9 +26,6 @@ export const FORMATOS: { key: FormatoDatos; label: string }[] = [
   { key: 'sistema', label: 'Vienen de otro sistema exportable' },
   { key: 'cero',    label: 'No aplica / empieza desde cero' },
 ]
-
-/** Umbral orientativo para sugerir tarifa "fundador" (primeros N clientes). */
-export const LIMITE_FUNDADOR = 20
 
 /**
  * Las cuatro fases de una instalación, con su nombre.
@@ -95,6 +96,68 @@ export interface ParametrosPresupuesto {
   horasFormacionCaja:   number
   horasCierre:          number
   lineas:               LineaParametro[]
+}
+
+// ── Del volumen tecleado al NIVEL que hace falta ────────────────────────────
+//
+// `presupuesto_parametros` recoge 14 volúmenes; seis de ellos son exactamente las
+// dimensiones que `nivel_limites` limita. Con esos seis se sabe, sin preguntar
+// nada más, si el negocio cabe en el nivel elegido.
+//
+// Los otros ocho NO están aquí a propósito: `monedas`, `turnos_*`, `categorias_*`
+// y `config_nomina` no tienen tope comercial, y `productos_catalogo` es el
+// catálogo QR —la misma tabla que Inventario, pero el cliente puede tener catálogo
+// sin llevar inventario, así que contarlo contra el tope de productos inflaría el
+// nivel de quien solo enseña un menú—.
+
+/** Clave en `presupuesto_parametros` → dimensión en `nivel_limites`. */
+export const PARAMETRO_A_DIMENSION: Record<string, string> = {
+  empresas:             'empresas',
+  cuentas_tesoreria:    'cuentas_tesoreria',
+  puntos_venta:         'puntos_venta',
+  productos_inventario: 'productos',
+  almacenes:            'almacenes',
+  empleados:            'trabajadores',
+}
+
+export interface DimensionApretada {
+  dimension: string
+  volumen:   number
+  tope:      number
+}
+
+/**
+ * El nivel más bajo de `orden` en el que caben TODOS los volúmenes tecleados, y
+ * qué se pasa del nivel elegido.
+ *
+ * `limitesPorNivel` viene de `nivel_limites` (clave de nivel → dimensión → tope,
+ * `null` = sin tope), en el orden comercial. Un nivel sin fila para una dimensión
+ * se trata como sin tope: es lo mismo que hace el portal al no encontrarla, y
+ * bloquear por una fila que falta sería inventarse un límite.
+ */
+export function nivelMinimoPorVolumenes(
+  ordenNiveles: string[],
+  limitesPorNivel: Record<string, Record<string, number | null>>,
+  volumenes: Record<string, number>,
+): string | null {
+  for (const nivel of ordenNiveles) {
+    if (dimensionesApretadas(limitesPorNivel[nivel] ?? {}, volumenes).length === 0) return nivel
+  }
+  return ordenNiveles.length ? ordenNiveles[ordenNiveles.length - 1] : null
+}
+
+/** Qué dimensiones NO caben en ese nivel, con su tope, para poder decirlo. */
+export function dimensionesApretadas(
+  limites: Record<string, number | null>,
+  volumenes: Record<string, number>,
+): DimensionApretada[] {
+  const fuera: DimensionApretada[] = []
+  for (const [clave, dimension] of Object.entries(PARAMETRO_A_DIMENSION)) {
+    const v = Number(volumenes[clave]) || 0
+    const tope = limites[dimension]
+    if (v > 0 && typeof tope === 'number' && v > tope) fuera.push({ dimension, volumen: v, tope })
+  }
+  return fuera
 }
 
 /** Claves de `settings` con los escalares. Una sola lista para leerlos y para el formulario

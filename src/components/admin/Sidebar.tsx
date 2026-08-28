@@ -39,7 +39,8 @@ const NAV: NavGroup[] = [
       { href: '/admin/clientes', label: 'Clientes', key: 'clientes', icon: (
         <Users size={18} className="flex-shrink-0" />
       )},
-      { href: '/admin/modulos', label: 'Módulos', key: 'modulos', icon: (
+      { href: '/admin/modulos', label: 'Módulos', key: 'modulos',
+        match: ['/admin/modulos', '/admin/niveles'], icon: (
         <Boxes size={18} className="flex-shrink-0" />
       )},
       { href: '/admin/ia', label: 'Asistente IA', key: 'ia', icon: (

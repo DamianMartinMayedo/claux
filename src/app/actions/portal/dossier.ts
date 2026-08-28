@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { tieneModulo } from '@/lib/modulos'
+import { comprobarLimite } from '@/lib/limites'
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { optimizarImagen } from '@/lib/imagen/optimizar'
 import { getPortalSession, puedeEditarModulo } from './auth'
@@ -24,9 +25,9 @@ import { resumenGavetaPendiente, RESUMEN_GAVETA_VACIO, type ResumenGaveta } from
 // Independiente: funciona a mano sin la base. Con `base`, puede TRAER los números
 // (llenado rápido) con fusión NO destructiva. Todo scoped por `client_id`.
 //
-// VARIOS dossiers por cliente los desbloquea el addon `multidossier`. Sin él:
-// un dossier y un enlace publicado. Los gates son de aplicación (bloqueoCrear /
-// bloqueoPublicar), no de esquema — la base soporta N desde la 098.
+// CUÁNTOS dossiers caben lo fija el nivel contratado (`lib/limites.ts`), no un
+// addon. El gate es de aplicación (bloqueoCrear), no de esquema — la base soporta
+// N desde la 098. Publicar no se limita aparte: ver el bloque de `bloqueoCrear`.
 
 export interface TasaUsada { tasa: number; fecha: string | null }
 
@@ -60,7 +61,7 @@ export interface DossierBasico {
   tasas_usadas:            Record<string, TasaUsada>
 }
 
-// Cabecera para el listado (addon `multidossier`): lo justo para decidir cuál
+// Cabecera para el listado: lo justo para decidir cuál
 // abrir y cuál está listo para enviar. Sin serie ni relato — una fila de tabla no
 // necesita el snapshot entero, y son N dossiers.
 export interface ResumenDossier {
@@ -101,7 +102,6 @@ export interface DossierData {
   tieneBase:          boolean
   hayInventario:      boolean                 // sin inventario el coste es «compras del período», no COGS (nota honesta)
   tieneRrhh:          boolean                 // solo habilita precargar Equipo
-  multiempresa:       boolean
   nombreNegocio:      string                  // nombre de la cuenta: defecto de portada en consolidado
   emailUsuario:       string                  // correo de registro: precarga del contacto del dossier
   primerMovimiento:   string | null           // fecha del 1er dato contable → atajo "Toda la vida"
@@ -160,33 +160,23 @@ async function modulosDelCliente(db: Db, clientId: string): Promise<string[]> {
   return Array.isArray(data?.modulos_activos) ? (data!.modulos_activos as string[]) : []
 }
 
-// ── Gates del addon `multidossier` ──
-// Van en el servidor y no en el botón: estas actions son públicas y ocultar la UI
-// no es control de acceso (MODELO-MODULOS §3.2). Devuelven el mensaje de error, o
-// null si puede seguir; el mensaje ES el upsell —aparece justo cuando el dueño
-// quiere la capacidad—, así que no hacen falta candados en el portal.
+// ── Cuántos dossiers caben ──
+// El gate va en el servidor y no en el botón: estas actions son públicas y ocultar
+// la UI no es control de acceso (MODELO-MODULOS §3.2). Devuelve el mensaje de
+// error, o null si puede seguir; el mensaje ES el upsell.
+//
+// Antes esto lo abría el addon `multidossier` (uno solo sin él); ahora lo fija el
+// nivel contratado, que es una dimensión más de `lib/limites.ts`.
+//
+// Y **ya no se limita publicar**. El gate de publicación existía porque con el
+// addon «un dossier» significaba «un enlace vivo», así que sin él bastaba con
+// duplicar el contenido para tener cinco enlaces. Con el nivel no hay hueco: nadie
+// puede publicar más dossiers de los que su nivel le deja tener, y quien paga tres
+// tiene derecho a los tres enlaces.
 
 // Duplicar ES crear, así que las dos actions comparten este gate.
 async function bloqueoCrear(db: Db, clientId: string): Promise<string | null> {
-  if (tieneModulo(await modulosDelCliente(db, clientId), 'multidossier')) return null
-  const { count } = await db.from('dossiers')
-    .select('dossier_id', { count: 'exact', head: true }).eq('client_id', clientId)
-  return (count ?? 0) >= 1
-    ? 'Tu suscripción permite un solo dossier. Activa Multidossier para tener varios.'
-    : null
-}
-
-// El enlace ES el producto, así que este es el gate con dientes: sin él, alguien
-// contrata un mes, publica cinco enlaces y se da de baja con los cinco vivos. No
-// destruye nada —los dossiers se siguen viendo y editando, regla de independencia—,
-// solo impide un segundo enlace publicado a la vez.
-async function bloqueoPublicar(db: Db, clientId: string, dossierId: string): Promise<string | null> {
-  if (tieneModulo(await modulosDelCliente(db, clientId), 'multidossier')) return null
-  const { count } = await db.from('dossiers').select('dossier_id', { count: 'exact', head: true })
-    .eq('client_id', clientId).eq('estado', 'PUBLICADO').neq('dossier_id', dossierId)
-  return (count ?? 0) >= 1
-    ? 'Ya tienes una presentación publicada. Despublícala, o activa Multidossier para tener varias a la vez.'
-    : null
+  return comprobarLimite(db, clientId, 'dossiers')
 }
 
 // Resuelve las empresas del dossier: null = todas las accesibles (consolidado).
@@ -338,8 +328,8 @@ export async function obtenerDossiers(): Promise<ResumenDossier[]> {
   }))
 }
 
-// Sin `id` devuelve el más antiguo: es el camino sin addon, y se comporta
-// exactamente igual que antes de que existiera multidossier.
+// Sin `id` devuelve el más antiguo: es el camino del cliente con sitio para uno
+// solo, y se comporta exactamente igual que cuando el dossier era único.
 export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   const session = await getPortalSession()
   if (!session) return null
@@ -365,7 +355,6 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   const tieneBase     = tieneModulo(modulos, 'base')
   const hayInventario = tieneModulo(modulos, 'inventario')
   const tieneRrhh     = tieneModulo(modulos, 'rrhh')
-  const multiempresa  = tieneModulo(modulos, 'multiempresa')
   const monedas = (monedasRows ?? []).map((m: { codigo: string; simbolo: string | null }) => ({ codigo: m.codigo, simbolo: m.simbolo || m.codigo }))
   const monedaConsolidacion = (monedasRows ?? []).find((m: { es_consolidacion: boolean }) => m.es_consolidacion)?.codigo ?? null
 
@@ -393,7 +382,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
   if (!dosRow) {
     return {
       dossier: null, serie: [], lineas: [], secciones: [],
-      tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
+      tieneBase, hayInventario, tieneRrhh, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
        monedas, monedaConsolidacion, categoriasCosto: categoriasCatalogoBase, conceptosSector, empresaLogoUrl: null,
        aperturas: 0, ultimaApertura: null, tieneEn: false, enDesactualizado: false,
        frescura: frescuraDossier({ estado: 'BORRADOR', snapshotAt: null, snapshotStale: false }), gaveta,
@@ -469,7 +458,7 @@ export async function obtenerDossier(id?: string): Promise<DossierData | null> {
 
   return {
     dossier, serie, lineas, secciones,
-    tieneBase, hayInventario, tieneRrhh, multiempresa, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
+    tieneBase, hayInventario, tieneRrhh, nombreNegocio, emailUsuario: session.email, primerMovimiento, empresas: listaEmpresas,
     monedas, monedaConsolidacion, categoriasCosto, conceptosSector,
     empresaLogoUrl: await logoDeEmpresa(dossier.empresa_id),
     aperturas: aperturaCount ?? 0,
@@ -1276,9 +1265,6 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
     .eq('dossier_id', dossierId).eq('client_id', session.client_id)
     .neq('moneda', dos.moneda_presentacion).limit(1).maybeSingle()
   if (dos.snapshot_stale || mezcla) return { ok: false, error: 'Cambiaste la moneda, la empresa o el período: sincroniza tus números en «Los números» antes de publicar.' }
-
-  const bloqueo = await bloqueoPublicar(db, session.client_id, dossierId)
-  if (bloqueo) return { ok: false, error: bloqueo }
 
   const token = (dos.token as string | null) ?? nuevoToken()
   const { error } = await db.from('dossiers').update({

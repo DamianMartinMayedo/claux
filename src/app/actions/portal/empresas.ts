@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
+import { comprobarLimite } from '@/lib/limites'
 
 // Paleta moderna de identidad de empresa. Saturada y a media-oscuridad (no
 // pastel) para que la inicial blanca del avatar/badge siempre contraste, y bien
@@ -186,29 +187,9 @@ export async function guardarEmpresa(
       return { ok: false, error: 'Crea al menos una moneda en «Monedas y tasas» antes de crear una empresa.' }
     }
 
-    // Límite por módulo: sin 'multiempresa' el cliente solo puede tener 1 empresa.
-    const { data: cliente } = await db
-      .from('clients')
-      .select('modulos_activos')
-      .eq('client_id', session.client_id)
-      .single()
-
-    const tieneMultiempresa = Array.isArray(cliente?.modulos_activos)
-      && cliente.modulos_activos.includes('multiempresa')
-
-    if (!tieneMultiempresa) {
-      const { count } = await db
-        .from('empresas')
-        .select('empresa_id', { count: 'exact', head: true })
-        .eq('client_id', session.client_id)
-
-      if ((count ?? 0) >= 1) {
-        return {
-          ok: false,
-          error: 'Tu suscripción permite una sola empresa. Activa el módulo Multiempresa para añadir más.',
-        }
-      }
-    }
+    // Cuántas empresas caben es cosa del nivel contratado, no de un addon.
+    const tope = await comprobarLimite(db, session.client_id, 'empresas')
+    if (tope) return { ok: false, error: tope }
 
     const empresa_id = generarEmpresaId()
     const { error } = await db.from('empresas').insert({

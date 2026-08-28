@@ -8,7 +8,8 @@
 import Link from 'next/link'
 import { FileText, Plus } from 'lucide-react'
 import { listarPresupuestosDeCliente } from '@/app/actions/presupuestos'
-import PresupuestosClienteTabla from './PresupuestosClienteTabla'
+import PresupuestosClienteTabla, { type ModuloCatalogo } from './PresupuestosClienteTabla'
+import type { Nivel } from '@/lib/niveles'
 
 export default async function PresupuestosClienteCard({
   clientId,
@@ -16,12 +17,14 @@ export default async function PresupuestosClienteCard({
   /** Hay un pago de configuración registrado para este cliente. */
   tienePagoConfiguracion,
   catalogo,
+  nombresNivel,
   descuentoAnualPct,
 }: {
   clientId: string
   nombreEmpresa: string
   tienePagoConfiguracion: boolean
-  catalogo: { clave: string; nombre: string; precio_fundador_usd: number; precio_estandar_usd: number }[]
+  catalogo: ModuloCatalogo[]
+  nombresNivel: Record<Nivel, string>
   descuentoAnualPct: number
 }) {
   const presupuestos = await listarPresupuestosDeCliente(clientId)
@@ -55,6 +58,7 @@ export default async function PresupuestosClienteCard({
         <PresupuestosClienteTabla
           presupuestos={presupuestos}
           catalogo={catalogo}
+          nombresNivel={nombresNivel}
           descuentoAnualPct={descuentoAnualPct}
         />
       )}

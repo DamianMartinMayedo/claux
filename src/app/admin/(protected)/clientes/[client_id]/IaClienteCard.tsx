@@ -8,8 +8,9 @@ import FormHelp from '@/components/portal/FormHelp'
 
 interface Props {
   clientId: string
-  cupoGlobal: number
-  cupoOverride: number | null   // null = usa el global
+  cupoNivel: number             // lo que incluye el nivel contratado
+  nivelNombre: string
+  cupoOverride: number | null   // null = usa el del nivel
   conversaciones: number
   tokens: number
   periodo: string
@@ -17,12 +18,12 @@ interface Props {
 
 // Card de IA en la ficha del cliente: consumo del mes + override del cupo (subir
 // el límite de este cliente). Solo se monta si el cliente tiene asistente_ia.
-export default function IaClienteCard({ clientId, cupoGlobal, cupoOverride, conversaciones, tokens, periodo }: Props) {
+export default function IaClienteCard({ clientId, cupoNivel, nivelNombre, cupoOverride, conversaciones, tokens, periodo }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [valor, setValor] = useState(cupoOverride != null ? String(cupoOverride) : '')
 
-  const cupoEfectivo = cupoOverride ?? cupoGlobal
+  const cupoEfectivo = cupoOverride ?? cupoNivel
   const pct = cupoEfectivo > 0 ? Math.round((conversaciones / cupoEfectivo) * 100) : 0
 
   function guardar(e: React.FormEvent) {
@@ -31,7 +32,7 @@ export default function IaClienteCard({ clientId, cupoGlobal, cupoOverride, conv
     startTransition(async () => {
       const r = await setCupoClienteIa(clientId, n && n > 0 ? n : null)
       if (!r.ok) { toastError(r.error); return }
-      toastSuccess(n && n > 0 ? `Cupo del cliente: ${n}/mes` : 'Cupo restablecido al global')
+      toastSuccess(n && n > 0 ? `Cupo del cliente: ${n}/mes` : 'Cupo restablecido al de su nivel')
       router.refresh()
     })
   }
@@ -58,11 +59,11 @@ export default function IaClienteCard({ clientId, cupoGlobal, cupoOverride, conv
         <div className="input-group">
           <div className="form-label-with-help">
             <label htmlFor="cupo-cli">Cupo propio de este cliente (conversaciones/mes)</label>
-            <FormHelp text="Déjalo vacío para usar el cupo global. Súbelo si el cliente paga consumo extra de IA." label="Cómo funciona el cupo propio" />
+            <FormHelp text={`Déjalo vacío y usa el de su nivel (${nivelNombre}: ${cupoNivel.toLocaleString('es-ES')}/mes). Súbelo si el cliente paga consumo extra de IA. Pasado el cupo el asistente no se apaga: baja al modelo gratuito hasta el mes siguiente.`} label="Cómo funciona el cupo propio" />
           </div>
           <input id="cupo-cli" type="number" min="0" step="1" className="input"
                  value={valor} onChange={e => setValor(e.target.value)}
-                 placeholder={`Global: ${cupoGlobal}`} />
+                 placeholder={`${nivelNombre}: ${cupoNivel}`} />
         </div>
         <button type="submit" className="btn btn-primary btn-sm" disabled={isPending}>
           {isPending ? <><span className="spinner" /> Guardando...</> : 'Guardar cupo'}

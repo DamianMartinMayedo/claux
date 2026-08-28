@@ -4,6 +4,7 @@ import { obtenerUsuarios }    from '@/app/actions/portal/usuarios'
 import { obtenerEmpresas }    from '@/app/actions/portal/empresas'
 import { createAdminClient }  from '@/lib/supabase/admin'
 import UsuariosView, { type ModuloContratado } from './UsuariosView'
+import CupoNivel          from '@/components/portal/CupoNivel'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,8 @@ export default async function UsuariosPage() {
       sessionUserId={session.user_id}
       soloLectura={session.solo_lectura}
       modulosContratados={modulosContratados}
-    />
+    >
+      <CupoNivel dim="usuarios_portal" />
+    </UsuariosView>
   )
 }

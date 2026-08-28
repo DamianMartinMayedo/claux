@@ -10,7 +10,7 @@ import { crearDossier, guardarBasicos, type DossierData, type DossierBasico } fr
 // y la pestaña «Mi dossier» lo abre suelto. `dossier == null` → crear.
 //
 // Regla del paso: una pregunta con una sola respuesta posible NO se pregunta.
-// Empresa solo si tiene multiempresa Y más de una; moneda solo si tiene más de
+// Empresa solo si de verdad tiene más de una; moneda solo si tiene más de
 // una activa. La mayoría de clientes ven tres campos, no seis.
 
 // Presets de período (en cliente; el servidor tiene su propio fallback). Atajos
@@ -71,7 +71,11 @@ export default function PasoBasicos({
   const [hasta, setHasta] = useState(dossier?.periodo_hasta ?? porDefecto.hasta)
   const [pending, startTransition] = useTransition()
 
-  const eligeEmpresa = data.multiempresa && data.empresas.length > 1
+  // Tener varias empresas YA es la prueba de que su nivel se lo permite: el tope
+  // vive en `nivel_limites.empresas` y lo aplica el alta. Preguntar además por un
+  // addon —el desaparecido `multiempresa`— dejaría a un cliente con tres empresas
+  // sin poder decir de cuál es el dossier.
+  const eligeEmpresa = data.empresas.length > 1
   const eligeMoneda  = data.monedas.length > 1
   const presetActivo = opciones.find(o => o.desde === desde && o.hasta === hasta)?.clave ?? ''
 

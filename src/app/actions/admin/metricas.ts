@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { precioModulo, type ModuloPrecios } from '@/lib/niveles'
 
 // Módulo server-only: lecturas agregadas para las métricas del admin. Lo
 // consumen páginas ya protegidas (requireAccesoPagina('metricas') /
@@ -33,13 +34,6 @@ function periodoActual(): string {
     .format(new Date()).slice(0, 7)
 }
 
-function precioModulo(
-  m: { precio_fundador_usd: number | null; precio_estandar_usd: number | null },
-  tarifa: string | null,
-): number {
-  return Number((tarifa === 'fundador' ? m.precio_fundador_usd : m.precio_estandar_usd) ?? 0)
-}
-
 export type AdopcionModulo = {
   clave: string
   nombre: string
@@ -70,8 +64,8 @@ export async function obtenerMetricasGenerales(): Promise<MetricasGenerales> {
   const s7  = diaHace(7)
 
   const [{ data: clientes }, { data: catalogo }, { data: uso }, { data: ia }] = await Promise.all([
-    db.from('clients').select('client_id, estado, sector, modulos_activos, tarifa'),
-    db.from('modulos_catalogo').select('clave, nombre, tipo, precio_fundador_usd, precio_estandar_usd, orden').eq('activo', true).order('orden'),
+    db.from('clients').select('client_id, estado, sector, modulos_activos, nivel'),
+    db.from('modulos_catalogo').select('clave, nombre, tipo, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, orden').eq('activo', true).order('orden'),
     db.from('uso_portal').select('client_id, user_id, modulo, hits, dia').gte('dia', s30),
     db.from('ia_uso').select('conversaciones, tokens_in, tokens_out').eq('periodo', periodoActual()),
   ])
@@ -88,7 +82,7 @@ export async function obtenerMetricasGenerales(): Promise<MetricasGenerales> {
       const activos = Array.isArray(c.modulos_activos) ? (c.modulos_activos as string[]) : []
       if (activos.includes(m.clave)) {
         contratados += 1
-        ingresoMensual += precioModulo(m, c.tarifa)
+        ingresoMensual += precioModulo(m as ModuloPrecios, c.nivel)
       }
     }
     return { clave: m.clave, nombre: m.nombre, tipo: m.tipo, contratados, ingresoMensual }

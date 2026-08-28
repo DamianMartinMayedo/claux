@@ -6,8 +6,10 @@ import { cargarParametros } from '@/lib/presupuesto/parametros'
 import { getSetting } from '@/app/actions/settings'
 import {
   FASES_INSTALACION, etiquetaFase,
-  type FormatoDatos, type TarifaTipo,
+  type FormatoDatos,
 } from '@/lib/presupuesto/config'
+import { normalizarNivel, type Nivel } from '@/lib/niveles'
+import { nombresDeNiveles, limitesDeNiveles } from '@/lib/niveles-server'
 import PresupuestoCalculadora from '../../nuevo/PresupuestoCalculadora'
 
 export const dynamic = 'force-dynamic'
@@ -36,10 +38,12 @@ export default async function EditarPresupuestoPage({
   // estados, esto es el candado por si se llega por URL directa.
   if (pres.estado !== 'guardado') redirect('/admin/presupuestos')
 
-  const [modulos, comerciales, parametros] = await Promise.all([
+  const [modulos, comerciales, parametros, nombresNivel, limitesNivel] = await Promise.all([
     listarModulosParaPresupuesto(),
     listarComerciales(),
     cargarParametros(),
+    nombresDeNiveles(),
+    limitesDeNiveles(),
   ])
 
   const descuentoAnualPct = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
@@ -58,7 +62,7 @@ export default async function EditarPresupuestoPage({
     desea?: boolean; desde?: string | null; hasta?: string | null
     volumen?: number | null; horasManual?: number | null
   }
-  const tarifa: TarifaTipo = pres.tarifa === 'fundador' ? 'fundador' : 'estandar'
+  const nivel: Nivel = normalizarNivel(pres.nivel)
 
   return (
     <PresupuestoCalculadora
@@ -67,7 +71,9 @@ export default async function EditarPresupuestoPage({
       // El comercial guardado manda como valor del selector; si ya no está activo, la
       // calculadora lo conserva como opción para no perderlo.
       comercialEmailDefault={pres.comercial_email || ctx.email}
-      tarifaSugerida={tarifa}
+      nivelSugerido={nivel}
+      nombresNivel={nombresNivel}
+      limitesNivel={limitesNivel}
       parametros={parametros}
       descuentoAnualPct={descuentoAnualPct}
       editarId={presId}
@@ -78,7 +84,7 @@ export default async function EditarPresupuestoPage({
         nombreResponsable: pres.nombre_responsable ?? '',
         contacto:          pres.contacto ?? '',
         modulos:           Array.isArray(pres.modulos) ? pres.modulos : [],
-        tarifa,
+        nivel,
         formato:           (pres.formato_datos ?? 'cero') as FormatoDatos,
         volumenes:         (pres.volumenes ?? {}) as Record<string, number>,
         tarifaHora:        Number(pres.tarifa_hora_usd ?? parametros.tarifaHora),

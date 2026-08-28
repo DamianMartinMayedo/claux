@@ -135,6 +135,9 @@
   border-color: var(--color-amber-text);
 }
 .info-banner-gracia svg { color: var(--color-amber-text); }
+/* Dentro de un modal el `--space-8` de arriba es demasiado: el banner es el pie
+   del formulario, no un aparte entre dos secciones de una pantalla. */
+.info-banner-compacto { margin-top: var(--space-4); }
 
 /* Detail grid (2 columns) */
 .detail-grid {
@@ -226,6 +229,14 @@
 .detail-page > *:last-child { margin-bottom: 0; }
 .detail-page > .detail-header { margin-bottom: var(--space-8); }
 .detail-page > .detail-grid { margin-top: 0; }
+/* Panel de una pestaña de la ficha del cliente. El ritmo entre tarjetas lo ponía
+   `.detail-page > *`, y dentro de una pestaña las tarjetas ya no son hijas
+   directas de la página: se lo pone el panel. Con `gap` y no con `margin-bottom`,
+   que dejaba un hueco colgando debajo de la última. */
+.cli-panel { display: flex; flex-direction: column; gap: var(--space-6); }
+/* El grid de pagos trae su propio `margin-bottom`, pensado para cuando iba suelto
+   en la página; dentro del panel se sumaría al `gap`. */
+.cli-panel > .detail-grid { margin-bottom: 0; }
 
 /* Checkbox group */
 .checkbox-group {
@@ -948,13 +959,18 @@ textarea:focus-visible {
   margin: var(--space-2) 0 0; padding-left: var(--space-4);
   display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-xs);
 }
-.pres-totales {
+/* Recibo de importes del admin: una línea por concepto y el total abajo. Lo
+   estrenó el presupuesto y lo usa igual la cuota mensual de la ficha del cliente
+   (`.cond-cuota`), que es el mismo objeto: de dónde sale lo que se cobra. Un solo
+   juego de reglas para los dos en vez de dos copias que derivan; si aparece un
+   tercer consumidor, la familia se sube a 03-components.css con nombre genérico. */
+.pres-totales, .cond-cuota {
   display: flex; flex-direction: column; gap: var(--space-2);
   border-top: 1px solid var(--color-divider); padding-top: var(--space-3); margin-top: var(--space-2);
 }
-.pres-totales > div { display: flex; justify-content: space-between; align-items: baseline; }
-.pres-total-label { color: var(--color-text-muted); font-size: var(--text-sm); }
-.pres-total-valor { font-weight: 700; font-family: var(--font-display); }
+.pres-totales > div, .cond-cuota > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); }
+.pres-total-label, .cond-cuota-label { color: var(--color-text-muted); font-size: var(--text-sm); }
+.pres-total-valor, .cond-cuota-valor { font-weight: 700; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
 /* Título de cada bloque de precio. Son DOS cosas —un pago único y una cuota recurrente— y
    listadas seguidas se leían como una suma: el cliente juntaba dos cifras que no se pagan a
    la vez. Cada una con su encabezado y su total. */
@@ -1073,3 +1089,98 @@ textarea:focus-visible {
 .doc-cli-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .doc-cli-confirm { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .doc-cli-confirm-txt { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* ── Niveles y límites (/admin/niveles) ─────────────────────────────────────
+   Los tres niveles, uno por columna, y la matriz de límites. Los inputs de la
+   matriz van dentro de celdas `col-num`, así que se alinean a la derecha con el
+   resto de cifras de la plataforma en vez de estirarse a todo el ancho. */
+.niv-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.niv-col  { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.niv-col > .badge { align-self: flex-start; }
+.niv-desc { resize: vertical; min-height: 4.5rem; font-family: var(--font-body); }
+.niv-celda { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.niv-limite-input { width: 6.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+/* «Sin tope» se pone dejando la casilla vacía, y eso no se descubre solo —menos
+   aún para VOLVER a ilimitado después de teclear una cifra por error—. El botón
+   lo dice y lo hace. Sigue en su sitio, deshabilitado, cuando ya no hay tope: si
+   apareciera y desapareciera con el contenido, la columna bailaría a cada tecla. */
+.niv-sin-tope {
+  flex-shrink: 0;
+  width: var(--space-8); height: var(--space-8);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+.niv-sin-tope:hover:not(:disabled) {
+  border-color: var(--color-border-focus);
+  background: var(--color-surface-2);
+  color: var(--color-primary-text);
+}
+.niv-sin-tope:disabled { opacity: 0.4; cursor: default; }
+
+@media (max-width: 860px) {
+  .niv-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  /* En tarjeta apilada la celda ya es `etiqueta: valor`: el grupo deja de
+     empujarse a la derecha y se queda pegado a su etiqueta. */
+  .niv-celda { justify-content: flex-start; }
+}
+
+/* ── Impacto de un cambio de precio del catálogo ────────────────────────────
+   Se pinta dentro de un modal, antes de guardar. Subida y bajada se distinguen
+   con la tinta de los estados (`--color-error` / `--color-success`, que en esa
+   familia es el color y no el fondo), no con el teal ni el ámbar de marca. */
+/* El aire de arriba lo pone el `gap` del `.modal-body` (--space-5): un
+   `margin-top` aquí se SUMARÍA a ese gap y, peor, solo se aplicaría a esta rama
+   —cuando no le cambia la cuota a nadie se devuelve un `<p>` suelto, sin este
+   envoltorio—, así que los dos estados del mismo modal salían a distancias
+   distintas. El envoltorio solo ordena lo de dentro. */
+.impacto-precios { display: flex; flex-direction: column; gap: var(--space-4); }
+.impacto-precios > .alert { margin-bottom: 0; }
+.impacto-sube { color: var(--color-error); }
+.impacto-baja { color: var(--color-success); }
+.impacto-cliente { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+
+/* ── Ficha del cliente: condiciones comerciales y capacidad ─────────────────
+   Dos columnas que son dos decisiones distintas (descuento · Socio CLAUX) y no
+   deben leerse como una escalera de campos. */
+
+/* El recibo abre la tarjeta, así que no lleva la línea de arriba que sí lleva el
+   del presupuesto (allí cierra una lista de fases). */
+.cond-cuota { border-top: 0; padding-top: 0; margin-top: 0; }
+/* Lo que se resta va en el verde de una rebaja, igual que en el presupuesto. */
+.cond-cuota-resta .cond-cuota-valor { color: var(--color-success); }
+/* Una condición guardada que HOY no descuenta nada —un descuento fuera de fechas,
+   o en pausa porque es socio— se enseña igual: que no aparezca invita a volver a
+   escribirla. Va sin cifra y en tinta apagada, para que no se sume con la vista. */
+.cond-cuota-inerte .cond-cuota-label { color: var(--color-text-faint); }
+.cond-cuota-total {
+  padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+}
+.cond-cuota-total .cond-cuota-label { color: var(--color-text); font-weight: 600; }
+.cond-cuota-total .cond-cuota-valor { font-size: var(--text-xl); color: var(--color-primary-text); }
+/* Socio: el total es cero y la cifra grande en teal lo celebraría. Va en tinta
+   normal —es un dato, no un logro— y lo que informa es la línea de al lado. */
+.cond-cuota-total-cero .cond-cuota-valor { color: var(--color-text); }
+.cond-bloque { display: flex; flex-direction: column; gap: var(--space-4); }
+/* Un hint suelto en la columna tiene que quedar a la MISMA distancia de su campo
+   que uno dentro de un `.input-group` (gap `--space-2` + su `margin-top`
+   `--space-1` = `--space-3`). Aquí el gap es `--space-4`, así que se descuenta la
+   diferencia; si no, dos hints de la misma columna salían a 4px y a 12px. */
+.cond-bloque > * + .form-hint { margin-top: calc(var(--space-3) - var(--space-4)); }
+
+/* Excepciones de límite: el número va estrecho porque es un cupo, no un importe. */
+.cap-input { max-width: 7rem; }
+.cap-badge { margin-left: var(--space-2); }
+
+/* ── Calculadora de presupuestos: el nivel no da para estos volúmenes ───────
+   Cada dimensión apretada en su línea: dentro de un `.alert` (que es `display:
+   block`) los `<span>` se pegarían unos a otros en un párrafo ilegible. */
+.pres-apretada { display: block; }

@@ -1,8 +1,9 @@
 // ── Resolución del contexto de admin (server-only) ──
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAuthBypassed, DEV_ADMIN } from '@/lib/dev-auth'
-import type { ContextoAdmin, SeccionKey } from '@/lib/roles'
+import type { ContextoAdmin, RolAdmin, SeccionKey } from '@/lib/roles'
 
 /** Emails super-admin de bootstrap (ADMIN_EMAILS). Vacío si no está configurada. */
 function superAdminsBootstrap(): string[] {
@@ -12,14 +13,23 @@ function superAdminsBootstrap(): string[] {
 }
 
 /**
- * Resuelve el contexto del admin en sesión (rol + permisos) o `null` si la
- * cuenta no está autorizada. Lee la sesión de Supabase Auth y, para vendedores,
- * la fila `admin_users` (service_role).
+ * Resuelve el contexto de la cuenta en sesión (rol + permisos) o `null` si no
+ * está autorizada. Lee la sesión de Supabase Auth y, para todo lo que no sea un
+ * super admin de bootstrap, la fila `admin_users` (service_role).
+ *
+ * Sirve a las tres clases de cuenta: super_admin y vendedor son equipo de CLAUX;
+ * `partner` es un revendedor externo que usa el mismo login pero no entra al
+ * panel (ver `puedeAcceder` en `@/lib/roles`).
  *
  * Bootstrap: cualquier email en ADMIN_EMAILS es super_admin aunque no tenga
- * fila. Si ADMIN_EMAILS no está configurada, se mantiene el fail-open histórico.
+ * fila. Si ADMIN_EMAILS no está configurada, el fail-open histórico se mantiene
+ * SOLO para cuentas sin fila.
+ *
+ * Memorizado por petición (`cache` de React): el layout, la página y las acciones
+ * lo piden por separado, y sin esto cada una repetiría la llamada a Supabase Auth
+ * y la consulta a `admin_users` para responder lo mismo.
  */
-export async function obtenerContextoAdmin(): Promise<ContextoAdmin | null> {
+export const obtenerContextoAdmin = cache(async function obtenerContextoAdmin(): Promise<ContextoAdmin | null> {
   // Bypass de desarrollo → super_admin ficticio (sin tocar BD).
   if (isAuthBypassed()) {
     return { email: DEV_ADMIN.email, nombre: DEV_ADMIN.user_metadata.full_name, rol: 'super_admin', permisos: [] }
@@ -34,12 +44,14 @@ export async function obtenerContextoAdmin(): Promise<ContextoAdmin | null> {
 
   const whitelist = superAdminsBootstrap()
 
-  // Sin whitelist configurada → fail-open (comportamiento histórico): super_admin.
-  if (whitelist.length === 0)      return { email, nombre, rol: 'super_admin', permisos: [] }
-  // En whitelist → super_admin.
-  if (whitelist.includes(email))   return { email, nombre, rol: 'super_admin', permisos: [] }
+  // En whitelist → super_admin, tenga fila o no (bootstrap: nunca deja al equipo fuera).
+  if (whitelist.includes(email)) return { email, nombre, rol: 'super_admin', permisos: [] }
 
-  // Vendedor / super_admin gestionado: fila activa en admin_users.
+  // La fila manda sobre el fail-open. El orden importa: mientras el fail-open se
+  // consultaba ANTES de leer la tabla, un entorno sin ADMIN_EMAILS convertía en
+  // super_admin a cualquier cuenta autenticada — incluida la de un PARTNER, que
+  // es de fuera de CLAUX. Con la fila leída primero, un partner es partner
+  // aunque la variable de entorno falte.
   const db = createAdminClient()
   const { data } = await db
     .from('admin_users')
@@ -47,15 +59,24 @@ export async function obtenerContextoAdmin(): Promise<ContextoAdmin | null> {
     .eq('email', email)
     .maybeSingle()
 
-  if (!data || !data.activo) return null
+  if (data) {
+    if (!data.activo) return null
+    const rol = data.rol as RolAdmin
+    if (rol === 'super_admin') {
+      return { email, nombre: data.nombre || nombre, rol: 'super_admin', permisos: [] }
+    }
+    return {
+      email,
+      nombre:   data.nombre || nombre,
+      // Un rol desconocido (fila vieja, dato tocado a mano) NO se trata como
+      // equipo: cae a partner, que es el rol que menos ve.
+      rol:      rol === 'vendedor' ? 'vendedor' : 'partner',
+      // El partner no se describe por secciones del panel: no entra a ninguna.
+      permisos: rol === 'vendedor' ? ((data.permisos ?? []) as SeccionKey[]) : [],
+    }
+  }
 
-  if (data.rol === 'super_admin') {
-    return { email, nombre: data.nombre || nombre, rol: 'super_admin', permisos: [] }
-  }
-  return {
-    email,
-    nombre:   data.nombre || nombre,
-    rol:      'vendedor',
-    permisos: (data.permisos ?? []) as SeccionKey[],
-  }
-}
+  // Sin fila y sin whitelist configurada → fail-open (comportamiento histórico).
+  if (whitelist.length === 0) return { email, nombre, rol: 'super_admin', permisos: [] }
+  return null
+})

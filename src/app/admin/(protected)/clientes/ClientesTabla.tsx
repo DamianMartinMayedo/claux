@@ -4,7 +4,7 @@ import { Download, Eye, Search, User } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { suscripcionLabel } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, type CondicionesCliente } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
 
@@ -13,10 +13,10 @@ const ESTADO_BADGE: Record<string, string> = {
   DESACTIVADO: 'badge-warning', VENCIDO: 'badge-error',
 }
 
-type Cliente = {
+type Cliente = CondicionesCliente & {
   client_id: string; nombre_empresa: string; nombre_contacto: string | null
   email_admin: string; estado: string
-  precio_mensual_usd: number | null; ciclo_facturacion: string | null
+  ciclo_facturacion: string | null
   fecha_expiracion: string | null; fecha_inicio: string | null
   fecha_fin_gracia: string | null
   created_at: string | null; notas: string | null
@@ -68,7 +68,7 @@ function exportCSV(clientes: Cliente[]) {
     'Estado', 'Expiración', 'Días restantes', 'Fecha alta', 'Notas']
   const rows = clientes.map(c => [
     c.client_id, c.nombre_empresa, c.nombre_contacto ?? '', c.email_admin,
-    Number(c.precio_mensual_usd ?? 0).toFixed(2), cicloLabel(c.ciclo_facturacion), c.estado,
+    precioMensualEfectivo(c).toFixed(2), cicloLabel(c.ciclo_facturacion), c.estado,
     c.fecha_expiracion ?? '', calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia).label,
     c.fecha_inicio ?? c.created_at ?? '', c.notas ?? '',
   ])
@@ -185,7 +185,7 @@ export default function ClientesTabla({
                     </td>
                     <td data-label="Email" className="table-muted">{c.email_admin}</td>
                     <td data-label="Suscripción" className="table-muted">
-                      {suscripcionLabel(Number(c.precio_mensual_usd ?? 0), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct)}
+                      {suscripcionLabel(precioMensualEfectivo(c), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct)}
                     </td>
                     <td data-label="Estado">
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>

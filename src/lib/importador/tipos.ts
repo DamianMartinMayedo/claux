@@ -2,6 +2,8 @@
 // aporta un `Adaptador` que sabe validar, deduplicar, insertar y actualizar sus
 // filas. Todo server-side (lo llaman las acciones de `actions/portal/importar.ts`).
 
+import type { Dimension } from '@/lib/limites'
+
 export type ClienteDb = ReturnType<typeof import('@/lib/supabase/admin').createAdminClient>
 
 /** Un campo importable de una entidad. */
@@ -177,6 +179,13 @@ export interface ResultadoValidacion {
   pendientes?: Pendiente[]
   /** Filas que dicen lo mismo que otra del archivo (§`FilaRepetida`). */
   repetidas?: FilaRepetida[]
+  /**
+   * Cuánto cupo del nivel queda LIBRE ahora mismo para esta entidad. Es un dato de
+   * la base, no del archivo, así que vale igual en la primera tanda y en la última;
+   * el asistente lo enseña antes de aplicar para que nadie descubra el tope a
+   * mitad de la importación. Ausente = esta entidad no consume cupo, o es ilimitado.
+   */
+  cupo?: { dimension: Dimension; etiqueta: string; libre: number; limite: number }
 }
 
 export interface ResumenAplicacion {
@@ -276,6 +285,13 @@ export interface Adaptador {
    */
   repetible?: boolean
   modulos:   string[]     // módulos que habilitan escribir esta entidad (candado)
+  /**
+   * Cupo del nivel que consume cada fila NUEVA de esta entidad (`lib/limites.ts`).
+   * Sin esto, importar es el agujero por el que se cuela cualquier límite: cien
+   * altas a mano se paran, un fichero de mil no. Las entidades que no son fichas
+   * —gastos, cobros, saldos, stock— no lo declaran: no ocupan plaza de nada.
+   */
+  dimension?: Dimension
   revalidar: string       // ruta a revalidar tras aplicar
   campos:    CampoDef[]
   defaults:  DefaultDef[] // valores globales que pide el asistente antes de validar

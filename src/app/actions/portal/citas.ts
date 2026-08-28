@@ -17,6 +17,7 @@ import {
   limiteDelFiltro, patronBusqueda, ordenDelRango, type FiltroListado,
 } from '@/lib/listados'
 import { sumarDias } from '@/lib/fecha-tz'
+import { comprobarLimite } from '@/lib/limites'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -499,27 +500,37 @@ export async function guardarServicio(
           return m ? Math.max(max, parseInt(m[1], 10)) : max
         }, 0) + 1
         const nuevoId = `SRV-${corto()}`
-        const { error } = await db.from('products').insert({
-          producto_id:  nuevoId,
-          client_id:    session.client_id,
-          codigo:       `SRV-${String(n).padStart(4, '0')}`,
-          nombre,
-          tipo:         'SERVICIO',
-          unidad:       'servicio',
-          estado:       'ACTIVO',
-          // Un precio por moneda, como en el catálogo: aquí solo hay uno y es el suyo.
-          precios:      precio != null && moneda ? { [moneda]: precio } : {},
-          costos:       {},
-          stock_actual: 0,
-          stock_minimo: 0,
-          created_at:   new Date().toISOString(),
-          updated_at:   new Date().toISOString(),
-        })
-        if (error) {
-          console.error('[citas] alta en catálogo:', error)
-          avisoCatalogo = 'El servicio se guardó, pero no se pudo añadir al catálogo.'
+
+        // El cupo de servicios NO bloquea el alta de la cita: esto es solo la
+        // casilla de «añadirlo también al catálogo», y Citas funciona sin catálogo.
+        // Se degrada igual que un error de inserción —aviso y `producto_id` en
+        // null—; impedir guardar la cita por un cupo de catálogo sería desmedido.
+        const tope = await comprobarLimite(db, session.client_id, 'servicios')
+        if (tope) {
+          avisoCatalogo = `El servicio se guardó, pero no se añadió al catálogo. ${tope}`
         } else {
-          producto_id = nuevoId
+          const { error } = await db.from('products').insert({
+            producto_id:  nuevoId,
+            client_id:    session.client_id,
+            codigo:       `SRV-${String(n).padStart(4, '0')}`,
+            nombre,
+            tipo:         'SERVICIO',
+            unidad:       'servicio',
+            estado:       'ACTIVO',
+            // Un precio por moneda, como en el catálogo: aquí solo hay uno y es el suyo.
+            precios:      precio != null && moneda ? { [moneda]: precio } : {},
+            costos:       {},
+            stock_actual: 0,
+            stock_minimo: 0,
+            created_at:   new Date().toISOString(),
+            updated_at:   new Date().toISOString(),
+          })
+          if (error) {
+            console.error('[citas] alta en catálogo:', error)
+            avisoCatalogo = 'El servicio se guardó, pero no se pudo añadir al catálogo.'
+          } else {
+            producto_id = nuevoId
+          }
         }
       }
     }

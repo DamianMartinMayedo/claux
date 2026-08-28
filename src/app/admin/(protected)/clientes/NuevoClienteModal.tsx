@@ -4,10 +4,12 @@ import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import ClienteFormModal, { type ModuloCatalogo, type PlantillaSector } from './ClienteFormModal'
 import type { ParametrosPresupuesto } from '@/lib/presupuesto/config'
+import type { Nivel } from '@/lib/niveles'
 
 type Props = {
   catalogo:          ModuloCatalogo[]
   plantillas:        PlantillaSector[]
+  nombresNivel:      Record<Nivel, string>
   descuentoAnualPct: number
   parametros:        ParametrosPresupuesto
 }

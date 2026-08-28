@@ -12,14 +12,16 @@ import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { importeCiclo } from '@/lib/billing'
+import { NIVELES, precioModulo, type Nivel } from '@/lib/niveles'
 import { MIGRACION_ESTADOS_ALTA, MIGRACION_ESTADO_LABEL } from '@/lib/migracion'
 
 export type ModuloCatalogo = {
   clave: string
   nombre: string
   descripcion: string | null
-  precio_fundador_usd: number
-  precio_estandar_usd: number
+  precio_inicial_usd: number
+  precio_empresa_usd: number
+  precio_pro_usd: number
   es_base: boolean
   tipo: string
 }
@@ -37,7 +39,7 @@ export type InitialCliente = {
   nombre_contacto?: string
   email_admin?:     string
   sector?:          string
-  tarifa?:          'estandar' | 'fundador'
+  nivel?:           Nivel
   ciclo?:           'mensual' | 'anual'
   modulos?:         string[]
   pago_setup_usd?:  number
@@ -48,6 +50,8 @@ type Props = {
   onClose:           () => void
   catalogo:          ModuloCatalogo[]
   plantillas:        PlantillaSector[]
+  /** Cómo se llama hoy cada nivel (`niveles.nombre`, editable desde /admin). */
+  nombresNivel:      Record<Nivel, string>
   descuentoAnualPct: number
   /** Precios del presupuesto de instalación, para estimar el pago de configuración. */
   parametros?:       ParametrosPresupuesto
@@ -62,7 +66,7 @@ const GRUPOS: { label: string; tipo: string }[] = [
 ]
 
 export default function ClienteFormModal({
-  open, onClose, catalogo, plantillas, descuentoAnualPct, parametros, initial, presupuestoId,
+  open, onClose, catalogo, plantillas, nombresNivel, descuentoAnualPct, parametros, initial, presupuestoId,
 }: Props) {
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<{ client_id: string; passwordTemporal: string; estado: string; email?: string } | null>(null)
@@ -72,10 +76,10 @@ export default function ClienteFormModal({
 
   const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [sector, setSector] = useState('')
-  const [tarifa, setTarifa] = useState<'estandar' | 'fundador'>('estandar')
+  const [nivel, setNivel] = useState<Nivel>('inicial')
   const [ciclo, setCiclo]   = useState<'mensual' | 'anual'>('mensual')
   // Va arriba del todo y en estado (no `defaultChecked`) porque decide qué se
-  // muestra del resto: a un entorno de prueba no se le cobra, así que tarifa,
+  // muestra del resto: a un entorno de prueba no se le cobra, así que nivel,
   // ciclo, precio y pago de configuración no pintan nada y solo son campos que
   // rellenar. Los ocultos no se envían, y `crearCliente` los ignora igualmente.
   const [esPrueba, setEsPrueba] = useState(false)
@@ -90,7 +94,7 @@ export default function ClienteFormModal({
     setResultado(null)
     setSeleccionados(initial?.modulos ?? [])
     setSector(initial?.sector ?? '')
-    setTarifa(initial?.tarifa ?? 'estandar')
+    setNivel(initial?.nivel ?? 'inicial')
     setCiclo(initial?.ciclo ?? 'mensual')
     setEsPrueba(false)
     setPagoSetup(initial?.pago_setup_usd != null ? String(initial.pago_setup_usd) : '')
@@ -112,10 +116,9 @@ export default function ClienteFormModal({
     )
   }, [parametros, seleccionados])
 
-  const precioField = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
   const precioMensual = catalogo
     .filter(m => seleccionados.includes(m.clave))
-    .reduce((sum, m) => sum + Number(m[precioField] ?? 0), 0)
+    .reduce((sum, m) => sum + precioModulo(m, nivel), 0)
   const precioAnual = importeCiclo(precioMensual, 'anual', descuentoAnualPct)
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
 
@@ -162,7 +165,7 @@ export default function ClienteFormModal({
     if (contacto) q.set('responsable', contacto)
     if (email)    q.set('contacto', email)
     if (seleccionados.length > 0) q.set('modulos', seleccionados.join(','))
-    q.set('tarifa', tarifa)
+    q.set('nivel', nivel)
     return `/admin/presupuestos/nuevo?${q.toString()}`
   }
 
@@ -285,16 +288,16 @@ export default function ClienteFormModal({
                   </select>
                 </div>
 
-                {/* Tarifa */}
+                {/* Nivel: fija a la vez el precio de cada módulo y cuánto cabe dentro. */}
                 {!esPrueba && (
                 <div className="seg-field">
-                  <span className="seg-field-label">Tarifa</span>
+                  <span className="seg-field-label">Nivel</span>
                   <div className="seg">
-                    {(['estandar', 'fundador'] as const).map(t => (
-                      <label key={t} className="seg-opt">
-                        <input type="radio" name="tarifa" value={t} checked={tarifa === t}
-                          onChange={() => setTarifa(t)} />
-                        <span>{t === 'estandar' ? 'Estándar' : 'Fundador'}</span>
+                    {NIVELES.map(n => (
+                      <label key={n} className="seg-opt">
+                        <input type="radio" name="nivel" value={n} checked={nivel === n}
+                          onChange={() => setNivel(n)} />
+                        <span>{nombresNivel[n]}</span>
                       </label>
                     ))}
                   </div>
@@ -310,7 +313,7 @@ export default function ClienteFormModal({
                       <p className="mod-list-label">{grupo.label}</p>
                       {items.map(m => {
                         const activo = seleccionados.includes(m.clave)
-                        const precio = Number(m[precioField] ?? 0)
+                        const precio = precioModulo(m, nivel)
                         return (
                           <label key={m.clave} className="mod-row">
                             <span className="mod-row-main">
@@ -397,7 +400,7 @@ export default function ClienteFormModal({
                   />
                   {/* Dos caminos, y ninguno es inventarse la cifra:
                       · la cuenta rápida con los módulos ya marcados, para un alta sin más;
-                      · o irse a cotizarlo en serio —volúmenes, tarifa pactada, descuento—
+                      · o irse a cotizarlo en serio —volúmenes, nivel pactado, descuento—
                         llevándose lo que ya se ha tecleado aquí. Es el camino inverso al
                         habitual (presupuesto → cliente) y es igual de legítimo: a veces el
                         cliente aparece primero y el presupuesto se hace después. */}

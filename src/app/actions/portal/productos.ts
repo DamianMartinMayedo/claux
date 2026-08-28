@@ -21,6 +21,7 @@ import {
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { comprobarLimite } from '@/lib/limites'
 
 /**
  * Techo del historial de movimientos de la FICHA de un producto.
@@ -378,6 +379,12 @@ export async function guardarProducto(
         .eq('client_id', session.client_id)
       if (!count) return { ok: false, error: 'Crea un almacén antes de registrar productos físicos.' }
     }
+    // Productos y servicios viven en la misma tabla pero son cupos SEPARADOS: con
+    // uno solo, contratar Servicios se comería el catálogo de Inventario, y cada
+    // módulo tiene que valerse por sí mismo.
+    const tope = await comprobarLimite(db, session.client_id, tipo === 'SERVICIO' ? 'servicios' : 'productos')
+    if (tope) return { ok: false, error: tope }
+
     const producto_id = generarProductoId(tipo)
     const codigo      = await siguienteCodigoProducto(db, session.client_id, tipo)
 
@@ -520,6 +527,14 @@ export async function restaurarProducto(
   const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
+
+  // Desarchivar cuenta como crear. Sin esto el límite es decorativo: archivas 200,
+  // creas 200 nuevos y devuelves los viejos al catálogo.
+  const tope = await comprobarLimite(
+    db, session.client_id, tipoProd === 'SERVICIO' ? 'servicios' : 'productos', 1, 'desarchivar',
+  )
+  if (tope) return { ok: false, error: tope }
+
   const { error } = await db
     .from('products')
     .update({ estado: 'ACTIVO', updated_at: new Date().toISOString() })

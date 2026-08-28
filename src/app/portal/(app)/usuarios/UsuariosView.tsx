@@ -394,9 +394,10 @@ interface Props {
   sessionUserId: string
   soloLectura:   boolean
   modulosContratados: ModuloContratado[]
+  children?:     React.ReactNode
 }
 
-export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLectura, modulosContratados }: Props) {
+export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLectura, modulosContratados, children }: Props) {
   const router = useRouter()
   const [tab,        setTab]       = useState<TabKind>('usuarios')
   const [modalOpen,  setModalOpen] = useState(false)
@@ -444,6 +445,8 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
           </button>
         )}
       </div>
+
+      {children}
 
       {/* Tabs */}
       <Tabs<TabKind>

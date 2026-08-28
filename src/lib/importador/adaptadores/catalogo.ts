@@ -85,6 +85,7 @@ function crearAdaptadorCatalogo(tipo: TipoProducto): Adaptador {
   const esServicio = tipo === 'SERVICIO'
   return {
     entidad:   esServicio ? 'servicios' : 'productos',
+    dimension: esServicio ? 'servicios' : 'productos',
     etiqueta:  esServicio ? 'Servicios' : 'Productos',
     modulos:   [esServicio ? 'servicios' : 'inventario'],
     revalidar: esServicio ? '/portal/servicios' : '/portal/productos',

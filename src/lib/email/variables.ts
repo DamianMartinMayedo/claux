@@ -10,6 +10,8 @@ export type TipoEmail =
   | 'fin_prueba'
   | 'suspension'
   | 'periodo_gracia'
+  | 'limite_alcanzado'
+  | 'socio_ampliado'
 
 export const TIPOS_EMAIL: { tipo: TipoEmail; label: string }[] = [
   { tipo: 'diagnostico_cita',  label: 'Diagnóstico → agendar cita' },
@@ -23,6 +25,8 @@ export const TIPOS_EMAIL: { tipo: TipoEmail; label: string }[] = [
   { tipo: 'fin_prueba',        label: 'Fin de prueba (trial)' },
   { tipo: 'suspension',        label: 'Aviso de suspensión' },
   { tipo: 'periodo_gracia',    label: 'Ampliación de acceso (período especial)' },
+  { tipo: 'limite_alcanzado',  label: 'Llegó al tope de su nivel' },
+  { tipo: 'socio_ampliado',    label: 'Prórroga de Socio CLAUX' },
 ]
 
 interface VarDef {
@@ -91,5 +95,17 @@ export const PLANTILLAS_VARS: Record<TipoEmail, VarDef[]> = {
     { clave: 'fecha_fin',        label: 'Acceso ampliado hasta',     ejemplo: '30 sep 2026' },
     { clave: 'fecha_expiracion', label: 'Fecha en que venció',       ejemplo: '15 ago 2026' },
     { clave: 'dias',             label: 'Días de acceso concedidos', ejemplo: '30' },
+  ],
+  // El cambio de nivel es MANUAL (D15): este correo abre la conversación, no
+  // ofrece un botón que no existe. Por eso no lleva ningún enlace de «amplía aquí».
+  limite_alcanzado: [
+    { clave: 'empresa',  label: 'Nombre de la empresa',        ejemplo: 'Restaurante El Sabor' },
+    { clave: 'concepto', label: 'Qué se llenó, en plural',     ejemplo: 'productos' },
+    { clave: 'limite',   label: 'Tope de su nivel',            ejemplo: '200' },
+    { clave: 'nivel',    label: 'Nombre del nivel contratado', ejemplo: 'Inicial' },
+  ],
+  socio_ampliado: [
+    { clave: 'empresa',   label: 'Nombre de la empresa', ejemplo: 'Restaurante El Sabor' },
+    { clave: 'fecha_fin', label: 'Condición de socio hasta', ejemplo: '31 dic 2026' },
   ],
 }

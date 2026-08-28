@@ -19,6 +19,7 @@ import type { Adaptador, Preparado } from '../tipos'
 
 export const adaptadorPersonal: Adaptador = {
   entidad:   'personal',
+  dimension: 'trabajadores',
   etiqueta:  'Personal',
   modulos:   ['rrhh'],
   revalidar: '/portal/rrhh',

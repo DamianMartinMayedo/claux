@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
-import { PERMISOS_VENDEDOR_DEFAULT, SECCIONES, type RolAdmin, type SeccionKey } from '@/lib/roles'
+import { PERMISOS_VENDEDOR_DEFAULT, SECCIONES, normalizarRol, type RolAdmin, type SeccionKey } from '@/lib/roles'
 import { revalidatePath } from 'next/cache'
 
 export interface UsuarioAdmin {
@@ -31,6 +31,10 @@ function superAdminsBootstrap(): string[] {
 
 function normalizarPermisos(rol: RolAdmin, permisos: string[]): SeccionKey[] {
   if (rol === 'super_admin') return []
+  // Un partner no entra a ninguna sección del panel: su acceso no se describe por
+  // secciones sino por la capa del manual. Se vacía aquí y no solo en la pantalla,
+  // porque lo que llegue en el formulario no es de fiar.
+  if (rol === 'partner') return []
   const limpio = (permisos ?? []).filter((k): k is SeccionKey => CLAVES_VALIDAS.has(k as SeccionKey))
   // Un vendedor sin ninguna sección no tendría a dónde entrar → mínimos por defecto.
   return limpio.length > 0 ? Array.from(new Set(limpio)) : [...PERMISOS_VENDEDOR_DEFAULT]
@@ -74,7 +78,7 @@ export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
     out.push({
       email,
       nombre:      f.nombre,
-      rol:         boot ? 'super_admin' : (f.rol as RolAdmin),
+      rol:         boot ? 'super_admin' : normalizarRol(f.rol),
       permisos:    boot ? [] : ((f.permisos ?? []) as SeccionKey[]),
       activo:      boot ? true : f.activo,
       created_at:  f.created_at,
@@ -117,7 +121,7 @@ export async function crearUsuarioAdmin(args: {
 
   const email  = (args.email || '').trim().toLowerCase()
   const nombre = (args.nombre || '').trim()
-  const rol: RolAdmin = args.rol === 'super_admin' ? 'super_admin' : 'vendedor'
+  const rol = normalizarRol(args.rol)
   const password = args.password || ''
 
   if (!EMAIL_RE.test(email)) return { ok: false, error: 'Correo no válido.' }
@@ -181,7 +185,7 @@ export async function actualizarUsuarioAdmin(email: string, args: {
 
   const clave = (email || '').trim().toLowerCase()
   const nombre = (args.nombre || '').trim()
-  const rol: RolAdmin = args.rol === 'super_admin' ? 'super_admin' : 'vendedor'
+  const rol = normalizarRol(args.rol)
   if (!clave)   return { ok: false, error: 'Usuario no válido.' }
   if (!nombre)  return { ok: false, error: 'El nombre es obligatorio.' }
 

@@ -1,24 +1,26 @@
 // Loader server-side del catálogo público. ÚNICO origen de verdad para la
 // landing y el diagnóstico: lee modulos_catalogo + plantillas_sector +
-// diagnostico_necesidades. Así, al añadir un módulo, cambiar un sector o editar
-// las necesidades en el admin, el embudo se actualiza solo (las páginas que lo
-// consumen usan ISR — ver `revalidate` en cada page).
+// diagnostico_necesidades + niveles/nivel_limites. Así, al añadir un módulo, cambiar un sector o editar
+// las necesidades en el admin, el embudo se actualiza solo: las páginas que lo
+// consumen (landing y diagnóstico) son `force-dynamic`, así que leen en cada
+// visita y un cambio del admin se ve al recargar, sin desplegar ni revalidar.
 import { createAdminClient } from '@/lib/supabase/admin'
 import { etiquetasDe } from '@/lib/sector'
 import type {
   CatalogoPublico,
   ModuloPublico,
   NecesidadPublica,
+  NivelPublico,
   SectorPublico,
 } from './tipos'
 
-export type { CatalogoPublico, ModuloPublico, NecesidadPublica, SectorPublico }
+export type { CatalogoPublico, ModuloPublico, NecesidadPublica, NivelPublico, SectorPublico }
 
 // Catálogo vacío: fallback cuando la BD/secreto no está disponible. Una página
 // pública de marketing (landing/diagnóstico) NUNCA debe tumbar el build ni
-// devolver 500 por un fallo de lectura: degradamos a vacío y, como las páginas
-// usan ISR, se auto-reparan en la siguiente revalidación cuando la BD vuelve.
-const CATALOGO_VACIO: CatalogoPublico = { modulos: [], sectores: [], necesidades: [] }
+// devolver 500 por un fallo de lectura: degradamos a vacío, y como se renderizan
+// por petición, el fallo se queda en esa visita — la siguiente ya vuelve a leer.
+const CATALOGO_VACIO: CatalogoPublico = { modulos: [], sectores: [], necesidades: [], niveles: [] }
 
 export async function obtenerCatalogoPublico(): Promise<CatalogoPublico> {
   try {
@@ -32,7 +34,7 @@ export async function obtenerCatalogoPublico(): Promise<CatalogoPublico> {
 async function cargarCatalogoPublico(): Promise<CatalogoPublico> {
   const db = createAdminClient()
 
-  const [modRes, secRes, necRes] = await Promise.all([
+  const [modRes, secRes, necRes, nivRes, limRes] = await Promise.all([
     db
       .from('modulos_catalogo')
       .select('clave, nombre, descripcion, tipo, mostrar_en_landing')
@@ -48,6 +50,14 @@ async function cargarCatalogoPublico(): Promise<CatalogoPublico> {
       .select('clave, etiqueta, descripcion, icono, modulos')
       .eq('activa', true)
       .order('orden', { ascending: true }),
+    db
+      .from('niveles')
+      .select('clave, nombre, descripcion')
+      .eq('activo', true)
+      .order('orden', { ascending: true }),
+    db
+      .from('nivel_limites')
+      .select('nivel, dimension, base'),
   ])
 
   const modulos: ModuloPublico[] = (modRes.data ?? []).map((m) => ({
@@ -73,5 +83,22 @@ async function cargarCatalogoPublico(): Promise<CatalogoPublico> {
     modulos: Array.isArray(n.modulos) ? (n.modulos as string[]) : [],
   }))
 
-  return { modulos, sectores, necesidades }
+  // Los límites llegan en una sola consulta (30 filas) y se reparten por nivel.
+  // `base` NULL es SIN TOPE, no cero: se conserva el null hasta la pantalla, que
+  // es la que decide cómo se dice.
+  const porNivel = new Map<string, Record<string, number | null>>()
+  for (const l of (limRes.data ?? []) as { nivel: string; dimension: string; base: number | null }[]) {
+    const m = porNivel.get(l.nivel) ?? {}
+    m[l.dimension] = l.base === null || l.base === undefined ? null : Number(l.base)
+    porNivel.set(l.nivel, m)
+  }
+
+  const niveles: NivelPublico[] = (nivRes.data ?? []).map((n) => ({
+    clave: n.clave,
+    nombre: n.nombre,
+    descripcion: n.descripcion ?? '',
+    limites: porNivel.get(n.clave) ?? {},
+  }))
+
+  return { modulos, sectores, necesidades, niveles }
 }

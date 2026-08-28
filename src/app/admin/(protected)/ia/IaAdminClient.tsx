@@ -206,8 +206,8 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
           </div>
           <div className="input-group">
             <div className="form-label-with-help">
-              <label htmlFor="ia-cupo">Cupo global (conversaciones/mes)</label>
-              <FormHelp text="Límite por defecto para cada cliente. Se puede subir por cliente en su ficha." label="Qué es el cupo global" />
+              <label htmlFor="ia-cupo">Cupo de reserva (conversaciones/mes)</label>
+              <FormHelp text="El cupo de cada cliente lo fija su nivel (Ajustes → Niveles), y se puede subir cliente a cliente en su ficha. Este número solo entra si un nivel se quedara sin cupo definido." label="Cuándo se usa este cupo" />
             </div>
             <input id="ia-cupo" type="number" min="1" step="1" className="input"
                    value={cupo} onChange={e => setCupo(e.target.value)} />

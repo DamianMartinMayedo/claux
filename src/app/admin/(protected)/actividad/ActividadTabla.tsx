@@ -18,6 +18,7 @@ const ENTITY_LABEL: Record<string, string> = {
   plan:    'Plan',
   pago:    'Pago',
   sistema: 'Sistema',
+  nivel:   'Nivel',
 }
 // Variantes de la familia `.badge`, que dentro de la tabla van sin fondo. Los tonos son
 // los que tenía la antigua `.act-badge-*`, ahora vía tokens del design system.
@@ -26,6 +27,7 @@ const ENTITY_BADGE: Record<string, string> = {
   plan:    'badge-warning',
   pago:    'badge-success',
   sistema: 'badge-neutral',
+  nivel:   'badge-warning',
 }
 
 const ACTION_LABEL: Record<string, string> = {

@@ -3,15 +3,10 @@
 import Link from 'next/link'
 import MobileNavToggle from '@/components/MobileNavToggle'
 import AvisosCampana from '@/components/admin/notificaciones/AvisosCampana'
-import type { RolAdmin } from '@/lib/roles'
+import { ROL_LABEL, type RolAdmin } from '@/lib/roles'
 
 function getInitials(name: string): string {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
-}
-
-const ROL_LABEL: Record<RolAdmin, string> = {
-  super_admin: 'Super Admin',
-  vendedor:    'Vendedor',
 }
 
 export default function Header({ displayName, rol }: { displayName: string; rol: RolAdmin }) {

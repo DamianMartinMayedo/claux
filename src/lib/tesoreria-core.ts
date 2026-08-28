@@ -35,6 +35,9 @@ export async function obtenerCuentaApertura(
     .limit(1).maybeSingle()
   if (data?.cuenta_id) return data.cuenta_id as string
 
+  // Sin comprobación de límite, a propósito: esta cuenta no la pide el dueño ni
+  // la ve en su listado, y sin ella el histórico importado se queda sin saldar.
+  // Por eso tampoco cuenta para el cupo (ver `es_apertura` en `lib/limites.ts`).
   const cuenta_id = generarCuentaId()
   const { error } = await db.from('cuentas').insert({
     cuenta_id,

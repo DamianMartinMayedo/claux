@@ -924,6 +924,12 @@
 .prf-badge-trial  { background: var(--color-info-bg); color: var(--color-primary); }
 .prf-badge-gracia { background: var(--color-warning-bg); color: var(--color-warning); }
 .prf-badge-vencido { background: var(--color-error-bg); color: var(--color-error); }
+/* Socio CLAUX: bandera, no estado — convive con el badge de estado, por eso
+   lleva color propio (violeta) y no reutiliza ninguno de los cuatro de arriba. */
+.prf-badge-socio  { background: var(--color-purple-bg); color: var(--color-purple); }
+/* Nivel contratado: tampoco es estado, va siempre y convive con los de arriba.
+   Índigo, que es el acento con el que ya se pinta la capacidad en la Academia. */
+.prf-badge-nivel  { background: var(--color-indigo-bg); color: var(--color-indigo); }
 
 /* Fila 2 columnas en el form de usuario */
 .prf-form-row {
@@ -4029,7 +4035,7 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 /* Presentación: panel de control del enlace público (/d/<token>) */
 .dos-enlace-estado { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
 .dos-enlace-nota { margin: 0; }
-/* Listado de dossiers (addon multidossier) */
+/* Listado de dossiers (cuántos caben lo dice el nivel) */
 /* `.page-header` es flex con wrap, y un bloque de texto sin acotar se lleva la fila
    entera: el botón acaba debajo y a la izquierda, que es justo donde no se busca una
    acción principal. Con `flex:1` el texto ocupa solo el hueco que deja el botón y
@@ -5221,3 +5227,14 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    son un solo gesto («esto, a las que faltan»). */
 .gav-lote-accion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .gav-lote-select { min-width: 15rem; }
+
+/* ── Cupo del nivel: «182 de 200 productos» ─────────────────────────────────
+   Discreto a propósito (D9): el dueño solo necesita saber por dónde va, y el
+   día que se acerque al tope el color hace el resto. Nada que ver con
+   `.listado-tope`, que habla del techo de filas de una consulta. */
+.cupo-nivel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+.cupo-nivel-cerca { color: var(--color-warning); font-weight: 500; }

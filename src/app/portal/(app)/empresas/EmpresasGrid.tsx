@@ -24,6 +24,7 @@ interface Props {
   empresas:    Empresa[]
   monedas:     Moneda[]
   maxEmpresas: number | null
+  nivelNombre: string
   esAdmin:     boolean
   soloLectura: boolean
 }
@@ -452,7 +453,7 @@ function EmpresaModal({
 
 // ── Grid principal ────────────────────────────────────────────────────────────
 
-export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esAdmin, soloLectura }: Props) {
+export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, nivelNombre, esAdmin, soloLectura }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false, empresa: null })
   // Empresas no la gobierna un módulo: el candado de escritura es «ser admin y no ser
   // solo-lectura». Un `usuario` no-admin o un solo-lectura la ve, pero sin botones.
@@ -464,15 +465,19 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
   const sinMonedas        = monedas.length === 0
   const bloqueado         = limiteAlcanzado || sinMonedas
 
-  // Interés en el addon multiempresa: se registra en el servidor (deja rastro en
-  // /admin/soporte y avisa a comercial), no un texto muerto. Mismo criterio que el
-  // banner del dashboard: nada de `mailto:`, que no deja constancia de quién pidió qué.
+  // Interés en SUBIR DE NIVEL. Antes esto pedía el addon «Multiempresa», que ya no
+  // existe: cuántas empresas caben lo decide el nivel, así que ofrecer el addon era
+  // ofrecer algo que nadie puede contratar. La clave y la etiqueta son las mismas que
+  // usa el banner del dashboard (`nivel_superior` / «Subir de nivel»), para que las
+  // dos peticiones caigan en la misma fila de /admin/soporte y en el mismo embudo de
+  // Ventas → Ampliaciones. Se registra en el servidor (deja rastro y avisa a
+  // comercial), nunca un `mailto:`, que no deja constancia de quién pidió qué.
   const [interesEnviado,   setInteresEnviado]   = useState(false)
   const [enviandoInteres,  startInteres]        = useTransition()
-  function pedirMultiempresa() {
+  function pedirSubirNivel() {
     if (enviandoInteres || interesEnviado) return
     startInteres(async () => {
-      const r = await registrarInteresModulo('multiempresa', 'Multiempresa')
+      const r = await registrarInteresModulo('nivel_superior', 'Subir de nivel')
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
       setInteresEnviado(true)
       toastSuccess('Recibido. Te contactamos enseguida.')
@@ -537,13 +542,13 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, esA
       {limiteAlcanzado && esAdmin && (
         <div className="alert alert-warning mb-5 emp-limite-cta">
           <span>
-            Has alcanzado el límite de <strong>{maxEmpresas}</strong> empresa{maxEmpresas === 1 ? '' : 's'} de tu plan.
-            Con <strong>Multiempresa</strong> puedes gestionar todas las que necesites.
+            El nivel <strong>{nivelNombre}</strong> llega a <strong>{maxEmpresas}</strong> empresa{maxEmpresas === 1 ? '' : 's'}.
+            Con el siguiente caben más.
           </span>
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            onClick={pedirMultiempresa}
+            onClick={pedirSubirNivel}
             disabled={enviandoInteres || interesEnviado}
           >
             {enviandoInteres

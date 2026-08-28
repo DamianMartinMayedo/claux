@@ -13,7 +13,7 @@ import {
   resetPasswordUsuarioAdmin,
   type UsuarioAdmin,
 } from '@/app/actions/usuarios-admin'
-import { SECCIONES, PERMISOS_VENDEDOR_DEFAULT, type RolAdmin, type SeccionKey } from '@/lib/roles'
+import { SECCIONES, PERMISOS_VENDEDOR_DEFAULT, ROL_LABEL, type RolAdmin, type SeccionKey } from '@/lib/roles'
 
 function generarPassword(len = 10): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
@@ -102,10 +102,10 @@ export default function UsuarioModal({
             <div className="seg-field">
               <span className="seg-field-label">Rol</span>
               <div className="seg">
-                {(['vendedor', 'super_admin'] as const).map(r => (
+                {(['vendedor', 'super_admin', 'partner'] as const).map(r => (
                   <label key={r} className="seg-opt">
                     <input type="radio" name="rol" value={r} checked={rol === r} onChange={() => setRol(r)} />
-                    <span>{r === 'vendedor' ? 'Vendedor' : 'Super Admin'}</span>
+                    <span>{ROL_LABEL[r]}</span>
                   </label>
                 ))}
               </div>
@@ -119,7 +119,7 @@ export default function UsuarioModal({
                 <FormHelp
                   text={editando
                     ? 'Si la rellenas, se regenera la contraseña de acceso de este usuario.'
-                    : 'Se la comunicas al vendedor; podrá cambiarla luego.'}
+                    : 'Se la comunicas a la persona; podrá cambiarla luego.'}
                   label="Información sobre la contraseña" />
               </div>
               <div className="grid-cols-2">
@@ -159,9 +159,15 @@ export default function UsuarioModal({
                   </div>
                 )}
               </div>
-            ) : (
+            ) : rol === 'super_admin' ? (
               <div className="alert alert-info">
                 Un <strong>Super Admin</strong> tiene acceso total al panel.
+              </div>
+            ) : (
+              <div className="alert alert-info">
+                Un <strong>Partner</strong> es de fuera de CLAUX: <strong>no entra al panel</strong>.
+                Entra por <code>claux.es/partners</code> con este mismo correo y solo ve el manual
+                en su capa, sin costes, márgenes ni hoja de ruta.
               </div>
             )}
           </div>

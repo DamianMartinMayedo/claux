@@ -33,10 +33,13 @@ export default function SolicitudesView({
   leads,
   rol,
   permisos,
+  nombresNivel,
 }: {
   leads: DiagnosticoLead[]
   rol: RolAdmin
   permisos: SeccionKey[]
+  /** Nombres vivos de los niveles: el lead guarda la clave, no el rótulo. */
+  nombresNivel: Record<string, string>
 }) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
@@ -189,6 +192,14 @@ export default function SolicitudesView({
                   <span className="sol-label">Módulos recomendados</span>
                   <span className="sol-value">{(detalle.modulos_rec ?? []).join(', ') || '—'}</span>
                 </div>
+                {/* Solo si el lead lo trae: los anteriores al paso de tamaño
+                    (mig. 219) no lo respondieron y no se les inventa uno. */}
+                {detalle.nivel_rec && (
+                  <div className="sol-row">
+                    <span className="sol-label">Nivel que le encaja</span>
+                    <span className="sol-value">{nombresNivel[detalle.nivel_rec] ?? detalle.nivel_rec}</span>
+                  </div>
+                )}
                 <div className="sol-row">
                   <span className="sol-label">Fecha</span>
                   <span className="sol-value">{fmtFecha(detalle.created_at)}</span>

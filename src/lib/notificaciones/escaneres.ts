@@ -18,6 +18,9 @@ import { facturadasPorCiclo, rangoPeriodo } from '@/lib/facturacion-suscripcione
 import { reanudarAcuerdo } from '@/lib/suscripciones-core'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { DIAS_DOSSIER_RANCIO } from '@/lib/dossier/frescura'
+import { cargarContextoLimites, contarActivos, DIMENSIONES, type Dimension } from '@/lib/limites'
+import { renderPlantilla } from '@/lib/email/render'
+import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -1545,4 +1548,98 @@ export async function escanearDossier(db: Db, tenants: ContextoTenant[]): Promis
     await resolverNotificaciones(db, t.clientId, ['dossier_snapshot_desactualizado'], 'dossier', vivas.de(t.clientId))
   }
   return creadas
+}
+
+// ── Capacidad del nivel: cerca del tope y tope alcanzado ──────────────────────
+//
+// Al 90 % un aviso en la bandeja; al 100 %, además, un correo al dueño. El cambio
+// de nivel es MANUAL (D15): el correo abre la conversación, no ofrece un botón
+// que no existe.
+//
+// Rompe el «nunca una query por cliente» del contrato de arriba, y no hay forma
+// de evitarlo: son conteos con filtro por tenant sobre nueve tablas distintas y
+// PostgREST no agrupa. Se acota contando SOLO las dimensiones cuyo módulo tiene
+// contratado el tenant y SOLO las que tienen tope (un nivel Pro casi no cuenta
+// nada).
+//
+// `entidadId` lleva el período: el índice de idempotencia impide repetir, así que
+// sin la fecha dentro el aviso saldría UNA vez en la vida del cliente. Con ella,
+// como mucho uno por dimensión y mes — que es la cadencia que tiene sentido para
+// algo que se resuelve archivando o subiendo de nivel.
+export async function escanearLimites(
+  db: Db, tenants: ContextoTenant[], periodo: string,
+): Promise<number> {
+  if (tenants.length === 0) return 0
+  let creadas = 0
+
+  for (const t of tenants) {
+    let ctx: Awaited<ReturnType<typeof cargarContextoLimites>>
+    try {
+      ctx = await cargarContextoLimites(db, t.clientId)
+    } catch { continue }
+
+    for (const dim of Object.keys(DIMENSIONES) as Exclude<Dimension, 'ia_conversaciones'>[]) {
+      const limite = ctx.limites[dim]
+      if (limite === null || limite === undefined) continue        // sin tope, nada que avisar
+      const def = DIMENSIONES[dim]
+      if (def.modulo && !t.modulos.includes(def.modulo)) continue  // no lo tiene contratado
+
+      let usado: number
+      try {
+        usado = await contarActivos(db, t.clientId, dim)
+      } catch { continue }   // un conteo caído no inventa un aviso
+
+      const lleno = usado >= limite
+      if (!lleno && usado < Math.ceil(limite * 0.9)) continue
+
+      const ok = await crearNotificacion({
+        clientId:    t.clientId,
+        tipo:        lleno ? 'limite_alcanzado' : 'limite_cerca',
+        titulo:      lleno
+          ? `Llegaste al tope de ${def.varios}`
+          : `Te quedan pocos huecos de ${def.varios}`,
+        cuerpo:      lleno
+          ? `Tienes ${usado} de ${limite} ${def.varios}, el máximo de tu nivel ${ctx.nivelNombre}. No se corta nada: para añadir más, archiva ${def.genero === 'f' ? 'alguna' : 'alguno'} o escríbenos y subimos de nivel.`
+          : `Llevas ${usado} de ${limite} ${def.varios} de tu nivel ${ctx.nivelNombre}.`,
+        entidadTipo: 'limite',
+        entidadId:   `${dim}:${periodo}`,
+      }, t)
+      if (!ok) continue
+      creadas++
+
+      // El correo cuelga de que el aviso sea NUEVO: así se manda una vez por
+      // dimensión y mes, sin llevar una tabla de envíos aparte.
+      if (lleno) await avisarLimitePorCorreo(db, t.clientId, def.varios, limite, ctx.nivelNombre)
+    }
+  }
+
+  return creadas
+}
+
+/** Correo `limite_alcanzado` al dueño. Nunca lanza: es un efecto secundario. */
+async function avisarLimitePorCorreo(
+  db: Db, clientId: string, concepto: string, limite: number, nivelNombre: string,
+): Promise<void> {
+  try {
+    if (!(await tipoEmailActivo('limite_alcanzado'))) return
+    const { data: cli } = await db
+      .from('clients')
+      .select('nombre_empresa, email_admin')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    if (!cli?.email_admin) return
+
+    const { asunto, html } = await renderPlantilla('limite_alcanzado', {
+      empresa:  cli.nombre_empresa ?? clientId,
+      concepto,
+      limite:   String(limite),
+      nivel:    nivelNombre,
+    })
+    await enviarEmail({
+      to: cli.email_admin, subject: asunto, html,
+      clientId, tipo: 'limite_alcanzado',
+    })
+  } catch (e) {
+    console.error('[limites] no se pudo avisar por correo', clientId, e)
+  }
 }

@@ -10,7 +10,7 @@
 // ya tiene icono allí, aquí se usa el MISMO, para que el usuario reconozca en el
 // portal lo que vio en la landing.
 import {
-  ArrowRight, Boxes, Briefcase, Building2, Calculator, Calendar, Check,
+  ArrowRight, Boxes, Briefcase, Calculator, Calendar, Check,
   ChevronDown, Clock, Coffee, Dumbbell, FileText, Flower2, Handshake, HeartPulse,
   Key, Layers, MessageSquare, Presentation, Printer, Puzzle, QrCode, Scissors,
   Sparkles, Store, Users, UtensilsCrossed, Wine,
@@ -56,14 +56,12 @@ const MODULO_ICONS: Record<string, IconCmp> = {
   servicios:           Handshake,
   rrhh:                Users,
   asistente_ia:        Sparkles,
-  multiempresa:        Building2,
   catalogo_qr:         QrCode,
   reservas_citas:      Calendar,
   agenda:              Clock,
   documentos_imprenta: Printer,
   caja:                Store,
   dossier:             Presentation,
-  multidossier:        Layers,
 }
 
 /** Acento de color del design system (clases .ld-ac-*). */
@@ -92,14 +90,12 @@ const MODULO_COLOR: Record<string, ColorModulo> = {
   servicios:           'green',
   rrhh:                'indigo',
   asistente_ia:        'purple',
-  multiempresa:        'indigo',
   catalogo_qr:         'green',
   reservas_citas:      'purple',
   agenda:              'rose',
   documentos_imprenta: 'amber',
   caja:                'teal',
   dossier:             'amber',
-  multidossier:        'rose',
 }
 
 export function iconoSector(sector: string): IconCmp {

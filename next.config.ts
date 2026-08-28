@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
   // 500. Hay que forzar su inclusión en la función de la ruta del PDF.
   outputFileTracingIncludes: {
     '/d/[token]/pdf': ['./node_modules/@sparticuz/chromium/bin/**'],
+    // El manual de la Academia son .md que se leen por FS en runtime (no con
+    // import), así que el tracer tampoco los empaqueta: en Vercel las fichas
+    // saldrían «en preparación» y en local no se nota, porque hay disco real.
+    // El glob cubre también las rutas hijas —la pieza suelta y el manual
+    // entero—, que los leen igual.
+    '/academia': ['./content/academia/**'],
+    '/academia/**': ['./content/academia/**'],
   },
   images: {
     // Logos de empresas servidos desde Supabase Storage (bucket público).

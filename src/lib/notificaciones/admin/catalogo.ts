@@ -105,6 +105,17 @@ export const CATALOGO_ADMIN = {
     etiqueta: 'Pago registrado',
     descripcion: 'Se anotó el pago de un cliente.',
   },
+  socio_termina: {
+    categoria: 'clientes', seccion: 'clientes', severidad: 'aviso', implementado: true,
+    etiqueta: 'Se acaba una condición de Socio CLAUX',
+    descripcion: 'A un socio se le termina el período gratuito y vuelve al flujo de cobro.',
+    // Empieza a los 30 días, y no a los 15 como una suscripción normal: aquí no
+    // hay una factura que renovar sino una conversación que tener —prorrogar,
+    // convertir a cliente de pago o cerrar—, y esa conversación no se improvisa
+    // la semana de antes. El escalón `vencido` es el que avisa de que el cliente
+    // acaba de volver al flujo normal y ya se le puede cortar por fecha.
+    umbrales: ['30d', '15d', '5d', '1d', 'vencido'], porUmbral: { '1d': 'urgente' },
+  },
   cliente_inactivo: {
     categoria: 'clientes', seccion: 'clientes', severidad: 'aviso', implementado: true,
     etiqueta: 'Cliente inactivo',

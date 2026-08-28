@@ -94,6 +94,19 @@ export const CATALOGO = {
     etiqueta: 'Cupo de IA cerca del tope',
     descripcion: 'Tu consumo mensual del asistente se acerca al límite.',
   },
+  // Capacidad del nivel contratado (productos, trabajadores, empresas…). `modulo:
+  // null` = plataforma: el tope existe tenga los módulos que tenga, y el aviso ha
+  // de llegar igual al que solo tiene RRHH que al que lo tiene todo.
+  limite_cerca: {
+    categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
+    etiqueta: 'Cerca del tope de tu nivel',
+    descripcion: 'Te quedan pocos huecos en algo que tu nivel limita (productos, trabajadores, empresas…).',
+  },
+  limite_alcanzado: {
+    categoria: 'suscripcion', modulo: null, severidad: 'urgente', implementado: true,
+    etiqueta: 'Llegaste al tope de tu nivel',
+    descripcion: 'Se llenó algo que tu nivel limita. No se corta nada, pero no puedes añadir más.',
+  },
   // Documentos legales del alta sin firmar. `modulo: null` = plataforma: aplica a
   // todo cliente, tenga los módulos que tenga. La lanza el admin como recordatorio.
   documentos_firma_pendiente: {

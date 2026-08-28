@@ -1,6 +1,7 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { DOCUMENTOS_IA } from '@/lib/ia/documentos'
+import { normalizarNivel } from '@/lib/niveles'
 import IaAdminClient, { type ModeloIa, type ConsumoCliente, type DocumentoUi } from './IaAdminClient'
 
 export const dynamic = 'force-dynamic'
@@ -20,9 +21,19 @@ export default async function AdminIaPage() {
     supabase.from('settings').select('key, value')
       .in('key', ['ia_model', 'ia_modelo_fallback_gratis', 'ia_cupo_conversaciones', 'ia_nombre_agente', 'ia_tono']),
     supabase.from('settings').select('key, value').in('key', DOCUMENTOS_IA.map(d => d.key)),
-    supabase.from('clients').select('client_id, nombre_empresa, ia_config')
+    supabase.from('clients').select('client_id, nombre_empresa, ia_config, nivel')
       .contains('modulos_activos', ['asistente_ia']),
   ])
+
+  // El cupo base de cada cliente sale de su NIVEL. Se leen las tres filas de una
+  // vez (son tres) en vez de una consulta por cliente.
+  const { data: limitesIa } = await supabase.from('nivel_limites')
+    .select('nivel, base').eq('dimension', 'ia_conversaciones')
+  const cupoPorNivel = Object.fromEntries(
+    (limitesIa ?? [])
+      .filter((f: { base: number | null }) => f.base !== null)
+      .map((f: { nivel: string; base: number | null }) => [f.nivel, Math.floor(Number(f.base))]),
+  ) as Record<string, number>
 
   const modelos = (modelosRaw ?? []) as ModeloIa[]
   const S = Object.fromEntries((settingsRaw ?? []).map(r => [r.key, r.value]))
@@ -55,7 +66,12 @@ export default async function AdminIaPage() {
   const consumo: ConsumoCliente[] = clientes.map(c => {
     const cfg = (c.ia_config && typeof c.ia_config === 'object') ? c.ia_config as Record<string, unknown> : {}
     const override = Number(cfg.cupo)
-    const cupo = Number.isFinite(override) && override > 0 ? Math.floor(override) : cupoGlobal
+    // Mismo orden que `cupoEfectivo` (lib/ia/modelo.ts): excepción del cliente →
+    // nivel → global. Si esta tabla enseñara otro número, el admin estaría viendo
+    // un cupo que el motor no aplica.
+    const cupo = Number.isFinite(override) && override > 0
+      ? Math.floor(override)
+      : cupoPorNivel[normalizarNivel(c.nivel)] ?? cupoGlobal
     const u = usoMap[c.client_id as string]
     const conversaciones = Number(u?.conversaciones) || 0
     const tokens = (Number(u?.tokens_in) || 0) + (Number(u?.tokens_out) || 0)

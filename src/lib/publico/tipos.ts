@@ -30,8 +30,21 @@ export interface NecesidadPublica {
   modulos: string[] // claves de modulos_catalogo que cubre esta necesidad
 }
 
+// Un nivel comercial tal y como se enseña fuera: nombre y descripción editables
+// desde /admin/niveles, y sus topes ya resueltos. `null` en un límite = sin tope.
+// Las claves de `limites` son las dimensiones (`empresas`, `productos`…); se deja
+// como Record<string, …> a propósito, para que este fichero siga sin importar
+// nada del motor de límites.
+export interface NivelPublico {
+  clave: string
+  nombre: string
+  descripcion: string
+  limites: Record<string, number | null>
+}
+
 export interface CatalogoPublico {
   modulos: ModuloPublico[]
   sectores: SectorPublico[]
   necesidades: NecesidadPublica[]
+  niveles: NivelPublico[]
 }

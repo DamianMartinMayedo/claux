@@ -23,13 +23,13 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function DiagnosticoPage() {
-  const { modulos, sectores, necesidades } = await obtenerCatalogoPublico()
+  const { modulos, sectores, necesidades, niveles } = await obtenerCatalogoPublico()
 
   return (
     <div className="dg-page">
       <PublicHeader />
       <div className="dg-container">
-        <DiagnosticoForm modulos={modulos} sectores={sectores} necesidades={necesidades} />
+        <DiagnosticoForm modulos={modulos} sectores={sectores} necesidades={necesidades} niveles={niveles} />
       </div>
       <PublicFooter />
     </div>

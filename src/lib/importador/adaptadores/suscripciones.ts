@@ -31,6 +31,7 @@ import {
 } from '../util'
 import { aFallo, resolverRef } from '../resolver'
 import { registrarAuxiliar } from '../motor'
+import { comprobarLimite } from '@/lib/limites'
 import { defEmpresa, defMoneda, defServicioFaltante, defTerceroFaltante, politicaServicio } from './comunes'
 import { crearTerceroImportado, resolverTerceroDeFila } from './terceros'
 import type { Adaptador, CampoDef, CtxImport, Preparado } from '../tipos'
@@ -148,6 +149,12 @@ async function crearServicioImportado(
   const idx = await indiceServicios(ctx)
   const ya  = idx.buscar(nombre)[0]
   if (ya) { await asegurarSuscribible(ya.producto_id, ctx); return ya.producto_id }
+
+  // El servicio nace «de paso», pero es una ficha real que el dueño verá y usará:
+  // consume cupo como cualquier otra. Si no cabe, se lanza y el motor deja esta
+  // fila en ERROR con el motivo — la suscripción no puede existir sin su servicio.
+  const tope = await comprobarLimite(ctx.db, ctx.client_id, 'servicios')
+  if (tope) throw new Error(tope)
 
   const producto_id = generarProductoId('SERVICIO')
   const campos = construirCamposProducto({

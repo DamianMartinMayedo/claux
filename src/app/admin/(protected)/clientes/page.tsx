@@ -3,6 +3,7 @@ import { Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
+import { nombresDeNiveles } from '@/lib/niveles-server'
 import NuevoClienteModal from './NuevoClienteModal'
 import ClientesTabla     from './ClientesTabla'
 
@@ -10,11 +11,11 @@ export default async function ClientesPage() {
   await requireAccesoPagina('clientes')
   const supabase = await createClient()
 
-  const [{ data: clientes }, { data: catalogo }, { data: plantillas }] = await Promise.all([
+  const [{ data: clientes }, { data: catalogo }, { data: plantillas }, nombresNivel] = await Promise.all([
     supabase.from('clients').select('*').order('created_at', { ascending: false }),
     supabase
       .from('modulos_catalogo')
-      .select('clave, nombre, descripcion, precio_fundador_usd, precio_estandar_usd, es_base, tipo')
+      .select('clave, nombre, descripcion, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, es_base, tipo')
       .eq('activo', true)
       .order('orden'),
     supabase
@@ -22,6 +23,7 @@ export default async function ClientesPage() {
       .select('sector, nombre, modulos, etiquetas')
       .eq('activa', true)
       .order('orden'),
+    nombresDeNiveles(),
   ])
 
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
@@ -42,6 +44,7 @@ export default async function ClientesPage() {
         <NuevoClienteModal
           catalogo={catalogo ?? []}
           plantillas={plantillas ?? []}
+          nombresNivel={nombresNivel}
           descuentoAnualPct={descuentoAnual}
           parametros={parametros}
         />

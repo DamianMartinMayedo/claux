@@ -7,6 +7,7 @@ import { hashPasswordPortal } from '@/lib/portal-auth'
 import { calcularAcceso, type ModuloPerm, type Permiso } from '@/lib/permisos'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
+import { comprobarLimite } from '@/lib/limites'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,9 @@ export async function crearUsuario(formData: FormData): Promise<{
 
   if (existe) return { ok: false, error: `El email "${email}" ya está registrado.` }
 
+  const tope = await comprobarLimite(db, session.client_id, 'usuarios_portal')
+  if (tope) return { ok: false, error: tope }
+
   const password = generarPasswordTemporal()
   const salt     = generarSalt()
   const hash     = await hashPasswordPortal(password, salt)
@@ -311,12 +315,19 @@ export async function editarUsuario(formData: FormData): Promise<{
   // Verificar que el usuario pertenece a este cliente
   const { data: usr } = await db
     .from('client_users')
-    .select('user_id')
+    .select('user_id, estado')
     .eq('user_id', user_id)
     .eq('client_id', session.client_id)
     .maybeSingle()
 
   if (!usr) return { ok: false, error: 'Usuario no encontrado.' }
+
+  // Reactivar un usuario desactivado ocupa plaza igual que crearlo. Desactivar,
+  // en cambio, nunca se bloquea: libera cupo.
+  if (estado === 'ACTIVO' && usr.estado !== 'ACTIVO') {
+    const tope = await comprobarLimite(db, session.client_id, 'usuarios_portal', 1, 'desarchivar')
+    if (tope) return { ok: false, error: tope }
+  }
 
   const empresasValidas = rol === 'usuario'
     ? await validarEmpresas(db, session.client_id, empresas)

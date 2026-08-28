@@ -381,6 +381,10 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
 /* Card que contiene tabla al ras — sin padding, el table-wrapper queda sin borde propio */
 .card-table { padding: 0 !important; overflow: hidden; }
 .card-table .card-header { padding: var(--space-5) var(--space-6) var(--space-4); margin-bottom: 0; }
+/* Un pie dentro de una `.card-table` tiene que traerse su propio padding, igual que
+   la cabecera: la tarjeta lo puso a 0 para que la tabla vaya al ras, así que un
+   `.mod-footer` (que solo lleva `padding-top`) deja el botón pegado al borde. */
+.card-table > .mod-footer { padding: var(--space-4) var(--space-6) var(--space-5); }
 .card-table > .table-wrapper,
 .card-table .mon-card-header + .table-wrapper { border: none; box-shadow: none; border-radius: 0; }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }

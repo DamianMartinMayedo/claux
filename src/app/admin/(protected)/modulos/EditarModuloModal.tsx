@@ -4,11 +4,13 @@ import { X } from 'lucide-react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { editarModulo } from '@/app/actions/modulos'
+import { editarModulo, previsualizarPrecio } from '@/app/actions/modulos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
+import { NIVELES, CAMPO_PRECIO, precioModulo, type Nivel } from '@/lib/niveles'
+import ImpactoPrecios, { type ImpactoFila } from './ImpactoPrecios'
 
 function slugify(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -33,8 +35,9 @@ type Modulo = {
   clave: string
   nombre: string
   descripcion: string | null
-  precio_fundador_usd: number
-  precio_estandar_usd: number
+  precio_inicial_usd: number
+  precio_empresa_usd: number
+  precio_pro_usd: number
   tipo: string
   activo: boolean
   orden: number
@@ -43,10 +46,12 @@ type Modulo = {
 
 export default function EditarModuloModal({
   modulo,
+  nombresNivel,
   open: openProp,
   onClose: onCloseProp,
 }: {
   modulo: Modulo
+  nombresNivel: Record<Nivel, string>
   /** Modo controlado: si se pasa, el padre gobierna la apertura y no se
    *  renderiza el botón disparador (se usa desde el menú RowActions). */
   open?: boolean
@@ -64,6 +69,9 @@ export default function EditarModuloModal({
   const [addError, setAddError]     = useState('')
   const [editTipo, setEditTipo]     = useState(modulo.tipo)
   const [routeEdited, setRouteEdited] = useState(false)
+  // Impacto pendiente de confirmar: mientras no sea null, el modal está
+  // preguntando «esto le cambia la cuota a esta gente, ¿seguimos?».
+  const [porConfirmar, setPorConfirmar] = useState<ImpactoFila[] | null>(null)
   const formRef               = useRef<HTMLFormElement>(null)
   const mounted               = useMounted()
 
@@ -73,6 +81,7 @@ export default function EditarModuloModal({
     setPaginas(ensurePages(modulo.paginas))
     setEditTipo(modulo.tipo)
     setNuevaRuta(''); setNuevoLabel(''); setRouteEdited(false)
+    setPorConfirmar(null)
   }, [modulo])
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -83,6 +92,7 @@ export default function EditarModuloModal({
     setNuevaRuta(''); setNuevoLabel(''); setRouteEdited(false)
     setPaginas(ensurePages(modulo.paginas))
     setEditTipo(modulo.tipo)
+    setPorConfirmar(null)
   }, [isControlled, onCloseProp, modulo.paginas, modulo.tipo])
 
   useModalKeyboard(open, handleClose)
@@ -130,8 +140,15 @@ export default function EditarModuloModal({
   }
   function handlePageDragEnd() { setDragIndex(null) }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  /** Los tres precios tal como están escritos AHORA en el formulario. */
+  function preciosDelFormulario(): Record<string, number> {
+    const fd = new FormData(formRef.current!)
+    return Object.fromEntries(
+      NIVELES.map(n => [n, Number(fd.get(CAMPO_PRECIO[n]) ?? 0) || 0]),
+    )
+  }
+
+  async function guardar() {
     setLoading(true)
     const fd = new FormData(formRef.current!)
     fd.set('paginas', JSON.stringify(paginas))
@@ -139,8 +156,26 @@ export default function EditarModuloModal({
     const res = await editarModulo(fd)
     setLoading(false)
     if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
-    toastSuccess('Módulo guardado')
+    const n = res.clientesRecalculados ?? 0
+    toastSuccess(n > 0 ? `Módulo guardado · ${n} cuota(s) recalculada(s)` : 'Módulo guardado')
     setTimeout(() => { handleClose(); router.refresh() }, 600)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    // Si los precios no se han tocado, no hay nada que avisar: se guarda directo.
+    const precios = preciosDelFormulario()
+    const cambian = NIVELES.some(n => precios[n] !== precioModulo(modulo, n))
+    if (!cambian) { await guardar(); return }
+
+    // Cambiar un precio del catálogo mueve la cuota de todo el que tenga este
+    // módulo. No se guarda sin enseñar a quién y cuánto (plan §8.2).
+    setLoading(true)
+    const prev = await previsualizarPrecio(modulo.clave, precios)
+    setLoading(false)
+    if (!prev.ok) { toastError('No se pudo calcular el impacto'); return }
+    if (!prev.impacto.length) { await guardar(); return }
+    setPorConfirmar(prev.impacto)
   }
 
   const modal = (
@@ -189,20 +224,29 @@ export default function EditarModuloModal({
                 <input name="descripcion" className="input" defaultValue={modulo.descripcion ?? ''} />
               </div>
             </div>
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Precio fundador (USD)</label>
-                <input name="precio_fundador_usd" className="input" type="number" min="0" step="any" required defaultValue={modulo.precio_fundador_usd} />
-              </div>
-              <div className="input-group">
-                <label>Precio estándar (USD)</label>
-                <input name="precio_estandar_usd" className="input" type="number" min="0" step="any" required defaultValue={modulo.precio_estandar_usd} />
-              </div>
+            {/* Un precio por nivel. Los rótulos salen de /admin/niveles: si el dueño
+                renombra un nivel, este formulario lo dice sin tocar código. */}
+            <div className="grid-cols-3">
+              {NIVELES.map(n => (
+                <div className="input-group" key={n}>
+                  <label htmlFor={`mod-${n}`}>Precio {nombresNivel[n]} (USD)</label>
+                  <input id={`mod-${n}`} name={CAMPO_PRECIO[n]} className="input"
+                         type="number" min="0" step="any" required defaultValue={precioModulo(modulo, n)}
+                         onChange={() => setPorConfirmar(null)} />
+                </div>
+              ))}
             </div>
             <label className="module-check">
               <input type="checkbox" name="activo" value="true" defaultChecked={modulo.activo} />
               Activo (visible en los toggles de cliente)
             </label>
+
+            {/* Paso de confirmación: solo aparece cuando el precio nuevo le mueve
+                la cuota a alguien. Los campos siguen editables a propósito —
+                tocar uno vuelve a dejarlo en «Guardar» y a recalcular el aviso. */}
+            {porConfirmar && (
+              <ImpactoPrecios impacto={porConfirmar} nombresNivel={nombresNivel} />
+            )}
 
             {/* ── Páginas internas (solo para módulos) ── */}
             {editTipo === 'modulo' && (
@@ -268,10 +312,23 @@ export default function EditarModuloModal({
             )}
           </div>
           <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
-            </button>
+            {porConfirmar ? (
+              <>
+                <button type="button" className="btn btn-secondary" onClick={() => setPorConfirmar(null)}>
+                  Volver a editar
+                </button>
+                <button type="button" className="btn btn-primary" onClick={guardar} disabled={loading}>
+                  {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar y recalcular'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

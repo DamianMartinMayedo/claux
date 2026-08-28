@@ -17,6 +17,7 @@ import { headers }           from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { leerSetting }       from '@/lib/settings'
 import { importeCiclo } from '@/lib/billing'
+import { normalizarNivel, precioModulo, type ModuloPrecios } from '@/lib/niveles'
 import { logActividad }      from '@/lib/audit'
 import { clientIp }          from '@/lib/rate-limit'
 import { getPortalSession }  from './auth'
@@ -100,7 +101,7 @@ const TIPO_LABEL: Record<string, string> = {
 }
 
 async function construirAnexoInput(
-  db: Db, cid: string, cliente: { modulos_activos: string[]; precio_mensual_usd: number; ciclo: string; tarifa: string },
+  db: Db, cid: string, cliente: { modulos_activos: string[]; precio_mensual_usd: number; ciclo: string; nivel: string },
 ): Promise<AnexoInput> {
   const descuento = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const ciclo = cliente.ciclo === 'anual' ? 'anual' : 'mensual'
@@ -113,7 +114,7 @@ async function construirAnexoInput(
   // negociando. Un borrador no es un acuerdo.
   const { data: presu } = await db
     .from('presupuestos_instalacion')
-    .select('id, modulos, cuota_mensual_usd, total_final_usd, tarifa, estado, created_at')
+    .select('id, modulos, cuota_mensual_usd, total_final_usd, nivel, estado, created_at')
     .eq('client_id', cid)
     .in('estado', ['aprobado', 'instalado'])
     .order('created_at', { ascending: false })
@@ -124,16 +125,14 @@ async function construirAnexoInput(
   const claves = (presu?.modulos?.length ? presu.modulos : cliente.modulos_activos) as string[]
   const { data: catalogo } = await db
     .from('modulos_catalogo')
-    .select('clave, nombre, tipo, precio_fundador_usd, precio_estandar_usd, orden')
+    .select('clave, nombre, tipo, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, orden')
     .in('clave', claves.length ? claves : ['__none__'])
     .order('orden')
-  const filasCat = (catalogo ?? []) as {
-    clave: string; nombre: string; tipo: string
-    precio_fundador_usd: number | null; precio_estandar_usd: number | null; orden: number
-  }[]
-  const tarifa = presu?.tarifa ?? cliente.tarifa ?? 'estandar'
-  const precioDe = (m: typeof filasCat[number]) =>
-    Number((tarifa === 'fundador' ? m.precio_fundador_usd : m.precio_estandar_usd) ?? 0)
+  const filasCat = (catalogo ?? []) as (ModuloPrecios & { nombre: string; tipo: string; orden: number })[]
+  // El nivel del presupuesto manda sobre el del cliente: el Anexo documenta lo que se
+  // firmó, y si el cliente sube de nivel después, ese Anexo viejo no se reescribe solo.
+  const nivel = presu?.nivel ?? cliente.nivel
+  const precioDe = (m: typeof filasCat[number]) => precioModulo(m, nivel)
 
   const lineas: LineaAnexo[] = filasCat.map(m => {
     const p = precioDe(m)
@@ -151,7 +150,7 @@ async function construirAnexoInput(
     const primerPeriodo = ciclo === 'anual' ? importeCiclo(precioMes, 'anual', descuento) : precioMes
     // La versión sella el CONTENIDO, no el id: editar un borrador conserva el id
     // y con `presupuesto-<id>` a secas un Anexo firmado seguía contando como
-    // firmado con otros números dentro. Cualquier cambio de ciclo, tarifa,
+    // firmado con otros números dentro. Cualquier cambio de ciclo, nivel,
     // módulos o importes mueve la versión y obliga a re-firmar (la firma vieja
     // queda en histórico como prueba de lo que se firmó). Esta cadena tiene que
     // coincidir carácter a carácter con la de la migración 204, que renombró las
@@ -159,7 +158,7 @@ async function construirAnexoInput(
     const version = [
       `presupuesto-${presu.id}`,
       ciclo,
-      tarifa,
+      nivel,
       [...claves].sort().join('+'),
       precioMes.toFixed(2),
       totalInstal.toFixed(2),
@@ -181,7 +180,7 @@ async function construirAnexoInput(
   // Fallback: sin presupuesto de instalación enlazado (cliente de prueba o alta
   // manual). El Anexo se autogenera desde los módulos activos, sin coste de
   // configuración. La versión codifica el contenido para que un cambio de
-  // módulos/tarifa exija una firma nueva.
+  // módulos/nivel exija una firma nueva.
   const primerPeriodo = ciclo === 'anual' ? importeCiclo(precioMes, 'anual', descuento) : precioMes
   const version = `modulos-${ciclo}-${[...cliente.modulos_activos].sort().join('+') || 'ninguno'}-${precioMes}`
   return {
@@ -200,7 +199,7 @@ async function resolverDocumentos(db: Db, cid: string): Promise<{
 } | null> {
   const { data: c } = await db
     .from('clients')
-    .select('nombre_empresa, email_admin, datos_firma, modulos_activos, precio_mensual_usd, ciclo_facturacion, tarifa')
+    .select('nombre_empresa, email_admin, datos_firma, modulos_activos, precio_mensual_usd, ciclo_facturacion, nivel')
     .eq('client_id', cid)
     .single()
   if (!c) return null
@@ -220,7 +219,7 @@ async function resolverDocumentos(db: Db, cid: string): Promise<{
     modulos_activos: Array.isArray(c.modulos_activos) ? c.modulos_activos : [],
     precio_mensual_usd: c.precio_mensual_usd,
     ciclo: c.ciclo_facturacion ?? 'mensual',
-    tarifa: c.tarifa ?? 'estandar',
+    nivel: normalizarNivel(c.nivel),
   })
 
   return {

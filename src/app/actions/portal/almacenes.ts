@@ -8,6 +8,7 @@ import { estadoStock, pideAtencion, minimoAplicable } from '@/lib/inventario/sto
 import { valorarPorMoneda, type ValorMoneda } from '@/lib/inventario/valoracion'
 import { consumoDiario, diasDeCobertura, DIAS_VENTANA, type MovimientoConsumo } from '@/lib/inventario/consumo'
 import { limiteDelFiltro, type FiltroListado } from '@/lib/listados'
+import { comprobarLimite } from '@/lib/limites'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -310,6 +311,9 @@ export async function guardarAlmacen(
 
   if (!almacen_id) {
     // Crear
+    const tope = await comprobarLimite(db, session.client_id, 'almacenes')
+    if (tope) return { ok: false, error: tope }
+
     const { error } = await db.from('almacenes').insert({
       ...payload,
       almacen_id: generarAlmacenId(),
@@ -386,7 +390,13 @@ export async function restaurarAlmacen(
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  const { error } = await createAdminClient()
+  const db = createAdminClient()
+
+  // Desarchivar es crear: el cupo lo mide lo activo, no lo que hubo alguna vez.
+  const tope = await comprobarLimite(db, session.client_id, 'almacenes', 1, 'desarchivar')
+  if (tope) return { ok: false, error: tope }
+
+  const { error } = await db
     .from('almacenes')
     .update({ activo: true, updated_at: new Date().toISOString() })
     .eq('almacen_id', almacen_id)

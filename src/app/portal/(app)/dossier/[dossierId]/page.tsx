@@ -5,9 +5,9 @@ import DossierEditor      from '../DossierEditor'
 
 export const dynamic = 'force-dynamic'
 
-// Un dossier concreto. Es la ruta del addon `multidossier`, pero no lleva gate
-// propio: sin el addon el cliente tiene un solo dossier, así que llegar aquí a mano
-// solo le enseña el suyo. El gate está donde importa —crear y publicar—, no en mirar:
+// Un dossier concreto. Es la ruta que abre el listado, y no lleva gate propio: con
+// un tope de un dossier el cliente solo tiene el suyo, así que llegar aquí a mano no
+// le enseña otra cosa. El gate está donde importa —crear y publicar—, no en mirar:
 // quien es solo-ver entra y ve, pero el editor le esconde los controles de escritura.
 export default async function DossierDetallePage({ params }: { params: Promise<{ dossierId: string }> }) {
   const { puedeEditar } = await requireAccesoModulo('dossier')

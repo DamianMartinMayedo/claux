@@ -12,6 +12,15 @@ import {
   type UsuarioAdmin,
 } from '@/app/actions/usuarios-admin'
 import UsuarioModal from './UsuarioModal'
+import { ROL_LABEL, type RolAdmin } from '@/lib/roles'
+
+/** Color del rol en el listado: el partner es de fuera y se distingue a simple
+ *  vista de quien sí entra al panel. */
+const ROL_BADGE: Record<RolAdmin, string> = {
+  super_admin: 'badge-info',
+  vendedor:    'badge-neutral',
+  partner:     'badge-purple',
+}
 
 function fmtFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -70,9 +79,10 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
     <div className="view-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Usuarios del equipo</h1>
+          <h1 className="page-title">Usuarios</h1>
           <p className="page-subtitle">
-            {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} · super admins y vendedores.
+            {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} · el equipo de CLAUX y los
+            partners que leen el manual.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalNuevo(true)}>
@@ -112,9 +122,7 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
                     </td>
                     <td data-label="Correo" className="table-muted">{u.email}</td>
                     <td data-label="Rol">
-                      <span className={`badge ${u.rol === 'super_admin' ? 'badge-info' : 'badge-neutral'}`}>
-                        {u.rol === 'super_admin' ? 'Super Admin' : 'Vendedor'}
-                      </span>
+                      <span className={`badge ${ROL_BADGE[u.rol]}`}>{ROL_LABEL[u.rol]}</span>
                     </td>
                     <td data-label="Estado">
                       <span className={`badge ${u.activo ? 'badge-success' : 'badge-warning'}`}>

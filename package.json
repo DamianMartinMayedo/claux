@@ -11,7 +11,11 @@
     "lint": "eslint",
     "audit:gating": "node scripts/audit-gating.mjs",
     "audit:columnas": "node scripts/audit-columnas.mjs",
-    "audit:filtros": "node scripts/audit-filtros.mjs"
+    "audit:filtros": "node scripts/audit-filtros.mjs",
+    "audit:limites": "node scripts/audit-limites.mjs",
+    "audit:nivel": "node scripts/audit-nivel.mjs",
+    "audit:precios": "node scripts/audit-precios.mjs",
+    "audit": "node scripts/audit.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",

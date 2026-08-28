@@ -1,0 +1,1740 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   CLAUX Academia — superficie propia del manual (ruta /academia)
+   Se abre como «otra web»: sin barra de admin, sin volver. Identidad CLAUX.
+   Solo tokens; los temas claro/oscuro los resuelve 01-tokens.css con light-dark().
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* El `scroll-behavior: smooth` global es proporcional a la distancia: saltar de
+   la cabecera a la última ficha del manual tardaba segundos. Aquí lo anima el JS
+   a duración fija (`lib/academia/desplazar.ts`) y sin JS el salto es inmediato,
+   que también sirve. Las dos cosas necesitan que la base no se meta. */
+html:has(.acad-root) { scroll-behavior: auto; }
+
+.acad-root {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  line-height: 1.6;
+}
+
+/* ── Cabecera ───────────────────────────────────────────────────────────────── */
+.acad-masthead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in oklab, var(--color-surface) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--color-divider);
+}
+.acad-masthead-in {
+  max-width: 1180px;
+  margin: 0 auto;
+  height: var(--header-h);
+  padding: 0 var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.acad-brand { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; flex-shrink: 0; }
+.acad-logo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+  letter-spacing: -0.02em;
+  background: var(--gradient-band);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* La capa, pegada a la marca: la cabecera queda fija, así que es lo único que
+   sigue diciendo con qué ojos se lee cuando la barra de abajo ya no se ve. */
+.acad-brand-capa {
+  align-self: center;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.acad-brand-sep { color: var(--color-text-faint); }
+.acad-brand-sub {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+}
+
+/* ── Barra «Ver como» (la capa de lectura) ──────────────────────────────────
+   Con qué ojos se lee. Va bajo la cabecera y no dentro: el selector no compite
+   por el sitio del buscador, y la frase de qué queda fuera cabe entera.
+   Se llama `vercomo` y no `capas` a propósito: `.acad-capas-*` ya es el diagrama
+   «Funciona sola» de las fichas, y dos cosas distintas con el mismo prefijo
+   acaban pisándose el día que una gane una clase que la otra ya tenía. ────── */
+.acad-vercomo {
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface-2);
+}
+.acad-vercomo.es-filtrada {
+  background: var(--color-warning-bg);
+  border-bottom-color: color-mix(in oklab, var(--color-warning) 40%, transparent);
+}
+.acad-vercomo-in {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  flex-wrap: wrap;
+}
+.acad-vercomo-sel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+.acad-vercomo-k {
+  margin-right: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.acad-capa-pill {
+  padding: 3px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.acad-capa-pill:hover { color: var(--color-text); background: color-mix(in oklab, var(--color-surface) 70%, transparent); }
+.acad-capa-pill.is-active {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  font-weight: 700;
+  box-shadow: var(--shadow-xs);
+}
+.acad-vercomo-nota {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+.acad-vercomo.es-filtrada .acad-vercomo-nota { color: var(--color-warning); }
+.acad-vercomo.es-filtrada .acad-vercomo-nota strong { color: var(--color-warning); }
+
+/* ── Buscador de contenido ──────────────────────────────────────────────────── */
+.acad-bus { position: relative; flex: 1 1 380px; max-width: 440px; min-width: 0; }
+.acad-bus-campo {
+  cursor: text;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  height: 2.25rem;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  transition: var(--transition);
+}
+.acad-bus-campo:focus-within { border-color: var(--color-border-focus); background: var(--color-surface); }
+.acad-bus-icono { flex-shrink: 0; color: var(--color-text-faint); }
+.acad-bus-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+.acad-bus-input::placeholder { color: var(--color-text-faint); }
+.acad-bus-input::-webkit-search-cancel-button { display: none; }
+.acad-bus-kbd {
+  cursor: text;
+  flex-shrink: 0;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-faint);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+}
+.acad-bus-limpiar {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.acad-bus-limpiar:hover { background: var(--color-surface-offset); color: var(--color-text); }
+
+.acad-bus-panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.acad-bus-vacio { margin: 0; padding: var(--space-4); font-size: var(--text-sm); color: var(--color-text-muted); }
+.acad-bus-cuenta {
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+}
+.acad-bus-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.acad-bus-item.is-active { background: var(--color-surface-2); }
+.acad-bus-item-sec {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-primary-text);
+}
+.acad-bus-item-tit { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.acad-bus-item-txt {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.acad-bus-mark { background: var(--color-amber-light); color: var(--color-amber-text); border-radius: var(--radius-sm); }
+
+.acad-tema {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.acad-tema:hover { background: var(--color-surface-2); color: var(--color-text); border-color: var(--color-border-strong); }
+.acad-tema:disabled { cursor: default; color: var(--color-text-faint); background: var(--color-surface); }
+.acad-tema:disabled:hover { border-color: var(--color-border); }
+.acad-tema svg { flex-shrink: 0; }
+.acad-tema { flex-shrink: 0; }
+
+/* ── Estructura ─────────────────────────────────────────────────────────────── */
+.acad-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--space-6) var(--space-16);
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: var(--space-10);
+  align-items: start;
+}
+/* Portada y manual entero no llevan índice al lado: la página ES el índice. */
+.acad-shell.es-suelto { grid-template-columns: minmax(0, 1fr); }
+
+/* Marca de «esto es navegación, no un enlace de texto». 02-base-layout.css tiñe
+   de teal todo <a> que no esté en su lista de excepciones, y esa regla gana por
+   especificidad: sin esta marca, el índice entero salía en color principal y no
+   se distinguía lo que se está leyendo. El color lo pone cada lista. */
+.acad-nav { text-decoration: none; }
+
+/* ── Índice lateral ─────────────────────────────────────────────────────────
+   Mismo lenguaje que los diagramas del manual: una línea fina que recorre el
+   grupo y un segmento marcado en la ficha que se está leyendo, en vez de un
+   recuadro de color. Los bloques de la ficha activa cuelgan de esa línea. */
+.acad-rail {
+  position: sticky;
+  top: calc(var(--header-h) + var(--space-6));
+  max-height: calc(100vh - var(--header-h) - var(--space-10));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-top: var(--space-8);
+}
+.acad-rail-det { min-width: 0; }
+
+/* Tirador del índice. Es el <summary> de un <details>, así que pliega sin JS; el
+   JS solo recuerda la preferencia. Plegado, la columna de lectura se queda con
+   todo el ancho y aquí no queda más que el tirador. */
+.acad-rail-sum {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  list-style: none;
+  transition: var(--transition);
+}
+.acad-rail-sum:hover { background: var(--color-surface-2); color: var(--color-text); }
+.acad-rail-sum::-webkit-details-marker { display: none; }
+.acad-rail-sum svg { flex-shrink: 0; }
+.acad-rail-sum span { flex: 1 1 auto; }
+.acad-rail-sum-chevron { transition: var(--transition); }
+.acad-rail-det[open] .acad-rail-sum-chevron { transform: rotate(180deg); }
+
+.acad-rail-in { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-1); }
+
+.acad-rail-title {
+  margin: var(--space-6) 0 var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-faint);
+}
+/* Cada grupo del catálogo es un <details> con su rótulo de <summary>: se pliega
+   solo, sin JS, y el recuento sigue a la vista aunque esté plegado —así se ve lo
+   que hay dentro sin abrirlo—. */
+.acad-rail-group { display: block; }
+.acad-rail-cat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  list-style: none;
+  transition: var(--transition);
+}
+.acad-rail-cat::-webkit-details-marker { display: none; }
+.acad-rail-cat:hover { color: var(--color-text); }
+.acad-rail-cat > span:first-of-type { flex: 1 1 auto; }
+/* Plegado apunta a la derecha, desplegado hacia abajo: el gesto de árbol de
+   siempre. Va a la izquierda del rótulo y sobre la misma vertical que la línea
+   del grupo, así el índice se lee como un árbol y no como tres listas sueltas. */
+.acad-rail-cat-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  transform: rotate(-90deg);
+  transition: var(--transition);
+}
+.acad-rail-group[open] > .acad-rail-cat .acad-rail-cat-chevron { transform: none; }
+.acad-rail-cat-n {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text-faint);
+}
+/* La línea del grupo. El segmento activo se pinta encima, no al lado. */
+.acad-rail-lista {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-divider);
+}
+
+.acad-rail-node { position: relative; min-width: 0; }
+.acad-rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: var(--transition);
+}
+.acad-rail-item:hover { background: var(--color-surface-2); color: var(--color-text); }
+.acad-rail-item.is-part { font-weight: 600; color: var(--color-text); }
+.acad-rail-node.is-active > .acad-rail-item { color: var(--color-primary-text); font-weight: 600; }
+/* Segmento marcado sobre la línea del grupo. */
+.acad-rail-lista .acad-rail-node.is-active::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1 - 1px);
+  top: var(--space-2);
+  height: calc(var(--text-sm) * 1.6);
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+}
+.acad-rail-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acad-rail-pend {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+}
+
+/* Bloques de la ficha activa. Solo se despliegan ahí: el índice sigue siendo
+   una lista de doce fichas, no de sesenta apartados. */
+.acad-rail-sub { display: none; }
+.acad-rail-node.is-active .acad-rail-sub {
+  --acad-linea: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  margin: 2px 0 var(--space-3) var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 1px dashed var(--color-border);
+}
+.acad-rail-sublink {
+  position: relative;
+  padding: var(--space-1) 0 var(--space-1) var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  line-height: var(--acad-linea);
+  text-decoration: none;
+  transition: var(--transition);
+}
+/* Tirita que engancha el bloque a la línea, a media altura de su primera línea
+   de texto (mismo criterio que los diagramas). */
+.acad-rail-sublink::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-4) * -1);
+  top: calc(var(--space-1) + var(--acad-linea) / 2);
+  width: var(--space-3);
+  height: 1px;
+  background: var(--color-border);
+}
+.acad-rail-sublink:hover { color: var(--color-text); }
+.acad-rail-sublink.is-active { color: var(--color-primary-text); font-weight: 600; }
+.acad-rail-sublink.is-active::before { background: var(--color-primary); }
+
+/* Salida al manual entero. No es una pieza más del índice: va aparte y al pie. */
+.acad-rail-todo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  transition: var(--transition);
+}
+.acad-rail-todo:hover { color: var(--color-text); }
+.acad-rail-todo svg { flex-shrink: 0; }
+
+/* Plegado en pantalla ancha: el tirador se queda en un botón cuadrado y la
+   rejilla le da su ancho a la lectura. Va en `min-width` a propósito —en móvil
+   el índice plegado sigue siendo una barra con su rótulo, no un icono suelto—. */
+@media (min-width: 961px) {
+  .acad-shell:has(.acad-rail-det:not([open])) {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .acad-rail-det:not([open]) .acad-rail-sum {
+    justify-content: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-divider);
+  }
+  .acad-rail-det:not([open]) .acad-rail-sum span,
+  .acad-rail-det:not([open]) .acad-rail-sum-chevron { display: none; }
+}
+
+/* ── Columna de lectura ─────────────────────────────────────────────────────── */
+/* `margin-inline: auto` para que el texto siga centrado cuando se pliega el índice. */
+.acad-main { min-width: 0; max-width: 780px; margin-inline: auto; padding-top: var(--space-8); }
+.acad-kicker {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+}
+.acad-note {
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-10);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-divider);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.acad-note strong { color: var(--color-text); }
+
+/* Encabezados */
+.acad-h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-3xl);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-wrap: balance;
+  color: var(--color-text);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.acad-h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-xl);
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin: var(--space-10) 0 var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-divider);
+}
+.acad-h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  color: var(--color-text);
+  margin: var(--space-6) 0 var(--space-1);
+}
+.acad-h4 {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--color-primary-text);
+  margin: var(--space-5) 0 var(--space-1);
+}
+/* Sin esto, saltar a un apartado (buscador, índice, enlace copiado) lo deja
+   debajo de la cabecera pegajosa. */
+.acad-h1, .acad-h2, .acad-h3, .acad-h4 { scroll-margin-top: calc(var(--header-h) + var(--space-4)); }
+
+/* ── Enlace por apartado ─────────────────────────────────────────────────── */
+.acad-h2, .acad-h3 { position: relative; }
+.acad-ancla {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: var(--transition);
+  vertical-align: middle;
+}
+.acad-h2:hover .acad-ancla,
+.acad-h3:hover .acad-ancla,
+.acad-ancla:focus-visible { opacity: 1; }
+.acad-ancla:hover { color: var(--color-primary-text); }
+.acad-ancla-ok {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+  display: none;
+}
+.acad-ancla.is-copiado { opacity: 1; }
+.acad-ancla.is-copiado .acad-ancla-ok { display: inline; }
+
+.acad-p { margin: 0 0 var(--space-4); color: var(--color-text); }
+.acad-p:last-child { margin-bottom: 0; }
+
+.acad-ul, .acad-ol { margin: 0 0 var(--space-4); padding-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); }
+.acad-ul li, .acad-ol li { color: var(--color-text); }
+.acad-ul { list-style: disc; }
+.acad-ol { list-style: decimal; }
+.acad-ul li::marker, .acad-ol li::marker { color: var(--color-primary); }
+
+.acad-hr { border: 0; border-top: 1px solid var(--color-divider); margin: var(--space-8) 0; }
+
+.acad-link { color: var(--color-primary-text); text-decoration: underline; text-underline-offset: 2px; }
+.acad-link:hover { color: var(--color-primary-hover); }
+
+.acad-code {
+  font-family: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 0.88em;
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-divider);
+  color: var(--color-text);
+}
+
+.acad-callout {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-amber-light);
+  border-left: 3px solid var(--color-amber);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+}
+.acad-callout p { margin: 0; }
+.acad-callout p + p { margin-top: var(--space-2); }
+.acad-callout strong { color: var(--color-amber-text); }
+
+/* Tablas */
+.acad-table-wrap { margin: 0 0 var(--space-4); overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.acad-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.acad-table th, .acad-table td { padding: var(--space-3) var(--space-4); text-align: left; vertical-align: top; border-bottom: 1px solid var(--color-divider); }
+.acad-table th { background: var(--color-surface-2); font-weight: 600; color: var(--color-text); }
+.acad-table tbody tr:last-child td, .acad-table tr:last-child td { border-bottom: 0; }
+
+/* Etiquetas de audiencia/profundidad */
+.acad-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.acad-tag {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+.acad-tag-vender       { background: var(--color-amber-light);  color: var(--color-amber-text); }
+.acad-tag-usar         { background: var(--color-info-bg);      color: var(--color-info); }
+.acad-tag-operar       { background: var(--color-purple-bg);    color: var(--color-purple); }
+.acad-tag-confidencial { background: var(--color-error-bg);     color: var(--color-error); }
+.acad-tag-basico       { background: var(--color-success-bg);   color: var(--color-success); }
+.acad-tag-avanzado     { background: var(--color-warning-bg);   color: var(--color-warning); }
+
+/* ── Portada · banda de entrada ─────────────────────────────────────────────
+   La portada se viste como la LANDING —banda de marca a sangre, tipo grande,
+   acciones invertidas— y no como una pieza del manual: es la puerta, no lectura.
+   Dentro de cada pieza el tipo vuelve a ser sobrio.
+
+   Va a sangre (fuera de `.acad-shell`, que centra a 1180) porque una banda que
+   no llega a los bordes se lee como una tarjeta gigante, no como cabecera.
+   El degradado y el blanco no cambian con el tema a propósito: es la misma
+   decisión que en la landing, y por eso el texto usa --color-text-on-brand y el
+   realce --color-amber-on-band, que tampoco llevan par. ─────────────────── */
+.acad-hero {
+  background: var(--gradient-band);
+  color: var(--color-text-on-brand);
+}
+/* El ancho de la columna de lectura (940) MÁS su padding, para que el texto del
+   hero arranque en la misma vertical que el de las secciones de abajo. Con el
+   1180 del shell arrancaba 120 px a la izquierda del resto de la página. */
+.acad-hero-in {
+  max-width: calc(940px + var(--space-6) * 2);
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6) var(--space-10);
+}
+.acad-hero-kicker {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklab, var(--color-text-on-brand) 82%, transparent);
+}
+.acad-hero-title {
+  margin: var(--space-3) 0 0;
+  max-width: 20ch;
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-wrap: balance;
+  color: var(--color-text-on-brand);
+}
+.acad-hero-realce { color: var(--color-amber-on-band); }
+.acad-hero-lead {
+  margin: var(--space-5) 0 0;
+  max-width: 62ch;
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  text-wrap: pretty;
+  color: color-mix(in oklab, var(--color-text-on-brand) 90%, transparent);
+}
+.acad-hero-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+/* El ghost es texto oscuro por defecto; sobre la banda no se vería. */
+.acad-hero .btn-ghost { color: color-mix(in oklab, var(--color-text-on-brand) 88%, transparent); }
+.acad-hero .btn-ghost:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-text-on-brand) 14%, transparent);
+  color: var(--color-text-on-brand);
+}
+.acad-hero-tip {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: color-mix(in oklab, var(--color-text-on-brand) 78%, transparent);
+}
+/* Las cifras viven en la banda: aquí el teal de tinta desaparecería. */
+.acad-hero .acad-cifras { margin-top: var(--space-10); }
+.acad-hero .acad-cifra-n { color: var(--color-amber-on-band); }
+.acad-hero .acad-cifra-t { color: color-mix(in oklab, var(--color-text-on-brand) 80%, transparent); }
+
+/* Rótulo de sección: la misma señal que la landing —qué viene ahora, en una
+   palabra— para que las tres secciones de la portada no arranquen todas igual. */
+.acad-sec-label {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-primary-text);
+}
+
+/* ── Portada ────────────────────────────────────────────────────────────────
+   Dos entradas en la misma página: los ATAJOS, para quien tiene un cliente
+   delante y necesita un apartado concreto, y el RECORRIDO, para quien viene a
+   aprenderse esto. La rejilla de tarjetas se reserva al catálogo, que es lo
+   único que de verdad se consulta suelto. */
+.acad-main.es-portada { max-width: 940px; }
+
+/* Cabecera de texto con la banda de marca debajo. La portada ya no la usa —tiene
+   la banda entera—; queda para el 404, que sí es una página de una sola frase. */
+.acad-portada-head {
+  position: relative;
+  padding-bottom: var(--space-8);
+  margin-bottom: var(--space-12);
+}
+.acad-portada-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-band);
+}
+.acad-portada-entrada {
+  margin: var(--space-4) 0 0;
+  max-width: 62ch;
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+}
+
+/* Las tres cifras del manual. Son datos derivados del propio contenido —piezas
+   escritas, apartados etiquetados, minutos de lectura—, no adorno: dicen si esto
+   cabe antes de la visita de las diez. */
+.acad-cifras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-10);
+  margin: var(--space-8) 0 0;
+}
+.acad-cifra { min-width: 0; }
+.acad-cifra-n {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-3xl);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary-text);
+}
+.acad-cifra-t {
+  margin: var(--space-1) 0 0;
+  max-width: 24ch;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+/* En atajos y acciones la flecha va pegada al texto: sin esto, en una fila
+   apretada el flex se la come antes que la palabra. */
+.acad-flecha { flex-shrink: 0; }
+
+/* ── Atajos: entrar por la situación, no por el índice ──────────────────────
+   Quien abre esto con un cliente delante no busca «4.1 Dos números que no se
+   mezclan», busca qué contestar. Cada uno cae en el apartado exacto. */
+.acad-atajos {
+  padding: var(--space-6);
+  margin-bottom: var(--space-12);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-2xl);
+}
+.acad-atajos-head { margin-bottom: var(--space-5); }
+.acad-atajos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--space-3);
+}
+.acad-atajo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  transition: var(--transition);
+}
+.acad-atajo:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+.acad-atajo-sit {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  color: var(--color-text);
+}
+.acad-atajo:hover .acad-atajo-sit { color: var(--color-primary-text); }
+.acad-atajo-donde {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+
+/* ── El recorrido de lectura ────────────────────────────────────────────────
+   Las partes narradas no son una tarjeta más: son tramos en un orden, y el
+   orden es información. Mismo lenguaje que el diagrama de flujo de las fichas
+   —nodo numerado y línea fina— para que la portada se lea como el manual. */
+.acad-ruta { --acad-nodo: 1.625rem; margin: 0; padding: 0; }
+.acad-ruta-paso { position: relative; }
+/* La línea que une los nodos: nace en el centro del nodo y muere en el
+   siguiente, así que el primero solo la tiene hacia abajo y el último hacia
+   arriba. Va detrás del nodo, que es opaco. */
+.acad-ruta-paso::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--space-4) + var(--acad-nodo) / 2);
+  width: 1px;
+  background: var(--color-border);
+}
+.acad-ruta-paso:first-child::before { top: calc(var(--space-4) + var(--acad-nodo) / 2); }
+.acad-ruta-paso:last-child::before { bottom: calc(100% - var(--space-4) - var(--acad-nodo) / 2); }
+.acad-ruta-link {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  transition: var(--transition);
+}
+.acad-ruta-link:hover { background: var(--color-surface-2); }
+.acad-ruta-node {
+  flex-shrink: 0;
+  width: var(--acad-nodo);
+  height: var(--acad-nodo);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-primary);
+  background: var(--color-bg);
+  color: var(--color-primary-text);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.acad-ruta-link:hover .acad-ruta-node { background: var(--color-primary); color: var(--color-text-inv); }
+.acad-ruta-cuerpo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.acad-ruta-t {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+.acad-ruta-link:hover .acad-ruta-t { color: var(--color-primary-text); }
+.acad-ruta-n { font-size: var(--text-sm); line-height: 1.5; color: var(--color-text-muted); }
+.acad-ruta-meta {
+  flex-shrink: 0;
+  padding-top: 2px;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+/* ── El catálogo ────────────────────────────────────────────────────────── */
+.acad-catalogo { scroll-margin-top: calc(var(--header-h) + var(--space-4)); }
+
+.acad-portada-grupo { margin-bottom: var(--space-10); }
+.acad-portada-grupo-head { margin-bottom: var(--space-4); }
+/* El rótulo de la Parte II separa el catálogo de lo que va antes. */
+.acad-portada-grupo-head.es-parte {
+  margin-top: var(--space-12);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+.acad-portada-grupo-t {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-2xl);
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+.acad-portada-grupo-t.es-sub { font-size: var(--text-lg); }
+.acad-portada-grupo-n {
+  margin: var(--space-1) 0 0;
+  max-width: 68ch;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.acad-portada-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Tarjeta de pieza. El icono y su acento salen del mismo mapa que la landing y
+   el menú del portal (`components/publico/iconos.tsx` vía `academia/visual.ts`):
+   un módulo se ve del mismo color en los tres sitios, que es lo que lo hace
+   reconocible a quien ya usó el producto. La pastilla de color es el único
+   relleno de la tarjeta; el resto sigue siendo línea fina. */
+.acad-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  transition: var(--transition);
+}
+.acad-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+.acad-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.acad-card-icono {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: transform var(--transition);
+}
+.acad-card:hover .acad-card-icono { transform: scale(1.08); }
+.acad-card-nombre {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+.acad-card:hover .acad-card-nombre { color: var(--color-primary-text); }
+.acad-card-res { font-size: var(--text-sm); color: var(--color-text-muted); }
+/* Lo que hay dentro sin entrar: sus páginas del portal, o dónde vive si no se
+   vende. Es lo que hace reconocible una ficha a quien ya usó el producto. */
+.acad-card-dentro {
+  padding-top: var(--space-1);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-text-faint);
+}
+.acad-card-pie {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+.acad-card-num,
+.acad-card-precio { font-variant-numeric: tabular-nums; }
+.acad-card-precio { font-weight: 600; color: var(--color-text-muted); }
+.acad-card-pend { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ── Banda de cierre ────────────────────────────────────────────────────────
+   Lo único de la portada que no es entrar a leer, sino llevarse el manual. En
+   banda y al final: es lo que se hace DESPUÉS de ver que esto existe, y en gris
+   nadie lo vería. Degradado invertido respecto al de arriba, para que las dos
+   bandas de la página no sean el mismo bloque repetido. */
+.acad-cierre {
+  margin: var(--space-16) 0 var(--space-10);
+  padding: var(--space-10) var(--space-8);
+  border-radius: var(--radius-2xl);
+  background: var(--gradient-band-alt);
+  color: var(--color-text-on-brand);
+  text-align: center;
+}
+.acad-cierre-t {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-2xl);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  color: var(--color-text-on-brand);
+}
+.acad-cierre-p {
+  margin: var(--space-3) auto var(--space-6);
+  max-width: 56ch;
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: color-mix(in oklab, var(--color-text-on-brand) 90%, transparent);
+}
+
+/* Parte prevista y todavía sin texto: se enseña para que se vea dónde termina
+   lo que hay, con el borde discontinuo de «esto no es un enlace». */
+.acad-falta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-faint);
+}
+.acad-falta .acad-card-nombre { color: var(--color-text-muted); }
+
+/* ── El manual entero en una página ─────────────────────────────────────────
+   Vista secundaria: para el Ctrl+F del navegador, leer del tirón e imprimir. */
+.acad-todo-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-10);
+}
+.acad-todo-navlink {
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  transition: var(--transition);
+}
+.acad-todo-navlink:hover { border-color: var(--color-primary); color: var(--color-primary-text); }
+.acad-todo-corte {
+  margin: var(--space-10) 0 0;
+  border: 0;
+  border-top: 2px solid var(--color-primary);
+}
+
+/* ── Cabecera de la Parte II ────────────────────────────────────────────────── */
+.acad-part2-head {
+  margin: var(--space-16) 0 var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+/* ── Ficha ──────────────────────────────────────────────────────────────────── */
+.acad-parte { scroll-margin-top: calc(var(--header-h) + var(--space-4)); }
+.acad-ficha { scroll-margin-top: calc(var(--header-h) + var(--space-4)); padding: var(--space-10) 0; border-top: 1px solid var(--color-divider); }
+.acad-ficha:first-of-type { border-top: 0; }
+
+.acad-ficha-head { margin-bottom: var(--space-6); }
+.acad-ficha-titlerow { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.acad-ficha-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-3xl);
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  margin: 0;
+}
+.acad-pill {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-full);
+}
+.acad-pill-modulo        { background: var(--color-primary-subtle); color: var(--color-primary-text); }
+.acad-pill-funcionalidad { background: var(--color-info-bg);        color: var(--color-info); }
+.acad-pill-addon         { background: var(--color-purple-bg);      color: var(--color-purple); }
+/* Capacidad: tampoco se vende sola, la da el nivel. Índigo, el acento que ya
+   tenía Multiempresa cuando era addon. */
+.acad-pill-capacidad     { background: var(--color-indigo-bg);      color: var(--color-indigo); }
+/* Transversal: no se vende, viene con todo. Ámbar, el color que el portal ya
+   usa para lo que se mueve solo (tasas, existencias). */
+.acad-pill-transversal   { background: var(--color-amber-light);    color: var(--color-amber-text); }
+
+.acad-ficha-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.acad-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+}
+.acad-chip-k { color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.acad-chip-v { color: var(--color-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.acad-ficha-pages { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+/* La línea del catálogo: orienta sin tener que entrar en el texto. */
+.acad-ficha-resumen {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-lg);
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  text-wrap: pretty;
+}
+
+/* Sumario de la ficha: sus apartados, a un clic desde la cabecera. */
+.acad-ficha-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+.acad-ficha-navlink {
+  padding: 3px var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  transition: var(--transition);
+}
+.acad-ficha-navlink:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+}
+
+/* En preparación */
+.acad-pend {
+  padding: var(--space-6);
+  background: var(--color-surface-2);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.acad-pend-txt { margin: 0; color: var(--color-text-muted); }
+.acad-pend-tag {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+}
+
+/* ── Saltos entre fichas ─────────────────────────────────────────────────────
+   El manual es una sola página larga: al terminar una ficha, la siguiente a un
+   clic, sin volver a subir al índice. */
+.acad-saltos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-10);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-divider);
+}
+.acad-salto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  text-decoration: none;
+  transition: var(--transition);
+}
+.acad-salto:hover { border-color: var(--color-primary); background: var(--color-surface-2); }
+.acad-salto.es-siguiente { align-items: flex-end; text-align: right; }
+.acad-salto-k {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+}
+.acad-salto-v {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.acad-salto:hover .acad-salto-v { color: var(--color-primary-text); }
+
+/* Volver arriba. Es un enlace de verdad (#) para que funcione sin JS; el JS solo
+   lo esconde mientras se está en la cabecera y le pone la animación. */
+.acad-arriba {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-md);
+  transition: var(--transition);
+}
+.acad-arriba:hover { color: var(--color-text); border-color: var(--color-primary); }
+.acad-arriba.is-oculto { opacity: 0; visibility: hidden; transform: translateY(var(--space-2)); }
+
+.acad-footer {
+  margin-top: var(--space-16);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+}
+
+/* ── Diagramas del grafo (flujo · conexiones · funciona sola) ──────────────────
+   Alimentados por src/lib/academia/grafo.ts, insertados con ```claux:<tipo>```.
+   Solo clases del design system; sin SVG a mano ni estilo inline. */
+.acad-dia {
+  margin: var(--space-8) 0;
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-divider);
+}
+.acad-dia-cap {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-faint);
+  margin-bottom: var(--space-5);
+}
+
+/* Flujo interno: nodos enlazados por un rail de 1px */
+.acad-flujo-track {
+  /* Diámetro del nodo. El rail se dibuja a su mitad exacta, así que de aquí
+     depende que la línea salga recta y centrada en todos los pasos. */
+  --acad-nodo: 1.625rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  /* Sin salto de línea: un rail partido en dos filas deja cabos sueltos. */
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.acad-flujo-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+}
+/* El rail: una línea que cruza a la altura del centro del nodo. */
+.acad-flujo-step::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--acad-nodo) / 2);
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--color-border);
+}
+.acad-flujo-step:first-child::before { left: 50%; }
+.acad-flujo-step:last-child::before { right: 50%; }
+.acad-flujo-node {
+  position: relative;
+  width: var(--acad-nodo);
+  height: var(--acad-nodo);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-primary);
+  background: var(--color-bg);
+  color: var(--color-primary-text);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.acad-flujo-t { font-weight: 600; font-size: var(--text-sm); color: var(--color-text); line-height: 1.3; }
+.acad-flujo-d { font-size: var(--text-xs); line-height: 1.45; color: var(--color-text-muted); }
+
+/* Conexiones: hub central con las piezas entrando (izq.) y saliendo (der.) */
+.acad-conex-map {
+  /* Interlineado de la primera línea de cada nodo. Las tiritas se cuelgan de su
+     mitad, así que fijarlo aquí es lo que mantiene todas las líneas a la misma
+     altura y perfectamente rectas. */
+  --acad-linea: 1.25rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* Fila 1: los rótulos (así coinciden entre sí). Fila 2: brackets y hub,
+     centrados: sus puntos medios caen a la misma altura y las líneas que los
+     unen salen rectas sin depender de cuántas piezas tenga cada lado. */
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+/* Un solo lado con piezas (un addon que solo entrega, p. ej.): la columna vacía
+   se pliega a cero para que el hub quede pegado a su bracket y no quede medio
+   diagrama en blanco con una línea cruzando la nada. */
+.acad-conex-map.con-entrada:not(.con-salida) { grid-template-columns: minmax(0, 1fr) auto 0; }
+.acad-conex-map.con-salida:not(.con-entrada) { grid-template-columns: 0 auto minmax(0, 1fr); }
+.acad-conex-col { display: flex; flex-direction: column; gap: var(--space-4); }
+.acad-conex-col.esta-vacia { border: 0; padding: 0; }
+.acad-conex-col-label {
+  align-self: end;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+  margin: 0;
+  min-height: 1em;
+}
+.acad-conex-col-label.es-salida { text-align: right; }
+/* Cada columna es un bracket de 1px; cada nodo se engancha con su tirita, y la
+   tirita cae en el centro óptico de la primera línea del nombre (de ahí que el
+   nombre fije su interlineado con --acad-linea: si no, la línea baila). */
+.acad-conex-col.es-entrada { padding-right: var(--space-5); border-right: 1px solid var(--color-border); }
+.acad-conex-col.es-salida  { padding-left: var(--space-5);  border-left: 1px solid var(--color-border); text-align: right; }
+.acad-conex-node { position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.acad-conex-col.es-entrada .acad-conex-node::after,
+.acad-conex-col.es-salida .acad-conex-node::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--acad-linea) / 2);
+  width: var(--space-5);
+  height: 1px;
+  background: var(--color-border);
+}
+.acad-conex-col.es-entrada .acad-conex-node::after { right: calc(var(--space-5) * -1); }
+.acad-conex-col.es-salida  .acad-conex-node::after { left: calc(var(--space-5) * -1); }
+.acad-conex-node-name { font-weight: 600; font-size: var(--text-sm); line-height: var(--acad-linea); color: var(--color-text); }
+.acad-conex-node-que { font-size: var(--text-xs); line-height: 1.45; color: var(--color-text-muted); }
+
+.acad-conex-center { position: relative; display: flex; justify-content: center; }
+/* Los dos tramos que unen cada bracket con el hub. Solo se dibuja el lado que
+   tiene piezas: una línea que no lleva a ningún sitio se lee como un fallo. */
+.acad-conex-map.con-entrada .acad-conex-center::before,
+.acad-conex-map.con-salida .acad-conex-center::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: var(--space-3);
+  height: 1px;
+  background: var(--color-border);
+}
+.acad-conex-map.con-entrada .acad-conex-center::before { left: calc(var(--space-3) * -1); }
+.acad-conex-map.con-salida  .acad-conex-center::after  { right: calc(var(--space-3) * -1); }
+.acad-conex-hub-node {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-primary);
+  background: var(--color-bg);
+  color: var(--color-primary-text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-base);
+  line-height: 1.2;
+  text-align: center;
+  border-radius: var(--radius-md);
+}
+.acad-conex-both {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* Funciona sola: núcleo perfilado + añadidos colgando de una línea */
+.acad-capas-nucleo {
+  padding: var(--space-3) 0 var(--space-4) var(--space-4);
+  border-left: 2px solid var(--color-primary);
+}
+.acad-capas-titulo {
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-primary-text);
+}
+.acad-capas-items { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.acad-capas-chip {
+  padding: 2px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.acad-capas-add { margin-top: var(--space-5); }
+.acad-capas-glabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+  margin: 0 0 var(--space-3);
+}
+.acad-capas-add-list {
+  --acad-linea: 1.25rem;
+  padding-left: var(--space-4);
+  border-left: 1px dashed var(--color-border);
+  display: grid;
+  gap: var(--space-3);
+}
+.acad-capas-add-item {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+/* Tirita de 1px que engancha cada añadido a la línea de puntos, a la mitad de
+   la primera línea del nombre (mismo criterio que en el mapa de conexiones). */
+.acad-capas-add-item::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--acad-linea) / 2);
+  left: calc(var(--space-4) * -1);
+  width: var(--space-4);
+  height: 1px;
+  background: var(--color-border);
+}
+.acad-capas-de { flex: 0 0 auto; font-weight: 600; font-size: var(--text-sm); line-height: var(--acad-linea); color: var(--color-text); }
+.acad-capas-aporta { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Bloque de código literal (fallback de ```) */
+.acad-pre {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  overflow-x: auto;
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  font-family: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+/* ── Entrada desde el admin (dashboard → «otra web») ────────────────────────── */
+.acad-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--gradient-band);
+  color: var(--color-text-on-brand);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+.acad-entry:hover { filter: brightness(1.05); box-shadow: var(--shadow-md); opacity: 1; }
+.acad-entry svg { flex-shrink: 0; }
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  /* Sin sitio para las tres cosas: el texto del tema se va, el buscador se queda. */
+  .acad-masthead-in { gap: var(--space-3); padding: 0 var(--space-4); }
+  .acad-bus { flex: 1 1 auto; }
+  .acad-bus-kbd { display: none; }
+  .acad-tema span { display: none; }
+  .acad-shell { grid-template-columns: 1fr; gap: var(--space-6); }
+  /* El índice va delante del texto: desplegado son trece enlaces antes de la
+     primera palabra, así que aquí se pliega y se abre a demanda. */
+  .acad-rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-top: var(--space-6);
+  }
+  .acad-rail-det {
+    background: var(--color-surface);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+  }
+  /* Aquí el tirador es la tapa de una tarjeta, no un rótulo de columna. */
+  .acad-rail-sum {
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: 0;
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .acad-rail-sum:hover { background: none; }
+  .acad-rail-sum svg { color: var(--color-text-muted); }
+  .acad-rail-det[open] .acad-rail-sum { border-bottom: 1px solid var(--color-divider); }
+  .acad-rail-in { margin-top: 0; padding: var(--space-2) var(--space-4) var(--space-4); }
+  .acad-rail-title { margin-top: var(--space-4); }
+  .acad-main { max-width: none; padding-top: var(--space-2); }
+}
+
+@media (max-width: 640px) {
+  .acad-vercomo-in { padding: var(--space-2) var(--space-4); gap: var(--space-2); }
+  .acad-vercomo-k { display: none; }
+  .acad-vercomo-nota { flex-basis: 100%; }
+
+  /* Portada: la banda se estrecha, el título deja de partirse a 20ch, las cifras
+     se ponen en fila corta y el recorrido pierde la columna de la derecha. */
+  .acad-hero-in { padding: var(--space-8) var(--space-4); }
+  .acad-hero-title { max-width: none; }
+  .acad-hero-lead { font-size: var(--text-base); }
+  .acad-hero-acciones { margin-top: var(--space-6); }
+  .acad-hero .acad-cifras { margin-top: var(--space-8); }
+  /* Los dos botones del hero, a lo ancho: en 360 px uno al lado del otro se
+     parten por dentro y quedan dos cajas de dos líneas. */
+  .acad-hero-acciones .btn { width: 100%; justify-content: center; }
+  .acad-cierre { padding: var(--space-8) var(--space-5); }
+  .acad-cifras { gap: var(--space-4) var(--space-6); }
+  .acad-cifra-n { font-size: var(--text-2xl); }
+  .acad-atajos { padding: var(--space-4); }
+  .acad-ruta-link { flex-wrap: wrap; padding: var(--space-3); }
+  .acad-ruta-meta { padding-left: calc(var(--acad-nodo) + var(--space-4)); }
+  .acad-ruta-paso::before { left: calc(var(--space-3) + var(--acad-nodo) / 2); }
+  .acad-ruta-paso:first-child::before { top: calc(var(--space-3) + var(--acad-nodo) / 2); }
+  .acad-ruta-paso:last-child::before { bottom: calc(100% - var(--space-3) - var(--acad-nodo) / 2); }
+
+  /* En una columna: el hub arriba y los dos brackets alineados a la izquierda,
+     para que todas las tiritas sigan cayendo sobre la misma vertical. */
+  .acad-conex-map { grid-template-columns: 1fr; grid-template-rows: none; row-gap: var(--space-3); }
+  .acad-conex-center { order: -1; justify-content: flex-start; margin-bottom: var(--space-2); }
+  .acad-conex-map.con-entrada .acad-conex-center::before,
+  .acad-conex-map.con-salida .acad-conex-center::after { content: none; }
+  .acad-conex-col-label.es-entrada { order: 1; }
+  .acad-conex-col.es-entrada { order: 2; }
+  .acad-conex-col-label.es-salida { order: 3; margin-top: var(--space-3); }
+  .acad-conex-col.es-salida { order: 4; }
+  .acad-conex-col-label { align-self: start; text-align: left; }
+  .acad-conex-col-label.es-salida { text-align: left; }
+  .acad-conex-col-label:empty { display: none; }
+  .acad-conex-col.es-entrada,
+  .acad-conex-col.es-salida {
+    padding: 0 0 0 var(--space-5);
+    border: 0;
+    border-left: 1px solid var(--color-border);
+    text-align: left;
+  }
+  .acad-conex-col.es-entrada .acad-conex-node::after,
+  .acad-conex-col.es-salida .acad-conex-node::after { left: calc(var(--space-5) * -1); right: auto; }
+}
+
+@media (max-width: 560px) {
+  /* El nombre largo de la marca sobra antes que el buscador. */
+  .acad-brand-sep, .acad-brand-sub { display: none; }
+
+  /* El rail pasa a vertical: la línea baja por el centro de los nodos. El aire
+     entre pasos es padding —no gap— para que la línea no se corte a trozos. */
+  .acad-flujo-track { flex-direction: column; }
+  .acad-flujo-step {
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: left;
+    flex: 0 0 auto;
+    gap: var(--space-3);
+    padding: 0 0 var(--space-5);
+    flex-wrap: wrap;
+  }
+  .acad-flujo-step:last-child { padding-bottom: 0; }
+  .acad-flujo-step::before {
+    top: 0;
+    bottom: 0;
+    left: calc(var(--acad-nodo) / 2);
+    right: auto;
+    width: 1px;
+    height: auto;
+  }
+  .acad-flujo-step:first-child::before { top: calc(var(--acad-nodo) / 2); left: calc(var(--acad-nodo) / 2); }
+  .acad-flujo-step:last-child::before { bottom: calc(100% - var(--acad-nodo) / 2); right: auto; }
+  .acad-flujo-node { flex: 0 0 auto; }
+  .acad-flujo-t { flex: 1 1 auto; line-height: var(--acad-nodo); }
+  .acad-flujo-d { flex: 1 1 100%; padding-left: calc(var(--acad-nodo) + var(--space-3)); }
+}
+
+/* ── Imprimir: el PDF de marca ───────────────────────────────────────────────
+   El PDF no se genera en el servidor: lo hace el navegador desde
+   `/academia/todo`. Así el texto sale seleccionable, los enlaces vivos y no hay
+   una segunda plantilla que mantener al día. Lo que se imprime es lo que deja
+   ver la capa activa: «Ver como partner» + imprimir da el documento que se le
+   puede entregar a un partner. ────────────────────────────────────────────── */
+.acad-imprimir {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.acad-imprimir:hover { border-color: var(--color-primary); color: var(--color-primary-text); }
+
+/* La portada del PDF vive en el HTML pero no se ve en pantalla: en la web ya
+   está la cabecera diciendo lo mismo. */
+.acad-print-cover { display: none; }
+
+@media print {
+  @page { margin: 16mm 15mm; }
+
+  /* `light-dark()` resuelve por `color-scheme`: sin esto, quien lea en oscuro
+     imprimiría texto claro sobre papel blanco, o sea nada. */
+  .acad-root {
+    color-scheme: light;
+    background: var(--color-surface-fixed);
+  }
+
+  /* Fuera el cromo: en papel no hay buscador, ni selector, ni volver arriba. */
+  .acad-masthead,
+  .acad-vercomo,
+  .acad-arriba,
+  .acad-note,
+  .acad-kicker,
+  .acad-copy,
+  .acad-ficha-nav { display: none; }
+
+  .acad-shell { display: block; }
+  .acad-main { max-width: none; padding-top: 0; }
+
+  /* Cuerpo de texto para papel: los tokens son `rem`, así que se ajusta la raíz
+     y baja todo a la vez. 16px en A4 es enorme. */
+  html:has(.acad-root) { font-size: 10.5pt; }
+
+  .acad-print-cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 60vh;
+    break-after: page;
+  }
+  .acad-print-marca {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-text-faint);
+  }
+  .acad-print-titulo {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-top: var(--space-4);
+  }
+  .acad-print-fuera {
+    margin-top: var(--space-4);
+    max-width: 34em;
+    color: var(--color-text-muted);
+  }
+  .acad-print-pie {
+    margin-top: var(--space-8);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-divider);
+    font-size: var(--text-sm);
+    color: var(--color-text-faint);
+  }
+
+  /* El sumario de piezas se queda, pero como lista, no como pastillas. No
+     lleva salto propio: ya lo pone la primera pieza. */
+  .acad-todo-nav { display: block; }
+  .acad-todo-navlink {
+    display: block;
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    text-decoration: none;
+  }
+
+  /* Una pieza por página: en papel el corte entre piezas es la unidad. */
+  .acad-parte,
+  .acad-ficha,
+  .acad-part2-head { break-before: page; }
+  .acad-todo-corte { display: none; }
+
+  /* Nada que se lea como bloque se parte por la mitad. */
+  .acad-dia,
+  .acad-table-wrap,
+  .acad-callout,
+  .acad-tags,
+  .acad-pre { break-inside: avoid; }
+  .acad-h { break-after: avoid; break-inside: avoid; }
+  .acad-p, .acad-ul, .acad-ol { orphans: 3; widows: 3; }
+
+  /* En pantalla la tabla ancha se desplaza; en papel no hay a dónde. */
+  .acad-table-wrap { overflow-x: visible; }
+  .acad-table { font-size: var(--text-xs); }
+
+  .acad-footer { break-inside: avoid; }
+}

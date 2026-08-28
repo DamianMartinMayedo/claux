@@ -4,7 +4,7 @@ import { useState, useTransition, type ReactNode } from 'react'
 import {
   Wallet, Boxes, Store, UserCircle, Calendar, CalendarDays,
   Handshake, QrCode, Presentation, Sparkles, ArrowRight, Check,
-  ChevronDown, ChevronUp, Building2, Layers,
+  ChevronDown, ChevronUp, TrendingUp,
 } from 'lucide-react'
 import { registrarInteresModulo } from '@/app/actions/portal/soporte'
 import { useNotificacionesOpcional } from '@/components/portal/notificaciones/NotificacionesContext'
@@ -19,7 +19,7 @@ import type { ModuloOferta } from '@/app/actions/portal/dashboard'
 //  · DISCRETO (≥3): una línea al pie. Sigue estando, pero no compite con sus datos.
 //
 // Se cuentan módulos CON PANEL, no «lo contratado»: un cliente puede tener tres
-// cosas (IA, imprenta, multiempresa) y el dashboard seguir vacío.
+// cosas (IA, imprenta, catálogo) y el dashboard seguir vacío.
 //
 // El interés NO se manda por `mailto:`: eso depende de que el dueño tenga cliente
 // de correo configurado (si no, el clic no hace nada) y sobre todo no deja rastro
@@ -37,8 +37,8 @@ const ICONOS: Record<string, ReactNode> = {
   catalogo_qr:    <QrCode size={20} />,
   dossier:        <Presentation size={20} />,
   asistente_ia:   <Sparkles size={20} />,
-  multiempresa:   <Building2 size={20} />,
-  multidossier:   <Layers size={20} />,
+  // No es un módulo: es subir de nivel cuando algo se ha llenado (dashboard.ts).
+  nivel_superior: <TrendingUp size={20} />,
 }
 
 // Cuántas se ven sin desplegar. Cuatro entran de un vistazo; la lista completa

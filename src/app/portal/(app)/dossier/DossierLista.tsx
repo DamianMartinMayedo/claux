@@ -15,12 +15,13 @@ import {
   type ResumenDossier, type ResultadoLote,
 } from '@/app/actions/portal/dossier'
 
-// ── Listado de dossiers (addon `multidossier`) ────────────────────────────────
+// ── Listado de dossiers ───────────────────────────────────────────────────────
 //
-// Esta pantalla ES el addon: sin él, /portal/dossier abre el editor directamente y
-// esta lista no existe. Por eso no hace falta anunciar la compra en ningún sitio —
-// la página deja de ser un editor y pasa a ser «Mis dossiers» con un botón de
-// crear, y ese es el primer pixel que ve el dueño al activarlo.
+// Esta pantalla aparece cuando el NIVEL deja tener más de uno: con tope de 1,
+// /portal/dossier abre el editor directamente y esta lista no existe. Por eso no
+// hace falta anunciar nada en ningún sitio — la página deja de ser un editor y pasa
+// a ser «Mis dossiers» con un botón de crear, y ese es el primer pixel que ve el
+// dueño al subir de nivel.
 //
 // Sistema de tablas ÚNICO (skill UI §3): `.table` + `.table-wrapper`, col-* en th y
 // td, data-label en cada td (bajo 640px la tabla se vuelve tarjetas), RowActions
@@ -41,11 +42,12 @@ function fechaDia(f: string | null): string {
 }
 
 export default function DossierLista({
-  dossiers, empresas, puedeEditar,
+  dossiers, empresas, puedeEditar, children,
 }: {
   dossiers: ResumenDossier[]
   empresas: { empresa_id: string; nombre: string }[]
   puedeEditar: boolean
+  children?: React.ReactNode
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -133,6 +135,8 @@ export default function DossierLista({
           </Link>
         )}
       </div>
+
+      {children}
 
       {pendientes.length > 0 && (
         <div className="alert alert-warning" role="status">

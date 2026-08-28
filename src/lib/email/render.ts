@@ -16,6 +16,8 @@ const DEFAULT_ASUNTO: Record<TipoEmail, string> = {
   fin_prueba:        'Tu prueba gratuita de CLAUX está por terminar',
   suspension:        'Tu cuenta de CLAUX fue suspendida',
   periodo_gracia:    'Ampliamos tu acceso a CLAUX hasta el {{fecha_fin}}',
+  limite_alcanzado:  'Llegaste al tope de {{concepto}} de tu nivel {{nivel}}',
+  socio_ampliado:    'Sigues como Socio CLAUX hasta el {{fecha_fin}}',
 }
 const DEFAULT_CUERPO: Record<TipoEmail, string> = {
   diagnostico_cita:  'Hola {{nombre}},\n\nGracias por tu diagnóstico. Agenda tu cita aquí: {{link_agenda}}',
@@ -29,6 +31,8 @@ const DEFAULT_CUERPO: Record<TipoEmail, string> = {
   fin_prueba:        'La prueba gratuita de {{empresa}} termina el {{fecha_expiracion}}.',
   suspension:        'La suscripción de {{empresa}} venció y la cuenta quedó suspendida.',
   periodo_gracia:    'Hola,\n\nLa suscripción de {{empresa}} venció el {{fecha_expiracion}}. Hemos ampliado tu acceso hasta el {{fecha_fin}} para que no interrumpas tu trabajo.\n\nSi necesitas más tiempo o quieres que veamos otra forma de pago, escríbenos.\n\nEl equipo de CLAUX',
+  limite_alcanzado:  'Hola,\n\n{{empresa}} llegó a {{limite}} {{concepto}}, que es lo que incluye el nivel {{nivel}}.\n\nNo se ha cortado nada: sigues trabajando con todo lo que tienes. Lo único que no puedes es añadir más {{concepto}} hasta que archives algunos o pasemos a un nivel mayor.\n\nSi te hace falta más sitio, respóndenos a este correo y lo vemos.\n\nEl equipo de CLAUX',
+  socio_ampliado:    'Hola,\n\nSeguimos: {{empresa}} continúa como Socio CLAUX hasta el {{fecha_fin}}. Tu portal no cambia en nada y no se te genera ningún cobro.\n\nEl equipo de CLAUX',
 }
 
 function interpolar(texto: string, vars: Record<string, string>): string {

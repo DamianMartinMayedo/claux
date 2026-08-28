@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Pencil, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 import EditarModuloModal from './EditarModuloModal'
 import NuevoModuloModal  from './NuevoModuloModal'
+import SembrarColumnaModal from './SembrarColumnaModal'
+import CatalogoTabs from '@/components/admin/CatalogoTabs'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { reordenarModulos, archivarModulo, eliminarModulo } from '@/app/actions/modulos'
 import { useToast } from '@/app/contexts/ToastContext'
+import { NIVELES, precioModulo, type Nivel } from '@/lib/niveles'
 
 const TIPO_LABEL: Record<string, string> = {
   base:          'Base',
@@ -31,8 +34,9 @@ export type Modulo = {
   nombre: string
   descripcion: string | null
   tipo: string
-  precio_fundador_usd: number
-  precio_estandar_usd: number
+  precio_inicial_usd: number
+  precio_empresa_usd: number
+  precio_pro_usd: number
   es_base: boolean
   activo: boolean
   orden: number
@@ -49,7 +53,9 @@ function countPaginas(paginas: Pagina[] | null | undefined): number {
   return 0
 }
 
-export default function ModulosPageClient({ modulos: initial }: { modulos: Modulo[] }) {
+export default function ModulosPageClient(
+  { modulos: initial, nombresNivel }: { modulos: Modulo[]; nombresNivel: Record<Nivel, string> },
+) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
   const [modulos, setModulos] = useState<Modulo[]>(() => initial.map(m => ({ ...m })))
@@ -118,12 +124,17 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
         <div>
           <h1 className="page-title">Catálogo de módulos</h1>
           <p className="page-subtitle">
-            Gestiona módulos y funcionalidades. Arrastra para reordenar (se guarda solo).
-            Edita para cambiar precios y páginas internas.
+            Qué se vende y a qué precio en cada nivel. Arrastra para reordenar (se guarda solo).
+            Cambiar un precio recalcula la cuota de quien tenga el módulo: antes de guardar se dice a quién.
           </p>
         </div>
-        <NuevoModuloModal />
+        <div className="page-header-acciones">
+          <SembrarColumnaModal nombresNivel={nombresNivel} />
+          <NuevoModuloModal nombresNivel={nombresNivel} />
+        </div>
       </div>
+
+      <CatalogoTabs />
 
       <div className="card card-table">
         <div className="table-wrapper">
@@ -134,8 +145,7 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
               <th>Nombre</th>
               <th>Tipo</th>
               <th>Páginas</th>
-              <th className="col-num">Fundador</th>
-              <th className="col-num">Estándar</th>
+              {NIVELES.map(n => <th className="col-num" key={n}>{nombresNivel[n]}</th>)}
               <th>Estado</th>
               <th className="col-actions"></th>
             </tr>
@@ -165,8 +175,11 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
                   </span>
                 </td>
                 <td data-label="Páginas">{countPaginas(m.paginas) || '—'}</td>
-                <td data-label="Fundador" className="col-num table-price">${Number(m.precio_fundador_usd).toFixed(2)}</td>
-                <td data-label="Estándar" className="col-num table-price">${Number(m.precio_estandar_usd).toFixed(2)}</td>
+                {NIVELES.map(n => (
+                  <td data-label={nombresNivel[n]} className="col-num table-price" key={n}>
+                    ${precioModulo(m, n).toFixed(2)}
+                  </td>
+                ))}
                 <td data-label="Estado">
                   <span className={`badge ${m.activo ? 'badge-success' : 'badge-neutral'}`}>
                     {m.activo ? 'Activo' : 'Archivado'}
@@ -201,7 +214,7 @@ export default function ModulosPageClient({ modulos: initial }: { modulos: Modul
       </div>
 
       {editing && (
-        <EditarModuloModal modulo={editing} open onClose={() => setEditing(null)} />
+        <EditarModuloModal modulo={editing} nombresNivel={nombresNivel} open onClose={() => setEditing(null)} />
       )}
 
       {confirmarBorrado && (

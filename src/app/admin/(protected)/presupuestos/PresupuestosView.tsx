@@ -19,6 +19,7 @@ import ClienteFormModal, {
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
 import { descargarPresupuesto } from '@/lib/pdf/presupuesto'
 import { importeCiclo } from '@/lib/billing'
+import { normalizarNivel, precioModulo, type Nivel } from '@/lib/niveles'
 import {
   obtenerPresupuesto,
   actualizarHorasReales,
@@ -48,7 +49,7 @@ function EstadoBadge({ estado }: { estado: string }) {
 // Precarga del alta de cliente a partir del presupuesto. El correo (contacto
 // principal) y el sector vienen del diagnóstico de origen; si no hay diagnóstico
 // (presupuesto manual) se cae al `contacto` cuando parece un email. Los módulos y
-// la tarifa vienen del presupuesto, y el pago de configuración = coste calculado.
+// el nivel vienen del presupuesto, y el pago de configuración = coste calculado.
 function initialDesde(d: Detalle): InitialCliente {
   const diag = d.diagnosticos ?? null
   const contacto = String(d.contacto ?? '').trim()
@@ -58,7 +59,7 @@ function initialDesde(d: Detalle): InitialCliente {
     nombre_contacto: d.nombre_responsable ?? '',
     email_admin:     email,
     sector:          diag?.sector ?? '',
-    tarifa:          d.tarifa === 'fundador' ? 'fundador' : 'estandar',
+    nivel:           normalizarNivel(d.nivel),
     modulos:         Array.isArray(d.modulos) ? d.modulos : [],
     // Lo que se cobra es el total tras el descuento, no el coste bruto: cobrar el bruto
     // sería no aplicar lo que se le prometió al cliente.
@@ -72,6 +73,7 @@ export default function PresupuestosView({
   permisos,
   catalogo,
   plantillas,
+  nombresNivel,
   descuentoAnualPct,
 }: {
   presupuestos: PresupuestoRow[]
@@ -79,6 +81,7 @@ export default function PresupuestosView({
   permisos: SeccionKey[]
   catalogo: ModuloCatalogo[]
   plantillas: PlantillaSector[]
+  nombresNivel: Record<Nivel, string>
   descuentoAnualPct: number
 }) {
   const router = useRouter()
@@ -94,10 +97,9 @@ export default function PresupuestosView({
    */
   async function descargarPdf(d: Detalle, incluir: 'todo' | 'instalacion' | 'suscripcion') {
     const claves: string[] = Array.isArray(d.modulos) ? d.modulos : []
-    const campo = d.tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
     const mods = catalogo
       .filter(m => claves.includes(m.clave))
-      .map(m => ({ nombre: m.nombre, precio: Number((m as unknown as Record<string, unknown>)[campo] ?? 0) }))
+      .map(m => ({ nombre: m.nombre, precio: precioModulo(m, d.nivel) }))
     const mensual = Number(d.cuota_mensual_usd ?? 0)
     try {
       await descargarPresupuesto({
@@ -383,7 +385,7 @@ export default function PresupuestosView({
                     <div className="sol-row"><span className="sol-label">Comercial</span><span className="sol-value">{detalle.comercial_nombre ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Responsable</span><span className="sol-value">{detalle.nombre_responsable ?? '—'}</span></div>
                     <div className="sol-row"><span className="sol-label">Contacto</span><span className="sol-value">{detalle.contacto ?? '—'}</span></div>
-                    <div className="sol-row"><span className="sol-label">Tarifa</span><span className="sol-value">{detalle.tarifa === 'fundador' ? 'Fundador' : 'Estándar'}</span></div>
+                    <div className="sol-row"><span className="sol-label">Nivel</span><span className="sol-value">{nombresNivel[normalizarNivel(detalle.nivel)]}</span></div>
                     <div className="sol-row"><span className="sol-label">Módulos</span><span className="sol-value">{(detalle.modulos ?? []).join(', ') || '—'}</span></div>
                     {detalle.client_id && (
                       <div className="sol-row"><span className="sol-label">Cliente</span><span className="sol-value">{detalle.client_id}</span></div>
@@ -552,6 +554,7 @@ export default function PresupuestosView({
         onClose={() => setClienteOpen(false)}
         catalogo={catalogo}
         plantillas={plantillas}
+        nombresNivel={nombresNivel}
         descuentoAnualPct={descuentoAnualPct}
         initial={clienteInitial}
         presupuestoId={clientePresupuestoId}

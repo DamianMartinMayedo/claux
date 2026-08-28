@@ -20,6 +20,10 @@ export interface DiagnosticoLead {
   necesidades: string[]
   modo_actual: string
   modulos_rec: string[]
+  /** Nivel que le encajaba según los volúmenes que declaró. Null en los leads
+      anteriores al paso de tamaño (mig. 219). */
+  nivel_rec: string | null
+  tamano: Record<string, number> | null
   estado: EstadoLead
   created_at: string
 }
@@ -31,7 +35,7 @@ export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('diagnosticos')
-    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, estado, created_at')
+    .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, nivel_rec, tamano, estado, created_at')
     .order('created_at', { ascending: false })
   return (data ?? []) as DiagnosticoLead[]
 }
@@ -57,6 +61,11 @@ interface GuardarDiagnosticoInput {
   necesidades: string[]
   modoActual: string
   modulosRec: string[]
+  /** Clave del nivel recomendado ('inicial'|'empresa'|'pro'), o null si no se
+      pudieron cargar los niveles: se guarda el lead igual, sin inventárselo. */
+  nivelRec?: string | null
+  /** Respuestas del paso de tamaño, para que quien llame sepa de dónde salió. */
+  tamano?: Record<string, number>
 }
 
 // Guarda el lead y NADA MÁS. Ojo con lo que se añade aquí: esto corre al pulsar
@@ -65,7 +74,7 @@ interface GuardarDiagnosticoInput {
 export async function guardarDiagnostico(
   input: GuardarDiagnosticoInput
 ): Promise<{ ok: boolean; id?: number; error?: string }> {
-  const { nombre, telefono, email, sector, necesidades, modoActual, modulosRec } = input
+  const { nombre, telefono, email, sector, necesidades, modoActual, modulosRec, nivelRec, tamano } = input
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -86,6 +95,8 @@ export async function guardarDiagnostico(
     necesidades,
     modo_actual: modoActual,
     modulos_rec: modulosRec,
+    nivel_rec: nivelRec ?? null,
+    tamano: tamano && Object.keys(tamano).length ? tamano : null,
   }).select('id').single()
 
   if (error) {

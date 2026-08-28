@@ -3,6 +3,7 @@ import { requireAccesoModulo }   from '@/app/actions/portal/auth'
 import { obtenerProductos }      from '@/app/actions/portal/productos'
 import ProductosView             from './ProductosView'
 import SolicitarAcceso            from '@/components/portal/SolicitarAcceso'
+import CupoNivel from '@/components/portal/CupoNivel'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,7 @@ export default async function ProductosPage() {
   if (!data) redirect('/portal/login')
   return (
     <ProductosView data={data} puedeEditar={puedeEditar}>
+      <CupoNivel dim="productos" />
       {!puedeEditar && <SolicitarAcceso modulo="inventario" />}
     </ProductosView>
   )

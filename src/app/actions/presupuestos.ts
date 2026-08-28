@@ -6,7 +6,8 @@ import { logActividad } from '@/lib/audit'
 import { revalidatePath } from 'next/cache'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
-import type { FormatoDatos, TarifaTipo } from '@/lib/presupuesto/config'
+import type { FormatoDatos } from '@/lib/presupuesto/config'
+import { normalizarNivel, sumarModulos, type Nivel, type ModuloPrecios } from '@/lib/niveles'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
 export interface ModuloPresupuesto {
@@ -14,8 +15,9 @@ export interface ModuloPresupuesto {
   nombre:  string
   tipo:    string
   es_base: boolean
-  precio_fundador_usd: number
-  precio_estandar_usd: number
+  precio_inicial_usd: number
+  precio_empresa_usd: number
+  precio_pro_usd:     number
 }
 
 export interface Comercial {
@@ -40,8 +42,8 @@ export interface CrearPresupuestoInput {
   nombreResponsable?: string
   contacto?:          string
   /** Solo elige el precio de los MÓDULOS (cuota mensual). La hora de instalación tiene
-   *  tarifa única, configurable y negociable por cliente. */
-  tarifa:             TarifaTipo
+   *  tarifa/hora única, configurable y negociable por cliente. */
+  nivel:              Nivel
   modulos:            string[]
   volumenes:          Record<string, number>
   formato:            FormatoDatos
@@ -60,7 +62,7 @@ export interface PresupuestoRow {
   comercial_nombre:      string | null
   nombre_negocio:        string
   contacto:              string | null
-  tarifa:                string
+  nivel:                 string
   horas_total:           number
   coste_instalacion_usd: number
   cuota_mensual_usd:     number
@@ -78,7 +80,7 @@ export async function listarModulosParaPresupuesto(): Promise<ModuloPresupuesto[
   const db = createAdminClient()
   const { data } = await db
     .from('modulos_catalogo')
-    .select('clave, nombre, tipo, es_base, precio_fundador_usd, precio_estandar_usd')
+    .select('clave, nombre, tipo, es_base, precio_inicial_usd, precio_empresa_usd, precio_pro_usd')
     .eq('activo', true)
     .order('orden')
   return (data ?? []) as ModuloPresupuesto[]
@@ -107,21 +109,16 @@ export async function listarComerciales(): Promise<Comercial[]> {
   return Array.from(mapa.values()).sort((a, b) => a.nombre.localeCompare(b.nombre))
 }
 
-// ── Cuota mensual (Σ precios de módulos contratados según tarifa, en vivo) ──
+// ── Cuota mensual (Σ precios de módulos contratados por la columna del nivel, en vivo) ──
 async function calcularCuotaMensual(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any, modulos: string[], tarifa: TarifaTipo,
+  db: any, modulos: string[], nivel: Nivel,
 ): Promise<number> {
   const { data } = await db
     .from('modulos_catalogo')
-    .select('clave, precio_fundador_usd, precio_estandar_usd')
+    .select('clave, precio_inicial_usd, precio_empresa_usd, precio_pro_usd')
     .eq('activo', true)
-  const campo = tarifa === 'fundador' ? 'precio_fundador_usd' : 'precio_estandar_usd'
-  return (data ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((m: any) => modulos.includes(m.clave))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .reduce((s: number, m: any) => s + Number(m[campo] ?? 0), 0)
+  return sumarModulos((data ?? []) as ModuloPrecios[], modulos, nivel)
 }
 
 // ── Listar presupuestos guardados ──
@@ -130,7 +127,7 @@ export async function listarPresupuestos(): Promise<PresupuestoRow[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('presupuestos_instalacion')
-    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, tarifa, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
+    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, nivel, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
     .order('created_at', { ascending: false })
   return (data ?? []) as PresupuestoRow[]
 }
@@ -147,7 +144,7 @@ export async function listarPresupuestosDeCliente(clientId: string): Promise<Pre
   const db = createAdminClient()
   const { data } = await db
     .from('presupuestos_instalacion')
-    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, tarifa, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
+    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, nivel, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
     .eq('client_id', clientId)
     .order('created_at', { ascending: false })
   return (data ?? []) as PresupuestoRow[]
@@ -170,12 +167,12 @@ export async function obtenerPresupuesto(id: number) {
 // ── Validación + recálculo autoritativo, compartido por crear y actualizar ──
 //
 // RECÁLCULO AUTORITATIVO con los parámetros del servidor: lo que llegue del navegador es una
-// propuesta, no el precio. La tarifa pactada sí se respeta —es la palanca comercial—, pero las
+// propuesta, no el precio. El nivel pactado sí se respeta —es la palanca comercial—, pero las
 // horas se vuelven a calcular aquí. Las fases excluidas viajan con el resto: si el recálculo
 // del servidor las ignorara, guardaría un presupuesto más caro que el que el comercial acaba de
 // enseñar en pantalla.
 type SnapshotPresupuesto = {
-  tarifa:          TarifaTipo
+  nivel:           Nivel
   nombreNegocio:   string
   descuentoPct:    number
   descuentoMotivo: string
@@ -189,7 +186,7 @@ async function calcularSnapshotPresupuesto(
 ): Promise<{ ok: false; error: string } | { ok: true; snap: SnapshotPresupuesto }> {
   const nombreNegocio = (input.nombreNegocio || '').trim()
   if (!nombreNegocio) return { ok: false, error: 'El nombre del negocio es obligatorio.' }
-  const tarifa: TarifaTipo = input.tarifa === 'fundador' ? 'fundador' : 'estandar'
+  const nivel: Nivel = normalizarNivel(input.nivel)
 
   // Un descuento sin motivo es un descuento que dentro de tres meses nadie sabe explicar:
   // por qué ESTE cliente pagó $700 y no $1.000 es justo lo que hay que poder mirar después.
@@ -215,9 +212,9 @@ async function calcularSnapshotPresupuesto(
     fasesExcluidas,
   }, parametros)
 
-  const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], tarifa)
+  const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], nivel)
 
-  return { ok: true, snap: { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } }
+  return { ok: true, snap: { nivel, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } }
 }
 
 // ── El cobro de configuración sigue a su presupuesto ─────────────────────────
@@ -385,7 +382,7 @@ export async function crearPresupuesto(
 
   const calc = await calcularSnapshotPresupuesto(db, input)
   if (!calc.ok) return { ok: false, error: calc.error }
-  const { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
+  const { nivel, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
 
   const { data, error } = await db
     .from('presupuestos_instalacion')
@@ -397,7 +394,7 @@ export async function crearPresupuesto(
       nombre_negocio:        nombreNegocio,
       nombre_responsable:    (input.nombreResponsable || '').trim() || null,
       contacto:              (input.contacto || '').trim() || null,
-      tarifa,
+      nivel,
       modulos:               input.modulos ?? [],
       volumenes:             input.volumenes ?? {},
       formato_datos:         input.formato,
@@ -458,7 +455,7 @@ export async function actualizarPresupuesto(
 
   const calc = await calcularSnapshotPresupuesto(db, input)
   if (!calc.ok) return { ok: false, error: calc.error }
-  const { tarifa, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
+  const { nivel, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
 
   // No se tocan `diagnostico_id`, `client_id`, `estado`, `horas_reales` ni `created_at`: son la
   // identidad y el ciclo de vida del presupuesto, no lo que se está reeditando.
@@ -470,7 +467,7 @@ export async function actualizarPresupuesto(
       nombre_negocio:        nombreNegocio,
       nombre_responsable:    (input.nombreResponsable || '').trim() || null,
       contacto:              (input.contacto || '').trim() || null,
-      tarifa,
+      nivel,
       modulos:               input.modulos ?? [],
       volumenes:             input.volumenes ?? {},
       formato_datos:         input.formato,

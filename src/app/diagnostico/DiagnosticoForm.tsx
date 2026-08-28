@@ -7,8 +7,15 @@ import type {
   EtiquetasSector,
   ModuloPublico,
   NecesidadPublica,
+  NivelPublico,
   SectorPublico,
 } from '@/lib/publico/tipos'
+import {
+  PREGUNTAS_TAMANO_BASE,
+  preguntaCatalogo,
+  opcionesTamano,
+  nivelRecomendado,
+} from '@/lib/publico/tamano'
 import { ETIQUETAS_DEFAULT } from '@/lib/sector'
 import { iconoSector } from '@/components/publico/iconos'
 import { CheckIcon, ArrowRightIcon, ArrowLeftIcon, SendIcon } from './icons'
@@ -17,7 +24,7 @@ import { CheckIcon, ArrowRightIcon, ArrowLeftIcon, SendIcon } from './icons'
    Datos fijos (no del catálogo): pasos y modo actual
    ════════════════════════════════════════════════ */
 
-const STEPS = ['Tipo de negocio', '¿Qué necesitas?', '¿Cómo lo haces hoy?', 'Tus datos', 'Informe']
+const STEPS = ['Tipo de negocio', '¿Qué necesitas?', 'Tu tamaño', '¿Cómo lo haces hoy?', 'Tus datos', 'Informe']
 const TOTAL_STEPS = STEPS.length
 
 const MODOS = [
@@ -72,15 +79,18 @@ interface Props {
   modulos: ModuloPublico[]
   sectores: SectorPublico[]
   necesidades: NecesidadPublica[]
+  niveles: NivelPublico[]
 }
 
-export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpts }: Props) {
+export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpts, niveles }: Props) {
   const ordenModulo = new Map(modulos.map((m, i) => [m.clave, i]))
 
   const [step, setStep] = useState(0)
   const [sector, setSector] = useState('')
   const [necesidades, setNecesidades] = useState<string[]>([])
   const [modoActual, setModoActual] = useState('')
+  // Respuestas del paso de tamaño: clave de pregunta → índice del nivel que exige.
+  const [tamano, setTamano] = useState<Record<string, number>>({})
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
@@ -99,13 +109,24 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
   const progressPct = ((step + 1) / TOTAL_STEPS) * 100
   const sectorSel = sectores.find((s) => s.sector === sector)
 
+  // Las preguntas de tamaño dependen del sector (la del catálogo) y sus opciones
+  // de los topes vivos de cada nivel. Solo entran las que ese nivel tiene medidas:
+  // sin filas en `nivel_limites` no hay bandas y la pregunta no se pinta.
+  const preguntasTamano = [...PREGUNTAS_TAMANO_BASE, preguntaCatalogo(sectorSel?.modulos ?? [])]
+    .map((q) => ({ ...q, opciones: opcionesTamano(niveles, q.dim) }))
+    .filter((q) => q.opciones.length > 1)
+  const nivelRec = nivelRecomendado(niveles, tamano)
+
   function next() {
     const errs: Record<string, string> = {}
 
     if (step === 0 && !sector) errs.sector = 'Selecciona el tipo de negocio.'
     if (step === 1 && necesidades.length === 0) errs.necesidades = 'Selecciona al menos una opción.'
-    if (step === 2 && !modoActual) errs.modoActual = 'Selecciona una opción.'
-    if (step === 3) {
+    if (step === 2 && preguntasTamano.some((q) => tamano[q.clave] === undefined)) {
+      errs.tamano = 'Responde las tres para saber qué nivel te encaja.'
+    }
+    if (step === 3 && !modoActual) errs.modoActual = 'Selecciona una opción.'
+    if (step === 4) {
       if (!nombre.trim()) errs.nombre = 'El nombre es obligatorio.'
       if (!telefono.trim()) errs.telefono = 'El teléfono es obligatorio.'
       if (!email.trim()) errs.email = 'El correo es obligatorio.'
@@ -118,7 +139,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
     }
     setErrores({})
 
-    if (step === 3) {
+    if (step === 4) {
       guardarYAvanzar()
       return
     }
@@ -139,6 +160,8 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
       necesidades,
       modoActual,
       modulosRec: claves,
+      nivelRec: nivelRec?.clave ?? null,
+      tamano,
     })
 
     setSubmitting(false)
@@ -150,7 +173,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
 
     setRecClaves(claves)
     setLeadId(resultado.id ?? null)
-    setStep(4)
+    setStep(5)
   }
 
   // El botón «Quiero que me contacten gratis». Antes esto era solo
@@ -294,8 +317,58 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
         </div>
       )}
 
-      {/* Paso 2: modo actual */}
+      {/* Paso 2: tamaño → nivel. Las bandas salen de `nivel_limites` en vivo:
+          ver src/lib/publico/tamano.ts. Si no hubiera niveles cargados, la lista
+          sale vacía y el paso se salta solo enseñando el botón de siguiente. */}
       {step === 2 && (
+        <div className="dg-step-content">
+          <h2 className="dg-step-title">¿De qué tamaño es tu negocio?</h2>
+          <p className="dg-step-subtitle">
+            Aproximado, sin pensarlo mucho. Es para saber qué nivel te encaja.
+          </p>
+
+          {preguntasTamano.map((q) => (
+            <fieldset key={q.clave} className="dg-fieldset dg-tamano-bloque">
+              <legend className="dg-tamano-pregunta">{q.pregunta}</legend>
+              <div className="dg-options dg-options-auto">
+                {q.opciones.map((o) => (
+                  <label key={o.label} className="dg-option-radio">
+                    <input
+                      type="radio"
+                      name={`tam-${q.clave}`}
+                      className="dg-option-input"
+                      value={o.label}
+                      checked={tamano[q.clave] === o.nivelIdx}
+                      onChange={() => {
+                        setTamano({ ...tamano, [q.clave]: o.nivelIdx })
+                        setErrores({})
+                      }}
+                    />
+                    <span className="dg-option-radio-dot" />
+                    <span className="dg-option-radio-text">
+                      <span className="dg-option-radio-label">{o.label}</span>
+                      <span className="dg-option-check-desc">{q.cosa}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+
+          {errores.tamano && <p className="dg-form-error dg-error-block">{errores.tamano}</p>}
+          <div className="dg-form-actions">
+            <button className="btn btn-ghost" onClick={back}>
+              <ArrowLeftIcon /> Atrás
+            </button>
+            <button className="btn btn-primary" onClick={next}>
+              Siguiente <ArrowRightIcon />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Paso 3: modo actual */}
+      {step === 3 && (
         <div className="dg-step-content">
           <h2 className="dg-step-title">¿Cómo gestionas tu negocio hoy?</h2>
           <p className="dg-step-subtitle">
@@ -340,8 +413,8 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
         </div>
       )}
 
-      {/* Paso 3: contacto */}
-      {step === 3 && (
+      {/* Paso 4: contacto */}
+      {step === 4 && (
         <div className="dg-step-content">
           <h2 className="dg-step-title">¿Dónde te contactamos?</h2>
           <p className="dg-step-subtitle">
@@ -428,8 +501,8 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
         </div>
       )}
 
-      {/* Paso 4: informe */}
-      {step === 4 && recClaves && (
+      {/* Paso 5: informe */}
+      {step === 5 && recClaves && (
         <div className="dg-report">
           <div className="dg-report-header">
             <div className="dg-report-icon">
@@ -468,6 +541,19 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
                 )
               })}
           </div>
+
+          {/* El nivel que le encaja. SIN precio (D12 del plan): la cuota depende
+              de qué módulos active y eso se habla, no se estima en una pantalla.
+              Si no hay recomendación —niveles sin cargar— no se pinta nada. */}
+          {nivelRec && (
+            <div className="dg-report-nivel">
+              <p className="dg-report-nivel-label">El nivel que te encaja</p>
+              <p className="dg-report-nivel-nombre">{nivelRec.nombre}</p>
+              {nivelRec.descripcion && (
+                <p className="dg-report-nivel-desc">{nivelRec.descripcion}</p>
+              )}
+            </div>
+          )}
 
           <div className="dg-report-cta">
             {contactado ? (

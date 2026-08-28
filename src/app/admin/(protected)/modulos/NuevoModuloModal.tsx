@@ -8,8 +8,9 @@ import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
+import { NIVELES, CAMPO_PRECIO, type Nivel } from '@/lib/niveles'
 
-export default function NuevoModuloModal() {
+export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Record<Nivel, string> }) {
   const [open, setOpen]       = useState(false)
   const { success: toastSuccess, error: toastError } = useToast()
   const [loading, setLoading] = useState(false)
@@ -65,17 +66,18 @@ export default function NuevoModuloModal() {
               <label>Descripción</label>
               <textarea name="descripcion" className="input" rows={2} placeholder="Describe qué incluye este módulo…" />
             </div>
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Precio fundador (USD)</label>
-                <input name="precio_fundador_usd" className="input" type="number" min="0" step="any" required defaultValue="0" />
-              </div>
-              <div className="input-group">
-                <label>Precio estándar (USD)</label>
-                <input name="precio_estandar_usd" className="input" type="number" min="0" step="any" required defaultValue="0" />
-              </div>
+            {/* Un precio por nivel. Los rótulos salen de /admin/niveles: si el dueño
+                renombra un nivel, este formulario lo dice sin tocar código. */}
+            <div className="grid-cols-3">
+              {NIVELES.map(n => (
+                <div className="input-group" key={n}>
+                  <label htmlFor={`nuevo-${n}`}>Precio {nombresNivel[n]} (USD)</label>
+                  <input id={`nuevo-${n}`} name={CAMPO_PRECIO[n]} className="input"
+                         type="number" min="0" step="any" required defaultValue="0" />
+                </div>
+              ))}
             </div>
-            <div className="info-banner" style={{ marginTop: 'var(--space-4)', marginBottom: 0 }}>
+            <div className="info-banner info-banner-compacto">
               <Info aria-hidden />
               <p>Las páginas internas (módulo) o rutas (funcionalidad) se crean con el asistente de IA. Desde aquí solo gestionas el catálogo.</p>
             </div>

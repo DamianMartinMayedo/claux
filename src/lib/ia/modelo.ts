@@ -3,8 +3,11 @@
 // principal (settings.ia_model) y el de respaldo gratis (ia_modelo_fallback_gratis).
 // Regla de control de coste (decisión del propietario): si un cliente supera su
 // cupo del mes, sus consultas pasan automáticamente al modelo gratis de respaldo.
-// El cupo es global (settings.ia_cupo_conversaciones) con override por cliente
-// (clients.ia_config.cupo).
+// El cupo lo fija el NIVEL contratado (nivel_limites.ia_conversaciones: 500 /
+// 1.500 / 5.000), con override por cliente en clients.ia_config.cupo y el
+// settings.ia_cupo_conversaciones como red de seguridad si el nivel no tuviera
+// fila. Antes solo existían los dos últimos: el número del nivel se editaba en
+// /admin/niveles y no lo leía nadie.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { PRUEBA_LENTA_MS } from './prueba-tipos'
@@ -51,7 +54,14 @@ async function resolverApiKey(
   return null
 }
 
-// Cupo efectivo del cliente: override en ia_config.cupo, si no el global.
+/**
+ * Cupo efectivo del cliente, por orden: `ia_config.cupo` (excepción negociada) →
+ * el del nivel contratado → el global de settings → 500.
+ *
+ * `Infinity` si el nivel lo tiene en ilimitado (`base` NULL): quien no tiene tope
+ * nunca cae al modelo gratis. Los tres niveles de hoy traen número, así que es un
+ * caso que solo aparece si alguien lo pone a mano en /admin/niveles.
+ */
 export async function cupoEfectivo(clientId: string): Promise<number> {
   const db = createAdminClient()
   const [{ data: cli }, { data: setRow }] = await Promise.all([
@@ -61,6 +71,16 @@ export async function cupoEfectivo(clientId: string): Promise<number> {
   const cfg = (cli?.ia_config && typeof cli.ia_config === 'object') ? cli.ia_config as Record<string, unknown> : {}
   const override = Number(cfg.cupo)
   if (Number.isFinite(override) && override > 0) return Math.floor(override)
+
+  // El nivel. Se lee aquí y no en `cargarContextoLimites` para no arrastrar a
+  // `lib/limites` una dimensión que no se cuenta por filas activas; el precio es
+  // una consulta, y esto ya va detrás de un `Promise.all`.
+  const { data: cliNivel } = await db.from('clients').select('nivel').eq('client_id', clientId).maybeSingle()
+  const nivel = typeof cliNivel?.nivel === 'string' ? cliNivel.nivel : 'inicial'
+  const { data: fila } = await db.from('nivel_limites')
+    .select('base').eq('nivel', nivel).eq('dimension', 'ia_conversaciones').maybeSingle()
+  if (fila) return fila.base === null ? Infinity : Math.floor(Number(fila.base))
+
   const global = parseInt(String(setRow?.value ?? ''), 10)
   return Number.isFinite(global) && global > 0 ? global : DEFAULT_CUPO
 }

@@ -11,8 +11,11 @@
 import { norm } from './util'
 import type {
   Adaptador, ClavesVistas, CtxImport, MapeoImport, FilaRepetida, FilaResultado,
-  ResumenAplicacion, TrozoValidacion, TrozoAplicacion,
+  ResultadoValidacion, ResumenAplicacion, TrozoValidacion, TrozoAplicacion,
 } from './tipos'
+import {
+  DIMENSIONES, cargarContextoLimites, contarActivos, huecoDisponible, limiteDe, mensajeLimiteCrear,
+} from '@/lib/limites'
 
 /** Presupuesto de una tanda: lo que llegue antes. */
 const FILAS_TANDA = 200
@@ -116,6 +119,23 @@ function resumenFila(
   return partes.join(' · ') || adaptador.etiqueta
 }
 
+/**
+ * Cuánto cupo del nivel queda libre para la entidad del adaptador.
+ *
+ * Se informa en el DRY-RUN y se aplica de verdad en el commit. Es un dato de la
+ * base —no del archivo—, así que no hace falta acumularlo entre tandas: en la
+ * primera y en la última dice lo mismo, que es lo que el operador necesita saber
+ * antes de pulsar «Importar».
+ */
+async function cupoLibre(adaptador: Adaptador, ctx: CtxImport): Promise<ResultadoValidacion['cupo']> {
+  const dim = adaptador.dimension
+  if (!dim || dim === 'ia_conversaciones') return undefined
+  const libre = await huecoDisponible(ctx.db, ctx.client_id, dim)
+  if (libre === null) return undefined            // ilimitado: nada que avisar
+  const limite = await limiteDe(ctx.db, ctx.client_id, dim)
+  return { dimension: dim, etiqueta: DIMENSIONES[dim].varios, libre, limite: limite ?? 0 }
+}
+
 /** Dry-run: valida cada fila SIN escribir. Marca duplicados dentro del archivo. */
 export async function validarLoteFilas(
   filas: Record<string, string>[], mapeo: MapeoImport, adaptador: Adaptador, ctx: CtxImport,
@@ -188,6 +208,7 @@ export async function validarLoteFilas(
     resumen:    adaptador.resumen?.(buenas),
     pendientes: [...ctx.pendientes.values()],
     repetidas,
+    cupo:       await cupoLibre(adaptador, ctx),
     claves:     [...vistos],
     siguiente:  i < filas.length ? i : null,
   }
@@ -299,6 +320,22 @@ export async function aplicarLoteFilas(
   const vistos = new Map(clavesPrevias)
   const r: ResumenAplicacion = { insertadas: 0, actualizadas: 0, saltadas: 0, errores: 0 }
 
+  // Presupuesto de cupo de ESTA tanda. Se recuenta contra la base al empezar cada
+  // una, así que ya incluye lo que insertaron las anteriores: no hay que acumular
+  // nada entre llamadas y un reintento no descuadra.
+  //
+  // Lo que no cabe se SALTA con su motivo, no revienta el lote. Un fichero de 400
+  // productos con sitio para 58 mete 58 y deja escrito, fila por fila, por qué las
+  // otras 342 no entraron; abortarlo entero dejaría al cliente sin nada y sin saber
+  // qué le faltó.
+  const dim = adaptador.dimension && adaptador.dimension !== 'ia_conversaciones'
+    ? adaptador.dimension : null
+  const cupo = dim ? await cargarContextoLimites(ctx.db, ctx.client_id) : null
+  const tope = dim && cupo ? cupo.limites[dim] ?? null : null
+  let presupuesto = tope === null || !dim
+    ? null                                                   // ilimitado o sin dimensión
+    : Math.max(0, tope - await contarActivos(ctx.db, ctx.client_id, dim))
+
   let i = desde
   for (; i < filas.length && !seAcabaElTiempo(t0, i - desde); i++) {
     const fila = i + 1
@@ -332,9 +369,16 @@ export async function aplicarLoteFilas(
         await adaptador.actualizar(existente, parcial, ctx)
         await registrarItem(ctx, loteId, adaptador.entidad, fila, 'ACTUALIZADA', existente, null)
         r.actualizadas++
+      } else if (dim && presupuesto !== null && presupuesto <= 0) {
+        await registrarItem(
+          ctx, loteId, adaptador.entidad, fila, 'SALTADA', null,
+          mensajeLimiteCrear(dim, tope ?? 0, cupo?.nivelNombre ?? ''),
+        )
+        r.saltadas++
       } else {
         const id = await adaptador.insertar(prep.datos, ctx)
         await registrarItem(ctx, loteId, adaptador.entidad, fila, 'INSERTADA', id, null)
+        if (presupuesto !== null) presupuesto--
         r.insertadas++
       }
     } catch (e) {

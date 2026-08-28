@@ -56,7 +56,7 @@ export default function DossierWizard({
   data: DossierData
   onRefrescar: () => void
   onTerminar: () => void
-  // Solo lo pasa la ruta /nuevo (addon multidossier): ver `creado()`.
+  // Solo lo pasa la ruta /nuevo, la que nace del listado: ver `creado()`.
   onCreado?: (dossierId: string) => void
 }) {
   const pasos = useMemo(() => pasosDe(data.tieneBase), [data.tieneBase])

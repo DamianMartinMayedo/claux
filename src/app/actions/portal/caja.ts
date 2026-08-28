@@ -14,6 +14,7 @@ import { ingestarLote, contabilizarCierre, type LotePayload, type CajaRow } from
 import { tieneModulo }      from '@/lib/modulos'
 import { LIMITE_LISTADO, limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/listados'
 import { diaDelNegocio } from '@/lib/fecha-tz'
+import { comprobarLimite } from '@/lib/limites'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -256,6 +257,11 @@ export async function crearCaja(
   if (!empresas.some(e => e.empresa_id === empresa_id)) {
     return { ok: false, error: 'Empresa no válida.' }
   }
+
+  // El tope es del cliente entero, no de esta empresa: seis puntos de venta son
+  // seis, repartidos como quiera.
+  const tope = await comprobarLimite(db, session.client_id, 'puntos_venta')
+  if (tope) return { ok: false, error: tope }
 
   // **Un punto de venta no nace roto.** Antes se aceptaban TODAS las monedas activas con
   // `cuentas_moneda` vacío: exactamente el estado que `guardarConfigCaja` se niega a
@@ -926,7 +932,16 @@ export async function setActivaCaja(caja_id: string, activa: boolean): Promise<{
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  const { error } = await createAdminClient().from('cajas')
+  const db = createAdminClient()
+
+  // Reactivar cuenta como crear: si no, archivar seis y desarchivarlos después
+  // deja doce puntos de venta con derecho a seis.
+  if (activa) {
+    const tope = await comprobarLimite(db, session.client_id, 'puntos_venta', 1, 'desarchivar')
+    if (tope) return { ok: false, error: tope }
+  }
+
+  const { error } = await db.from('cajas')
     .update({ activa, updated_at: new Date().toISOString() })
     .eq('caja_id', caja_id).eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }

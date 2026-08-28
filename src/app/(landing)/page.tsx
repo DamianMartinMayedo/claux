@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
-import type { ModuloPublico, SectorPublico } from '@/lib/publico/tipos'
+import type { ModuloPublico, NivelPublico, SectorPublico } from '@/lib/publico/tipos'
+import { DIMENSIONES_LANDING, DIMENSIONES_LIMITE, etiquetaDimension } from '@/lib/limites'
 import { PublicHeader, PublicFooter } from '@/components/publico/Chrome'
 import LandingAnim from '@/components/publico/LandingAnim'
 import { Reveal } from '@/components/publico/Reveal'
@@ -48,7 +49,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function LandingPage() {
-  const { modulos, sectores } = await obtenerCatalogoPublico()
+  const { modulos, sectores, niveles } = await obtenerCatalogoPublico()
 
   // El fondo de puntos interactivo (DotOrb) está retirado del render mientras
   // decidimos qué hacer con él: era `position: fixed`, así que no daba ritmo al
@@ -71,6 +72,7 @@ export default async function LandingPage() {
         </div>
         <ValueSection />
         <ModulesSection modulos={modulos} />
+        <NivelesSection niveles={niveles} />
         <SectorsSection sectores={sectores} />
         <IaSection />
         <StepsSection />
@@ -229,6 +231,133 @@ function ModulesSection({ modulos }: { modulos: ModuloPublico[] }) {
       </Reveal>
     </section>
   )
+}
+
+/* ════════════════════════════════════════════════ Niveles ════ */
+
+/**
+ * Las tres tarjetas de nivel. Números leídos EN VIVO de `niveles` +
+ * `nivel_limites`: lo que el dueño edita en /admin/niveles es lo que se enseña
+ * aquí, sin desplegar.
+ *
+ * Sin precios, a propósito (D12 del plan): la landing dice cuánto cabe, y el
+ * precio sale del diagnóstico o de una conversación, porque depende de qué
+ * módulos active cada negocio.
+ *
+ * Si la lectura falla, `obtenerCatalogoPublico` degrada a lista vacía y la
+ * sección entera no se pinta. Mejor eso que tres tarjetas sin cifras.
+ */
+function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
+  if (niveles.length === 0) return null
+
+  // Solo las dimensiones que alguno de los niveles trae de verdad: una fila
+  // vacía en la comparativa es una promesa a medias.
+  const comparables = DIMENSIONES_LIMITE.filter((d) => niveles.some((n) => d in n.limites))
+
+  // La de en medio va resaltada, como en cualquier tabla de precios. Se elige por
+  // POSICIÓN y no por la clave del nivel: si mañana se renombran o se reordenan
+  // desde /admin/niveles, el resalte sigue cayendo en el del medio en vez de
+  // quedarse pegado a un nombre que ya no existe. Con un número par de niveles no
+  // hay «medio» y no se resalta ninguno.
+  const destacado = niveles.length % 2 === 1 ? Math.floor(niveles.length / 2) : -1
+
+  return (
+    <section className="ld-section ld-section-niveles" id="niveles">
+      <Reveal stagger className="ld-section-head">
+        <div className="ld-section-label">Tamaño de tu negocio</div>
+        <h2 className="ld-section-title">Tres niveles, según lo que necesites</h2>
+        <p className="ld-section-text">
+          Los tres traen los mismos módulos y funcionan igual. Eliges por el
+          tamaño de tu negocio: un puesto con veinte productos no paga lo mismo
+          que uno con tres almacenes y quince empleados.
+        </p>
+      </Reveal>
+
+      <Reveal stagger className="ld-niveles-grid">
+        {niveles.map((n, i) => (
+          <div
+            key={n.clave}
+            className={`ld-nivel-card${i === destacado ? ' ld-nivel-card-destacado' : ''}`}
+          >
+            {i === destacado && <span className="ld-nivel-badge">Recomendado</span>}
+            {/* Medidor de tamaño: tantos tramos como niveles hay, y encendidos
+                hasta el suyo. De un vistazo dice «este es más grande que aquel»,
+                que es lo único que los separa, sin tener que leer las cifras. */}
+            <span className="ld-nivel-medidor" aria-hidden="true">
+              {niveles.map((_, j) => (
+                <span key={j} className={`ld-nivel-tramo${j <= i ? ' is-on' : ''}`} />
+              ))}
+            </span>
+            <h3 className="ld-nivel-nombre">{n.nombre}</h3>
+            <p className="ld-nivel-desc">{n.descripcion}</p>
+            <ul className="ld-nivel-lista">
+              {DIMENSIONES_LANDING.filter((d) => d in n.limites).map((d) => {
+                const v = n.limites[d]
+                const sinTope = v === null || v === undefined
+                return (
+                  <li key={d} className="ld-nivel-item">
+                    <strong className={`ld-nivel-cifra${sinTope ? ' ld-nivel-cifra-inf' : ''}`}>
+                      {valorLimite(v)}
+                    </strong>
+                    <span className="ld-nivel-que">{etiquetaDimension(d)}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
+      </Reveal>
+
+      {/* Aquí NO va la letra pequeña del cupo de IA (qué pasa si te pasas). Es
+          una respuesta a una duda que el visitante todavía no tiene, y puesta
+          antes de tiempo lo que hace es sembrarla. No es una promesa a medias:
+          los tres niveles enseñan su cifra de conversaciones y ninguno dice
+          «ilimitado», así que no hay nada que matizar. El detalle vive donde
+          sirve —en el material de venta: `2-modulos/asistente-ia.md`— para que
+          quien vende sepa contestarlo cuando de verdad se lo pregunten. */}
+
+      {comparables.length > 0 && (
+        <Reveal className="ld-comparativa">
+          <details className="ld-faq-item">
+            <summary className="ld-faq-q">
+              Ver la comparativa completa
+              <ChevronIcon className="ld-faq-chevron" size={18} />
+            </summary>
+            <div className="ld-comparativa-scroll">
+              <table className="ld-comparativa-tabla">
+                <thead>
+                  <tr>
+                    <th scope="col">Cuánto cabe</th>
+                    {niveles.map((n) => <th key={n.clave} scope="col">{n.nombre}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparables.map((d) => (
+                    <tr key={d}>
+                      <th scope="row">{capitalizar(etiquetaDimension(d))}</th>
+                      {niveles.map((n) => (
+                        <td key={n.clave}>{d in n.limites ? valorLimite(n.limites[d]) : '—'}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </Reveal>
+      )}
+    </section>
+  )
+}
+
+/** `null` en `nivel_limites.base` es SIN TOPE, no cero. */
+function valorLimite(v: number | null | undefined): string {
+  if (v === null || v === undefined) return 'Sin límite'
+  return v.toLocaleString('es-ES')
+}
+
+function capitalizar(t: string): string {
+  return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
 /* ════════════════════════════════════════════════ Sectores ════ */

@@ -113,13 +113,13 @@ export async function avisarSoporteNuevo(params: {
 export async function avisarClienteNuevo(params: {
   clientId: string
   empresa:  string
-  tarifa:   string
+  nivel:    string
   ciclo:    string
 }): Promise<void> {
   await crearAvisoAdmin({
     tipo:        'cliente_nuevo',
     titulo:      `Cliente nuevo — ${params.empresa}`,
-    cuerpo:      `${params.clientId} · ${params.tarifa}/${params.ciclo}`,
+    cuerpo:      `${params.clientId} · ${params.nivel}/${params.ciclo}`,
     enlace:      `/admin/clientes/${params.clientId}`,
     clientId:    params.clientId,
     entidadTipo: 'cliente',

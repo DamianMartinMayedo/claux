@@ -7,6 +7,7 @@ import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/p
 import { obtenerGavetaPendiente } from '@/app/actions/portal/caja-gaveta'
 import TesoreriaView        from './TesoreriaView'
 import SolicitarAcceso      from '@/components/portal/SolicitarAcceso'
+import CupoNivel from '@/components/portal/CupoNivel'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,7 @@ export default async function TesoreriaPage({
       pendientes={{ cobrar: cxc?.documentos ?? [], pagar: cxp?.documentos ?? [] }}
       gaveta={gaveta}
     >
+      <CupoNivel dim="cuentas_tesoreria" />
       {!puedeEditar && <SolicitarAcceso modulo="base" />}
     </TesoreriaView>
   )

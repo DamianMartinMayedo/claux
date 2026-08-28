@@ -17,6 +17,7 @@ import {
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { comprobarLimite } from '@/lib/limites'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -272,6 +273,9 @@ export async function guardarCuenta(
     if (!await monedaValida(db, session.client_id, moneda)) {
       return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
     }
+    const tope = await comprobarLimite(db, session.client_id, 'cuentas_tesoreria')
+    if (tope) return { ok: false, error: tope }
+
     const { error } = await db.from('cuentas').insert({
       cuenta_id:  generarCuentaId(),
       client_id:  session.client_id,
@@ -321,7 +325,13 @@ export async function restaurarCuenta(cuenta_id: string): Promise<{ ok: boolean;
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
 
-  const { error } = await createAdminClient()
+  const db = createAdminClient()
+
+  // Desarchivar cuenta como crear: el cupo mide lo activo.
+  const tope = await comprobarLimite(db, session.client_id, 'cuentas_tesoreria', 1, 'desarchivar')
+  if (tope) return { ok: false, error: tope }
+
+  const { error } = await db
     .from('cuentas')
     .update({ activa: true, updated_at: new Date().toISOString() })
     .eq('cuenta_id', cuenta_id)
@@ -346,7 +356,21 @@ export async function archivarCuentasEnLote(
   if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0 }
 
-  const { data, error } = await createAdminClient().from('cuentas')
+  const db = createAdminClient()
+
+  // Restaurar en lote se comprueba entero antes de tocar nada; archivar nunca
+  // se bloquea (libera cupo, no lo consume).
+  if (!archivar) {
+    const { count: aRestaurar } = await db.from('cuentas')
+      .select('cuenta_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id).in('cuenta_id', ids).eq('activa', false)
+    if (aRestaurar) {
+      const tope = await comprobarLimite(db, session.client_id, 'cuentas_tesoreria', aRestaurar, 'desarchivar')
+      if (tope) return { ok: false, hechas: 0, error: tope }
+    }
+  }
+
+  const { data, error } = await db.from('cuentas')
     .update({ activa: !archivar, updated_at: new Date().toISOString() })
     .eq('client_id', session.client_id).in('cuenta_id', ids)
     .select('cuenta_id')

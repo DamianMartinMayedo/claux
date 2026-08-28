@@ -3,29 +3,26 @@ import { requireAccesoModulo }   from '@/app/actions/portal/auth'
 import { obtenerDossier, obtenerDossiers } from '@/app/actions/portal/dossier'
 import { obtenerEmpresas }       from '@/app/actions/portal/empresas'
 import { createAdminClient }     from '@/lib/supabase/admin'
-import { tieneModulo }           from '@/lib/modulos'
+import { cargarContextoLimites } from '@/lib/limites'
 import DossierEditor             from './DossierEditor'
 import DossierLista              from './DossierLista'
+import CupoNivel                 from '@/components/portal/CupoNivel'
 
 export const dynamic = 'force-dynamic'
 
-// La home del módulo depende del addon `multidossier`:
-//   · sin él  → el editor del único dossier, exactamente como antes de que el addon
-//               existiera. Quien no lo ha contratado no paga ni un clic de más.
-//   · con él  → el listado. Y ese ES el modo de que el dueño se dé cuenta de lo que
-//               ha contratado: la página deja de ser un editor y pasa a ser «Mis
-//               dossiers» con un botón de crear. No hace falta anunciarlo aparte.
+// La home del módulo: listado o editor directo, según cuántos dossiers quepan.
 //
-// El addon no añade una ruta al sidebar (`paginas` vacío en el catálogo): la ruta
-// la sigue aportando la funcionalidad `dossier`, y este archivo bifurca.
+// Antes esto lo decidía el addon `multidossier` (sin él, editor de uno solo). Ese
+// addon ya no existe: cuántos caben lo dice el NIVEL, igual que las empresas o los
+// productos. Con un tope de 1 no hay lista que enseñar y se va al editor; con más,
+// la página es «Mis dossiers» con su botón de crear.
 export default async function DossierPage() {
   const { session, puedeEditar } = await requireAccesoModulo('dossier')
 
-  const db = createAdminClient()
-  const { data: cliente } = await db.from('clients').select('modulos_activos')
-    .eq('client_id', session.client_id).maybeSingle()
+  const db  = createAdminClient()
+  const ctx = await cargarContextoLimites(db, session.client_id)
 
-  if (!tieneModulo(cliente?.modulos_activos, 'multidossier')) {
+  if (ctx.limites.dossiers === 1) {
     const data = await obtenerDossier()
     if (!data) notFound()
     return <DossierEditor data={data} puedeEditar={puedeEditar} />
@@ -43,6 +40,8 @@ export default async function DossierPage() {
       dossiers={dossiers}
       empresas={empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre }))}
       puedeEditar={puedeEditar}
-    />
+    >
+      <CupoNivel dim="dossiers" />
+    </DossierLista>
   )
 }

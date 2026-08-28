@@ -5,6 +5,14 @@ import { ingestarLote, getCajaToken, type CajaRow, type LotePayload } from '@/li
 
 // Sincronización de ventas (dispositivo → Claux). Recibe el lote de tickets +
 // cierres y lo ingesta de forma idempotente. Autenticación por sync_token.
+//
+// AQUÍ NO SE COMPRUEBA NINGÚN LÍMITE DE NIVEL, Y ES DELIBERADO. Lo que llega por
+// esta ruta son ventas YA COBRADAS en el mostrador, offline, hace horas o días.
+// Rechazar una por cupo no impide nada: el dinero ya entró y lo único que se
+// consigue es que el negocio pierda el registro. Los límites se comprueban al
+// CREAR (cajas, productos, empleados…), que es cuando todavía hay algo que
+// decidir. Si alguien añade aquí una comprobación «por coherencia», rompe la
+// caja offline. Plan: docs/planes/niveles-comerciales.md §15 riesgo 4.
 export async function POST(req: NextRequest) {
   const token = getCajaToken(req)
   if (!token) return NextResponse.json({ ok: false, error: 'Sin token' }, { status: 401 })

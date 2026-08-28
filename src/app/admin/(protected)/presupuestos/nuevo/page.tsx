@@ -1,8 +1,9 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listarModulosParaPresupuesto, listarComerciales } from '@/app/actions/presupuestos'
-import { LIMITE_FUNDADOR } from '@/lib/presupuesto/config'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
+import { normalizarNivel, type Nivel } from '@/lib/niveles'
+import { nombresDeNiveles, limitesDeNiveles } from '@/lib/niveles-server'
 import { getSetting } from '@/app/actions/settings'
 import PresupuestoCalculadora from './PresupuestoCalculadora'
 
@@ -11,18 +12,20 @@ export const dynamic = 'force-dynamic'
 export default async function NuevoPresupuestoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string; cliente?: string; negocio?: string; responsable?: string; contacto?: string; modulos?: string; tarifa?: string }>
+  searchParams: Promise<{ lead?: string; cliente?: string; negocio?: string; responsable?: string; contacto?: string; modulos?: string; nivel?: string }>
 }) {
   const ctx = await requireAccesoPagina('presupuestos')
-  const { lead, cliente, negocio, responsable, contacto: contactoQs, modulos: modulosQs, tarifa: tarifaQs } = await searchParams
+  const { lead, cliente, negocio, responsable, contacto: contactoQs, modulos: modulosQs, nivel: nivelQs } = await searchParams
 
   // Los precios se cargan AQUÍ y viajan enteros a la calculadora, que se los pasa al
   // cálculo. La misma tanda llega luego a la acción de guardar, para que la vista previa y
   // el recálculo autoritativo no puedan partir de números distintos.
-  const [modulos, comerciales, parametros] = await Promise.all([
+  const [modulos, comerciales, parametros, nombresNivel, limitesNivel] = await Promise.all([
     listarModulosParaPresupuesto(),
     listarComerciales(),
     cargarParametros(),
+    nombresDeNiveles(),
+    limitesDeNiveles(),
   ])
 
   const db = createAdminClient()
@@ -33,7 +36,7 @@ export default async function NuevoPresupuestoPage({
     clientId: null as string | null,
     nombreNegocio: '', nombreResponsable: '', contacto: '',
     modulos: [] as string[],
-    tarifa: null as 'fundador' | 'estandar' | null,
+    nivel: null as Nivel | null,
   }
 
   // Presupuesto para un cliente en marcha: es el caso de la ampliación —contrata inventario
@@ -51,7 +54,7 @@ export default async function NuevoPresupuestoPage({
     // no es un lead del embudo, no hay teléfono que traer.
     const { data } = await db
       .from('clients')
-      .select('client_id, nombre_empresa, nombre_contacto, email_admin, modulos_activos, tarifa')
+      .select('client_id, nombre_empresa, nombre_contacto, email_admin, modulos_activos, nivel')
       .eq('client_id', cliente)
       .maybeSingle()
     if (data) {
@@ -67,9 +70,9 @@ export default async function NuevoPresupuestoPage({
         modulos:           Array.isArray(data.modulos_activos)
           ? data.modulos_activos.filter((c: string) => modulos.some(m => m.clave === c))
           : [],
-        // Y su tarifa comercial, que es la que decide el precio de los módulos: si el cliente
-        // es fundador, su ampliación se cotiza como fundador.
-        tarifa: data.tarifa === 'fundador' ? 'fundador' : 'estandar',
+        // Y su nivel, que es el que decide el precio de los módulos: la ampliación de un
+        // cliente Inicial se cotiza a precio Inicial.
+        nivel: normalizarNivel(data.nivel),
       }
     }
   }
@@ -86,7 +89,7 @@ export default async function NuevoPresupuestoPage({
       contacto:          contactoQs ?? '',
       modulos: (modulosQs ?? '').split(',').map(c => c.trim())
         .filter(c => c && modulos.some(m => m.clave === c)),
-      tarifa: tarifaQs === 'fundador' ? 'fundador' : tarifaQs === 'estandar' ? 'estandar' : null,
+      nivel: nivelQs ? normalizarNivel(nivelQs) : null,
     }
   }
 
@@ -95,7 +98,7 @@ export default async function NuevoPresupuestoPage({
     if (!Number.isNaN(id)) {
       const { data } = await db
         .from('diagnosticos')
-        .select('id, nombre, telefono, email, modulos_rec')
+        .select('id, nombre, telefono, email, modulos_rec, nivel_rec')
         .eq('id', id)
         .maybeSingle()
       if (data) {
@@ -107,28 +110,32 @@ export default async function NuevoPresupuestoPage({
           nombreResponsable: '',
           contacto:          data.telefono || data.email || '',
           modulos:           rec,
-          tarifa:            null,
+          // El nivel que salió del diagnóstico (mig. 219). El comercial puede
+          // cambiarlo, pero arrancar en el que declaró el propio cliente evita
+          // cotizarle un nivel donde ya sabemos que no cabe.
+          nivel:             data.nivel_rec ? normalizarNivel(data.nivel_rec) : null,
         }
       }
     }
   }
 
-  // Sugerencia de tarifa: fundador si aún estamos dentro de los primeros N clientes.
-  const { count } = await db.from('clients').select('*', { count: 'exact', head: true })
-  // La del cliente manda cuando lo hay; si no, la sugerencia por antigüedad.
   // El ciclo anual es la palanca de venta del bloque recurrente, y su descuento es un ajuste
   // global: sin él, el comercial tenía que calcularlo a mano.
   const descuentoAnualPct = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
 
-  const tarifaSugerida: 'fundador' | 'estandar' =
-    prefill.tarifa ?? ((count ?? 0) < LIMITE_FUNDADOR ? 'fundador' : 'estandar')
+  // El nivel del cliente manda cuando lo hay. Si no, se arranca en el de entrada: el que
+  // corresponde lo decide lo que el negocio necesita (cuántas empresas, cuánta plantilla,
+  // cuánto catálogo), y eso se ve marcando volúmenes, no al abrir la página.
+  const nivelSugerido: Nivel = prefill.nivel ?? 'inicial'
 
   return (
     <PresupuestoCalculadora
       modulos={modulos}
       comerciales={comerciales}
       comercialEmailDefault={ctx.email}
-      tarifaSugerida={tarifaSugerida}
+      nivelSugerido={nivelSugerido}
+      nombresNivel={nombresNivel}
+      limitesNivel={limitesNivel}
       parametros={parametros}
       descuentoAnualPct={descuentoAnualPct}
       prefill={prefill}

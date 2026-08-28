@@ -3,6 +3,7 @@ import { listarCajas, saludCajas } from '@/app/actions/portal/caja'
 import { obtenerEmpresas }   from '@/app/actions/portal/empresas'
 import CajaHubView           from './CajaHubView'
 import SolicitarAcceso       from '@/components/portal/SolicitarAcceso'
+import CupoNivel from '@/components/portal/CupoNivel'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ export default async function CajaPage() {
       salud={salud}
       puedeEditar={puedeEditar}
     >
+      <CupoNivel dim="puntos_venta" />
       {!puedeEditar && <SolicitarAcceso modulo="caja" />}
     </CajaHubView>
   )
