@@ -9,7 +9,8 @@ import { esSocioHoy } from '@/lib/billing'
 import { generarNotificacionesInternas } from '@/lib/notificaciones/generador'
 import { generarAvisosAdmin } from '@/lib/notificaciones/admin/generador'
 import { barrerReservas } from '@/lib/reservas/barrido'
-import { toDateStr, addDays, fmtFechaEs } from '@/lib/date-utils'
+import { fmtFechaEs } from '@/lib/date-utils'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 // Los 3 tipos que dispara el cron (subconjunto de TipoEmail).
 type TipoCron = 'recordatorio_pago' | 'fin_prueba' | 'suspension'
 
@@ -84,7 +85,12 @@ export async function GET(req: NextRequest) {
   }
 
   const db = createAdminClient()
-  const hoy = toDateStr(new Date())
+  // El «hoy» de los avisos es el del NEGOCIO. Este cron está programado a las
+  // 08:00 UTC —las 03:00 o 04:00 en Cuba, mismo día del calendario—, así que en
+  // UTC salía lo mismo por casualidad. Bastaría un disparo manual por la tarde
+  // para que «vence en 3 días» pasara a decir 2, y para que la ventana de aviso
+  // y la de suspensión se corrieran con él.
+  const hoy = hoyEnTz()
 
   // 0. Sincronizar estados (GRACIA/ACTIVO/TRIAL vencidos → DESACTIVADO) para que
   //    los que expiran hoy no cuenten como "próximos a vencer".
@@ -93,7 +99,7 @@ export async function GET(req: NextRequest) {
   const { suspendidos, rescatados } = await barrerVencidos()
 
   const diasAviso = parseInt(await leerSetting('dias_aviso', '5'), 10) || 5
-  const limite = toDateStr(addDays(new Date(), diasAviso))
+  const limite = sumarDias(hoy, diasAviso)
 
   const resumen = { suspendidos, rescatados, recordatorio_pago: 0, fin_prueba: 0, suspension: 0 }
 
@@ -155,7 +161,7 @@ export async function GET(req: NextRequest) {
   //    ventana de lookback). Captura tanto a los que barrió este cron como a los
   //    que ya hubiera desactivado el admin al abrir el panel; el dedup evita dobles.
   if (await tipoEmailActivo('suspension')) {
-    const desde = toDateStr(addDays(new Date(), -DIAS_LOOKBACK_SUSPENSION))
+    const desde = sumarDias(hoy, -DIAS_LOOKBACK_SUSPENSION)
     const { data } = await db
       .from('clients')
       .select(`client_id, nombre_empresa, email_admin, fecha_expiracion, ${COLUMNAS_EXENCION}`)

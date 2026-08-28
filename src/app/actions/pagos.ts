@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
-import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
+import { fmtFechaEs } from '@/lib/date-utils'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo, precioMensualEfectivo, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { renderPlantilla } from '@/lib/email/render'
@@ -37,20 +38,18 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   const descuento    = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   const montoSugerido = importeCiclo(precioMensualEfectivo(cliente), ciclo, descuento)
 
-  // fecha_inicio = día siguiente a la expiración actual (o hoy si no hay expiración)
-  let fechaBase: Date
-  if (cliente.fecha_expiracion) {
-    const expDate = new Date(cliente.fecha_expiracion)
-    expDate.setHours(0, 0, 0, 0)
-    fechaBase = new Date(expDate)
-    fechaBase.setDate(fechaBase.getDate() + 1)   // día SIGUIENTE
-  } else {
-    fechaBase = new Date()
-    fechaBase.setHours(0, 0, 0, 0)
-  }
+  // fecha_inicio = día siguiente a la expiración actual (o hoy si no hay expiración).
+  //
+  // Todo en cadenas YYYY-MM-DD, con `sumarDias`. Antes se mezclaban dos husos en
+  // el mismo cálculo: `setHours(0,0,0,0)` da la medianoche LOCAL del proceso y
+  // `toDateStr` corta en UTC. En Vercel (UTC) coincidían y no se veía; corriendo
+  // el admin desde España el período propuesto empezaba un día antes, y el «hoy»
+  // del cliente sin expiración se iba un día adelante pasadas las 20:00 en Cuba.
+  const fechaBase = cliente.fecha_expiracion
+    ? sumarDias(cliente.fecha_expiracion.split('T')[0], 1)   // día SIGUIENTE
+    : hoyEnTz()
 
-  const fechaFin = new Date(fechaBase)
-  fechaFin.setDate(fechaFin.getDate() + duracionDias)
+  const fechaFin = sumarDias(fechaBase, duracionDias)
 
   // Último pago de suscripción — para el cálculo pro-rata
   const { data: ultimoPago } = await supabase
@@ -66,8 +65,8 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   return {
     ok:                      true as const,
     monto_sugerido:          montoSugerido,
-    fecha_inicio:            toDateStr(fechaBase),
-    fecha_fin:               toDateStr(fechaFin),
+    fecha_inicio:            fechaBase,
+    fecha_fin:               fechaFin,
     ciclo,
     duracion_dias:           duracionDias,
     fecha_expiracion_actual: cliente.fecha_expiracion ?? null,
@@ -168,7 +167,7 @@ export async function registrarPago(formData: FormData) {
     estado:              'confirmado',
     monto_usd,
     metodo,
-    fecha:               toDateStr(new Date()),
+    fecha:               hoyEnTz(),
     fecha_inicio_periodo,
     fecha_fin_periodo,
     notas,

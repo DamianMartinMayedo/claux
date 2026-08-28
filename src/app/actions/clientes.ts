@@ -7,7 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { logActividad } from '@/lib/audit'
-import { addDays, toDateStr, fmtFechaEs } from '@/lib/date-utils'
+import { fmtFechaEs } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo, esSocioHoy } from '@/lib/billing'
 import { normalizarNivel, nombreNivel, sumarModulos, type ModuloPrecios } from '@/lib/niveles'
@@ -18,7 +18,7 @@ import { avisarClienteNuevo } from '@/lib/notificaciones/admin/eventos'
 import { notificarGraciaActivada } from '@/lib/notificaciones/eventos'
 import { esMigracionEstado, MIGRACION_ESTADOS_ALTA, type MigracionEstado } from '@/lib/migracion'
 import { COLUMNAS_EXENCION, desactivable, estadoAlRetirarGracia, socioMalSuspendido } from '@/lib/clientes/ciclo-vida'
-import { hoyEnTz } from '@/lib/fecha-tz'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
 
@@ -159,8 +159,13 @@ export async function crearCliente(formData: FormData) {
     ? (parseInt(await getSetting('dias_trial_default', '15'), 10) || 15)
     : diasCiclo(ciclo)
 
-  const hoy = new Date()
-  const fechaExpiracion = addDays(hoy, diasVigencia)
+  // El alta se fecha con el día del NEGOCIO, no con el del servidor. `new Date()`
+  // + `toDateStr` cortan en UTC: un cliente dado de alta pasadas las 20:00 en Cuba
+  // nacía con la fecha de mañana y se llevaba un día de más. Y `sumarDias` en vez
+  // de `addDays` porque trabaja sobre la cadena YYYY-MM-DD: sin Date por medio no
+  // hay huso que cruzar ni salto de horario que compense nada.
+  const hoy = hoyEnTz()
+  const fechaExpiracion = sumarDias(hoy, diasVigencia)
 
   const { error: errorCliente } = await supabase.from('clients').insert({
     client_id,
@@ -172,8 +177,8 @@ export async function crearCliente(formData: FormData) {
     nivel,
     ciclo_facturacion: ciclo,
     precio_mensual_usd,
-    fecha_inicio:     toDateStr(hoy),
-    fecha_expiracion: es_prueba ? null : toDateStr(fechaExpiracion),
+    fecha_inicio:     hoy,
+    fecha_expiracion: es_prueba ? null : fechaExpiracion,
     estado:           estadoInicial,
     es_prueba,
     notas,
@@ -220,7 +225,7 @@ export async function crearCliente(formData: FormData) {
       metodo:    'transferencia',
       concepto:  'configuracion',
       estado:    'por_confirmar',
-      fecha:     toDateStr(hoy),
+      fecha:     hoy,
       notas:     'Pago único de configuración inicial',
     })
   }
@@ -232,9 +237,9 @@ export async function crearCliente(formData: FormData) {
       metodo:    'transferencia',
       concepto:  'suscripcion',
       estado:    'por_confirmar',
-      fecha:     toDateStr(hoy),
-      fecha_inicio_periodo: toDateStr(hoy),
-      fecha_fin_periodo:    toDateStr(fechaExpiracion),
+      fecha:     hoy,
+      fecha_inicio_periodo: hoy,
+      fecha_fin_periodo:    fechaExpiracion,
       notas:     `Primer cobro de suscripción (${ciclo})`,
     })
   }
@@ -638,13 +643,13 @@ export async function aplicarGracia(formData: FormData) {
   // Los días se cuentan desde el hoy del NEGOCIO: con `new Date()` a secas, una
   // gracia aplicada de noche en Cuba (ya día siguiente en UTC) terminaba una
   // jornada antes de la que se le había dicho al cliente.
-  const fechaGracia = addDays(new Date(`${hoyEnTz()}T12:00:00`), dias)
+  const fechaGracia = sumarDias(hoyEnTz(), dias)
 
   const { error } = await supabase
     .from('clients')
     .update({
       estado:           'GRACIA',
-      fecha_fin_gracia:  toDateStr(fechaGracia),
+      fecha_fin_gracia:  fechaGracia,
       motivo_gracia:     motivo,
       notas_gracia:      notas,
     })
@@ -665,7 +670,7 @@ export async function aplicarGracia(formData: FormData) {
   // "tu suscripción venció" del cron del día siguiente, sin ninguna pista de que
   // ya tiene acceso extendido.
   after(async () => {
-    await notificarGraciaActivada({ clientId: client_id, fechaFinGracia: toDateStr(fechaGracia) })
+    await notificarGraciaActivada({ clientId: client_id, fechaFinGracia: fechaGracia })
   })
 
   // Y por correo, en un after() aparte para que un fallo de Resend no se lleve el
@@ -685,7 +690,7 @@ export async function aplicarGracia(formData: FormData) {
     if (!cli?.email_admin || !cli.fecha_expiracion) return
     const { asunto, html } = await renderPlantilla('periodo_gracia', {
       empresa:          cli.nombre_empresa,
-      fecha_fin:        fmtFechaEs(toDateStr(fechaGracia)),
+      fecha_fin:        fmtFechaEs(fechaGracia),
       fecha_expiracion: fmtFechaEs(cli.fecha_expiracion),
       dias:             String(dias),
     })
@@ -697,14 +702,14 @@ export async function aplicarGracia(formData: FormData) {
       clientId: client_id,
       // Deja en el log a qué período corresponde el envío: dos ampliaciones
       // seguidas son dos correos distintos, no un duplicado.
-      meta:     { fecha_fin_gracia: toDateStr(fechaGracia) },
+      meta:     { fecha_fin_gracia: fechaGracia },
     })
   })
 
   revalidatePath('/admin/clientes')
   revalidatePath(`/admin/clientes/${client_id}`)
   revalidatePath('/admin/dashboard')
-  return { ok: true as const, hasta: toDateStr(fechaGracia) }
+  return { ok: true as const, hasta: fechaGracia }
 }
 
 // ── Módulos à la carte: activar/desactivar y recalcular precio ───────

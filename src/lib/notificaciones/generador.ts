@@ -10,7 +10,8 @@
 // orquestador ya tiene cargadas.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
+import { fmtFechaEs } from '@/lib/date-utils'
+import { hoyEnTz } from '@/lib/fecha-tz'
 import { umbralParaFecha, type Severidad } from './catalogo'
 import { crearNotificacion, type ContextoTenant, type Preferencia } from './crear'
 import { esSocioHoy } from '@/lib/billing'
@@ -58,7 +59,11 @@ export async function generarNotificacionesInternas(
   soloCliente?: string,
 ): Promise<ResumenGenerador> {
   const db  = createAdminClient()
-  const hoy = toDateStr(new Date())
+  // El «hoy» de los avisos es el del NEGOCIO. Hoy este generador solo lo llama
+  // el cron de las 08:00 UTC —las 03:00 o 04:00 en Cuba, mismo día—, así que en
+  // UTC salía lo mismo por casualidad. Bastaría un disparo manual por la tarde,
+  // o un botón «enviar ahora», para que «faltan 3 días» pasara a decir 2.
+  const hoy = hoyEnTz()
 
   const qClientes = db
     .from('clients')

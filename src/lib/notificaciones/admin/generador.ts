@@ -10,7 +10,8 @@
 // pidiendo atender algo ya atendido.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { toDateStr, fmtFechaEs } from '@/lib/date-utils'
+import { fmtFechaEs } from '@/lib/date-utils'
+import { hoyEnTz } from '@/lib/fecha-tz'
 import { enviarAvisoInterno } from '@/lib/email/enviar'
 import { esSocioHoy } from '@/lib/billing'
 import { umbralAdminParaFecha } from './catalogo'
@@ -55,7 +56,11 @@ function haceHoras(horas: number): string {
 
 export async function generarAvisosAdmin(): Promise<ResumenAvisosAdmin> {
   const db    = createAdminClient()
-  const hoy   = toDateStr(new Date())
+  // El «hoy» de los avisos es el del NEGOCIO. Hoy este generador solo lo llama
+  // el cron de las 08:00 UTC —las 03:00 o 04:00 en Cuba, mismo día—, así que en
+  // UTC salía lo mismo por casualidad. Bastaría un disparo manual por la tarde,
+  // o un botón «enviar ahora», para que «faltan 3 días» pasara a decir 2.
+  const hoy   = hoyEnTz()
   const prefs = await cargarPrefsAdmin(db)
 
   let creados = 0
