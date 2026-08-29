@@ -1,0 +1,12 @@
+/* CLAUX — hoja de las superficies de MARCA (landing, legales y diagnóstico).
+   Son las páginas que ve alguien que aún no es cliente: cargan la base y
+   08-landing (donde viven también la cabecera/pie públicos y el formulario del
+   diagnóstico), y NADA del portal, del admin ni de la Academia.
+   El orden de los @import es el orden de cascada — no reordenar sin pensar.
+   No añadas reglas aquí: edita el parcial correspondiente en src/app/styles/. */
+@import "tailwindcss";
+@import "./01-tokens.css";
+@import "./02-base-layout.css";
+@import "./03-components.css";
+@import "./04-responsive-dark.css";
+@import "./08-landing.css";

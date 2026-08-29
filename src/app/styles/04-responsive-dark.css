@@ -180,7 +180,7 @@
   }
   .table tbody tr:hover { background: var(--color-surface); }
   /* El acento de empresa de la 1ª celda se anula en 06-portal.css, no aquí: la
-     regla que hay que ganar vive allí y este archivo carga ANTES (globals.css). */
+     regla que hay que ganar vive allí y este archivo carga ANTES (ver el orden en la hoja de entrada). */
   .table td {
     display: flex; justify-content: flex-end; align-items: center;
     gap: var(--space-3) var(--space-4); flex-wrap: wrap;

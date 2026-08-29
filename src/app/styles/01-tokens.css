@@ -180,8 +180,10 @@
   --duration:   180ms;
   --transition: var(--duration) var(--ease);
 
-  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-  --font-body:    'IBM Plex Sans', system-ui, sans-serif;
+  /* Las familias las inyecta <BrandFonts> en `:root` (next/font, servidas desde
+     nuestro dominio); el respaldo cubre a quien cargue estos tokens sin montarlo. */
+  --font-display: var(--fuente-display, system-ui), sans-serif;
+  --font-body:    var(--fuente-body, system-ui), sans-serif;
   /* ── Tipografías anteriores (comentadas para switch rápido) ──
   --font-display: 'Schibsted Grotesk', system-ui, sans-serif;
   --font-display: 'Public Sans', system-ui, sans-serif;

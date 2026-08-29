@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import NumberWheelGuard from '@/components/NumberWheelGuard'
 
-// NOTA: globals.css (el design system del portal) ya NO se importa aquí. Se carga
+// NOTA: el design system ya NO se importa aquí. Cada superficie carga su hoja de
+// entrada (`src/app/styles/entrada-*.css`), que trae solo sus parciales. Se carga
 // en el layout de cada superficie interna (admin/, portal/, landing/, diagnostico/)
 // para que las rutas públicas por-negocio de (public)/ — menú, reservar, citas —
 // queden libres de su peso. Regla de públicas: CONTEXTO §3 / skills/ui/SKILL.md §6.

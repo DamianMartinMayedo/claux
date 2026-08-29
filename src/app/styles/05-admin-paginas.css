@@ -440,46 +440,6 @@ textarea:focus-visible {
   margin-top: var(--space-1);
 }
 
-/* ── Reset password / sent confirmation ── */
-.reset-sent-box {
-  display: flex;
-  gap: var(--space-4);
-  align-items: flex-start;
-  background: var(--color-success-bg);
-  border: 1px solid #A5D6A7;
-  border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-5);
-}
-.reset-sent-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: #fff;
-  border: 1px solid #A5D6A7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--color-success);
-}
-.reset-sent-title {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--color-success);
-  margin: 0 0 2px;
-}
-.reset-sent-email {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 var(--space-2);
-}
-.reset-sent-hint {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: 1.5;
-}
 .reset-status-box {
   display: flex;
   align-items: center;
@@ -1184,3 +1144,32 @@ textarea:focus-visible {
    Cada dimensión apretada en su línea: dentro de un `.alert` (que es `display:
    block`) los `<span>` se pegarían unos a otros en un párrafo ilegible. */
 .pres-apretada { display: block; }
+
+
+/* ── Entrada a la Academia desde la cabecera del admin ─────────────────────
+   La regla vive aquí y no en el parcial de la Academia porque el botón es del
+   admin: es la única superficie que lo pinta. */
+.acad-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--gradient-band);
+  color: var(--color-text-on-brand);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+.acad-entry:hover { filter: brightness(1.05); box-shadow: var(--shadow-md); opacity: 1; }
+.acad-entry svg { flex-shrink: 0; }
+/* En la cabecera del admin: misma pieza, a la altura de la campana (36 px). En
+   móvil estrecho se queda el birrete solo, en el mismo punto donde la cabecera
+   ya esconde el nombre del usuario. */
+.acad-entry-header { height: 36px; padding: 0 var(--space-3); }
+@media (max-width: 480px) {
+  .acad-entry-header { width: 36px; padding: 0; justify-content: center; }
+  .acad-entry-label { display: none; }
+}

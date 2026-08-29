@@ -6,6 +6,7 @@ import { geometriaGrafico } from '@/lib/dossier/grafico'
 import { derivarPaleta, paletaVars } from '@/lib/dossier/paleta'
 import { SECCIONES_RELATO } from '@/lib/dossier/secciones'
 import { DECK_LABELS, ETIQUETA_SECCION_EN, fechaLargaL, etiquetaMesL, fmtPctL } from '@/lib/dossier/deck-i18n'
+import BrandFonts from '@/components/BrandFontsSinCursiva'
 import DeckReveal from './DeckReveal'
 import './dossier-publica.css'
 
@@ -371,13 +372,12 @@ export default function Deck({ deck, borrador = false }: { deck: DeckPublico; bo
           <button type="button" className="dp-lang-btn" data-set-lang="en">EN</button>
         </div>
       )}
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
-        rel="stylesheet"
-      />
+      {/* Las mismas dos fuentes que el resto de CLAUX, servidas desde nuestro
+          dominio en vez de desde Google: el deck se abre en el móvil de un dueño
+          que a lo mejor está en datos, y ahorra dos conexiones y una hoja que
+          bloquea el pintado. Los ficheros son los mismos que ya trae la landing,
+          así que a menudo vienen de la caché del navegador. */}
+      <BrandFonts />
       <DeckReveal />
 
       <nav className="dp-nav" aria-label="Ir a una sección">

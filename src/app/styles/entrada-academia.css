@@ -1,0 +1,12 @@
+/* CLAUX — hoja de las superficies de CONTENIDO (Academia, partners y el centro de
+   ayuda). Base + 08-landing, que es donde viven la cabecera y el pie públicos que
+   comparten con la landing, + 09-academia. Sin portal ni admin.
+   El orden de los @import es el orden de cascada — no reordenar sin pensar.
+   No añadas reglas aquí: edita el parcial correspondiente en src/app/styles/. */
+@import "tailwindcss";
+@import "./01-tokens.css";
+@import "./02-base-layout.css";
+@import "./03-components.css";
+@import "./04-responsive-dark.css";
+@import "./08-landing.css";
+@import "./09-academia.css";

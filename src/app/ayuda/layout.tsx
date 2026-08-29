@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import '@/app/globals.css'
+import '@/app/styles/entrada-academia.css'
 import BrandFonts from '@/components/BrandFonts'
 
 /**
@@ -16,8 +16,9 @@ import BrandFonts from '@/components/BrandFonts'
  * La capa es fija (`CAPA_PUBLICA`) y el filtro corre en el servidor, así que lo
  * que no es `usar` no llega al HTML — no está oculto, no está.
  *
- * Marketing propio de CLAUX, como la landing y los legales: design system
- * completo y fuentes de marca (`globals.css` no va en el root layout).
+ * Marketing propio de CLAUX, como la landing y los legales: design system y
+ * fuentes de marca. Comparte hoja con la Academia, que es de donde sale el manual
+ * que aquí se lee filtrado.
  */
 
 export const metadata: Metadata = {

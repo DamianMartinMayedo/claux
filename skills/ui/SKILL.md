@@ -9,7 +9,17 @@ Esta skill es la **fuente única** de todo lo de UI. Para una tarea de UI no nec
 
 ## 0. Dónde vive el CSS
 
-`src/app/globals.css` **solo orquesta** `@import` — su orden es la cascada, no reordenar; no escribas reglas ahí. El CSS real está partido en **8 parciales por orden de cascada** en `src/app/styles/`:
+El CSS real está partido en **9 parciales por orden de cascada** en `src/app/styles/`. Encima hay **tres hojas de entrada** que solo orquestan `@import` (su orden es la cascada, no reordenar; no escribas reglas ahí): cada superficie carga la suya y así no baja el CSS de las demás.
+
+| Hoja de entrada | La cargan | Parciales |
+|---|---|---|
+| `entrada-gestion.css` | `portal/`, `admin/` | 01–07 |
+| `entrada-marca.css` | `(landing)/`, `legal/`, `diagnostico/` | 01–04 + 08 |
+| `entrada-academia.css` | `(academia)/`, `ayuda/` | 01–04 + 08 + 09 |
+
+**Al crear una clase, mira quién la va a pintar**: una clase en `06-portal.css` NO existe para la landing ni para la Academia, y una en `09-academia.css` no existe para el portal. Si una pieza es compartida (el login, la cabecera pública), su CSS va en un parcial que carguen todos los que la usan — normalmente `03-components.css`.
+
+Los parciales:
 
 | Parcial | Dominio (dónde crear una clase nueva) |
 |---|---|
@@ -20,7 +30,8 @@ Esta skill es la **fuente única** de todo lo de UI. Para una tarea de UI no nec
 | `05-admin-paginas.css` | Pantallas del `/admin` |
 | `06-portal.css` | Portal y módulos del cliente |
 | `07-ventas-actividad.css` | Ventas / actividad financiera |
-| `08-landing.css` | Público (landing, mini-webs, catálogo/reserva públicos) |
+| `08-landing.css` | Landing, diagnóstico (`.dg-*`) y la cabecera/pie públicos compartidos |
+| `09-academia.css` | Academia y centro de ayuda (`.acad-*`) |
 
 **Localiza una clase antes de crear**: `grep -rn "nombre-aproximado" src/app/styles/`. El sistema ya tiene botones, inputs, navegación, tablas, modales, badges, cards, alertas y estados.
 
@@ -144,12 +155,25 @@ El registro de toda la plataforma (portal, admin, páginas públicas): **profesi
 
 Son los enlaces que se comparten con el cliente final en conexión pésima (Cuba, 3G). **Presupuesto duro: carga mínima.** Regla excepcional, **aislada del portal** — la arquitectura ya está montada así a propósito:
 
-- **NO cargan `globals.css` ni nada del design system del portal.** Viven en `src/app/(public)/`, cuyo `layout.tsx` importa solo `public-base.css` (reset mínimo). `globals.css` se importa en los layouts de `admin/`, `portal/`, `landing/`, `diagnostico/` — **nunca** en el root ni en `(public)/`. No importes globals ni tokens del portal aquí: romperías el aislamiento (el público pasó de 234 KB de CSS a ~8 KB).
+- **NO cargan ninguna hoja de entrada ni nada del design system del portal.** Viven en `src/app/(public)/`, cuyo `layout.tsx` importa solo `public-base.css` (reset mínimo). Las hojas de entrada se importan en los layouts de las superficies internas (§0) — **nunca** en el root ni en `(public)/`. No importes una hoja de entrada ni tokens del portal aquí: romperías el aislamiento (el público pasó de 234 KB de CSS a ~8 KB).
 - **Cada ruta trae su hoja propia con paleta namespaced**: `catalogo-publica.css` (`--cp-*`) y `reserva-publica.css` (`--rp-*`), definidas en un wrapper `.cp-page`/`.rp-page`. No aliasar los tokens del portal.
 - **Fuentes del sistema** (`system-ui`), nunca fuentes web: no uses `<BrandFonts>` aquí.
 - Imágenes WebP/AVIF, sin librerías de UI pesadas, JS mínimo (Server Component siempre que se pueda). Objetivo: < 100 KB inicial, útil en 3G, PWA/offline donde aplique.
 
-> **Landing y diagnóstico** (`/landing`, `/diagnostico`) son marketing propio de CLAUX, no mini-webs de negocio: esos **sí** usan el design system (cargan `globals.css` + `<BrandFonts>` en su layout). El aislamiento duro es **solo** para `(public)/[slug]/*`.
+> **Landing y diagnóstico** (`/landing`, `/diagnostico`) son marketing propio de CLAUX, no mini-webs de negocio: esos **sí** usan el design system (cargan `entrada-marca.css` + fuentes de marca en su layout). El aislamiento duro es **solo** para `(public)/[slug]/*`.
+
+### Fuentes de marca
+
+Se sirven desde nuestro dominio (`next/font`, descargadas en el build), nunca desde Google. Dos componentes, y la diferencia es la cursiva —que se precarga entera, 45 KB, la use la página o no—:
+
+| Componente | Lo montan | Cursiva |
+|---|---|---|
+| `<BrandFonts>` | `portal/`, `admin/`, `(academia)/`, `ayuda/` | sí |
+| `<BrandFontsSinCursiva>` | `(landing)/`, `legal/`, `diagnostico/`, el deck `/d/[token]` | no |
+
+Publican `--fuente-display` / `--fuente-body` en `:root` (no como clase en un `<div>`: los modales y los toasts se pintan con `createPortal` colgando de `<body>` y se quedarían fuera). `01-tokens.css` las consume en `--font-display` / `--font-body`, que son las que se usan en el CSS.
+
+**Si escribes texto en cursiva** (`font-style: italic`, `<em>`, markdown con `*énfasis*`) **en una superficie de la fila de abajo, cámbiala a `<BrandFonts>`**: sin la cursiva real el navegador inclina la redonda a la fuerza, y eso no rompe nada que se vea saltar.
 
 ## 7. Accesibilidad mínima
 

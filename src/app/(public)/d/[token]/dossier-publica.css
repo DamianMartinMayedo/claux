@@ -1,6 +1,6 @@
 /* ── Deck público del dossier — /d/<token> ──
    Hoja propia y autocontenida (mismo criterio que catalogo-publica.css): sin
-   globals.css, sin tokens del portal, sin fuentes web, sin librerías. Presupuesto
+   el design system, sin tokens del portal, sin librerías. Presupuesto
    < 100 KB (skill de UI §6 / CONTEXTO §3).
 
    Los `--do-*` los inyecta paletaVars() en `.dp-page`: el color del dueño, ya
@@ -25,11 +25,12 @@
   --dp-bg: #ffffff;
   --dp-text: #141719;
   --dp-text-muted: #5c5b52;
-  /* Fuentes de marca de la plataforma (las carga el <link> del deck con
-     display=swap): display para títulos y cifras, body para el resto. Fallback a
-     la del sistema si la fuente web no llega (3G, offline): el deck sigue legible. */
-  --dp-font: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", sans-serif;
-  --dp-font-display: 'Bricolage Grotesque', system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Fuentes de marca de la plataforma (las monta <BrandFonts> en el deck, desde
+     nuestro dominio y con display=swap): display para títulos y cifras, body para
+     el resto. Fallback a la del sistema si la fuente web no llega (3G, offline):
+     el deck sigue legible. */
+  --dp-font: var(--fuente-body, system-ui), -apple-system, "Segoe UI", sans-serif;
+  --dp-font-display: var(--fuente-display, system-ui), -apple-system, "Segoe UI", sans-serif;
 
   height: 100dvh;
   overflow-y: auto;

@@ -1,0 +1,13 @@
+/* CLAUX — hoja de las superficies de GESTIÓN (portal del cliente y admin interno).
+   Carga los parciales que estas dos pantallas usan de verdad; se quedan fuera
+   08-landing y 09-academia, que ninguna de las dos pinta.
+   El orden de los @import es el orden de cascada — no reordenar sin pensar.
+   No añadas reglas aquí: edita el parcial correspondiente en src/app/styles/. */
+@import "tailwindcss";
+@import "./01-tokens.css";
+@import "./02-base-layout.css";
+@import "./03-components.css";
+@import "./04-responsive-dark.css";
+@import "./05-admin-paginas.css";
+@import "./06-portal.css";
+@import "./07-ventas-actividad.css";
