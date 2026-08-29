@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import type { AgendaResumen } from '@/app/actions/portal/dashboard'
 import { formatFecha } from './format'
-import CargaSemanalChart from './charts/CargaSemanalChart'
+import CargaSemanalChart from './charts/CargaSemanalChartLazy'
 
 interface Props {
   data: AgendaResumen

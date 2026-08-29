@@ -1,10 +1,9 @@
 import { redirect }       from 'next/navigation'
 import { FlaskConical }   from 'lucide-react'
-import { getPortalSession, debeCambiarPassword } from '@/app/actions/portal/auth'
+import { getPortalSession, debeCambiarPassword, accesoModulosSession } from '@/app/actions/portal/auth'
 import { obtenerEmpresasSelector } from '@/app/actions/portal/empresas'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
 import { accesoImportCliente } from '@/lib/importador/acceso-cliente'
 import PortalHeader          from '@/components/portal/PortalHeader'
 import PortalSidebar, { type CatalogoItem } from '@/components/portal/PortalSidebar'
@@ -34,21 +33,25 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const db = createAdminClient()
 
-  const [{ data: cliente }, { data: usr }, { data: catalogo }, empresas, etiquetas, filasUsuario, debeCambiar, accesoImport] = await Promise.all([
+  const [{ data: cliente }, { data: catalogo }, acceso, empresas, etiquetas, debeCambiar, accesoImport] = await Promise.all([
     db
       .from('clients')
       .select(`nombre_empresa, modulos_activos, precio_mensual_usd, ciclo_facturacion, ${COLUMNAS_ACCESO}`)
       .eq('client_id', session.client_id)
       .single(),
-    db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     db
       .from('modulos_catalogo')
       .select('clave, nombre, tipo, paginas, orden')
       .eq('activo', true)
       .order('orden'),
+    // La MISMA función que usan los guards de página (`requireModulo`) y las
+    // acciones. Está memoizada por petición, así que el sidebar y el candado de
+    // la página que se está pintando comparten UNA lectura. Antes el layout
+    // repetía aquí el cálculo a mano —con dos consultas propias— y la página lo
+    // volvía a hacer por su cuenta: la misma regla escrita en dos sitios.
+    accesoModulosSession(session),
     obtenerEmpresasSelector(),
     obtenerEtiquetasNegocio(),
-    modulosDeUsuario(db, session.user_id),
     // La sesión de configuración (imp) se salta el cambio obligatorio: esa
     // contraseña es del cliente y la define él en su primer acceso. Forzarla aquí
     // bloquearía justo la tarea que viene a hacer el configurador.
@@ -72,15 +75,12 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   // Módulos que ESTE usuario puede ver (tenant ∩ permisos por usuario). El sidebar
   // y los guards de página usan este subconjunto; las cascadas entre módulos NO.
-  const rawDefecto = usr?.permiso_defecto
-  const defecto: Permiso = rawDefecto === 'sin_acceso' || rawDefecto === 'ver' || rawDefecto === 'editar' ? rawDefecto : 'editar'
-  const { visibles: modulosVisibles } = calcularAcceso(session, modulosActivos, defecto, filasUsuario)
+  const { visibles: modulosVisibles } = acceso
 
   // Addon de IA: el chat flotante solo aparece si está contratado Y el usuario
-  // tiene permiso para verlo. El nombre del agente es global; por defecto "Claux".
+  // tiene permiso para verlo.
   const iaVisible = modulosVisibles.includes('asistente_ia')
   const tieneIa = iaVisible
-  const nombreAgente = tieneIa ? (await configAgente()).nombreAgente : 'Claux'
 
   // Sugerencias iniciales del chat, relevantes a los módulos contratados (máx. 4).
   const sugerenciasIa: string[] = []
@@ -109,9 +109,18 @@ export default async function PortalAppLayout({ children }: { children: React.Re
 
   const catsBandeja = categoriasBandeja(session.rol, modulosVisibles)  // null = admin (todas)
   const verNotificaciones = !bloqueado && (catsBandeja === null || catsBandeja.length > 0)
-  const notifInicial = verNotificaciones
-    ? await cargaInicialNotificaciones()
-    : { noLeidas: 0, recientes: [], popups: [] }
+
+  // Las dos cargas que dependen de lo de arriba (¿hay IA?, ¿hay campana?) pero NO
+  // una de la otra. Iban encadenadas —el nombre del agente primero, las
+  // notificaciones después—, así que cada carga del portal pagaba tres viajes en
+  // fila donde bastan dos. El nombre del agente es global; por defecto "Claux".
+  const [agente, notifInicial] = await Promise.all([
+    tieneIa ? configAgente() : Promise.resolve(null),
+    verNotificaciones
+      ? cargaInicialNotificaciones()
+      : Promise.resolve({ noLeidas: 0, recientes: [], popups: [] }),
+  ])
+  const nombreAgente = agente?.nombreAgente ?? 'Claux'
 
   const shell = (
     <>

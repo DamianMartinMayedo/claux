@@ -71,7 +71,22 @@ async function etiquetasDeSector(db: ReturnType<typeof createAdminClient>, secto
 // página pública que invalidar).
 async function revalidarPublico(db: ReturnType<typeof createAdminClient>, client_id: string): Promise<void> {
   const { data } = await db.from('clients').select('slug').eq('client_id', client_id).maybeSingle()
-  if (data?.slug) revalidatePath(`/${data.slug}/catalogo`)
+  if (!data?.slug) return
+  // Modo 'layout' y no 'page': la ficha de cada ítem (/[slug]/catalogo/[itemId])
+  // también se cachea, y en modo 'page' se quedaría con el precio viejo mientras
+  // el listado ya enseñaba el nuevo.
+  revalidatePath(`/${data.slug}/catalogo`, 'layout')
+  // El QR y los enlaces que se comparten no suelen apuntar a /catalogo sino a la
+  // URL con la palabra del negocio, que `rewrites()` (next.config.ts) resuelve a
+  // esta misma página. Si esas tres guardan su propia entrada de caché, invalidar
+  // solo /catalogo dejaría el menú compartido con el precio viejo hasta que
+  // caducara. Invalidar una ruta que no tenga entrada no cuesta nada, así que se
+  // hace por las tres: es el caso que NO se puede comprobar en local, porque
+  // `next dev` no aplica la caché de ruta. Si se toca la lista de vistas del
+  // next.config.ts, hay que tocarla aquí.
+  for (const vista of ['menu', 'carta', 'servicios']) {
+    revalidatePath(`/${data.slug}/${vista}`, 'layout')
+  }
 }
 
 // Moneda de visualización del catálogo: la configurada explícitamente, si no la

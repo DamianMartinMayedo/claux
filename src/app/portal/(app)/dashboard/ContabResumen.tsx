@@ -1,9 +1,18 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import type { ContabMonedaResumen } from '@/app/actions/portal/dashboard'
 import { formatMoneda } from './format'
-import VentasGastosChart from './charts/VentasGastosChart'
+
+// Recharts pesa ~100 KB gzip y el dashboard es la primera pantalla tras entrar:
+// baja en su propio chunk, después de los KPIs, que es lo que se mira primero
+// (presupuesto Cuba, CONTEXTO §3). El esqueleto es el mismo que el gráfico ya
+// pintaba antes de hidratar, así que la pantalla no cambia.
+const VentasGastosChart = dynamic(() => import('./charts/VentasGastosChart'), {
+  ssr: false,
+  loading: () => <div className="dash-chart dash-chart-skeleton" aria-hidden />,
+})
 
 interface Opcion { key: string; label: string; entry: ContabMonedaResumen }
 

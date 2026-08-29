@@ -7,6 +7,16 @@ import { obtenerItemPublicoCache } from '@/lib/publico/catalogo-qr'
 import { sufijoPeriodo } from '@/lib/catalogo-periodo'
 import '../catalogo-publica.css'
 
+// Mismo caso que la página del catálogo: sin generateStaticParams el
+// `revalidate` no llega a activarse. Se genera en la primera visita y lo
+// invalida `revalidarPublico` (revalidatePath en modo 'layout', que alcanza
+// también a las fichas colgadas del catálogo).
+export function generateStaticParams() {
+  return []
+}
+
+export const dynamicParams = true
+
 export const revalidate = 60
 
 interface Props {

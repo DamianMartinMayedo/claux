@@ -4,11 +4,10 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { devPortalSession } from '@/lib/dev-auth'
 import { modulosDeUsuario, calcularAcceso, type AccesoModulos, type Permiso } from '@/lib/permisos'
+import { leerSesionPortal, leerAccesoModulos } from '@/lib/portal/sesion'
 import {
   signPortalToken,
-  verifyPortalToken,
   hashPasswordPortal,
   PORTAL_COOKIE,
   PORTAL_COOKIE_OPTS,
@@ -145,29 +144,11 @@ export async function debeCambiarPassword(session: PortalSession): Promise<boole
 
 // ── Leer sesión (Server Components / Actions) ─────────────────────────────────
 
+// La implementación vive en `@/lib/portal/sesion` porque este fichero es
+// `'use server'` y no puede exportar un `const = cache(...)`. Aquí queda el
+// envoltorio para que ningún punto de llamada tenga que cambiar de import.
 export async function getPortalSession(): Promise<PortalSession | null> {
-  const jar   = await cookies()
-  const token = jar.get(PORTAL_COOKIE)?.value
-  // Bypass de login SOLO en desarrollo local: si no hay cookie y el bypass está activo
-  // (doble candado), impersonamos el tenant indicado en DEV_PORTAL_CLIENT_ID.
-  if (!token) return devPortalSession()
-  const session = await verifyPortalToken(token)
-  if (!session) return null
-  // El JWT evita consultar la sesión en cada página, pero rol, estado y solo lectura
-  // son permisos revocables. Una cookie antigua no puede conservar acceso después de
-  // que el administrador cambie esos campos desde «Usuarios».
-  if (session.imp) return session
-  const { data: usuario } = await createAdminClient().from('client_users')
-    .select('email, rol, solo_lectura, puede_importar, estado')
-    .eq('user_id', session.user_id).eq('client_id', session.client_id).maybeSingle()
-  if (!usuario || usuario.estado !== 'ACTIVO') return null
-  return {
-    ...session,
-    email: usuario.email,
-    rol: usuario.rol as PortalSession['rol'],
-    solo_lectura: !!usuario.solo_lectura,
-    puede_importar: !!usuario.puede_importar,
-  }
+  return leerSesionPortal()
 }
 
 // ── Acceso efectivo a módulos (tenant ∩ permisos por usuario) ────────
@@ -176,18 +157,7 @@ export async function getPortalSession(): Promise<PortalSession | null> {
 // un data-loader que ya tiene la sesión (p. ej. la ficha del tercero) gatee sus
 // pestañas con el MISMO conjunto `visibles` que el sidebar, sin re-derivarla.
 export async function accesoModulosSession(session: PortalSession): Promise<AccesoModulos> {
-  const db = createAdminClient()
-  const [{ data: cliente }, { data: usr }, overrides] = await Promise.all([
-    db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single(),
-    db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
-    modulosDeUsuario(db, session.user_id),
-  ])
-  const activos: string[] = Array.isArray(cliente?.modulos_activos)
-    ? (cliente.modulos_activos as string[])
-    : []
-  const raw = usr?.permiso_defecto
-  const defecto: Permiso = raw === 'sin_acceso' || raw === 'ver' || raw === 'editar' ? raw : 'editar'
-  return calcularAcceso(session, activos, defecto, overrides)
+  return leerAccesoModulos(session)
 }
 
 /** Acceso efectivo del usuario actual (para el layout/sidebar). */

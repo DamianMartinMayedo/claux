@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   exportarReportesRrhhXlsx,
@@ -16,9 +17,13 @@ import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
 import { crearDoc, cabeceraReporte, sellarPie } from '@/lib/pdf/documento'
 import { crearCursor } from '@/lib/pdf/reporte'
 import { formatMesRrhh } from '@/lib/rrhh/reportes'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from 'recharts'
+
+// Recharts (~100 KB gzip) baja aparte: el gráfico solo existe cuando hay UNA
+// moneda en juego, así que en el resto de casos ni se descarga.
+const CosteMensualChart = dynamic(() => import('./CosteMensualChart'), {
+  ssr: false,
+  loading: () => <div className="dash-chart dash-chart-skeleton" aria-hidden />,
+})
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -367,20 +372,7 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
               <div className="mon-empty"><BarChart3 size={32} strokeWidth={1} opacity={0.2} /><p>Sin nóminas confirmadas en {anio}.</p></div>
             ) : (
               <>
-                {hayGrafico && (
-                  <div className="dash-chart">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} width={56} />
-                        <Tooltip formatter={(v) => `${formatMonto(Number(v ?? 0))} ${monedaGrafico}`}
-                          contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 12 }} />
-                        <Bar dataKey="coste" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
+                {hayGrafico && <CosteMensualChart serie={serie} moneda={monedaGrafico} />}
                 <div className="table-wrapper">
                   <table className="table">
                     <thead><tr><th>Mes</th><th className="col-num">Coste</th></tr></thead>
