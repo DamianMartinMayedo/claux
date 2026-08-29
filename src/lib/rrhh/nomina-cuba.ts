@@ -116,8 +116,12 @@ export interface ResultadoCuba {
 const r2 = importe2
 
 // Los DÍAS no son dinero: no pasan por la política monetaria (truncar a 3, redondear a
-// 2), solo se redondean a 2 decimales para que «2,18 días» no arrastre cola binaria.
-const r2dias = (n: number) => Math.round(n * 100) / 100
+// 2). Se redondean a CUATRO decimales, solo para que no arrastren cola binaria.
+// Cuatro y no dos porque la acumulación es `días ÷ 11` y casi nunca cae en dos: un mes
+// de 26 días trabajados da 2,363636…, que guardado como 2,36 se come 0,0036 días del
+// derecho del trabajador. Un recorte pequeño cada mes, sobre un saldo que dura años.
+// Las columnas de días son `numeric` SIN escala (mig. 194/195): guardan los cuatro.
+const r2dias = (n: number) => Math.round(n * 10000) / 10000
 
 /** Elige la fila vigente en una fecha. Sin fila, el tributo no se aplica. */
 export function parametroVigente(

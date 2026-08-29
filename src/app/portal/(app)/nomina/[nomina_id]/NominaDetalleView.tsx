@@ -22,6 +22,12 @@ import {
   ChevronDown, CircleCheck, DollarSign, Download, FileText, Plus, RefreshCw, Trash2, X,
 } from 'lucide-react'
 
+// Días: hasta 4 decimales y sin ceros de relleno, igual que en la ficha del trabajador.
+// El saldo de vacaciones se acumula a `días ÷ 11` y ahí casi nunca hay dos decimales:
+// el aviso de liquidación proponía «28,36» de un saldo real de 28,3636.
+const formatDias = (n: number): string =>
+  Number(n.toFixed(4)).toLocaleString('es-ES', { maximumFractionDigits: 4 })
+
 // ── Lo variable del mes, en el cliente ──────────────────────────────────────────
 // Mismos campos que `IncidenciaMes` (rrhh.ts), pero sin depender de su forma
 // exacta aquí: un empleado sin incidencia guardada usa esta plantilla vacía.
@@ -645,7 +651,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
               {' '}y la nómina se los paga entero.
             </strong>{' '}
             {sugerenciasVisibles.slice(0, 3)
-              .map(([id, s]) => `${nombreCorto(id)}: ${s.dias} días`).join(' · ')}
+              .map(([id, s]) => `${nombreCorto(id)}: ${formatDias(s.dias)} días`).join(' · ')}
             {sugerenciasVisibles.length > 3 && ` · y ${sugerenciasVisibles.length - 3} más`}
           </span>
           <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}
@@ -669,7 +675,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
               {' '}con vacaciones sin liquidar.
             </strong>{' '}
             {liquidacionesVisibles.slice(0, 3)
-              .map(([id, s]) => `${nombreCorto(id)}: ${s.dias} días (${formatMonto(s.importe)} ${nomina.moneda})`).join(' · ')}
+              .map(([id, s]) => `${nombreCorto(id)}: ${formatDias(s.dias)} días (${formatMonto(s.importe)} ${nomina.moneda})`).join(' · ')}
             {liquidacionesVisibles.length > 3 && ` · y ${liquidacionesVisibles.length - 3} más`}
           </span>
           <button type="button" className="btn btn-aviso btn-sm" disabled={isPending}

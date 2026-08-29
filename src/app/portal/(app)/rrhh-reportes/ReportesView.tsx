@@ -34,9 +34,11 @@ function formatMonto(n: number): string {
 function lineaMoneda(ms: { moneda: string; monto: number }[]): string {
   return ms.length ? ms.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ') : '—'
 }
-/** Días de vacaciones: hasta 2 decimales, sin ceros de relleno (8, 8,5, 2,73). */
+/** Días de vacaciones: hasta 4 decimales, sin ceros de relleno (8, 8,5, 2,3636). Los
+ *  cuatro son los del cálculo: el derecho se acumula a `días ÷ 11`, que casi nunca cae
+ *  en dos decimales, y recortar en pantalla descuadra la suma de la columna. */
 function formatDiasRep(n: number): string {
-  return Number(n.toFixed(2)).toLocaleString('es-ES', { maximumFractionDigits: 2 })
+  return Number(n.toFixed(4)).toLocaleString('es-ES', { maximumFractionDigits: 4 })
 }
 
 // ── Página: Reportes de RRHH ─────────────────────────────────────────────────────

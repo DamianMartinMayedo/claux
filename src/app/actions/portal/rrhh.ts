@@ -366,6 +366,13 @@ function generarItemId():       string { return `NLC-${corto()}` }
 // Alias local: la política monetaria de RRHH (base truncada a 3 dec, redondeo a 2).
 const redondear2 = importe2
 
+/** Los DÍAS de vacaciones NO son dinero y NO pasan por `redondear2`: se acumulan a
+ *  razón de `días ÷ 11`, que casi nunca cae en dos decimales, y recortarlos ahí se
+ *  comía una fracción del derecho cada mes. Cuatro decimales, los MISMOS que fija el
+ *  motor (`r2dias` en `lib/rrhh/nomina-cuba.ts`): el saldo se deriva sumando líneas,
+ *  así que cambiar uno de los dos sin el otro lo descuadra. */
+const redondear4dias = (n: number) => Math.round(n * 10000) / 10000
+
 interface ConceptoAplicable {
   concepto_id?:       string
   nombre?:            string
@@ -1082,14 +1089,14 @@ async function saldoVacacionesDiasAcumulado(
     nomina_id: string
     vacaciones_dias_acumulados_periodo: number | null; vacaciones_dias_pagados_periodo: number | null
   }[]
-  if (!lineas.length) return redondear2(apertura)
+  if (!lineas.length) return redondear4dias(apertura)
 
   const { data: confirmadas } = await db.from('nominas')
     .select('nomina_id').eq('client_id', client_id).eq('estado', 'CONFIRMADA')
     .in('nomina_id', Array.from(new Set(lineas.map(l => l.nomina_id))))
   const cerradas = new Set(((confirmadas ?? []) as { nomina_id: string }[]).map(n => n.nomina_id))
 
-  return redondear2(apertura + lineas
+  return redondear4dias(apertura + lineas
     .filter(l => cerradas.has(l.nomina_id))
     .reduce((s, l) => s + Number(l.vacaciones_dias_acumulados_periodo ?? 0) - Number(l.vacaciones_dias_pagados_periodo ?? 0), 0))
 }
@@ -1162,7 +1169,7 @@ function saldoVacDe(
     if (nid === excluirNominaId) continue
     importe += v.importe; dias += v.dias
   }
-  return { importe: redondear2(importe), dias: redondear2(dias) }
+  return { importe: redondear2(importe), dias: redondear4dias(dias) }
 }
 
 /** El modelo cubano SOLO actúa sobre nóminas en CUP. Ver `crearNomina`. */
@@ -2107,13 +2114,13 @@ export async function obtenerReportesRrhh(
         nombre: [f.nombre, f.apellidos].filter(Boolean).join(' '),
         moneda: f.moneda,
         inicialImporte:   redondear2(iniImporte),
-        inicialDias:      redondear2(iniDias),
+        inicialDias:      redondear4dias(iniDias),
         acumuladoImporte: redondear2(m.acuI),
-        acumuladoDias:    redondear2(m.acuD),
+        acumuladoDias:    redondear4dias(m.acuD),
         pagadoImporte:    redondear2(m.pagI),
-        pagadoDias:       redondear2(m.pagD),
+        pagadoDias:       redondear4dias(m.pagD),
         finalImporte:     redondear2(iniImporte + m.acuI - m.pagI),
-        finalDias:        redondear2(iniDias + m.acuD - m.pagD),
+        finalDias:        redondear4dias(iniDias + m.acuD - m.pagD),
       }
     })
   }
@@ -2354,7 +2361,7 @@ export async function guardarVacacionesApertura(
   const { error } = await db.from('empleados')
     .update({
       vacaciones_apertura:      redondear2(importe),
-      vacaciones_apertura_dias: redondear2(dias),
+      vacaciones_apertura_dias: redondear4dias(dias),
       updated_at: new Date().toISOString(),
     })
     .eq('empleado_id', empleado_id).eq('client_id', session.client_id)
@@ -2796,10 +2803,10 @@ export async function obtenerEmpleadoDetalle(empleado_id: string): Promise<Emple
     data, empleado, nominas, contratos, conceptos, incidencias,
     vacaciones: {
       importe:  redondear2(acumuladas),
-      dias:     redondear2(acumuladasDias),
+      dias:     redondear4dias(acumuladasDias),
       moneda:   empleado.moneda,
       apertura:      redondear2(Number((empleado as { vacaciones_apertura?: number | null }).vacaciones_apertura ?? 0)),
-      apertura_dias: redondear2(Number((empleado as { vacaciones_apertura_dias?: number | null }).vacaciones_apertura_dias ?? 0)),
+      apertura_dias: redondear4dias(Number((empleado as { vacaciones_apertura_dias?: number | null }).vacaciones_apertura_dias ?? 0)),
     },
   }
 }
@@ -3231,16 +3238,24 @@ export async function guardarIncidencia(
     const v = parseFloat(formData.get(k) as string)
     return isNaN(v) || v < 0 ? 0 : redondear2(v)
   }
+  // Los días NO son dinero y no pasan por `num`. Importa sobre todo en la liquidación:
+  // el botón «Liquidar el saldo pendiente» manda aquí el saldo derivado entero, y
+  // pasarlo por la política monetaria lo recortaba a 2 decimales dejando un residuo
+  // que se queda en la ficha de alguien que ya se fue y no cobra nadie.
+  const numDias = (k: string): number => {
+    const v = parseFloat(formData.get(k) as string)
+    return isNaN(v) || v < 0 ? 0 : redondear4dias(v)
+  }
   const diasRaw = (formData.get('dias_trabajados') as string)?.trim()
   const dias_trabajados = diasRaw === '' || diasRaw == null ? null : parseFloat(diasRaw)
   if (dias_trabajados !== null && (isNaN(dias_trabajados) || dias_trabajados < 0 || dias_trabajados > 31)) {
     return { ok: false, error: 'Los días trabajados deben estar entre 0 y 31, o vacío para el mes completo.' }
   }
-  const dias_vacaciones = num('dias_vacaciones')
+  const dias_vacaciones = numDias('dias_vacaciones')
   if (dias_vacaciones > 31) return { ok: false, error: 'Los días de vacaciones no pueden pasar de 31.' }
   // La liquidación por baja paga TODO el saldo acumulado, que puede ser de varios años:
   // no lleva el tope de 31 del disfrute mensual, solo un límite defensivo.
-  const dias_liquidacion = num('dias_liquidacion')
+  const dias_liquidacion = numDias('dias_liquidacion')
   if (dias_liquidacion > 366) return { ok: false, error: 'Los días a liquidar no pueden pasar de 366.' }
   // Importe MANUAL del disfrute (mig. 202): OPCIONAL. Ausente o vacío = automático (null);
   // un valor MANDA sobre el cálculo del disfrute. Negativo o no numérico → sin corregir.
@@ -3517,7 +3532,7 @@ export async function obtenerNominaDetalle(nomina_id: string): Promise<NominaDet
         // Positivo y sin liquidar todavía: si ya teclearon los días, no hay nada que proponer.
         if (saldo.dias > 0.05 && yaLiquida < 0.05) {
           sugerenciaLiquidacion[l.empleado_id] = {
-            dias:    Math.round(saldo.dias * 100) / 100,
+            dias:    redondear4dias(saldo.dias),
             importe: Math.round(saldo.importe * 100) / 100,
           }
         }

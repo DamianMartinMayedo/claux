@@ -47,9 +47,12 @@ type IncidenciaConId = IncidenciaMes & { incidencia_id: string; periodo: string 
 
 // ── Constantes / helpers ────────────────────────────────────────────────────────
 
-// Días de vacaciones: hasta 2 decimales, sin ceros de relleno (8, 8.5, 2.73).
+// Días de vacaciones: hasta 4 decimales, sin ceros de relleno (8, 8,5, 2,3636). Cuatro
+// porque el derecho se acumula a `días ÷ 11` y ahí casi nunca hay dos: enseñar 2,36 de
+// un 2,3636 real es esconder saldo que el trabajador tiene. Los enteros y los medios
+// días siguen saliendo limpios («8», «8,5»): `toLocaleString` no rellena con ceros.
 const formatDias = (n: number): string =>
-  Number(n.toFixed(2)).toLocaleString('es-ES', { maximumFractionDigits: 2 })
+  Number(n.toFixed(4)).toLocaleString('es-ES', { maximumFractionDigits: 4 })
 
 const TIPO_CONTRATO_LABEL: Record<TipoContrato, string> = {
   INDEFINIDO: 'Indefinido', TEMPORAL: 'Temporal', POR_OBRA: 'Por obra', PRACTICAS: 'Prácticas',
