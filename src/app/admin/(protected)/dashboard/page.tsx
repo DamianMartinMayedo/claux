@@ -1,5 +1,5 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
-import { AlertTriangle, CheckCircle, Clock, CreditCard, GraduationCap, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, CreditCard, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting }   from '@/app/actions/settings'
 import { precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
@@ -108,10 +108,6 @@ export default async function DashboardPage() {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Resumen general del sistema CLAUX</p>
         </div>
-        <a href="/academia" target="_blank" rel="noopener" className="acad-entry enlace-sobre-banda">
-          <GraduationCap size={18} />
-          <span>Academia</span>
-        </a>
       </div>
 
       {/* ── Fila 1: Total clientes · Activos · Suspendidos · Planes ── */}

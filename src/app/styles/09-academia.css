@@ -1601,6 +1601,14 @@ html:has(.acad-root) { scroll-behavior: auto; }
 }
 .acad-entry:hover { filter: brightness(1.05); box-shadow: var(--shadow-md); opacity: 1; }
 .acad-entry svg { flex-shrink: 0; }
+/* En la cabecera del admin: misma pieza, a la altura de la campana (36 px). En
+   móvil estrecho se queda el birrete solo, en el mismo punto donde la cabecera
+   ya esconde el nombre del usuario. */
+.acad-entry-header { height: 36px; padding: 0 var(--space-3); }
+@media (max-width: 480px) {
+  .acad-entry-header { width: 36px; padding: 0; justify-content: center; }
+  .acad-entry-label { display: none; }
+}
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 960px) {
