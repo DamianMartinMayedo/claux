@@ -4,7 +4,7 @@ import { Download, Eye, Search, User } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { suscripcionLabel, precioMensualEfectivo, type CondicionesCliente } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, type CondicionesCliente } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
 
@@ -36,14 +36,22 @@ function formatFecha(fecha: string | null) {
 
 type DiasInfo = { label: string; variant: 'error' | 'warning' | 'success' | 'muted' }
 
-function calcDiasRestantes(fechaExp: string | null, estado: string, fechaFinGracia: string | null = null): DiasInfo {
-  if (estado === 'DESACTIVADO') return { label: '—', variant: 'muted' }
-  
-  // Para clientes en GRACIA, usar fecha_fin_gracia si existe
-  const fechaCalcular = (estado === 'GRACIA' && fechaFinGracia) ? fechaFinGracia : fechaExp
-  if (!fechaCalcular)    return { label: '—', variant: 'muted' }
+/**
+ * La fecha que de verdad gobierna a este cliente.
+ *
+ * Un Socio CLAUX no paga, así que su `fecha_expiracion` se queda congelada en el
+ * último ciclo que pagó y retrocede en el pasado para siempre. Su reloj es
+ * `socio_hasta` — el mismo criterio que ya aplican el dashboard del portal
+ * (`fechaTope` en `actions/portal/dashboard.ts`) y el escáner de la bandeja del
+ * admin. Sin fecha, la condición es indefinida y no hay nada que contar.
+ */
+function fechaTope(c: Cliente): string | null {
+  if (esSocioHoy(c)) return c.socio_hasta ?? null
+  return (c.estado === 'GRACIA' && c.fecha_fin_gracia) ? c.fecha_fin_gracia : c.fecha_expiracion
+}
 
-  const [y, m, d] = fechaCalcular.split('T')[0].split('-').map(Number)
+function cuentaAtras(fecha: string): DiasInfo {
+  const [y, m, d] = fecha.split('T')[0].split('-').map(Number)
   const exp = new Date(y, m - 1, d)
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const dias = Math.ceil((exp.getTime() - hoy.getTime()) / 86_400_000)
@@ -53,6 +61,19 @@ function calcDiasRestantes(fechaExp: string | null, estado: string, fechaFinGrac
   if (dias <= 5)  return { label: `${dias}d`,   variant: 'error' }
   if (dias <= 14) return { label: `${dias}d`,   variant: 'warning' }
   return              { label: `${dias}d`,       variant: 'success' }
+}
+
+/**
+ * Los días que le quedan. Esta columna pintaba «Vencido» en rojo sobre un socio con
+ * el acceso garantizado —le pasó a DEUS— porque miraba `fecha_expiracion` a secas,
+ * cuando el resto del admin (dashboard, bandeja, cron de recordatorios) ya descarta
+ * al socio con `esSocioHoy`. Era la única voz de la pantalla que no lo hacía.
+ */
+function calcDiasRestantes(c: Cliente): DiasInfo {
+  if (!esSocioHoy(c) && c.estado === 'DESACTIVADO') return { label: '—', variant: 'muted' }
+  const fecha = fechaTope(c)
+  if (!fecha) return { label: '—', variant: 'muted' }
+  return cuentaAtras(fecha)
 }
 
 const DIAS_COLOR: Record<DiasInfo['variant'], string> = {
@@ -65,11 +86,11 @@ const DIAS_COLOR: Record<DiasInfo['variant'], string> = {
 function exportCSV(clientes: Cliente[]) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const headers = ['ID Cliente', 'Empresa', 'Contacto', 'Email', 'Precio mensual USD', 'Ciclo',
-    'Estado', 'Expiración', 'Días restantes', 'Fecha alta', 'Notas']
+    'Estado', 'Socio CLAUX', 'Expiración', 'Días restantes', 'Fecha alta', 'Notas']
   const rows = clientes.map(c => [
     c.client_id, c.nombre_empresa, c.nombre_contacto ?? '', c.email_admin,
     precioMensualEfectivo(c).toFixed(2), cicloLabel(c.ciclo_facturacion), c.estado,
-    c.fecha_expiracion ?? '', calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia).label,
+    esSocioHoy(c) ? 'Sí' : '', fechaTope(c) ?? '', calcDiasRestantes(c).label,
     c.fecha_inicio ?? c.created_at ?? '', c.notas ?? '',
   ])
   const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
@@ -170,7 +191,7 @@ export default function ClientesTabla({
             </thead>
             <tbody>
               {pageItems.map(c => {
-                const dias = calcDiasRestantes(c.fecha_expiracion, c.estado, c.fecha_fin_gracia)
+                const dias = calcDiasRestantes(c)
                 return (
                   <tr key={c.client_id} className="table-row-clickable" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}>
                     <td data-label="Empresa">
@@ -192,9 +213,10 @@ export default function ClientesTabla({
                         {c.estado}
                       </span>
                       {c.es_prueba && <span className="badge badge-purple">Prueba</span>}
+                      {esSocioHoy(c) && <span className="badge badge-indigo">Socio</span>}
                       {c.archivado_at && <span className="badge badge-neutral">Archivado</span>}
                     </td>
-                    <td data-label="Expiración" className="table-muted">{formatFecha(c.fecha_expiracion)}</td>
+                    <td data-label="Expiración" className="table-muted">{formatFecha(fechaTope(c))}</td>
                     <td data-label="Días" className="col-center">
                       <span className="dias-value" style={{ color: DIAS_COLOR[dias.variant] }}>
                         {dias.label}
