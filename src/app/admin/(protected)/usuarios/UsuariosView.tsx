@@ -14,12 +14,10 @@ import {
 import UsuarioModal from './UsuarioModal'
 import { ROL_LABEL, type RolAdmin } from '@/lib/roles'
 
-/** Color del rol en el listado: el partner es de fuera y se distingue a simple
- *  vista de quien sí entra al panel. */
+/** Color del rol en el listado. */
 const ROL_BADGE: Record<RolAdmin, string> = {
   super_admin: 'badge-info',
   vendedor:    'badge-neutral',
-  partner:     'badge-purple',
 }
 
 function fmtFecha(iso: string): string {
@@ -81,8 +79,8 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
         <div>
           <h1 className="page-title">Usuarios</h1>
           <p className="page-subtitle">
-            {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} · el equipo de CLAUX y los
-            partners que leen el manual.
+            {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} · el equipo de CLAUX y
+            quienes revenden desde fuera.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalNuevo(true)}>
@@ -123,6 +121,12 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
                     <td data-label="Correo" className="table-muted">{u.email}</td>
                     <td data-label="Rol">
                       <span className={`badge ${ROL_BADGE[u.rol]}`}>{ROL_LABEL[u.rol]}</span>
+                      {/* Un vendedor sin ninguna sección no entra al panel: solo lee el
+                          manual. Es quien revende de puertas afuera, y se distingue aquí
+                          porque desde fuera los dos son «Vendedor». */}
+                      {u.rol === 'vendedor' && u.permisos.length === 0 && (
+                        <div className="table-cell-sub">Solo manual</div>
+                      )}
                     </td>
                     <td data-label="Estado">
                       <span className={`badge ${u.activo ? 'badge-success' : 'badge-warning'}`}>

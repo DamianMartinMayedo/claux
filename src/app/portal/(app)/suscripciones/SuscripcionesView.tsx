@@ -1116,7 +1116,7 @@ function FacturacionPanel({ data, empresaInicial, puedeEditar }: {
             Esto es una <strong>vista previa</strong>: puedes ver qué se cobraría cada mes. Para
             <strong> emitir las facturas de verdad</strong> y cobrarlas necesitas el módulo <strong>Contabilidad</strong>.
           </span>
-          <Link href="/portal/soporte" className="btn btn-aviso btn-sm">Contactar para contratarlo</Link>
+          <Link href="/portal/soporte?asunto=Quiero+activar+Contabilidad" className="btn btn-aviso btn-sm">Contactar para contratarlo</Link>
         </div>
       )}
 

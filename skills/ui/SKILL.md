@@ -1,6 +1,6 @@
 ---
 name: ui
-description: Fuente ÚNICA y COMPLETA de UI del design system de CLAUX (reglas + tablas + tokens + iconos + gotchas). Usar SIEMPRE que se cree, edite o revise CUALQUIER componente, página, layout, estilo o CSS — incluso si la tarea solo dice "añade un botón", "cambia un color", "crea una página", "maqueta esto" o "ajusta el espaciado". Si la tarea toca un .tsx con JSX visible o un parcial de src/app/styles/, esta skill aplica y basta: no hace falta abrir ningún otro doc para UI. Regla central: NUNCA estilos inline.
+description: Fuente ÚNICA y COMPLETA de UI del design system de CLAUX (reglas + tablas + tokens + iconos + textos + gotchas). Usar SIEMPRE que se cree, edite o revise CUALQUIER componente, página, layout, estilo o CSS — incluso si la tarea solo dice "añade un botón", "cambia un color", "crea una página", "maqueta esto" o "ajusta el espaciado". Si la tarea toca un .tsx con JSX visible o un parcial de src/app/styles/, esta skill aplica y basta: no hace falta abrir ningún otro doc para UI. Regla central: NUNCA estilos inline.
 ---
 
 # CLAUX UI — Design system y reglas de implementación
@@ -125,6 +125,20 @@ Sin emojis en la UI. Iconos **exclusivamente SVG inline** con `width`/`height` c
 - Acciones críticas (registrar pago, anular factura, confirmar reserva, cerrar período) → resumen + confirmación explícita.
 - **Prohibidos `confirm()`, `alert()` y `prompt()` del navegador**: son del sistema, no de CLAUX, y en móvil se ven como un aviso del navegador. Todo borrado (y cualquier acción irreversible) confirma con **`<ConfirmDialog>`** de `src/components/portal/Dialog.tsx` (`danger`, `confirmLabel="Eliminar"`); los errores van a toast, no a `alert()`. El estado de confirmación vive en el **padre** (`const [confirmarBorrado, setConfirmarBorrado] = useState<T|null>(null)`), nunca dentro de la fila o del menú `RowActions`: el botón solo hace `setConfirmarBorrado(item)`. Referencia: `CatalogoEditor.tsx`, `ModulosPageClient.tsx`. Sobre un panel flotante (chat IA), el diálogo ya va en `dialog-top` (z-index por encima).
 - Tras guardar, feedback de éxito visible con el identificador generado.
+- El texto visible se escribe con las reglas de §5.1. No es cosmética: un texto que sobra se lee tantas veces como se abre la pantalla.
+
+## 5.1 El texto de la interfaz — PROFESIONAL Y CONCISO
+
+El registro de toda la plataforma (portal, admin, páginas públicas): **profesional y conciso**. Se enuncia, no se conversa. Es una herramienta de trabajo que alguien abre veinte veces al día, no una campaña ni un asistente simpático. Aplica a todo lo que se lee en pantalla: títulos, subtítulos, botones, etiquetas, columnas, vacíos, avisos, errores, toasts, ayudas y textos de modal.
+
+- **Lo más corto que siga siendo exacto.** Una idea, una frase. Si el texto se entiende sin la segunda frase, la segunda frase se borra entera —no se acorta—. El caso típico: un título que dice el problema y un botón que dice la acción no necesitan nada en medio.
+- **No se explica el mecanismo.** «Se abre en una pestaña nueva», «tu mensaje llega al panel de CLAUX», «se leen sin entrar en el portal»: es cierto, no aporta y envejece con el código. La razón técnica va en el comentario del código, que es donde sirve.
+- **No se vende dentro del producto.** Quien lo lee ya es cliente. Nada de adjetivos de folleto ni de frases que justifican lo buena que es una función («conoce tu negocio y responde al momento»). Se nombra lo que hace y se ofrece la acción.
+- **Ni euforia ni disculpas.** Sin exclamaciones («¡Listo!», «¡Genial!»), sin emoticonos, sin «Lo sentimos mucho». Un error dice **qué ha pasado y qué hacer**, en una frase; un éxito dice qué quedó hecho, con su identificador.
+- **Botón = verbo + objeto** («Enviar mensaje», «Registrar pago»), sin coletillas ni signos. Un vacío dice qué es la pantalla y ofrece la acción; nada de frases de ánimo.
+- **Profesional NO es formal ni técnico.** Se mantiene el tuteo, que es la voz ya instalada en el portal, y se siguen prohibidas la jerga interna y la nomenclatura del código («Recurso» → «Profesional», «Tercero» → el nombre que use el negocio). Preciso y sobrio, no distante.
+
+> Este apartado es la fuente única del registro de los textos de la plataforma. El del **manual** (`/academia`, `/ayuda`) es otro —neutro, en tercera persona, sin tuteo— y vive en `docs/CONTEXTO.md § Academia`.
 
 ## 6. Rutas públicas por-negocio (menú/catálogo QR, reservar, citas) — presupuesto Cuba, INNEGOCIABLE
 
@@ -163,6 +177,7 @@ Todo `<input>` con `<label for>` asociado por `id`. Todo botón de solo icono co
 5b. Si hay filtros: ¿una sola declaración con `<Filtros>` (§3.3), estado en la URL, y `npm run audit:filtros` en verde?
 6. ¿Probado en dark mode y en móvil 360 px?
 7. ¿Estados de carga, doble-submit y feedback cubiertos si hay acciones?
+8. ¿El texto visible es profesional y conciso (§5.1)? ¿Sobra alguna frase —mecanismo, adjetivos, ánimo— que se pueda borrar entera?
 
 ---
 *Presupuesto: este archivo ≤ ~1.400 palabras. Si crece, factoriza — los valores exactos viven en `01-tokens.css`, no aquí.*

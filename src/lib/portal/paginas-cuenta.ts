@@ -22,7 +22,7 @@ export interface PaginaCuenta {
 
 export const PAGINAS_CUENTA: PaginaCuenta[] = [
   { ruta: '/portal/perfil',         label: 'Mi perfil',       grupo: 'Mi cuenta' },
-  { ruta: '/portal/soporte',        label: 'Soporte',         grupo: 'Mi cuenta' },
+  { ruta: '/portal/soporte',        label: 'Ayuda y soporte', grupo: 'Mi cuenta' },
   { ruta: '/portal/importar-datos', label: 'Importar datos',  grupo: 'Negocio', soloImportador: true },
   { ruta: '/portal/empresas',       label: 'Empresas',        grupo: 'Negocio', soloAdmin: true },
   // «Monedas y tasas» se queda para todos: hasta solo-lectura puede actualizar tasas.

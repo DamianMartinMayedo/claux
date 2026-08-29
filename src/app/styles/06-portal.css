@@ -858,18 +858,49 @@
 }
 .usr-roles-wrap { display: flex; flex-direction: column; gap: var(--space-5); }
 
-/* ── Soporte: FAQ (acordeón) + contacto ── */
-.soporte-form { display: flex; flex-direction: column; gap: var(--space-4); }
+/* ── Ayuda y soporte: FAQ (acordeón) + guías del centro de ayuda ── */
 .soporte-grid {
   display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--space-5); align-items: start;
 }
 @media (max-width: 900px) { .soporte-grid { grid-template-columns: 1fr; } }
 
 .faq-group + .faq-group { margin-top: var(--space-4); }
+/* El rótulo del grupo y el enlace a su guía en la misma línea: alineados por la
+   base para que las dos tipografías —versalita y enlace— se lean como una sola. */
+.faq-group-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-2);
+}
 .faq-group-title {
   font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em;
-  color: var(--color-text-muted); margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
 }
+.faq-group-guia {
+  display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-text);
+}
+.faq-group-guia:hover { text-decoration: underline; }
+
+/* Remate del bloque de preguntas: la salida para lo que no contestan. */
+.soporte-pie {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-3);
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Guías del cliente: una fila por módulo contratado. */
+.soporte-guias { display: flex; flex-direction: column; gap: var(--space-2); }
+.soporte-guia {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-size: var(--text-sm); color: var(--color-text);
+  transition: border-color var(--transition), color var(--transition);
+}
+.soporte-guia:hover { border-color: var(--color-primary); background: var(--color-info-bg); }
+.soporte-guia-nombre { flex: 1 1 auto; min-width: 0; font-weight: 500; }
 .faq-item {
   border: 1px solid var(--color-border); border-radius: var(--radius-md);
   margin-bottom: var(--space-2); background: var(--color-surface-2);
@@ -3388,6 +3419,26 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ia-banner-title  { font-size: var(--text-base); font-weight: 700; }
 .ia-banner-desc   { font-size: var(--text-xs); opacity: 0.92; line-height: 1.4; }
 .ia-banner-switch { flex-shrink: 0; }
+
+/* Variante SUAVE: el mismo banner cuando no encabeza una pantalla sino que la
+   cierra (el pie de las preguntas frecuentes en «Ayuda y soporte»). El degradado
+   de marca se queda en el borde y en un fondo tenue —el mismo tratamiento que
+   `.btn-ia`—, para invitar sin gritar más que el contenido que hay encima; y la
+   separación va arriba, porque aquí el banner es lo último de la tarjeta. */
+.ia-banner-suave {
+  flex-wrap: wrap; margin: var(--space-5) 0 0;
+  color: var(--color-text);
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)) 0%,
+      color-mix(in srgb, var(--color-amber) 8%, var(--color-surface)) 100%) padding-box,
+    var(--gradient-brand) border-box;
+  border: 1px solid transparent;
+}
+.ia-banner-suave .ia-banner-body { flex: 1 1 12rem; }
+@media (max-width: 640px) {
+  .ia-banner-suave .btn { width: 100%; justify-content: center; }
+}
 
 /* Fila compacta de ajuste (confirmación automática) */
 .res-conf-item {

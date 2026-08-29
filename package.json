@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "audit:academia": "node scripts/audit-academia.mjs",
     "audit:gating": "node scripts/audit-gating.mjs",
     "audit:columnas": "node scripts/audit-columnas.mjs",
     "audit:filtros": "node scripts/audit-filtros.mjs",

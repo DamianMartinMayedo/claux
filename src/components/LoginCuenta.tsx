@@ -11,8 +11,8 @@ import { createClient } from '@/lib/supabase/client'
  * puertas del sistema: el panel del equipo (`/admin/login`) y la de un
  * revendedor (`/partners`). Es el MISMO login —la misma tabla de cuentas y el
  * mismo proveedor—; lo que cambia es el rótulo con el que se presenta y adónde
- * se entra al terminar. El rol decide el resto: un partner que aterrice en el
- * panel sale rebotado al manual, y al revés.
+ * se entra al terminar. Los permisos deciden el resto: quien solo tiene el
+ * manual y aterrice en el panel sale rebotado a él, y al revés.
  */
 export default function LoginCuenta({ subtitulo, destino, pie }: {
   /** Qué es esto, bajo el logo. */

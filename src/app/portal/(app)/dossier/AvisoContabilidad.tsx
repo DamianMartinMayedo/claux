@@ -30,7 +30,7 @@ export default function AvisoContabilidad({ texto }: { texto: string }) {
             cuenta. Sigue siendo un gancho, no un candado. */}
         <span className="alert-cta-nota">Y no tienes que montar nada: te la dejamos configurada y lista para usar.</span>
       </span>
-      <Link href="/portal/soporte" className="btn btn-aviso btn-sm">Quiero Contabilidad</Link>
+      <Link href="/portal/soporte?asunto=Quiero+activar+Contabilidad" className="btn btn-aviso btn-sm">Quiero Contabilidad</Link>
     </div>
   )
 }

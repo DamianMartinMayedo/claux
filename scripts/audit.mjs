@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
-// Los seis centinelas de una vez.
+// Los siete centinelas de una vez.
 //
 // POR QUÉ EXISTE. Hasta ahora eran comandos sueltos que había que acordarse de
 // ejecutar, y una regla que hay que recordar no es una regla: es una nota. Esto es
 // lo que se corre antes de desplegar (`docs/OPERACION.md`).
 //
 // Corren EN PARALELO y con la salida guardada, para imprimirlas siempre en el
-// mismo orden: seis salidas entrelazadas no se leen. Si uno falla, falla el
-// conjunto — pero todos llegan a ejecutarse, porque enterarte de los seis
+// mismo orden: siete salidas entrelazadas no se leen. Si uno falla, falla el
+// conjunto — pero todos llegan a ejecutarse, porque enterarte de los siete
 // problemas de una vez es media hora menos que enterarte de uno por vuelta.
 //
 // Uso:  npm run audit
@@ -17,6 +17,7 @@
 import { execFile } from 'node:child_process'
 
 const CENTINELAS = [
+  ['academia', 'scripts/audit-academia.mjs', 'el manual contra el sistema que describe'],
   ['gating',   'scripts/audit-gating.mjs',   'candado comercial de las mutaciones del portal'],
   ['columnas', 'scripts/audit-columnas.mjs', 'columnas que el código pide y la BD no tiene'],
   ['filtros',  'scripts/audit-filtros.mjs',  'listados que recortan o descargas que mienten'],

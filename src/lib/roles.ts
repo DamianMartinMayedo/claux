@@ -4,25 +4,22 @@
 // BD/sesión) vive en `roles-server.ts`.
 
 /**
- * Quién tiene cuenta en el sistema del equipo.
+ * Quién tiene cuenta en el sistema del equipo. Dos roles, no tres.
  *
- * `super_admin` y `vendedor` son gente de CLAUX y entran al panel. `partner` es
- * un revendedor EXTERNO: usa la misma tabla y el mismo login porque no había
- * ninguna razón para montarle un sistema de cuentas aparte, pero **no accede a
- * ninguna sección de /admin** —`puedeAcceder` le dice que no a todas— y su única
- * superficie es el manual, leído en la capa `partner`, que le impone el rol.
+ * `super_admin` lo ve todo. `vendedor` es **quien vende CLAUX**, sea del equipo
+ * o un revendedor de fuera: entra al panel por sus secciones de venta
+ * (`permisos`) y lee el manual en la capa `vendedor`, que le impone el rol.
+ *
+ * Hubo un tercer rol, `partner`, para el revendedor externo, y sobraba: no hacía
+ * nada que el vendedor no hiciera —solo leer el manual—, y separarlos obligaba a
+ * mantener dos veces la misma frontera. Quien revende es un vendedor con sus
+ * secciones de venta; lo que ve del manual lo decide la capa, no un rol aparte.
  */
-export type RolAdmin = 'super_admin' | 'vendedor' | 'partner'
+export type RolAdmin = 'super_admin' | 'vendedor'
 
-/** ¿Es alguien de fuera de CLAUX? Hoy solo el partner; la pregunta se hace en
- *  varios sitios y conviene que sea una y no un `=== 'partner'` repetido. */
-export function esExterno(rol: RolAdmin): boolean {
-  return rol === 'partner'
-}
-
-/** Dónde vive el manual. El partner entra por `/partners`, que es la puerta que
- *  se le da; una vez dentro lee en esta misma ruta, para que un enlace a un
- *  apartado sirva igual para el equipo y para él. */
+/** Dónde vive el manual. Se entra por `/partners`, que es la puerta que se da a
+ *  quien vende; una vez dentro se lee en esta misma ruta, para que un enlace a
+ *  un apartado sirva igual para el equipo y para un revendedor. */
 export const RUTA_MANUAL = '/academia'
 
 /** Cómo se llama cada rol en pantalla. Un solo sitio: lo pintan la cabecera del
@@ -30,16 +27,13 @@ export const RUTA_MANUAL = '/academia'
 export const ROL_LABEL: Record<RolAdmin, string> = {
   super_admin: 'Super Admin',
   vendedor:    'Vendedor',
-  partner:     'Partner',
 }
 
 /** Un rol que viene de fuera (formulario, fila de BD) convertido en uno válido.
- *  Lo desconocido cae a `partner`, que es el que menos ve: equivocarse al
- *  teclear no puede ascender a nadie a equipo interno. */
+ *  Lo desconocido cae a `vendedor`, que es el que menos ve: equivocarse al
+ *  teclear no puede ascender a nadie a super_admin. */
 export function normalizarRol(valor: unknown): RolAdmin {
-  return valor === 'super_admin' ? 'super_admin'
-    : valor === 'vendedor' ? 'vendedor'
-    : 'partner'
+  return valor === 'super_admin' ? 'super_admin' : 'vendedor'
 }
 
 export type SeccionKey =
@@ -66,8 +60,7 @@ export const SECCIONES: { key: SeccionKey; label: string }[] = [
   { key: 'usuarios',       label: 'Usuarios del equipo' },
 ]
 
-/** Secciones marcadas por defecto al crear un vendedor. Un partner no lleva
- *  ninguna: su acceso no se describe por secciones del panel. */
+/** Secciones marcadas por defecto al crear un vendedor. */
 export const PERMISOS_VENDEDOR_DEFAULT: SeccionKey[] = ['solicitudes', 'presupuestos', 'clientes_ro']
 
 /** Ruta de la página de cada sección (para nav y redirecciones). */
@@ -97,26 +90,34 @@ export interface ContextoAdmin {
 }
 
 /**
- * ¿El contexto puede acceder a la sección `key`? super_admin siempre.
- *
- * Un partner NUNCA: es de fuera, y el panel enseña clientes, cobros y márgenes.
- * Se corta aquí y no en cada página para que una sección nueva nazca cerrada
- * para él sin que nadie tenga que acordarse.
+ * ¿El contexto puede acceder a la sección `key`? super_admin siempre; el resto,
+ * solo las que tenga marcadas. Se corta aquí y no en cada página para que una
+ * sección nueva nazca cerrada sin que nadie tenga que acordarse.
  */
 export function puedeAcceder(ctx: ContextoAdmin | null, key: SeccionKey): boolean {
   if (!ctx) return false
-  if (esExterno(ctx.rol)) return false
   if (ctx.rol === 'super_admin') return true
   return ctx.permisos.includes(key)
+}
+
+/**
+ * ¿A este solo le queda el manual? Un vendedor sin NINGUNA sección marcada es
+ * quien vende de puertas afuera: comparte tabla de cuentas y login con el
+ * equipo, pero el panel no tiene nada que enseñarle. Se pregunta aquí, en un
+ * solo sitio, porque de ello dependen dos cosas lejanas entre sí: que el panel
+ * lo devuelva al manual y que el manual le ofrezca un botón de salir.
+ */
+export function soloManual(ctx: ContextoAdmin | null): boolean {
+  return !!ctx && ctx.rol !== 'super_admin' && ctx.permisos.length === 0
 }
 
 /** Primera ruta a la que enviar a un usuario según sus permisos (para redirecciones). */
 export function primeraRutaPermitida(ctx: ContextoAdmin | null): string {
   if (!ctx) return '/admin/login'
-  // El partner no tiene ninguna sección del panel: su sitio es el manual.
-  if (esExterno(ctx.rol)) return RUTA_MANUAL
   if (ctx.rol === 'super_admin') return '/admin/dashboard'
   const orden: SeccionKey[] = ['solicitudes', 'presupuestos', 'clientes_ro', 'dashboard']
   const key = orden.find(k => ctx.permisos.includes(k)) ?? ctx.permisos[0]
-  return key ? RUTA_SECCION[key] : '/admin/login'
+  // Sin ninguna sección marcada, el sitio de un vendedor es el manual: es lo que
+  // tiene siempre, y mandarlo al login otra vez parecería que su cuenta no vale.
+  return key ? RUTA_SECCION[key] : RUTA_MANUAL
 }

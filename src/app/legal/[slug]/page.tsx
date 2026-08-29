@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { PublicFooter } from '@/components/publico/Chrome'
+import { PublicFooter, PublicHeaderMarca } from '@/components/publico/Chrome'
 import { leerSetting } from '@/lib/settings'
 import { PAGINAS_LEGALES, parsearLegal, type BloqueLegal } from '@/lib/publico/legal'
-import LegalHeader from './LegalHeader'
 import VolverLink from './VolverLink'
 import SubirArriba from './SubirArriba'
 
@@ -48,7 +47,7 @@ export default async function LegalPage({ params }: Props) {
 
   return (
     <div className="ld-page">
-      <LegalHeader />
+      <PublicHeaderMarca />
       <main className="lg-page">
         {/* «Volver» va donde empieza la lectura, no en la cabecera: ahí, pegado al
             logo, se lee como parte del cromo y no como la salida de ESTA página. Para

@@ -25,10 +25,13 @@ h1,h2,h3,h4,h5,h6 { font-family: var(--font-display); font-weight: 700; line-hei
    `.acad-nav` es la marca de los enlaces de navegación de la Academia (índice
    lateral, sumario de ficha, saltos entre fichas): son una lista, no enlaces de
    texto, y el teal ahí se reserva para lo que se está leyendo.
+   `.enlace-lista` es esa misma idea, genérica y para cualquier superficie: una
+   fila que se pulsa (las guías de «Ayuda y soporte») se lee con el color del
+   texto que la rodea, no en teal.
    Si esta lista sigue creciendo, el arreglo es envolver el selector en `:where()`
    y bajar la base a especificidad 0, no seguir alargándola. */
-a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):not(.enlace-sobre-banda):not(.acad-nav) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
-a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):not(.enlace-sobre-banda):not(.acad-nav):hover { color: var(--color-primary-hover); }
+a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):not(.enlace-sobre-banda):not(.acad-nav):not(.enlace-lista) { color: var(--color-primary-text); text-decoration: none; transition: color var(--transition); }
+a:not(.btn):not(.nav-item):not(.portal-account-menu-item):not(.cp-cta):not(.tab):not(.enlace-sobre-banda):not(.acad-nav):not(.enlace-lista):hover { color: var(--color-primary-hover); }
 /* Enlace dentro de una banda de marca (degradado/color fuerte con texto blanco):
    blanco subrayado, que es la única tinta con contraste comprobado encima. */
 .enlace-sobre-banda { color: #fff; text-decoration: underline; text-underline-offset: 2px; transition: opacity var(--transition); }

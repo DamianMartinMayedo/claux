@@ -67,6 +67,11 @@ html:has(.acad-root) { scroll-behavior: auto; }
   font-size: var(--text-base);
   color: var(--color-text-muted);
 }
+/* La marca del centro de ayuda público lleva el LOGO, no el wordmark: es una
+   página de fuera y tiene que reconocerse como CLAUX igual que la landing. Se
+   centra en vez de alinearse por la base, que es la línea del texto y deja la
+   imagen descolgada. */
+.acad-brand-publica { align-items: center; }
 
 /* ── Barra «Ver como» (la capa de lectura) ──────────────────────────────────
    Con qué ojos se lee. Va bajo la cabecera y no dentro: el selector no compite
@@ -504,6 +509,11 @@ html:has(.acad-root) { scroll-behavior: auto; }
   color: var(--color-text-muted);
 }
 .acad-note strong { color: var(--color-text); }
+/* De aviso de entrada a remate: en las guías de /ayuda cierra la página, detrás
+   de los saltos a la anterior y la siguiente. Ahí `margin-bottom` no basta —se
+   quedaba pegado a la navegación—, y el margen no se le pone a la clase porque
+   donde abre (portada, /todo) ya lo separa la cabecera. */
+.acad-saltos + .acad-note { margin-top: var(--space-8); }
 
 /* Encabezados */
 .acad-h1 {
@@ -643,6 +653,73 @@ html:has(.acad-root) { scroll-behavior: auto; }
 .acad-tag-confidencial { background: var(--color-error-bg);     color: var(--color-error); }
 .acad-tag-basico       { background: var(--color-success-bg);   color: var(--color-success); }
 .acad-tag-avanzado     { background: var(--color-warning-bg);   color: var(--color-warning); }
+
+/* ── Apartados avanzados: el segundo eje de la etiqueta ──────────────────────
+   La etiqueta dice para quién es un apartado Y cuánto baja. Lo primero es una
+   frontera, y de eso se encarga el filtro quitándolo; lo segundo no quita nada:
+   pliega el apartado DONDE ESTÁ, con `<details>` nativo —sin JS se lee igual,
+   se abre con el teclado y no cuesta un viaje al servidor—. Va desplegado en la
+   capa interna, porque el equipo viene justo a por esto. */
+.acad-avanzado {
+  margin: var(--space-8) 0 var(--space-6);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border);
+  transition: var(--transition);
+}
+.acad-avanzado[open] { border-left-color: var(--color-primary); }
+.acad-avanzado-sum {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  list-style: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.acad-avanzado-sum::-webkit-details-marker { display: none; }
+/* Dentro del tirador el encabezado es el rótulo: sus márgenes y su regla de
+   separación las pone ya el propio <details>. */
+.acad-avanzado-sum .acad-h2,
+.acad-avanzado-sum .acad-h3 {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.acad-avanzado-sum:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: var(--space-1);
+}
+/* La pista es lo único que invita a abrir: sin ella un apartado plegado se lee
+   como un apartado vacío. */
+.acad-avanzado-pista {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: var(--transition);
+}
+.acad-avanzado-pista::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: var(--transition);
+}
+.acad-avanzado[open] .acad-avanzado-pista::after { transform: translateY(1px) rotate(-135deg); }
+.acad-avanzado-sum:hover .acad-avanzado-pista {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+}
+.acad-avanzado > :last-child { margin-bottom: 0; }
 
 /* ── Portada · banda de entrada ─────────────────────────────────────────────
    La portada se viste como la LANDING —banda de marca a sangre, tipo grande,
@@ -1243,6 +1320,22 @@ html:has(.acad-root) { scroll-behavior: auto; }
 .acad-arriba:hover { color: var(--color-text); border-color: var(--color-primary); }
 .acad-arriba.is-oculto { opacity: 0; visibility: hidden; transform: translateY(var(--space-2)); }
 
+/* ── Centro de ayuda público (/ayuda) ───────────────────────────────────────
+   Es el MISMO manual con otra puerta: reutiliza entero el vestido de lectura de
+   arriba (hero, rejilla de tarjetas, columna, índice lateral, apartados
+   plegables) y solo cambia el cromo — la cabecera es la del manual sin lo que
+   solo vale dentro (`AyudaMasthead`: marca, buscador y claro/oscuro, sin capas
+   ni menú interno) y el pie es el público compartido (`.ld-footer`).
+   De ahí la ÚNICA regla que hace falta: el pie público tiene `margin-top:auto`
+   pensado para una columna flex (ver `.ld-page` en 08-landing) y `.acad-root` no
+   lo es, así que con una guía corta se quedaba flotando a media pantalla. Nada
+   más: si hiciera falta más, sería señal de que se está construyendo otra web en
+   vez de otra salida del mismo manual. */
+.acad-root.es-ayuda {
+  display: flex;
+  flex-direction: column;
+}
+
 .acad-footer {
   margin-top: var(--space-16);
   padding-top: var(--space-6);
@@ -1267,6 +1360,17 @@ html:has(.acad-root) { scroll-behavior: auto; }
   letter-spacing: 0.08em;
   color: var(--color-text-faint);
   margin-bottom: var(--space-5);
+}
+
+/* Topes por nivel: la tabla que insertan las fichas con ```claux:limites```.
+   Hermana de los diagramas —dato del sistema, no texto tecleado—, así que
+   comparte su marco; lo suyo es solo la columna de cifras alineada a la
+   derecha, que es como se comparan tres números de distinto largo. */
+.acad-limites .acad-table-wrap { margin-bottom: 0; }
+.acad-limites thead th + th,
+.acad-limites tbody td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Flujo interno: nodos enlazados por un rail de 1px */
@@ -1623,8 +1727,8 @@ html:has(.acad-root) { scroll-behavior: auto; }
    El PDF no se genera en el servidor: lo hace el navegador desde
    `/academia/todo`. Así el texto sale seleccionable, los enlaces vivos y no hay
    una segunda plantilla que mantener al día. Lo que se imprime es lo que deja
-   ver la capa activa: «Ver como partner» + imprimir da el documento que se le
-   puede entregar a un partner. ────────────────────────────────────────────── */
+   ver la capa activa: «Ver como vendedor» + imprimir da el documento que se le
+   puede entregar a quien vende. ───────────────────────────────────────────── */
 .acad-imprimir {
   display: inline-flex;
   align-items: center;
@@ -1663,7 +1767,17 @@ html:has(.acad-root) { scroll-behavior: auto; }
   .acad-note,
   .acad-kicker,
   .acad-copy,
+  .acad-avanzado-pista,
   .acad-ficha-nav { display: none; }
+
+  /* En papel no hay nada que plegar: el <details> lo abre `AcademiaChrome` antes
+     de imprimir (CSS no puede), y aquí solo se le quita el rail de tirador para
+     que el apartado se lea como los demás. */
+  .acad-avanzado {
+    margin: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
 
   .acad-shell { display: block; }
   .acad-main { max-width: none; padding-top: 0; }

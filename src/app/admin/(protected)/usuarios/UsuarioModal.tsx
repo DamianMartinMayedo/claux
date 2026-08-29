@@ -102,7 +102,7 @@ export default function UsuarioModal({
             <div className="seg-field">
               <span className="seg-field-label">Rol</span>
               <div className="seg">
-                {(['vendedor', 'super_admin', 'partner'] as const).map(r => (
+                {(['vendedor', 'super_admin'] as const).map(r => (
                   <label key={r} className="seg-opt">
                     <input type="radio" name="rol" value={r} checked={rol === r} onChange={() => setRol(r)} />
                     <span>{ROL_LABEL[r]}</span>
@@ -145,7 +145,8 @@ export default function UsuarioModal({
                   {avanzado ? 'Ocultar configuración avanzada' : 'Configuración avanzada de accesos'}
                 </button>
                 <span className="input-hint">
-                  Por defecto: Solicitudes, Presupuestos y Clientes (solo lectura). Amplía solo si hace falta.
+                  Por defecto: Solicitudes, Presupuestos y Clientes (solo lectura). Amplía solo
+                  si hace falta, o quítalas todas para que solo lea el manual.
                 </span>
                 {avanzado && (
                   <div className="mod-list">
@@ -159,15 +160,19 @@ export default function UsuarioModal({
                   </div>
                 )}
               </div>
-            ) : rol === 'super_admin' ? (
+            ) : (
               <div className="alert alert-info">
                 Un <strong>Super Admin</strong> tiene acceso total al panel.
               </div>
-            ) : (
+            )}
+
+            {/* Así se da de alta a quien revende CLAUX de puertas afuera: mismo rol
+                que el vendedor del equipo, sin ninguna sección marcada. */}
+            {rol === 'vendedor' && permisos.length === 0 && (
               <div className="alert alert-info">
-                Un <strong>Partner</strong> es de fuera de CLAUX: <strong>no entra al panel</strong>.
-                Entra por <code>claux.es/partners</code> con este mismo correo y solo ve el manual
-                en su capa, sin costes, márgenes ni hoja de ruta.
+                Sin ninguna sección, este vendedor <strong>no entra al panel</strong>: entra por{' '}
+                <code>claux.es/partners</code> con este mismo correo y solo lee el manual en su
+                capa, sin costes, márgenes ni hoja de ruta.
               </div>
             )}
           </div>

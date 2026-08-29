@@ -3,6 +3,33 @@
 import Link from 'next/link'
 import EnlacesLegales from './EnlacesLegales'
 
+/**
+ * Cabecera de solo marca: las páginas públicas que NO son de captación.
+ *
+ * La usan los legales y el centro de ayuda. Ninguna de las dos es una página
+ * para vender: al visitante que llega de Google no le dicen nada «Acceso
+ * clientes» y «Diagnóstico gratis», y al **cliente** —que es quien más las abre,
+ * las cookies desde su perfil o una guía desde «Ayuda y soporte»— le están
+ * ofreciendo lo que ya tiene contratado.
+ *
+ * **El logo NO es un enlace.** En `PublicHeader` lleva a `/`, y ese es
+ * exactamente el viaje que se evita aquí: se pulsa el logo por costumbre y se
+ * acaba en la web comercial, fuera del portal desde el que se venía. La vuelta a
+ * la casa sigue estando en el pie, para quien la busque.
+ */
+export function PublicHeaderMarca() {
+  return (
+    <header className="pub-header-marca">
+      {/* Mismas clases que el logo de la cabecera pública: es la misma marca y el
+          mismo par claro/oscuro, no una variante. */}
+      <span className="ld-header-logo">
+        <img src="/logo_color.svg" alt="CLAUX" className="logo-light" />
+        <img src="/logo_blanco.svg" alt="CLAUX" className="logo-dark" />
+      </span>
+    </header>
+  )
+}
+
 export function PublicHeader() {
   return (
     <header className="ld-header">

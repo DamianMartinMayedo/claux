@@ -17,9 +17,9 @@ function superAdminsBootstrap(): string[] {
  * está autorizada. Lee la sesión de Supabase Auth y, para todo lo que no sea un
  * super admin de bootstrap, la fila `admin_users` (service_role).
  *
- * Sirve a las tres clases de cuenta: super_admin y vendedor son equipo de CLAUX;
- * `partner` es un revendedor externo que usa el mismo login pero no entra al
- * panel (ver `puedeAcceder` en `@/lib/roles`).
+ * Sirve a las dos clases de cuenta: `super_admin`, que lo ve todo, y `vendedor`,
+ * que entra a las secciones que tenga marcadas (ver `puedeAcceder` en
+ * `@/lib/roles`). Un revendedor de fuera es un vendedor más.
  *
  * Bootstrap: cualquier email en ADMIN_EMAILS es super_admin aunque no tenga
  * fila. Si ADMIN_EMAILS no está configurada, el fail-open histórico se mantiene
@@ -49,9 +49,9 @@ export const obtenerContextoAdmin = cache(async function obtenerContextoAdmin():
 
   // La fila manda sobre el fail-open. El orden importa: mientras el fail-open se
   // consultaba ANTES de leer la tabla, un entorno sin ADMIN_EMAILS convertía en
-  // super_admin a cualquier cuenta autenticada — incluida la de un PARTNER, que
-  // es de fuera de CLAUX. Con la fila leída primero, un partner es partner
-  // aunque la variable de entorno falte.
+  // super_admin a cualquier cuenta autenticada — incluida la de un revendedor de
+  // fuera. Con la fila leída primero, un vendedor es vendedor aunque la variable
+  // de entorno falte.
   const db = createAdminClient()
   const { data } = await db
     .from('admin_users')
@@ -65,14 +65,14 @@ export const obtenerContextoAdmin = cache(async function obtenerContextoAdmin():
     if (rol === 'super_admin') {
       return { email, nombre: data.nombre || nombre, rol: 'super_admin', permisos: [] }
     }
+    // Un rol desconocido (fila vieja, dato tocado a mano) cae a vendedor, que es
+    // el que menos ve: lo que abre cada sección son sus `permisos`, y una fila
+    // sin permisos no abre ninguna.
     return {
       email,
       nombre:   data.nombre || nombre,
-      // Un rol desconocido (fila vieja, dato tocado a mano) NO se trata como
-      // equipo: cae a partner, que es el rol que menos ve.
-      rol:      rol === 'vendedor' ? 'vendedor' : 'partner',
-      // El partner no se describe por secciones del panel: no entra a ninguna.
-      permisos: rol === 'vendedor' ? ((data.permisos ?? []) as SeccionKey[]) : [],
+      rol:      'vendedor',
+      permisos: (data.permisos ?? []) as SeccionKey[],
     }
   }
 

@@ -20,7 +20,7 @@ CLAUX es una plataforma SaaS multi-tenant para digitalizar negocios locales cuba
 
 > ## ⚠️ REGLA DE UI — INNEGOCIABLE
 >
-> Tocas UI (cualquier `.tsx` con JSX visible o un parcial de `src/app/styles/`) ⇒ **lee primero [skills/ui/SKILL.md](skills/ui/SKILL.md)**. Es la **fuente única y completa** de UI (reglas, sistema de tablas, tokens, iconos, gotchas): con ella basta, no abras otro doc para UI. Aplica aunque solo añadas un botón, cambies un color o ajustes un margen. Regla central: **prohibido el estilo inline**; tokens y clases del design system siempre.
+> Tocas UI (cualquier `.tsx` con JSX visible o un parcial de `src/app/styles/`) ⇒ **lee primero [skills/ui/SKILL.md](skills/ui/SKILL.md)**. Es la **fuente única y completa** de UI (reglas, sistema de tablas, tokens, iconos, textos, gotchas): con ella basta, no abras otro doc para UI. Aplica aunque solo añadas un botón, cambies un color o ajustes un margen. Regla central: **prohibido el estilo inline**; tokens y clases del design system siempre.
 
 ## Qué leer según la tarea (no sobre-leas)
 
@@ -82,7 +82,7 @@ Ante cualquier contradicción entre documentos, el orden de prioridad es:
 
 Curadas para el stack real (Next.js 16 + React 19 + Supabase + design system propio en CSS, sin utilidades Tailwind, sin backend Express). Se eliminaron las que se solapaban o no encajaban.
 
-- `skills/ui/SKILL.md` → SIEMPRE que se cree, edite o revise cualquier componente, página, layout o CSS (cualquier .tsx con JSX o parcial de `src/app/styles/`). **Fuente única y completa de UI** (reglas, sistema de tablas, tokens, iconos, gotchas). Regla central: prohibido el estilo inline; tokens y clases del design system siempre.
+- `skills/ui/SKILL.md` → SIEMPRE que se cree, edite o revise cualquier componente, página, layout o CSS (cualquier .tsx con JSX o parcial de `src/app/styles/`). **Fuente única y completa de UI** (reglas, sistema de tablas, tokens, iconos, textos, gotchas). Regla central: prohibido el estilo inline; tokens y clases del design system siempre.
 - `skills/emil-design-eng/SKILL.md` → al pulir detalles de UI, animaciones, interacciones y decisiones de diseño que hacen que el software se sienta bien.
 - `skills/accessibility/SKILL.md` → al auditar o mejorar accesibilidad web (WCAG 2.2, screen readers, navegación por teclado).
 - `skills/seo/SKILL.md` → al optimizar visibilidad en buscadores (meta tags, structured data, sitemap, technical SEO) — clave para landing y páginas públicas.

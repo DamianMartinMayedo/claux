@@ -112,12 +112,27 @@ verdad y deja de serlo el día que el dueño cambia el precio en el admin, sin q
 enfrente las dos cifras.
 
 ```bash
+npm run audit:academia
+```
+
+El manual de la Academia contra el sistema que describe. Todo lo que comprueba falla **en
+silencio**: una etiqueta mal escrita (`vendedor`, o `basico` sin tilde) hace que el apartado
+desaparezca de las **tres** capas, la interna incluida; una directiva `claux:` que no
+resuelve deja un hueco; un atajo de la portada a un encabezado renombrado se esfuma —la
+portada solo pinta los que existen—; un `.md` que nadie da de alta en `piezas.ts` no lo lee
+nadie; una ficha que se vende y se queda sin apartados `usar` deja sin texto público la guía
+que «Ayuda y soporte» le ofrece al cliente, o sea un 404 servido desde dentro de su portal; y
+un módulo dado de alta en `/admin` sin ficha deja sin nada que leer a quien va a venderlo.
+Sin `.env.local` los cinco primeros se hacen igual y el cruce con el catálogo se anuncia como
+NO hecho, en vez de callarse.
+
+```bash
 npm run audit
 ```
 
-**Los seis de una vez**, en paralelo y con la salida ordenada. Es el que hay que recordar:
-seis comandos sueltos que hay que acordarse de ejecutar no son una regla, son una nota.
-Rojo si falla cualquiera, pero todos llegan a correr — enterarte de los seis problemas de
+**Los siete de una vez**, en paralelo y con la salida ordenada. Es el que hay que recordar:
+siete comandos sueltos que hay que acordarse de ejecutar no son una regla, son una nota.
+Rojo si falla cualquiera, pero todos llegan a correr — enterarte de los siete problemas de
 una vez es media hora menos que enterarte de uno por vuelta.
 
 `npx eslint <ficheros>` para lo tocado. El build de este proyecto es pesado: si el proceso
@@ -188,6 +203,8 @@ El cron de tasas es el ejemplo a copiar.
 | Un listado sale del revés o le faltan filas viejas | El orden lo fija el rango (`ordenDelRango`) y el techo, `limiteDelFiltro` (`lib/listados.ts`) |
 | Un cliente crea por encima de su tope | Una columna de filtro de esa dimensión que ya no existe: PostgREST falla el conteo, sale 0 y el límite deja de existir. `npm run audit:limites` |
 | Una funcionalidad desapareció sin dar ningún error | Su clave de módulo, retirada o renombrada en el catálogo vivo: `tieneModulo` devuelve `false` para siempre. `npm run audit:nivel` |
+| Un apartado del manual no sale en NINGUNA capa | Su `> etiquetas:` con una audiencia que no existe: `filtro.ts` no la reconoce y lo poda entero. `npm run audit:academia` |
+| A un módulo contratado no le sale la guía en «Ayuda y soporte» | Su ficha del manual no declara la `clave` del catálogo (`lib/academia/catalogo.ts`): `guiaDeModulo` no la encuentra y el enlace no se pinta, a propósito |
 
 ## Convenciones
 

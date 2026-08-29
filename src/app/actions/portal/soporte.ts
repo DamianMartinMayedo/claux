@@ -22,11 +22,20 @@ export interface FaqGrupo {
   items:  Faq[]
 }
 
-// FAQ visible para el cliente: las 'general' + las de los módulos que tiene
-// contratados (modulos_activos). El catálogo aporta el nombre legible del módulo.
-export async function obtenerFaqPortal(): Promise<{ generales: Faq[]; porModulo: FaqGrupo[] }> {
+export interface Modulo { clave: string; nombre: string }
+
+// Lo que necesita la pantalla de Ayuda y soporte, en una sola lectura: las FAQ
+// visibles para el cliente —las 'general' + las de los módulos que tiene
+// contratados (modulos_activos)— y esos mismos módulos con su nombre legible,
+// que es de donde salen los enlaces a las guías del centro de ayuda. El catálogo
+// se lee una vez y sirve para las dos cosas.
+export async function obtenerSoportePortal(): Promise<{
+  generales: Faq[]
+  porModulo: FaqGrupo[]
+  modulos:   Modulo[]
+}> {
   const session = await getPortalSession()
-  if (!session) return { generales: [], porModulo: [] }
+  if (!session) return { generales: [], porModulo: [], modulos: [] }
 
   const db = createAdminClient()
   const [{ data: cliente }, { data: catalogo }, { data: faqs }] = await Promise.all([
@@ -50,7 +59,14 @@ export async function obtenerFaqPortal(): Promise<{ generales: Faq[]; porModulo:
     }))
     .filter(g => g.items.length > 0)
 
-  return { generales, porModulo }
+  // Los contratados en el ORDEN del catálogo, no en el que estén guardados en la
+  // fila del cliente: el menú lateral usa ese mismo orden y las dos listas tienen
+  // que leerse igual.
+  const modulos: Modulo[] = (catalogo ?? [])
+    .filter(c => contratados.includes(c.clave))
+    .map(c => ({ clave: c.clave, nombre: c.nombre }))
+
+  return { generales, porModulo, modulos }
 }
 
 /**

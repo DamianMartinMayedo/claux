@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { obtenerContextoAdmin } from '@/lib/roles-server'
-import { esExterno, RUTA_MANUAL } from '@/lib/roles'
+import { soloManual, RUTA_MANUAL } from '@/lib/roles'
 import TopLoader from '@/components/portal/TopLoader'
 import Sidebar from '@/components/admin/Sidebar'
 import Header from '@/components/admin/Header'
@@ -39,11 +39,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // Sin sesión (y sin bypass de desarrollo) → login.
   if (!ctx) redirect('/admin/login')
 
-  // Un PARTNER es de fuera de CLAUX: comparte tabla de cuentas y login con el
-  // equipo, pero el panel no es suyo. Se corta aquí, en la raíz de todo lo
-  // protegido, y no página a página: así una sección nueva nace cerrada para él
-  // sin que nadie tenga que acordarse. Su sitio es el manual.
-  if (esExterno(ctx.rol)) redirect(RUTA_MANUAL)
+  // Un vendedor SIN ninguna sección es quien revende CLAUX de puertas afuera:
+  // comparte tabla de cuentas y login con el equipo, pero el panel no es suyo.
+  // Se corta aquí, en la raíz de todo lo protegido, y no página a página: así
+  // una sección nueva nace cerrada para él sin que nadie tenga que acordarse. Su
+  // sitio es el manual.
+  if (soloManual(ctx)) redirect(RUTA_MANUAL)
 
   // Desactivar automáticamente clientes vencidos (solo super_admin, evita error
   // de permisos para un vendedor al abrir el panel).

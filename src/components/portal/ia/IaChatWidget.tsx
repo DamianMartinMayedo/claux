@@ -11,6 +11,7 @@ import {
   type ConversacionResumen
 } from '@/app/actions/portal/ia'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import { EVENTO_ABRIR_IA } from './abrir-chat'
 import type { TurnoChat } from '@/lib/ia/agente'
 
 // Botón flotante (abajo-derecha) con chat libre del dueño hacia su agente.
@@ -118,6 +119,16 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
     if (abierto) cerrarChat()
     else abrirChat()
   }
+
+  // Otra pantalla puede pedir que se abra el chat (el cierre de «Ayuda y
+  // soporte» lo hace). La dependencia es el número de conversaciones porque es
+  // lo único vivo que lee `abrirChat`: decide si toca traer el historial.
+  useEffect(() => {
+    const onAbrir = () => abrirChat()
+    window.addEventListener(EVENTO_ABRIR_IA, onAbrir)
+    return () => window.removeEventListener(EVENTO_ABRIR_IA, onAbrir)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversaciones.length])
 
   async function enviarTexto(texto: string) {
     const t = texto.trim()

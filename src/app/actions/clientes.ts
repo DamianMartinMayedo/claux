@@ -951,8 +951,8 @@ export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendi
 //     `precio_mensual_usd` se le sigue calculando, que es lo que hace falta
 //     saber el día que se negocie la conversión.
 //
-// Ojo con la palabra «socio»: NO es `admin_users.rol = 'partner'` (mig. 205), que
-// es el revendedor externo y es otra cosa.
+// Ojo con la palabra «socio»: es un CLIENTE que no paga, no quien revende CLAUX
+// desde fuera (ese es un vendedor de `admin_users`, y es otra cosa).
 export async function guardarCondicionesCliente(formData: FormData) {
   await requirePermiso('clientes')
   const supabase = await createClient()

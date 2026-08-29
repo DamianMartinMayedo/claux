@@ -375,7 +375,7 @@ export async function guardarSuscripcion(
 /**
  * El mismo acuerdo para VARIOS clientes de una vez.
  *
- * Es cómo crece de verdad un negocio de cuotas: el partner con 53 acuerdos casi idénticos
+ * Es cómo crece de verdad un negocio de cuotas: el cliente con 53 acuerdos casi idénticos
  * los metió por el importador porque desde la UI no había forma. Aquí cada cliente
  * produce un acuerdo propio (precio y condiciones iguales, ficha suya), no un acuerdo
  * compartido.

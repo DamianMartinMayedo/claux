@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
-import { PERMISOS_VENDEDOR_DEFAULT, SECCIONES, normalizarRol, type RolAdmin, type SeccionKey } from '@/lib/roles'
+import { SECCIONES, normalizarRol, type RolAdmin, type SeccionKey } from '@/lib/roles'
 import { revalidatePath } from 'next/cache'
 
 export interface UsuarioAdmin {
@@ -31,13 +31,13 @@ function superAdminsBootstrap(): string[] {
 
 function normalizarPermisos(rol: RolAdmin, permisos: string[]): SeccionKey[] {
   if (rol === 'super_admin') return []
-  // Un partner no entra a ninguna sección del panel: su acceso no se describe por
-  // secciones sino por la capa del manual. Se vacía aquí y no solo en la pantalla,
-  // porque lo que llegue en el formulario no es de fiar.
-  if (rol === 'partner') return []
-  const limpio = (permisos ?? []).filter((k): k is SeccionKey => CLAVES_VALIDAS.has(k as SeccionKey))
-  // Un vendedor sin ninguna sección no tendría a dónde entrar → mínimos por defecto.
-  return limpio.length > 0 ? Array.from(new Set(limpio)) : [...PERMISOS_VENDEDOR_DEFAULT]
+  // Cero secciones es una elección válida y no un descuido: así se da de alta a
+  // quien revende CLAUX de puertas afuera, que entra a leer el manual y nada
+  // más. Los mínimos por defecto los pone el modal al abrirse, que es donde se
+  // puede desmarcar lo que sobre.
+  return Array.from(new Set(
+    (permisos ?? []).filter((k): k is SeccionKey => CLAVES_VALIDAS.has(k as SeccionKey))
+  ))
 }
 
 /**

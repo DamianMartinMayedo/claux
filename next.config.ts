@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
     // entero—, que los leen igual.
     '/academia': ['./content/academia/**'],
     '/academia/**': ['./content/academia/**'],
+    // El centro de ayuda público lee LOS MISMOS .md (es el manual filtrado por la
+    // capa `cliente`), así que necesita el mismo trazado. El sitemap también: sale
+    // de los archivos que sí tienen texto para un cliente, y sin ellos anunciaría
+    // cero URLs — o peor, unas que dan 404.
+    '/ayuda': ['./content/academia/**'],
+    '/ayuda/**': ['./content/academia/**'],
+    '/sitemap.xml': ['./content/academia/**'],
   },
   images: {
     // Logos de empresas servidos desde Supabase Storage (bucket público).
@@ -36,8 +43,20 @@ const nextConfig: NextConfig = {
     // El menú/catálogo público usa una URL acorde al negocio (/menu, /carta,
     // /servicios) que sirve la misma página que /catalogo (ruta física canónica).
     // Los enlaces y QR de /catalogo ya compartidos siguen funcionando igual.
+    //
+    // El `:slug` es el del NEGOCIO, así que hay que decirle cuáles no lo son:
+    // sin este filtro `/academia/servicios` —la ficha del módulo Servicios— se
+    // reescribía a `/academia/catalogo`, que no existe, y daba un 404 que no
+    // salía de la Academia sino de aquí. Se compara el segmento ENTERO (de ahí
+    // la barra dentro del lookahead) para no dejar fuera a un negocio que se
+    // llame `academia-de-baile`. Toda sección nueva de primer nivel que pueda
+    // tener un hijo `menu`, `carta` o `servicios` se añade a esta lista.
+    const RESERVADOS = [
+      'academia', 'ayuda', 'partners', 'admin', 'api', 'diagnostico', 'legal', 'd', 'punto-de-venta',
+    ]
+    const negocio = `((?!(?:${RESERVADOS.join('|')})/)[^/]+)`
     return ['menu', 'carta', 'servicios'].map((vista) => ({
-      source: `/:slug/${vista}`,
+      source: `/:slug${negocio}/${vista}`,
       destination: '/:slug/catalogo',
     }))
   },
