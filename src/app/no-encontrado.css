@@ -1,0 +1,61 @@
+/* ── 404 de la raíz — hoja MÍNIMA y autocontenida ──────────────────────────
+   Esta hoja se paga en TODAS las páginas del sitio, y por eso es así de corta.
+   El motivo: `app/not-found.tsx` es la frontera que cuelga del layout raíz, o
+   sea que está en el árbol de todas las rutas; React serializa su subárbol en
+   la carga de cada página y emite un `<link rel=preload as=style>` de su CSS
+   aunque el 404 no se pinte nunca. Importar aquí `entrada-marca.css` costaba
+   19 KB gz de descarga en cada visita — también en el menú público, cuyo
+   presupuesto entero son ~8 KB (regla de públicas, skills/ui/SKILL.md §6).
+   Así que esta página NO usa el design system: paleta propia con namespace
+   (`--n4-*`) y fuentes del sistema, mismo criterio que las hojas públicas.
+   Si crece, lo que crece es el peso de todo el sitio. */
+
+.n4-page {
+  --n4-bg: #faf7f2;
+  --n4-text: #1a1a1a;
+  --n4-text-muted: #595959;
+  --n4-primary: #0d9488;
+  --n4-primary-hover: #0f766e;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--n4-bg);
+  color: var(--n4-text);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* El tema lo fija el script del layout raíz en `<html data-theme>`, así que se
+   lee de ahí y no de `prefers-color-scheme`: es el tema que el usuario eligió. */
+[data-theme="dark"] .n4-page {
+  --n4-bg: #1a1a1a;
+  --n4-text: #e5e5e5;
+  --n4-text-muted: #a3a3a3;
+}
+
+.n4-logo { height: 20px; width: auto; }
+[data-theme="dark"] .n4-logo-claro { display: none; }
+.n4-logo-oscuro { display: none; }
+[data-theme="dark"] .n4-logo-oscuro { display: block; }
+
+.n4-titulo { font-size: 22px; font-weight: 700; margin: 0; }
+.n4-texto { font-size: 15px; color: var(--n4-text-muted); margin: 0; max-width: 36ch; }
+.n4-enlace {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: var(--n4-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background .15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .n4-enlace:hover { background: var(--n4-primary-hover); }
+}

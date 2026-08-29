@@ -1657,3 +1657,34 @@ input[type="checkbox"]:checked::after {
   transition: color var(--transition);
 }
 .volver-link:hover { color: var(--color-primary-text); }
+
+/* ═══════════════════════════════════════════════════
+   PÁGINA NO ENCONTRADA / PANTALLA CAÍDA
+   ═══════════════════════════════════════════════════
+   El bloque centrado de `not-found.tsx` y `error.tsx`. Vive en el parcial
+   COMPARTIDO porque lo pintan las tres hojas de entrada (§0): gestión —portal y
+   admin, dentro de su shell—, marca —la raíz y los legales— y academia. Las
+   rutas públicas por-negocio NO lo usan: están aisladas del design system y
+   llevan sus cuatro reglas dentro de `(public)/public-base.css` —la única hoja que
+   ya carga su layout—, regla de públicas §6. */
+.nf-bloque {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.nf-bloque svg { opacity: 0.35; }
+.nf-titulo { font-size: var(--text-2xl); font-weight: 800; color: var(--color-text); }
+/* Reintentar y la salida: dos acciones en fila, que envuelven en móvil. */
+.nf-acciones { display: flex; align-items: center; justify-content: center; gap: var(--space-2); flex-wrap: wrap; }
+/* La referencia del fallo (`error.digest`): es lo que empareja lo que vio el
+   cliente con la traza del servidor, así que se enseña, discreta y entera. */
+.nf-referencia {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
