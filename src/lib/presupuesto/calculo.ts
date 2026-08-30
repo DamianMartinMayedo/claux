@@ -47,7 +47,7 @@ export interface InstalacionInput {
    *
    * Una fase excluida **desaparece del desglose**, no se pinta a cero: una línea de $0 en
    * el papel que ve el cliente invita a preguntar por qué está ahí. Y no suma horas, que es
-   * el punto: hasta ahora la migración de datos se cobraba siempre que hubiera un módulo
+   * el punto: hasta ahora la puesta en marcha se cobraba siempre que hubiera un módulo
    * contratado, aunque el negocio empezara de cero y no hubiera nada que migrar.
    */
   fasesExcluidas?: number[]
@@ -171,7 +171,7 @@ export function calcularInstalacion(
   const f1 = dentro(1) ? acumular(1) : VACIA
   const horasFase1 = dentro(1) ? r2(params.horasAlta + f1.horas) : 0
 
-  // ── Fase 2: migración de datos (solo módulos activos) ──
+  // ── Fase 2: puesta en marcha (solo módulos activos) ──
   const f2 = dentro(2) ? acumular(2) : VACIA
 
   // ── Fase 3: formación (base + por módulo; el punto de venta cuesta lo suyo) ──

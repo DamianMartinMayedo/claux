@@ -207,7 +207,7 @@ export default function PresupuestoForm({
       {([1, 2] as const).map(fase => (
         <div key={fase} className="pp-bloque">
           <p className="mod-list-label">
-            {fase === 1 ? 'Configuración inicial' : 'Migración de datos'}
+            {fase === 1 ? 'Configuración inicial' : 'Puesta en marcha'}
           </p>
           <CabeceraColumnas />
           {lineas.filter(l => l.fase === fase).map(l => (

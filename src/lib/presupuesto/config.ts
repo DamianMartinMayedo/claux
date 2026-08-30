@@ -37,11 +37,11 @@ export const FORMATOS: { key: FormatoDatos; label: string }[] = [
  *
  * **Una fase se puede excluir**: hay instalaciones sin nada que migrar (un negocio que
  * empieza de cero) y clientes que no quieren formación. Antes no había forma de quitarlas y
- * el presupuesto cobraba una migración de datos que nadie iba a hacer.
+ * el presupuesto cobraba una puesta en marcha que nadie iba a hacer.
  */
 export const FASES_INSTALACION = [
   { num: 1, etiqueta: 'Alta y configuración base' },
-  { num: 2, etiqueta: 'Migración de datos' },
+  { num: 2, etiqueta: 'Puesta en marcha' },
   { num: 3, etiqueta: 'Formación' },
   { num: 4, etiqueta: 'Validación y cierre' },
 ] as const
@@ -72,7 +72,7 @@ export const CLAVE_CAJA = 'caja'
  */
 export interface LineaParametro {
   clave:           string
-  /** 1 = configuración inicial · 2 = migración de datos. */
+  /** 1 = configuración inicial · 2 = puesta en marcha. */
   fase:            1 | 2
   etiqueta:        string
   /** Clave de `modulos_catalogo` que activa la línea; `null` = siempre. */

@@ -805,7 +805,7 @@ export const GRAFO: Record<string, Grafo> = {
       titulo: 'Cómo se arma el precio de una instalación',
       pasos: [
         { titulo: 'Se eligen los módulos', detalle: 'De ahí sale la cuota mensual, que se lee del catálogo en vivo y no se teclea en el presupuesto.' },
-        { titulo: 'Se marcan las fases que hacen falta', detalle: 'Alta y configuración · Migración de datos · Formación · Validación y cierre. La que no aplica se desmarca y desaparece del papel, no sale a cero.' },
+        { titulo: 'Se marcan las fases que hacen falta', detalle: 'Alta y configuración · Puesta en marcha · Formación · Validación y cierre. La que no aplica se desmarca y desaparece del papel, no sale a cero.' },
         { titulo: 'Se declara el volumen real', detalle: 'Cuántos productos, cuántos empleados, cuántos clientes. Las horas suben por tramos: migrar veinte productos no es migrar cinco mil.' },
         { titulo: 'Todo se convierte en horas', detalle: 'No hay recargos sueltos en dólares. Horas × tarifa, con una tarifa por hora que se puede negociar por cliente.' },
         { titulo: 'Y si hay descuento, lleva motivo', detalle: 'El margen comercial existe y queda escrito, en vez de bajar el número sin dejar rastro.' },
