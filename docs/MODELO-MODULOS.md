@@ -66,7 +66,9 @@ Decisión del propietario (frente a "reutilizar la tabla plans"): es la única q
 1. Un **catálogo** de módulos disponibles, con **un precio por nivel y moneda** (tabla
    `modulos_catalogo`: `precio_{inicial,empresa,pro}_usd` y `precio_{inicial,empresa,pro}_eur`, mig. 225).
    Seis celdas por módulo, todas editables a mano en el admin: el euro es un **precio propio**, no una
-   conversión del dólar (por eso lo facturado coincide siempre con lo cobrado). Es una lista de
+   conversión del dólar (por eso lo facturado coincide siempre con lo cobrado). La **semilla** (mig. 226)
+   es dólar **×0,95 redondeado hacia arriba al medio euro** —1 EUR = 1,05 USD, con el mercado en 1,08-1,16:
+   el diferencial paga el coste de facturar desde España—, y a partir de ahí manda la celda. Es una lista de
    "productos" que CLAUX vende. Los precios viven aquí, en datos — **nunca** en el código (`npm run audit:precios`). Cada
    entrada lleva un `tipo` (`modulo` | `funcionalidad` | `addon`) que decide cómo se agrupa y presenta
    en el admin y el portal. La contabilidad es un `modulo` más (clave `base`); el antiguo `tipo='base'`/flag
@@ -350,6 +352,8 @@ cliente**: el documento describe lo que se firmó.
 | **220** | **Retirada de los addons de capacidad**: `multiempresa` y `multidossier` a `activo = false` y fuera de `modulos_activos` · caché `precio_mensual_usd` rehecha para toda la cartera · plantillas de correo `limite_alcanzado` y `socio_ampliado` |
 
 | **225** | **Precio propio en euros**: `modulos_catalogo.precio_{inicial,empresa,pro}_eur` (sembrados desde el dólar, editables a mano) · `clients.precio_mensual_eur` + `moneda_facturacion` · `moneda` en `payments`, `presupuestos_instalacion` y `presupuesto_parametros.tarifa_hora_eur` |
+
+| **226** | La columna en euros deja de ser paridad: semilla ×0,95 al alza (`claux_eur_desde_usd`) **solo sobre las filas sin tocar a mano** · caché `precio_mensual_eur` rehecha |
 
 > **No se borran, se desactivan.** Las dos filas siguen en `modulos_catalogo`: los anexos, presupuestos y
 > facturas ya emitidos citan la clave y necesitan su nombre para poder leerse dentro de diez años.

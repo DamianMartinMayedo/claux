@@ -20,7 +20,7 @@ import { guardarParametrosPresupuesto } from '@/app/actions/presupuesto-parametr
 import { horasDeLinea } from '@/lib/presupuesto/calculo'
 import { AJUSTES_PRESUPUESTO, type LineaParametro } from '@/lib/presupuesto/config'
 import FormHelp from '@/components/portal/FormHelp'
-import { importeClaux } from '@/lib/moneda-claux'
+import { importeClaux, MONEDAS_CLAUX, type MonedaClaux } from '@/lib/moneda-claux'
 
 type Escalares = Record<string, string>
 type LineaEdit = Pick<LineaParametro,
@@ -30,7 +30,11 @@ const CLAVES = Object.keys(AJUSTES_PRESUPUESTO) as (keyof typeof AJUSTES_PRESUPU
 // Las dos tarifas/hora son dinero, no horas: van arriba y juntas, fuera del bloque de
 // «horas que se cobran siempre». La de euros es un precio propio, no la de dólares
 // pasada por el cambio del día (mig. 225).
-const TARIFAS = ['tarifaHora', 'tarifaHoraEur'] as const
+const TARIFA_DE: Record<MonedaClaux, 'tarifaHora' | 'tarifaHoraEur'> = {
+  USD: 'tarifaHora',
+  EUR: 'tarifaHoraEur',
+}
+const TARIFAS: string[] = Object.values(TARIFA_DE)
 
 const hs = (n: number) => `${Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 })} h`
 
@@ -148,23 +152,34 @@ export default function PresupuestoForm({
       <div className="input-group">
         <div className="form-label-with-help">
           <label htmlFor="pp-tarifaHora">Tarifa por hora</label>
-          <FormHelp text="Todo se cotiza en horas y esta tarifa las convierte en dinero. Cada moneda tiene la suya, y en cada presupuesto se puede pactar otra para ese cliente." label="Cómo se usa la tarifa por hora" />
+          <FormHelp text="La instalación se cotiza en horas y esta tarifa las convierte en dinero. Cada moneda tiene su tarifa propia —la de euros no sale de convertir la de dólares— y en cada presupuesto se puede pactar otra para ese cliente." label="Cómo se usa la tarifa por hora" />
         </div>
-        <div className="grid-cols-2">
-          {TARIFAS.map(k => (
-            <div key={k} className="input-group">
-              <label htmlFor={`pp-${k}`}>{AJUSTES_PRESUPUESTO[k].label}</label>
-              <input id={`pp-${k}`} type="number" min="0" step="any" className="input"
-                value={escalares[k]} onChange={e => setEscalares(p => ({ ...p, [k]: e.target.value }))} />
-            </div>
-          ))}
+        {/* La moneda va DELANTE del número, pegada a la casilla, y la unidad detrás:
+            el campo se lee «USD [20] / hora». El rótulo de arriba ya dice qué es,
+            así que aquí solo hace falta lo que distingue un campo del otro. */}
+        <div className="pp-tarifas">
+          {MONEDAS_CLAUX.map(moneda => {
+            const k = TARIFA_DE[moneda]
+            return (
+              <div className="pp-tarifa" key={moneda}>
+                <span className="pp-tarifa-campo">
+                  <span className="pp-tarifa-moneda" aria-hidden="true">{moneda}</span>
+                  <input id={`pp-${k}`} type="number" min="0" step="any"
+                    className="input pp-tarifa-input"
+                    aria-label={AJUSTES_PRESUPUESTO[k].label}
+                    value={escalares[k]} onChange={e => setEscalares(p => ({ ...p, [k]: e.target.value }))} />
+                </span>
+                <span className="pp-tarifa-unidad">/ hora</span>
+              </div>
+            )
+          })}
         </div>
       </div>
 
       <div>
         <p className="mod-list-label">Horas que se cobran siempre</p>
         <div className="grid-cols-2">
-          {CLAVES.filter(k => !TARIFAS.includes(k as typeof TARIFAS[number])).map(k => (
+          {CLAVES.filter(k => !TARIFAS.includes(k)).map(k => (
             <div key={k} className="input-group">
               <label htmlFor={`pp-${k}`}>{AJUSTES_PRESUPUESTO[k].label}</label>
               <input id={`pp-${k}`} type="number" min="0" step="any" className="input"

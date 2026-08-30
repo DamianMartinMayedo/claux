@@ -1007,6 +1007,30 @@ textarea:focus-visible {
   .pp-fila-cab { display: none; }
 }
 
+/* ── Las dos tarifas por hora ────────────────────────────────────────────────
+   Un rótulo y dos campos. Cada campo repetía debajo «Tarifa por hora (USD)» /
+   «Tarifa por hora (EUR)» bajo un rótulo que ya decía «Tarifa por hora»: tres
+   veces la misma frase, y lo único que distingue un campo del otro —la moneda—
+   escondido al final entre paréntesis. Aquí la moneda es un prefijo pegado a la
+   casilla y la unidad va detrás, así que el campo se lee de un vistazo:
+   «USD [20] / hora». */
+.pp-tarifas { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
+.pp-tarifa { display: flex; align-items: center; gap: var(--space-2); }
+.pp-tarifa-campo { display: flex; align-items: stretch; }
+.pp-tarifa-moneda {
+  display: flex; align-items: center; padding: 0 var(--space-3);
+  border: 1.5px solid var(--color-border); border-right: none;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--color-surface-offset-2);
+  font-family: var(--font-display); font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 0.05em; color: var(--color-text-muted);
+}
+.pp-tarifa-input {
+  width: 6.5rem; text-align: right; font-variant-numeric: tabular-nums;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+.pp-tarifa-unidad { font-size: var(--text-sm); color: var(--color-text-muted); }
+
 .pp-num {
   width: 4.5rem; text-align: right;
   height: var(--h-filtro); padding: 0 var(--space-2);

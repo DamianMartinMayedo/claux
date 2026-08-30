@@ -203,7 +203,8 @@ export default function ModulosCard({
           </div>
           {moneda !== monedaInicial && (
             <p className="form-hint">
-              Al guardar, el contrato y el anexo de módulos quedarán pendientes de firma en {moneda}.
+              Hoy se le factura en {monedaInicial}. Al guardar pasa a {moneda} y el contrato y el
+              anexo de módulos quedarán pendientes de firma.
             </p>
           )}
         </div>
