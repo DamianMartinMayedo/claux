@@ -90,6 +90,8 @@ export interface LineaParametro {
 export interface ParametrosPresupuesto {
   /** $/h base. En el presupuesto se puede ajustar para ese cliente. */
   tarifaHora:           number
+  /** €/h base: precio PROPIO, no la tarifa en dólares pasada por el cambio del día. */
+  tarifaHoraEur:        number
   horasAlta:            number
   horasFormacionBase:   number
   horasFormacionModulo: number
@@ -164,6 +166,7 @@ export function dimensionesApretadas(
  *  de Configuración, que si no se desincronizan. */
 export const AJUSTES_PRESUPUESTO = {
   tarifaHora:           { key: 'tarifa_hora_usd',                    def: '20', label: 'Tarifa por hora (USD)' },
+  tarifaHoraEur:        { key: 'tarifa_hora_eur',                    def: '20', label: 'Tarifa por hora (EUR)' },
   horasAlta:            { key: 'presupuesto_horas_alta',             def: '4',  label: 'Horas de alta y configuración base' },
   horasFormacionBase:   { key: 'presupuesto_horas_formacion_base',   def: '2',  label: 'Horas de formación (base)' },
   horasFormacionModulo: { key: 'presupuesto_horas_formacion_modulo', def: '1',  label: 'Horas de formación por módulo' },

@@ -6,6 +6,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import EditarPagoModal  from './EditarPagoModal'
 import EliminarPagoBtn  from './EliminarPagoBtn'
 import ConfirmarPagoBtn from './ConfirmarPagoBtn'
+import { importeClaux, normalizarMonedaClaux } from '@/lib/moneda-claux'
 
 const METODO_LABEL: Record<string, string> = {
   tropipay: 'TropiPay', transferencia: 'Transferencia', efectivo: 'Efectivo',
@@ -13,7 +14,10 @@ const METODO_LABEL: Record<string, string> = {
 
 type Pago = {
   pago_id: string; client_id: string; concepto: string | null; estado: string | null
-  monto_usd: number; metodo: string; fecha: string
+  monto: number; metodo: string; fecha: string
+  /** La del cobro, congelada en la fila: un pago de hace un año en dólares se lee
+   *  en dólares aunque hoy a ese cliente se le facture en euros (mig. 225). */
+  moneda: string | null
   fecha_inicio_periodo: string | null; fecha_fin_periodo: string | null
   notas: string | null
 }
@@ -37,13 +41,15 @@ function exportCSV(
   clienteNombre: Record<string, string>,
 ) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  // La moneda en columna propia, no en la cabecera: con las dos en la misma hoja,
+  // «Monto USD» miente en la mitad de las filas y nadie lo mira antes de sumar.
   const headers = ['ID Pago', 'Cliente ID', 'Empresa', 'Concepto', 'Estado', 'Método',
-    'Monto USD', 'Fecha', 'Inicio período', 'Fin período']
+    'Monto', 'Moneda', 'Fecha', 'Inicio período', 'Fin período']
   const rows = pagos.map(p => [
     p.pago_id, p.client_id, clienteNombre[p.client_id] ?? '',
     conceptoLabel(p.concepto), estadoLabel(p.estado),
     METODO_LABEL[p.metodo] ?? p.metodo,
-    p.monto_usd, p.fecha ?? '',
+    p.monto, normalizarMonedaClaux(p.moneda), p.fecha ?? '',
     p.fecha_inicio_periodo ?? '', p.fecha_fin_periodo ?? '',
   ])
   const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
@@ -144,7 +150,7 @@ export default function PagosTabla({
                 <th>Concepto</th>
                 <th>Estado</th>
                 <th>Método</th>
-                <th className="col-num">Monto USD</th>
+                <th className="col-num">Monto</th>
                 <th>Fecha</th>
                 <th>Período</th>
                 <th className="col-actions" />
@@ -176,7 +182,7 @@ export default function PagosTabla({
                       {METODO_LABEL[p.metodo] ?? p.metodo}
                     </span>
                   </td>
-                  <td data-label="Monto USD" className="col-num table-price">${p.monto_usd?.toFixed(2)}</td>
+                  <td data-label="Monto" className="col-num table-price">{importeClaux(p.monto, p.moneda)}</td>
                   <td data-label="Fecha" className="table-muted">{formatFecha(p.fecha)}</td>
                   <td data-label="Período" className="table-muted text-xs">
                     {p.fecha_inicio_periodo && p.fecha_fin_periodo
@@ -189,7 +195,8 @@ export default function PagosTabla({
                         <ConfirmarPagoBtn
                           pagoId={p.pago_id}
                           clienteNombre={clienteNombre[p.client_id] ?? p.client_id}
-                          monto={p.monto_usd}
+                          monto={p.monto}
+                          moneda={p.moneda}
                           concepto={p.concepto}
                         />
                       )}

@@ -10,7 +10,7 @@ import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
 import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
 import { leerSetting }       from '@/lib/settings'
-import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { etiquetaDimension, OFERTA_NIVEL, type Dimension } from '@/lib/limites'
 import { obtenerEtiquetasNegocio } from './sector'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
@@ -1477,7 +1477,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     suscripcion: {
       estado: cliente.estado ?? '—',
       diasRestantes,
-      label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento),
+      label: suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento, monedaDelCliente(cliente)),
       // Lo que el dueño tiene contratado, en su cabecera y no escondido en
       // Facturación: hasta ahora el nivel solo aparecía el día que chocaba con un
       // tope, y la condición de socio solo en la página de la factura.

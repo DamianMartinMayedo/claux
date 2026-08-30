@@ -8,10 +8,14 @@ import { editarPago } from '@/app/actions/pagos'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
+import { MONEDAS_CLAUX, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 type Pago = {
   pago_id: string; client_id: string; concepto: string | null
-  monto_usd: number; metodo: string
+  monto: number; metodo: string
+  /** La del cobro. Se puede corregir aquí porque también se puede equivocar al
+   *  registrarlo; lo que no se hace nunca es convertirla sola (mig. 225). */
+  moneda: string | null
   fecha_inicio_periodo: string | null; fecha_fin_periodo: string | null
   notas: string | null
 }
@@ -43,7 +47,8 @@ export default function EditarPagoModal({
   const [loading, setLoading] = useState(false)
   const mounted = useMounted()
 
-  const [monto, setMonto]         = useState(String(pago.monto_usd))
+  const [monto, setMonto]         = useState(String(pago.monto))
+  const [moneda, setMoneda]       = useState<MonedaClaux>(normalizarMonedaClaux(pago.moneda))
   const [metodo, setMetodo]       = useState(pago.metodo)
   const [fechaInicio, setFechaInicio] = useState(toYMD(pago.fecha_inicio_periodo))
   const [fechaFin, setFechaFin]   = useState(toYMD(pago.fecha_fin_periodo))
@@ -60,7 +65,8 @@ export default function EditarPagoModal({
 
   function handleOpen() {
     // Resetear a valores actuales del pago
-    setMonto(String(pago.monto_usd))
+    setMonto(String(pago.monto))
+    setMoneda(normalizarMonedaClaux(pago.moneda))
     setMetodo(pago.metodo)
     setFechaInicio(toYMD(pago.fecha_inicio_periodo))
     setFechaFin(toYMD(pago.fecha_fin_periodo))
@@ -127,20 +133,29 @@ export default function EditarPagoModal({
               </div>
             </div>
 
-            {/* Monto */}
-            <div className="input-group">
-              <label>Monto USD <span className="required">*</span></label>
-              <input
-                name="monto_usd"
-                type="number"
-                step="any"
-                min="0.01"
-                className="input"
-                required
-                value={monto}
-                onChange={e => setMonto(e.target.value)}
-                placeholder="0.00"
-              />
+            {/* Monto y moneda: el importe sin su moneda no dice cuánto se cobró */}
+            <div className="grid-cols-2">
+              <div className="input-group">
+                <label>Monto <span className="required">*</span></label>
+                <input
+                  name="monto"
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  className="input"
+                  required
+                  value={monto}
+                  onChange={e => setMonto(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="input-group">
+                <label>Moneda <span className="required">*</span></label>
+                <select name="moneda" className="input" required value={moneda}
+                  onChange={e => setMoneda(e.target.value as MonedaClaux)}>
+                  {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
             </div>
 
             {/* Período (solo suscripción) */}

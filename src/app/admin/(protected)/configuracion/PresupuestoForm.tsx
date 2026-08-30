@@ -20,15 +20,19 @@ import { guardarParametrosPresupuesto } from '@/app/actions/presupuesto-parametr
 import { horasDeLinea } from '@/lib/presupuesto/calculo'
 import { AJUSTES_PRESUPUESTO, type LineaParametro } from '@/lib/presupuesto/config'
 import FormHelp from '@/components/portal/FormHelp'
+import { importeClaux } from '@/lib/moneda-claux'
 
 type Escalares = Record<string, string>
 type LineaEdit = Pick<LineaParametro,
   'clave' | 'etiqueta' | 'fase' | 'horas_base' | 'incluido' | 'tramo' | 'horas_por_tramo'>
 
 const CLAVES = Object.keys(AJUSTES_PRESUPUESTO) as (keyof typeof AJUSTES_PRESUPUESTO)[]
+// Las dos tarifas/hora son dinero, no horas: van arriba y juntas, fuera del bloque de
+// «horas que se cobran siempre». La de euros es un precio propio, no la de dólares
+// pasada por el cambio del día (mig. 225).
+const TARIFAS = ['tarifaHora', 'tarifaHoraEur'] as const
 
 const hs = (n: number) => `${Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 })} h`
-const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
 
 /** Un cliente de ejemplo para esta línea: tres tramos por encima de lo incluido. Es el
  *  volumen que hace visible el escalado — con el volumen justo incluido no se vería. */
@@ -99,7 +103,9 @@ function LineaPrecio({
           cobro?». Se recalcula mientras se teclea. */}
       <span className="pp-col pp-col-ej pp-fila-ejemplo">
         {ejemplo} → <strong>{hs(horas)}</strong>
-        {tarifa > 0 && <> · {usd(horas * tarifa)}</>}
+        {/* El ejemplo se cuenta con la tarifa en dólares: es una ilustración del
+            escalado por volumen, no una cotización. */}
+        {tarifa > 0 && <> · {importeClaux(horas * tarifa, 'USD')}</>}
       </span>
     </div>
   )
@@ -141,17 +147,24 @@ export default function PresupuestoForm({
     <form onSubmit={handleSubmit} className="config-form">
       <div className="input-group">
         <div className="form-label-with-help">
-          <label htmlFor="pp-tarifa">{AJUSTES_PRESUPUESTO.tarifaHora.label}</label>
-          <FormHelp text="Todo se cotiza en horas y esta tarifa las convierte en dinero. En cada presupuesto se puede pactar otra para ese cliente." label="Cómo se usa la tarifa por hora" />
+          <label htmlFor="pp-tarifaHora">Tarifa por hora</label>
+          <FormHelp text="Todo se cotiza en horas y esta tarifa las convierte en dinero. Cada moneda tiene la suya, y en cada presupuesto se puede pactar otra para ese cliente." label="Cómo se usa la tarifa por hora" />
         </div>
-        <input id="pp-tarifa" type="number" min="0" step="any" className="input"
-          value={escalares.tarifaHora} onChange={e => setEscalares(p => ({ ...p, tarifaHora: e.target.value }))} />
+        <div className="grid-cols-2">
+          {TARIFAS.map(k => (
+            <div key={k} className="input-group">
+              <label htmlFor={`pp-${k}`}>{AJUSTES_PRESUPUESTO[k].label}</label>
+              <input id={`pp-${k}`} type="number" min="0" step="any" className="input"
+                value={escalares[k]} onChange={e => setEscalares(p => ({ ...p, [k]: e.target.value }))} />
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>
         <p className="mod-list-label">Horas que se cobran siempre</p>
         <div className="grid-cols-2">
-          {CLAVES.filter(k => k !== 'tarifaHora').map(k => (
+          {CLAVES.filter(k => !TARIFAS.includes(k as typeof TARIFAS[number])).map(k => (
             <div key={k} className="input-group">
               <label htmlFor={`pp-${k}`}>{AJUSTES_PRESUPUESTO[k].label}</label>
               <input id={`pp-${k}`} type="number" min="0" step="any" className="input"

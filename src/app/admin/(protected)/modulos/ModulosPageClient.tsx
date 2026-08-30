@@ -7,11 +7,13 @@ import EditarModuloModal from './EditarModuloModal'
 import NuevoModuloModal  from './NuevoModuloModal'
 import SembrarColumnaModal from './SembrarColumnaModal'
 import CatalogoTabs from '@/components/admin/CatalogoTabs'
+import FilterPills from '@/components/portal/FilterPills'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { reordenarModulos, archivarModulo, eliminarModulo } from '@/app/actions/modulos'
 import { useToast } from '@/app/contexts/ToastContext'
 import { NIVELES, precioModulo, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 const TIPO_LABEL: Record<string, string> = {
   base:          'Base',
@@ -29,6 +31,13 @@ const TIPO_BADGE: Record<string, string> = {
 
 type Pagina = { ruta: string; label: string; orden: number }
 
+// La rejilla del catálogo son SEIS precios (tres niveles × dos monedas, mig. 225),
+// pero la tabla enseña tres: seis columnas de cifras al lado de nombre, tipo,
+// páginas y estado no se barren con la vista. La moneda se elige arriba y el
+// símbolo de cada celda la confirma. Comparar las dos monedas de un módulo se
+// hace donde importa —el modal de edición, que las tiene las seis juntas.
+const MONEDA_PILLS = MONEDAS_CLAUX.map(m => ({ id: m, label: m }))
+
 export type Modulo = {
   clave: string
   nombre: string
@@ -37,6 +46,9 @@ export type Modulo = {
   precio_inicial_usd: number
   precio_empresa_usd: number
   precio_pro_usd: number
+  precio_inicial_eur: number
+  precio_empresa_eur: number
+  precio_pro_eur: number
   es_base: boolean
   activo: boolean
   orden: number
@@ -74,6 +86,7 @@ export default function ModulosPageClient(
   const orderRef = useRef<string[]>([])
   const [editing, setEditing] = useState<Modulo | null>(null)
   const [confirmarBorrado, setConfirmarBorrado] = useState<Modulo | null>(null)
+  const [moneda, setMoneda] = useState<MonedaClaux>('USD')
 
   function handleDragStart(index: number) { setDragIndex(index); movedRef.current = false }
   function handleDragOver(e: React.DragEvent, index: number) {
@@ -136,6 +149,16 @@ export default function ModulosPageClient(
 
       <CatalogoTabs />
 
+      <div className="ter-toolbar">
+        <FilterPills
+          items={MONEDA_PILLS}
+          value={moneda}
+          onChange={id => setMoneda(id as MonedaClaux)}
+          ariaLabel="Moneda de los precios"
+          sinTodas
+        />
+      </div>
+
       <div className="card card-table">
         <div className="table-wrapper">
         <table className="table">
@@ -177,7 +200,7 @@ export default function ModulosPageClient(
                 <td data-label="Páginas">{countPaginas(m.paginas) || '—'}</td>
                 {NIVELES.map(n => (
                   <td data-label={nombresNivel[n]} className="col-num table-price" key={n}>
-                    ${precioModulo(m, n).toFixed(2)}
+                    {importeClaux(precioModulo(m, n, moneda), moneda)}
                   </td>
                 ))}
                 <td data-label="Estado">

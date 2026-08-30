@@ -63,35 +63,40 @@ Decisión del propietario (frente a "reutilizar la tabla plans"): es la única q
 100% (precio compuesto real, un precio por módulo y por nivel, toggle por módulo con recálculo).
 
 **La idea, simple:**
-1. Un **catálogo** de módulos disponibles, con **un precio por nivel** (tabla `modulos_catalogo`:
-   `precio_inicial_usd` / `precio_empresa_usd` / `precio_pro_usd`). Es una lista de "productos" que CLAUX
-   vende. Los precios viven aquí, en datos — **nunca** en el código (`npm run audit:precios`). Cada
+1. Un **catálogo** de módulos disponibles, con **un precio por nivel y moneda** (tabla
+   `modulos_catalogo`: `precio_{inicial,empresa,pro}_usd` y `precio_{inicial,empresa,pro}_eur`, mig. 225).
+   Seis celdas por módulo, todas editables a mano en el admin: el euro es un **precio propio**, no una
+   conversión del dólar (por eso lo facturado coincide siempre con lo cobrado). Es una lista de
+   "productos" que CLAUX vende. Los precios viven aquí, en datos — **nunca** en el código (`npm run audit:precios`). Cada
    entrada lleva un `tipo` (`modulo` | `funcionalidad` | `addon`) que decide cómo se agrupa y presenta
    en el admin y el portal. La contabilidad es un `modulo` más (clave `base`); el antiguo `tipo='base'`/flag
    `es_base` quedó **retirado** (068): es opcional como cualquier módulo.
-2. Cada **cliente** guarda **qué módulos tiene encendidos** y en qué **nivel** (`clients.nivel`, mig. 215).
-   Su **precio mensual de catálogo** = suma de los módulos encendidos (incluida la contabilidad si la
-   contrató) leyendo **la columna de su nivel**. Se recalcula al togglear un módulo, al cambiar de nivel
-   **y al editar un precio del catálogo** (`recalcularCuotas`, §3.4).
+2. Cada **cliente** guarda **qué módulos tiene encendidos**, en qué **nivel** (`clients.nivel`, mig. 215)
+   y en qué **moneda se le factura** (`clients.moneda_facturacion`, mig. 225). Su **precio mensual de
+   catálogo** = suma de los módulos encendidos (incluida la contabilidad si la contrató) leyendo **la
+   columna de su nivel**, en las dos monedas: `precio_mensual_usd` y `precio_mensual_eur` se mantienen
+   **siempre los dos**, y `moneda_facturacion` decide cuál se cobra. Se recalcula al togglear un módulo,
+   al cambiar de nivel **y al editar un precio del catálogo** (`recalcularCuotas`, §3.4).
 3. El **gating** del portal pasa a leer los módulos **del cliente** (no del plan). El resto del gating no
    cambia: `PortalSidebar` ya consume una lista de strings.
 
 ```
 modulos_catalogo (lo que se vende)              clients (cada negocio)
-┌──────────────────────────────────────┐       ┌──────────────────────────────────┐
-│ clave           (PK)  catalogo_qr    │       │ client_id         (PK)           │
-│ nombre                Menú digital   │       │ modulos_activos   [catalogo_qr,  │
-│ descripcion                          │ ────► │                    reservas_citas]│
-│ precio_inicial_usd    10.00          │       │ nivel             'inicial'      │
-│ precio_empresa_usd    20.00          │       │ precio_mensual_usd  30.00        │
-│ precio_pro_usd        25.00          │       │ descuento_pct/_desde/_hasta      │
-│ tipo   'modulo|funcionalidad|addon'  │       │ es_socio / socio_desde           │
-│ paginas (JSONB) [{ruta,label,orden}] │       │ limites_override  (JSONB)        │
-│ orden           (int)  20            │       │ ciclo_facturacion 'mensual'      │
-│ activo          (bool) true          │       │ plan_id           (NULL, inerte) │
-└──────────────────────────────────────┘       └──────────────────────────────────┘
+┌───────────────────────────────────────┐       ┌────────────────────────────────────┐
+│ clave           (PK)  catalogo_qr     │       │ client_id         (PK)             │
+│ nombre                Menú digital    │       │ modulos_activos   [catalogo_qr,    │
+│ descripcion                           │ ────► │                    reservas_citas] │
+│ precio_inicial_usd/_eur  10.00/9.50   │       │ nivel             'inicial'        │
+│ precio_empresa_usd/_eur  20.00/19.00  │       │ moneda_facturacion 'USD'           │
+│ precio_pro_usd/_eur      25.00/24.00  │       │ precio_mensual_usd  30.00          │
+│ (seis precios: 3 niveles × 2 monedas) │       │ precio_mensual_eur  28.50          │
+│ tipo   'modulo|funcionalidad|addon'   │       │ descuento_pct/_desde/_hasta        │
+│ paginas (JSONB) [{ruta,label,orden}]  │       │ es_socio / socio_desde             │
+│ orden           (int)  20             │       │ limites_override  (JSONB)          │
+│ activo          (bool) true           │       │ ciclo_facturacion 'mensual'        │
+└───────────────────────────────────────┘       └────────────────────────────────────┘
         ▲                                                │
-        │ el nivel elige la COLUMNA de precio            │ el nivel elige la FILA de tope
+        │ nivel + moneda eligen la COLUMNA de precio     │ el nivel elige la FILA de tope
         │                                                ▼
 ┌───────────────────────┐              ┌──────────────────────────────────────────┐
 │ niveles               │              │ nivel_limites                            │
@@ -159,7 +164,7 @@ y reordenar** entradas del menú desde el admin sin desplegar. Sirve además com
 
 Pasos repetibles (aplican a los tres `tipo`; sus diferencias, en §3.1). Sirve para construir **y** para no olvidar cómo documentarlo — que sea siempre igual es lo que evita que cada módulo se haga distinto.
 
-1. **Datos (catálogo).** Añade una fila a `modulos_catalogo`: `clave` estable y **genérica** (nunca "menu"/"mesa", §6), `tipo`, `nombre`, **los tres precios** (`precio_inicial_usd`/`_empresa_usd`/`_pro_usd`, con Empresa = Inicial ×2 y Pro = ×2,5 redondeado a 5), `orden`, y `paginas` (JSONB `[{ruta,label,orden}]`) si es `modulo`/`funcionalidad`. Precios SOLO en datos, nunca en código. Migración nueva en `supabase/migrations/` con el **número siguiente** (no reutilizar).
+1. **Datos (catálogo).** Añade una fila a `modulos_catalogo`: `clave` estable y **genérica** (nunca "menu"/"mesa", §6), `tipo`, `nombre`, **los seis precios** (`precio_{inicial,empresa,pro}_{usd,eur}`, con Empresa = Inicial ×2 y Pro = ×2,5 redondeado a 5, y el euro sembrado desde el dólar pero ajustable a mano), `orden`, y `paginas` (JSONB `[{ruta,label,orden}]`) si es `modulo`/`funcionalidad`. Precios SOLO en datos, nunca en código. Migración nueva en `supabase/migrations/` con el **número siguiente** (no reutilizar).
 2. **Código de la(s) página(s).** El `page.tsx`, su ruta y su icono son **código** — crear la fila del catálogo es media operación (§3.2). Crea el `page.tsx` en la ruta declarada y su icono en el `ICON_MAP` de `PortalSidebar`. Una `ruta` sin `page.tsx` da 404.
 3. **Gating (obligatorio, server-side).**
    - `modulo`/`funcionalidad`: primera línea del `page.tsx` → `requireModulo('<clave>')`. Ocultar en el sidebar NO es control de acceso.
@@ -167,7 +172,7 @@ Pasos repetibles (aplican a los tres `tipo`; sus diferencias, en §3.1). Sirve p
 4. **¿Lleva tope? (§3.4).** Si el módulo crea filas de algo que un negocio grande tendrá en cantidad, es una **dimensión** de `nivel_limites`, no un addon de capacidad: añade su fila a `DIMENSIONES` en `src/lib/limites.ts` (tabla, `pk`, módulo y **filtro de activo verificado contra la BD**), sus tres filas a `nivel_limites`, y llama a `comprobarLimite` en **crear y desarchivar**. Después, `npm run audit:limites` — es lo único que separa un límite real de uno que no existe en silencio.
 5. **Independencia (regla transversal, CONTEXTO §2).** Funciona solo; la base opera sin él. Si aprovecha otro módulo, es **llenado rápido aditivo en una dirección** (cargar algo solo si el otro está activo), nunca dependencia; su modelo de datos es propio y los vínculos a otros módulos son blandos/opcionales.
 6. **UI.** Toda la pantalla sigue `skills/ui/SKILL.md` (fuente única: reglas, tablas, tokens, iconos, gotchas). Etiquetas por sector, sin jerga (§6; helper `src/lib/sector.ts`). Las server actions devuelven objeto tipado y llaman `revalidatePath`.
-7. **Admin.** El toggle por cliente ya existe (`ModulosCard`, agrupado por `tipo`) y recalcula `precio_mensual_usd`. No hay que tocarlo salvo que cambie la mecánica.
+7. **Admin.** El toggle por cliente ya existe (`ModulosCard`, agrupado por `tipo`) y recalcula `precio_mensual_usd` y `precio_mensual_eur`. No hay que tocarlo salvo que cambie la mecánica.
 8. **Documentar (una sola vez, en su sitio).** Actualiza el **mapa §2 de CONTEXTO.md** con **un bullet** en el formato estándar: *qué es (clave, tipo) · estado · puntos de entrada (ruta · vista · acciones) · pendiente*. **No** párrafos-ensayo, listas de migraciones ni RPC (viven en las migraciones y el código). Gotchas de UI → `SKILL.md`. Detalles operativos volátiles (claves de proveedor, quirks) → memoria del agente. Skill nueva → regístrala en `AGENTS.md`.
 
 ### 3.4 Niveles y límites de capacidad (v3 — sección canónica)
@@ -258,9 +263,11 @@ cae al modelo gratuito. Lo que se promete es que siga respondiendo, no consumo i
 
 #### El precio que se cobra
 
-`clients.precio_mensual_usd` es una **caché del precio de catálogo**: Σ de los módulos activos en la columna
-del nivel, **sin descuento** y contando **solo `modulos_catalogo.activo = true`** (`sumarModulos` en
-`src/lib/niveles.ts`). Encima van dos cosas, que viven aparte a propósito:
+`clients.precio_mensual_usd` y `clients.precio_mensual_eur` son una **caché del precio de catálogo**: Σ de
+los módulos activos en la columna del nivel, **sin descuento** y contando **solo
+`modulos_catalogo.activo = true`** (`sumarModulos` en `src/lib/niveles.ts`). Las dos se mantienen siempre,
+aunque al cliente se le cobre en una: `moneda_facturacion` elige cuál manda (`precioMensualEfectivo` /
+`monedaDelCliente` en `src/lib/moneda-claux.ts`). Encima van dos cosas, que viven aparte a propósito:
 
 - **Descuento con vigencia** — `descuento_pct` + `descuento_desde`/`descuento_hasta`. Caduca solo; fuera de
   fechas el precio vuelve al de catálogo sin que nadie se acuerde. Ojo: **«hoy» se calcula con `hoyEnTz()`**,
@@ -275,7 +282,14 @@ del nivel, **sin descuento** y contando **solo `modulos_catalogo.activo = true`*
 la cartera entera pagando el viejo, en silencio. Y como es el botón más peligroso del panel,
 `/admin/modulos` enseña con `impactoDeCambios` **a quién le sube, y de cuánto a cuánto, antes de guardar**.
 
-**El Anexo I firmado documenta `precio_mensual_usd`, no el efectivo**: si firmara el precio con descuento,
+**Las dos monedas no se suman ni se convierten nunca.** El MRR, lo cobrado del mes y el pendiente del
+portal se agrupan por moneda y se enseñan como `$X · €Y` (`totalPorMoneda` / `importesPorMoneda`). Cada
+pago y cada presupuesto guardan **su** moneda y no se reetiquetan; el prorrateo de un cambio de ciclo se
+niega —diciéndolo en pantalla— si el último pago fue en otra moneda. La moneda **viaja en la versión del
+documento**, así que cambiar `moneda_facturacion` en la ficha deja el contrato y el Anexo I pendientes de
+firma: el cliente que pasa de dólar a euro vuelve a firmar en su moneda, y el resto de la cartera no.
+
+**El Anexo I firmado documenta el precio de catálogo, no el efectivo**: si firmara el precio con descuento,
 el día que el descuento caduca la cadena de versión se movería sola y el cliente tendría que volver a
 firmar por algo que él no cambió. Y al generar el anexo **manda el nivel del presupuesto, no el del
 cliente**: el documento describe lo que se firmó.
@@ -285,7 +299,7 @@ cliente**: el documento describe lo que se firmó.
 | Dónde | Qué hace |
 |---|---|
 | `/admin/niveles` | Nombre, descripción y la rejilla 10 × 3 de topes. Un número aquí mueve a la vez el bloqueo del portal, la tarjeta de la landing y las bandas del diagnóstico |
-| `/admin/modulos` | Tres columnas de precio · **sembrar** una columna desde otra (×multiplicador + redondeo: siembra, no manda) · previsualización de impacto |
+| `/admin/modulos` | Rejilla de seis precios (3 niveles × 2 monedas), toda editable a mano · **sembrar** una columna desde otra (×multiplicador + redondeo: siembra, no manda) · previsualización de impacto |
 | Ficha del cliente | `CondicionesCard` (nivel, descuento, socio) y `CapacidadCard` (usado/tope por dimensión, con override) |
 | Landing | Tres tarjetas de nivel con sus topes en vivo. **Sin precios** — `DIMENSIONES_LANDING` elige cuáles se enseñan y vive en código, porque depende del diseño de la tarjeta, no del negocio |
 | Diagnóstico | Tres preguntas de tamaño cuyas **bandas se derivan de los topes vivos** (`lib/publico/tamano.ts`); guarda `nivel_recomendado` en el lead (mig. 219) |
@@ -298,7 +312,7 @@ cliente**: el documento describe lo que se firmó.
 - **`audit:limites`** — la `DIMENSIONES` contra la BD viva, las filas de `nivel_limites` en los dos
   sentidos, y que **todo `insert`/`upsert` en tabla limitada pase por `comprobarLimite`**.
 - **`audit:nivel`** — que toda clave de módulo citada en código exista en el catálogo, que las plantillas de
-  sector y el diagnóstico no apunten a claves muertas, y que los tres precios estén y sean monótonos.
+  sector y el diagnóstico no apunten a claves muertas, y que los seis precios (tres niveles × dos monedas) estén y sean monótonos.
   Marca además la clave **inactiva y sin ningún cliente que la tenga**: un módulo retirado se le sigue
   sirviendo a quien lo contrató, pero cuando no lo tiene nadie, citarlo es código muerto que apaga algo en
   silencio. `SIN_VENDER_AUN` justifica lo contrario (`documentos_imprenta`: construido entero, sin activar).
@@ -335,6 +349,8 @@ cliente**: el documento describe lo que se firmó.
 | **219** | `diagnostico_leads.nivel_recomendado` / `respuestas_tamano`, **nullable**: a los leads viejos no se les inventa un nivel |
 | **220** | **Retirada de los addons de capacidad**: `multiempresa` y `multidossier` a `activo = false` y fuera de `modulos_activos` · caché `precio_mensual_usd` rehecha para toda la cartera · plantillas de correo `limite_alcanzado` y `socio_ampliado` |
 
+| **225** | **Precio propio en euros**: `modulos_catalogo.precio_{inicial,empresa,pro}_eur` (sembrados desde el dólar, editables a mano) · `clients.precio_mensual_eur` + `moneda_facturacion` · `moneda` en `payments`, `presupuestos_instalacion` y `presupuesto_parametros.tarifa_hora_eur` |
+
 > **No se borran, se desactivan.** Las dos filas siguen en `modulos_catalogo`: los anexos, presupuestos y
 > facturas ya emitidos citan la clave y necesitan su nombre para poder leerse dentro de diez años.
 
@@ -357,9 +373,9 @@ cliente**: el documento describe lo que se firmó.
   (manual puro); con Inventario → se cargan. No cambia la lógica de cálculo.
 - **Admin** — en el detalle de cliente (`src/app/admin/(protected)/clientes/[client_id]/`): UI de **toggle
   por módulo/funcionalidad** (agrupada por `tipo`; contabilidad incluida como un módulo toggleable más) que
-  actualiza `modulos_activos` y **recalcula** `precio_mensual_usd` = Σ precios de lo activo en la columna de
-  `clients.nivel`. Server action en `src/app/actions/clientes.ts`.
-- **Catálogo** — pantalla admin para CRUD de `modulos_catalogo` (**los tres precios**, `tipo`, `activo`), con
+  actualiza `modulos_activos` y **recalcula** `precio_mensual_usd`/`_eur` = Σ precios de lo activo en la
+  columna de `clients.nivel`. Server action en `src/app/actions/clientes.ts`.
+- **Catálogo** — pantalla admin para CRUD de `modulos_catalogo` (**los seis precios**, `tipo`, `activo`), con
   sembrado de columna y previsualización de impacto (§3.4).
 - **Constante `MODULOS`** — `src/lib/planes-constants.ts` (y los 3 modales de `/admin/planes`) se unifican a
   una sola fuente leída de `modulos_catalogo`.

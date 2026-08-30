@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { listarModulosParaPresupuesto, listarComerciales } from '@/app/actions/presupuestos'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
 import { normalizarNivel, type Nivel } from '@/lib/niveles'
+import { normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { nombresDeNiveles, limitesDeNiveles } from '@/lib/niveles-server'
 import { getSetting } from '@/app/actions/settings'
 import PresupuestoCalculadora from './PresupuestoCalculadora'
@@ -12,10 +13,10 @@ export const dynamic = 'force-dynamic'
 export default async function NuevoPresupuestoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string; cliente?: string; negocio?: string; responsable?: string; contacto?: string; modulos?: string; nivel?: string }>
+  searchParams: Promise<{ lead?: string; cliente?: string; negocio?: string; responsable?: string; contacto?: string; modulos?: string; nivel?: string; moneda?: string }>
 }) {
   const ctx = await requireAccesoPagina('presupuestos')
-  const { lead, cliente, negocio, responsable, contacto: contactoQs, modulos: modulosQs, nivel: nivelQs } = await searchParams
+  const { lead, cliente, negocio, responsable, contacto: contactoQs, modulos: modulosQs, nivel: nivelQs, moneda: monedaQs } = await searchParams
 
   // Los precios se cargan AQUÍ y viajan enteros a la calculadora, que se los pasa al
   // cálculo. La misma tanda llega luego a la acción de guardar, para que la vista previa y
@@ -37,6 +38,7 @@ export default async function NuevoPresupuestoPage({
     nombreNegocio: '', nombreResponsable: '', contacto: '',
     modulos: [] as string[],
     nivel: null as Nivel | null,
+    moneda: null as MonedaClaux | null,
   }
 
   // Presupuesto para un cliente en marcha: es el caso de la ampliación —contrata inventario
@@ -54,7 +56,7 @@ export default async function NuevoPresupuestoPage({
     // no es un lead del embudo, no hay teléfono que traer.
     const { data } = await db
       .from('clients')
-      .select('client_id, nombre_empresa, nombre_contacto, email_admin, modulos_activos, nivel')
+      .select('client_id, nombre_empresa, nombre_contacto, email_admin, modulos_activos, nivel, moneda_facturacion')
       .eq('client_id', cliente)
       .maybeSingle()
     if (data) {
@@ -73,6 +75,9 @@ export default async function NuevoPresupuestoPage({
         // Y su nivel, que es el que decide el precio de los módulos: la ampliación de un
         // cliente Inicial se cotiza a precio Inicial.
         nivel: normalizarNivel(data.nivel),
+        // Y su moneda: a un cliente al que se le factura en euros no se le cotiza la
+        // ampliación en dólares.
+        moneda: normalizarMonedaClaux(data.moneda_facturacion),
       }
     }
   }
@@ -90,6 +95,7 @@ export default async function NuevoPresupuestoPage({
       modulos: (modulosQs ?? '').split(',').map(c => c.trim())
         .filter(c => c && modulos.some(m => m.clave === c)),
       nivel: nivelQs ? normalizarNivel(nivelQs) : null,
+      moneda: monedaQs ? normalizarMonedaClaux(monedaQs) : null,
     }
   }
 
@@ -114,6 +120,8 @@ export default async function NuevoPresupuestoPage({
           // cambiarlo, pero arrancar en el que declaró el propio cliente evita
           // cotizarle un nivel donde ya sabemos que no cabe.
           nivel:             data.nivel_rec ? normalizarNivel(data.nivel_rec) : null,
+          // Un lead no tiene moneda: el comercial la elige al cotizar.
+          moneda:            null,
         }
       }
     }

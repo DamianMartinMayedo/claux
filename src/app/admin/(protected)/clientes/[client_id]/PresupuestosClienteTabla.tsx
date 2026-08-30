@@ -18,14 +18,18 @@ import {
 import { descargarPresupuesto } from '@/lib/pdf/presupuesto'
 import { importeCiclo } from '@/lib/billing'
 import { normalizarNivel, precioModulo, type Nivel, type ModuloPrecios } from '@/lib/niveles'
+import { importeClaux, normalizarMonedaClaux } from '@/lib/moneda-claux'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Detalle = Record<string, any>
-type DesgloseFase = { fase: string; horas: number; subtotalUsd: number }
+type DesgloseFase = { fase: string; horas: number; subtotal: number }
 type Revision = { linea: string; motivo: string }
 export type ModuloCatalogo = ModuloPrecios & { nombre: string }
 
-const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
+// La moneda la trae CADA presupuesto, no el cliente: uno de hace medio año en
+// dólares se lee en dólares aunque hoy se le facture en euros. Ese es justo el
+// punto de guardarla en la fila (mig. 225).
+const imp = (n: number, moneda: unknown) => importeClaux(n, moneda)
 
 function fmtFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -74,10 +78,11 @@ export default function PresupuestosClienteTabla({
   async function descargarPdf(incluir: 'todo' | 'instalacion' | 'suscripcion') {
     if (!detalle) return
     const claves: string[] = Array.isArray(detalle.modulos) ? detalle.modulos : []
+    const moneda = normalizarMonedaClaux(detalle.moneda)
     const mods = catalogo
       .filter(m => claves.includes(m.clave))
-      .map(m => ({ nombre: m.nombre, precio: precioModulo(m, detalle.nivel) }))
-    const mensual = Number(detalle.cuota_mensual_usd ?? 0)
+      .map(m => ({ nombre: m.nombre, precio: precioModulo(m, detalle.nivel, moneda) }))
+    const mensual = Number(detalle.cuota_mensual ?? 0)
     try {
       await descargarPresupuesto({
         numero: `PRE-${String(detalle.id).padStart(4, '0')}`,
@@ -87,14 +92,15 @@ export default function PresupuestosClienteTabla({
         contacto: detalle.contacto,
         desglose,
         horasTotal: Number(detalle.horas_total ?? 0),
-        tarifaHora: Number(detalle.tarifa_hora_usd ?? 0),
-        costeInstalacion: Number(detalle.coste_instalacion_usd ?? 0),
+        tarifaHora: Number(detalle.tarifa_hora ?? 0),
+        costeInstalacion: Number(detalle.coste_instalacion ?? 0),
         descuentoPct: Number(detalle.descuento_pct ?? 0),
-        totalInstalacion: Number(detalle.total_final_usd ?? detalle.coste_instalacion_usd ?? 0),
+        totalInstalacion: Number(detalle.total_final ?? detalle.coste_instalacion ?? 0),
         modulos: mods,
         cuotaMensual: mensual,
         cuotaAnual: importeCiclo(mensual, 'anual', descuentoAnualPct),
         descuentoAnualPct,
+        moneda,
         incluir,
       }, `PRE-${String(detalle.id).padStart(4, '0')}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
     } catch {
@@ -138,6 +144,7 @@ export default function PresupuestosClienteTabla({
     router.refresh()
   }
 
+  const monedaDet = normalizarMonedaClaux(detalle?.moneda)
   const desglose: DesgloseFase[] = Array.isArray(detalle?.desglose) ? detalle!.desglose : []
   const revisiones: Revision[] = Array.isArray(detalle?.revisiones) ? detalle!.revisiones : []
   const horasHanCambiado = horasReales !== horasRealesOriginales
@@ -167,6 +174,7 @@ export default function PresupuestosClienteTabla({
             {presupuestos.map(p => {
               const reales = p.horas_reales
               const seExcedio = reales != null && reales > p.horas_total
+              const moneda = normalizarMonedaClaux(p.moneda)
               return (
                 <tr
                   key={p.id}
@@ -186,7 +194,7 @@ export default function PresupuestosClienteTabla({
                       : <span className={seExcedio ? 'pres-horas-exceso' : undefined}>{reales}h</span>}
                   </td>
                   <td data-label="Instalación" className="col-num table-price">
-                    {usd(p.total_final_usd ?? p.coste_instalacion_usd)}
+                    {imp(p.total_final ?? p.coste_instalacion, moneda)}
                     {Number(p.descuento_pct) > 0 && (
                       <span className="text-xs-muted"> · −{Number(p.descuento_pct)}%</span>
                     )}
@@ -233,7 +241,8 @@ export default function PresupuestosClienteTabla({
         <ConfirmDialog
           title={`¿Eliminar el borrador de ${borrar.nombre_negocio}?`}
           body={<>
-            Se borra el presupuesto de <strong>{usd(borrar.total_final_usd ?? borrar.coste_instalacion_usd)}</strong>{' '}
+            Se borra el presupuesto de{' '}
+            <strong>{imp(borrar.total_final ?? borrar.coste_instalacion, borrar.moneda)}</strong>{' '}
             de instalación ({borrar.horas_total}h) guardado el {fmtFecha(borrar.created_at)}. No se puede deshacer.
           </>}
           confirmLabel="Eliminar"
@@ -279,7 +288,7 @@ export default function PresupuestosClienteTabla({
                       <div key={i} className="pres-fase-row">
                         <span className="pres-fase-nombre">{d.fase}</span>
                         <span className="pres-fase-horas">{d.horas}h</span>
-                        <span className="pres-fase-sub col-num">{usd(d.subtotalUsd)}</span>
+                        <span className="pres-fase-sub col-num">{imp(d.subtotal, monedaDet)}</span>
                       </div>
                     ))}
                   </div>
@@ -296,10 +305,10 @@ export default function PresupuestosClienteTabla({
                   <div className="pres-totales">
                     <p className="pres-bloque-titulo">Pago único · Instalación</p>
                     <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{detalle.horas_total}h</span></div>
-                    {Number(detalle.tarifa_hora_usd) > 0 && (
-                      <div><span className="pres-total-label">Tarifa aplicada</span><span className="pres-total-valor">{usd(detalle.tarifa_hora_usd)}/h</span></div>
+                    {Number(detalle.tarifa_hora) > 0 && (
+                      <div><span className="pres-total-label">Tarifa aplicada</span><span className="pres-total-valor">{imp(detalle.tarifa_hora, monedaDet)}/h</span></div>
                     )}
-                    <div><span className="pres-total-label">Coste instalación</span><span className="pres-total-valor">{usd(detalle.coste_instalacion_usd)}</span></div>
+                    <div><span className="pres-total-label">Coste instalación</span><span className="pres-total-valor">{imp(detalle.coste_instalacion, monedaDet)}</span></div>
                     {Number(detalle.descuento_pct) > 0 && (
                       <div className="pres-total-dto">
                         <span className="pres-total-label">
@@ -307,13 +316,13 @@ export default function PresupuestosClienteTabla({
                           {detalle.descuento_motivo && <em className="pres-dto-motivo"> · {detalle.descuento_motivo}</em>}
                         </span>
                         <span className="pres-total-valor">
-                          −{usd(Number(detalle.coste_instalacion_usd) - Number(detalle.total_final_usd))}
+                          −{imp(Number(detalle.coste_instalacion) - Number(detalle.total_final), monedaDet)}
                         </span>
                       </div>
                     )}
                     <div className="pres-total-final">
                       <span className="pres-total-label">Total a pagar una vez</span>
-                      <span className="pres-total-valor">{usd(detalle.total_final_usd ?? detalle.coste_instalacion_usd)}</span>
+                      <span className="pres-total-valor">{imp(detalle.total_final ?? detalle.coste_instalacion, monedaDet)}</span>
                     </div>
                   </div>
                   <div className="input-group pres-horas-reales">

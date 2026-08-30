@@ -7,13 +7,28 @@
 
 import { identificacionProveedor } from '../proveedor'
 import { clausulaFirmaElectronica, identificacionCliente, type DatosCliente, type DatosProveedor, type DocumentoResuelto } from '../render'
+import { NOMBRE_MONEDA_CLAUX, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
-export const VERSION_CONTRATO = 'contrato-2026-08'
+// La moneda está DENTRO del articulado (cláusula 5), así que el contrato es en
+// realidad dos textos y la versión tiene que distinguirlos: firmar el de dólares
+// no es haber firmado el de euros. Se resuelve con una variante por moneda y no
+// subiendo `2026-08` a `2026-09`, que obligaría a re-firmar también a los que
+// siguen en dólares y no han cambiado nada.
+//
+// El texto de la variante USD es idéntico carácter a carácter al de antes de la
+// mig. 225: su hash sigue casando y ninguna firma vigente se rompe.
+const BASE_CONTRATO = 'contrato-2026-08'
 
-export function construirContrato(cliente: DatosCliente, prov: DatosProveedor): DocumentoResuelto {
+export function versionContrato(moneda: unknown): string {
+  return `${BASE_CONTRATO}-${normalizarMonedaClaux(moneda).toLowerCase()}`
+}
+
+export function construirContrato(
+  cliente: DatosCliente, prov: DatosProveedor, moneda: MonedaClaux = 'USD',
+): DocumentoResuelto {
   return {
     tipo: 'contrato',
-    version: VERSION_CONTRATO,
+    version: versionContrato(moneda),
     titulo: 'Contrato de prestación de servicio',
     subtitulo: 'CLAUX — Cliente',
     cuerpo: [
@@ -62,8 +77,8 @@ export function construirContrato(cliente: DatosCliente, prov: DatosProveedor): 
         tipo: 'seccion',
         titulo: '5. Precio y forma de pago',
         parrafos: [
-          'El precio se factura en dólares estadounidenses (USD), según los módulos contratados y el '
-          + 'Anexo I vigente.',
+          `El precio se factura en ${NOMBRE_MONEDA_CLAUX[moneda]} (${moneda}), según los módulos `
+          + 'contratados y el Anexo I vigente.',
           'El Cliente puede optar por facturación mensual o anual; la modalidad anual puede tener un '
           + 'descuento sobre el importe mensual equivalente según promociones activas.',
           'Medios de pago aceptados: transferencia bancaria, link de pago, efectivo, o el medio que '

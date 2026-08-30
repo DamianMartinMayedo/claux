@@ -2,7 +2,11 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { AlertTriangle, CheckCircle, Clock, CreditCard, PauseCircle, Star, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting }   from '@/app/actions/settings'
-import { precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import {
+  precioMensualEfectivo, monedaDelCliente, esSocioHoy,
+  COLUMNAS_CONDICIONES, type CondicionesCliente,
+} from '@/lib/billing'
+import { totalPorMoneda, importesPorMoneda } from '@/lib/moneda-claux'
 import { COLUMNAS_EXENCION } from '@/lib/clientes/ciclo-vida'
 import ProximosVencer   from './ProximosVencer'
 
@@ -52,7 +56,7 @@ export default async function DashboardPage() {
       .lte('fecha_expiracion', fechaAvisoStr),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'DESACTIVADO').eq('es_prueba', false),
     supabase.from('clients').select(COLUMNAS_CONDICIONES).in('estado', ['ACTIVO', 'TRIAL']).eq('es_prueba', false),
-    supabase.from('payments').select('monto_usd, fecha, estado, client_id'),
+    supabase.from('payments').select('monto, moneda, fecha, estado, client_id'),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)
     supabase.from('clients')
       .select(`client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia, ${COLUMNAS_EXENCION}`)
@@ -87,18 +91,25 @@ export default async function DashboardPage() {
   // MRR: suma de la cuota EFECTIVA de activos + trial. Con el precio de catálogo el MRR
   // contaba dinero que nadie ingresa —un Socio CLAUX no paga y un descuento pactado no se
   // cobra—, y esa cifra es la que se mira para decidir.
-  const ingresosEstimados = (clientesActivosDatos ?? []).reduce(
-    (sum, c) => sum + precioMensualEfectivo(c), 0
-  )
+  // Y separado por moneda, nunca convertido: el MRR en euros y el MRR en dólares
+  // son dos cifras. Convertirlas para enseñar una sola las ata a la tasa del día,
+  // que es justo de lo que este trabajo saca a CLAUX (mig. 225).
+  // El cast es por la lista de columnas: al venir de una constante compartida (y no
+  // escrita a mano aquí), PostgREST no puede tipar la respuesta. Mismo apaño que en
+  // `listarPresupuestos`; a cambio, la lista de columnas no se desincroniza.
+  const cartera = (clientesActivosDatos ?? []) as unknown as CondicionesCliente[]
+  const ingresosEstimados = totalPorMoneda(cartera, monedaDelCliente, precioMensualEfectivo)
 
   // Ingresos del mes actual
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
   // Solo los pagos confirmados cuentan como ingreso, y nunca los de clientes de prueba.
   const confirmadosData = (pagosData ?? [])
     .filter(p => p.estado !== 'por_confirmar' && !idsPrueba.has(p.client_id))
-  const ingresosMes = confirmadosData
-    .filter(p => p.fecha?.startsWith(mesActual))
-    .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
+  // Cada cobro trae SU moneda: se agrupa por ella, no por la del cliente hoy.
+  const ingresosMes = totalPorMoneda(
+    confirmadosData.filter(p => p.fecha?.startsWith(mesActual)),
+    p => p.moneda, p => p.monto,
+  )
   const totalPagos = confirmadosData.length
 
   return (
@@ -174,7 +185,7 @@ export default async function DashboardPage() {
             <CreditCard size={20} />
           </div>
           <p className="metric-label">Ingresos este mes</p>
-          <p className="metric-value">${ingresosMes.toFixed(0)}</p>
+          <p className="metric-value">{importesPorMoneda(ingresosMes, 'USD', 0)}</p>
           <p className="metric-sub">{totalPagos} pago{totalPagos !== 1 ? 's' : ''} registrado{totalPagos !== 1 ? 's' : ''}</p>
         </div>
 
@@ -183,7 +194,7 @@ export default async function DashboardPage() {
             <TrendingUp size={20} />
           </div>
           <p className="metric-label">Ingresos estimados</p>
-          <p className="metric-value">${ingresosEstimados.toFixed(0)}</p>
+          <p className="metric-value">{importesPorMoneda(ingresosEstimados, 'USD', 0)}</p>
           <p className="metric-sub">Base de clientes activos + trial</p>
         </div>
       </div>

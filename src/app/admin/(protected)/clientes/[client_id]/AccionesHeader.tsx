@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia, retirarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
 import { estadoAlRetirarGracia } from '@/lib/clientes/ciclo-vida'
 import { esSocioHoy } from '@/lib/billing'
+import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
@@ -28,7 +29,13 @@ const METODO_LABEL: Record<string, string> = {
   tropipay: 'TropiPay', transferencia: 'Transferencia', efectivo: 'Efectivo',
 }
 
-type UltimoPago = { monto_usd: number; fecha_inicio: string; fecha_fin: string }
+type UltimoPago = {
+  monto: number
+  /** La del cobro anterior. Puede NO ser la de hoy: el prorrateo depende de eso. */
+  moneda: MonedaClaux
+  fecha_inicio: string
+  fecha_fin: string
+}
 
 type Props = {
   cliente: {
@@ -74,19 +81,29 @@ function daysBetween(fromStr: string, toStr: string): number {
   return Math.round((parseYMD(toStr).getTime() - parseYMD(fromStr).getTime()) / 86_400_000)
 }
 
+/**
+ * Crédito por los días ya pagados del período anterior.
+ *
+ * Se calcula SOLO si el cobro anterior fue en la misma moneda que este. Restarle
+ * euros a un importe en dólares da un número que no es dinero de ninguna de las dos,
+ * y el cliente puede pagar un mes en una y el siguiente en la otra (mig. 225). Cuando
+ * las monedas no coinciden se cobra el precio entero y se dice por qué.
+ */
 function calcProrata(
   fechaInicio: string,
   fechaExpActual: string | null,
   ultimoPago: UltimoPago | null,
   planPrice: number,
+  moneda: MonedaClaux,
 ): { overlapDays: number; dailyRate: number; credit: number; planPrice: number; suggestedNet: number } | null {
   if (!ultimoPago || !fechaInicio || !fechaExpActual) return null
+  if (ultimoPago.moneda !== moneda) return null
   if (fechaInicio >= fechaExpActual) return null
   const periodDays = daysBetween(ultimoPago.fecha_inicio, ultimoPago.fecha_fin)
   if (periodDays <= 0) return null
   const overlapDays = daysBetween(fechaInicio, fechaExpActual)
   if (overlapDays <= 0) return null
-  const dailyRate    = ultimoPago.monto_usd / periodDays
+  const dailyRate    = ultimoPago.monto / periodDays
   const credit       = dailyRate * overlapDays
   const suggestedNet = Math.max(0, planPrice - credit)
   return { overlapDays, dailyRate, credit, planPrice, suggestedNet }
@@ -124,6 +141,10 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
   // Pago — estado controlado
   const [montoSugerido, setMontoSugerido]     = useState('')
   const [montoBase, setMontoBase]             = useState(0)
+  const [moneda, setMoneda]                   = useState<MonedaClaux>('USD')
+  // El precio del ciclo en LAS DOS monedas: cambiar de moneda no convierte nada,
+  // coge el otro precio (que es propio, no una conversión del primero).
+  const [montos, setMontos]                   = useState<Record<MonedaClaux, number>>({ USD: 0, EUR: 0 })
   const [fechaInicio, setFechaInicio]         = useState('')
   const [fechaFin, setFechaFin]               = useState('')
   const [duracionDias, setDuracionDias]       = useState(30)
@@ -144,6 +165,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setDiasGracia(''); setFechaCalculada('—')
     setFechaInicio(''); setFechaFin(''); setMontoSugerido(''); setMontoBase(0)
     setDuracionDias(30); setCiclo('mensual'); setUltimoPago(null)
+    setMoneda('USD'); setMontos({ USD: 0, EUR: 0 })
   }, [])
 
   useModalKeyboard(!!modal, handleClose)
@@ -173,8 +195,10 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     const res = await obtenerDatosPagoDefecto(cliente.client_id)
     setLoadingPago(false)
     if (res.ok) {
-      setMontoSugerido(String(res.monto_sugerido))
-      setMontoBase(Number(res.monto_sugerido))
+      setMontos(res.monto_sugerido)
+      setMoneda(res.moneda)
+      setMontoSugerido(res.monto_sugerido[res.moneda].toFixed(2))
+      setMontoBase(res.monto_sugerido[res.moneda])
       setFechaInicio(res.fecha_inicio)
       setFechaFin(res.fecha_fin)
       setDuracionDias(res.duracion_dias)
@@ -215,11 +239,25 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     router.refresh()
   }
 
+  // El importe a cobrar sale del precio del ciclo en la moneda elegida, menos el
+  // crédito del período anterior si lo hay. Se recalcula igual al mover la fecha que
+  // al cambiar de moneda: son las dos entradas del mismo número.
+  function recalcularMonto(m: MonedaClaux, inicio: string) {
+    const base = montos[m] ?? 0
+    const pr = calcProrata(inicio, fechaExpActual, ultimoPago, base, m)
+    setMontoBase(base)
+    setMontoSugerido((pr ? pr.suggestedNet : base).toFixed(2))
+  }
+
   function onInicioChange(val: string) {
     setFechaInicio(val)
     if (val && duracionDias) setFechaFin(addDays(val, duracionDias))
-    const pr = calcProrata(val, fechaExpActual, ultimoPago, montoBase)
-    setMontoSugerido(pr ? String(pr.suggestedNet.toFixed(2)) : String(montoBase.toFixed(2)))
+    recalcularMonto(moneda, val)
+  }
+
+  function onMonedaChange(m: MonedaClaux) {
+    setMoneda(m)
+    recalcularMonto(m, fechaInicio)
   }
 
   async function handleSuspender() {
@@ -308,7 +346,12 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     fechaExpActual,
     ultimoPago,
     montoBase || parseFloat(montoSugerido) || 0,
+    moneda,
   )
+  // Había solape, pero el cobro anterior fue en la otra moneda: se explica en vez de
+  // dejar que el importe entero parezca un olvido.
+  const solapeOtraMoneda = !prorata && !!ultimoPago && ultimoPago.moneda !== moneda
+    && !!fechaInicio && !!fechaExpActual && fechaInicio < fechaExpActual
 
   const esActivo    = cliente.estado === 'ACTIVO' || cliente.estado === 'TRIAL'
   const hoyYMD = toYMD(new Date())
@@ -451,12 +494,19 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
               </div>
             )}
 
-            <div className="grid-cols-2">
+            <div className="grid-cols-3">
               <div className="input-group">
                 <label>Ciclo</label>
                 <div className="input input-display">
                   {ciclo === 'anual' ? 'Anual' : 'Mensual'} · {duracionDias} días
                 </div>
+              </div>
+              <div className="input-group">
+                <label>Moneda <span className="required">*</span></label>
+                <select name="moneda" className="input" required value={moneda}
+                  onChange={e => onMonedaChange(e.target.value as MonedaClaux)}>
+                  {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
               </div>
               <div className="input-group">
                 <label>Método <span className="required">*</span></label>
@@ -469,12 +519,13 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
             </div>
 
             <div className="input-group">
-              <label>Monto USD a cobrar</label>
-              <div className="input input-display">${(parseFloat(montoSugerido) || 0).toFixed(2)}</div>
-              <input type="hidden" name="monto_usd" value={montoSugerido} />
+              <label>Monto a cobrar</label>
+              <div className="input input-display">{importeClaux(parseFloat(montoSugerido) || 0, moneda)}</div>
+              <input type="hidden" name="monto" value={montoSugerido} />
               <span className="input-hint">
                 Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
-                {prorata && ` Ajustado por prorrateo: crédito $${prorata.credit.toFixed(2)} sobre $${prorata.planPrice.toFixed(2)}.`}
+                {prorata && ` Ajustado por prorrateo: crédito ${importeClaux(prorata.credit, moneda)} sobre ${importeClaux(prorata.planPrice, moneda)}.`}
+                {solapeOtraMoneda && ` El período anterior se cobró en ${ultimoPago!.moneda}: no se prorratea entre monedas.`}
               </span>
             </div>
 
@@ -523,10 +574,10 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
                 <Info aria-hidden />
                 <div className="pro-rata-details">
                   <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
-                  <span>Tarifa diaria período anterior: ${prorata.dailyRate.toFixed(4)}/día</span>
-                  <span>Crédito por días ya pagados: −${prorata.credit.toFixed(2)}</span>
+                  <span>Tarifa diaria período anterior: {importeClaux(prorata.dailyRate, moneda)}/día</span>
+                  <span>Crédito por días ya pagados: −{importeClaux(prorata.credit, moneda)}</span>
                   <span>
-                    <strong>Monto sugerido primer período: ${prorata.suggestedNet.toFixed(2)}</strong>
+                    <strong>Monto sugerido primer período: {importeClaux(prorata.suggestedNet, moneda)}</strong>
                     {' '}(ajustado arriba en el campo Monto)
                   </span>
                 </div>

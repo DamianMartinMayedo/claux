@@ -13,6 +13,7 @@ import {
 } from '@/lib/presupuesto/config'
 import { etiquetaDimension, type Dimension } from '@/lib/limites'
 import { NIVELES, precioModulo, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX, SIMBOLO_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import {
   crearPresupuesto,
   actualizarPresupuesto,
@@ -27,7 +28,9 @@ const GRUPOS: { label: string; tipo: string }[] = [
   { label: 'Addons',          tipo: 'addon' },
 ]
 
-const usd = (n: number) => `$${Number(n ?? 0).toFixed(2)}`
+// Toda esta pantalla habla en UNA moneda, la del presupuesto: no se convierte nada
+// entre ellas, ni la cuota ni la tarifa/hora (mig. 225).
+const imp = (n: number, moneda: MonedaClaux) => importeClaux(n, moneda)
 
 type Prefill = {
   diagnosticoId: number | null
@@ -38,6 +41,8 @@ type Prefill = {
   contacto: string
   modulos: string[]
   nivel: Nivel | null
+  /** En qué moneda se cotiza. Del cliente si es una ampliación; si no, dólares. */
+  moneda?: MonedaClaux | null
   // Campos que solo trae el modo edición, para reconstruir el snapshot completo del borrador
   // guardado. En alta van sin definir y caen a los valores por defecto de siempre.
   formato?: FormatoDatos | null
@@ -85,6 +90,7 @@ export default function PresupuestoCalculadora({
   const [contacto, setContacto]                   = useState(prefill.contacto)
   const [comercialEmail, setComercialEmail]       = useState(comercialEmailDefault)
   const [nivel, setNivel]                         = useState<Nivel>(nivelSugerido)
+  const [moneda, setMoneda]                       = useState<MonedaClaux>(prefill.moneda ?? 'USD')
   const [formato, setFormato]                     = useState<FormatoDatos>(prefill.formato ?? 'cero')
 
   const [modulosSel, setModulosSel] = useState<string[]>(prefill.modulos)
@@ -98,7 +104,16 @@ export default function PresupuestoCalculadora({
 
   // La palanca comercial: la tarifa/hora arranca en la base configurada y se puede pactar
   // para ESTE cliente, al céntimo. Antes solo se podía saltar de un escalón a otro.
+  const tarifaBase = moneda === 'EUR' ? parametros.tarifaHoraEur : parametros.tarifaHora
   const [tarifaHora, setTarifaHora] = useState(String(prefill.tarifaHora ?? parametros.tarifaHora))
+
+  // Al cambiar de moneda, la tarifa vuelve a la base de la nueva. Una tarifa pactada en
+  // dólares no significa nada en euros —no es el mismo número con otro símbolo— y
+  // dejarla puesta sería cotizar 20 €/h porque antes se habían pactado 20 $/h.
+  function onMonedaChange(m: MonedaClaux) {
+    setMoneda(m)
+    setTarifaHora(String(m === 'EUR' ? parametros.tarifaHoraEur : parametros.tarifaHora))
+  }
   const [descuento, setDescuento]   = useState(prefill.descuentoPct ? String(prefill.descuentoPct) : '')
   const [dtoMotivo, setDtoMotivo]   = useState(prefill.descuentoMotivo ?? '')
 
@@ -117,7 +132,7 @@ export default function PresupuestoCalculadora({
 
 
   const modulosElegidos = modulos.filter(m => modulosSel.includes(m.clave))
-  const cuotaMensual = modulosElegidos.reduce((s, m) => s + precioModulo(m, nivel), 0)
+  const cuotaMensual = modulosElegidos.reduce((s, m) => s + precioModulo(m, nivel, moneda), 0)
   const cuotaAnual   = importeCiclo(cuotaMensual, 'anual', descuentoAnualPct)
   const ahorroAnual  = Math.max(0, cuotaMensual * 12 - cuotaAnual)
 
@@ -150,7 +165,8 @@ export default function PresupuestoCalculadora({
     tarifaHoraOverride: Number(tarifaHora) || 0,
     descuentoPct: Number(descuento) || 0,
     fasesExcluidas: fasesFuera,
-  }, parametros), [modulosSel, volNum, formato, migDesea, migHoras, tarifaHora, descuento, fasesFuera, parametros])
+    moneda,
+  }, parametros), [modulosSel, volNum, formato, migDesea, migHoras, tarifaHora, descuento, fasesFuera, parametros, moneda])
 
   // Los campos de volumen salen de los propios parámetros: al añadir una línea en
   // Configuración aparece su campo, sin tocar esta pantalla. Los de una fase excluida NO se
@@ -191,6 +207,7 @@ export default function PresupuestoCalculadora({
       nombreResponsable,
       contacto,
       nivel,
+      moneda,
       modulos: modulosSel,
       volumenes: volNum,
       formato,
@@ -226,7 +243,7 @@ export default function PresupuestoCalculadora({
           <div className="success-icon-circle"><Check size={28} strokeWidth={2.5} /></div>
           <h1 className="modal-title modal-success-title">{editando ? 'Cambios guardados' : 'Presupuesto guardado'}</h1>
           <p className="modal-success-description">
-            {nombreNegocio} · {resultado.horasTotal}h · {usd(resultado.totalFinalUsd)} de instalación · {usd(cuotaMensual)}/mes.
+            {nombreNegocio} · {resultado.horasTotal}h · {imp(resultado.totalFinal, moneda)} de instalación · {imp(cuotaMensual, moneda)}/mes.
           </p>
           {creado.aviso && (
             <div className={`alert ${creado.tono === 'warning' ? 'alert-warning' : 'alert-info'}`}>
@@ -305,6 +322,18 @@ export default function PresupuestoCalculadora({
                 </select>
               </div>
               <div className="seg-field">
+                <span className="seg-field-label">Moneda</span>
+                <div className="seg">
+                  {MONEDAS_CLAUX.map(m => (
+                    <label key={m} className="seg-opt">
+                      <input type="radio" name="moneda" value={m} checked={moneda === m}
+                        onChange={() => onMonedaChange(m)} />
+                      <span>{m}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="seg-field">
                 <span className="seg-field-label">Nivel</span>
                 <div className="seg">
                   {NIVELES.map(t => (
@@ -346,14 +375,14 @@ export default function PresupuestoCalculadora({
                   <p className="mod-list-label">{g.label}</p>
                   {items.map(m => {
                     const activo = modulosSel.includes(m.clave)
-                    const precio = precioModulo(m, nivel)
+                    const precio = precioModulo(m, nivel, moneda)
                     return (
                       <label key={m.clave} className="mod-row">
                         <span className="mod-row-main">
                           <span className="mod-row-name">{m.nombre}</span>
                         </span>
                         <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
-                          {precio > 0 ? `+${usd(precio)}` : 'Gratis'}
+                          {precio > 0 ? `+${imp(precio, moneda)}` : 'Gratis'}
                         </span>
                         <span className="switch">
                           <input type="checkbox" checked={activo}
@@ -481,12 +510,12 @@ export default function PresupuestoCalculadora({
             <div className="pres-tarifa">
               <label htmlFor="p-tarifa">Tarifa por hora</label>
               <div className="pres-tarifa-campo">
-                <span className="pres-tarifa-moneda">$</span>
+                <span className="pres-tarifa-moneda">{SIMBOLO_CLAUX[moneda]}</span>
                 <input id="p-tarifa" type="number" min="0" step="any" className="input"
                   value={tarifaHora} onChange={e => setTarifaHora(e.target.value)} />
               </div>
-              {Number(tarifaHora) !== parametros.tarifaHora && (
-                <span className="input-hint">Base: {usd(parametros.tarifaHora)}/h</span>
+              {Number(tarifaHora) !== tarifaBase && (
+                <span className="input-hint">Base: {imp(tarifaBase, moneda)}/h</span>
               )}
             </div>
 
@@ -502,7 +531,7 @@ export default function PresupuestoCalculadora({
                   <div className="pres-fase-row">
                     <span className="pres-fase-nombre">{d.fase}</span>
                     <span className="pres-fase-horas">{d.horas}h</span>
-                    <span className="pres-fase-sub col-num">{usd(d.subtotalUsd)}</span>
+                    <span className="pres-fase-sub col-num">{imp(d.subtotal, moneda)}</span>
                   </div>
                   {/* Cada línea con su cuenta: «4 · 1h base + 3 × 0,5h». Es lo que se le lee
                       en voz alta al cliente cuando pregunta de dónde sale el número. */}
@@ -559,17 +588,17 @@ export default function PresupuestoCalculadora({
               <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{resultado.horasTotal}h</span></div>
               <div>
                 <span className="pres-total-label">Coste instalación</span>
-                <span className="pres-total-valor">{usd(resultado.costeInstalacionUsd)}</span>
+                <span className="pres-total-valor">{imp(resultado.costeInstalacion, moneda)}</span>
               </div>
-              {resultado.descuentoUsd > 0 && (
+              {resultado.descuento > 0 && (
                 <div className="pres-total-dto">
                   <span className="pres-total-label">Descuento ({Number(descuento)}%)</span>
-                  <span className="pres-total-valor">−{usd(resultado.descuentoUsd)}</span>
+                  <span className="pres-total-valor">−{imp(resultado.descuento, moneda)}</span>
                 </div>
               )}
               <div className="pres-total-final">
                 <span className="pres-total-label">Total a pagar una vez</span>
-                <span className="pres-total-valor">{usd(resultado.totalFinalUsd)}</span>
+                <span className="pres-total-valor">{imp(resultado.totalFinal, moneda)}</span>
               </div>
             </div>
 
@@ -577,18 +606,18 @@ export default function PresupuestoCalculadora({
               <p className="pres-bloque-titulo">Suscripción · {modulosElegidos.length} contratado{modulosElegidos.length !== 1 ? 's' : ''}</p>
               <div className="pres-total-final">
                 <span className="pres-total-label">Cada mes</span>
-                <span className="pres-total-valor">{usd(cuotaMensual)}</span>
+                <span className="pres-total-valor">{imp(cuotaMensual, moneda)}</span>
               </div>
               {cuotaMensual > 0 && (
                 <>
                   <div>
                     <span className="pres-total-label">Pagando por año (−{descuentoAnualPct}%)</span>
-                    <span className="pres-total-valor">{usd(cuotaAnual)}</span>
+                    <span className="pres-total-valor">{imp(cuotaAnual, moneda)}</span>
                   </div>
                   {ahorroAnual > 0 && (
                     <div>
                       <span className="pres-total-label">Ahorro anual</span>
-                      <span className="pres-total-valor">{usd(ahorroAnual)}</span>
+                      <span className="pres-total-valor">{imp(ahorroAnual, moneda)}</span>
                     </div>
                   )}
                 </>

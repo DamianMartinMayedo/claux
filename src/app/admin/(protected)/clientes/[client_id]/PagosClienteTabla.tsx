@@ -17,19 +17,23 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { confirmarPago, eliminarPago } from '@/app/actions/pagos'
 import { ajustarCobroConfiguracion } from '@/app/actions/presupuestos'
+import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 export type PagoFicha = {
   pago_id:        string
   concepto:       string | null
   estado:         string | null
-  monto_usd:      number | null
+  monto:      number | null
+  /** La del cobro, no la del cliente: un pago viejo en dólares se lee en dólares
+   *  aunque hoy se le facture en euros (mig. 225). El historial no se reetiqueta. */
+  moneda:         string | null
   metodo:         string | null
   fecha:          string | null
   presupuesto_id: number | null
 }
 
 /** Presupuestos aprobados del cliente, del más reciente al más antiguo. */
-export type PresupuestoRef = { id: number; total: number }
+export type PresupuestoRef = { id: number; total: number; moneda: MonedaClaux }
 
 type Accion = 'confirmar' | 'ajustar' | 'eliminar'
 type Pendiente = { accion: Accion; pago: PagoFicha; objetivo: PresupuestoRef | null }
@@ -40,7 +44,8 @@ const METODO_LABEL: Record<string, string> = {
   efectivo:      'Efectivo',
 }
 
-const usd = (n: number | null | undefined) => `$${Number(n ?? 0).toFixed(2)}`
+const monedaDe = (x: { moneda: string | null }) => normalizarMonedaClaux(x.moneda)
+const imp = (n: number | null | undefined, m: unknown) => importeClaux(n, m)
 
 function formatFecha(fecha: string | null) {
   if (!fecha) return '—'
@@ -110,17 +115,23 @@ export default function PagosClienteTabla({
             {pagos.map(p => {
               const porConfirmar = p.estado === 'por_confirmar'
               const objetivo     = presupuestoDe(p)
+              const moneda       = monedaDe(p)
               // Ajustar solo se ofrece si hay algo que ajustar: si la cifra ya es
-              // la del presupuesto, el botón sobra.
-              const desajustado  = !!objetivo && Math.abs(Number(p.monto_usd ?? 0) - objetivo.total) > 0.005
+              // la del presupuesto, el botón sobra. LA MONEDA CUENTA COMO CIFRA: si
+              // el cliente re-firmó en euros, el cobro pendiente en dólares está
+              // desajustado aunque el número sea el mismo (no se convierte, se
+              // rehace en la moneda del presupuesto vigente).
+              const desajustado  = !!objetivo && (
+                Math.abs(Number(p.monto ?? 0) - objetivo.total) > 0.005 || objetivo.moneda !== moneda
+              )
 
               return (
                 <tr key={p.pago_id}>
                   <td data-label="Fecha" className="table-muted">{formatFecha(p.fecha)}</td>
                   <td data-label="Monto" className="col-num table-price">
-                    {usd(p.monto_usd)}
+                    {imp(p.monto, moneda)}
                     {desajustado && (
-                      <span className="text-xs-muted"> · presupuesto {usd(objetivo.total)}</span>
+                      <span className="text-xs-muted"> · presupuesto {imp(objetivo.total, objetivo.moneda)}</span>
                     )}
                   </td>
                   <td data-label="Estado">
@@ -174,7 +185,7 @@ export default function PagosClienteTabla({
           body={<>
             Marca como cobrado <strong>{pendiente.pago.pago_id}</strong> de {clienteNombre}
             {' '}({pendiente.pago.concepto === 'configuracion' ? 'configuración' : 'suscripción'})
-            {' '}por <strong>{usd(pendiente.pago.monto_usd)} USD</strong>. A partir de aquí cuenta
+            {' '}por <strong>{imp(pendiente.pago.monto, monedaDe(pendiente.pago))}</strong>. A partir de aquí cuenta
             como ingreso y deja de ajustarse solo. Hazlo cuando hayas verificado el dinero.
           </>}
           confirmLabel="Confirmar cobro"
@@ -192,15 +203,15 @@ export default function PagosClienteTabla({
             /* Un presupuesto a cero (100% de descuento) no deja un cobro de $0 en
                la ficha: se retira, y hay que decirlo antes de hacerlo. */
             <>
-              El presupuesto aprobado queda en <strong>$0.00</strong>, así que el cobro de{' '}
-              <strong>{usd(pendiente.pago.monto_usd)} USD</strong> se retira del historial:
-              no hay nada que cobrarle a {clienteNombre}.
+              El presupuesto aprobado queda en <strong>{imp(0, pendiente.objetivo.moneda)}</strong>, así
+              que el cobro de <strong>{imp(pendiente.pago.monto, monedaDe(pendiente.pago))}</strong> se
+              retira del historial: no hay nada que cobrarle a {clienteNombre}.
             </>
           ) : (
             <>
-              El cobro pasa de <strong>{usd(pendiente.pago.monto_usd)}</strong> a{' '}
-              <strong>{usd(pendiente.objetivo.total)} USD</strong>, que es lo que vale hoy el
-              presupuesto aprobado. El cliente verá esa cifra en su panel.
+              El cobro pasa de <strong>{imp(pendiente.pago.monto, monedaDe(pendiente.pago))}</strong> a{' '}
+              <strong>{imp(pendiente.objetivo.total, pendiente.objetivo.moneda)}</strong>, que es lo que
+              vale hoy el presupuesto aprobado. El cliente verá esa cifra en su panel.
             </>
           )}
           confirmLabel={pendiente.objetivo.total <= 0 ? 'Retirar cobro' : 'Ajustar cobro'}
@@ -216,7 +227,7 @@ export default function PagosClienteTabla({
           title={`¿Eliminar ${pendiente.pago.pago_id}?`}
           body={<>
             Se borra del historial de {clienteNombre} el cobro de{' '}
-            <strong>{usd(pendiente.pago.monto_usd)} USD</strong>. Está por confirmar, así que no
+            <strong>{imp(pendiente.pago.monto, monedaDe(pendiente.pago))}</strong>. Está por confirmar, así que no
             había entrado dinero: no se toca la suscripción. No se puede deshacer.
           </>}
           confirmLabel="Eliminar"

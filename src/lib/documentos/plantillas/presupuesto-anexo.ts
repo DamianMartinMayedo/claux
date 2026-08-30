@@ -8,9 +8,13 @@
 //
 // La VERSIÓN codifica el contenido: si el presupuesto cambia (otro módulo, otra
 // tarifa), cambia la versión, y como la firma es única por (cliente, tipo,
-// versión), el cambio exige una firma nueva en vez de quedar con la vieja.
+// versión), el cambio exige una firma nueva en vez de quedar con la vieja. La
+// moneda va DENTRO de la versión y no se deduce del importe: con la siembra a la
+// par (mig. 225) «35» es el mismo número en las dos, y un Anexo en euros habría
+// pasado por firmado con la firma del de dólares.
 
 import type { DatosCliente, DatosProveedor, DocumentoResuelto, Elemento } from '../render'
+import { NOMBRE_MONEDA_CLAUX, type MonedaClaux } from '@/lib/moneda-claux'
 
 export interface LineaAnexo {
   concepto: string
@@ -19,9 +23,11 @@ export interface LineaAnexo {
 }
 
 export interface AnexoInput {
-  /** Versión que sella este presupuesto (p. ej. 'presupuesto-42' o 'modulos-…'). */
+  /** Versión que sella este presupuesto (p. ej. 'presupuesto-42-usd-…' o 'modulos-eur-…'). */
   version:          string
   fuente:           'presupuesto' | 'modulos'
+  /** Moneda de facturación del Cliente: la del importe periódico y la del cierre. */
+  moneda:           MonedaClaux
   lineas:           LineaAnexo[]
   periodicidad:     string   // 'Mensual' | 'Anual'
   importeInicial:   string   // suma inicial (config + primer período), ya formateada
@@ -71,9 +77,9 @@ export function construirPresupuestoAnexo(
   cuerpo.push({
     tipo: 'seccion',
     parrafos: [
-      'Los importes se facturan en dólares estadounidenses (USD) conforme a la cláusula 5 del '
-      + 'Contrato. Cualquier cambio en los módulos contratados se reflejará en la facturación del '
-      + 'período siguiente.',
+      `Los importes se facturan en ${NOMBRE_MONEDA_CLAUX[anexo.moneda]} (${anexo.moneda}) conforme `
+      + 'a la cláusula 5 del Contrato. Cualquier cambio en los módulos contratados se reflejará en '
+      + 'la facturación del período siguiente.',
     ],
   })
 

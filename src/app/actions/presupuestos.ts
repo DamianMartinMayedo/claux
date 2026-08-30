@@ -7,17 +7,15 @@ import { revalidatePath } from 'next/cache'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
 import type { FormatoDatos } from '@/lib/presupuesto/config'
-import { normalizarNivel, sumarModulos, type Nivel, type ModuloPrecios } from '@/lib/niveles'
+import { COLUMNAS_PRECIO, normalizarNivel, sumarModulos, type Nivel, type ModuloPrecios } from '@/lib/niveles'
+import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
-export interface ModuloPresupuesto {
+export interface ModuloPresupuesto extends ModuloPrecios {
   clave:   string
   nombre:  string
   tipo:    string
   es_base: boolean
-  precio_inicial_usd: number
-  precio_empresa_usd: number
-  precio_pro_usd:     number
 }
 
 export interface Comercial {
@@ -44,6 +42,9 @@ export interface CrearPresupuestoInput {
   /** Solo elige el precio de los MÓDULOS (cuota mensual). La hora de instalación tiene
    *  tarifa/hora única, configurable y negociable por cliente. */
   nivel:              Nivel
+  /** En qué moneda se emite. Es una decisión comercial del presupuesto, no del cliente:
+   *  el mismo negocio puede tener uno en euros y otro en dólares (y elegir después). */
+  moneda:             MonedaClaux
   modulos:            string[]
   volumenes:          Record<string, number>
   formato:            FormatoDatos
@@ -62,17 +63,25 @@ export interface PresupuestoRow {
   comercial_nombre:      string | null
   nombre_negocio:        string
   contacto:              string | null
-  nivel:                 string
-  horas_total:           number
-  coste_instalacion_usd: number
-  cuota_mensual_usd:     number
-  horas_reales:          number | null
-  estado:                string
-  client_id:             string | null
-  tarifa_hora_usd:       number
-  descuento_pct:         number
-  total_final_usd:       number
+  nivel:             string
+  moneda:            MonedaClaux
+  horas_total:       number
+  coste_instalacion: number
+  cuota_mensual:     number
+  horas_reales:      number | null
+  estado:            string
+  client_id:         string | null
+  tarifa_hora:       number
+  descuento_pct:     number
+  total_final:       number
 }
+
+// Las columnas del listado, en un sitio: la ficha del cliente y el listado general
+// leen lo mismo y se desincronizaban a mano cada vez que aparecía una columna.
+const COLUMNAS_LISTADO =
+  'id, created_at, comercial_nombre, nombre_negocio, contacto, nivel, moneda, horas_total, '
+  + 'coste_instalacion, cuota_mensual, horas_reales, estado, client_id, tarifa_hora, '
+  + 'descuento_pct, total_final'
 
 // ── Catálogo de módulos activos (en vivo) para el formulario ──
 export async function listarModulosParaPresupuesto(): Promise<ModuloPresupuesto[]> {
@@ -80,7 +89,7 @@ export async function listarModulosParaPresupuesto(): Promise<ModuloPresupuesto[
   const db = createAdminClient()
   const { data } = await db
     .from('modulos_catalogo')
-    .select('clave, nombre, tipo, es_base, precio_inicial_usd, precio_empresa_usd, precio_pro_usd')
+    .select(`clave, nombre, tipo, es_base, ${COLUMNAS_PRECIO}`)
     .eq('activo', true)
     .order('orden')
   return (data ?? []) as ModuloPresupuesto[]
@@ -112,13 +121,13 @@ export async function listarComerciales(): Promise<Comercial[]> {
 // ── Cuota mensual (Σ precios de módulos contratados por la columna del nivel, en vivo) ──
 async function calcularCuotaMensual(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any, modulos: string[], nivel: Nivel,
+  db: any, modulos: string[], nivel: Nivel, moneda: MonedaClaux,
 ): Promise<number> {
   const { data } = await db
     .from('modulos_catalogo')
-    .select('clave, precio_inicial_usd, precio_empresa_usd, precio_pro_usd')
+    .select(`clave, ${COLUMNAS_PRECIO}`)
     .eq('activo', true)
-  return sumarModulos((data ?? []) as ModuloPrecios[], modulos, nivel)
+  return sumarModulos((data ?? []) as ModuloPrecios[], modulos, nivel, moneda)
 }
 
 // ── Listar presupuestos guardados ──
@@ -127,9 +136,9 @@ export async function listarPresupuestos(): Promise<PresupuestoRow[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('presupuestos_instalacion')
-    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, nivel, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
+    .select(COLUMNAS_LISTADO)
     .order('created_at', { ascending: false })
-  return (data ?? []) as PresupuestoRow[]
+  return (data ?? []) as unknown as PresupuestoRow[]
 }
 
 /**
@@ -144,10 +153,10 @@ export async function listarPresupuestosDeCliente(clientId: string): Promise<Pre
   const db = createAdminClient()
   const { data } = await db
     .from('presupuestos_instalacion')
-    .select('id, created_at, comercial_nombre, nombre_negocio, contacto, nivel, horas_total, coste_instalacion_usd, cuota_mensual_usd, horas_reales, estado, client_id, tarifa_hora_usd, descuento_pct, total_final_usd')
+    .select(COLUMNAS_LISTADO)
     .eq('client_id', clientId)
     .order('created_at', { ascending: false })
-  return (data ?? []) as PresupuestoRow[]
+  return (data ?? []) as unknown as PresupuestoRow[]
 }
 
 // ── Detalle completo de un presupuesto ──
@@ -173,6 +182,7 @@ export async function obtenerPresupuesto(id: number) {
 // enseñar en pantalla.
 type SnapshotPresupuesto = {
   nivel:           Nivel
+  moneda:          MonedaClaux
   nombreNegocio:   string
   descuentoPct:    number
   descuentoMotivo: string
@@ -187,6 +197,7 @@ async function calcularSnapshotPresupuesto(
   const nombreNegocio = (input.nombreNegocio || '').trim()
   if (!nombreNegocio) return { ok: false, error: 'El nombre del negocio es obligatorio.' }
   const nivel: Nivel = normalizarNivel(input.nivel)
+  const moneda = normalizarMonedaClaux(input.moneda)
 
   // Un descuento sin motivo es un descuento que dentro de tres meses nadie sabe explicar:
   // por qué ESTE cliente pagó $700 y no $1.000 es justo lo que hay que poder mirar después.
@@ -206,15 +217,16 @@ async function calcularSnapshotPresupuesto(
     modulos:   input.modulos ?? [],
     volumenes: input.volumenes ?? {},
     formato:   input.formato,
+    moneda,
     historicoHorasManual,
     tarifaHoraOverride: Number(input.tarifaHora) || 0,
     descuentoPct,
     fasesExcluidas,
   }, parametros)
 
-  const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], nivel)
+  const cuotaMensual = await calcularCuotaMensual(db, input.modulos ?? [], nivel, moneda)
 
-  return { ok: true, snap: { nivel, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } }
+  return { ok: true, snap: { nivel, moneda, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } }
 }
 
 // ── El cobro de configuración sigue a su presupuesto ─────────────────────────
@@ -236,16 +248,17 @@ interface ResultadoCobro {
   accion:  AccionCobro
   /** Importe que ha quedado (o el del cobro congelado, para poder avisar). */
   monto?:  number
+  moneda?: MonedaClaux
   pagoId?: string
 }
 
 /** Lo que le pasó al cobro, en una frase para el toast (null = no pasó nada que contar). */
 function avisoCobro(r: ResultadoCobro): string | null {
-  const usd = (n?: number) => `$${(n ?? 0).toFixed(2)}`
-  if (r.accion === 'actualizado') return `El cobro de configuración pasa a ${usd(r.monto)}.`
-  if (r.accion === 'creado')      return `Se creó el cobro de configuración ${r.pagoId} por ${usd(r.monto)} (por confirmar).`
-  if (r.accion === 'eliminado')   return 'Se retiró el cobro de configuración: el presupuesto queda en $0.'
-  if (r.accion === 'congelado')   return `Ojo: el cobro de configuración (${usd(r.monto)}) ya está confirmado y no se toca. Ajústalo a mano si procede.`
+  const imp = (n?: number) => importeClaux(n ?? 0, r.moneda)
+  if (r.accion === 'actualizado') return `El cobro de configuración pasa a ${imp(r.monto)}.`
+  if (r.accion === 'creado')      return `Se creó el cobro de configuración ${r.pagoId} por ${imp(r.monto)} (por confirmar).`
+  if (r.accion === 'eliminado')   return `Se retiró el cobro de configuración: el presupuesto queda en ${imp(0)}.`
+  if (r.accion === 'congelado')   return `Ojo: el cobro de configuración (${imp(r.monto)}) ya está confirmado y no se toca. Ajústalo a mano si procede.`
   return null
 }
 
@@ -270,12 +283,17 @@ async function sincronizarCobroConfiguracion(
 ): Promise<ResultadoCobro> {
   const { data: pres } = await db
     .from('presupuestos_instalacion')
-    .select('id, client_id, estado, total_final_usd, nombre_negocio')
+    .select('id, client_id, estado, total_final, moneda, nombre_negocio')
     .eq('id', presupuestoId)
     .maybeSingle()
   if (!pres?.client_id) return { accion: 'ninguna' }
 
-  const total = Number(pres.total_final_usd) || 0
+  const total = Number(pres.total_final) || 0
+  // El cobro hereda la moneda DEL PRESUPUESTO, no la de facturación del cliente:
+  // la instalación se pactó en una cifra concreta y esa cifra no se reetiqueta
+  // porque el cliente decida pagar la cuota en la otra moneda (decisión del dueño:
+  // puede tener presupuestos en las dos a la vez).
+  const moneda = normalizarMonedaClaux(pres.moneda)
   // Un BORRADOR no es un compromiso: puede mover el cobro que ya es suyo, pero no
   // adoptar uno suelto ni inventarse uno nuevo. Si no, editar un presupuesto en
   // negociación le dejaría al cliente un «pendiente» en su panel —o peor, le
@@ -286,7 +304,7 @@ async function sincronizarCobroConfiguracion(
   // sin ligar (dato anterior a la mig. 204): es el mismo cobro, sin etiqueta.
   const { data: propio } = await db
     .from('payments')
-    .select('pago_id, estado, monto_usd')
+    .select('pago_id, estado, monto, moneda')
     .eq('presupuesto_id', presupuestoId)
     .eq('concepto', 'configuracion')
     // Si por lo que sea hubiera dos, manda el confirmado ('confirmado' < 'por_confirmar'):
@@ -299,7 +317,7 @@ async function sincronizarCobroConfiguracion(
   if (!cobro && esCompromiso) {
     const { data: suelto } = await db
       .from('payments')
-      .select('pago_id, estado, monto_usd')
+      .select('pago_id, estado, monto, moneda')
       .eq('client_id', pres.client_id)
       .eq('concepto', 'configuracion')
       .eq('estado', 'por_confirmar')
@@ -313,7 +331,7 @@ async function sincronizarCobroConfiguracion(
   // Confirmado = dinero cobrado: es un hecho, no una previsión. Se devuelve para
   // que quien llame pueda avisar de que la cifra ya no cuadra con el presupuesto.
   if (cobro && cobro.estado !== 'por_confirmar') {
-    return { accion: 'congelado', monto: Number(cobro.monto_usd) || 0, pagoId: cobro.pago_id }
+    return { accion: 'congelado', monto: Number(cobro.monto) || 0, moneda: normalizarMonedaClaux(cobro.moneda), pagoId: cobro.pago_id }
   }
 
   // Presupuesto a cero (100% de descuento, cortesía): no hay nada que cobrar, y
@@ -324,22 +342,27 @@ async function sincronizarCobroConfiguracion(
     await db.from('payments').delete().eq('pago_id', cobro.pago_id)
     await logActividad(db, {
       user_email: ctx.email, entity: 'pago', entity_id: cobro.pago_id, action: 'eliminar',
-      description: `Eliminó el cobro de configuración ${cobro.pago_id} — el presupuesto de ${pres.nombre_negocio} queda en $0`,
+      description: `Eliminó el cobro de configuración ${cobro.pago_id} — el presupuesto de ${pres.nombre_negocio} queda en ${importeClaux(0, moneda)}`,
     })
-    return { accion: 'eliminado', pagoId: cobro.pago_id }
+    return { accion: 'eliminado', moneda, pagoId: cobro.pago_id }
   }
 
   if (cobro) {
-    const antes = Number(cobro.monto_usd) || 0
+    const antes       = Number(cobro.monto) || 0
+    const monedaAntes = normalizarMonedaClaux(cobro.moneda)
     await db.from('payments')
-      .update({ monto_usd: total, presupuesto_id: presupuestoId })
+      .update({ monto: total, moneda, presupuesto_id: presupuestoId })
       .eq('pago_id', cobro.pago_id)
-    if (Math.abs(antes - total) < 0.005) return { accion: 'ninguna', monto: total, pagoId: cobro.pago_id }
+    // Mismo importe en otra moneda NO es «sin cambios»: $700 y €700 son cifras
+    // distintas aunque el número coincida, y con la siembra a la par coinciden mucho.
+    if (monedaAntes === moneda && Math.abs(antes - total) < 0.005) {
+      return { accion: 'ninguna', monto: total, moneda, pagoId: cobro.pago_id }
+    }
     await logActividad(db, {
       user_email: ctx.email, entity: 'pago', entity_id: cobro.pago_id, action: 'editar',
-      description: `Ajustó el cobro de configuración ${cobro.pago_id} de $${antes.toFixed(2)} a $${total.toFixed(2)} — presupuesto de ${pres.nombre_negocio}`,
+      description: `Ajustó el cobro de configuración ${cobro.pago_id} de ${importeClaux(antes, monedaAntes)} a ${importeClaux(total, moneda)} — presupuesto de ${pres.nombre_negocio}`,
     })
-    return { accion: 'actualizado', monto: total, pagoId: cobro.pago_id }
+    return { accion: 'actualizado', monto: total, moneda, pagoId: cobro.pago_id }
   }
 
   // No hay cobro que ajustar: se crea, y solo si el presupuesto ya es un
@@ -359,7 +382,8 @@ async function sincronizarCobroConfiguracion(
     presupuesto_id: presupuestoId,
     concepto:       'configuracion',
     estado:         'por_confirmar',
-    monto_usd:      total,
+    monto:          total,
+    moneda,
     metodo:         'transferencia',
     fecha:          hoyEnTz(),
     notas:          'Pago único de configuración inicial',
@@ -368,9 +392,9 @@ async function sincronizarCobroConfiguracion(
 
   await logActividad(db, {
     user_email: ctx.email, entity: 'pago', entity_id: pagoId, action: 'registrar',
-    description: `Pre-creó el cobro de configuración ${pagoId} (por confirmar) — $${total.toFixed(2)} del presupuesto de ${pres.nombre_negocio}`,
+    description: `Pre-creó el cobro de configuración ${pagoId} (por confirmar) — ${importeClaux(total, moneda)} del presupuesto de ${pres.nombre_negocio}`,
   })
-  return { accion: 'creado', monto: total, pagoId }
+  return { accion: 'creado', monto: total, moneda, pagoId }
 }
 
 // ── Crear (guardar) un presupuesto: recálculo autoritativo en servidor ──
@@ -382,7 +406,7 @@ export async function crearPresupuesto(
 
   const calc = await calcularSnapshotPresupuesto(db, input)
   if (!calc.ok) return { ok: false, error: calc.error }
-  const { nivel, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
+  const { nivel, moneda, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
 
   const { data, error } = await db
     .from('presupuestos_instalacion')
@@ -395,6 +419,7 @@ export async function crearPresupuesto(
       nombre_responsable:    (input.nombreResponsable || '').trim() || null,
       contacto:              (input.contacto || '').trim() || null,
       nivel,
+      moneda,
       modulos:               input.modulos ?? [],
       volumenes:             input.volumenes ?? {},
       formato_datos:         input.formato,
@@ -405,14 +430,14 @@ export async function crearPresupuesto(
       desglose:              resultado.desglose,
       revisiones:            resultado.revisiones,
       horas_total:           resultado.horasTotal,
-      coste_instalacion_usd: resultado.costeInstalacionUsd,
-      cuota_mensual_usd:     cuotaMensual,
+      coste_instalacion: resultado.costeInstalacion,
+      cuota_mensual:     cuotaMensual,
       // Snapshot de lo negociado: un presupuesto de hace tres meses tiene que seguir
       // explicando su propio número cuando cambie la tarifa base.
-      tarifa_hora_usd:       resultado.tarifaHora,
+      tarifa_hora:       resultado.tarifaHora,
       descuento_pct:         descuentoPct,
       descuento_motivo:      descuentoMotivo || null,
-      total_final_usd:       resultado.totalFinalUsd,
+      total_final:       resultado.totalFinal,
     })
     .select('id')
     .single()
@@ -424,7 +449,7 @@ export async function crearPresupuesto(
     entity:      'presupuesto',
     entity_id:   String(data.id),
     action:      'crear',
-    description: `Guardó presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
+    description: `Guardó presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · ${importeClaux(resultado.totalFinal, moneda)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · ${importeClaux(cuotaMensual, moneda)}/mes`,
   })
 
   revalidatePath('/admin/presupuestos')
@@ -455,7 +480,7 @@ export async function actualizarPresupuesto(
 
   const calc = await calcularSnapshotPresupuesto(db, input)
   if (!calc.ok) return { ok: false, error: calc.error }
-  const { nivel, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
+  const { nivel, moneda, nombreNegocio, descuentoPct, descuentoMotivo, cuotaMensual, resultado } = calc.snap
 
   // No se tocan `diagnostico_id`, `client_id`, `estado`, `horas_reales` ni `created_at`: son la
   // identidad y el ciclo de vida del presupuesto, no lo que se está reeditando.
@@ -468,6 +493,7 @@ export async function actualizarPresupuesto(
       nombre_responsable:    (input.nombreResponsable || '').trim() || null,
       contacto:              (input.contacto || '').trim() || null,
       nivel,
+      moneda,
       modulos:               input.modulos ?? [],
       volumenes:             input.volumenes ?? {},
       formato_datos:         input.formato,
@@ -475,12 +501,12 @@ export async function actualizarPresupuesto(
       desglose:              resultado.desglose,
       revisiones:            resultado.revisiones,
       horas_total:           resultado.horasTotal,
-      coste_instalacion_usd: resultado.costeInstalacionUsd,
-      cuota_mensual_usd:     cuotaMensual,
-      tarifa_hora_usd:       resultado.tarifaHora,
+      coste_instalacion: resultado.costeInstalacion,
+      cuota_mensual:     cuotaMensual,
+      tarifa_hora:       resultado.tarifaHora,
       descuento_pct:         descuentoPct,
       descuento_motivo:      descuentoMotivo || null,
-      total_final_usd:       resultado.totalFinalUsd,
+      total_final:       resultado.totalFinal,
       updated_at:            new Date().toISOString(),
     })
     .eq('id', id)
@@ -493,7 +519,7 @@ export async function actualizarPresupuesto(
     entity:      'presupuesto',
     entity_id:   String(id),
     action:      'editar',
-    description: `Editó el presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · $${resultado.totalFinalUsd.toFixed(2)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · $${cuotaMensual.toFixed(2)}/mes`,
+    description: `Editó el presupuesto de ${nombreNegocio} — ${resultado.horasTotal}h · ${importeClaux(resultado.totalFinal, moneda)} instalación${descuentoPct > 0 ? ` (${descuentoPct}% dto.: ${descuentoMotivo})` : ''} · ${importeClaux(cuotaMensual, moneda)}/mes`,
   })
 
   // El cobro por confirmar que cuelga de este presupuesto se mueve con él: si no,
@@ -572,7 +598,7 @@ export async function eliminarPresupuesto(
 
   const { data: pres } = await db
     .from('presupuestos_instalacion')
-    .select('id, estado, nombre_negocio, client_id, total_final_usd')
+    .select('id, estado, nombre_negocio, client_id, total_final, moneda')
     .eq('id', id)
     .maybeSingle()
   // El listado puede estar abierto en otra pestaña. Si ya se eliminó allí, tratar
@@ -623,7 +649,7 @@ export async function eliminarPresupuesto(
     entity:      'presupuesto',
     entity_id:   String(id),
     action:      'eliminar',
-    description: `Eliminó el borrador de presupuesto de ${pres.nombre_negocio} — $${Number(pres.total_final_usd ?? 0).toFixed(2)} de instalación${pres.client_id ? ` · ${pres.client_id}` : ''}`,
+    description: `Eliminó el borrador de presupuesto de ${pres.nombre_negocio} — ${importeClaux(pres.total_final, pres.moneda)} de instalación${pres.client_id ? ` · ${pres.client_id}` : ''}`,
   })
 
   revalidatePath('/admin/presupuestos')

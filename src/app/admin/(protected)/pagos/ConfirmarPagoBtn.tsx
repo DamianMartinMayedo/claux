@@ -8,16 +8,20 @@ import { confirmarPago } from '@/app/actions/pagos'
 import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import { useMounted } from '@/lib/use-mounted'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { importeClaux } from '@/lib/moneda-claux'
 
 export default function ConfirmarPagoBtn({
   pagoId,
   clienteNombre,
   monto,
+  moneda,
   concepto,
 }: {
   pagoId: string
   clienteNombre: string
   monto: number
+  /** La del cobro, no la del cliente: se confirma lo que se cobró. */
+  moneda: string | null
   concepto: string | null
 }) {
   const [open, setOpen]       = useState(false)
@@ -54,7 +58,7 @@ export default function ConfirmarPagoBtn({
           <div className="info-box">
             <strong className="info-box-title">{pagoId} · {clienteNombre}</strong>
             <span className="text-xs-muted">
-              Marca como cobrado el pago de {conceptoLabel} por <strong>${monto.toFixed(2)} USD</strong>.
+              Marca como cobrado el pago de {conceptoLabel} por <strong>{importeClaux(monto, moneda)}</strong>.
               A partir de aquí cuenta como ingreso. Hazlo solo cuando hayas verificado el dinero.
             </span>
           </div>

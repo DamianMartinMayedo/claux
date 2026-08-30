@@ -5,6 +5,7 @@ import { setModulosCliente, simularNivel } from '@/app/actions/clientes'
 import { importeCiclo } from '@/lib/billing'
 import { useToast } from '@/app/contexts/ToastContext'
 import { NIVELES, normalizarNivel, precioModulo, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 type ModuloCatalogo = {
   clave: string
@@ -13,6 +14,9 @@ type ModuloCatalogo = {
   precio_inicial_usd: number
   precio_empresa_usd: number
   precio_pro_usd: number
+  precio_inicial_eur: number
+  precio_empresa_eur: number
+  precio_pro_eur: number
   es_base: boolean
   tipo: string
 }
@@ -23,6 +27,11 @@ type Props = {
   nivel:             string
   /** Cómo se llama hoy cada nivel (`niveles.nombre`, editable desde /admin). */
   nombresNivel:      Record<Nivel, string>
+  /** En la que se le factura. Toda esta tarjeta habla en ella: no se convierte nada. */
+  /** En la que se le factura HOY. Es editable aquí: un cliente puede pagar un mes en
+   *  una y al siguiente en la otra, y cambiarla obliga a re-firmar (las versiones de
+   *  los documentos llevan la moneda dentro). */
+  moneda:            MonedaClaux
   ciclo:             string
   precioMensual:     number
   descuentoAnualPct: number
@@ -40,6 +49,7 @@ export default function ModulosCard({
   modulosActivos,
   nivel: nivelInicial,
   nombresNivel,
+  moneda: monedaInicial,
   ciclo: cicloInicial,
   descuentoAnualPct,
   catalogo,
@@ -49,6 +59,7 @@ export default function ModulosCard({
   const [seleccionados, setSeleccionados] = useState<string[]>(modulosActivos)
   const [nivel, setNivel] = useState<Nivel>(normalizarNivel(nivelInicial))
   const [ciclo, setCiclo]   = useState(cicloInicial || 'mensual')
+  const [moneda, setMoneda] = useState<MonedaClaux>(monedaInicial)
   const [isPending, startTransition] = useTransition()
   const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
 
@@ -75,7 +86,7 @@ export default function ModulosCard({
 
   const precioMensual = catalogo
     .filter(m => seleccionados.includes(m.clave))
-    .reduce((sum, m) => sum + precioModulo(m, nivel), 0)
+    .reduce((sum, m) => sum + precioModulo(m, nivel, moneda), 0)
   const precioAnual = importeCiclo(precioMensual, 'anual', descuentoAnualPct)
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
 
@@ -92,13 +103,14 @@ export default function ModulosCard({
     fd.append('client_id', client_id)
     fd.append('nivel', nivel)
     fd.append('ciclo_facturacion', ciclo)
+    fd.append('moneda_facturacion', moneda)
     seleccionados.forEach(m => fd.append('modulos', m))
 
     startTransition(async () => {
       const res = await setModulosCliente(fd)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
-      toastSuccess(`Módulos actualizados · $${(res.precio_mensual_usd ?? 0).toFixed(2)}/mes`)
+      toastSuccess(`Módulos actualizados · ${importeClaux(res.precio_mensual, res.moneda)}/mes`)
     })
   }
 
@@ -106,7 +118,7 @@ export default function ModulosCard({
     <div className="card">
       <div className="card-header">
         <h2 className="card-title">Módulos contratados</h2>
-        <span className="badge badge-neutral">${precioMensual.toFixed(2)}/mes</span>
+        <span className="badge badge-neutral">{importeClaux(precioMensual, moneda)}/mes</span>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -148,7 +160,7 @@ export default function ModulosCard({
               <p className="mod-list-label">{grupo.label}</p>
               {items.map(m => {
                 const activo = seleccionados.includes(m.clave)
-                const precio = precioModulo(m, nivel)
+                const precio = precioModulo(m, nivel, moneda)
                 return (
                   <label key={m.clave} className="mod-row">
                     <span className="mod-row-main">
@@ -156,7 +168,7 @@ export default function ModulosCard({
                       <span className="mod-row-desc">{m.descripcion}</span>
                     </span>
                     <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
-                      {precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}
+                      {precio > 0 ? `+${importeClaux(precio, moneda)}` : 'Gratis'}
                     </span>
                     <span className="switch">
                       <input
@@ -173,6 +185,28 @@ export default function ModulosCard({
             </div>
           )
         })}
+
+        {/* Moneda de facturación. Cambiarla NO convierte nada: pasa a cobrarse la otra
+            columna del catálogo, que es un precio propio. Y como el contrato y el anexo
+            llevan la moneda en su versión, al guardar quedan pendientes de firma otra
+            vez, que es lo que se pide cuando un cliente pasa de dólares a euros. */}
+        <div className="seg-field">
+          <span className="seg-field-label">Moneda</span>
+          <div className="seg">
+            {MONEDAS_CLAUX.map(m => (
+              <label key={m} className="seg-opt">
+                <input type="radio" name="moneda_ui" value={m} checked={moneda === m}
+                  onChange={() => setMoneda(m)} />
+                <span>{m}</span>
+              </label>
+            ))}
+          </div>
+          {moneda !== monedaInicial && (
+            <p className="form-hint">
+              Al guardar, el contrato y el anexo de módulos quedarán pendientes de firma en {moneda}.
+            </p>
+          )}
+        </div>
 
         {/* Ciclo de facturación */}
         <div className="seg-field">
@@ -192,13 +226,13 @@ export default function ModulosCard({
         <div className="mod-precio-resumen">
           <div className={`mod-precio-card${ciclo === 'mensual' ? ' mod-precio-card-active' : ''}`}>
             <p className="mod-precio-label">Mensual</p>
-            <p className="mod-precio-valor">${precioMensual.toFixed(2)}<span className="mod-precio-unidad">/mes</span></p>
+            <p className="mod-precio-valor">{importeClaux(precioMensual, moneda)}<span className="mod-precio-unidad">/mes</span></p>
           </div>
           <div className={`mod-precio-card${ciclo === 'anual' ? ' mod-precio-card-active' : ''}`}>
             <p className="mod-precio-label">Anual</p>
-            <p className="mod-precio-valor">${precioAnual.toFixed(2)}<span className="mod-precio-unidad">/año</span></p>
+            <p className="mod-precio-valor">{importeClaux(precioAnual, moneda)}<span className="mod-precio-unidad">/año</span></p>
             {descuentoAnualPct > 0 && precioMensual > 0 && (
-              <p className="mod-precio-extra">Ahorra {descuentoAnualPct}% (${ahorroAnual.toFixed(2)}/año)</p>
+              <p className="mod-precio-extra">Ahorra {descuentoAnualPct}% ({importeClaux(ahorroAnual, moneda)}/año)</p>
             )}
           </div>
         </div>

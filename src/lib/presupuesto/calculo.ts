@@ -16,16 +16,25 @@
 // cada línea escala por tramos, y el recargo suelto en dólares ($15 por tramo excedido)
 // desaparece: mezclar horas × tarifa con un recargo en dólares hacía el desglose imposible de
 // explicarle al cliente. Ahora todo son horas, y una sola tarifa las convierte en dinero.
+//
+// ── UNA MONEDA POR PRESUPUESTO, Y NO ES UNA CONVERSIÓN ───────────────────────
+// El presupuesto se emite en euros o en dólares, y la tarifa/hora de cada moneda es
+// un precio propio (`tarifa_hora_usd` / `tarifa_hora_eur`). No se calcula en dólares
+// para después pasarlo al cambio: eso es lo que hacía que lo facturado no coincidiera
+// con lo pagado, porque el cambio se movía entre una cosa y la otra.
 
 import {
   CLAVE_BASE, CLAVE_CAJA, etiquetaFase,
   type FormatoDatos, type LineaParametro, type NumeroFase, type ParametrosPresupuesto,
 } from './config'
+import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 export interface InstalacionInput {
   modulos:   string[]                    // claves contratadas (incluye 'base' si aplica)
   volumenes: Record<string, number>
   formato:   FormatoDatos
+  /** Moneda en la que se emite. Elige la tarifa/hora; por defecto, dólares. */
+  moneda?:   MonedaClaux
   /** Horas de migración de histórico cargadas por el comercial. */
   historicoHorasManual?: number
   /** Tarifa pactada con ESTE cliente. Si falta, la base de configuración. */
@@ -52,11 +61,11 @@ export interface LineaDesglose {
 }
 
 export interface DesgloseFase {
-  fase:        string
-  horas:       number
-  subtotalUsd: number
-  detalle?:    string
-  lineas?:     LineaDesglose[]
+  fase:     string
+  horas:    number
+  subtotal: number
+  detalle?: string
+  lineas?:  LineaDesglose[]
 }
 
 export interface Revision {
@@ -65,15 +74,18 @@ export interface Revision {
 }
 
 export interface InstalacionResultado {
-  desglose:            DesgloseFase[]
-  revisiones:          Revision[]
-  horasTotal:          number
+  desglose:         DesgloseFase[]
+  revisiones:       Revision[]
+  horasTotal:       number
   /** Antes del descuento. */
-  costeInstalacionUsd: number
-  descuentoUsd:        number
+  costeInstalacion: number
+  descuento:        number
   /** Lo que se cobra de verdad. */
-  totalFinalUsd:       number
-  tarifaHora:          number
+  totalFinal:       number
+  tarifaHora:       number
+  /** Moneda de TODOS los importes de arriba. Viaja con ellos: un número suelto
+   *  sin su moneda es exactamente el error que este trabajo viene a cerrar. */
+  moneda:           MonedaClaux
 }
 
 const num = (v: unknown): number => {
@@ -114,7 +126,10 @@ export function calcularInstalacion(
   input: InstalacionInput,
   params: ParametrosPresupuesto,
 ): InstalacionResultado {
-  const tarifaHora = num(input.tarifaHoraOverride) || num(params.tarifaHora)
+  const moneda = normalizarMonedaClaux(input.moneda)
+  // La tarifa pactada con el cliente manda sobre la base; la base es la de SU moneda.
+  const tarifaHora = num(input.tarifaHoraOverride)
+    || num(moneda === 'EUR' ? params.tarifaHoraEur : params.tarifaHora)
   const modulos = new Set(input.modulos)
   const vol = input.volumenes ?? {}
   const revisiones: Revision[] = []
@@ -177,25 +192,25 @@ export function calcularInstalacion(
   if (dentro(1)) desglose.push({
     fase: etiquetaFase(1),
     horas: horasFase1,
-    subtotalUsd: r2(horasFase1 * tarifaHora),
+    subtotal: r2(horasFase1 * tarifaHora),
     detalle: `${params.horasAlta}h de alta + lo que sume la configuración.`,
     lineas: f1.lineas,
   })
   if (dentro(2)) desglose.push({
     fase: etiquetaFase(2),
     horas: f2.horas,
-    subtotalUsd: r2(f2.horas * tarifaHora),
+    subtotal: r2(f2.horas * tarifaHora),
     lineas: f2.lineas,
   })
   if (dentro(3)) desglose.push({
     fase: etiquetaFase(3),
     horas: horasFase3,
-    subtotalUsd: r2(horasFase3 * tarifaHora),
+    subtotal: r2(horasFase3 * tarifaHora),
   })
   if (dentro(4)) desglose.push({
     fase: etiquetaFase(4),
     horas: horasFase4,
-    subtotalUsd: r2(horasFase4 * tarifaHora),
+    subtotal: r2(horasFase4 * tarifaHora),
   })
 
   let horasTotal = r2(horasFase1 + f2.horas + horasFase3 + horasFase4)
@@ -209,23 +224,24 @@ export function calcularInstalacion(
     desglose.push({
       fase: 'Migración de histórico (cotización manual)',
       horas: histHoras,
-      subtotalUsd: r2(histHoras * tarifaHora),
-      detalle: `${histHoras}h × $${tarifaHora}/h (valoración del comercial).`,
+      subtotal: r2(histHoras * tarifaHora),
+      detalle: `${histHoras}h × ${importeClaux(tarifaHora, moneda)}/h (valoración del comercial).`,
     })
     horasTotal = r2(horasTotal + histHoras)
   }
 
-  const costeInstalacionUsd = r2(horasTotal * tarifaHora)
+  const costeInstalacion = r2(horasTotal * tarifaHora)
   const pct = Math.min(100, Math.max(0, num(input.descuentoPct)))
-  const descuentoUsd = r2(costeInstalacionUsd * (pct / 100))
+  const descuento = r2(costeInstalacion * (pct / 100))
 
   return {
     desglose,
     revisiones,
     horasTotal,
-    costeInstalacionUsd,
-    descuentoUsd,
-    totalFinalUsd: r2(costeInstalacionUsd - descuentoUsd),
+    costeInstalacion,
+    descuento,
+    totalFinal: r2(costeInstalacion - descuento),
     tarifaHora,
+    moneda,
   }
 }

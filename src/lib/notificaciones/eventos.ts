@@ -6,6 +6,7 @@
 // puede tumbar la reserva que lo originó.
 
 import { fmtFechaEs } from '@/lib/date-utils'
+import { importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { crearNotificacion } from './crear'
 
 /**
@@ -73,14 +74,15 @@ export async function notificarCancelacionCliente(params: {
 /** CLAUX confirmó un pago de la suscripción del negocio. */
 export async function notificarPagoConfirmado(params: {
   clientId:        string
-  montoUsd:        number
+  monto:           number
+  moneda:          MonedaClaux
   fechaExpiracion: string
 }): Promise<void> {
   await crearNotificacion({
     clientId: params.clientId,
     tipo:     'pago_confirmado',
     titulo:   'Pago confirmado',
-    cuerpo:   `Recibimos tu pago de ${params.montoUsd.toFixed(2)} USD. Tu suscripción queda cubierta hasta el ${fmtFechaEs(params.fechaExpiracion)}.`,
+    cuerpo:   `Recibimos tu pago de ${importeClaux(params.monto, params.moneda)}. Tu suscripción queda cubierta hasta el ${fmtFechaEs(params.fechaExpiracion)}.`,
     enlace:   '/portal/facturacion',
     // El periodo pagado identifica el hecho: dos pagos distintos, dos avisos.
     entidadTipo: 'pago',

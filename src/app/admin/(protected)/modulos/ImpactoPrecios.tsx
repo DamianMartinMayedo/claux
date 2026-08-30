@@ -1,6 +1,8 @@
 'use client'
 
 import type { Nivel } from '@/lib/niveles'
+import { importeClaux } from '@/lib/moneda-claux'
+import type { ImpactoCliente } from '@/lib/catalogo-precios'
 
 /**
  * A quién le cambia la cuota. Se pinta ANTES de guardar cualquier precio del
@@ -10,16 +12,12 @@ import type { Nivel } from '@/lib/niveles'
  * La fila trae también lo que hay CACHEADO en `clients`. Cuando no coincide con
  * «ahora», es que la caché venía sucia de antes —precios cambiados sin
  * recalcular— y conviene verlo, porque guardar lo va a arreglar de camino.
+ *
+ * Es LA MISMA fila que calcula `impactoDeCambios`, no una copia: cuando se le
+ * añadió la moneda (mig. 225) el duplicado se habría quedado corto en silencio, y
+ * esta tabla habría seguido pintando euros con el símbolo del dólar.
  */
-export type ImpactoFila = {
-  client_id:      string
-  nombre_empresa: string
-  nivel:          Nivel
-  antes:          number
-  despues:        number
-  cacheado:       number
-  archivado:      boolean
-}
+export type ImpactoFila = ImpactoCliente
 
 export default function ImpactoPrecios(
   { impacto, nombresNivel }: { impacto: ImpactoFila[]; nombresNivel: Record<Nivel, string> },
@@ -61,17 +59,17 @@ export default function ImpactoPrecios(
                     <span className="table-empresa cell-clamp">{c.nombre_empresa}</span>
                     {c.archivado && <span className="badge badge-neutral">Archivado</span>}
                     {c.cacheado !== c.antes && (
-                      <span className="badge badge-warning" title={`La ficha dice $${c.cacheado.toFixed(2)}`}>
+                      <span className="badge badge-warning" title={`La ficha dice ${importeClaux(c.cacheado, c.moneda)}`}>
                         caché desfasada
                       </span>
                     )}
                   </span>
                 </td>
                 <td data-label="Nivel">{nombresNivel[c.nivel]}</td>
-                <td data-label="Ahora" className="col-num table-price">${c.antes.toFixed(2)}</td>
+                <td data-label="Ahora" className="col-num table-price">{importeClaux(c.antes, c.moneda)}</td>
                 <td data-label="Quedaría" className="col-num table-price">
                   <span className={c.despues > c.antes ? 'impacto-sube' : 'impacto-baja'}>
-                    ${c.despues.toFixed(2)}
+                    {importeClaux(c.despues, c.moneda)}
                   </span>
                 </td>
               </tr>

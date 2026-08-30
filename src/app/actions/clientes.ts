@@ -10,7 +10,8 @@ import { logActividad } from '@/lib/audit'
 import { fmtFechaEs } from '@/lib/date-utils'
 import { getSetting } from '@/app/actions/settings'
 import { diasCiclo, importeCiclo, esSocioHoy } from '@/lib/billing'
-import { normalizarNivel, nombreNivel, sumarModulos, type ModuloPrecios } from '@/lib/niveles'
+import { COLUMNAS_PRECIO, normalizarNivel, nombreNivel, sumarModulos, type ModuloPrecios } from '@/lib/niveles'
+import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { DIMENSIONES, usoDeLimites } from '@/lib/limites'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/enviar'
@@ -67,17 +68,33 @@ function emailConSufijo(email: string, client_id: string): string {
 // Devuelve el precio de CATÁLOGO, sin descuento ni condición de socio: eso lo
 // resuelve `precioMensualEfectivo` al leer, porque tiene fecha de caducidad y un
 // número cacheado no caduca solo (§`lib/billing.ts`).
-async function calcularPrecioMensual(
+//
+// Devuelve SIEMPRE las dos monedas, no la del cliente: el caché de `clients`
+// guarda las dos columnas a la vez (mig. 225) para que cambiar de moneda de
+// facturación sea elegir cuál se mira, no recalcular nada. Cada una sale de su
+// propia columna del catálogo: ninguna se convierte desde la otra.
+type Cuotas = { precio_mensual_usd: number; precio_mensual_eur: number }
+
+async function calcularCuotas(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   modulosActivos: string[],
   nivel: string,
-): Promise<number> {
+): Promise<Cuotas> {
   const { data: catalogo } = await supabase
     .from('modulos_catalogo')
-    .select('clave, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, activo')
+    .select(`clave, ${COLUMNAS_PRECIO}, activo`)
     .eq('activo', true)
-  return sumarModulos((catalogo ?? []) as ModuloPrecios[], modulosActivos, nivel)
+  const modulos = (catalogo ?? []) as ModuloPrecios[]
+  return {
+    precio_mensual_usd: sumarModulos(modulos, modulosActivos, nivel, 'USD'),
+    precio_mensual_eur: sumarModulos(modulos, modulosActivos, nivel, 'EUR'),
+  }
+}
+
+/** La cuota que de verdad se le cobra a este cliente: la de SU moneda. */
+function cuotaDe(c: Cuotas, moneda: MonedaClaux): number {
+  return moneda === 'EUR' ? c.precio_mensual_eur : c.precio_mensual_usd
 }
 
 // ── Crear cliente ────────────────────────────────────────────────────
@@ -94,8 +111,12 @@ export async function crearCliente(formData: FormData) {
   const nivel           = normalizarNivel(formData.get('nivel') ?? formData.get('tarifa'))
   const ciclo           = (formData.get('ciclo_facturacion') as string ?? 'mensual').trim()
   const sector          = (formData.get('sector') as string ?? '').trim() || null
-  const pagoSetupRaw    = parseFloat(formData.get('pago_setup_usd') as string ?? '0')
-  const pago_setup_usd  = isNaN(pagoSetupRaw) ? 0 : pagoSetupRaw
+  const pagoSetupRaw    = parseFloat(formData.get('pago_setup') as string ?? '0')
+  const pago_setup      = isNaN(pagoSetupRaw) ? 0 : pagoSetupRaw
+  // En qué moneda se le factura a ESTE cliente. Viene del presupuesto que aceptó
+  // (o se elige en el alta). No es una preferencia estética: manda sobre qué
+  // columna de precios se le mira y en qué moneda nacen sus cobros.
+  const moneda          = normalizarMonedaClaux(formData.get('moneda_facturacion'))
   // El presupuesto del que sale el alta (si viene de uno). Se lee aquí arriba
   // porque no solo enlaza el cliente al final: es también de donde sale el cobro
   // de configuración, y ese vínculo es lo que le permite seguir al presupuesto
@@ -144,7 +165,8 @@ export async function crearCliente(formData: FormData) {
   // módulo) y precio mensual resultante. Se normalizan igual que en el toggle:
   // el alta también compone un conjunto y lo convierte en la primera cuota.
   const modulos_activos = formData.getAll('modulos') as string[]
-  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, nivel)
+  const cuotas          = await calcularCuotas(supabase, modulos_activos, nivel)
+  const precio_mensual  = cuotaDe(cuotas, moneda)
 
   // Estado y vigencia: trial → TRIAL por días configurables; sin trial → DESACTIVADO hasta que
   // se confirme el primer pago de suscripción (confirmarPago lo pasa a ACTIVO).
@@ -176,7 +198,8 @@ export async function crearCliente(formData: FormData) {
     modulos_activos,
     nivel,
     ciclo_facturacion: ciclo,
-    precio_mensual_usd,
+    ...cuotas,
+    moneda_facturacion: moneda,
     fecha_inicio:     hoy,
     fecha_expiracion: es_prueba ? null : fechaExpiracion,
     estado:           estadoInicial,
@@ -193,7 +216,7 @@ export async function crearCliente(formData: FormData) {
     entity:      'cliente',
     entity_id:   client_id,
     action:      'crear',
-    description: `Creó cliente ${nombre_empresa} (${client_id}) — ${modulos_activos.length} módulo(s) · nivel ${nivel}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — Estado: ${estadoInicial}`,
+    description: `Creó cliente ${nombre_empresa} (${client_id}) — ${modulos_activos.length} módulo(s) · nivel ${nivel}/${ciclo} · ${importeClaux(precio_mensual, moneda)}/mes — Estado: ${estadoInicial}`,
   })
 
   // ── Pre-crear los cobros esperados como "por confirmar" ──────────────
@@ -203,7 +226,7 @@ export async function crearCliente(formData: FormData) {
   // si no, saldría en cuentas por cobrar como una deuda que nadie va a pagar jamás
   // y que habría que ir marcando a mano cada ciclo.
   const descuentoAnual   = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
-  const montoSuscripcion = (es_prueba || es_trial) ? 0 : importeCiclo(precio_mensual_usd, ciclo, descuentoAnual)
+  const montoSuscripcion = (es_prueba || es_trial) ? 0 : importeCiclo(precio_mensual, ciclo, descuentoAnual)
 
   // Numerador correlativo de pago_id (puede crear hasta 2 pagos)
   const { data: ultPago } = await supabase
@@ -216,12 +239,13 @@ export async function crearCliente(formData: FormData) {
   const nuevoPagoId = () => `PAG-${String(pagoNum++).padStart(4, '0')}`
 
   const pagosPre: Record<string, unknown>[] = []
-  if (!es_prueba && pago_setup_usd > 0) {
+  if (!es_prueba && pago_setup > 0) {
     pagosPre.push({
       pago_id:  nuevoPagoId(),
       client_id,
       presupuesto_id,
-      monto_usd: pago_setup_usd,
+      monto:     pago_setup,
+      moneda,
       metodo:    'transferencia',
       concepto:  'configuracion',
       estado:    'por_confirmar',
@@ -233,7 +257,8 @@ export async function crearCliente(formData: FormData) {
     pagosPre.push({
       pago_id:  nuevoPagoId(),
       client_id,
-      monto_usd: montoSuscripcion,
+      monto:     montoSuscripcion,
+      moneda,
       metodo:    'transferencia',
       concepto:  'suscripcion',
       estado:    'por_confirmar',
@@ -251,7 +276,7 @@ export async function crearCliente(formData: FormData) {
         entity:      'pago',
         entity_id:   p.pago_id as string,
         action:      'registrar',
-        description: `Pre-creó pago ${p.pago_id} (${p.concepto}, por confirmar) — Cliente: ${client_id} — $${Number(p.monto_usd).toFixed(2)}`,
+        description: `Pre-creó pago ${p.pago_id} (${p.concepto}, por confirmar) — Cliente: ${client_id} — ${importeClaux(p.monto as number, moneda)}`,
       })
     }
   }
@@ -733,12 +758,26 @@ export async function setModulosCliente(formData: FormData) {
   // NADA: los físicos, almacenes y movimientos se quedan y dejan de mostrarse.
   const modulos_activos = formData.getAll('modulos') as string[]
 
-  // precio = Σ módulos activos por la columna del nivel (siempre desde el catálogo)
-  const precio_mensual_usd = await calcularPrecioMensual(supabase, modulos_activos, nivel)
+  // precio = Σ módulos activos por la columna del nivel (siempre desde el catálogo).
+  // Se recalculan y guardan las DOS monedas aunque hoy solo se le cobre una: si
+  // mañana pasa a la otra, la cuota ya está puesta y no depende de que alguien
+  // acierte a tocar los módulos ese día.
+  const cuotas = await calcularCuotas(supabase, modulos_activos, nivel)
+
+  // La moneda de facturación se decide AQUÍ, junto al nivel y al ciclo: son las tres
+  // condiciones de lo que paga. Se puede cambiar de un mes para otro (un cliente paga
+  // en euros en enero y en dólares en febrero) y no convierte nada — pasa a cobrarse la
+  // otra columna, que es un precio propio. Si la card no la manda, se queda la que
+  // tenía: nadie pierde su moneda por guardar desde una pantalla que no la pregunta.
+  const { data: cli } = await supabase
+    .from('clients').select('moneda_facturacion').eq('client_id', client_id).maybeSingle()
+  const monedaForm = formData.get('moneda_facturacion')
+  const moneda = normalizarMonedaClaux(monedaForm ?? cli?.moneda_facturacion)
+  const precio_mensual = cuotaDe(cuotas, moneda)
 
   const { error } = await supabase
     .from('clients')
-    .update({ modulos_activos, nivel, ciclo_facturacion: ciclo, precio_mensual_usd })
+    .update({ modulos_activos, nivel, ciclo_facturacion: ciclo, moneda_facturacion: moneda, ...cuotas })
     .eq('client_id', client_id)
 
   if (error) return { ok: false, error: error.message }
@@ -749,13 +788,13 @@ export async function setModulosCliente(formData: FormData) {
     entity:      'cliente',
     entity_id:   client_id,
     action:      'modulos',
-    description: `Actualizó módulos del cliente ${client_id} — nivel ${nivel}/${ciclo} · $${precio_mensual_usd.toFixed(2)}/mes — módulos: [${modulos_activos.join(', ')}]`,
+    description: `Actualizó módulos del cliente ${client_id} — nivel ${nivel}/${ciclo} · ${importeClaux(precio_mensual, moneda)}/mes (${moneda}) — módulos: [${modulos_activos.join(', ')}]`,
   })
 
   revalidatePath(`/admin/clientes/${client_id}`)
   revalidatePath('/admin/clientes')
   revalidatePath('/admin/dashboard')
-  return { ok: true as const, precio_mensual_usd }
+  return { ok: true as const, precio_mensual, moneda }
 }
 
 // ── Editar datos del cliente ──────────────────────────────────────────
@@ -948,7 +987,7 @@ export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendi
 //     caduca solo, y este caduca.
 //   · **Socio CLAUX**: no paga cuota. Es una BANDERA, no un estado — el cliente
 //     sigue ACTIVO y con todo su portal; lo único que no se genera es el cobro.
-//     `precio_mensual_usd` se le sigue calculando, que es lo que hace falta
+//     La cuota se le sigue calculando, que es lo que hace falta
 //     saber el día que se negocie la conversión.
 //
 // Ojo con la palabra «socio»: es un CLIENTE que no paga, no quien revende CLAUX
@@ -1115,23 +1154,25 @@ export async function simularNivel(client_id: string, nivel: string) {
 
   const { data: cli } = await supabase
     .from('clients')
-    .select('modulos_activos, nivel, precio_mensual_usd')
+    .select('modulos_activos, nivel, precio_mensual_usd, precio_mensual_eur, moneda_facturacion')
     .eq('client_id', client_id)
     .maybeSingle()
   if (!cli) return { ok: false as const, error: 'Cliente no encontrado.' }
+  const moneda = normalizarMonedaClaux(cli.moneda_facturacion)
 
   const modulos = Array.isArray(cli.modulos_activos) ? cli.modulos_activos as string[] : []
   // El conteo va por el cliente de servicio: las tablas del tenant tienen RLS por
   // `client_id` y la sesión de un admin no las ve. Aquí ya se pasó `requirePermiso`.
-  const [cuota, uso] = await Promise.all([
-    calcularPrecioMensual(supabase, modulos, destino),
+  const [cuotas, uso] = await Promise.all([
+    calcularCuotas(supabase, modulos, destino),
     usoDeLimites(createAdminClient(), client_id, destino),
   ])
 
   return {
     ok: true as const,
-    actual:  Number(cli.precio_mensual_usd ?? 0) || 0,
-    cuota,
+    moneda,
+    actual:  Number(cuotaDe(cli as Cuotas, moneda)) || 0,
+    cuota:   cuotaDe(cuotas, moneda),
     excedidas: uso.filter(u => u.excedido).map(u => ({
       etiqueta: u.etiqueta, usado: u.usado, limite: u.limite ?? 0,
     })),

@@ -23,23 +23,30 @@
 // las dos difieren, la previsualización miente.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { normalizarNivel, sumarModulos, type ModuloPrecios, type Nivel } from '@/lib/niveles'
+import { COLUMNAS_PRECIO, normalizarNivel, sumarModulos, type ModuloPrecios, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 // El cliente de Supabase entra como parámetro para servir tanto al de servicio
 // como al de sesión, que son tipos distintos y no comparten interfaz.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Db = any
 
-/** Precios nuevos de un módulo. Solo las columnas que cambian. */
+/**
+ * Precios nuevos de un módulo. Solo las celdas que cambian, indexadas por moneda
+ * y nivel: la rejilla del catálogo es de seis casillas desde la mig. 225 y se
+ * puede tocar una sola sin arrastrar las otras cinco.
+ */
 export interface CambioPrecio {
   clave: string
-  precios: Partial<Record<Nivel, number>>
+  precios: Partial<Record<MonedaClaux, Partial<Record<Nivel, number>>>>
 }
 
 export interface ImpactoCliente {
   client_id:      string
   nombre_empresa: string
   nivel:          Nivel
+  /** Moneda en la que se le factura. Las tres cifras de abajo van en ella. */
+  moneda:         MonedaClaux
   /** Cuota de catálogo ANTES del cambio. */
   antes:          number
   /** Cuota de catálogo DESPUÉS. */
@@ -49,7 +56,13 @@ export interface ImpactoCliente {
   archivado:      boolean
 }
 
-const CAMPOS = 'clave, precio_inicial_usd, precio_empresa_usd, precio_pro_usd'
+const CAMPOS = `clave, ${COLUMNAS_PRECIO}`
+
+/** Columna de caché de la cuota mensual, por moneda. Gemelas: se escriben las dos. */
+const CAMPO_CUOTA: Record<MonedaClaux, 'precio_mensual_usd' | 'precio_mensual_eur'> = {
+  USD: 'precio_mensual_usd',
+  EUR: 'precio_mensual_eur',
+}
 
 function aplicarCambios(catalogo: ModuloPrecios[], cambios: CambioPrecio[]): ModuloPrecios[] {
   const porClave = new Map(cambios.map(c => [c.clave, c.precios]))
@@ -58,9 +71,12 @@ function aplicarCambios(catalogo: ModuloPrecios[], cambios: CambioPrecio[]): Mod
     if (!nuevo) return m
     return {
       ...m,
-      precio_inicial_usd: nuevo.inicial ?? m.precio_inicial_usd,
-      precio_empresa_usd: nuevo.empresa ?? m.precio_empresa_usd,
-      precio_pro_usd:     nuevo.pro     ?? m.precio_pro_usd,
+      precio_inicial_usd: nuevo.USD?.inicial ?? m.precio_inicial_usd,
+      precio_empresa_usd: nuevo.USD?.empresa ?? m.precio_empresa_usd,
+      precio_pro_usd:     nuevo.USD?.pro     ?? m.precio_pro_usd,
+      precio_inicial_eur: nuevo.EUR?.inicial ?? m.precio_inicial_eur,
+      precio_empresa_eur: nuevo.EUR?.empresa ?? m.precio_empresa_eur,
+      precio_pro_eur:     nuevo.EUR?.pro     ?? m.precio_pro_eur,
     }
   })
 }
@@ -79,7 +95,7 @@ export async function impactoDeCambios(db: Db, cambios: CambioPrecio[]): Promise
   const [{ data: catalogo }, { data: clientes }] = await Promise.all([
     db.from('modulos_catalogo').select(CAMPOS).eq('activo', true),
     db.from('clients')
-      .select('client_id, nombre_empresa, nivel, modulos_activos, precio_mensual_usd, archivado_at')
+      .select('client_id, nombre_empresa, nivel, moneda_facturacion, modulos_activos, precio_mensual_usd, precio_mensual_eur, archivado_at')
       .overlaps('modulos_activos', cambios.map(c => c.clave)),
   ])
 
@@ -88,18 +104,23 @@ export async function impactoDeCambios(db: Db, cambios: CambioPrecio[]): Promise
 
   const filas: ImpactoCliente[] = []
   for (const c of (clientes ?? []) as Record<string, any>[]) {
-    const mods  = Array.isArray(c.modulos_activos) ? c.modulos_activos as string[] : []
-    const nivel = normalizarNivel(c.nivel)
-    const antes   = sumarModulos(antesCat,   mods, nivel)
-    const despues = sumarModulos(despuesCat, mods, nivel)
+    const mods   = Array.isArray(c.modulos_activos) ? c.modulos_activos as string[] : []
+    const nivel  = normalizarNivel(c.nivel)
+    // En LA MONEDA EN LA QUE SE LE FACTURA: subirle el precio en euros no le mueve
+    // nada al que paga en dólares, y enseñarle un impacto que no va a notar es
+    // ruido en la única pantalla donde hay que mirar con lupa.
+    const moneda = normalizarMonedaClaux(c.moneda_facturacion)
+    const antes   = sumarModulos(antesCat,   mods, nivel, moneda)
+    const despues = sumarModulos(despuesCat, mods, nivel, moneda)
     if (antes === despues) continue
     filas.push({
       client_id:      c.client_id,
       nombre_empresa: c.nombre_empresa ?? c.client_id,
       nivel,
+      moneda,
       antes,
       despues,
-      cacheado:       Number(c.precio_mensual_usd ?? 0) || 0,
+      cacheado:       Number(c[CAMPO_CUOTA[moneda]] ?? 0) || 0,
       archivado:      Boolean(c.archivado_at),
     })
   }
@@ -111,9 +132,11 @@ export async function impactoDeCambios(db: Db, cambios: CambioPrecio[]): Promise
  * costando lo de la otra columna. Es lo que hay que enseñar antes de subir a
  * alguien de Inicial a Empresa.
  */
-export async function cuotaEnNivel(db: Db, modulos: string[], nivel: unknown): Promise<number> {
+export async function cuotaEnNivel(
+  db: Db, modulos: string[], nivel: unknown, moneda: unknown,
+): Promise<number> {
   const { data } = await db.from('modulos_catalogo').select(CAMPOS).eq('activo', true)
-  return sumarModulos((data ?? []) as ModuloPrecios[], modulos, nivel)
+  return sumarModulos((data ?? []) as ModuloPrecios[], modulos, nivel, moneda)
 }
 
 /**
@@ -132,19 +155,24 @@ export async function recalcularCuotas(db: Db, claves: string[]): Promise<number
   const [{ data: catalogo }, { data: clientes }] = await Promise.all([
     db.from('modulos_catalogo').select(CAMPOS).eq('activo', true),
     db.from('clients')
-      .select('client_id, nivel, modulos_activos, precio_mensual_usd')
+      .select('client_id, nivel, modulos_activos, precio_mensual_usd, precio_mensual_eur')
       .overlaps('modulos_activos', claves),
   ])
 
   const cat = (catalogo ?? []) as ModuloPrecios[]
   let tocados = 0
   for (const c of (clientes ?? []) as Record<string, any>[]) {
-    const mods  = Array.isArray(c.modulos_activos) ? c.modulos_activos as string[] : []
-    const nuevo = sumarModulos(cat, mods, c.nivel)
-    if (nuevo === (Number(c.precio_mensual_usd ?? 0) || 0)) continue
-    const { error } = await db.from('clients')
-      .update({ precio_mensual_usd: nuevo })
-      .eq('client_id', c.client_id)
+    const mods = Array.isArray(c.modulos_activos) ? c.modulos_activos as string[] : []
+    // Las DOS cachés, siempre, sea cual sea la moneda en la que se le factura hoy:
+    // el día que cambie de moneda no puede encontrarse la otra columna con la suma
+    // de los módulos que tenía hace medio año.
+    const update: Record<string, number> = {}
+    for (const moneda of MONEDAS_CLAUX) {
+      const nuevo = sumarModulos(cat, mods, c.nivel, moneda)
+      if (nuevo !== (Number(c[CAMPO_CUOTA[moneda]] ?? 0) || 0)) update[CAMPO_CUOTA[moneda]] = nuevo
+    }
+    if (!Object.keys(update).length) continue
+    const { error } = await db.from('clients').update(update).eq('client_id', c.client_id)
     if (!error) tocados++
   }
   return tocados

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
 // Centinela del catálogo comercial: ¿nombra alguien un módulo que ya no existe,
-// o hay un módulo sin precio en alguno de los tres niveles?
+// o hay un módulo sin precio en alguna de las seis casillas (moneda × nivel)?
 //
 // POR QUÉ EXISTE. El catálogo es VIVO: el dueño edita nombre, texto y los tres
 // precios desde /admin, y activa o retira módulos sin desplegar nada. El código y
@@ -14,9 +14,12 @@
 //     exactamente lo que pasa al retirar Multiempresa y Multidossier (§9 del
 //     plan): quedan sitios nombrándolos, y el cliente pierde el selector de
 //     empresa de su dossier sin que nadie vea un fallo.
-//   · **Un precio a null o a cero en un nivel.** `precioModulo()` hace
-//     `Number(… ?? 0)`: el módulo pasa a ser gratis en ese nivel. La suma del
-//     presupuesto, la factura y la landing dicen lo mismo, y todas mienten igual.
+//   · **Un precio a null o a cero en una casilla.** `precioModulo()` hace
+//     `Number(… ?? 0)`: el módulo pasa a ser gratis ahí. La suma del presupuesto,
+//     la factura y la landing dicen lo mismo, y todas mienten igual. Desde el
+//     euro (mig. 225) son SEIS casillas y no tres: un módulo con su precio en
+//     dólares y sin poner el de euros se regala entero al cliente que se factura
+//     desde España, y en pantalla no se distingue de uno bien puesto.
 //   · **Una clave que sigue en el catálogo pero ya no se vende ni la tiene nadie.**
 //     Igual de muda que la anterior, y más difícil de ver: la fila existe, así que
 //     el ojo la da por buena. Solo se distingue por que su `activo` es false y
@@ -163,7 +166,7 @@ const hallazgos = []
 const apunta = (que, porque) => hallazgos.push({ que, porque })
 
 const [catalogo, sectores, necesidades, clientes] = await Promise.all([
-  pedir('modulos_catalogo?select=clave,nombre,activo,tipo,precio_inicial_usd,precio_empresa_usd,precio_pro_usd'),
+  pedir('modulos_catalogo?select=clave,nombre,activo,tipo,precio_inicial_usd,precio_empresa_usd,precio_pro_usd,precio_inicial_eur,precio_empresa_eur,precio_pro_eur'),
   pedir('plantillas_sector?select=sector,modulos'),
   pedir('diagnostico_necesidades?select=clave,modulos'),
   pedir('clients?select=client_id,nombre_empresa,modulos_activos'),
@@ -234,36 +237,41 @@ for (const c of clientes) {
   }
 }
 
-// 4. Los tres precios de cada módulo activo.
-const NIVELES = [['inicial', 'precio_inicial_usd'], ['empresa', 'precio_empresa_usd'], ['pro', 'precio_pro_usd']]
+// 4. Las SEIS casillas de precio de cada módulo activo: tres niveles × dos monedas.
+//    El euro no es el dólar convertido —es precio propio— así que se comprueba
+//    entero, columna a columna, igual que el dólar.
+const MONEDAS = [['USD', 'usd', '$'], ['EUR', 'eur', '€']]
+const NIVELES = ['inicial', 'empresa', 'pro']
 for (const m of catalogo) {
   if (!m.activo) continue
-  const precios = {}
-  for (const [nivel, campo] of NIVELES) {
-    const v = m[campo]
-    if (v === null || v === undefined || v === '') {
-      apunta(`'${m.clave}' (${m.nombre}) no tiene precio en ${nivel}`,
-             '`precioModulo` hace `?? 0`: el módulo sale GRATIS en ese nivel, y el presupuesto, la factura y la landing lo repiten igual.')
-      continue
+  for (const [moneda, sufijo, simbolo] of MONEDAS) {
+    const precios = {}
+    for (const nivel of NIVELES) {
+      const v = m[`precio_${nivel}_${sufijo}`]
+      if (v === null || v === undefined || v === '') {
+        apunta(`'${m.clave}' (${m.nombre}) no tiene precio en ${nivel} / ${moneda}`,
+               '`precioModulo` hace `?? 0`: el módulo sale GRATIS en esa casilla, y el presupuesto, la factura y la landing lo repiten igual.')
+        continue
+      }
+      precios[nivel] = Number(v)
+      if (!Number.isFinite(precios[nivel]) || precios[nivel] <= 0) {
+        apunta(`'${m.clave}' (${m.nombre}) vale ${v} en ${nivel} / ${moneda}`,
+               'Un módulo activo a cero se está regalando; si es a propósito, desactívalo o ponle su precio.')
+      }
     }
-    precios[nivel] = Number(v)
-    if (!Number.isFinite(precios[nivel]) || precios[nivel] <= 0) {
-      apunta(`'${m.clave}' (${m.nombre}) vale ${v} en ${nivel}`,
-             'Un módulo activo a cero se está regalando; si es a propósito, desactívalo o ponle su precio.')
+    // Un nivel más alto nunca puede costar menos: sería el escalón al revés, y en
+    // una rejilla que se teclea a mano es el error más fácil.
+    if (precios.inicial > precios.empresa || precios.empresa > precios.pro) {
+      apunta(`'${m.clave}' (${m.nombre}) cuesta ${simbolo}${precios.inicial} / ${simbolo}${precios.empresa} / ${simbolo}${precios.pro}`,
+             'El precio baja al subir de nivel: subir de nivel le saldría más barato al cliente que quedarse.')
     }
-  }
-  // Un nivel más alto nunca puede costar menos: sería el escalón al revés, y en
-  // una tabla de tres columnas que se teclean a mano es el error más fácil.
-  if (precios.inicial > precios.empresa || precios.empresa > precios.pro) {
-    apunta(`'${m.clave}' (${m.nombre}) cuesta ${precios.inicial} / ${precios.empresa} / ${precios.pro}`,
-           'El precio baja al subir de nivel: subir de nivel le saldría más barato al cliente que quedarse.')
   }
 }
 
 // ── Veredicto ────────────────────────────────────────────────────────────────
 
 if (hallazgos.length === 0) {
-  console.log(`✓ Catálogo OK: las ${citadas.size} claves citadas en código existen, y los ${activo.size} módulos activos tienen sus tres precios.`)
+  console.log(`✓ Catálogo OK: las ${citadas.size} claves citadas en código existen, y los ${activo.size} módulos activos tienen sus seis precios (3 niveles × 2 monedas).`)
   process.exit(0)
 }
 

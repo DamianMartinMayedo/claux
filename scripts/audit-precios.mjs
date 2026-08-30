@@ -3,20 +3,20 @@
 // Centinela de precios cableados: ¿hay algún importe escrito en el código?
 //
 // POR QUÉ EXISTE. El precio de CLAUX no vive en el código: vive en
-// `modulos_catalogo` (tres columnas, una por nivel) y en `settings` (la hora de
-// instalación), y el dueño los edita desde /admin sin desplegar. Un importe
+// `modulos_catalogo` (seis columnas: tres niveles × dos monedas) y en `settings`
+// (la hora de instalación, una por moneda), y el dueño los edita desde /admin sin desplegar. Un importe
 // tecleado en un `.ts` no da error nunca: **empieza siendo verdad**. Deja de serlo
 // el día que el dueño cambia el precio en el admin, y a partir de ahí hay dos
 // cifras distintas —la de la pantalla y la del cobro— sin nada que las enfrente.
 //
 // Ya pasó con las migraciones-semilla, que quedaron desalineadas del catálogo
-// vivo. Con tres columnas y dos descuentos, la tentación de cablear crece.
+// vivo. Con seis columnas y dos descuentos, la tentación de cablear crece.
 //
 // QUÉ MIRA, y solo esto:
 //   1. Un número puesto a mano en un campo que ES dinero de CLAUX
-//      (`precio_*_usd`, `cuota_mensual_usd`, `tarifa_hora_usd`, `monto_usd`…).
+//      (`precio_*_usd`, `precio_*_eur`, `cuota_mensual`, `tarifa_hora`, `monto`…).
 //   2. Un importe escrito dentro de un texto que el usuario lee («$35/mes»,
-//      «20 USD al mes»): el mismo problema, en la copia.
+//      «€35/mes», «20 USD al mes»): el mismo problema, en la copia.
 //
 // No mira comentarios (ahí un importe es un ejemplo, no una promesa) ni los
 // ficheros del ALLOWLIST, donde el valor por defecto vive JUNTO a su clave de
@@ -41,18 +41,23 @@ const ALLOWLIST = {
 
 // Campos que SON dinero de CLAUX (no del cliente: `precio_venta` de un producto o
 // el `descuento_pct` de una línea de factura son datos del negocio, no nuestros).
+// Los campos con moneda EN EL NOMBRE son los del catálogo y las cachés del
+// cliente (hay una columna por moneda); los que la perdieron —`cuota_mensual`,
+// `total_final`, `monto`…— la llevan ahora en una columna `moneda` al lado, y por
+// eso cablear su importe es AÚN peor: el número ya no dice ni en qué moneda está.
 const CAMPOS = [
   'precio_inicial_usd', 'precio_empresa_usd', 'precio_pro_usd',
-  'precio_mensual_usd', 'precio_instalacion_usd',
-  'cuota_mensual_usd', 'coste_instalacion_usd', 'tarifa_hora_usd',
-  'total_final_usd', 'monto_usd',
+  'precio_inicial_eur', 'precio_empresa_eur', 'precio_pro_eur',
+  'precio_mensual_usd', 'precio_mensual_eur',
+  'cuota_mensual', 'coste_instalacion', 'tarifa_hora',
+  'total_final', 'monto',
 ]
 
 const CAMPO_CON_NUMERO = new RegExp(String.raw`\b(${CAMPOS.join('|')})\s*[:=]\s*(\d+(?:\.\d+)?)`, 'g')
-// «$35», «$35.00/mes». `$0` no: es «no se cobra nada», no un precio.
-const IMPORTE_TEXTO    = /\$\s?(\d+(?:[.,]\d+)?)/g
-// «20 USD», «20 dólares al mes».
-const IMPORTE_PALABRA  = /\b(\d+(?:[.,]\d+)?)\s*(USD|usd|dólares|dolares)\b/g
+// «$35», «€35.00/mes». `$0` no: es «no se cobra nada», no un precio.
+const IMPORTE_TEXTO    = /[$€]\s?(\d+(?:[.,]\d+)?)/g
+// «20 USD», «20 euros al mes».
+const IMPORTE_PALABRA  = /\b(\d+(?:[.,]\d+)?)\s*(USD|usd|EUR|eur|dólares|dolares|euros)\b/g
 
 function ficheros(dir) {
   const out = []

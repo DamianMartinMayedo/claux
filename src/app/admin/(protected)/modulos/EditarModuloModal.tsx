@@ -10,6 +10,7 @@ import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 import { NIVELES, CAMPO_PRECIO, precioModulo, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX } from '@/lib/moneda-claux'
 import ImpactoPrecios, { type ImpactoFila } from './ImpactoPrecios'
 
 function slugify(text: string): string {
@@ -38,6 +39,9 @@ type Modulo = {
   precio_inicial_usd: number
   precio_empresa_usd: number
   precio_pro_usd: number
+  precio_inicial_eur: number
+  precio_empresa_eur: number
+  precio_pro_eur: number
   tipo: string
   activo: boolean
   orden: number
@@ -140,12 +144,15 @@ export default function EditarModuloModal({
   }
   function handlePageDragEnd() { setDragIndex(null) }
 
-  /** Los tres precios tal como están escritos AHORA en el formulario. */
-  function preciosDelFormulario(): Record<string, number> {
+  /** Los seis precios tal como están escritos AHORA en el formulario. */
+  function preciosDelFormulario(): Record<string, Record<string, number>> {
     const fd = new FormData(formRef.current!)
-    return Object.fromEntries(
-      NIVELES.map(n => [n, Number(fd.get(CAMPO_PRECIO[n]) ?? 0) || 0]),
-    )
+    return Object.fromEntries(MONEDAS_CLAUX.map(moneda => [
+      moneda,
+      Object.fromEntries(
+        NIVELES.map(n => [n, Number(fd.get(CAMPO_PRECIO[moneda][n]) ?? 0) || 0]),
+      ),
+    ]))
   }
 
   async function guardar() {
@@ -165,7 +172,8 @@ export default function EditarModuloModal({
     e.preventDefault()
     // Si los precios no se han tocado, no hay nada que avisar: se guarda directo.
     const precios = preciosDelFormulario()
-    const cambian = NIVELES.some(n => precios[n] !== precioModulo(modulo, n))
+    const cambian = MONEDAS_CLAUX.some(moneda =>
+      NIVELES.some(n => precios[moneda][n] !== precioModulo(modulo, n, moneda)))
     if (!cambian) { await guardar(); return }
 
     // Cambiar un precio del catálogo mueve la cuota de todo el que tenga este
@@ -224,18 +232,24 @@ export default function EditarModuloModal({
                 <input name="descripcion" className="input" defaultValue={modulo.descripcion ?? ''} />
               </div>
             </div>
-            {/* Un precio por nivel. Los rótulos salen de /admin/niveles: si el dueño
-                renombra un nivel, este formulario lo dice sin tocar código. */}
-            <div className="grid-cols-3">
-              {NIVELES.map(n => (
-                <div className="input-group" key={n}>
-                  <label htmlFor={`mod-${n}`}>Precio {nombresNivel[n]} (USD)</label>
-                  <input id={`mod-${n}`} name={CAMPO_PRECIO[n]} className="input"
-                         type="number" min="0" step="any" required defaultValue={precioModulo(modulo, n)}
-                         onChange={() => setPorConfirmar(null)} />
-                </div>
-              ))}
-            </div>
+            {/* Un precio por nivel Y POR MONEDA: seis casillas, las seis a mano. El
+                de euros no es el de dólares al cambio del día —ese era justo el
+                problema— sino un precio propio que se teclea aquí. Los rótulos de
+                nivel salen de /admin/niveles: si el dueño renombra uno, este
+                formulario lo dice sin tocar código. */}
+            {MONEDAS_CLAUX.map(moneda => (
+              <div className="grid-cols-3" key={moneda}>
+                {NIVELES.map(n => (
+                  <div className="input-group" key={n}>
+                    <label htmlFor={`mod-${moneda}-${n}`}>Precio {nombresNivel[n]} ({moneda})</label>
+                    <input id={`mod-${moneda}-${n}`} name={CAMPO_PRECIO[moneda][n]} className="input"
+                           type="number" min="0" step="any" required
+                           defaultValue={precioModulo(modulo, n, moneda)}
+                           onChange={() => setPorConfirmar(null)} />
+                  </div>
+                ))}
+              </div>
+            ))}
             <label className="module-check">
               <input type="checkbox" name="activo" value="true" defaultChecked={modulo.activo} />
               Activo (visible en los toggles de cliente)

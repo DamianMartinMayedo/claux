@@ -6,11 +6,14 @@ import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarCondicionesCliente } from '@/app/actions/clientes'
 import { descuentoVigente, esSocioHoy } from '@/lib/billing'
 import FormHelp from '@/components/portal/FormHelp'
+import { importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 interface Props {
   clientId:        string
-  /** Suma de catálogo del nivel: lo que costaría sin nada pactado. */
+  /** Suma de catálogo del nivel EN SU MONEDA: lo que costaría sin nada pactado. */
   precioCatalogo:  number
+  /** En la que se le factura. El descuento se aplica dentro de ella, no cruza. */
+  moneda:          MonedaClaux
   descuentoPct:    number
   descuentoDesde:  string | null
   descuentoHasta:  string | null
@@ -24,9 +27,9 @@ interface Props {
 // columnas: un descuento del 20 % y ser Socio CLAUX no se suman ni se pisan —
 // socio gana, porque a un socio no se le cobra nada.
 //
-// Ninguna de las dos toca `precio_mensual_usd`: ese sigue siendo el precio de
-// catálogo. Lo que se cobra se resuelve al leer (`precioMensualEfectivo`), porque
-// esto caduca y un número guardado no caduca solo.
+// Ninguna de las dos toca las cachés `precio_mensual_usd`/`_eur`: esas siguen
+// siendo el precio de catálogo. Lo que se cobra se resuelve al leer
+// (`precioMensualEfectivo`), porque esto caduca y un número guardado no caduca solo.
 export default function CondicionesCard(props: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -43,7 +46,6 @@ export default function CondicionesCard(props: Props) {
   // Previsualización con los valores del formulario, no con los guardados: el
   // admin ve el número antes de decidir si guarda.
   const borrador = {
-    precio_mensual_usd: props.precioCatalogo,
     descuento_pct:      Number(pct) || 0,
     descuento_desde:    desde || null,
     descuento_hasta:    hasta || null,
@@ -73,7 +75,7 @@ export default function CondicionesCard(props: Props) {
     startTransition(async () => {
       const r = await guardarCondicionesCliente(fd)
       if (!r.ok) { toastError(r.error ?? 'No se pudo guardar'); return }
-      toastSuccess(socioHoy ? 'Socio CLAUX: no se le genera cobro' : `Cuota: $${cobrado.toFixed(2)}/mes`)
+      toastSuccess(socioHoy ? 'Socio CLAUX: no se le genera cobro' : `Cuota: ${importeClaux(cobrado, props.moneda)}/mes`)
       router.refresh()
     })
   }
@@ -96,14 +98,14 @@ export default function CondicionesCard(props: Props) {
       <div className="cond-cuota">
         <div>
           <span className="cond-cuota-label">Catálogo de su nivel</span>
-          <span className="cond-cuota-valor">${props.precioCatalogo.toFixed(2)}</span>
+          <span className="cond-cuota-valor">{importeClaux(props.precioCatalogo, props.moneda)}</span>
         </div>
 
         {socioHoy ? (
           <>
             <div className="cond-cuota-resta">
               <span className="cond-cuota-label">Socio CLAUX — no se le factura</span>
-              <span className="cond-cuota-valor">−${props.precioCatalogo.toFixed(2)}</span>
+              <span className="cond-cuota-valor">−{importeClaux(props.precioCatalogo, props.moneda)}</span>
             </div>
             {Number(pct) > 0 && (
               <div className="cond-cuota-inerte">
@@ -116,7 +118,7 @@ export default function CondicionesCard(props: Props) {
         ) : pctHoy > 0 ? (
           <div className="cond-cuota-resta">
             <span className="cond-cuota-label">Descuento pactado ({pctHoy}%)</span>
-            <span className="cond-cuota-valor">−${rebaja.toFixed(2)}</span>
+            <span className="cond-cuota-valor">−{importeClaux(rebaja, props.moneda)}</span>
           </div>
         ) : programado ? (
           <div className="cond-cuota-inerte">
@@ -128,7 +130,7 @@ export default function CondicionesCard(props: Props) {
 
         <div className={`cond-cuota-total${socioHoy ? ' cond-cuota-total-cero' : ''}`}>
           <span className="cond-cuota-label">Se le cobra cada mes</span>
-          <span className="cond-cuota-valor">${cobrado.toFixed(2)}</span>
+          <span className="cond-cuota-valor">{importeClaux(cobrado, props.moneda)}</span>
         </div>
       </div>
 

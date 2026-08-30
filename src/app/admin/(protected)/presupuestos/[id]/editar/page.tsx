@@ -9,6 +9,7 @@ import {
   type FormatoDatos,
 } from '@/lib/presupuesto/config'
 import { normalizarNivel, type Nivel } from '@/lib/niveles'
+import { normalizarMonedaClaux } from '@/lib/moneda-claux'
 import { nombresDeNiveles, limitesDeNiveles } from '@/lib/niveles-server'
 import PresupuestoCalculadora from '../../nuevo/PresupuestoCalculadora'
 
@@ -85,9 +86,11 @@ export default async function EditarPresupuestoPage({
         contacto:          pres.contacto ?? '',
         modulos:           Array.isArray(pres.modulos) ? pres.modulos : [],
         nivel,
+        // La del borrador: se sigue editando en la moneda en que se guardó.
+        moneda:            normalizarMonedaClaux(pres.moneda),
         formato:           (pres.formato_datos ?? 'cero') as FormatoDatos,
         volumenes:         (pres.volumenes ?? {}) as Record<string, number>,
-        tarifaHora:        Number(pres.tarifa_hora_usd ?? parametros.tarifaHora),
+        tarifaHora:        Number(pres.tarifa_hora ?? parametros.tarifaHora),
         descuentoPct:      Number(pres.descuento_pct ?? 0),
         descuentoMotivo:   pres.descuento_motivo ?? '',
         fasesExcluidas,

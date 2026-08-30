@@ -12,7 +12,7 @@ export default async function PagosPage() {
   const [{ data: pagos }, { data: clientes }] = await Promise.all([
     supabase.from('payments').select('*').order('fecha', { ascending: false }),
     supabase.from('clients')
-      .select('client_id, nombre_empresa, precio_mensual_usd, ciclo_facturacion, es_prueba')
+      .select('client_id, nombre_empresa, ciclo_facturacion, es_prueba')
       .order('nombre_empresa'),
   ])
 

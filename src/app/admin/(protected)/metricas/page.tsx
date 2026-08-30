@@ -1,6 +1,7 @@
 import { requireAccesoPagina } from '@/lib/admin-guard'
 import { Activity, Sparkles, UserCheck, Users } from 'lucide-react'
 import { obtenerMetricasGenerales } from '@/app/actions/admin/metricas'
+import { importesPorMoneda } from '@/lib/moneda-claux'
 
 const TIPO_LABEL: Record<string, string> = {
   base:          'Módulo',
@@ -69,7 +70,9 @@ export default async function MetricasPage() {
                   <td data-label="Módulo">{a.nombre}</td>
                   <td data-label="Tipo"><span className="badge badge-neutral">{TIPO_LABEL[a.tipo] ?? a.tipo}</span></td>
                   <td data-label="Negocios" className="col-num">{a.contratados}</td>
-                  <td data-label="Ingreso mensual" className="col-num table-price">${a.ingresoMensual.toFixed(0)}</td>
+                  <td data-label="Ingreso mensual" className="col-num table-price">
+                    {importesPorMoneda({ USD: a.ingresoUsd, EUR: a.ingresoEur }, 'USD', 0)}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -4,7 +4,7 @@ import { Download, Eye, Search, User } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, type CondicionesCliente } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, type CondicionesCliente } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
 
@@ -85,11 +85,14 @@ const DIAS_COLOR: Record<DiasInfo['variant'], string> = {
 
 function exportCSV(clientes: Cliente[]) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const headers = ['ID Cliente', 'Empresa', 'Contacto', 'Email', 'Precio mensual USD', 'Ciclo',
+  // La moneda va en su propia columna, no pegada al número ni en la cabecera: con dos
+  // monedas en la misma hoja, «Precio mensual USD» mintiendo en la mitad de las filas
+  // es peor que no traerla, y quien abra el CSV va a sumar la columna sin mirar.
+  const headers = ['ID Cliente', 'Empresa', 'Contacto', 'Email', 'Precio mensual', 'Moneda', 'Ciclo',
     'Estado', 'Socio CLAUX', 'Expiración', 'Días restantes', 'Fecha alta', 'Notas']
   const rows = clientes.map(c => [
     c.client_id, c.nombre_empresa, c.nombre_contacto ?? '', c.email_admin,
-    precioMensualEfectivo(c).toFixed(2), cicloLabel(c.ciclo_facturacion), c.estado,
+    precioMensualEfectivo(c).toFixed(2), monedaDelCliente(c), cicloLabel(c.ciclo_facturacion), c.estado,
     esSocioHoy(c) ? 'Sí' : '', fechaTope(c) ?? '', calcDiasRestantes(c).label,
     c.fecha_inicio ?? c.created_at ?? '', c.notas ?? '',
   ])
@@ -206,7 +209,7 @@ export default function ClientesTabla({
                     </td>
                     <td data-label="Email" className="table-muted">{c.email_admin}</td>
                     <td data-label="Suscripción" className="table-muted">
-                      {suscripcionLabel(precioMensualEfectivo(c), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct)}
+                      {suscripcionLabel(precioMensualEfectivo(c), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct, monedaDelCliente(c))}
                     </td>
                     <td data-label="Estado">
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>

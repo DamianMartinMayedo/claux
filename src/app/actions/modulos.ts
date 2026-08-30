@@ -5,11 +5,38 @@ import { requirePermiso } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
-import { NIVELES, CAMPO_PRECIO, normalizarNivel, precioModulo, type Nivel, type ModuloPrecios } from '@/lib/niveles'
+import {
+  NIVELES, CAMPO_PRECIO, COLUMNAS_PRECIO, campoPrecio, normalizarNivel, precioModulo,
+  type ColumnaPrecio, type Nivel, type ModuloPrecios,
+} from '@/lib/niveles'
+import { MONEDAS_CLAUX, importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import {
   impactoDeCambios, recalcularCuotas, sembrarPrecio,
   type CambioPrecio, type ImpactoCliente,
 } from '@/lib/catalogo-precios'
+
+/**
+ * Los SEIS precios del formulario (moneda × nivel, mig. 225), con el nombre de
+ * columna como clave para poder volcarlos directos al `update`/`insert`.
+ * Ausente o vacío = 0, igual que antes: el formulario siempre los manda todos.
+ */
+function leerPrecios(formData: FormData): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const moneda of MONEDAS_CLAUX) {
+    for (const nivel of NIVELES) {
+      const campo = CAMPO_PRECIO[moneda][nivel]
+      out[campo] = parseFloat((formData.get(campo) as string) ?? '0')
+    }
+  }
+  return out
+}
+
+/** Los seis precios en una línea, para el registro de actividad. */
+function describirPrecios(precios: Record<string, number>): string {
+  return MONEDAS_CLAUX.map(moneda =>
+    NIVELES.map(nivel => `${nivel}: ${importeClaux(precios[CAMPO_PRECIO[moneda][nivel]], moneda)}`).join(' / '),
+  ).join(' · ')
+}
 
 export async function editarModulo(formData: FormData) {
   await requirePermiso('modulos')
@@ -19,9 +46,7 @@ export async function editarModulo(formData: FormData) {
   const nombre               = (formData.get('nombre')               as string ?? '').trim()
   const descripcion          = (formData.get('descripcion')          as string ?? '').trim() || null
   const tipo                 = (formData.get('tipo')                 as string ?? '').trim() || null
-  const precio_inicial_usd   = parseFloat(formData.get('precio_inicial_usd')   as string ?? '0')
-  const precio_empresa_usd   = parseFloat(formData.get('precio_empresa_usd')   as string ?? '0')
-  const precio_pro_usd       = parseFloat(formData.get('precio_pro_usd')       as string ?? '0')
+  const precios              = leerPrecios(formData)
   const activo               = formData.get('activo') === 'true'
   const orden                = parseInt(formData.get('orden') as string ?? '0', 10)
 
@@ -29,9 +54,7 @@ export async function editarModulo(formData: FormData) {
   const paginas = paginasRaw ? JSON.parse(paginasRaw) : null
 
   if (!clave || !nombre) return { ok: false, error: 'Clave y nombre son obligatorios.' }
-  if ([precio_inicial_usd, precio_empresa_usd, precio_pro_usd].some(isNaN)) {
-    return { ok: false, error: 'Precios inválidos.' }
-  }
+  if (Object.values(precios).some(isNaN)) return { ok: false, error: 'Precios inválidos.' }
 
   // Obtener tipo actual para validar cambios
   const { data: actual } = await supabase
@@ -41,7 +64,7 @@ export async function editarModulo(formData: FormData) {
     .single()
 
   const update: Record<string, unknown> = {
-    nombre, descripcion, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, activo,
+    nombre, descripcion, ...precios, activo,
     updated_at: new Date().toISOString(),
   }
   if (!isNaN(orden)) update.orden = orden
@@ -66,7 +89,7 @@ export async function editarModulo(formData: FormData) {
     entity:      'modulo_catalogo',
     entity_id:   clave,
     action:      'editar',
-    description: `Editó módulo ${clave} — inicial: $${precio_inicial_usd} / empresa: $${precio_empresa_usd} / pro: $${precio_pro_usd} — activo: ${activo}`,
+    description: `Editó módulo ${clave} — ${describirPrecios(precios)} — activo: ${activo}`,
   })
 
   // La cuota cacheada de quien tenga este módulo deja de ser cierta en el
@@ -88,15 +111,11 @@ export async function crearModulo(formData: FormData) {
   const nombre               = (formData.get('nombre')               as string ?? '').trim()
   const tipo                 = (formData.get('tipo')                 as string ?? 'modulo').trim()
   const descripcion          = (formData.get('descripcion')          as string ?? '').trim() || null
-  const precio_inicial_usd   = parseFloat(formData.get('precio_inicial_usd')   as string ?? '0')
-  const precio_empresa_usd   = parseFloat(formData.get('precio_empresa_usd')   as string ?? '0')
-  const precio_pro_usd       = parseFloat(formData.get('precio_pro_usd')       as string ?? '0')
+  const precios              = leerPrecios(formData)
 
   if (!clave || !nombre) return { ok: false, error: 'Clave y nombre son obligatorios.' }
   if (!['modulo', 'funcionalidad', 'addon'].includes(tipo)) return { ok: false, error: 'Tipo inválido.' }
-  if ([precio_inicial_usd, precio_empresa_usd, precio_pro_usd].some(isNaN)) {
-    return { ok: false, error: 'Precios inválidos.' }
-  }
+  if (Object.values(precios).some(isNaN)) return { ok: false, error: 'Precios inválidos.' }
 
   // Verificar que la clave no exista
   const { data: existente } = await supabase
@@ -115,8 +134,7 @@ export async function crearModulo(formData: FormData) {
   const { error } = await supabase
     .from('modulos_catalogo')
     .insert({
-      clave, nombre, tipo, descripcion,
-      precio_inicial_usd, precio_empresa_usd, precio_pro_usd,
+      clave, nombre, tipo, descripcion, ...precios,
       es_base: false, orden, activo: true,
       paginas: JSON.stringify([]),
     })
@@ -129,7 +147,7 @@ export async function crearModulo(formData: FormData) {
     entity:      'modulo_catalogo',
     entity_id:   clave,
     action:      'crear',
-    description: `Creó ${tipo} "${nombre}" (${clave}) — inicial: $${precio_inicial_usd} / empresa: $${precio_empresa_usd} / pro: $${precio_pro_usd}`,
+    description: `Creó ${tipo} "${nombre}" (${clave}) — ${describirPrecios(precios)}`,
   })
 
   revalidatePath('/admin/modulos')
@@ -242,24 +260,40 @@ export async function eliminarModulo(clave: string) {
 // cuota de todo el que tenga ese módulo. Antes de guardar hay que enseñar a
 // quién le cambia y cuánto, con nombre y apellidos. Plan §8.2.
 
-/** A quién le mueve la cuota este precio nuevo. No guarda nada. */
-export async function previsualizarPrecio(clave: string, precios: Record<string, number>) {
+/**
+ * A quién le mueve la cuota este precio nuevo. No guarda nada.
+ *
+ * `precios` llega indexado por moneda y nivel (`{ USD: { inicial: 20 } }`): el
+ * modal edita las seis casillas a la vez y cualquiera de ellas mueve la cuota de
+ * alguien, según en qué moneda se le facture.
+ */
+export async function previsualizarPrecio(
+  clave: string, precios: Record<string, Record<string, number>>,
+) {
   await requirePermiso('modulos')
   const supabase = await createClient()
 
-  const limpio: Partial<Record<Nivel, number>> = {}
-  for (const n of NIVELES) {
-    const v = Number(precios[n])
-    if (Number.isFinite(v) && v >= 0) limpio[n] = v
+  const limpio: Partial<Record<MonedaClaux, Partial<Record<Nivel, number>>>> = {}
+  for (const moneda of MONEDAS_CLAUX) {
+    for (const nivel of NIVELES) {
+      const v = Number(precios?.[moneda]?.[nivel])
+      if (!Number.isFinite(v) || v < 0) continue
+      limpio[moneda] = { ...(limpio[moneda] ?? {}), [nivel]: v }
+    }
   }
   const impacto = await impactoDeCambios(supabase, [{ clave, precios: limpio }])
   return { ok: true as const, impacto }
 }
 
 // ── Sembrar una columna de precios ───────────────────────────────────
-// Empresa = Inicial ×2 · Pro = Inicial ×2,5 al alza al múltiplo de 5 (D2). El
-// multiplicador SIEMBRA la columna; no manda. Después cada celda se edita a mano
-// y nadie vuelve a preguntarle al multiplicador.
+// Una «columna» es una casilla de la rejilla: MONEDA × NIVEL, seis en total
+// (mig. 225). Con eso, «Empresa = Inicial ×2» y «el euro parte del dólar» son la
+// misma operación y no hacen falta dos herramientas.
+//
+// El multiplicador SIEMBRA la columna; NO manda. Después cada celda se edita a
+// mano y nadie vuelve a preguntarle al multiplicador. Es la única forma honesta
+// de tener un precio en euros: si lo recalculara una tasa, volveríamos al
+// problema que trajo todo esto —lo facturado y lo pagado sin coincidir—.
 
 export interface FilaSiembra {
   clave:  string
@@ -268,37 +302,47 @@ export interface FilaSiembra {
   nuevo:  number
 }
 
+/** Una casilla venida del navegador, normalizada. */
+function columna(moneda: unknown, nivel: unknown): ColumnaPrecio {
+  return { moneda: normalizarMonedaClaux(moneda), nivel: normalizarNivel(nivel) }
+}
+
+const mismaColumna = (a: ColumnaPrecio, b: ColumnaPrecio) =>
+  a.moneda === b.moneda && a.nivel === b.nivel
+
 async function calcularSiembra(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any, origen: Nivel, destino: Nivel, multiplicador: number, redondeoA: number,
+  supabase: any, origen: ColumnaPrecio, destino: ColumnaPrecio, multiplicador: number, redondeoA: number,
 ): Promise<{ filas: FilaSiembra[]; cambios: CambioPrecio[] }> {
   const { data } = await supabase
     .from('modulos_catalogo')
-    .select('clave, nombre, precio_inicial_usd, precio_empresa_usd, precio_pro_usd')
+    .select(`clave, nombre, ${COLUMNAS_PRECIO}`)
     .order('orden')
 
   const filas: FilaSiembra[] = []
   const cambios: CambioPrecio[] = []
   for (const m of (data ?? []) as (ModuloPrecios & { nombre: string })[]) {
-    const actual = precioModulo(m, destino)
-    const nuevo  = sembrarPrecio(precioModulo(m, origen), multiplicador, redondeoA)
+    const actual = precioModulo(m, destino.nivel, destino.moneda)
+    const nuevo  = sembrarPrecio(precioModulo(m, origen.nivel, origen.moneda), multiplicador, redondeoA)
     if (nuevo === actual) continue
     filas.push({ clave: m.clave, nombre: m.nombre, actual, nuevo })
-    cambios.push({ clave: m.clave, precios: { [destino]: nuevo } })
+    cambios.push({ clave: m.clave, precios: { [destino.moneda]: { [destino.nivel]: nuevo } } })
   }
   return { filas, cambios }
 }
 
 /** Qué quedaría en la columna y a quién le cambia la cuota. No guarda nada. */
 export async function previsualizarSiembra(
-  origen: string, destino: string, multiplicador: number, redondeoA: number,
+  origenMoneda: string, origenNivel: string,
+  destinoMoneda: string, destinoNivel: string,
+  multiplicador: number, redondeoA: number,
 ) {
   await requirePermiso('modulos')
   const supabase = await createClient()
 
-  const desde = normalizarNivel(origen)
-  const hacia = normalizarNivel(destino)
-  if (desde === hacia) return { ok: false as const, error: 'El origen y el destino son la misma columna.' }
+  const desde = columna(origenMoneda, origenNivel)
+  const hacia = columna(destinoMoneda, destinoNivel)
+  if (mismaColumna(desde, hacia)) return { ok: false as const, error: 'El origen y el destino son la misma columna.' }
   if (!(Number(multiplicador) > 0)) return { ok: false as const, error: 'El multiplicador tiene que ser mayor que cero.' }
 
   const { filas, cambios } = await calcularSiembra(supabase, desde, hacia, Number(multiplicador), Number(redondeoA) || 0)
@@ -308,14 +352,16 @@ export async function previsualizarSiembra(
 
 /** Escribe la columna sembrada y rehace la cuota cacheada de los afectados. */
 export async function aplicarSiembra(
-  origen: string, destino: string, multiplicador: number, redondeoA: number,
+  origenMoneda: string, origenNivel: string,
+  destinoMoneda: string, destinoNivel: string,
+  multiplicador: number, redondeoA: number,
 ) {
   await requirePermiso('modulos')
   const supabase = await createClient()
 
-  const desde = normalizarNivel(origen)
-  const hacia = normalizarNivel(destino)
-  if (desde === hacia) return { ok: false as const, error: 'El origen y el destino son la misma columna.' }
+  const desde = columna(origenMoneda, origenNivel)
+  const hacia = columna(destinoMoneda, destinoNivel)
+  if (mismaColumna(desde, hacia)) return { ok: false as const, error: 'El origen y el destino son la misma columna.' }
   if (!(Number(multiplicador) > 0)) return { ok: false as const, error: 'El multiplicador tiene que ser mayor que cero.' }
 
   // Se recalcula aquí en vez de fiarse de lo que mande el navegador: entre la
@@ -324,7 +370,7 @@ export async function aplicarSiembra(
   const { filas } = await calcularSiembra(supabase, desde, hacia, Number(multiplicador), Number(redondeoA) || 0)
   if (!filas.length) return { ok: true as const, escritos: 0, clientesRecalculados: 0 }
 
-  const campo = CAMPO_PRECIO[hacia]
+  const campo = campoPrecio(hacia.nivel, hacia.moneda)
   for (const f of filas) {
     const { error } = await supabase
       .from('modulos_catalogo')
@@ -335,13 +381,14 @@ export async function aplicarSiembra(
 
   const tocados = await recalcularCuotas(supabase, filas.map(f => f.clave))
 
+  const etiqueta = (c: ColumnaPrecio) => `${c.nivel} en ${c.moneda}`
   const { data: { user } } = await supabase.auth.getUser()
   await logActividad(supabase, {
     user_email:  user?.email ?? 'sistema',
     entity:      'modulo_catalogo',
-    entity_id:   `siembra-${hacia}`,
+    entity_id:   `siembra-${hacia.moneda}-${hacia.nivel}`,
     action:      'editar',
-    description: `Sembró la columna ${hacia} desde ${desde} (×${multiplicador}${redondeoA > 0 ? `, al alza a múltiplos de ${redondeoA}` : ''}) — ${filas.length} módulo(s), ${tocados} cliente(s) recalculado(s)`,
+    description: `Sembró la columna ${etiqueta(hacia)} desde ${etiqueta(desde)} (×${multiplicador}${redondeoA > 0 ? `, al alza a múltiplos de ${redondeoA}` : ''}) — ${filas.length} módulo(s), ${tocados} cliente(s) recalculado(s)`,
   })
 
   revalidatePath('/admin/modulos')

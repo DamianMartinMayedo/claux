@@ -9,7 +9,8 @@ import { logActividad } from '@/lib/audit'
 import { fmtFechaEs } from '@/lib/date-utils'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { getSetting } from '@/app/actions/settings'
-import { diasCiclo, importeCiclo, precioMensualEfectivo, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { diasCiclo, importeCiclo, precioMensualEnMoneda, monedaDelCliente, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { MONEDAS_CLAUX, importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { notificarPagoConfirmado } from '@/lib/notificaciones/eventos'
@@ -36,7 +37,12 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   const ciclo        = cliente.ciclo_facturacion ?? 'mensual'
   const duracionDias = diasCiclo(ciclo)
   const descuento    = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
-  const montoSugerido = importeCiclo(precioMensualEfectivo(cliente), ciclo, descuento)
+  // Se propone el importe en LAS DOS monedas, no solo en la suya: el dueño puede
+  // cobrarle un mes en euros y el siguiente en dólares, y en ese momento el número
+  // que hace falta es el de la otra columna, no este pasado por el cambio del día.
+  const montoSugerido = Object.fromEntries(
+    MONEDAS_CLAUX.map(m => [m, importeCiclo(precioMensualEnMoneda(cliente, m), ciclo, descuento)]),
+  ) as Record<MonedaClaux, number>
 
   // fecha_inicio = día siguiente a la expiración actual (o hoy si no hay expiración).
   //
@@ -54,7 +60,7 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   // Último pago de suscripción — para el cálculo pro-rata
   const { data: ultimoPago } = await supabase
     .from('payments')
-    .select('monto_usd, fecha_inicio_periodo, fecha_fin_periodo')
+    .select('monto, moneda, fecha_inicio_periodo, fecha_fin_periodo')
     .eq('client_id', clientId)
     .eq('concepto', 'suscripcion')
     .not('fecha_fin_periodo', 'is', null)
@@ -65,6 +71,7 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
   return {
     ok:                      true as const,
     monto_sugerido:          montoSugerido,
+    moneda:                  monedaDelCliente(cliente),
     fecha_inicio:            fechaBase,
     fecha_fin:               fechaFin,
     ciclo,
@@ -72,7 +79,8 @@ export async function obtenerDatosPagoDefecto(clientId: string) {
     fecha_expiracion_actual: cliente.fecha_expiracion ?? null,
     ultimo_pago:             ultimoPago
       ? {
-          monto_usd:    ultimoPago.monto_usd    as number,
+          monto:        ultimoPago.monto as number,
+          moneda:       normalizarMonedaClaux(ultimoPago.moneda),
           fecha_inicio: ultimoPago.fecha_inicio_periodo as string,
           fecha_fin:    ultimoPago.fecha_fin_periodo    as string,
         }
@@ -92,7 +100,11 @@ export async function registrarPago(formData: FormData) {
   const supabase = await createClient()
 
   const client_id            = formData.get('client_id')            as string
-  const monto_usd            = parseFloat(formData.get('monto_usd') as string)
+  const monto                = parseFloat(formData.get('monto') as string)
+  // La moneda viaja con el cobro y no se deduce del cliente al leerlo: si el mes
+  // que viene pasa a facturarse en la otra, este pago tiene que seguir diciendo en
+  // cuál entró el dinero. Un histórico reetiquetado no es un histórico.
+  const moneda               = normalizarMonedaClaux(formData.get('moneda'))
   const metodo               = formData.get('metodo')               as string
   const fecha_inicio_periodo = formData.get('fecha_inicio_periodo') as string
   const fecha_fin_periodo    = formData.get('fecha_fin_periodo')    as string
@@ -102,7 +114,7 @@ export async function registrarPago(formData: FormData) {
   if (!client_id || !metodo || !fecha_inicio_periodo || !fecha_fin_periodo) {
     return { ok: false as const, error: 'Todos los campos obligatorios son requeridos.' }
   }
-  if (isNaN(monto_usd) || monto_usd <= 0) {
+  if (isNaN(monto) || monto <= 0) {
     return { ok: false as const, error: 'El monto debe ser un número positivo.' }
   }
   if (!['tropipay', 'transferencia', 'efectivo'].includes(metodo)) {
@@ -165,7 +177,8 @@ export async function registrarPago(formData: FormData) {
     client_id,
     concepto:            'suscripcion',
     estado:              'confirmado',
-    monto_usd,
+    monto,
+    moneda,
     metodo,
     fecha:               hoyEnTz(),
     fecha_inicio_periodo,
@@ -200,7 +213,7 @@ export async function registrarPago(formData: FormData) {
   // un negocio sin correo puesto debe enterarse igual al entrar al portal.
   after(async () => {
     await notificarPagoConfirmado({
-      clientId: client_id, montoUsd: monto_usd, fechaExpiracion: fecha_fin_periodo,
+      clientId: client_id, monto, moneda, fechaExpiracion: fecha_fin_periodo,
     })
   })
 
@@ -211,7 +224,8 @@ export async function registrarPago(formData: FormData) {
       pagoId:     pago_id,
       clientId:   client_id,
       empresa:    cliente.nombre_empresa,
-      montoUsd:   monto_usd,
+      monto,
+      moneda,
       cubreHasta: fecha_fin_periodo,
     })
   })
@@ -223,7 +237,7 @@ export async function registrarPago(formData: FormData) {
       if (await tipoEmailActivo('confirmacion_pago')) {
         const { asunto, html } = await renderPlantilla('confirmacion_pago', {
           empresa: cliente.nombre_empresa,
-          monto: monto_usd.toFixed(2),
+          monto: importeClaux(monto, moneda),
           fecha_expiracion: fmtFechaEs(fecha_fin_periodo),
         })
         await enviarEmail({
@@ -245,7 +259,7 @@ export async function registrarPago(formData: FormData) {
     entity:      'pago',
     entity_id:   pago_id,
     action:      'registrar',
-    description: `Registró pago ${pago_id} — Cliente: ${client_id} — $${monto_usd} (${metodo}) — hasta ${fecha_fin_periodo}`,
+    description: `Registró pago ${pago_id} — Cliente: ${client_id} — ${importeClaux(monto, moneda)} (${metodo}) — hasta ${fecha_fin_periodo}`,
   })
 
   revalidatePath('/admin/pagos')
@@ -271,7 +285,7 @@ export async function confirmarPago(pagoId: string) {
 
   const { data: pago } = await supabase
     .from('payments')
-    .select('client_id, concepto, monto_usd, estado, fecha_fin_periodo')
+    .select('client_id, concepto, monto, moneda, estado, fecha_fin_periodo')
     .eq('pago_id', pagoId)
     .single()
   if (!pago) return { ok: false as const, error: 'Pago no encontrado.' }
@@ -313,7 +327,7 @@ export async function confirmarPago(pagoId: string) {
     if (await tipoEmailActivo('confirmacion_pago')) {
       const { asunto, html } = await renderPlantilla('confirmacion_pago', {
         empresa: cliente.nombre_empresa,
-        monto: Number(pago.monto_usd).toFixed(2),
+        monto: importeClaux(pago.monto, pago.moneda),
         fecha_expiracion: cliente.fecha_expiracion ? fmtFechaEs(cliente.fecha_expiracion) : '—',
       })
       await enviarEmail({
@@ -334,7 +348,7 @@ export async function confirmarPago(pagoId: string) {
     entity:      'pago',
     entity_id:   pagoId,
     action:      'confirmar',
-    description: `Confirmó pago ${pagoId} (${pago.concepto}) — Cliente: ${pago.client_id} — $${Number(pago.monto_usd).toFixed(2)}`,
+    description: `Confirmó pago ${pagoId} (${pago.concepto}) — Cliente: ${pago.client_id} — ${importeClaux(pago.monto, pago.moneda)}`,
   })
 
   revalidatePath('/admin/pagos')
@@ -353,7 +367,11 @@ export async function editarPago(formData: FormData) {
   const supabase = await createClient()
 
   const pago_id              = formData.get('pago_id')              as string
-  const monto_usd            = parseFloat(formData.get('monto_usd') as string)
+  const monto                = parseFloat(formData.get('monto') as string)
+  // La moneda viaja con el cobro y no se deduce del cliente al leerlo: si el mes
+  // que viene pasa a facturarse en la otra, este pago tiene que seguir diciendo en
+  // cuál entró el dinero. Un histórico reetiquetado no es un histórico.
+  const moneda               = normalizarMonedaClaux(formData.get('moneda'))
   const metodo               = formData.get('metodo')               as string
   const fecha_inicio_periodo = formData.get('fecha_inicio_periodo') as string
   const fecha_fin_periodo    = formData.get('fecha_fin_periodo')    as string
@@ -361,7 +379,7 @@ export async function editarPago(formData: FormData) {
 
   if (!pago_id || !metodo)
     return { ok: false as const, error: 'Campos obligatorios requeridos.' }
-  if (isNaN(monto_usd) || monto_usd <= 0)
+  if (isNaN(monto) || monto <= 0)
     return { ok: false as const, error: 'El monto debe ser un número positivo.' }
   if (!['tropipay', 'transferencia', 'efectivo'].includes(metodo))
     return { ok: false as const, error: 'Método de pago no válido.' }
@@ -380,7 +398,7 @@ export async function editarPago(formData: FormData) {
   if (esConfiguracion) {
     const { error: errPago } = await supabase
       .from('payments')
-      .update({ monto_usd, metodo, notas })
+      .update({ monto, moneda, metodo, notas })
       .eq('pago_id', pago_id)
     if (errPago) return { ok: false as const, error: errPago.message }
 
@@ -390,7 +408,7 @@ export async function editarPago(formData: FormData) {
       entity:      'pago',
       entity_id:   pago_id,
       action:      'editar',
-      description: `Editó pago de configuración ${pago_id} — $${monto_usd}`,
+      description: `Editó pago de configuración ${pago_id} — ${importeClaux(monto, moneda)}`,
     })
 
     revalidatePath('/admin/pagos')
@@ -423,7 +441,7 @@ export async function editarPago(formData: FormData) {
 
   const { error: errPago } = await supabase
     .from('payments')
-    .update({ monto_usd, metodo, fecha_inicio_periodo, fecha_fin_periodo, notas })
+    .update({ monto, moneda, metodo, fecha_inicio_periodo, fecha_fin_periodo, notas })
     .eq('pago_id', pago_id)
   if (errPago) return { ok: false as const, error: errPago.message }
 
@@ -440,7 +458,7 @@ export async function editarPago(formData: FormData) {
     entity:      'pago',
     entity_id:   pago_id,
     action:      'editar',
-    description: `Editó pago ${pago_id} — $${monto_usd} — período ${fecha_inicio_periodo} → ${fecha_fin_periodo}`,
+    description: `Editó pago ${pago_id} — ${importeClaux(monto, moneda)} — período ${fecha_inicio_periodo} → ${fecha_fin_periodo}`,
   })
 
   revalidatePath('/admin/pagos')

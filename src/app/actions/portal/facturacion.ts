@@ -3,7 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { leerSetting }       from '@/lib/settings'
-import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { type MonedaClaux } from '@/lib/moneda-claux'
 import { cargarContextoLimites, usoDeLimites, DIMENSIONES, OFERTA_NIVEL, type UsoDimension } from '@/lib/limites'
 import { fechaEnTz }        from '@/lib/fecha-tz'
 
@@ -16,7 +17,8 @@ export interface PagoPortal {
   fecha_fin_periodo:    string | null
   concepto:             string | null
   estado:               string | null
-  monto_usd:            number
+  monto:                number
+  moneda:               string | null
   metodo:               string
   notas:                string | null
 }
@@ -28,6 +30,8 @@ export interface FacturacionData {
   es_prueba:        boolean
   suscripcion:      string
   precio_mensual:   number
+  /** Moneda en la que se le factura. Los importes de la página se pintan con ella. */
+  moneda:           MonedaClaux
   ciclo:            string
   fecha_expiracion: string | null
   fecha_fin_gracia: string | null
@@ -63,7 +67,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
       // `estado` viaja al panel del cliente a propósito: sin él, un cobro POR
       // CONFIRMAR (el de configuración recién generado, p. ej.) se leía como un
       // pago ya hecho dentro del «Historial de pagos».
-      .select('pago_id, fecha, fecha_inicio_periodo, fecha_fin_periodo, concepto, estado, monto_usd, metodo, notas')
+      .select('pago_id, fecha, fecha_inicio_periodo, fecha_fin_periodo, concepto, estado, monto, moneda, metodo, notas')
       .eq('client_id', session.client_id)
       .order('fecha', { ascending: false }),
   ])
@@ -72,9 +76,10 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
 
   // Lo que paga, no lo que cuesta: aquí el cliente mira su factura.
   const precioMes   = precioMensualEfectivo(cliente)
+  const moneda      = monedaDelCliente(cliente)
   const ciclo       = cliente.ciclo_facturacion ?? 'mensual'
   const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
-  const suscripcion = suscripcionLabel(precioMes, ciclo, descuento)
+  const suscripcion = suscripcionLabel(precioMes, ciclo, descuento, moneda)
   const emailSoporte = await leerSetting('email_soporte', 'soporte@claux.es')
 
   // Su nivel y lo que le cabe. Hasta ahora el dueño solo se enteraba de en qué
@@ -130,6 +135,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
     es_prueba:        cliente.es_prueba ?? false,
     suscripcion,
     precio_mensual:   precioMes,
+    moneda,
     ciclo,
     fecha_expiracion: cliente.fecha_expiracion ?? null,
     fecha_fin_gracia: cliente.fecha_fin_gracia ?? null,

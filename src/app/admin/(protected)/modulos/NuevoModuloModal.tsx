@@ -9,6 +9,7 @@ import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 import { NIVELES, CAMPO_PRECIO, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX } from '@/lib/moneda-claux'
 
 export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Record<Nivel, string> }) {
   const [open, setOpen]       = useState(false)
@@ -66,17 +67,20 @@ export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Recor
               <label>Descripción</label>
               <textarea name="descripcion" className="input" rows={2} placeholder="Describe qué incluye este módulo…" />
             </div>
-            {/* Un precio por nivel. Los rótulos salen de /admin/niveles: si el dueño
-                renombra un nivel, este formulario lo dice sin tocar código. */}
-            <div className="grid-cols-3">
-              {NIVELES.map(n => (
-                <div className="input-group" key={n}>
-                  <label htmlFor={`nuevo-${n}`}>Precio {nombresNivel[n]} (USD)</label>
-                  <input id={`nuevo-${n}`} name={CAMPO_PRECIO[n]} className="input"
-                         type="number" min="0" step="any" required defaultValue="0" />
-                </div>
-              ))}
-            </div>
+            {/* Un precio por nivel Y POR MONEDA. Las seis se piden aquí, en el alta:
+                un módulo sin precio en euros sale GRATIS al que se le factura en
+                euros, y eso no avisa por ningún lado (`audit:nivel` exige los seis). */}
+            {MONEDAS_CLAUX.map(moneda => (
+              <div className="grid-cols-3" key={moneda}>
+                {NIVELES.map(n => (
+                  <div className="input-group" key={n}>
+                    <label htmlFor={`nuevo-${moneda}-${n}`}>Precio {nombresNivel[n]} ({moneda})</label>
+                    <input id={`nuevo-${moneda}-${n}`} name={CAMPO_PRECIO[moneda][n]} className="input"
+                           type="number" min="0" step="any" required defaultValue="0" />
+                  </div>
+                ))}
+              </div>
+            ))}
             <div className="info-banner info-banner-compacto">
               <Info aria-hidden />
               <p>Las páginas internas (módulo) o rutas (funcionalidad) se crean con el asistente de IA. Desde aquí solo gestionas el catálogo.</p>

@@ -2,6 +2,7 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
 import { listarPresupuestos } from '@/app/actions/presupuestos'
+import { COLUMNAS_PRECIO } from '@/lib/niveles'
 import { nombresDeNiveles } from '@/lib/niveles-server'
 import PresupuestosView from './PresupuestosView'
 
@@ -15,7 +16,7 @@ export default async function PresupuestosPage() {
     listarPresupuestos(),
     supabase
       .from('modulos_catalogo')
-      .select('clave, nombre, descripcion, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, es_base, tipo')
+      .select(`clave, nombre, descripcion, ${COLUMNAS_PRECIO}, es_base, tipo`)
       .eq('activo', true)
       .order('orden'),
     supabase

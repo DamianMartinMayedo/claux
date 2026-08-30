@@ -4,7 +4,7 @@ import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
 import { leerSetting }       from '@/lib/settings'
-import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { cargarContextoLimites } from '@/lib/limites'
 import { hashPasswordPortal } from '@/lib/portal-auth'
 
@@ -59,7 +59,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
   const ctx         = await cargarContextoLimites(db, session.client_id)
   const precioMes   = precioMensualEfectivo(cliente)
   const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
-  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento)
+  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuento, monedaDelCliente(cliente))
 
   return {
     client_id:        session.client_id,

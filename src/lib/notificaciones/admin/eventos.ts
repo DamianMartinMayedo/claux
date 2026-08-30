@@ -12,6 +12,7 @@
 // escalado del cron lo es.
 
 import { fmtFechaEs } from '@/lib/date-utils'
+import { importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { crearAvisoAdmin, resolverAvisosCliente } from './crear'
 
 /** Alta en `diagnosticos`: alguien completó el diagnóstico público. */
@@ -142,7 +143,8 @@ export async function avisarPagoRegistrado(params: {
   pagoId:      string
   clientId:    string
   empresa:     string
-  montoUsd:    number
+  monto:       number
+  moneda:      MonedaClaux
   cubreHasta:  string
 }): Promise<void> {
   await resolverAvisosCliente(params.clientId, [
@@ -151,7 +153,7 @@ export async function avisarPagoRegistrado(params: {
   await crearAvisoAdmin({
     tipo:        'pago_registrado',
     titulo:      `Pago de ${params.empresa}`,
-    cuerpo:      `${params.montoUsd.toFixed(2)} USD · cubre hasta el ${fmtFechaEs(params.cubreHasta)}`,
+    cuerpo:      `${importeClaux(params.monto, params.moneda)} · cubre hasta el ${fmtFechaEs(params.cubreHasta)}`,
     enlace:      `/admin/clientes/${params.clientId}`,
     clientId:    params.clientId,
     entidadTipo: 'pago',

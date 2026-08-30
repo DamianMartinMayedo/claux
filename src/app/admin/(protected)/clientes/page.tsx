@@ -3,6 +3,7 @@ import { Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSetting } from '@/app/actions/settings'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
+import { COLUMNAS_PRECIO } from '@/lib/niveles'
 import { nombresDeNiveles } from '@/lib/niveles-server'
 import NuevoClienteModal from './NuevoClienteModal'
 import ClientesTabla     from './ClientesTabla'
@@ -15,7 +16,7 @@ export default async function ClientesPage() {
     supabase.from('clients').select('*').order('created_at', { ascending: false }),
     supabase
       .from('modulos_catalogo')
-      .select('clave, nombre, descripcion, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, es_base, tipo')
+      .select(`clave, nombre, descripcion, ${COLUMNAS_PRECIO}, es_base, tipo`)
       .eq('activo', true)
       .order('orden'),
     supabase

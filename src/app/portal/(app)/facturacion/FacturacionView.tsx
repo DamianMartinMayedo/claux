@@ -7,6 +7,7 @@ import { usePagination, TablePagination } from '@/components/TablePagination'
 import { registrarInteresModulo } from '@/app/actions/portal/soporte'
 import { useNotificacionesOpcional } from '@/components/portal/notificaciones/NotificacionesContext'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import { MONEDAS_CLAUX, importeClaux, importesPorMoneda, totalPorMoneda } from '@/lib/moneda-claux'
 
 // La clave con la que «subir de nivel» viaja por el circuito de contratación.
 // Es la MISMA que usa el banner del dashboard (`OFERTA_NIVEL` de `@/lib/limites`),
@@ -37,9 +38,9 @@ function fmt(dateStr: string | null | undefined) {
   })
 }
 
-function fmtUsd(amount: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
-}
+// Cada pago trae SU moneda: el que se cobró en dólares se lee en dólares aunque hoy
+// se le facture en euros (mig. 225). El formateador es el único de la casa.
+const imp = (n: number, moneda: unknown) => importeClaux(n, moneda)
 
 function diasRestantes(fechaStr: string | null): number | null {
   if (!fechaStr) return null
@@ -77,9 +78,12 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
 
   // Lo que aún no ha entrado. Se suma sobre TODOS los pagos, no sobre la página
   // visible: el cliente tiene que ver lo que debe aunque esté en la página 3.
-  const pendiente = data.pagos
-    .filter(p => p.estado === 'por_confirmar')
-    .reduce((total, p) => total + Number(p.monto_usd ?? 0), 0)
+  // Y separado por moneda: si dejó a medias un cobro en euros y otro en dólares son
+  // dos deudas, no una suma.
+  const pendiente = totalPorMoneda(
+    data.pagos.filter(p => p.estado === 'por_confirmar'), p => p.moneda, p => p.monto,
+  )
+  const hayPendiente = MONEDAS_CLAUX.some(m => pendiente[m] > 0)
 
   // En GRACIA, lo vigente es `fecha_fin_gracia` — la suscripción de base ya venció
   // (por eso el cliente está en gracia) y seguir mirando `fecha_expiracion` es lo
@@ -307,8 +311,8 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
             <span className="text-xs-muted">
               {data.pagos.length} registro{data.pagos.length !== 1 ? 's' : ''}
             </span>
-            {pendiente > 0 && (
-              <span className="badge badge-warning">{fmtUsd(pendiente)} pendiente</span>
+            {hayPendiente && (
+              <span className="badge badge-warning">{importesPorMoneda(pendiente, data.moneda)} pendiente</span>
             )}
           </div>
         </div>
@@ -361,7 +365,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                       </span>
                     </td>
                     <td data-label="Monto" className="col-num">
-                      <span className="fac-monto">{fmtUsd(p.monto_usd)}</span>
+                      <span className="fac-monto">{imp(p.monto, p.moneda)}</span>
                     </td>
                     <td data-label="Método">
                       <span className="fac-metodo">{METODO_LABEL[p.metodo] ?? p.metodo}</span>

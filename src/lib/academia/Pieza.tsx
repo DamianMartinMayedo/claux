@@ -3,6 +3,7 @@ import type { PiezaLeida } from './manual'
 import Markdown from './Markdown'
 import { nombresNivelManual } from './precios'
 import { NIVELES } from '@/lib/niveles'
+import { MONEDAS_CLAUX, importeClaux } from '@/lib/moneda-claux'
 
 /**
  * Una pieza del manual: su cabecera y su texto.
@@ -61,7 +62,9 @@ export default async function Pieza(
           {comercial && pieza.precio && NIVELES.map(n => (
             <span className="acad-chip" key={n}>
               <span className="acad-chip-k">{nombresNivel[n]}</span>
-              <span className="acad-chip-v">{pieza.precio!.precios[n]} USD</span>
+              <span className="acad-chip-v">
+                {MONEDAS_CLAUX.map(m => importeClaux(pieza.precio!.precios[m][n], m)).join(' · ')}
+              </span>
             </span>
           ))}
           {/* Se vende, pero el catálogo no la encuentra: mejor un hueco que un

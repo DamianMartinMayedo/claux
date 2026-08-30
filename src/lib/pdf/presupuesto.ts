@@ -14,9 +14,9 @@ import {
   crearDoc, cabeceraReporte, sellarPie, texto, trazo, relleno, textoPdfSeguro,
   MARCA, MARGEN, RESERVA_PIE, type JsPdfDoc,
 } from './documento'
+import { importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
-const usd = (n: number) => `$${(Number(n) || 0).toFixed(2)}`
-const hs  = (n: number) => `${Number(n) || 0} h`
+const hs = (n: number) => `${Number(n) || 0} h`
 
 /**
  * Escribe SANEANDO el texto. Las fuentes estándar de jsPDF codifican en WinAnsi, y un
@@ -45,10 +45,10 @@ export interface LineaPdf {
 }
 
 export interface FasePdf {
-  fase:        string
-  horas:       number
-  subtotalUsd: number
-  lineas?:     LineaPdf[]
+  fase:     string
+  horas:    number
+  subtotal: number
+  lineas?:  LineaPdf[]
 }
 
 export interface ModuloPdf {
@@ -60,6 +60,8 @@ export interface PresupuestoPdf {
   numero:            string
   fecha:             string
   negocio:           string
+  /** Moneda de TODOS los importes del documento. El presupuesto se emite en una. */
+  moneda:            MonedaClaux
   responsable?:      string | null
   contacto?:         string | null
   // ── Pago único ──
@@ -83,6 +85,7 @@ export interface PresupuestoPdf {
 }
 
 export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc> {
+  const imp = (n: number) => importeClaux(n, d.moneda)
   const doc = await crearDoc()
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -146,7 +149,7 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     texto(doc, MARCA.muted); doc.setFont('helvetica', 'normal')
     escribir(doc, hs(f.horas), right - 28, y, { align: 'right' })
     texto(doc, MARCA.dark)
-    escribir(doc, usd(f.subtotalUsd), right, y, { align: 'right' })
+    escribir(doc, imp(f.subtotal), right, y, { align: 'right' })
     y += 5
 
     // El detalle de cada línea: es lo que hace que el cliente entienda de dónde sale la cifra
@@ -165,16 +168,16 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     y += 5
   }
 
-  fila(`${d.horasTotal} h × ${usd(d.tarifaHora)}/h`, usd(d.costeInstalacion))
+  fila(`${d.horasTotal} h × ${imp(d.tarifaHora)}/h`, imp(d.costeInstalacion))
   if (d.descuentoPct > 0) {
     const dto = d.costeInstalacion - d.totalInstalacion
-    fila(`Descuento ${d.descuentoPct}%`, `− ${usd(dto)}`)
+    fila(`Descuento ${d.descuentoPct}%`, `− ${imp(dto)}`)
   }
   y += 1
   trazo(doc, MARCA.dark); doc.setLineWidth(0.4)
   doc.line(totX, y, right, y)
   y += 6
-  fila('Total a pagar una vez', usd(d.totalInstalacion), true)
+  fila('Total a pagar una vez', imp(d.totalInstalacion), true)
   y += 6
   }
 
@@ -188,20 +191,20 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     doc.setFont('helvetica', 'normal'); texto(doc, MARCA.dark)
     escribir(doc, m.nombre, MARGEN, y)
     texto(doc, m.precio > 0 ? MARCA.dark : MARCA.muted)
-    escribir(doc, m.precio > 0 ? `${usd(m.precio)}/mes` : 'Incluido', right, y, { align: 'right' })
+    escribir(doc, m.precio > 0 ? `${imp(m.precio)}/mes` : 'Incluido', right, y, { align: 'right' })
     y += 5.2
   }
   y += 2
   trazo(doc, MARCA.dark); doc.setLineWidth(0.4)
   doc.line(totX, y, right, y)
   y += 6
-  fila('Total mensual', `${usd(d.cuotaMensual)}/mes`, true)
+  fila('Total mensual', `${imp(d.cuotaMensual)}/mes`, true)
   if (d.cuotaAnual > 0) {
     // El anual se enseña SIEMPRE que haya cuota: es la palanca de venta que el comercial
     // tenía que calcular a mano, y el ahorro dicho en dinero convence más que el porcentaje.
     const ahorro = d.cuotaMensual * 12 - d.cuotaAnual
-    fila(`Si se paga por año (−${d.descuentoAnualPct}%)`, `${usd(d.cuotaAnual)}/año`)
-    if (ahorro > 0) fila('Ahorro frente a pagar mes a mes', usd(ahorro))
+    fila(`Si se paga por año (−${d.descuentoAnualPct}%)`, `${imp(d.cuotaAnual)}/año`)
+    if (ahorro > 0) fila('Ahorro frente a pagar mes a mes', imp(ahorro))
   }
   y += 8
   }

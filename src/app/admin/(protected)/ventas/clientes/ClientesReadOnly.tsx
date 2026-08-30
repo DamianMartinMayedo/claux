@@ -2,7 +2,7 @@
 
 import { Search, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { suscripcionLabel, precioMensualEfectivo, type CondicionesCliente } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, type CondicionesCliente } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import VentasTabs from '@/components/admin/VentasTabs'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
@@ -101,7 +101,7 @@ export default function ClientesReadOnly({
                     <td data-label="Contacto" className="table-muted">{c.nombre_contacto || '—'}</td>
                     <td data-label="Email" className="table-muted">{c.email_admin}</td>
                     <td data-label="Suscripción" className="table-muted">
-                      {suscripcionLabel(precioMensualEfectivo(c), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct)}
+                      {suscripcionLabel(precioMensualEfectivo(c), c.ciclo_facturacion ?? 'mensual', descuentoAnualPct, monedaDelCliente(c))}
                     </td>
                     <td data-label="Estado">
                       <span className={`badge badge-dot ${ESTADO_BADGE[c.estado] ?? 'badge-neutral'}`}>

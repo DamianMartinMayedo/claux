@@ -13,6 +13,7 @@ import FormHelp from '@/components/portal/FormHelp'
 import { useMounted } from '@/lib/use-mounted'
 import { importeCiclo } from '@/lib/billing'
 import { NIVELES, precioModulo, type Nivel } from '@/lib/niveles'
+import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { MIGRACION_ESTADOS_ALTA, MIGRACION_ESTADO_LABEL } from '@/lib/migracion'
 
 export type ModuloCatalogo = {
@@ -22,6 +23,9 @@ export type ModuloCatalogo = {
   precio_inicial_usd: number
   precio_empresa_usd: number
   precio_pro_usd: number
+  precio_inicial_eur: number
+  precio_empresa_eur: number
+  precio_pro_eur: number
   es_base: boolean
   tipo: string
 }
@@ -42,7 +46,10 @@ export type InitialCliente = {
   nivel?:           Nivel
   ciclo?:           'mensual' | 'anual'
   modulos?:         string[]
-  pago_setup_usd?:  number
+  pago_setup?:      number
+  /** La del presupuesto aprobado. Un alta desde una cotización en euros nace en
+   *  euros: es el número que el cliente firmó, no uno convertido al abrir esto. */
+  moneda?:          MonedaClaux
 }
 
 type Props = {
@@ -86,6 +93,7 @@ export default function ClienteFormModal({
   // Controlado porque el botón de estimar lo rellena: con `defaultValue` no había forma de
   // escribir en él desde fuera.
   const [pagoSetup, setPagoSetup] = useState('')
+  const [moneda, setMoneda] = useState<MonedaClaux>('USD')
 
   // Al abrir, (re)inicializa el formulario con los valores de precarga. Si no hay
   // precarga, arranca en los valores por defecto del alta manual.
@@ -97,7 +105,8 @@ export default function ClienteFormModal({
     setNivel(initial?.nivel ?? 'inicial')
     setCiclo(initial?.ciclo ?? 'mensual')
     setEsPrueba(false)
-    setPagoSetup(initial?.pago_setup_usd != null ? String(initial.pago_setup_usd) : '')
+    setPagoSetup(initial?.pago_setup != null ? String(initial.pago_setup) : '')
+    setMoneda(initial?.moneda ?? 'USD')
   }, [open, initial])
 
   /**
@@ -111,14 +120,14 @@ export default function ClienteFormModal({
   const estimacion = useMemo(() => {
     if (!parametros || seleccionados.length === 0) return null
     return calcularInstalacion(
-      { modulos: seleccionados, volumenes: {}, formato: 'cero' },
+      { modulos: seleccionados, volumenes: {}, formato: 'cero', moneda },
       parametros,
     )
-  }, [parametros, seleccionados])
+  }, [parametros, seleccionados, moneda])
 
   const precioMensual = catalogo
     .filter(m => seleccionados.includes(m.clave))
-    .reduce((sum, m) => sum + precioModulo(m, nivel), 0)
+    .reduce((sum, m) => sum + precioModulo(m, nivel, moneda), 0)
   const precioAnual = importeCiclo(precioMensual, 'anual', descuentoAnualPct)
   const ahorroAnual = Math.max(0, precioMensual * 12 - precioAnual)
 
@@ -166,6 +175,7 @@ export default function ClienteFormModal({
     if (email)    q.set('contacto', email)
     if (seleccionados.length > 0) q.set('modulos', seleccionados.join(','))
     q.set('nivel', nivel)
+    q.set('moneda', moneda)
     return `/admin/presupuestos/nuevo?${q.toString()}`
   }
 
@@ -304,6 +314,26 @@ export default function ClienteFormModal({
                 </div>
                 )}
 
+                {/* Moneda de facturación. No es una preferencia de visualización: manda
+                    sobre la columna de precios que se cobra y sobre la tarifa/hora de la
+                    instalación, y se guarda en la ficha. Se puede cambiar después desde
+                    sus módulos —hay clientes que pagan un mes en una y al siguiente en la
+                    otra— y entonces hay que volver a firmar lo firmado en la anterior. */}
+                {!esPrueba && (
+                <div className="seg-field">
+                  <span className="seg-field-label">Moneda</span>
+                  <div className="seg">
+                    {MONEDAS_CLAUX.map(m => (
+                      <label key={m} className="seg-opt">
+                        <input type="radio" name="moneda_facturacion" value={m} checked={moneda === m}
+                          onChange={() => setMoneda(m)} />
+                        <span>{m}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                )}
+
                 {/* Lista de módulos con switch */}
                 {GRUPOS.map(grupo => {
                   const items = catalogo.filter(m => m.tipo === grupo.tipo)
@@ -313,7 +343,7 @@ export default function ClienteFormModal({
                       <p className="mod-list-label">{grupo.label}</p>
                       {items.map(m => {
                         const activo = seleccionados.includes(m.clave)
-                        const precio = precioModulo(m, nivel)
+                        const precio = precioModulo(m, nivel, moneda)
                         return (
                           <label key={m.clave} className="mod-row">
                             <span className="mod-row-main">
@@ -321,7 +351,7 @@ export default function ClienteFormModal({
                               {m.descripcion && <span className="mod-row-desc">{m.descripcion}</span>}
                             </span>
                             <span className={`mod-row-price${precio === 0 ? ' mod-row-price-free' : ''}`}>
-                              {precio > 0 ? `+$${precio.toFixed(2)}` : 'Gratis'}
+                              {precio > 0 ? `+${importeClaux(precio, moneda)}` : 'Gratis'}
                             </span>
                             <span className="switch">
                               <input
@@ -362,13 +392,13 @@ export default function ClienteFormModal({
                 <div className="mod-precio-resumen">
                   <div className={`mod-precio-card${ciclo === 'mensual' ? ' mod-precio-card-active' : ''}`}>
                     <p className="mod-precio-label">Mensual</p>
-                    <p className="mod-precio-valor">${precioMensual.toFixed(2)}<span className="mod-precio-unidad">/mes</span></p>
+                    <p className="mod-precio-valor">{importeClaux(precioMensual, moneda)}<span className="mod-precio-unidad">/mes</span></p>
                   </div>
                   <div className={`mod-precio-card${ciclo === 'anual' ? ' mod-precio-card-active' : ''}`}>
                     <p className="mod-precio-label">Anual</p>
-                    <p className="mod-precio-valor">${precioAnual.toFixed(2)}<span className="mod-precio-unidad">/año</span></p>
+                    <p className="mod-precio-valor">{importeClaux(precioAnual, moneda)}<span className="mod-precio-unidad">/año</span></p>
                     {descuentoAnualPct > 0 && precioMensual > 0 && (
-                      <p className="mod-precio-extra">Ahorra {descuentoAnualPct}% (${ahorroAnual.toFixed(2)}/año)</p>
+                      <p className="mod-precio-extra">Ahorra {descuentoAnualPct}% ({importeClaux(ahorroAnual, moneda)}/año)</p>
                     )}
                   </div>
                 </div>
@@ -381,7 +411,7 @@ export default function ClienteFormModal({
                     no tiene horas detrás con las que contrastarlo. */}
                 <div className="input-group">
                   <div className="form-label-with-help">
-                    <label>Pago de configuración (USD)</label>
+                    <label>Pago de configuración ({moneda})</label>
                     <FormHelp
                       text={presupuestoId
                         ? 'Viene del presupuesto aprobado. Cambiarlo aquí lo separa de las horas cotizadas.'
@@ -389,7 +419,7 @@ export default function ClienteFormModal({
                       label="Información sobre el pago de configuración" />
                   </div>
                   <input
-                    name="pago_setup_usd"
+                    name="pago_setup"
                     type="number"
                     min="0"
                     step="any"
@@ -408,11 +438,11 @@ export default function ClienteFormModal({
                     <p className="cli-estimacion">
                       <span>
                         Por sus módulos: <strong>{estimacion.horasTotal}h</strong> ·{' '}
-                        <strong>${estimacion.costeInstalacionUsd.toFixed(2)}</strong>
+                        <strong>{importeClaux(estimacion.costeInstalacion, moneda)}</strong>
                       </span>
                       <span className="cli-estimacion-acciones">
                         <button type="button" className="btn btn-secondary btn-xs"
-                          onClick={() => setPagoSetup(estimacion.costeInstalacionUsd.toFixed(2))}>
+                          onClick={() => setPagoSetup(estimacion.costeInstalacion.toFixed(2))}>
                           Usar este importe
                         </button>
                         {/* Botón y no enlace: la URL se arma AL PULSAR, leyendo el

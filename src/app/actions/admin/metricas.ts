@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { precioModulo, type ModuloPrecios } from '@/lib/niveles'
+import { COLUMNAS_PRECIO, precioModulo, type ModuloPrecios } from '@/lib/niveles'
+import { normalizarMonedaClaux } from '@/lib/moneda-claux'
 
 // Módulo server-only: lecturas agregadas para las métricas del admin. Lo
 // consumen páginas ya protegidas (requireAccesoPagina('metricas') /
@@ -39,7 +40,11 @@ export type AdopcionModulo = {
   nombre: string
   tipo: string
   contratados: number
-  ingresoMensual: number
+  // Ingreso separado por moneda y NUNCA sumado: convertirlo con la tasa del día
+  // devolvería un número distinto cada mañana para unos contratos que no se
+  // movieron. Un módulo puede aportar en las dos a la vez (clientes de ambas).
+  ingresoUsd: number
+  ingresoEur: number
 }
 export type UsoModulo = { modulo: string; hits: number }
 export type SectorDist = { sector: string; total: number }
@@ -64,8 +69,8 @@ export async function obtenerMetricasGenerales(): Promise<MetricasGenerales> {
   const s7  = diaHace(7)
 
   const [{ data: clientes }, { data: catalogo }, { data: uso }, { data: ia }] = await Promise.all([
-    db.from('clients').select('client_id, estado, sector, modulos_activos, nivel'),
-    db.from('modulos_catalogo').select('clave, nombre, tipo, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, orden').eq('activo', true).order('orden'),
+    db.from('clients').select('client_id, estado, sector, modulos_activos, nivel, moneda_facturacion'),
+    db.from('modulos_catalogo').select(`clave, nombre, tipo, ${COLUMNAS_PRECIO}, orden`).eq('activo', true).order('orden'),
     db.from('uso_portal').select('client_id, user_id, modulo, hits, dia').gte('dia', s30),
     db.from('ia_uso').select('conversaciones, tokens_in, tokens_out').eq('periodo', periodoActual()),
   ])
@@ -77,15 +82,19 @@ export async function obtenerMetricasGenerales(): Promise<MetricasGenerales> {
   // Adopción de módulos/addons: cuántos tenants tienen cada clave + ingreso mensual aportado.
   const adopcion: AdopcionModulo[] = catalogoArr.map(m => {
     let contratados = 0
-    let ingresoMensual = 0
+    let ingresoUsd = 0
+    let ingresoEur = 0
     for (const c of clientesArr) {
       const activos = Array.isArray(c.modulos_activos) ? (c.modulos_activos as string[]) : []
       if (activos.includes(m.clave)) {
         contratados += 1
-        ingresoMensual += precioModulo(m as ModuloPrecios, c.nivel)
+        const moneda = normalizarMonedaClaux(c.moneda_facturacion)
+        const precio = precioModulo(m as ModuloPrecios, c.nivel, moneda)
+        if (moneda === 'EUR') ingresoEur += precio
+        else                  ingresoUsd += precio
       }
     }
-    return { clave: m.clave, nombre: m.nombre, tipo: m.tipo, contratados, ingresoMensual }
+    return { clave: m.clave, nombre: m.nombre, tipo: m.tipo, contratados, ingresoUsd, ingresoEur }
   }).sort((a, b) => b.contratados - a.contratados)
 
   // Usuarios/tenants activos (con actividad en el periodo).

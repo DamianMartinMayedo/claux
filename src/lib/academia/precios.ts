@@ -1,7 +1,8 @@
 import 'server-only'
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { NIVELES, precioModulo, type Nivel, type ModuloPrecios } from '@/lib/niveles'
+import { COLUMNAS_PRECIO, NIVELES, precioModulo, type Nivel, type ModuloPrecios } from '@/lib/niveles'
+import { MONEDAS_CLAUX, type MonedaClaux } from '@/lib/moneda-claux'
 import { nombresDeNiveles } from '@/lib/niveles-server'
 
 /**
@@ -10,10 +11,11 @@ import { nombresDeNiveles } from '@/lib/niveles-server'
  * producto para ofrecer y cobrar—, así que el manual no puede contradecir al
  * sistema: se sube un precio en `/admin/modulos` y la ficha lo dice al recargar.
  *
- * Desde los niveles comerciales hay TRES precios por módulo, uno por nivel, y el
- * nombre de cada nivel también es dato editable (`niveles.nombre`): el manual de
- * ventas no puede llevar «Fundador» escrito a mano el día que el dueño lo
- * renombre.
+ * Desde los niveles comerciales hay tres precios por módulo, uno por nivel, y
+ * desde el euro (mig. 225) son SEIS: moneda × nivel. El manual lleva las dos
+ * monedas porque quien vende elige en cuál presupuesta, y el nombre de cada
+ * nivel también es dato editable (`niveles.nombre`): el manual de ventas no
+ * puede llevar «Fundador» escrito a mano el día que el dueño lo renombre.
  *
  * El esqueleto (orden de lectura, ficha en Markdown, páginas) sigue en
  * `catalogo.ts`: eso es criterio editorial, no dato del producto.
@@ -25,8 +27,8 @@ import { nombresDeNiveles } from '@/lib/niveles-server'
 
 export type PrecioCatalogo = {
   nombre: string
-  /** Un importe por nivel, en el orden de `NIVELES` (de menor a mayor). */
-  precios: Record<Nivel, number>
+  /** Un importe por moneda y nivel; los niveles, en el orden de `NIVELES`. */
+  precios: Record<MonedaClaux, Record<Nivel, number>>
   /** `false` = archivada en el admin: existe pero no se vende. */
   activo: boolean
 }
@@ -41,7 +43,7 @@ export const preciosDelCatalogo = cache(async (): Promise<PreciosAcademia> => {
   const db = createAdminClient()
   const [{ data, error }, nombresNivel] = await Promise.all([
     db.from('modulos_catalogo')
-      .select('clave, nombre, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, activo'),
+      .select(`clave, nombre, ${COLUMNAS_PRECIO}, activo`),
     nombresDeNiveles(),
   ])
 
@@ -56,8 +58,10 @@ export const preciosDelCatalogo = cache(async (): Promise<PreciosAcademia> => {
       nombre: fila.nombre,
       // Postgres devuelve `numeric` como texto: sin Number() se concatenaría.
       precios: Object.fromEntries(
-        NIVELES.map(n => [n, precioModulo(fila as ModuloPrecios, n)]),
-      ) as Record<Nivel, number>,
+        MONEDAS_CLAUX.map(m => [m, Object.fromEntries(
+          NIVELES.map(n => [n, precioModulo(fila as ModuloPrecios, n, m)]),
+        )]),
+      ) as Record<MonedaClaux, Record<Nivel, number>>,
       activo: fila.activo,
     }
   }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { rutaDe, BASE_MANUAL } from './piezas'
 import { duracion, type PiezaLeida } from './manual'
 import { caraDe } from './visual'
+import { MONEDAS_CLAUX, importeClaux } from '@/lib/moneda-claux'
 
 /**
  * Una pieza en la rejilla de una portada: nombre, para qué es, qué lleva dentro
@@ -46,8 +47,12 @@ export default function Tarjeta({ pieza, base = BASE_MANUAL, comercial = true }:
         {pieza.cuerpo
           ? <span className="acad-card-num">{pieza.apartados.length} apartados · {duracion(pieza.minutos)}</span>
           : <span className="acad-card-pend">En preparación</span>}
+        {/* Las dos monedas, nunca una convertida: el precio en euros es propio
+            (mig. 225) y el comercial tiene que poder leer el que va a decir. */}
         {comercial && pieza.precio && (
-          <span className="acad-card-precio">desde {pieza.precio.precios.inicial} USD</span>
+          <span className="acad-card-precio">
+            desde {MONEDAS_CLAUX.map(m => importeClaux(pieza.precio!.precios[m].inicial, m)).join(' · ')}
+          </span>
         )}
       </span>
     </Link>

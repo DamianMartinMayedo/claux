@@ -17,10 +17,11 @@ import PagosClienteTabla, { type PagoFicha } from './PagosClienteTabla'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { puedeAcceder } from '@/lib/roles'
 import { getSetting } from '@/app/actions/settings'
-import { suscripcionLabel, precioMensualEfectivo, esSocioHoy } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, monedaDelCliente } from '@/lib/billing'
 import { nombresDeNiveles } from '@/lib/niveles-server'
 import { listarFirmasCliente } from '@/app/actions/documentos-admin'
-import { normalizarNivel } from '@/lib/niveles'
+import { COLUMNAS_PRECIO, normalizarNivel } from '@/lib/niveles'
+import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 function periodoIa(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Havana', year: 'numeric', month: '2-digit' })
@@ -41,6 +42,25 @@ const MOTIVOS_GRACIA: Record<string, string> = {
   liquidez:  'Problema de liquidez',
   otro:      'Otro',
 }
+
+/**
+ * Cobrado por moneda, NUNCA sumado entre ellas: $100 y €100 no hacen 200 de nada,
+ * y el cliente puede pagar en una un mes y en la otra al siguiente. Devuelve solo
+ * las monedas con movimiento, de mayor a menor.
+ */
+function sumarPorMoneda(
+  filas: { monto: number | null; moneda: string | null }[],
+): [MonedaClaux, number][] {
+  const acc = new Map<MonedaClaux, number>()
+  for (const f of filas) {
+    const m = normalizarMonedaClaux(f.moneda)
+    acc.set(m, (acc.get(m) ?? 0) + (Number(f.monto) || 0))
+  }
+  return [...acc].filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1])
+}
+
+const listaImportes = (t: [MonedaClaux, number][], vacio: MonedaClaux) =>
+  t.length ? t.map(([m, v]) => importeClaux(v, m)).join(' · ') : importeClaux(0, vacio)
 
 function formatFecha(fecha: string | null | undefined) {
   if (!fecha) return '—'
@@ -75,7 +95,7 @@ export default async function ClienteDetallePage({
       .order('fecha', { ascending: false }),
     supabase
       .from('modulos_catalogo')
-      .select('clave, nombre, descripcion, precio_inicial_usd, precio_empresa_usd, precio_pro_usd, es_base, tipo')
+      .select(`clave, nombre, descripcion, ${COLUMNAS_PRECIO}, es_base, tipo`)
       .eq('activo', true)
       .order('orden'),
     supabase
@@ -87,7 +107,7 @@ export default async function ClienteDetallePage({
     // configuración pendiente (un borrador todavía no es un acuerdo).
     supabase
       .from('presupuestos_instalacion')
-      .select('id, total_final_usd')
+      .select('id, total_final, moneda')
       .eq('client_id', client_id)
       .in('estado', ['aprobado', 'instalado'])
       .order('created_at', { ascending: false }),
@@ -100,13 +120,15 @@ export default async function ClienteDetallePage({
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
   // Lo que se le cobra (catálogo menos lo pactado; cero si es Socio CLAUX). `select('*')`
   // ya trae las columnas de condiciones, así que no hace falta otra consulta.
+  // La moneda en la que se le factura HOY. Manda sobre qué caché se mira y en qué
+  // nace su próximo cobro; lo ya cobrado conserva la suya (ver `sumarPorMoneda`).
+  const moneda      = monedaDelCliente(cliente)
   const precioMes   = precioMensualEfectivo(cliente)
-  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuentoAnual)
+  const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuentoAnual, moneda)
+  const cuotaCatalogo = Number((moneda === 'EUR' ? cliente.precio_mensual_eur : cliente.precio_mensual_usd) ?? 0) || 0
   const confirmados = (pagos ?? []).filter(p => p.estado !== 'por_confirmar')
-  const totalPagado = confirmados.reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
-  const pendienteConfirmar = (pagos ?? [])
-    .filter(p => p.estado === 'por_confirmar')
-    .reduce((sum, p) => sum + (p.monto_usd ?? 0), 0)
+  const totalPagado = sumarPorMoneda(confirmados)
+  const pendienteConfirmar = sumarPorMoneda((pagos ?? []).filter(p => p.estado === 'por_confirmar'))
   const ultimoPago  = confirmados[0] ?? null
   // Lo que espera en cada pestaña. Son los únicos números que se pintan en las
   // solapas: si no hay nada pendiente no hay número (ver `ClienteTabs`).
@@ -114,7 +136,8 @@ export default async function ClienteDetallePage({
   const tiposFirmados = new Set(firmas.map(f => f.tipo))
   const docsPendientes = DOCS_LEGALES.filter(d => !tiposFirmados.has(d.tipo)).length
   const presupuestosRef = (presupuestosOk ?? []).map(p => ({
-    id: p.id as number, total: Number(p.total_final_usd) || 0,
+    id: p.id as number, total: Number(p.total_final) || 0,
+    moneda: normalizarMonedaClaux(p.moneda),
   }))
   const tieneGracia = cliente.estado === 'GRACIA' && cliente.fecha_fin_gracia
   const socioVigente = esSocioHoy(cliente)
@@ -301,8 +324,9 @@ export default async function ClienteDetallePage({
               modulosActivos={Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : []}
               nivel={cliente.nivel}
               nombresNivel={nombresNivel}
+              moneda={moneda}
               ciclo={cliente.ciclo_facturacion ?? 'mensual'}
-              precioMensual={Number(cliente.precio_mensual_usd ?? 0)}
+              precioMensual={cuotaCatalogo}
               descuentoAnualPct={descuentoAnual}
               catalogo={catalogo}
             />
@@ -311,7 +335,8 @@ export default async function ClienteDetallePage({
           {/* ── Lo pactado: descuento sobre la cuota y Socio CLAUX ── */}
           <CondicionesCard
             clientId={client_id}
-            precioCatalogo={Number(cliente.precio_mensual_usd ?? 0) || 0}
+            precioCatalogo={cuotaCatalogo}
+            moneda={moneda}
             descuentoPct={Number(cliente.descuento_pct ?? 0) || 0}
             descuentoDesde={cliente.descuento_desde ?? null}
             descuentoHasta={cliente.descuento_hasta ?? null}
@@ -378,14 +403,16 @@ export default async function ClienteDetallePage({
               <div className="detail-field">
                 <span className="detail-field-label">Total cobrado (confirmado)</span>
                 <span className="detail-field-value detail-field-value-large">
-                  ${totalPagado.toFixed(2)} USD
+                  {listaImportes(totalPagado, moneda)}
                 </span>
               </div>
-              {pendienteConfirmar > 0 && (
+              {pendienteConfirmar.length > 0 && (
                 <div className="detail-field">
                   <span className="detail-field-label">Pendiente por confirmar</span>
                   <span className="detail-field-value">
-                    <span className="badge badge-warning">${pendienteConfirmar.toFixed(2)} USD</span>
+                    {pendienteConfirmar.map(([m, v]) => (
+                      <span key={m} className="badge badge-warning">{importeClaux(v, m)}</span>
+                    ))}
                   </span>
                 </div>
               )}
@@ -394,7 +421,7 @@ export default async function ClienteDetallePage({
                 <span className="detail-field-value">
                   {ultimoPago ? (
                     <span className="pago-detalle-stack">
-                      <span><strong>${ultimoPago.monto_usd?.toFixed(2)} USD</strong> · {METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo}</span>
+                      <span><strong>{importeClaux(ultimoPago.monto, ultimoPago.moneda)}</strong> · {METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo}</span>
                       <span className="text-xs-muted">
                         Registrado: {formatFecha(ultimoPago.fecha)}
                       </span>

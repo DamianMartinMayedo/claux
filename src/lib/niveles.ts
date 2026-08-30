@@ -16,18 +16,37 @@
 // es un UPDATE, no un despliegue.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
+
 export type Nivel = 'inicial' | 'empresa' | 'pro'
 
 /** En orden de menor a mayor. El orden importa: lo usan los selectores y el upsell. */
 export const NIVELES: readonly Nivel[] = ['inicial', 'empresa', 'pro'] as const
 
-export type CampoPrecio = 'precio_inicial_usd' | 'precio_empresa_usd' | 'precio_pro_usd'
+export type CampoPrecio =
+  | 'precio_inicial_usd' | 'precio_empresa_usd' | 'precio_pro_usd'
+  | 'precio_inicial_eur' | 'precio_empresa_eur' | 'precio_pro_eur'
 
-/** Columna de `modulos_catalogo` con el precio de cada nivel. */
-export const CAMPO_PRECIO: Record<Nivel, CampoPrecio> = {
-  inicial: 'precio_inicial_usd',
-  empresa: 'precio_empresa_usd',
-  pro:     'precio_pro_usd',
+/**
+ * Columna de `modulos_catalogo` con el precio de cada nivel EN CADA MONEDA
+ * (mig. 225). Seis columnas, y las seis son precios propios: la de euros no se
+ * deriva de la de dólares ni al leer ni al escribir.
+ *
+ * El índice pasó de `CAMPO_PRECIO[nivel]` a `CAMPO_PRECIO[moneda][nivel]` a
+ * propósito: rompe la compilación en cada sitio que pedía un precio sin decir en
+ * qué moneda, que es exactamente la lista que había que revisar.
+ */
+export const CAMPO_PRECIO: Record<MonedaClaux, Record<Nivel, CampoPrecio>> = {
+  USD: {
+    inicial: 'precio_inicial_usd',
+    empresa: 'precio_empresa_usd',
+    pro:     'precio_pro_usd',
+  },
+  EUR: {
+    inicial: 'precio_inicial_eur',
+    empresa: 'precio_empresa_eur',
+    pro:     'precio_pro_eur',
+  },
 }
 
 /**
@@ -57,9 +76,18 @@ export function normalizarNivel(v: unknown): Nivel {
   return 'inicial'
 }
 
-/** Columna de precio del nivel (acepta lo que sea y lo normaliza). */
-export function campoPrecio(nivel: unknown): CampoPrecio {
-  return CAMPO_PRECIO[normalizarNivel(nivel)]
+/** Columna de precio del nivel en esa moneda (acepta lo que sea y lo normaliza). */
+export function campoPrecio(nivel: unknown, moneda: unknown): CampoPrecio {
+  return CAMPO_PRECIO[normalizarMonedaClaux(moneda)][normalizarNivel(nivel)]
+}
+
+/**
+ * Una casilla de la rejilla de precios del catálogo: moneda × nivel. Seis en
+ * total. Es lo que se edita, lo que se siembra y lo que se cobra.
+ */
+export interface ColumnaPrecio {
+  moneda: MonedaClaux
+  nivel:  Nivel
 }
 
 /** Nombre de respaldo del nivel. Para lo vivo, `niveles.nombre`. */
@@ -67,17 +95,32 @@ export function nombreNivel(nivel: unknown): string {
   return NOMBRE_NIVEL[normalizarNivel(nivel)]
 }
 
-/** Fila de `modulos_catalogo` con los tres precios. Lo que pide todo el que suma. */
+/**
+ * Fila de `modulos_catalogo` con los SEIS precios. Lo que pide todo el que suma.
+ *
+ * Las de euros son opcionales para no romper a quien lea solo las de dólares
+ * (el `select` de una métrica interna, por ejemplo), pero `precioModulo` hace
+ * `?? 0`: un módulo activo sin precio en euros sale GRATIS en euros. Por eso
+ * `audit:nivel` exige los seis y no los tres.
+ */
 export interface ModuloPrecios {
-  clave:              string
-  precio_inicial_usd: number | string | null
-  precio_empresa_usd: number | string | null
-  precio_pro_usd:     number | string | null
+  clave:               string
+  precio_inicial_usd:  number | string | null
+  precio_empresa_usd:  number | string | null
+  precio_pro_usd:      number | string | null
+  precio_inicial_eur?: number | string | null
+  precio_empresa_eur?: number | string | null
+  precio_pro_eur?:     number | string | null
 }
 
-/** Precio de un módulo en un nivel. */
-export function precioModulo(m: ModuloPrecios, nivel: unknown): number {
-  return Number(m[campoPrecio(nivel)] ?? 0)
+/** Las seis columnas de precio, para los `select`. Una sola fuente del literal. */
+export const COLUMNAS_PRECIO =
+  'precio_inicial_usd, precio_empresa_usd, precio_pro_usd, '
+  + 'precio_inicial_eur, precio_empresa_eur, precio_pro_eur'
+
+/** Precio de un módulo en un nivel y una moneda. */
+export function precioModulo(m: ModuloPrecios, nivel: unknown, moneda: unknown): number {
+  return Number(m[campoPrecio(nivel, moneda)] ?? 0)
 }
 
 /**
@@ -85,8 +128,10 @@ export function precioModulo(m: ModuloPrecios, nivel: unknown): number {
  * descuento**: el descuento es del cliente, no del catálogo, y se aplica después
  * (`lib/billing.ts`).
  */
-export function sumarModulos(catalogo: ModuloPrecios[], claves: string[], nivel: unknown): number {
-  const campo = campoPrecio(nivel)
+export function sumarModulos(
+  catalogo: ModuloPrecios[], claves: string[], nivel: unknown, moneda: unknown,
+): number {
+  const campo = campoPrecio(nivel, moneda)
   return catalogo
     .filter(m => claves.includes(m.clave))
     .reduce((total, m) => total + Number(m[campo] ?? 0), 0)
