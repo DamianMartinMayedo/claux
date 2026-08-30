@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { setModulosCliente, simularNivel } from '@/app/actions/clientes'
 import { importeCiclo } from '@/lib/billing'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -61,6 +62,7 @@ export default function ModulosCard({
   const [ciclo, setCiclo]   = useState(cicloInicial || 'mensual')
   const [moneda, setMoneda] = useState<MonedaClaux>(monedaInicial)
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
   const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
 
   // Bajar de nivel no rompe nada, pero deja al cliente sin poder añadir en las
@@ -111,6 +113,10 @@ export default function ModulosCard({
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
       toastSuccess(`Módulos actualizados · ${importeClaux(res.precio_mensual, res.moneda)}/mes`)
+      // Esta tarjeta no es la única que enseña lo que paga: la cuota de Condiciones
+      // comerciales, la cabecera y la capacidad salen del servidor con el nivel y la
+      // MONEDA de antes. Sin esto se guardaba EUR y al lado seguía leyéndose en USD.
+      router.refresh()
     })
   }
 
@@ -201,13 +207,16 @@ export default function ModulosCard({
               </label>
             ))}
           </div>
-          {moneda !== monedaInicial && (
-            <p className="form-hint">
-              Hoy se le factura en {monedaInicial}. Al guardar, el contrato y el anexo de
-              módulos quedarán pendientes de firma.
-            </p>
-          )}
         </div>
+        {/* Fuera de `.seg-field` a propósito: dentro es un tercer hijo de una fila
+            `space-between` y empuja el segmentado a media fila, que deja de alinearse
+            con el de Ciclo de cobro. Aviso ámbar debajo, como el del nivel. */}
+        {moneda !== monedaInicial && (
+          <div className="alert alert-warning mt-2">
+            Hoy se le factura en {monedaInicial}. Al guardar, el contrato y el anexo de
+            módulos quedarán pendientes de firma.
+          </div>
+        )}
 
         {/* Ciclo de facturación */}
         <div className="seg-field">
