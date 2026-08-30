@@ -9,6 +9,7 @@ import {
   resetearPassword,
   type UsuarioPortal,
 } from '@/app/actions/portal/usuarios'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import type { Permiso } from '@/lib/permisos'
 import type { Empresa } from '@/app/actions/portal/empresas'
 import { empresaColorVar, EmpresaTag } from '@/components/portal/EmpresaTag'
@@ -432,6 +433,13 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
 
   const empresaMap = new Map(empresas.map(e => [e.empresa_id, e]))
 
+  const ord = useOrden(usuarios, {
+    usuario:  { label: 'Usuario',  valor: u => u.nombre || u.email },
+    rol:      { label: 'Rol',      valor: u => ROL_LABEL[u.rol] ?? u.rol },
+    empresas: { label: 'Empresas', valor: u => u.rol === 'admin_empresa' ? Infinity : u.empresas.length },
+    estado:   { label: 'Estado',   valor: u => u.estado },
+  })
+
   return (
     <div className="view-container">
       <div className="page-header">
@@ -472,15 +480,15 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Usuario</th>
-                    <th>Rol</th>
-                    <th>Empresas</th>
-                    <th>Estado</th>
+                    <ThOrden orden={ord} clave="usuario" />
+                    <ThOrden orden={ord} clave="rol" />
+                    <ThOrden orden={ord} clave="empresas" />
+                    <ThOrden orden={ord} clave="estado" />
                     {!soloLectura && <th className="col-actions" />}
                   </tr>
                 </thead>
                 <tbody>
-                  {usuarios.map(u => (
+                  {ord.filas.map(u => (
                     <tr key={u.user_id} className={u.estado === 'INACTIVO' ? 'row-inactive' : ''}>
                       <td data-label="Usuario">
                         <div className="usr-cell-email">

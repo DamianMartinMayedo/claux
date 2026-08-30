@@ -20,6 +20,7 @@ import { TerceroFormModal, ViaBadge } from '../_TerceroFormModal'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs, { type TabItem } from '@/components/Tabs'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw, Repeat } from 'lucide-react'
 import type { TerceroSuscripcion } from '@/lib/suscripciones'
 
@@ -234,6 +235,13 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
 // ── Tab: Productos del proveedor ──────────────────────────────────────────────
 
 function TabProductos({ productos }: { productos: TerceroProducto[] }) {
+  const ord = useOrden(productos, {
+    codigo:   { label: 'Código',   valor: p => p.codigo },
+    producto: { label: 'Producto', valor: p => p.nombre },
+    stock:    { label: 'Stock',    valor: p => p.stock },
+    estado:   { label: 'Estado',   valor: p => p.estado },
+  })
+
   if (productos.length === 0) {
     return (
       <div className="det-tab-body">
@@ -253,15 +261,15 @@ function TabProductos({ productos }: { productos: TerceroProducto[] }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Código</th>
-                <th>Producto</th>
-                <th className="col-num">Stock</th>
-                <th>Estado</th>
+                <ThOrden orden={ord} clave="codigo" />
+                <ThOrden orden={ord} clave="producto" />
+                <ThOrden orden={ord} clave="stock" className="col-num" />
+                <ThOrden orden={ord} clave="estado" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {productos.map(p => (
+              {ord.filas.map(p => (
                 <tr key={p.producto_id} className={p.estado === 'INACTIVO' ? 'row-inactive' : ''}>
                   <td data-label="Código" className="text-sm-muted">{p.codigo || '—'}</td>
                   <td data-label="Producto"><span className="table-empresa cell-clamp">{p.nombre}</span></td>
@@ -294,6 +302,13 @@ function tramoCxP(dias: number | null): { cls: string; label: string } | null {
 }
 
 function TabCuentasPorPagar({ cxp }: { cxp: TerceroCxP }) {
+  const ord = useOrden(cxp.docs, {
+    concepto:    { label: 'Concepto',    valor: d => d.numero },
+    fecha:       { label: 'Fecha',       valor: d => d.fecha },
+    saldo:       { label: 'Saldo',       valor: d => d.saldo },
+    vencimiento: { label: 'Vencimiento', valor: d => d.dias_vencido },
+  })
+
   if (cxp.docs.length === 0) {
     return (
       <div className="det-tab-body">
@@ -320,15 +335,15 @@ function TabCuentasPorPagar({ cxp }: { cxp: TerceroCxP }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Concepto</th>
-                <th>Fecha</th>
-                <th className="col-num">Saldo</th>
-                <th>Vencimiento</th>
+                <ThOrden orden={ord} clave="concepto" />
+                <ThOrden orden={ord} clave="fecha" />
+                <ThOrden orden={ord} clave="saldo" className="col-num" />
+                <ThOrden orden={ord} clave="vencimiento" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {cxp.docs.map(d => {
+              {ord.filas.map(d => {
                 const t = tramoCxP(d.dias_vencido)
                 return (
                   <tr key={d.doc_id}>
@@ -500,6 +515,14 @@ const ESTADO_SUB_LABEL: Record<string, string> = {
 }
 
 function TabSuscripciones({ suscripciones }: { suscripciones: TerceroSuscripcion[] }) {
+  const ord = useOrden(suscripciones, {
+    servicio:     { label: 'Servicio',      valor: s => s.servicios.join(', ') },
+    precio:       { label: 'Precio',        valor: s => s.importe_cobro },
+    periodicidad: { label: 'Periodicidad',  valor: s => PERIODICIDAD_SUB_LABEL[s.periodicidad] ?? s.periodicidad },
+    proximo:      { label: 'Próximo cobro', valor: s => s.fecha_proximo_cobro },
+    estado:       { label: 'Estado',        valor: s => ESTADO_SUB_LABEL[s.estado_efectivo] ?? s.estado_efectivo },
+  })
+
   if (suscripciones.length === 0) {
     return (
       <div className="det-tab-body">
@@ -519,16 +542,16 @@ function TabSuscripciones({ suscripciones }: { suscripciones: TerceroSuscripcion
           <table className="table">
             <thead>
               <tr>
-                <th>Servicio</th>
-                <th className="col-num">Precio</th>
-                <th>Periodicidad</th>
-                <th>Próximo cobro</th>
-                <th>Estado</th>
+                <ThOrden orden={ord} clave="servicio" />
+                <ThOrden orden={ord} clave="precio" className="col-num" />
+                <ThOrden orden={ord} clave="periodicidad" />
+                <ThOrden orden={ord} clave="proximo" />
+                <ThOrden orden={ord} clave="estado" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {suscripciones.map(s => (
+              {ord.filas.map(s => (
                 <tr key={s.suscripcion_id}>
                   {/* Un acuerdo presta varios servicios: se listan todos, que es lo que
                       el cliente verá en su factura. */}

@@ -3,6 +3,7 @@
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -1048,6 +1049,16 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   const archivadas = data.cuentas.filter(c => !c.activa).length
 
   // ── Selección múltiple de cuentas (archivar/restaurar en lote) ──
+  const ordCuentas = useOrden(cuentasVista, {
+    cuenta:   { label: 'Cuenta',   valor: c => c.nombre },
+    tipo:     { label: 'Tipo',     valor: c => TIPO_CUENTA_LABEL[c.tipo] ?? c.tipo },
+    empresa:  { label: 'Empresa',  valor: c => data.empresa_nombres[c.empresa_id] },
+    saldo:    { label: 'Saldo',    valor: c => Number(c.saldo) },
+    ingresos: { label: 'Ingresos', valor: c => Number(c.total_ingresos) },
+    egresos:  { label: 'Egresos',  valor: c => Number(c.total_egresos) },
+    movs:     { label: 'Mov.',     valor: c => c.num_movimientos },
+  })
+
   const cuentaIds = useMemo(() => cuentasVista.map(c => c.cuenta_id), [cuentasVista])
   const selCuentas = useRowSelection(cuentaIds)
   const [confirmLote, setConfirmLote] = useState(false)
@@ -1145,7 +1156,15 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
     })
   }, [data.movimientos, filtroCuenta, filtroTipo, filtroEmpresaMov, filtroCatMov, hijasDeCat])
 
-  const { pageItems, ...pag } = usePagination(movimientosFiltrados)
+  const ordMovs = useOrden(movimientosFiltrados, {
+    fecha:    { label: 'Fecha',    valor: m => m.fecha },
+    concepto: { label: 'Concepto', valor: m => m.concepto },
+    cuenta:   { label: 'Cuenta',   valor: m => cuentaNombre[m.cuenta_id] ?? m.cuenta_id },
+    // Con signo: un egreso de 100 va por debajo de un ingreso de 100, que es como
+    // se lee la columna (los egresos salen con «−»).
+    monto:    { label: 'Monto',    valor: m => (m.tipo === 'INGRESO' ? 1 : -1) * Number(m.monto) },
+  })
+  const { pageItems, ...pag } = usePagination(ordMovs.filas)
   const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple de movimientos (eliminar en lote) ──
@@ -1335,13 +1354,13 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                       <HeaderCheck checked={selCuentas.allSelected} indeterminate={selCuentas.someSelected} onChange={selCuentas.toggleAll} />
                     </th>
                   )}
-                  <th>Cuenta</th>
-                  <th className="col-center">Tipo</th>
-                  {multiempresa && <th>Empresa</th>}
-                  <th className="col-num">Saldo</th>
-                  <th className="col-num">Ingresos</th>
-                  <th className="col-num">Egresos</th>
-                  <th className="col-num">Mov.</th>
+                  <ThOrden orden={ordCuentas} clave="cuenta" />
+                  <ThOrden orden={ordCuentas} clave="tipo" className="col-center" />
+                  {multiempresa && <ThOrden orden={ordCuentas} clave="empresa" />}
+                  <ThOrden orden={ordCuentas} clave="saldo" className="col-num" />
+                  <ThOrden orden={ordCuentas} clave="ingresos" className="col-num" />
+                  <ThOrden orden={ordCuentas} clave="egresos" className="col-num" />
+                  <ThOrden orden={ordCuentas} clave="movs" className="col-num" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -1439,10 +1458,10 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                       <HeaderCheck checked={selMov.allSelected} indeterminate={selMov.someSelected} onChange={selMov.toggleAll} />
                     </th>
                   )}
-                  <th>Fecha</th>
-                  <th>Concepto</th>
-                  <th>Cuenta</th>
-                  <th className="col-num">Monto</th>
+                  <ThOrden orden={ordMovs} clave="fecha" />
+                  <ThOrden orden={ordMovs} clave="concepto" />
+                  <ThOrden orden={ordMovs} clave="cuenta" />
+                  <ThOrden orden={ordMovs} clave="monto" className="col-num" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

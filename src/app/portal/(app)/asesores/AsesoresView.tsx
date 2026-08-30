@@ -8,6 +8,7 @@ import FormHelp from '@/components/portal/FormHelp'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import type { Asesor } from '@/app/actions/portal/asesores'
 import { guardarAsesor, eliminarAsesor } from '@/app/actions/portal/asesores'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
@@ -34,6 +35,12 @@ export default function AsesoresView({
 
   const empresaNombre = (id: string | null) =>
     id ? (empresas.find(e => e.empresa_id === id)?.nombre ?? id) : 'Todas las empresas'
+
+  const ord = useOrden(lista, {
+    nombre: { label: 'Nombre', valor: a => a.nombre },
+    correo: { label: 'Correo', valor: a => a.email },
+    para:   { label: 'Para',   valor: a => empresaNombre(a.empresa_id) },
+  })
 
   function abrirAlta() { setForm('new'); setNombre(''); setEmail(''); setEmpresa('') }
   function abrirEdicion(a: Asesor) {
@@ -135,14 +142,14 @@ export default function AsesoresView({
             <table className="table">
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  <th>Correo</th>
-                  <th>Para</th>
+                  <ThOrden orden={ord} clave="nombre" />
+                  <ThOrden orden={ord} clave="correo" />
+                  <ThOrden orden={ord} clave="para" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map(a => (
+                {ord.filas.map(a => (
                   <tr key={a.asesor_id}>
                     <td data-label="Nombre"><span className="table-empresa cell-clamp">{a.nombre}</span></td>
                     <td data-label="Correo" className="cell-truncate">{a.email}</td>

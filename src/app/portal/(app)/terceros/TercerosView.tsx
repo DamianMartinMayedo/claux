@@ -24,6 +24,7 @@ import { useRowSelection }             from '@/components/portal/useRowSelection
 import CopiarAEmpresaModal             from '@/components/portal/CopiarAEmpresaModal'
 import CopiarLoteEmpresaModal          from '@/components/portal/CopiarLoteEmpresaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -179,7 +180,16 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
     })
   }, [data.terceros, search, filtroTipo, filtroEmpresa, verArchivados])
 
-  const { pageItems, ...pag } = usePagination(tercerosFiltrados)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(tercerosFiltrados, {
+    nombre:      { label: 'Nombre',        valor: t => t.nombre },
+    tipo:        { label: 'Tipo',          valor: t => TIPO_LABEL[t.tipo] ?? t.tipo },
+    empresa:     { label: 'Empresa',       valor: t => data.empresa_nombres[t.empresa_id] ?? t.empresa_id },
+    representante: { label: 'Representante', valor: t => t.representante },
+    condicion:   { label: 'Cond. pago',    valor: t => CONDICION_LABEL[t.condicion_pago] ?? t.condicion_pago },
+  })
+
+  const { pageItems, ...pag } = usePagination(ord.filas)
   const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (archivar/restaurar en lote) ──
@@ -313,12 +323,12 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     </th>
                   )}
-                  <th>Nombre / ID fiscal</th>
-                  <th>Tipo</th>
-                  {multiempresa && <th>Empresa</th>}
-                  <th>Representante</th>
+                  <ThOrden orden={ord} clave="nombre">Nombre / ID fiscal</ThOrden>
+                  <ThOrden orden={ord} clave="tipo" />
+                  {multiempresa && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="representante" />
                   <th>Vías de pago</th>
-                  <th>Cond. pago</th>
+                  <ThOrden orden={ord} clave="condicion" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

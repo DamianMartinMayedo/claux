@@ -19,6 +19,7 @@ import { StockAjusteModal } from '../_StockAjusteModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs, { type TabItem } from '@/components/Tabs'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { AlertTriangle, Archive, CalendarClock, ExternalLink, Layers, Package, Pencil, RotateCcw, TrendingUp } from 'lucide-react'
 import { fmtFechaEs } from '@/lib/date-utils'
 
@@ -359,6 +360,13 @@ const ESTADO_ACUERDO_LABEL: Record<string, string> = {
 
 function TabContratos({ data }: { data: ProductoDetalleData }) {
   const { contratos } = data
+  const ord = useOrden(contratos, {
+    cliente:      { label: 'Cliente',              valor: c => c.cliente_nombre },
+    precio:       { label: 'Precio pactado / mes', valor: c => c.precio_mensual },
+    periodicidad: { label: 'Periodicidad',         valor: c => PERIODICIDAD_LABEL[c.periodicidad] ?? c.periodicidad },
+    desde:        { label: 'Desde',                valor: c => c.fecha_inicio },
+    estado:       { label: 'Estado',               valor: c => ESTADO_ACUERDO_LABEL[c.estado] ?? c.estado },
+  })
   // Lo que aporta al mes, por moneda y SOLO de los vivos: sumar un cancelado sería
   // contar dinero que ya no entra. Nunca se suman monedas distintas.
   const porMoneda = new Map<string, number>()
@@ -375,16 +383,16 @@ function TabContratos({ data }: { data: ProductoDetalleData }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Cliente</th>
-                <th className="col-num">Precio pactado / mes</th>
-                <th>Periodicidad</th>
-                <th>Desde</th>
-                <th>Estado</th>
+                <ThOrden orden={ord} clave="cliente" />
+                <ThOrden orden={ord} clave="precio" className="col-num" />
+                <ThOrden orden={ord} clave="periodicidad" />
+                <ThOrden orden={ord} clave="desde" />
+                <ThOrden orden={ord} clave="estado" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {contratos.map(c => (
+              {ord.filas.map(c => (
                 <tr key={c.suscripcion_id}>
                   <td data-label="Cliente"><strong className="text-sm-bold cell-clamp">{c.cliente_nombre}</strong></td>
                   <td data-label="Precio pactado / mes" className="col-num">
@@ -426,7 +434,17 @@ function TabContratos({ data }: { data: ProductoDetalleData }) {
 
 function TabMovimientos({ data }: { data: ProductoDetalleData }) {
   const { movimientos, almacen_nombres, producto } = data
-  const { pageItems, ...pag } = usePagination(movimientos)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(movimientos, {
+    fecha:    { label: 'Fecha',    valor: m => m.fecha },
+    tipo:     { label: 'Tipo',     valor: m => m.tipo },
+    almacen:  { label: 'Almacén',  valor: m => almacen_nombres[m.almacen_id] ?? m.almacen_id },
+    // Con el signo que se ve en la celda: una salida ordena por debajo de una entrada.
+    cantidad: { label: 'Cantidad', valor: m => m.tipo === 'SALIDA' ? -m.cantidad : m.cantidad },
+    motivo:   { label: 'Motivo',   valor: m => m.motivo },
+    origen:   { label: 'Origen',   valor: m => m.origen },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
 
   if (movimientos.length === 0) {
     return (
@@ -456,12 +474,12 @@ function TabMovimientos({ data }: { data: ProductoDetalleData }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Fecha</th>
-                <th>Tipo</th>
-                <th>Almacén</th>
-                <th className="col-num">Cantidad</th>
-                <th>Motivo</th>
-                <th>Origen</th>
+                <ThOrden orden={ord} clave="fecha" />
+                <ThOrden orden={ord} clave="tipo" />
+                <ThOrden orden={ord} clave="almacen" />
+                <ThOrden orden={ord} clave="cantidad" className="col-num" />
+                <ThOrden orden={ord} clave="motivo" />
+                <ThOrden orden={ord} clave="origen" />
               </tr>
             </thead>
             <tbody>

@@ -10,6 +10,7 @@ import FormHelp from '@/components/portal/FormHelp'
 import ModalShell from '@/components/portal/ModalShell'
 import { CampoNumero } from '@/components/portal/CampoNumero'
 import { CATALOGO_MONEDAS } from '@/lib/monedas-catalogo'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { puntosVentaConMoneda } from '@/app/actions/portal/caja'
 import {
   guardarMoneda,
@@ -568,6 +569,12 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
 
   // Tasas locales — se actualizan optimistamente tras guardar un par
   const [localPares, setLocalPares] = useState<Par[]>(initPares)
+  const ordPares = useOrden(localPares, {
+    par:         { label: 'Par',         valor: p => `${p.origen} ${p.destino}` },
+    tasa:        { label: 'Tasa',        valor: p => p.tasa },
+    fuente:      { label: 'Fuente',      valor: p => FUENTE_LABEL[p.fuente] },
+    actualizada: { label: 'Actualizada', valor: p => p.fecha },
+  })
   useEffect(() => { setLocalPares(initPares) }, [initPares])
 
   // Estado propio, no useTransition: el toast del resultado se crearía DENTRO de
@@ -701,15 +708,15 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Par</th>
-                    <th className="col-num">Tasa</th>
-                    <th>Fuente</th>
-                    <th>Actualizada</th>
+                    <ThOrden orden={ordPares} clave="par" />
+                    <ThOrden orden={ordPares} clave="tasa" className="col-num" />
+                    <ThOrden orden={ordPares} clave="fuente" />
+                    <ThOrden orden={ordPares} clave="actualizada" />
                     {puedeEditar && <th className="col-actions" />}
                   </tr>
                 </thead>
                 <tbody>
-                  {localPares.map(p => (
+                  {ordPares.filas.map(p => (
                     <tr key={p.par_id}>
                       <td data-label="Par">
                         <span className="mon-par">

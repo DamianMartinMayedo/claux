@@ -8,6 +8,7 @@ import {
   type Cierre, type PendienteContabilizar,
 } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import AvisoTope from '@/components/portal/AvisoTope'
 import Tabs from '@/components/Tabs'
@@ -96,6 +97,14 @@ function PendientesTabla({ items, cajaNombre, puedeEditar }: {
   const [isPending, startTransition] = useTransition()
   const [confirmar, setConfirmar] = useState<PendienteContabilizar | null>(null)
 
+  const ord = useOrden(items, {
+    caja:   { label: 'Punto de venta', valor: g => cajaNombre(g.caja_id) },
+    desde:  { label: 'Desde',          valor: g => g.desde },
+    hasta:  { label: 'Hasta',          valor: g => g.hasta },
+    ventas: { label: 'Ventas',         valor: g => g.tickets },
+    motivo: { label: 'Motivo',         valor: g => g.motivo },
+  })
+
   function contabilizar(g: PendienteContabilizar) {
     setConfirmar(null)
     const ld = toastLoading('Contabilizando…')
@@ -129,13 +138,17 @@ function PendientesTabla({ items, cajaNombre, puedeEditar }: {
           <table className="table">
             <thead>
               <tr>
-                <th>Punto de venta</th><th>Desde</th><th>Hasta</th>
-                <th className="col-num">Ventas</th><th>Totales</th><th>Motivo</th>
+                <ThOrden orden={ord} clave="caja" />
+                <ThOrden orden={ord} clave="desde" />
+                <ThOrden orden={ord} clave="hasta" />
+                <ThOrden orden={ord} clave="ventas" className="col-num" />
+                <th>Totales</th>
+                <ThOrden orden={ord} clave="motivo" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {items.map(g => (
+              {ord.filas.map(g => (
                 <tr key={`${g.caja_id}-${g.sesion_uuid}`}>
                   <td data-label="Punto de venta">{cajaNombre(g.caja_id)}</td>
                   <td data-label="Desde">{fecha(g.desde)}</td>
@@ -208,7 +221,16 @@ function CierresTabla({ data, cajaNombre, puedeEditar }: {
   data: Props['data']; cajaNombre: (id: string) => string; puedeEditar: boolean
 }) {
   const router = useRouter()
-  const { pageItems, ...pag } = usePagination(data.cierres)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(data.cierres, {
+    caja:          { label: 'Punto de venta', valor: c => cajaNombre(c.caja_id) },
+    turno:         { label: 'Turno',          valor: c => personas(c) },
+    abierta:       { label: 'Abierta',        valor: c => c.abierta_at },
+    cerrada:       { label: 'Cerrada',        valor: c => c.cerrada_at },
+    contabilidad:  { label: 'Contabilidad',   valor: c => monedasQueFaltan(c).length === 0 && Object.keys(c.total_por_moneda ?? {}).length > 0 },
+    inventario:    { label: 'Inventario',     valor: c => Boolean(c.stock_movs) },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   const [isPending, startTransition] = useTransition()
 
   function reintentar(c: Cierre) {
@@ -239,9 +261,15 @@ function CierresTabla({ data, cajaNombre, puedeEditar }: {
           <table className="table">
             <thead>
               <tr>
-                <th>Punto de venta</th><th>Turno</th><th>Abierta</th><th>Cerrada</th><th>Totales</th>
+                <ThOrden orden={ord} clave="caja" />
+                <ThOrden orden={ord} clave="turno" />
+                <ThOrden orden={ord} clave="abierta" />
+                <ThOrden orden={ord} clave="cerrada" />
+                <th>Totales</th>
                 <th>Descuentos</th>
-                <th>Contabilidad</th><th>Inventario</th><th className="col-actions"></th>
+                <ThOrden orden={ord} clave="contabilidad" />
+                <ThOrden orden={ord} clave="inventario" />
+                <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>

@@ -36,6 +36,7 @@ import FormHelp from '@/components/portal/FormHelp'
 import { explicarReciboIa } from '@/app/actions/portal/ia'
 import { useIa } from '@/components/portal/ia/IaContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import {
   actualizarConceptosNominas,
   formatMonto,
@@ -520,6 +521,11 @@ function IncidenciasSection({
     return p.length ? p.join(' · ') : 'Mes completo, sin novedades'
   }
 
+  const ordIncidencias = useOrden(incidencias, {
+    mes:     { label: 'Mes',      valor: i => i.periodo },
+    quePaso: { label: 'Qué pasó', valor: i => resumen(i) },
+  })
+
   return (
     <div className="det-card">
       <div className="card-header">
@@ -579,10 +585,14 @@ function IncidenciasSection({
         <div className="table-wrapper">
           <table className="table">
             <thead>
-              <tr><th>Mes</th><th>Qué pasó</th><th className="col-actions"></th></tr>
+              <tr>
+                <ThOrden orden={ordIncidencias} clave="mes" />
+                <ThOrden orden={ordIncidencias} clave="quePaso" />
+                <th className="col-actions"></th>
+              </tr>
             </thead>
             <tbody>
-              {incidencias.map(i => (
+              {ordIncidencias.filas.map(i => (
                 <tr key={i.incidencia_id}>
                   <td data-label="Mes"><strong>{formatPeriodo(i.periodo)}</strong></td>
                   <td data-label="Qué pasó" className="cell-truncate">{resumen(i)}</td>
@@ -796,6 +806,17 @@ function ConceptosSection({
       : `${c.valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${moneda}`
   }
 
+  const ordPropios = useOrden(propios, {
+    concepto: { label: 'Concepto', valor: c => c.nombre },
+    tipo:     { label: 'Tipo',     valor: c => c.tipo },
+    // Un porcentaje y un importe no se comparan: el % ordena por su cifra igual.
+    valor:    { label: 'Valor',    valor: c => c.valor },
+  })
+  const ordExcepciones = useOrden(excepciones, {
+    regla:    { label: 'Regla',             valor: c => c.nombre },
+    aplica:   { label: 'Qué se le aplica',  valor: c => c.excluida ? null : valorDe(c) },
+  })
+
   return (
     <div className="det-card">
       <div className="card-header">
@@ -815,10 +836,15 @@ function ConceptosSection({
         <div className="table-wrapper mt-3">
           <table className="table">
             <thead>
-              <tr><th>Concepto</th><th>Tipo</th><th className="col-num">Valor</th><th className="col-actions"></th></tr>
+              <tr>
+                <ThOrden orden={ordPropios} clave="concepto" />
+                <ThOrden orden={ordPropios} clave="tipo" />
+                <ThOrden orden={ordPropios} clave="valor" className="col-num" />
+                <th className="col-actions"></th>
+              </tr>
             </thead>
             <tbody>
-              {propios.map(c => (
+              {ordPropios.filas.map(c => (
                 <tr key={c.concepto_id}>
                   <td data-label="Concepto">
                     <strong>{c.nombre}</strong>{' '}
@@ -863,10 +889,14 @@ function ConceptosSection({
           <div className="table-wrapper">
             <table className="table">
               <thead>
-                <tr><th>Regla</th><th>Qué se le aplica</th><th className="col-actions"></th></tr>
+                <tr>
+                  <ThOrden orden={ordExcepciones} clave="regla" />
+                  <ThOrden orden={ordExcepciones} clave="aplica" />
+                  <th className="col-actions"></th>
+                </tr>
               </thead>
               <tbody>
-                {excepciones.map(c => (
+                {ordExcepciones.filas.map(c => (
                   <tr key={c.concepto_id}>
                     <td data-label="Regla"><strong>{c.nombre}</strong></td>
                     <td data-label="Qué se le aplica">
@@ -981,7 +1011,21 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
     const l = n.lineas.find(x => x.empleado_id === empleado.empleado_id)
     return l ? [{ nomina: n, linea: l }] : []
   })
-  const { pageItems: nominaItems, ...nominaPag } = usePagination(miNomina)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ordNomina = useOrden(miNomina, {
+    periodo:     { label: 'Período',     valor: x => x.nomina.periodo },
+    devengado:   { label: 'Devengado',   valor: x => x.linea.devengado },
+    deducciones: { label: 'Deducciones', valor: x => x.linea.deducciones },
+    neto:        { label: 'Neto',        valor: x => x.linea.neto },
+    estado:      { label: 'Estado',      valor: x => x.nomina.estado },
+  })
+  const { pageItems: nominaItems, ...nominaPag } = usePagination(ordNomina.filas)
+
+  const ordContratos = useOrden(contratos, {
+    tipo:      { label: 'Tipo',      valor: c => TIPO_CONTRATO_LABEL[c.tipo_contrato] },
+    vigencia:  { label: 'Vigencia',  valor: c => c.fecha_inicio },
+    documento: { label: 'Documento', valor: c => c.pdf_nombre },
+  })
 
   // Solo las que de verdad NO cuadran con sus conceptos: el desfase de SU línea lo
   // marca el servidor (`NominaLinea.desfasada`), no una copia de la fórmula aquí.
@@ -1163,14 +1207,14 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
             <table className="table">
               <thead>
                 <tr>
-                  <th>Tipo</th>
-                  <th>Vigencia</th>
-                  <th>Documento</th>
+                  <ThOrden orden={ordContratos} clave="tipo" />
+                  <ThOrden orden={ordContratos} clave="vigencia" />
+                  <ThOrden orden={ordContratos} clave="documento" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {contratos.map(c => (
+                {ordContratos.filas.map(c => (
                   <tr key={c.contrato_id}>
                     <td data-label="Tipo">
                       {TIPO_CONTRATO_LABEL[c.tipo_contrato]}
@@ -1223,11 +1267,11 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
             <table className="table">
               <thead>
                 <tr>
-                  <th>Período</th>
-                  <th className="col-num">Devengado</th>
-                  <th className="col-num">Deducciones</th>
-                  <th className="col-num">Neto</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ordNomina} clave="periodo" />
+                  <ThOrden orden={ordNomina} clave="devengado" className="col-num" />
+                  <ThOrden orden={ordNomina} clave="deducciones" className="col-num" />
+                  <ThOrden orden={ordNomina} clave="neto" className="col-num" />
+                  <ThOrden orden={ordNomina} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

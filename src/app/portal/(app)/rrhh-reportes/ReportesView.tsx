@@ -17,6 +17,7 @@ import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
 import { crearDoc, cabeceraReporte, sellarPie } from '@/lib/pdf/documento'
 import { crearCursor } from '@/lib/pdf/reporte'
 import { formatMesRrhh } from '@/lib/rrhh/reportes'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 // Recharts (~100 KB gzip) baja aparte: el gráfico solo existe cuando hay UNA
 // moneda en juego, así que en el resto de casos ni se descarga.
@@ -68,6 +69,41 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
   const { plantilla, altas, bajas, costeAnual, costePorMes, porDepto, porEmpresa,
           vacaciones, onat, costeMedio, rotacion, antiguedad, porCargo,
           fondoSubsidios } = data.reportes
+
+  // Los importes de estas tablas son una línea POR MONEDA: esas columnas no se ordenan
+  // (no hay un número que comparar), solo las que sí son un dato único.
+  const ordMeses = useOrden(costePorMes, {
+    mes: { label: 'Mes', valor: r => r.periodo },
+  })
+  const ordOnat = useOrden(onat, {
+    concepto: { label: 'Concepto', valor: o => o.concepto },
+  })
+  const ordVacaciones = useOrden(vacaciones.porTrabajador, {
+    trabajador: { label: 'Trabajador',        valor: v => v.nombre },
+    inicial:    { label: 'Saldo inicial',     valor: v => v.inicialImporte },
+    acumulado:  { label: 'Acumulado',         valor: v => v.acumuladoImporte },
+    pagado:     { label: 'Pagado / liquidado',valor: v => v.pagadoImporte },
+    final:      { label: 'Saldo final',       valor: v => v.finalImporte },
+  })
+  const ordFondo = useOrden(fondoSubsidios.porMoneda, {
+    moneda:        { label: 'Moneda',                   valor: f => f.moneda },
+    inicial:       { label: 'Saldo inicial',            valor: f => f.inicial },
+    provisionado:  { label: 'Provisionado',             valor: f => f.provisionadoAnio },
+    subsidios:     { label: 'Subsidios de enfermedad',  valor: f => f.pagadoAnio },
+    final:         { label: 'Saldo final',              valor: f => f.final },
+  })
+  const ordEmpresa = useOrden(porEmpresa, {
+    empresa: { label: 'Empresa', valor: e => e.nombre },
+    activos: { label: 'Activos', valor: e => e.activos },
+  })
+  const ordDepto = useOrden(porDepto, {
+    departamento: { label: 'Departamento', valor: d => d.departamento },
+    activos:      { label: 'Activos',      valor: d => d.activos },
+  })
+  const ordCargo = useOrden(porCargo, {
+    cargo:   { label: 'Cargo',   valor: c => c.cargo },
+    activos: { label: 'Activos', valor: c => c.activos },
+  })
   const sinDatos = data.sinDatos
 
   const empresaNombre = filtroEmpresa
@@ -377,9 +413,9 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
                 {hayGrafico && <CosteMensualChart serie={serie} moneda={monedaGrafico} />}
                 <div className="table-wrapper">
                   <table className="table">
-                    <thead><tr><th>Mes</th><th className="col-num">Coste</th></tr></thead>
+                    <thead><tr><ThOrden orden={ordMeses} clave="mes" /><th className="col-num">Coste</th></tr></thead>
                     <tbody>
-                      {costePorMes.map(r => (
+                      {ordMeses.filas.map(r => (
                         <tr key={r.periodo}>
                           <td data-label="Mes"><strong>{formatMesRrhh(r.periodo)}</strong></td>
                           <td data-label="Coste" className="col-num tes-monto-cell">{lineaMoneda(r.monedas)}</td>
@@ -399,9 +435,9 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
               <div className="ter-card-head"><span className="ter-form-section-title">Tributos de nómina · {anio}</span></div>
               <div className="table-wrapper">
                 <table className="table">
-                  <thead><tr><th>Concepto</th><th className="col-num">Importe</th></tr></thead>
+                  <thead><tr><ThOrden orden={ordOnat} clave="concepto" /><th className="col-num">Importe</th></tr></thead>
                   <tbody>
-                    {onat.map(o => (
+                    {ordOnat.filas.map(o => (
                       <tr key={o.concepto}>
                         <td data-label="Concepto"><strong>{o.concepto}</strong></td>
                         <td data-label="Importe" className="col-num tes-monto-cell">{lineaMoneda(o.monedas)}</td>
@@ -425,15 +461,15 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Trabajador</th>
-                      <th className="col-num">Saldo inicial</th>
-                      <th className="col-num">Acumulado</th>
-                      <th className="col-num">Pagado / liquidado</th>
-                      <th className="col-num">Saldo final</th>
+                      <ThOrden orden={ordVacaciones} clave="trabajador" />
+                      <ThOrden orden={ordVacaciones} clave="inicial" className="col-num" />
+                      <ThOrden orden={ordVacaciones} clave="acumulado" className="col-num" />
+                      <ThOrden orden={ordVacaciones} clave="pagado" className="col-num" />
+                      <ThOrden orden={ordVacaciones} clave="final" className="col-num" />
                     </tr>
                   </thead>
                   <tbody>
-                    {vacaciones.porTrabajador.map(v => (
+                    {ordVacaciones.filas.map(v => (
                       <tr key={v.nombre}>
                         <td data-label="Trabajador"><strong>{v.nombre}</strong></td>
                         <td data-label="Saldo inicial" className="col-num tes-monto-cell">
@@ -470,15 +506,15 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Moneda</th>
-                      <th className="col-num">Saldo inicial</th>
-                      <th className="col-num">Provisionado</th>
-                      <th className="col-num">Subsidios de enfermedad</th>
-                      <th className="col-num">Saldo final</th>
+                      <ThOrden orden={ordFondo} clave="moneda" />
+                      <ThOrden orden={ordFondo} clave="inicial" className="col-num" />
+                      <ThOrden orden={ordFondo} clave="provisionado" className="col-num" />
+                      <ThOrden orden={ordFondo} clave="subsidios" className="col-num" />
+                      <ThOrden orden={ordFondo} clave="final" className="col-num" />
                     </tr>
                   </thead>
                   <tbody>
-                    {fondoSubsidios.porMoneda.map(f => (
+                    {ordFondo.filas.map(f => (
                       <tr key={f.moneda}>
                         <td data-label="Moneda"><strong>{f.moneda}</strong></td>
                         <td data-label="Saldo inicial" className="col-num tes-monto-cell">{formatMonto(f.inicial)}</td>
@@ -502,9 +538,13 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
               <div className="ter-card-head"><span className="ter-form-section-title">Plantilla y coste por empresa · {anio}</span></div>
               <div className="table-wrapper">
                 <table className="table">
-                  <thead><tr><th>Empresa</th><th>Activos</th><th className="col-num">Coste {anio}</th></tr></thead>
+                  <thead><tr>
+                    <ThOrden orden={ordEmpresa} clave="empresa" />
+                    <ThOrden orden={ordEmpresa} clave="activos" />
+                    <th className="col-num">Coste {anio}</th>
+                  </tr></thead>
                   <tbody>
-                    {porEmpresa.map(e => (
+                    {ordEmpresa.filas.map(e => (
                       <tr key={e.empresa_id}>
                         <td data-label="Empresa"><EmpresaTag color={colorOf(e.empresa_id)} nombre={e.nombre} /></td>
                         <td data-label="Activos" className="text-sm-muted">{e.activos}</td>
@@ -522,9 +562,13 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
             <div className="ter-card-head"><span className="ter-form-section-title">Plantilla por departamento</span></div>
             <div className="table-wrapper">
               <table className="table">
-                <thead><tr><th>Departamento</th><th>Activos</th><th className="col-num">Coste {anio}</th></tr></thead>
+                <thead><tr>
+                  <ThOrden orden={ordDepto} clave="departamento" />
+                  <ThOrden orden={ordDepto} clave="activos" />
+                  <th className="col-num">Coste {anio}</th>
+                </tr></thead>
                 <tbody>
-                  {porDepto.map(d => (
+                  {ordDepto.filas.map(d => (
                     <tr key={d.departamento}>
                       <td data-label="Departamento"><strong>{d.departamento}</strong></td>
                       <td data-label="Activos" className="text-sm-muted">{d.activos}</td>
@@ -542,9 +586,13 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
             <div className="ter-card-head"><span className="ter-form-section-title">Plantilla por cargo</span></div>
             <div className="table-wrapper">
               <table className="table">
-                <thead><tr><th>Cargo</th><th>Activos</th><th className="col-num">Coste {anio}</th></tr></thead>
+                <thead><tr>
+                  <ThOrden orden={ordCargo} clave="cargo" />
+                  <ThOrden orden={ordCargo} clave="activos" />
+                  <th className="col-num">Coste {anio}</th>
+                </tr></thead>
                 <tbody>
-                  {porCargo.map(c => (
+                  {ordCargo.filas.map(c => (
                     <tr key={c.cargo}>
                       <td data-label="Cargo"><strong>{c.cargo}</strong></td>
                       <td data-label="Activos" className="text-sm-muted">{c.activos}</td>

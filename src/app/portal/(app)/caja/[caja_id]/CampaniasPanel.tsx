@@ -9,6 +9,7 @@ import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastCont
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 /** 0 = domingo … 6 = sábado, igual que `getDay()` del dispositivo, que es quien evalúa. */
 const DIAS = [
@@ -76,6 +77,13 @@ export default function CampaniasPanel({
     const lista = dias.length === 1 ? dias[0] : `${dias.slice(0, -1).join(', ')} y ${dias[dias.length - 1]}`
     return ventana === 'siempre' ? `los ${lista}` : `${ventana}, los ${lista}`
   }
+
+  const ord = useOrden(campanias, {
+    campania:  { label: 'Campaña',      valor: c => c.nombre },
+    descuento: { label: 'Descuento',    valor: c => c.pct },
+    aplica:    { label: 'Se aplica a',  valor: c => c.ambito === 'TODO' ? 'Todo lo que se venda' : nombreProducto(c.ambito_id) },
+    cuando:    { label: 'Cuándo',       valor: c => cuando(c) },
+  })
 
   /** Caducada = la ventana ya pasó. No se archiva sola: el dueño decide si la repite
    *  el mes que viene o la retira, y una lista que se vacía sola no deja decidir. */
@@ -203,15 +211,15 @@ export default function CampaniasPanel({
           <table className="table">
             <thead>
               <tr>
-                <th>Campaña</th>
-                <th className="col-num">Descuento</th>
-                <th>Se aplica a</th>
-                <th>Cuándo</th>
+                <ThOrden orden={ord} clave="campania" />
+                <ThOrden orden={ord} clave="descuento" className="col-num" />
+                <ThOrden orden={ord} clave="aplica" />
+                <ThOrden orden={ord} clave="cuando" />
                 {puedeEditar && <th className="col-actions"></th>}
               </tr>
             </thead>
             <tbody>
-              {campanias.map(c => (
+              {ord.filas.map(c => (
                 /* La fila entera abre la ficha. Una campaña tiene siete datos y la tabla
                    enseña cuatro: los días concretos, las fechas exactas y el estado se
                    leían solo entrando a editar, o sea arriesgando un cambio para mirar. */

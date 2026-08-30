@@ -9,6 +9,7 @@ import { crearCaja, setActivaCaja, type Caja } from '@/app/actions/portal/caja'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { RowActions } from '@/components/portal/RowActions'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 
 interface Salud { monedasSinCuenta: string[]; sinAlmacen: boolean }
@@ -44,9 +45,17 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [modalOpen, setModalOpen] = useState(false)
-  const { pageItems, ...pag } = usePagination(cajas)
   const multi = empresas.length > 1
   const empresaNombre = (id: string) => empresas.find(e => e.empresa_id === id)?.nombre ?? id
+
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(cajas, {
+    nombre:  { label: 'Nombre',                valor: c => c.nombre },
+    empresa: { label: 'Empresa',               valor: c => empresaNombre(c.empresa_id) },
+    sync:    { label: 'Última sincronización', valor: c => c.last_sync_at },
+    estado:  { label: 'Estado',                valor: c => c.activa },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
 
   function toggleActiva(c: Caja) {
     const ld = toastLoading('Actualizando…')
@@ -94,10 +103,10 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
             <table className="table">
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  {multi && <th>Empresa</th>}
-                  <th>Última sincronización</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ord} clave="nombre" />
+                  {multi && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="sync" />
+                  <ThOrden orden={ord} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

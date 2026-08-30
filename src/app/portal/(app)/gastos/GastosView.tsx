@@ -40,6 +40,7 @@ import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
 import FormHelp                        from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import GavetaLanzador                       from '@/components/portal/GavetaLanzador'
@@ -1048,7 +1049,21 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
       return n
     })
 
-  const { pageItems: regItems, ...regPag } = usePagination(registros)
+  // Solo la lista de registros se ordena. La de categorías es un ÁRBOL —padre y
+  // sus hijas debajo, con plegado—: ordenarla por una columna deshace la jerarquía
+  // y deja las subcategorías huérfanas por la pantalla.
+  const ord = useOrden(registros, {
+    fecha:    { label: 'Fecha',        valor: r => r.fecha },
+    concepto: { label: 'Concepto',     valor: r => r.concepto || r.descripcion },
+    categoria:    { label: 'Categoría',    valor: r => tab === 'gastos' ? catSubDe(r.categoria_id).cat : null },
+    subcategoria: { label: 'Subcategoría', valor: r => tab === 'gastos' ? catSubDe(r.categoria_id).sub : null },
+    empresa:  { label: 'Empresa',      valor: r => data.empresa_nombres[r.empresa_id] ?? null },
+    monto:    { label: 'Monto',        valor: r => Number(r.monto) },
+    pendiente:{ label: 'Pendiente',    valor: r => r.saldo_pendiente > 0.005 ? r.saldo_pendiente : null },
+    estado:   { label: 'Estado',       valor: r => ESTADO_LABEL[r.estado] ?? r.estado },
+  })
+
+  const { pageItems: regItems, ...regPag } = usePagination(ord.filas)
   const { pageItems: catItems, ...catPag } = usePagination(categoriasVisibles)
 
   // ── Selección múltiple (solo pestaña gastos) ──
@@ -1303,16 +1318,16 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     </th>
                   )}
-                  <th>Fecha</th>
+                  <ThOrden orden={ord} clave="fecha" />
                   {/* El CONCEPTO es la columna principal (mig. 152): es lo que el dueño
                       reconoce. La categoría va al lado, que es donde sirve — clasificar
                       el informe, no identificar la fila. */}
-                  <th>Concepto</th>
-                  {tab === 'gastos' && <><th>Categoría</th><th>Subcategoría</th></>}
-                  {multiempresa && <th>Empresa</th>}
-                  <th className="col-num">Monto</th>
-                  <th className="col-num">Pendiente</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ord} clave="concepto" />
+                  {tab === 'gastos' && <><ThOrden orden={ord} clave="categoria" /><ThOrden orden={ord} clave="subcategoria" /></>}
+                  {multiempresa && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="monto" className="col-num" />
+                  <ThOrden orden={ord} clave="pendiente" className="col-num" />
+                  <ThOrden orden={ord} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

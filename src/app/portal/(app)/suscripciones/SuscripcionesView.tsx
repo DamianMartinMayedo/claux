@@ -18,6 +18,7 @@ import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import EmpresaPills      from '@/components/portal/EmpresaPills'
 import { useEmpresas }   from '@/components/portal/EmpresaColorContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import Filtros from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
@@ -784,6 +785,20 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
   const borradores = mes.facturas.filter(f => f.estado === 'BORRADOR')
   const sel = useRowSelection(borradores.map(f => f.factura_id))
 
+  const ordFacturas = useOrden(mes.facturas, {
+    numero:        { label: 'Nº',            valor: f => f.numero },
+    cliente:       { label: 'Cliente',       valor: f => f.cliente_nombre },
+    suscripciones: { label: 'Suscripciones', valor: f => f.suscripciones },
+    total:         { label: 'Total',         valor: f => f.total },
+    debe:          { label: 'Debe',          valor: f => f.estado === 'BORRADOR' ? null : f.saldo },
+    estado:        { label: 'Estado',        valor: f => ESTADO_FACTURA_LABEL[f.estado as EstadoFactura] ?? f.estado },
+  })
+
+  const ordGrupos = useOrden(mes.grupos, {
+    cliente: { label: 'Cliente', valor: g => g.cliente_nombre },
+    total:   { label: 'Total',   valor: g => g.total },
+  })
+
   // El importe de lo que se va a generar, por moneda: el botón que mueve dinero dice
   // cuánto mueve. Nunca sumando monedas distintas.
   const porGenerar = new Map<string, number>()
@@ -859,17 +874,17 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
                       onChange={sel.toggleAll} aria-label="Seleccionar todos los borradores" />
                   </th>
                 )}
-                <th>Nº</th>
-                <th>Cliente</th>
-                <th className="col-center">Suscripciones</th>
-                <th className="col-num">Total</th>
-                <th className="col-num">Debe</th>
-                <th>Estado</th>
+                <ThOrden orden={ordFacturas} clave="numero" />
+                <ThOrden orden={ordFacturas} clave="cliente" />
+                <ThOrden orden={ordFacturas} clave="suscripciones" className="col-center" />
+                <ThOrden orden={ordFacturas} clave="total" className="col-num" />
+                <ThOrden orden={ordFacturas} clave="debe" className="col-num" />
+                <ThOrden orden={ordFacturas} clave="estado" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {mes.facturas.map(f => (
+              {ordFacturas.filas.map(f => (
                 <tr key={f.factura_id}>
                   {puedeEditar && borradores.length > 0 && (
                     <td data-label="Seleccionar" className="col-center">
@@ -914,13 +929,13 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
             <thead>
               <tr>
                 {puedeEditar && <th className="col-center">Incluir</th>}
-                <th>Cliente</th>
+                <ThOrden orden={ordGrupos} clave="cliente" />
                 <th>Qué se le factura</th>
-                <th className="col-num">Total</th>
+                <ThOrden orden={ordGrupos} clave="total" className="col-num" />
               </tr>
             </thead>
             <tbody>
-              {mes.grupos.map(g => {
+              {ordGrupos.filas.map(g => {
                 const key = `${mes.periodo}#${g.cliente_id}#${g.moneda}`
                 const incluido = !excluidos.has(key)
                 return (

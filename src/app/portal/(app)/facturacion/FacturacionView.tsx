@@ -4,6 +4,7 @@ import type { FacturacionData } from '@/app/actions/portal/facturacion'
 import { useState, useTransition } from 'react'
 import { Receipt, ArrowRight, Check, TrendingUp } from 'lucide-react'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { registrarInteresModulo } from '@/app/actions/portal/soporte'
 import { useNotificacionesOpcional } from '@/components/portal/notificaciones/NotificacionesContext'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
@@ -51,7 +52,25 @@ function diasRestantes(fechaStr: string | null): number | null {
 // ── Vista principal ───────────────────────────────────────────────────────────
 
 export default function FacturacionView({ data }: { data: FacturacionData }) {
-  const { pageItems, ...pag } = usePagination(data.pagos)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ordPagos = useOrden(data.pagos, {
+    id:       { label: 'ID',       valor: p => p.pago_id },
+    fecha:    { label: 'Fecha',    valor: p => p.fecha },
+    periodo:  { label: 'Período',  valor: p => p.fecha_inicio_periodo },
+    concepto: { label: 'Concepto', valor: p => p.concepto },
+    estado:   { label: 'Estado',   valor: p => p.estado },
+    monto:    { label: 'Monto',    valor: p => p.monto },
+    metodo:   { label: 'Método',   valor: p => METODO_LABEL[p.metodo] ?? p.metodo },
+  })
+  const { pageItems, ...pag } = usePagination(ordPagos.filas)
+
+  const ordCapacidad = useOrden(data.capacidad ?? [], {
+    concepto:   { label: 'Concepto',   valor: f => f.etiqueta },
+    usado:      { label: 'En uso',     valor: f => f.usado },
+    // Sin tope no hay número: va al final, que es donde deja de importar.
+    tope:       { label: 'Tope',       valor: f => f.limite },
+    disponible: { label: 'Disponible', valor: f => f.limite === null ? null : f.limite - f.usado },
+  })
 
   // Arranca con lo que YA pidió (viene del servidor): si vive solo en memoria, al
   // recargar vuelve a decir «lo quiero» y el dueño no sabe si su clic sirvió.
@@ -234,14 +253,14 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Concepto</th>
-                  <th className="col-num">En uso</th>
-                  <th className="col-num">Tope</th>
-                  <th>Disponible</th>
+                  <ThOrden orden={ordCapacidad} clave="concepto" />
+                  <ThOrden orden={ordCapacidad} clave="usado" className="col-num" />
+                  <ThOrden orden={ordCapacidad} clave="tope" className="col-num" />
+                  <ThOrden orden={ordCapacidad} clave="disponible" />
                 </tr>
               </thead>
               <tbody>
-                {capacidad.map(f => (
+                {ordCapacidad.filas.map(f => (
                   <tr key={f.dimension}>
                     <td data-label="Concepto">
                       {f.etiqueta.charAt(0).toUpperCase() + f.etiqueta.slice(1)}
@@ -327,13 +346,13 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Fecha</th>
-                  <th>Período</th>
-                  <th>Concepto</th>
-                  <th>Estado</th>
-                  <th className="col-num">Monto</th>
-                  <th>Método</th>
+                  <ThOrden orden={ordPagos} clave="id" />
+                  <ThOrden orden={ordPagos} clave="fecha" />
+                  <ThOrden orden={ordPagos} clave="periodo" />
+                  <ThOrden orden={ordPagos} clave="concepto" />
+                  <ThOrden orden={ordPagos} clave="estado" />
+                  <ThOrden orden={ordPagos} clave="monto" className="col-num" />
+                  <ThOrden orden={ordPagos} clave="metodo" />
                 </tr>
               </thead>
               <tbody>

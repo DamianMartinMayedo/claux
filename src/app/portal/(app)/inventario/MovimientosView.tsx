@@ -4,6 +4,7 @@ import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastCont
 import IaTouchpoint from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando from '@/components/portal/TablaCargando'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { Fragment, useState, useMemo, useTransition } from 'react'
@@ -296,6 +297,14 @@ function PanelRevisar({
 }) {
   const router = useRouter()
 
+  const ord = useOrden(revision, {
+    tipo:      { label: 'Qué pasa',  valor: a => REVISION_TITULO[a.tipo] },
+    producto:  { label: 'Producto',  valor: a => a.producto },
+    almacen:   { label: 'Almacén',   valor: a => a.almacen },
+    cantidad:  { label: 'Cantidad',  valor: a => a.cantidad },
+    cobertura: { label: 'Cobertura', valor: a => a.cobertura },
+  })
+
   if (revision.length === 0) {
     return (
       <div className="card card-table">
@@ -323,16 +332,17 @@ function PanelRevisar({
         <table className="table">
           <thead>
             <tr>
-              <th>Qué pasa</th>
-              <th>Producto</th>
-              <th>Almacén</th>
-              <th className="col-num">Cantidad</th>
-              <th className="col-num" title="Estimación al ritmo de los últimos 90 días">Cobertura</th>
+              <ThOrden orden={ord} clave="tipo" />
+              <ThOrden orden={ord} clave="producto" />
+              <ThOrden orden={ord} clave="almacen" />
+              <ThOrden orden={ord} clave="cantidad" className="col-num" />
+              <ThOrden orden={ord} clave="cobertura" className="col-num"
+                title="Estimación al ritmo de los últimos 90 días" />
               <th className="col-actions"></th>
             </tr>
           </thead>
           <tbody>
-            {revision.map((a, i) => (
+            {ord.filas.map((a, i) => (
               <tr key={`${a.tipo}-${a.producto_id}-${a.almacen_id ?? ''}-${i}`}>
                 <td data-label="Qué pasa">
                   <span className={`badge ${REVISION_BADGE[a.tipo]}`}>{REVISION_TITULO[a.tipo]}</span>
@@ -485,7 +495,20 @@ export default function MovimientosView({
     })
   }, [data.movimientos, filtroTipo, filtroAlm, filtroMotivo, filtroEmpresa])
 
-  const { pageItems, ...pag } = usePagination(filtrados)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(filtrados, {
+    fecha:    { label: 'Fecha',       valor: m => m.fecha },
+    tipo:     { label: 'Tipo',        valor: m => TIPO_LABEL[m.tipo] },
+    producto: { label: 'Producto',    valor: m => data.producto_nombres[m.producto_id] ?? m.producto_id },
+    almacen:  { label: 'Almacén',     valor: m => data.almacen_nombres[m.almacen_id] ?? m.almacen_id },
+    empresa:  { label: 'Empresa',     valor: m => data.empresa_nombres[m.empresa_id] ?? m.empresa_id },
+    // Con el signo que se ve en la celda: una salida ordena por debajo de una entrada.
+    cantidad: { label: 'Cantidad',    valor: m => m.tipo === 'SALIDA' ? -m.cantidad : m.cantidad },
+    coste:    { label: 'Coste unit.', valor: m => m.costo_unitario },
+    motivo:   { label: 'Motivo',      valor: m => m.motivo_tipo ? MOTIVO_LABEL[m.motivo_tipo] : m.motivo },
+    origen:   { label: 'Origen',      valor: m => m.origen },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
 
   function onSaved() { setModalOpen(false); startTransition(() => router.refresh()) }
 
@@ -612,15 +635,15 @@ export default function MovimientosView({
             <table className="table">
               <thead>
                 <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Producto</th>
-                  <th>Almacén</th>
-                  {multiempresa && <th>Empresa</th>}
-                  <th className="col-num">Cantidad</th>
-                  <th className="col-num">Coste unit.</th>
-                  <th>Motivo</th>
-                  <th>Origen</th>
+                  <ThOrden orden={ord} clave="fecha" />
+                  <ThOrden orden={ord} clave="tipo" />
+                  <ThOrden orden={ord} clave="producto" />
+                  <ThOrden orden={ord} clave="almacen" />
+                  {multiempresa && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="cantidad" className="col-num" />
+                  <ThOrden orden={ord} clave="coste" className="col-num" />
+                  <ThOrden orden={ord} clave="motivo" />
+                  <ThOrden orden={ord} clave="origen" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

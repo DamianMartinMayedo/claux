@@ -31,6 +31,7 @@ import BulkBar                          from '@/components/portal/BulkBar'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import AvisoTope                         from '@/components/portal/AvisoTope'
@@ -834,7 +835,20 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
     () => data.nominas.filter(n => !filtroEmpresa || n.empresa_id === filtroEmpresa),
     [data.nominas, filtroEmpresa])
 
-  const { pageItems, ...pag } = usePagination(nominasFiltradas)
+  const ord = useOrden(nominasFiltradas, {
+    periodo:   { label: 'Período',   valor: n => n.periodo },
+    empresa:   { label: 'Empresa',   valor: n => data.empresa_nombres[n.empresa_id] ?? null },
+    empleados: { label: 'Empleados', valor: n => n.lineas.length },
+    total:     { label: 'Total',     valor: n => Number(n.total) },
+    // El estado que se lee en la fila, no el de la columna: una CONFIRMADA con
+    // saldo se enseña como «Pendiente de pago», y ordenar por otra cosa
+    // desordenaría justo lo que se está mirando.
+    estado:    { label: 'Estado',    valor: n =>
+      n.estado === 'BORRADOR' ? 'Borrador'
+        : !data.tieneContabilidad ? 'Confirmada'
+        : (n.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago') },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (confirmar / eliminar en lote) ──
@@ -973,11 +987,11 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     )}
                   </th>
-                  <th>Período</th>
-                  {multiempresa && <th>Empresa</th>}
-                  <th>Empleados</th>
-                  <th className="col-num">Total</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ord} clave="periodo" />
+                  {multiempresa && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="empleados" />
+                  <ThOrden orden={ord} clave="total" className="col-num" />
+                  <ThOrden orden={ord} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

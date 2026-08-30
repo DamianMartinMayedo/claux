@@ -23,6 +23,7 @@ import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
@@ -1086,7 +1087,32 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     return true
   }), [data.citas, filtroRecurso, filtroEstado])
 
-  const { pageItems: citaItems, ...citaPag } = usePagination(citas)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ordCitas = useOrden(citas, {
+    fecha:    { label: 'Fecha',        valor: c => c.fecha },
+    hora:     { label: 'Hora',         valor: c => c.hora },
+    servicio: { label: et.servicio,    valor: c => c.servicio_nombre },
+    recurso:  { label: et.recurso,     valor: c => c.recurso_nombre },
+    cliente:  { label: 'Cliente',      valor: c => c.nombre_cliente },
+    estado:   { label: 'Estado',       valor: c => ESTADO_LABEL[c.estado] },
+  }, { clave: 'fecha' })
+
+  const { pageItems: citaItems, ...citaPag } = usePagination(ordCitas.filas)
+
+  const ordRecursos = useOrden(data.recursos, {
+    nombre:    { label: 'Nombre',           valor: r => r.nombre },
+    tipo:      { label: 'Tipo',             valor: r => r.tipo },
+    servicios: { label: `${et.servicio}s`,  valor: r => r.servicio_ids.length },
+    horario:   { label: 'Horario',          valor: r => r.horarios.length },
+    estado:    { label: 'Estado',           valor: r => r.activo },
+  })
+
+  const ordServicios = useOrden(data.servicios, {
+    nombre:   { label: 'Nombre',   valor: s => s.nombre },
+    duracion: { label: 'Duración', valor: s => s.duracion_minutos },
+    precio:   { label: 'Precio',   valor: s => s.precio },
+    estado:   { label: 'Estado',   valor: s => s.activo },
+  })
   const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (cambiar estado en lote) ──
@@ -1367,8 +1393,13 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     </th>
                   )}
-                  <th>Fecha</th><th>Hora</th><th>{servicioNombre}</th><th>{et.recurso}</th>
-                  <th>Cliente</th><th>Estado</th><th className="col-actions"></th>
+                  <ThOrden orden={ordCitas} clave="fecha" />
+                  <ThOrden orden={ordCitas} clave="hora" />
+                  <ThOrden orden={ordCitas} clave="servicio" />
+                  <ThOrden orden={ordCitas} clave="recurso" />
+                  <ThOrden orden={ordCitas} clave="cliente" />
+                  <ThOrden orden={ordCitas} clave="estado" />
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1466,10 +1497,17 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
           <div className="table-wrapper">
             <table className="table">
               <thead>
-                <tr><th>Nombre</th><th>Tipo</th><th>{servicioPlural}</th><th>Horario</th><th>Estado</th><th className="col-actions"></th></tr>
+                <tr>
+                  <ThOrden orden={ordRecursos} clave="nombre" />
+                  <ThOrden orden={ordRecursos} clave="tipo" />
+                  <ThOrden orden={ordRecursos} clave="servicios">{servicioPlural}</ThOrden>
+                  <ThOrden orden={ordRecursos} clave="horario" />
+                  <ThOrden orden={ordRecursos} clave="estado" />
+                  <th className="col-actions"></th>
+                </tr>
               </thead>
               <tbody>
-                {data.recursos.map(r => (
+                {ordRecursos.filas.map(r => (
                   <tr key={r.recurso_id}
                     className={puedeEditar ? 'table-row-clickable' : undefined}
                     onClick={puedeEditar ? () => { setEditRecurso(r); setShowRecurso(true) } : undefined}>
@@ -1524,10 +1562,16 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
           <div className="table-wrapper">
             <table className="table">
               <thead>
-                <tr><th>Nombre</th><th className="col-num">Duración</th><th className="col-num">Precio</th><th>Estado</th><th className="col-actions"></th></tr>
+                <tr>
+                  <ThOrden orden={ordServicios} clave="nombre" />
+                  <ThOrden orden={ordServicios} clave="duracion" className="col-num" />
+                  <ThOrden orden={ordServicios} clave="precio"   className="col-num" />
+                  <ThOrden orden={ordServicios} clave="estado" />
+                  <th className="col-actions"></th>
+                </tr>
               </thead>
               <tbody>
-                {data.servicios.map(s => (
+                {ordServicios.filas.map(s => (
                   <tr key={s.servicio_id}
                     className={puedeEditar ? 'table-row-clickable' : undefined}
                     onClick={puedeEditar ? () => { setEditServicio(s); setShowServicio(true) } : undefined}>

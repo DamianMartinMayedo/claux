@@ -11,6 +11,7 @@ import { Plus, Trash2 } from 'lucide-react'
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 function hoyISO(): string { return hoyEnTz() }
 function fmt(f: string): string {
@@ -28,6 +29,11 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
   const [isPending, startTransition] = useTransition()
   const [mostrarForm, setMostrarForm] = useState(false)
   const [confirmarBorrado, setConfirmarBorrado] = useState<Cierre | null>(null)
+
+  const ord = useOrden(cierres, {
+    fechas: { label: 'Fechas', valor: c => c.fecha_desde },
+    motivo: { label: 'Motivo', valor: c => c.motivo },
+  })
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -110,9 +116,13 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
       ) : (
         <div className="table-wrapper">
           <table className="table">
-            <thead><tr><th>Fechas</th><th>Motivo</th><th className="col-actions"></th></tr></thead>
+            <thead><tr>
+              <ThOrden orden={ord} clave="fechas" />
+              <ThOrden orden={ord} clave="motivo" />
+              <th className="col-actions"></th>
+            </tr></thead>
             <tbody>
-              {cierres.map(c => (
+              {ord.filas.map(c => (
                 <tr key={c.cierre_id}>
                   <td data-label="Fechas"><strong>{c.fecha_desde === c.fecha_hasta ? fmt(c.fecha_desde) : `${fmt(c.fecha_desde)} – ${fmt(c.fecha_hasta)}`}</strong></td>
                   <td data-label="Motivo" className="text-sm-muted cell-truncate">{c.motivo ?? '—'}</td>

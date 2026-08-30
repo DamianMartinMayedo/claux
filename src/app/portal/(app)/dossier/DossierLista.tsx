@@ -8,6 +8,7 @@ import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import {
   duplicarDossier, eliminarDossier,
@@ -81,6 +82,14 @@ export default function DossierLista({
 
   const nombreEmpresa = (id: string | null) =>
     id ? (empresas.find(e => e.empresa_id === id)?.nombre ?? 'Mi empresa') : 'Todas las empresas'
+
+  const ord = useOrden(dossiers, {
+    dossier:     { label: 'Dossier',     valor: d => d.titulo },
+    empresa:     { label: 'Empresa',     valor: d => nombreEmpresa(d.empresa_id) },
+    periodo:     { label: 'Período',     valor: d => d.periodo_desde },
+    estado:      { label: 'Estado',      valor: d => d.estado },
+    actualizado: { label: 'Actualizado', valor: d => d.updated_at },
+  })
 
   function duplicar(d: ResumenDossier) {
     const ld = toastLoading('Duplicando…')
@@ -161,16 +170,16 @@ export default function DossierLista({
                     <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                   </th>
                 )}
-                <th>Dossier</th>
-                <th>Empresa</th>
-                <th>Período</th>
-                <th className="col-center">Estado</th>
-                <th className="col-num">Actualizado</th>
+                <ThOrden orden={ord} clave="dossier" />
+                <ThOrden orden={ord} clave="empresa" />
+                <ThOrden orden={ord} clave="periodo" />
+                <ThOrden orden={ord} clave="estado" className="col-center" />
+                <ThOrden orden={ord} clave="actualizado" className="col-num" />
                 <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
-              {dossiers.map(d => (
+              {ord.filas.map(d => (
                 <tr key={d.dossier_id} className="table-row-clickable"
                   onClick={() => router.push(`/portal/dossier/${d.dossier_id}`)}>
                   {puedeEditar && (

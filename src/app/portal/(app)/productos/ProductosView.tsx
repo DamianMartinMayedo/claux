@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
@@ -347,9 +348,23 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
   }, [data.productos, search, filtroCat, filtroProv, filtroTipo, verArchivados, soloBajoMinimo,
       soloSuscribibles, categoriaMap, tieneAlerta])
 
-  const { pageItems: prodItems, ...prodPag } = usePagination(productosFiltrados)
+  const ordProd = useOrden(productosFiltrados, {
+    nombre:    { label: 'Nombre',    valor: p => p.nombre },
+    tipo:      { label: 'Tipo',      valor: p => p.tipo === 'SERVICIO' ? data.etiquetaServicio : 'Producto' },
+    codigo:    { label: 'Código',    valor: p => p.codigo },
+    categoria: { label: 'Categoría', valor: p => p.categoria_id ? categoriaMap[p.categoria_id] : null },
+    stock:     { label: 'Stock',     valor: p => p.stock_actual },
+  })
+  const { pageItems: prodItems, ...prodPag } = usePagination(ordProd.filas)
   const [cargando, setCargando] = useState(false)
-  const { pageItems: catItems, ...catPag } = usePagination(data.categorias)
+  const ordCat = useOrden(data.categorias, {
+    nombre:      { label: 'Nombre',      valor: c => c.nombre },
+    usoEn:       { label: 'Se usa en',   valor: c => TIPO_CATEGORIA_LABEL[c.tipo] ?? null },
+    descripcion: { label: 'Descripción', valor: c => c.descripcion },
+    articulos:   { label: 'Artículos',   valor: c => productosPorCategoria[c.categoria_id] ?? 0 },
+    estado:      { label: 'Estado',      valor: c => c.estado },
+  })
+  const { pageItems: catItems, ...catPag } = usePagination(ordCat.filas)
 
   // ── Selección múltiple (archivar/restaurar/eliminar en lote) ──
   const idsVisibles = useMemo(() => productosFiltrados.map(p => p.producto_id), [productosFiltrados])
@@ -659,15 +674,17 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
                           <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                         </th>
                       )}
-                      <th>Nombre</th>
+                      <ThOrden orden={ordProd} clave="nombre" />
                       {/* Con los dos tipos en la misma lista hay que poder distinguirlos
                           de un vistazo: es lo que decide dónde acabará cada ficha el día
                           que el cliente contrate Inventario o Servicios. */}
-                      {esMixto && <th>Tipo</th>}
-                      <th>Código</th>
-                      <th>Categoría</th>
+                      {esMixto && <ThOrden orden={ordProd} clave="tipo" />}
+                      <ThOrden orden={ordProd} clave="codigo" />
+                      <ThOrden orden={ordProd} clave="categoria" />
+                      {/* Los precios son un objeto por moneda: no hay un número que
+                          ordenar sin elegir una moneda por el usuario. */}
                       <th>Precios de venta</th>
-                      {conExistencias && <th>Stock</th>}
+                      {conExistencias && <ThOrden orden={ordProd} clave="stock" />}
                       <th className="col-actions"></th>
                     </tr>
                   </thead>
@@ -859,11 +876,11 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Nombre</th>
-                    <th>Se usa en</th>
-                    <th>Descripción</th>
-                    <th className="prd-cat-col-count col-center">Artículos</th>
-                    <th>Estado</th>
+                    <ThOrden orden={ordCat} clave="nombre" />
+                    <ThOrden orden={ordCat} clave="usoEn" />
+                    <ThOrden orden={ordCat} clave="descripcion" />
+                    <ThOrden orden={ordCat} clave="articulos" className="prd-cat-col-count col-center" />
+                    <ThOrden orden={ordCat} clave="estado" />
                     <th className="col-actions"></th>
                   </tr>
                 </thead>

@@ -13,6 +13,7 @@ import { RowActions } from '@/components/portal/RowActions'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import Tabs from '@/components/Tabs'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import { StockAjusteModal } from '../../productos/_StockAjusteModal'
 import { estadoStock, ESTADO_STOCK_BADGE, ESTADO_STOCK_LABEL } from '@/lib/inventario/stock'
 import { fmtValor } from '@/lib/inventario/valoracion'
@@ -82,9 +83,34 @@ export default function AlmacenDetalle(
     })
   }
 
-  const { pageItems: lineasPage,  ...pagLineas  } = usePagination(lineas)
-  const { pageItems: movsPage,    ...pagMovs    } = usePagination(movimientos)
-  const { pageItems: conteosPage, ...pagConteos } = usePagination(conteos)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ordLineas = useOrden(lineas, {
+    producto:  { label: 'Producto',    valor: l => l.nombre },
+    cantidad:  { label: 'Cantidad',    valor: l => l.cantidad },
+    minimo:    { label: 'Mínimo',      valor: l => l.minimo },
+    coste:     { label: 'Coste unit.', valor: l => l.costo },
+    valor:     { label: 'Valor',       valor: l => l.valor },
+    cobertura: { label: 'Cobertura',   valor: l => l.cobertura },
+    estado:    { label: 'Estado',      valor: l => ESTADO_STOCK_LABEL[estadoStock(l.cantidad, l.minimo)] },
+  })
+  const ordMovs = useOrden(movimientos, {
+    fecha:    { label: 'Fecha',    valor: m => m.fecha },
+    tipo:     { label: 'Tipo',     valor: m => m.tipo },
+    producto: { label: 'Producto', valor: m => m.producto },
+    cantidad: { label: 'Cantidad', valor: m => m.cantidad },
+    motivo:   { label: 'Motivo',   valor: m => m.motivo },
+  })
+  const ordConteos = useOrden(conteos, {
+    conteo:      { label: 'Conteo',      valor: c => c.created_at },
+    contadoPor:  { label: 'Contado por', valor: c => c.contado_por },
+    contadas:    { label: 'Contadas',    valor: c => c.contadas },
+    diferencias: { label: 'Diferencias', valor: c => c.diferencias },
+    estado:      { label: 'Estado',      valor: c => c.estado },
+  })
+
+  const { pageItems: lineasPage,  ...pagLineas  } = usePagination(ordLineas.filas)
+  const { pageItems: movsPage,    ...pagMovs    } = usePagination(ordMovs.filas)
+  const { pageItems: conteosPage, ...pagConteos } = usePagination(ordConteos.filas)
 
   const unidades  = lineas.reduce((s, l) => s + l.cantidad, 0)
   const alertas   = lineas.filter(l => {
@@ -220,11 +246,11 @@ export default function AlmacenDetalle(
             <table className="table">
               <thead>
                 <tr>
-                  <th>Conteo</th>
-                  <th>Contado por</th>
-                  <th className="col-num">Contadas</th>
-                  <th className="col-num">Diferencias</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ordConteos} clave="conteo" />
+                  <ThOrden orden={ordConteos} clave="contadoPor" />
+                  <ThOrden orden={ordConteos} clave="contadas" className="col-num" />
+                  <ThOrden orden={ordConteos} clave="diferencias" className="col-num" />
+                  <ThOrden orden={ordConteos} clave="estado" />
                 </tr>
               </thead>
               <tbody>
@@ -275,17 +301,18 @@ export default function AlmacenDetalle(
             <table className="table">
               <thead>
                 <tr>
-                  <th>Producto</th>
-                  <th className="col-num">Cantidad</th>
-                  <th className="col-num">Mínimo</th>
+                  <ThOrden orden={ordLineas} clave="producto" />
+                  <ThOrden orden={ordLineas} clave="cantidad" className="col-num" />
+                  <ThOrden orden={ordLineas} clave="minimo" className="col-num" />
                   {/* La moneda va en la cabecera de su columna: sin el titular de la
                       tarjeta, era el único sitio que decía en qué moneda están estas dos. */}
-                  <th className="col-num">Coste unit.{monedaVista && ` (${monedaVista})`}</th>
-                  <th className="col-num">Valor{monedaVista && ` (${monedaVista})`}</th>
+                  <ThOrden orden={ordLineas} clave="coste" className="col-num">Coste unit.{monedaVista && ` (${monedaVista})`}</ThOrden>
+                  <ThOrden orden={ordLineas} clave="valor" className="col-num">Valor{monedaVista && ` (${monedaVista})`}</ThOrden>
                   {/* Es el número que decide la compra. Y es una ESTIMACIÓN: se rotula
                       así, no se suma en ninguna parte y no genera aviso propio. */}
-                  <th className="col-num" title="Estimación al ritmo de los últimos 90 días">Cobertura</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ordLineas} clave="cobertura" className="col-num"
+                    title="Estimación al ritmo de los últimos 90 días" />
+                  <ThOrden orden={ordLineas} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -370,11 +397,11 @@ export default function AlmacenDetalle(
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Producto</th>
-                    <th className="col-num">Cantidad</th>
-                    <th>Motivo</th>
+                    <ThOrden orden={ordMovs} clave="fecha" />
+                    <ThOrden orden={ordMovs} clave="tipo" />
+                    <ThOrden orden={ordMovs} clave="producto" />
+                    <ThOrden orden={ordMovs} clave="cantidad" className="col-num" />
+                    <ThOrden orden={ordMovs} clave="motivo" />
                   </tr>
                 </thead>
                 <tbody>

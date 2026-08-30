@@ -14,6 +14,7 @@ import type { LineaDesglose } from '@/lib/dossier/base'
 import DossierDesfase from './DossierDesfase'
 import AvisoContabilidad from './AvisoContabilidad'
 import GavetaLanzador from '@/components/portal/GavetaLanzador'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import type { ResumenGaveta } from '@/lib/caja/pendientes'
 
 // El estado de resultados en pantalla ANTES de descargarlo: en Cuba bajar un PDF
@@ -58,6 +59,14 @@ export default function PestanaEstado({
   puedeEditar?: boolean
 }) {
   const er = useMemo(() => estadoDeResultados(serie, lineas), [serie, lineas])
+
+  const ordEvolucion = useOrden(er.evolucion, {
+    mes:       { label: 'Mes',                valor: e => e.mes },
+    ingresos:  { label: 'Ingresos',           valor: e => e.ingresos },
+    coste:     { label: 'Coste de ventas',    valor: e => e.costoVentas },
+    operativos:{ label: 'Gastos operativos',  valor: e => e.gastosOperativos },
+    neto:      { label: 'Neto',               valor: e => e.neto },
+  })
   // Nota honesta: el coste viene de la base y el negocio no tiene inventario, así
   // que ese renglón son las compras del período, no el coste de lo vendido.
   const costeEsCompras = !hayInventario && serie.some(f => f.origen === 'BASE')
@@ -299,15 +308,15 @@ export default function PestanaEstado({
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Mes</th>
-                    <th className="col-num">Ingresos</th>
-                    <th className="col-num">Coste de ventas</th>
-                    <th className="col-num">Gastos operativos</th>
-                    <th className="col-num">Neto</th>
+                    <ThOrden orden={ordEvolucion} clave="mes" />
+                    <ThOrden orden={ordEvolucion} clave="ingresos" className="col-num" />
+                    <ThOrden orden={ordEvolucion} clave="coste" className="col-num" />
+                    <ThOrden orden={ordEvolucion} clave="operativos" className="col-num" />
+                    <ThOrden orden={ordEvolucion} clave="neto" className="col-num" />
                   </tr>
                 </thead>
                 <tbody>
-                  {er.evolucion.map(e => (
+                  {ordEvolucion.filas.map(e => (
                     <tr key={e.mes}>
                       <td data-label="Mes">{etiquetaMes(e.mes)}</td>
                       <td data-label="Ingresos" className="col-num">{fmt(e.ingresos)}</td>

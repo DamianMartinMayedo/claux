@@ -18,6 +18,7 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                    from '@/components/portal/TablaCargando'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import ExportarMenu                    from '@/components/portal/ExportarMenu'
@@ -253,7 +254,15 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
     })
   }, [data.documentos, filtroTramo, filtroEmpresa, filtroTercero, busca])
 
-  const { pageItems, ...pag } = usePagination(documentos)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(documentos, {
+    documento:  { label: 'Documento',                  valor: d => d.numero },
+    tercero:    { label: esCobro ? 'Cliente' : 'Proveedor', valor: d => d.tercero_nombre },
+    vencimiento:{ label: 'Vencimiento',                valor: d => d.vencimiento },
+    total:      { label: 'Total',                      valor: d => d.monto },
+    pendiente:  { label: 'Pendiente',                  valor: d => d.saldo },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
 
   // Total pendiente por moneda DE LO QUE SE VE: la cabecera sumaba toda la lista mientras
   // la tabla enseñaba un filtro, y las dos cifras no cuadraban sin pista de por qué.
@@ -383,11 +392,11 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
             <table className="table">
               <thead>
                 <tr>
-                  <th>Documento</th>
-                  <th>{esCobro ? 'Cliente' : 'Proveedor'}</th>
-                  <th>Vencimiento</th>
-                  <th className="col-num">Total</th>
-                  <th className="col-num">Pendiente</th>
+                  <ThOrden orden={ord} clave="documento" />
+                  <ThOrden orden={ord} clave="tercero" />
+                  <ThOrden orden={ord} clave="vencimiento" />
+                  <ThOrden orden={ord} clave="total" className="col-num" />
+                  <ThOrden orden={ord} clave="pendiente" className="col-num" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

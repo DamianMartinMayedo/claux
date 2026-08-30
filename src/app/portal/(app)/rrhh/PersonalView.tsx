@@ -35,6 +35,7 @@ import { useEmpresas }                 from '@/components/portal/EmpresaColorCon
 import Filtros                         from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -534,7 +535,16 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
     })
   }, [data.empleados, search, filtroEstado, filtroEmpresa])
 
-  const { pageItems, ...pag } = usePagination(empleados)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(empleados, {
+    empleado: { label: 'Empleado',     valor: e => nombreCompleto(e) },
+    empresa:  { label: 'Empresa',      valor: e => data.empresa_nombres[e.empresa_id] },
+    cargo:    { label: 'Cargo',        valor: e => e.cargo },
+    contrato: { label: 'Contrato',     valor: e => TIPO_CONTRATO_LABEL[e.tipo_contrato] },
+    salario:  { label: 'Salario base', valor: e => e.salario_base },
+    estado:   { label: 'Estado',       valor: e => e.estado },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (baja / reactivar / eliminar en lote) ──
@@ -665,12 +675,12 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     </th>
                   )}
-                  <th>Empleado</th>
-                  {multiempresa && <th>Empresa</th>}
-                  <th>Cargo</th>
-                  <th>Contrato</th>
-                  <th className="col-num">Salario base</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ord} clave="empleado" />
+                  {multiempresa && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="cargo" />
+                  <ThOrden orden={ord} clave="contrato" />
+                  <ThOrden orden={ord} clave="salario" className="col-num" />
+                  <ThOrden orden={ord} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

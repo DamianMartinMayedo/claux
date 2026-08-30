@@ -20,6 +20,7 @@ import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { CompraFormModal }              from './_CompraFormModal'
 import { ReposicionModal }              from './_ReposicionModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { RowActions }                   from '@/components/portal/RowActions'
@@ -73,7 +74,15 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
     [data.compras, filtroEstado],
   )
 
-  const { pageItems, ...pag } = usePagination(filtradas)
+  const ord = useOrden(filtradas, {
+    numero:    { label: 'Número',    valor: c => c.numero },
+    fecha:     { label: 'Fecha',     valor: c => c.fecha },
+    proveedor: { label: 'Proveedor', valor: c => c.proveedor_id ? (data.proveedor_nombres[c.proveedor_id] ?? c.proveedor_id) : null },
+    almacen:   { label: 'Almacén',   valor: c => data.almacen_nombres[c.almacen_id] ?? c.almacen_id },
+    estado:    { label: 'Estado',    valor: c => ESTADO_LABEL[c.estado] ?? c.estado },
+    total:     { label: 'Total',     valor: c => Number(c.total) },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   const [cargando, setCargando] = useState(false)
 
   const sinAlmacenes = data.almacenes.length === 0
@@ -201,12 +210,12 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     </th>
                   )}
-                  <th>Número</th>
-                  <th>Fecha</th>
-                  <th>Proveedor</th>
-                  <th>Almacén</th>
-                  <th>Estado</th>
-                  <th className="col-num">Total</th>
+                  <ThOrden orden={ord} clave="numero" />
+                  <ThOrden orden={ord} clave="fecha" />
+                  <ThOrden orden={ord} clave="proveedor" />
+                  <ThOrden orden={ord} clave="almacen" />
+                  <ThOrden orden={ord} clave="estado" />
+                  <ThOrden orden={ord} clave="total" className="col-num" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>

@@ -35,6 +35,7 @@ import BulkBar from '@/components/portal/BulkBar'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando from '@/components/portal/TablaCargando'
 import ReglasReservaSection from '@/components/portal/ReglasReservaSection'
 import IaBotBanner from '@/components/portal/IaBotBanner'
@@ -739,7 +740,23 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     return true
   }), [data.reservas, filtroFranja, filtroEstado])
 
-  const { pageItems: reservaItems, ...reservaPag } = usePagination(reservas)
+  const ord = useOrden(reservas, {
+    fecha:    { label: 'Fecha',    valor: r => r.fecha },
+    hora:     { label: 'Hora',     valor: r => r.hora },
+    turno:    { label: 'Turno',    valor: r => r.franja_nombre },
+    cliente:  { label: 'Cliente',  valor: r => r.nombre_cliente },
+    personas: { label: 'Pers.',    valor: r => r.personas },
+    estado:   { label: 'Estado',   valor: r => ESTADO_LABEL[r.estado] ?? r.estado },
+  })
+  const { pageItems: reservaItems, ...reservaPag } = usePagination(ord.filas)
+
+  const ordFranjas = useOrden(data.franjas, {
+    nombre:    { label: 'Nombre',    valor: f => f.nombre },
+    horario:   { label: 'Horario',   valor: f => f.hora_inicio },
+    capacidad: { label: 'Capacidad', valor: f => f.capacidad },
+    ocupacion: { label: 'Ocupación', valor: f => ocupacion7d.get(f.franja_id) ?? null },
+    estado:    { label: 'Estado',    valor: f => f.activa },
+  })
   const [cargando, setCargando] = useState(false)
 
   // ── Selección múltiple (cambiar estado en lote) ──
@@ -1024,12 +1041,12 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
                       <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                     </th>
                   )}
-                  <th>Fecha</th>
-                  <th>Hora</th>
-                  <th>Turno</th>
-                  <th>Cliente</th>
-                  <th className="col-num">Pers.</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ord} clave="fecha" />
+                  <ThOrden orden={ord} clave="hora" />
+                  <ThOrden orden={ord} clave="turno" />
+                  <ThOrden orden={ord} clave="cliente" />
+                  <ThOrden orden={ord} clave="personas" className="col-num" />
+                  <ThOrden orden={ord} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -1139,16 +1156,16 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
             <table className="table">
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  <th>Horario</th>
-                  <th className="col-num">Capacidad</th>
-                  <th className="col-num">Ocupación</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ordFranjas} clave="nombre" />
+                  <ThOrden orden={ordFranjas} clave="horario" />
+                  <ThOrden orden={ordFranjas} clave="capacidad" className="col-num" />
+                  <ThOrden orden={ordFranjas} clave="ocupacion" className="col-num" />
+                  <ThOrden orden={ordFranjas} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {data.franjas.map(f => (
+                {ordFranjas.filas.map(f => (
                   <tr key={f.franja_id}>
                     <td data-label="Nombre"><strong className="cell-clamp">{f.nombre}</strong></td>
                     <td data-label="Horario" className="text-sm-muted">

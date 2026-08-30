@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { ReceiptText, Boxes } from 'lucide-react'
 import type { Ticket, MovimientoStock, LineaTicket } from '@/app/actions/portal/caja'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando from '@/components/portal/TablaCargando'
 import Tabs from '@/components/Tabs'
 import GavetaLanzador from '@/components/portal/GavetaLanzador'
@@ -229,7 +230,17 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
 function VentasTabla({ items, cajaNombre, lineas }: {
   items: Ticket[]; cajaNombre: (id: string) => string; lineas: Record<string, Linea[]>
 }) {
-  const { pageItems, ...pag } = usePagination(items)
+  // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+  const ord = useOrden(items, {
+    fecha:     { label: 'Fecha',          valor: t => t.fecha },
+    caja:      { label: 'Punto de venta', valor: t => cajaNombre(t.caja_id) },
+    medio:     { label: 'Medio de pago',  valor: t => t.medio_pago },
+    descuento: { label: 'Descuento',      valor: t => Number(t.bruto) - Number(t.total) },
+    total:     { label: 'Total',          valor: t => Number(t.total) },
+    moneda:    { label: 'Moneda',         valor: t => t.moneda },
+    estado:    { label: 'Estado',         valor: t => t.estado },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   // Qué venta está abierta. Desplegar y no una página de detalle: un ticket son tres
   // líneas, y navegar fuera para verlas obliga a volver y perder la posición del listado.
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -246,9 +257,13 @@ function VentasTabla({ items, cajaNombre, lineas }: {
           <table className="table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Punto de venta</th><th>Medio de pago</th>
-                <th className="col-num">Descuento</th>
-                <th className="col-num">Total</th><th>Moneda</th><th>Estado</th>
+                <ThOrden orden={ord} clave="fecha" />
+                <ThOrden orden={ord} clave="caja" />
+                <ThOrden orden={ord} clave="medio" />
+                <ThOrden orden={ord} clave="descuento" className="col-num" />
+                <ThOrden orden={ord} clave="total" className="col-num" />
+                <ThOrden orden={ord} clave="moneda" />
+                <ThOrden orden={ord} clave="estado" />
               </tr>
             </thead>
             <tbody>
@@ -319,7 +334,14 @@ function VentasTabla({ items, cajaNombre, lineas }: {
 }
 
 function StockTabla({ items, cajaNombre }: { items: MovimientoStock[]; cajaNombre: (id: string) => string }) {
-  const { pageItems, ...pag } = usePagination(items)
+  const ord = useOrden(items, {
+    fecha:    { label: 'Fecha',          valor: l => l.fecha },
+    caja:     { label: 'Punto de venta', valor: l => cajaNombre(l.caja_id) },
+    producto: { label: 'Producto',       valor: l => l.descripcion },
+    cantidad: { label: 'Cantidad',       valor: l => Number(l.cantidad) },
+    precio:   { label: 'Precio',         valor: l => Number(l.precio_unitario) },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   return (
     <div className="card card-table">
       {items.length === 0 ? (
@@ -332,8 +354,11 @@ function StockTabla({ items, cajaNombre }: { items: MovimientoStock[]; cajaNombr
           <table className="table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Punto de venta</th><th>Producto</th>
-                <th className="col-num">Cantidad</th><th className="col-num">Precio</th>
+                <ThOrden orden={ord} clave="fecha" />
+                <ThOrden orden={ord} clave="caja" />
+                <ThOrden orden={ord} clave="producto" />
+                <ThOrden orden={ord} clave="cantidad" className="col-num" />
+                <ThOrden orden={ord} clave="precio" className="col-num" />
               </tr>
             </thead>
             <tbody>

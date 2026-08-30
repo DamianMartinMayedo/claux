@@ -23,6 +23,7 @@ import ExportarMenu from '@/components/portal/ExportarMenu'
 import Filtros                         from '@/components/portal/Filtros'
 import TablaCargando                   from '@/components/portal/TablaCargando'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -312,6 +313,15 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
     })
   }
 
+  const ord = useOrden(almacenesFiltrados, {
+    nombre:      { label: 'Nombre',      valor: a => a.nombre },
+    empresa:     { label: 'Empresa',     valor: a => data.empresa_nombres[a.empresa_id] ?? a.empresa_id },
+    tipo:        { label: 'Tipo',        valor: a => TIPO_ALMACEN_LABEL[a.tipo] },
+    referencias: { label: 'Referencias', valor: a => data.resumen[a.almacen_id]?.referencias ?? 0 },
+    unidades:    { label: 'Unidades',    valor: a => data.resumen[a.almacen_id]?.unidades ?? 0 },
+    estado:      { label: 'Estado',      valor: a => a.activo },
+  })
+
   // Resumen del conjunto. Las cuatro tarjetas contaban «almacenes por tipo», que es
   // el número menos útil que se puede enseñar: nadie entra aquí a saber cuántos
   // almacenes virtuales tiene, sino cuánto hay guardado y cuánto vale.
@@ -417,18 +427,19 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
             <table className="table">
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  {multiempresa && <th>Empresa</th>}
-                  <th>Tipo</th>
-                  <th className="col-num">Referencias</th>
-                  <th className="col-num">Unidades</th>
+                  <ThOrden orden={ord} clave="nombre" />
+                  {multiempresa && <ThOrden orden={ord} clave="empresa" />}
+                  <ThOrden orden={ord} clave="tipo" />
+                  <ThOrden orden={ord} clave="referencias" className="col-num" />
+                  <ThOrden orden={ord} clave="unidades" className="col-num" />
+                  {/* «Valor» no se ordena: es una cifra por moneda, no un número. */}
                   <th className="col-num">Valor</th>
-                  <th>Estado</th>
+                  <ThOrden orden={ord} clave="estado" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {almacenesFiltrados.map(a => {
+                {ord.filas.map(a => {
                   const r = data.resumen[a.almacen_id]
                   return (
                   <tr

@@ -89,6 +89,26 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 
 **Color de empresa** (tablas multi-empresa): `<tr className="… row-empresa-accent" style={empresaColorVar(colorOf(id))}>` (única excepción al no-inline: custom property de runtime). Acento lateral izquierdo; en tarjeta pasa a `border-left`. No añadas más color que ese acento.
 
+**Columnas ordenables — un solo sistema (`src/components/TableSort.tsx`).** Toda tabla de listado del portal ordena por columna con `useOrden` + `<ThOrden>`; no escribas tu propio `sort` ni tu propia flecha.
+
+```tsx
+// Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
+const ord = useOrden(filtradas, {
+  nombre: { label: 'Nombre', valor: t => t.nombre },
+  total:  { label: 'Total',  valor: t => Number(t.total) },
+})
+const { pageItems, ...pag } = usePagination(ord.filas)
+…
+<ThOrden orden={ord} clave="nombre">Nombre / ID fiscal</ThOrden>
+<ThOrden orden={ord} clave="total" className="col-num" />
+```
+
+`valor` devuelve el dato que se compara (texto, número, fecha ISO o booleano), **no** el JSX de la celda: se ordena por el dato, no por cómo se pinta. Sin `children`, el `<th>` muestra `label`; el `className` de alineación (`col-num`, `col-center`) va en el `ThOrden`, igual que en un `<th>`. Tres estados por columna: ascendente → descendente → sin ordenar. Los vacíos caen siempre al final, se ordene como se ordene.
+
+**No se ordenan** (déjalas como `<th>`, con un comentario si no es obvio): las columnas cuyo valor es una cifra **por moneda** (no hay un número que comparar), las tablas cuyo orden lo fija el dueño a mano (catálogo, categorías) y las líneas de un documento (factura, compra, nómina), donde el orden ES el documento.
+
+Bajo 640px la cabecera vuelve como una fila de chips desplazable —la tabla ya es tarjetas apiladas—, así que ordenar funciona igual en el móvil, que es donde se usa el portal.
+
 ## 3.1 Autocompletado — un solo patrón, y NUNCA `<datalist>`
 
 Todo campo de texto con sugerencias usa la familia **`.ac-*`** de `03-components.css` (`.ac-wrap`, `.ac-lista`, `.ac-item`, `.ac-nom`, y opcionales `.ac-cod` / `.ac-extra`), a través de uno de los dos componentes que ya existen:

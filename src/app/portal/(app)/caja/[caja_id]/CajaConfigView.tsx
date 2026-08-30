@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { slugPuntoVenta } from '@/lib/caja/slug'
 import Tabs from '@/components/Tabs'
 import CampaniasPanel, { CAMPANIA_VACIA, type BorradorCampania } from './CampaniasPanel'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 type TabId = 'caja' | 'config' | 'campanias'
 
@@ -46,6 +47,11 @@ function ImportarPersonalModal({ personal, onClose, onImportar, isPending }: {
     setMarcados(todos ? new Set() : new Set(disponibles.map(p => p.empleado_id)))
   }
 
+  const ordPersonal = useOrden(personal, {
+    persona: { label: 'Persona', valor: p => p.nombre },
+    puesto:  { label: 'Puesto',  valor: p => p.cargo },
+  })
+
   return (
     <div className="modal-backdrop open">
       <div className="modal modal-lg" role="dialog" aria-modal aria-label="Importar del personal">
@@ -75,12 +81,12 @@ function ImportarPersonalModal({ personal, onClose, onImportar, isPending }: {
                         <input type="checkbox" checked={todos} onChange={toggleTodos}
                           aria-label="Marcar todos" disabled={disponibles.length === 0} />
                       </th>
-                      <th>Persona</th>
-                      <th>Puesto</th>
+                      <ThOrden orden={ordPersonal} clave="persona" />
+                      <ThOrden orden={ordPersonal} clave="puesto" />
                     </tr>
                   </thead>
                   <tbody>
-                    {personal.map(p => (
+                    {ordPersonal.filas.map(p => (
                       <tr key={p.empleado_id} className={p.ya_operador ? 'row-inactive' : undefined}>
                         <td data-label="Importar" className="col-center">
                           <input type="checkbox" checked={marcados.has(p.empleado_id)}

@@ -36,6 +36,7 @@ import {
 import { fmtFechaEs }                  from '@/lib/date-utils'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                    from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
@@ -612,7 +613,15 @@ function TablaOfertas({
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
-  const { pageItems, ...pag } = usePagination(ofertas)
+  const ord = useOrden(ofertas, {
+    numero:  { label: 'Número',  valor: o => o.numero },
+    fecha:   { label: 'Fecha',   valor: o => o.fecha_emision },
+    empresa: { label: 'Empresa', valor: o => empresaNombres[o.empresa_id] ?? o.empresa_id },
+    cliente: { label: 'Cliente', valor: o => clienteNombres[o.cliente_id] ?? o.cliente_id },
+    estado:  { label: 'Estado',  valor: o => o.estado },
+    total:   { label: 'Total',   valor: o => Number(o.total) },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   return (
     <>
     <div className="table-wrapper">
@@ -624,12 +633,12 @@ function TablaOfertas({
                 <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
               </th>
             )}
-            <th>Número</th>
-            <th>Fecha</th>
-            {mostrarEmpresa && <th>Empresa</th>}
-            <th>Cliente</th>
-            <th>Estado</th>
-            <th className="col-num">Total</th>
+            <ThOrden orden={ord} clave="numero" />
+            <ThOrden orden={ord} clave="fecha" />
+            {mostrarEmpresa && <ThOrden orden={ord} clave="empresa" />}
+            <ThOrden orden={ord} clave="cliente" />
+            <ThOrden orden={ord} clave="estado" />
+            <ThOrden orden={ord} clave="total" className="col-num" />
           </tr>
         </thead>
         <tbody>
@@ -696,7 +705,17 @@ function TablaFacturas({
 }) {
   const router = useRouter()
   const { colorOf } = useEmpresas()
-  const { pageItems, ...pag } = usePagination(facturas)
+  const ord = useOrden(facturas, {
+    numero:      { label: 'Número',      valor: f => etiquetaNumero(f.numero) },
+    fecha:       { label: 'Fecha',       valor: f => f.fecha_emision },
+    empresa:     { label: 'Empresa',     valor: f => empresaNombres[f.empresa_id] ?? f.empresa_id },
+    cliente:     { label: 'Cliente',     valor: f => clienteNombres[f.cliente_id] ?? f.cliente_id },
+    vencimiento: { label: 'Vencimiento', valor: f => f.fecha_vencimiento },
+    estado:      { label: 'Estado',      valor: f => f.estado },
+    total:       { label: 'Total',       valor: f => Number(f.total) },
+    pendiente:   { label: 'Pendiente',   valor: f => f.saldo > 0.005 ? f.saldo : null },
+  })
+  const { pageItems, ...pag } = usePagination(ord.filas)
   return (
     <>
     <div className="table-wrapper">
@@ -708,14 +727,14 @@ function TablaFacturas({
                 <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
               </th>
             )}
-            <th>Número</th>
-            <th>Fecha</th>
-            {mostrarEmpresa && <th>Empresa</th>}
-            <th>Cliente</th>
-            <th>Vencimiento</th>
-            <th>Estado</th>
-            <th className="col-num">Total</th>
-            <th className="col-num">Pendiente</th>
+            <ThOrden orden={ord} clave="numero" />
+            <ThOrden orden={ord} clave="fecha" />
+            {mostrarEmpresa && <ThOrden orden={ord} clave="empresa" />}
+            <ThOrden orden={ord} clave="cliente" />
+            <ThOrden orden={ord} clave="vencimiento" />
+            <ThOrden orden={ord} clave="estado" />
+            <ThOrden orden={ord} clave="total" className="col-num" />
+            <ThOrden orden={ord} clave="pendiente" className="col-num" />
             {puedeEditar && <th className="col-actions"></th>}
           </tr>
         </thead>

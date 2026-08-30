@@ -20,6 +20,7 @@ import { ChevronLeft, ChevronRight, Clock, Pencil, Plus, Power, Repeat, Search, 
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import { cruzaMedianoche, posicionEnCiclo } from '@/lib/rrhh/turnos'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
+import { useOrden, ThOrden } from '@/components/TableSort'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -698,6 +699,13 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
     const etq = p.tipo === 'QUINCENAL' ? 'Quincenal' : 'Mensual'
     return `${etq} · ${t.length} de ${p.longitud_dias} días`
   }
+  const ordPatrones = useOrden(patrones, {
+    turno:    { label: 'Turno',    valor: p => p.nombre },
+    horario:  { label: 'Horario',  valor: p => bandasDePatron(p)[0]?.hora_inicio },
+    cuando:   { label: 'Cuándo',   valor: p => resumenCuando(p) },
+    personas: { label: 'Personas', valor: p => miembrosPorPatron.get(p.patron_id) ?? 0 },
+  })
+
   /** Valores iniciales del modal al editar un turno existente. */
   function seedDePatron(p: TurnoPatron): SeedTurno {
     const bandas = bandasDePatron(p)
@@ -829,12 +837,15 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
             <table className="table">
               <thead>
                 <tr>
-                  <th>Turno</th><th>Horario</th><th>Cuándo</th>
-                  <th className="col-num">Personas</th><th className="col-actions"></th>
+                  <ThOrden orden={ordPatrones} clave="turno" />
+                  <ThOrden orden={ordPatrones} clave="horario" />
+                  <ThOrden orden={ordPatrones} clave="cuando" />
+                  <ThOrden orden={ordPatrones} clave="personas" className="col-num" />
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
-                {patrones.map(p => {
+                {ordPatrones.filas.map(p => {
                   const bandas = bandasDePatron(p)
                   const primary = bandas[0]
                   const multi = bandas.length > 1

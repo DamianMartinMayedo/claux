@@ -241,6 +241,28 @@ textarea.input { resize: vertical; min-height: 80px; }
 .table th.col-actions, .table td.col-actions {
   width: 1%; white-space: nowrap; text-align: right;
 }
+/* ── Cabecera que ordena (`ThOrden`, src/components/TableSort.tsx) ───────────
+   El `<th>` cede su padding al botón para que el área que se pulsa sea la celda
+   entera y no solo el texto. La flecha ocupa sitio siempre —también sin ordenar,
+   en gris— para que activar el orden no desplace la cabecera. */
+.table th.th-sort { padding: 0; }
+.table th.th-sort .th-sort-btn {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; padding: var(--space-3) var(--space-4);
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  text-align: inherit; background: none; border: 0; cursor: pointer;
+}
+.table th.th-sort.col-num .th-sort-btn    { justify-content: flex-end; }
+.table th.th-sort.col-center .th-sort-btn { justify-content: center; }
+.table th.th-sort .th-sort-btn:hover { color: var(--color-text); }
+.table th.th-sort .th-sort-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus); outline-offset: -2px;
+}
+.th-sort-ind { flex-shrink: 0; opacity: 0.3; transition: opacity var(--transition); }
+.table th.th-sort .th-sort-btn:hover .th-sort-ind { opacity: 0.6; }
+.table th.th-sort-activo { color: var(--color-text); }
+.table th.th-sort-activo .th-sort-ind { opacity: 1; color: var(--color-primary-text); }
+
 /* Columna de checkbox para selección en lote (misma clase en <th> y <td>) */
 .table th.col-check, .table td.col-check {
   width: 1%; white-space: nowrap; text-align: center; padding-right: 0;
