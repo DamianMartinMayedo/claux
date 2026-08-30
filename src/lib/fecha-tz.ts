@@ -130,6 +130,22 @@ export function relojNegocio(ahora: Date = new Date(), tz: string = TZ_NEGOCIO):
   }
 }
 
+/**
+ * Año de una fecha YYYY-MM-DD, leído del texto.
+ *
+ * `new Date('2026-01-01').getFullYear()` no vale: la cadena se interpreta como
+ * medianoche UTC y el año se lee en la zona del servidor, así que en offset
+ * negativo (La Habana, EEUU) el 1 de enero devuelve el año anterior. En un listado
+ * da igual; en la numeración fiscal significa emitir una factura de 2026 con el
+ * correlativo y el año de 2025, dentro de una serie ya cerrada.
+ *
+ * Para el año de HOY: `anioDeFecha(hoyEnTz())` — nunca `new Date().getFullYear()`,
+ * que en Vercel (UTC) ya es enero desde las 19:00 del 31 de diciembre en Cuba.
+ */
+export function anioDeFecha(fechaISO: string): number {
+  return Number(fechaISO.slice(0, 4))
+}
+
 /** Suma días a una fecha YYYY-MM-DD (aritmética de calendario, sin saltos por DST). */
 export function sumarDias(fechaISO: string, dias: number): string {
   const [y, m, d] = fechaISO.split('-').map(Number)

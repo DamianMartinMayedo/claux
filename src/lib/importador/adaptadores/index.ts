@@ -9,6 +9,7 @@ import { adaptadorPersonal } from './personal'
 import { adaptadorStockInicial } from './stock'
 import { adaptadorTesoreriaSaldo } from './tesoreria'
 import { adaptadorGastos, adaptadorCobros } from './gastos'
+import { adaptadorFacturas } from './facturas'
 import { adaptadorSuscripciones } from './suscripciones'
 import {
   DESHACEDORES_CATEGORIA, ENT_CAT_GASTO, ENT_CAT_GASTO_REAC,
@@ -25,6 +26,7 @@ export const ADAPTADORES: Record<string, Adaptador> = {
   personal:        adaptadorPersonal,
   stock_inicial:   adaptadorStockInicial,
   tesoreria_saldo: adaptadorTesoreriaSaldo,
+  facturas:        adaptadorFacturas,
   gastos:          adaptadorGastos,
   cobros:          adaptadorCobros,
   suscripciones:   adaptadorSuscripciones,

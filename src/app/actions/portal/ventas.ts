@@ -37,7 +37,7 @@ import {
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
-import { hoyEnTz } from '@/lib/fecha-tz'
+import { anioDeFecha, hoyEnTz } from '@/lib/fecha-tz'
 
 // El tipo se re-declara (no `export type { … } from`, que rompe el loader de
 // 'use server'): las vistas necesitan nombrarlo para pasar los filtros.
@@ -641,7 +641,7 @@ export async function guardarOferta(
     if (!await monedaValida(db, session.client_id, moneda)) {
       return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
     }
-    const anio    = new Date(fecha_emision).getFullYear()
+    const anio    = anioDeFecha(fecha_emision)
     let correlativo: number
     try {
       correlativo = await siguienteCorrelativo(db, session.client_id, empresa_id, 'OFERTA', anio)
@@ -1007,7 +1007,7 @@ export async function cambiarEstadoFactura(
     const letra = emp?.letra_facturacion as string | undefined
     if (!letra) return { ok: false, error: 'Asigna una letra de facturación a la empresa antes de emitir.' }
 
-    const anio = new Date(factura.fecha_emision as string).getFullYear()
+    const anio = anioDeFecha(factura.fecha_emision as string)
     try {
       const correlativo = await siguienteCorrelativo(db, session.client_id, factura.empresa_id as string, 'FACTURA', anio)
       numeroFiscal = formatoNumero('FACTURA', letra, anio, correlativo)
@@ -1053,7 +1053,7 @@ export async function cambiarEstadoFactura(
   // pueden pedir el mismo número y el índice único para a la segunda. Se reintenta una
   // sola vez con el siguiente libre, que es lo que antes hacía la creación en bucle.
   if (error && numeroFiscal && error.message.includes('duplicate key')) {
-    const anio = new Date(factura.fecha_emision as string).getFullYear()
+    const anio = anioDeFecha(factura.fecha_emision as string)
     const { data: emp } = await db.from('empresas')
       .select('letra_facturacion').eq('empresa_id', factura.empresa_id as string)
       .eq('client_id', session.client_id).maybeSingle()
@@ -1266,8 +1266,8 @@ export async function duplicarOferta(
   const validacion = await validarEmpresaAccesible(oferta.empresa_id)
   if (!validacion.ok) return validacion
 
-  const hoy  = new Date().toISOString().substring(0, 10)
-  const anio = new Date().getFullYear()
+  const hoy  = hoyEnTz()
+  const anio = anioDeFecha(hoy)
   let correlativo: number
   try {
     correlativo = await siguienteCorrelativo(db, session.client_id, oferta.empresa_id, 'OFERTA', anio)

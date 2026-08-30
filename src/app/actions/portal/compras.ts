@@ -13,7 +13,7 @@ import { minimoAplicable } from '@/lib/inventario/stock'
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: con `toISOString()` a partir de
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
-import { hoyEnTz } from '@/lib/fecha-tz'
+import { anioDeFecha, hoyEnTz } from '@/lib/fecha-tz'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -319,7 +319,7 @@ export async function crearComprasDeReposicion(
     porProveedor.set(clave, arr)
   }
 
-  const anio = new Date().getFullYear()
+  const anio = anioDeFecha(hoyEnTz())
   let creadas = 0
   let ultima  = ''
   for (const [clave, lineas] of porProveedor) {
@@ -463,7 +463,7 @@ export async function duplicarCompra(
   // del original rompería el índice único (client_id, numero).
   let numero: string
   try {
-    numero = await siguienteNumeroCompra(db, session.client_id, orig.empresa_id as string, new Date(hoy).getFullYear())
+    numero = await siguienteNumeroCompra(db, session.client_id, orig.empresa_id as string, anioDeFecha(hoy))
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
   }
@@ -659,7 +659,7 @@ export async function guardarCompra(
     let numero = existente.numero as string
     if (empresa_id !== existente.empresa_id) {
       try {
-        numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, new Date(fecha).getFullYear())
+        numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, anioDeFecha(fecha))
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
       }
@@ -694,7 +694,7 @@ export async function guardarCompra(
   const compra_id = generarCompraId()
   let numero: string
   try {
-    numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, new Date(fecha).getFullYear())
+    numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, anioDeFecha(fecha))
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
   }

@@ -69,10 +69,21 @@ async function porCodigo(ctx: CtxImport): Promise<Map<string, FichaProducto>> {
 // ficha correcta cuando el nombre del archivo no cuadra. Antes la fila moría con
 // un «no existe» y el operador tenía que adivinar cuál era.
 
-/** Producto por código visible, por su PRD-/SRV- o por nombre. */
-async function buscarProducto(
-  ref: string, ctx: CtxImport,
-): Promise<{ ok: true; ficha: FichaProducto } | Extract<Preparado, { ok: false }>> {
+/**
+ * Producto por código visible, por su PRD-/SRV- o por nombre. Vive aquí porque
+ * aquí está el índice del catálogo, pero la usa cualquier entidad que nombre un
+ * artículo (la línea de una factura importada, por ejemplo).
+ *
+ * `omitible` distingue los dos usos: en el stock el producto ES la fila y sin él
+ * no hay nada que cargar, así que el nombre que no se parece a nada la rechaza;
+ * en una línea de venta el artículo es opcional —hay líneas de texto libre— y
+ * ahí devuelve `null`, que deja la línea sin vínculo en lugar de tirar la
+ * factura entera. Lo parecido se pregunta igual en ambos casos: con un candidato
+ * al lado, decidir nunca es opcional.
+ */
+export async function buscarProductoDeFila(
+  ref: string, ctx: CtxImport, omitible = false,
+): Promise<{ ok: true; ficha: FichaProducto | null } | Extract<Preparado, { ok: false }>> {
   const porRef = (await porCodigo(ctx)).get(ref.trim().toUpperCase())
   if (porRef) return { ok: true, ficha: porRef }
 
@@ -85,14 +96,15 @@ async function buscarProducto(
     coincidencias: idx.buscar(ref).map(op),
     parecidos:     idx.sugerir(ref).map(op),
     otras:         idx.todas().map(op),
-    creable: false, omitible: false, defecto: 'RECHAZAR',
+    creable: false, omitible, defecto: omitible ? 'OMITIR' : 'RECHAZAR',
   }, ctx)
   const fallo = aFallo(r)
   if (fallo) return fallo
+  if (r.estado === 'OMITIR') return { ok: true, ficha: null }
   const ficha = (await catalogo(ctx)).find(p => p.producto_id === (r as { id: string }).id)
   return ficha
     ? { ok: true, ficha }
-    : { ok: false, motivo: `No existe el producto "${ref}". Impórtalo antes que el stock.` }
+    : { ok: false, motivo: `No existe el producto "${ref}".` }
 }
 
 /** Almacén por su ALM- (lo que manda el desplegable) o por nombre (el CSV). */
@@ -167,10 +179,13 @@ export const adaptadorStockInicial: Adaptador = {
 
     // Los dos se resuelven aunque el primero falle: así el asistente pregunta por
     // el producto y por el almacén en la misma pasada.
-    const rp = await buscarProducto(refProducto, ctx)
+    const rp = await buscarProductoDeFila(refProducto, ctx)
     const ra = await buscarAlmacen(refAlmacen, ctx)
     if (!rp.ok) return rp
     if (!ra.ok) return ra
+    // Sin `omitible` la ficha siempre viene; el tipo la admite nula porque la
+    // comparten entidades donde el artículo sí es opcional.
+    if (!rp.ficha) return { ok: false, motivo: `No existe el producto "${refProducto}". Impórtalo antes que el stock.` }
     const producto = rp.ficha
     const almacen  = ra.ficha
     if (producto.tipo === 'SERVICIO') return { ok: false, motivo: `"${refProducto}" es un servicio, y los servicios no tienen stock.` }

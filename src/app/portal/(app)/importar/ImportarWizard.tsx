@@ -38,6 +38,7 @@ const ENTIDADES = [
   { id: 'personal',        etiqueta: 'Personal',               desc: 'Trabajadores: identidad, puesto y contacto.',  disponible: true, destino: '/portal/rrhh' },
   { id: 'stock_inicial',   etiqueta: 'Stock inicial',          desc: 'Existencias a la fecha de corte. Requiere el catálogo y los almacenes ya creados.', disponible: true, destino: '/portal/inventario' },
   { id: 'tesoreria_saldo', etiqueta: 'Saldos de caja',         desc: 'Lo que hay en cada cuenta a la fecha de corte.', disponible: true, destino: '/portal/tesoreria' },
+  { id: 'facturas',        etiqueta: 'Facturas de venta',      desc: 'Histórico de ventas facturadas, con su número y su cliente. Lo pendiente va a CxC.', disponible: true, destino: '/portal/ventas' },
   { id: 'gastos',          etiqueta: 'Gastos',                 desc: 'Histórico de gastos por categoría. Lo pendiente va a CxP.', disponible: true, destino: '/portal/gastos' },
   { id: 'cobros',          etiqueta: 'Cobros',                 desc: 'Histórico de ingresos no facturados. Lo pendiente va a CxC.', disponible: true, destino: '/portal/gastos' },
 ]
@@ -1110,7 +1111,7 @@ export default function ImportarWizard() {
                 <li className="imprt-plan-warn">
                   <AlertTriangle size={14} strokeWidth={2} />
                   <span>
-                    <strong>{resultado.saltar} {etiquetaEntidad.toLowerCase()}</strong> ya {resultado.saltar === 1 ? 'existe' : 'existen'} y <strong>se {resultado.saltar === 1 ? 'saltará' : 'saltarán'}</strong>: NO recibirán lo que trae el archivo (p. ej. las vacaciones acumuladas).
+                    <strong>{resultado.saltar} {etiquetaEntidad.toLowerCase()}</strong> ya {resultado.saltar === 1 ? 'existe' : 'existen'} y <strong>se {resultado.saltar === 1 ? 'saltará' : 'saltarán'}</strong>: NO recibirán lo que trae el archivo.
                     <button type="button" className="btn btn-sm btn-primary imprt-plan-accion"
                       disabled={cargando}
                       onClick={() => { setPolitica('ACTUALIZAR'); validar(resoluciones, repetidas, 'ACTUALIZAR') }}>

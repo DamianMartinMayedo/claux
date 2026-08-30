@@ -286,6 +286,18 @@ export interface Adaptador {
   repetible?: boolean
   modulos:   string[]     // módulos que habilitan escribir esta entidad (candado)
   /**
+   * Solo la ofrece el importador del EQUIPO (impersonación). El de autoservicio
+   * arma su lista de entidades recorriendo `ADAPTADORES` (`acceso-cliente.ts`),
+   * así que sin esta marca cualquier entidad nueva aparecería ante el cliente el
+   * día que se registra. Y como el candado por acción se comprueba contra esa
+   * misma lista, dejarla fuera cierra también la puerta de atrás.
+   *
+   * Es para lo que todavía no se le pone delante al cliente: entidades que
+   * escriben en los libros y se revisan antes de aplicar. Se quita el día que la
+   * entidad esté lista para el autoservicio.
+   */
+  soloEquipo?: boolean
+  /**
    * Cupo del nivel que consume cada fila NUEVA de esta entidad (`lib/limites.ts`).
    * Sin esto, importar es el agujero por el que se cuela cualquier límite: cien
    * altas a mano se paran, un fichero de mil no. Las entidades que no son fichas

@@ -75,7 +75,11 @@ export async function accesoImportCliente(session: PortalSession): Promise<Acces
   const puede = puedeImportar(session)
   const entidades: EntidadImportable[] = puede
     ? Object.entries(ADAPTADORES)
-        .filter(([, a]) => a.modulos.some(m => modulos.includes(m)))
+        // `soloEquipo` es la puerta que NO se abre aquí: hay entidades que solo
+        // ofrece el importador del equipo (§`Adaptador.soloEquipo`). Se filtra en
+        // la lista y no en la página porque de esta lista cuelga también el
+        // candado por acción (`requireImportarEntidad`).
+        .filter(([, a]) => !a.soloEquipo && a.modulos.some(m => modulos.includes(m)))
         .map(([entidad, a]) => ({ entidad, etiqueta: a.etiqueta }))
         .sort((x, y) => porOrden(x.entidad, y.entidad))
     : []
