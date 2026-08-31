@@ -531,17 +531,20 @@ export default function PresupuestoCalculadora({
                   <div className="pres-fase-row">
                     <span className="pres-fase-nombre">{d.fase}</span>
                     <span className="pres-fase-horas">{d.horas}h</span>
-                    <span className="pres-fase-sub col-num">{imp(d.subtotal, moneda)}</span>
+                    <span className="pres-fase-sub">{imp(d.subtotal, moneda)}</span>
                   </div>
-                  {/* Cada línea con su cuenta: «4 · 1h base + 3 × 0,5h». Es lo que se le lee
-                      en voz alta al cliente cuando pregunta de dónde sale el número. */}
+                  {/* De qué se componen las horas de la fase. En la fila solo el cuánto
+                      («×3»); la cuenta que lo produce —«1h + 2×0,5h»— va en el tooltip,
+                      que la pide el comercial una vez y no cabe en esta columna. */}
                   {d.lineas && d.lineas.length > 0 && (
                     <ul className="pres-fase-lineas">
                       {d.lineas.map(l => (
-                        <li key={l.etiqueta}>
-                          <span className="pres-linea-nombre">{l.etiqueta}</span>
-                          <span className="pres-linea-detalle">{l.detalle}</span>
-                          <span className="pres-linea-horas col-num">{l.horas}h</span>
+                        <li key={l.etiqueta} title={l.detalle}>
+                          <span className="pres-linea-nombre">
+                            {l.etiqueta}
+                            {l.volumen ? <span className="pres-linea-vol">×{l.volumen}</span> : null}
+                          </span>
+                          <span className="pres-linea-horas">{l.horas}h</span>
                         </li>
                       ))}
                     </ul>

@@ -407,7 +407,7 @@ export default function PresupuestosView({
                       <div key={i} className="pres-fase-row">
                         <span className="pres-fase-nombre">{d.fase}</span>
                         <span className="pres-fase-horas">{d.horas}h</span>
-                        <span className="pres-fase-sub col-num">{imp(d.subtotal, detalle.moneda)}</span>
+                        <span className="pres-fase-sub">{imp(d.subtotal, detalle.moneda)}</span>
                       </div>
                     ))}
                   </div>

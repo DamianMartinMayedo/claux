@@ -890,31 +890,37 @@ textarea:focus-visible {
 }
 .pres-desglose { display: flex; flex-direction: column; gap: var(--space-2); }
 .pres-fase-bloque { display: flex; flex-direction: column; gap: var(--space-1); }
-/* El detalle de cada línea: «4 · 1h base + 3 × 0,5h». Se lee en voz alta cuando el cliente
-   pregunta de dónde sale el número. */
-.pres-fase-lineas {
-  list-style: none; margin: 0; padding: 0 0 0 var(--space-3);
-  display: flex; flex-direction: column; gap: 2px;
-  border-left: 2px solid var(--color-divider);
-}
+/* LA MISMA REJILLA para la fase y para sus líneas: concepto · horas · importe, con las dos
+   columnas de números en ancho FIJO. Con `auto` cada fila se medía por su cuenta y las horas
+   de las líneas caían debajo de los importes de las fases. Y las cifras ni siquiera iban a la
+   derecha dentro de su hueco: llevaban `col-num`, que solo existe dentro de `.table`. */
+.pres-fase-row,
 .pres-fase-lineas li {
-  display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-2);
-  align-items: baseline; font-size: var(--text-xs); color: var(--color-text-muted);
+  display: grid; grid-template-columns: 1fr 3.25rem 5.5rem; gap: var(--space-2);
+  align-items: baseline;
 }
-.pres-linea-detalle { font-variant-numeric: tabular-nums; color: var(--color-text-faint); }
-.pres-linea-horas { font-variant-numeric: tabular-nums; }
+/* La raya de las líneas va como sombra interior, no como borde: un borde estrecha el
+   contenido 2px y descoloca justo lo que se viene a alinear. */
+.pres-fase-lineas {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  box-shadow: inset 2px 0 0 var(--color-divider);
+}
+.pres-fase-lineas li { font-size: var(--text-xs); color: var(--color-text-muted); }
+.pres-linea-nombre { padding-left: var(--space-3); }
+/* El «×3» pega al concepto, no en columna propia: un número suelto en mitad de la
+   fila se leía como una cifra más de las que hay que cuadrar. */
+.pres-linea-vol { margin-left: var(--space-1); color: var(--color-text-faint); font-variant-numeric: tabular-nums; }
+.pres-linea-horas { text-align: right; font-variant-numeric: tabular-nums; }
 .pres-descuento {
   display: grid; grid-template-columns: 1fr; gap: var(--space-2);
   padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
 }
 .pres-descuento .input-group { margin: 0; }
-.pres-fase-row {
-  display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-3);
-  align-items: baseline; font-size: var(--text-sm);
-}
+.pres-fase-row    { font-size: var(--text-sm); }
 .pres-fase-nombre { color: var(--color-text); }
-.pres-fase-horas  { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
-.pres-fase-sub    { font-weight: 700; min-width: 5rem; }
+.pres-fase-horas  { text-align: right; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.pres-fase-sub    { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .pres-revisiones {
   margin: var(--space-2) 0 0; padding-left: var(--space-4);
   display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-xs);

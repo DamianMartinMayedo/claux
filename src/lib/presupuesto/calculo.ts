@@ -27,7 +27,7 @@ import {
   CLAVE_BASE, CLAVE_CAJA, etiquetaFase,
   type FormatoDatos, type LineaParametro, type NumeroFase, type ParametrosPresupuesto,
 } from './config'
-import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
+import { normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
 export interface InstalacionInput {
   modulos:   string[]                    // claves contratadas (incluye 'base' si aplica)
@@ -53,18 +53,27 @@ export interface InstalacionInput {
   fasesExcluidas?: number[]
 }
 
-/** Una línea dentro de una fase, con su cuenta a la vista: «4 empresas · 1h + 3 × 0,5h». */
+/**
+ * Una línea dentro de una fase. Dos audiencias, dos niveles de detalle:
+ *  - `volumen` es lo único que se enseña además de las horas —«Empresas a configurar
+ *    ×3 · 2h»—, en pantalla y en el PDF que lee el cliente. Al cliente le importa
+ *    cuánto se le monta, no con qué fórmula sale.
+ *  - `detalle` es la cuenta («1h + 2×0,5h»), y va al tooltip de la fila en el admin:
+ *    el comercial la tiene cuando la necesita, sin ensuciar el papel del cliente.
+ */
 export interface LineaDesglose {
   etiqueta: string
   horas:    number
-  detalle:  string
+  volumen?: number
+  detalle?: string
 }
 
 export interface DesgloseFase {
   fase:     string
   horas:    number
   subtotal: number
-  detalle?: string
+  /** Sin `detalle` de fase: nadie lo pintaba —ni la pantalla ni el PDF— y ahí se
+   *  escondían las horas fijas. Lo que se explica, se explica en `lineas`. */
   lineas?:  LineaDesglose[]
 }
 
@@ -116,10 +125,11 @@ export function horasDeLinea(
   return { horas: r2(l.horas_base + tramos * l.horas_por_tramo), tramos }
 }
 
-function detalleLinea(l: Pick<LineaParametro, 'horas_base' | 'horas_por_tramo'>, volumen: number, tramos: number): string {
-  const base = `${l.horas_base}h base`
-  if (tramos <= 0) return `${num(volumen)} · ${base}`
-  return `${num(volumen)} · ${base} + ${tramos} × ${l.horas_por_tramo}h`
+/** La cuenta de la línea, para el tooltip: «1h + 2×0,5h». Sin volumen delante, que ya
+ *  va en la propia fila, y sin la palabra «tramo», que no la busca nadie ahí. */
+function detalleLinea(l: Pick<LineaParametro, 'horas_base' | 'horas_por_tramo'>, tramos: number): string {
+  if (tramos <= 0) return `${l.horas_base}h`
+  return `${l.horas_base}h + ${tramos}×${l.horas_por_tramo}h`
 }
 
 export function calcularInstalacion(
@@ -151,7 +161,7 @@ export function calcularInstalacion(
       const v = num(vol[l.clave])
       const { horas: h, tramos } = horasDeLinea(l, v)
       horas += h
-      lineas.push({ etiqueta: l.etiqueta, horas: h, detalle: detalleLinea(l, v, tramos) })
+      lineas.push({ etiqueta: l.etiqueta, horas: h, volumen: v, detalle: detalleLinea(l, tramos) })
       // Lo único que el cálculo NO puede poner en precio es el estado en que llegan los
       // datos: la misma cantidad de fichas en papel o en una hoja bien montada no es el
       // mismo trabajo. El volumen ya se cobra; esto se avisa para que lo mire una persona.
@@ -189,12 +199,18 @@ export function calcularInstalacion(
   const horasFase4 = dentro(4) ? params.horasCierre : 0
 
   const desglose: DesgloseFase[] = []
+  // Las horas FIJAS de una fase van como una línea más, no en un `detalle`. Es lo que
+  // faltaba para que el desglose cuadre: la fase decía 7,5h y sus líneas sumaban 3,5h,
+  // porque las 4h de alta solo estaban en un texto que ni la pantalla ni el PDF pintan.
+  // Ahora la cabecera de cada fase es la suma exacta de lo que tiene debajo.
   if (dentro(1)) desglose.push({
     fase: etiquetaFase(1),
     horas: horasFase1,
     subtotal: r2(horasFase1 * tarifaHora),
-    detalle: `${params.horasAlta}h de alta + lo que sume la configuración.`,
-    lineas: f1.lineas,
+    lineas: [
+      { etiqueta: 'Alta de la cuenta', horas: params.horasAlta },
+      ...f1.lineas,
+    ],
   })
   if (dentro(2)) desglose.push({
     fase: etiquetaFase(2),
@@ -202,15 +218,39 @@ export function calcularInstalacion(
     subtotal: r2(f2.horas * tarifaHora),
     lineas: f2.lineas,
   })
-  if (dentro(3)) desglose.push({
-    fase: etiquetaFase(3),
-    horas: horasFase3,
-    subtotal: r2(horasFase3 * tarifaHora),
-  })
+  if (dentro(3)) {
+    // La formación se contaba en un bucle sobre los módulos y salía como un número
+    // solo: se veía «6h» sin decir de qué. El punto de venta va aparte porque su
+    // formación cuesta distinto que la de un módulo normal.
+    const formables = [...modulos].filter(c => c !== CLAVE_BASE)
+    const conCaja   = formables.includes(CLAVE_CAJA)
+    const otros     = formables.filter(c => c !== CLAVE_CAJA).length
+    const lineas3: LineaDesglose[] = [
+      { etiqueta: 'Sesión base', horas: params.horasFormacionBase },
+    ]
+    if (otros > 0) lineas3.push({
+      etiqueta: 'Módulos contratados',
+      horas:    r2(otros * params.horasFormacionModulo),
+      volumen:  otros,
+      detalle:  `${otros}×${params.horasFormacionModulo}h`,
+    })
+    if (conCaja) lineas3.push({
+      etiqueta: 'Punto de venta',
+      horas:    params.horasFormacionCaja,
+    })
+    desglose.push({
+      fase: etiquetaFase(3),
+      horas: horasFase3,
+      subtotal: r2(horasFase3 * tarifaHora),
+      lineas: lineas3,
+    })
+  }
   if (dentro(4)) desglose.push({
     fase: etiquetaFase(4),
     horas: horasFase4,
     subtotal: r2(horasFase4 * tarifaHora),
+    // Sin líneas: son horas fijas y una sola línea repetiría la cabecera. Solo se
+    // abre la fase que tiene partes (Alta, con su volumen; Formación, por módulo).
   })
 
   let horasTotal = r2(horasFase1 + f2.horas + horasFase3 + horasFase4)
@@ -225,7 +265,6 @@ export function calcularInstalacion(
       fase: 'Migración de histórico (cotización manual)',
       horas: histHoras,
       subtotal: r2(histHoras * tarifaHora),
-      detalle: `${histHoras}h × ${importeClaux(tarifaHora, moneda)}/h (valoración del comercial).`,
     })
     horasTotal = r2(horasTotal + histHoras)
   }

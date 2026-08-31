@@ -288,7 +288,7 @@ export default function PresupuestosClienteTabla({
                       <div key={i} className="pres-fase-row">
                         <span className="pres-fase-nombre">{d.fase}</span>
                         <span className="pres-fase-horas">{d.horas}h</span>
-                        <span className="pres-fase-sub col-num">{imp(d.subtotal, monedaDet)}</span>
+                        <span className="pres-fase-sub">{imp(d.subtotal, monedaDet)}</span>
                       </div>
                     ))}
                   </div>

@@ -41,7 +41,9 @@ function escribir(
 export interface LineaPdf {
   etiqueta: string
   horas:    number
-  detalle:  string
+  /** Cuántos hay de eso. Lo único que acompaña al nombre: al cliente le interesa
+   *  que se le configuran 3 empresas, no que salen de «1h + 2×0,5h». */
+  volumen?: number
 }
 
 export interface FasePdf {
@@ -157,7 +159,7 @@ export async function construirPresupuesto(d: PresupuestoPdf): Promise<JsPdfDoc>
     doc.setFontSize(8.5); texto(doc, MARCA.muted)
     for (const l of f.lineas ?? []) {
       salto(6)
-      escribir(doc, `${l.etiqueta} — ${l.detalle}`, MARGEN + 4, y)
+      escribir(doc, l.volumen ? `${l.etiqueta} ×${l.volumen}` : l.etiqueta, MARGEN + 4, y)
       escribir(doc, hs(l.horas), right - 28, y, { align: 'right' })
       y += 4.2
     }
