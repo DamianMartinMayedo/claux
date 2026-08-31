@@ -67,10 +67,16 @@ const PASOS: { id: Paso; label: string }[] = [
 ]
 
 /**
- * Tope de tamaño de archivo (barandilla de autoservicio, §8). 5 MB da de sobra para
- * una carta, un catálogo o años de gastos en hoja de cálculo, y frena el archivo
+ * Tope de tamaño de archivo (barandilla de autoservicio, §8). Frena el archivo
  * accidental (un export con imágenes, un volcado entero) que no cabría en el tiempo
  * de una función. El servidor lo vuelve a comprobar (última red).
+ *
+ * Por qué 5: es lo que hace falta para que quepa el archivo más grande que el motor
+ * acepta —20.000 filas (`MAX_FILAS`)—, aunque venga ancho, en CSV y sin comprimir.
+ * Poner menos rechazaría por tamaño archivos que el motor sí sabe procesar.
+ * El xlsx viaja en base64 (≈ 4/3 del real): 5 MB son 6,7 MB de payload, y por eso
+ * `serverActions.bodySizeLimit` está en 8 MB. Si se sube este tope, hay que subir
+ * antes el de `next.config.ts`, o el archivo morirá con un error genérico.
  */
 const TOPE_ARCHIVO_MB = 5
 const TOPE_ARCHIVO    = TOPE_ARCHIVO_MB * 1024 * 1024

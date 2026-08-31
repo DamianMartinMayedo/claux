@@ -2,8 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
+    // Techo de plataforma para TODA server action. Tiene que quedar por ENCIMA del
+    // archivo legítimo más grande, porque salta ANTES que la validación de cada
+    // acción: pasarse aquí no da «el PDF no puede superar 4 MB», da un error genérico.
+    //
+    // El peor payload legítimo de hoy es el importador: 5 MB de archivo en xlsx, que
+    // viaja en base64 (≈ 4/3 del tamaño real) → 6,7 MB. PDFs e imágenes topan a 4 MB
+    // y van en FormData, 1:1. Con 8 MB no queda ningún hueco por el que un archivo
+    // aceptado muera con el error genérico en vez de con su aviso.
+    // Si algún día sube un tope de esos, sube este primero.
     serverActions: {
-      bodySizeLimit: '12mb',
+      bodySizeLimit: '8mb',
     },
   },
   // Chromium headless (PDF del deck en móvil): binarios nativos que NO deben

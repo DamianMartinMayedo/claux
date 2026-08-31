@@ -458,7 +458,7 @@ export async function subirPdfFirma(formData: FormData): Promise<{ ok: boolean; 
   if (!Number.isFinite(firmaId) || firmaId <= 0) return { ok: false, error: 'Firma no válida.' }
   if (!(file instanceof File)) return { ok: false, error: 'PDF ausente.' }
   if (file.type !== 'application/pdf') return { ok: false, error: 'El archivo debe ser PDF.' }
-  if (file.size > 10 * 1024 * 1024) return { ok: false, error: 'El PDF no puede superar los 10 MB.' }
+  if (file.size > 4 * 1024 * 1024) return { ok: false, error: 'El PDF no puede superar los 4 MB.' }
 
   const db = createAdminClient()
   // Blob, no Buffer: en el runtime serverless de Vercel un Buffer corrompe la subida.

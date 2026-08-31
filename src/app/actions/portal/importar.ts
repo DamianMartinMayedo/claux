@@ -14,6 +14,7 @@ import { obtenerEmpresas } from './empresas'
 import { ADAPTADORES, DESHACEDORES, ETIQUETAS_AUXILIARES } from '@/lib/importador/adaptadores'
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
+import { requisitosFaltantes, mensajeRequisitos } from '@/lib/importador/requisitos'
 import { construirXlsxBase64, texto, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
 import type {
   ClavesVistas, CtxImport, DefaultResuelto, MapeoImport, TrozoValidacion, TrozoAplicacion,
@@ -73,6 +74,11 @@ export async function obtenerCamposEntidad(
   const adaptador = ADAPTADORES[entidad]
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
   if (!(await puedeEditarAlgunModulo(adaptador.modulos))) return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+
+  // Sin empresas o sin monedas no hay dónde crear las filas: se dice ahora, no con
+  // un desplegable obligatorio vacío a mitad del asistente.
+  const falta = mensajeRequisitos(requisitosFaltantes(adaptador, r.ctx))
+  if (falta) return { ok: false, error: falta }
 
   const defaults: DefaultResuelto[] = await Promise.all(adaptador.defaults.map(async d => ({
     campo: d.campo, etiqueta: d.etiqueta, obligatorio: d.obligatorio, ayuda: d.ayuda,
@@ -167,6 +173,22 @@ export async function crearLoteImport(
   const adaptador = ADAPTADORES[entidad]
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
   if (!(await puedeEditarAlgunModulo(adaptador.modulos))) return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+
+  // Sin empresas o sin monedas no hay dónde crear las filas: se dice ahora, no con
+  // un desplegable obligatorio vacío a mitad del asistente.
+  const falta = mensajeRequisitos(requisitosFaltantes(adaptador, r.ctx))
+  if (falta) return { ok: false, error: falta }
+
+  // Tope de tamaño. Aquí no hay aviso en el navegador —el asistente del equipo no
+  // comprueba nada antes de subir—, así que este es el único filtro: tiene que quedar
+  // por debajo del techo de plataforma (`serverActions.bodySizeLimit`), o el archivo
+  // muere con un error genérico antes de llegar. 5 MB en xlsx son 6,7 de payload.
+  // Constante local a propósito: en un fichero 'use server' solo se exporta async.
+  const TOPE_ARCHIVO_BYTES = 5 * 1024 * 1024
+  const bytesAprox = formato === 'xlsx' ? Math.floor(contenido.length * 3 / 4) : contenido.length
+  if (bytesAprox > TOPE_ARCHIVO_BYTES) {
+    return { ok: false, error: 'El archivo es demasiado grande (máx. 5 MB). Divídelo en partes más pequeñas y súbelas por separado.' }
+  }
 
   let leido
   try {

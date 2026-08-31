@@ -31,10 +31,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { Copy, Download, FileText, Pencil, Plus, RefreshCw, RotateCcw, Trash2, UserMinus, Wallet, X } from 'lucide-react'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
 import FormHelp from '@/components/portal/FormHelp'
-import { explicarReciboIa } from '@/app/actions/portal/ia'
-import { useIa } from '@/components/portal/ia/IaContext'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useOrden, ThOrden } from '@/components/TableSort'
 import {
@@ -978,7 +975,6 @@ function ConceptosSection({
 export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle: EmpleadoDetalleData; puedeEditar: boolean }) {
   const router = useRouter()
   const { data, empleado, nominas, contratos, conceptos, incidencias, vacaciones } = detalle
-  const { tieneIa, nombreAgente } = useIa()
   const [isPending, startTransition] = useTransition()
 
   // Los días y las vacaciones solo se piden si SU empresa usa el modelo cubano: en
@@ -996,9 +992,6 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
   const [delContrato,   setDelContrato]   = useState<Contrato | null>(null)
   /** Nómina cuyo recibo se está generando, para no lanzar dos veces el mismo. */
   const [reciboDe,      setReciboDe]      = useState<string | null>(null)
-  /** R8.2 · Nómina cuya explicación se está pidiendo, y el texto ya devuelto. */
-  const [explicando,    setExplicando]    = useState<string | null>(null)
-  const [explicacion,   setExplicacion]   = useState<{ periodo: string; texto: string } | null>(null)
 
   const nombre   = [empleado.nombre, empleado.apellidos].filter(Boolean).join(' ')
   const empresa  = data.empresa_nombres[empleado.empresa_id] ?? '—'
@@ -1068,28 +1061,6 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
     } finally {
       await ld.dismiss()
       setReciboDe(null)
-    }
-  }
-
-  /**
-   * R8.2 · La explicación del recibo en palabras, para leérsela al trabajador.
-   *
-   * Fuera de `startTransition` igual que la descarga del recibo y por el mismo motivo:
-   * dentro, el toast de carga no llega a pintarse y en 3G la pantalla parece muerta.
-   */
-  async function explicarRecibo(nomina: NominaConLineas) {
-    if (explicando) return
-    setExplicando(nomina.nomina_id)
-    const ld = toastLoading('Preparando la explicación…')
-    try {
-      const res = await explicarReciboIa(nomina.nomina_id, empleado.empleado_id)
-      if (!res.ok) { toastError(res.error); return }
-      setExplicacion({ periodo: nomina.periodo, texto: res.texto })
-    } catch {
-      toastError('No se pudo preparar la explicación.')
-    } finally {
-      await ld.dismiss()
-      setExplicando(null)
     }
   }
 
@@ -1293,36 +1264,15 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
                           : (nomina.saldo_pendiente <= 0.005 ? 'Pagada' : 'Pendiente de pago')}
                       </span>
                     </td>
-                    {/* Con el addon de IA son DOS acciones, así que van en el menú `⋯`
-                        (regla de tablas): una fila de botones-icono se amontona. Sin
-                        addon queda una sola y se pinta como botón directo. */}
+                    {/* Una sola acción ⇒ botón directo, no menú `⋯` (regla de tablas). */}
                     <td className="col-actions">
-                      {tieneIa ? (
-                        <RowActions>
-                          <button className="row-actions-item"
-                            onClick={() => descargarRecibo(nomina)}
-                            disabled={reciboDe !== null}>
-                            <Download size={15} strokeWidth={2} />
-                            {reciboDe === nomina.nomina_id ? 'Generando…' : 'Descargar recibo'}
-                          </button>
-                          {/* «¿Por qué cobro menos que el mes pasado?» es la conversación
-                              que el dueño tiene cada mes mirando el PDF. */}
-                          <button className="row-actions-item row-actions-item-ia"
-                            onClick={() => explicarRecibo(nomina)}
-                            disabled={explicando !== null}>
-                            <IaSparkle size={15} />
-                            {explicando === nomina.nomina_id ? 'Preparando…' : 'Explicárselo'}
-                          </button>
-                        </RowActions>
-                      ) : (
-                        <button className="btn btn-ghost btn-sm"
-                          onClick={e => { e.stopPropagation(); descargarRecibo(nomina) }}
-                          disabled={reciboDe !== null}
-                          title="Descargar el recibo de este período en PDF">
-                          <Download size={15} strokeWidth={2} />
-                          {reciboDe === nomina.nomina_id ? 'Generando…' : 'Recibo'}
-                        </button>
-                      )}
+                      <button className="btn btn-ghost btn-sm"
+                        onClick={e => { e.stopPropagation(); descargarRecibo(nomina) }}
+                        disabled={reciboDe !== null}
+                        title="Descargar el recibo de este período en PDF">
+                        <Download size={15} strokeWidth={2} />
+                        {reciboDe === nomina.nomina_id ? 'Generando…' : 'Recibo'}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1368,32 +1318,6 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
       {editContrato && (
         <ContratoModal empleadoId={empleado.empleado_id} contrato={editContrato}
           onClose={() => setEditContrato(null)} onSaved={() => { setEditContrato(null); refrescar() }} />
-      )}
-      {/* R8.2 · La explicación en palabras. Va en modal y no en un panel flotante porque
-          es un texto para LEER en voz alta, no un dato que se consulte de reojo. */}
-      {explicacion && (
-        <div className="modal-backdrop open">
-          <div className="modal modal-md" role="dialog" aria-modal>
-            <div className="modal-header">
-              <h2 className="modal-title">Su nómina de {formatPeriodo(explicacion.periodo)}</h2>
-              <button type="button" className="modal-close" onClick={() => setExplicacion(null)}>
-                <X size={16} strokeWidth={2} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="text-sm-muted mb-3">
-                Escrito para que se lo puedas leer a {empleado.nombre}. Repásalo antes: lo
-                redacta {nombreAgente} a partir de su recibo.
-              </p>
-              <div className="info-box">
-                <span className="det-value-pre">{explicacion.texto}</span>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setExplicacion(null)}>Cerrar</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {delContrato && (

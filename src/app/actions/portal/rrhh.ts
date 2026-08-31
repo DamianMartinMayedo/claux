@@ -2527,7 +2527,7 @@ export async function eliminarEmpleadosEnLote(ids: string[]): Promise<ResultadoL
 // Los contratos son documentos externos: NO cierran a otros ni tocan el salario
 // del empleado (la nómina usa empleados.salario_base). Pueden coexistir varios.
 
-const PDF_MAX = 10 * 1024 * 1024
+const PDF_MAX = 4 * 1024 * 1024
 
 // Sube el PDF de un contrato al bucket (como Blob — el Buffer se corrompe en el
 // serverless de Vercel, ver memoria storage-upload-blob-no-buffer) y devuelve
@@ -2538,7 +2538,7 @@ async function subirContratoPdf(
   path: string,
 ): Promise<{ url: string; nombre: string } | { error: string }> {
   if (file.type !== 'application/pdf') return { error: 'El contrato debe ser un archivo PDF.' }
-  if (file.size > PDF_MAX)             return { error: 'El PDF no puede superar los 10 MB.' }
+  if (file.size > PDF_MAX)             return { error: 'El PDF no puede superar los 4 MB.' }
   const buffer = Buffer.from(await file.arrayBuffer())
   const blob   = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
   const { error: upErr } = await db.storage.from('contratos')

@@ -21,6 +21,7 @@ import { obtenerEmpresas } from './empresas'
 import { ADAPTADORES, DESHACEDORES, ETIQUETAS_AUXILIARES } from '@/lib/importador/adaptadores'
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
+import { requisitosFaltantes, mensajeRequisitos } from '@/lib/importador/requisitos'
 import { requireImportarEntidad } from '@/lib/importador/acceso-cliente'
 import { avisarSolicitudMigracion } from '@/lib/notificaciones/admin/eventos'
 import { construirXlsxBase64, texto, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
@@ -81,6 +82,11 @@ export async function obtenerCamposEntidad(
   const adaptador = ADAPTADORES[entidad]
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
   if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'No puedes importar esto (revisa con tu administrador).' }
+
+  // Sin empresas o sin monedas no hay dónde crear las filas: se dice ahora, no con
+  // un desplegable obligatorio vacío a mitad del asistente.
+  const falta = mensajeRequisitos(requisitosFaltantes(adaptador, r.ctx))
+  if (falta) return { ok: false, error: falta }
 
   const defaults: DefaultResuelto[] = await Promise.all(adaptador.defaults.map(async d => ({
     campo: d.campo, etiqueta: d.etiqueta, obligatorio: d.obligatorio, ayuda: d.ayuda,
@@ -173,12 +179,20 @@ export async function crearLoteImport(
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
   if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'No puedes importar esto (revisa con tu administrador).' }
 
+  // Sin empresas o sin monedas no hay dónde crear las filas: se dice ahora, no con
+  // un desplegable obligatorio vacío a mitad del asistente.
+  const falta = mensajeRequisitos(requisitosFaltantes(adaptador, r.ctx))
+  if (falta) return { ok: false, error: falta }
+
   // Tope de tamaño (barandilla de autoservicio, §8): un archivo enorme no cabe en el
   // tiempo de una función serverless y no es un caso real de migración a mano. El
   // cliente ya avisa antes de subir; esto es la última red por si se saltara esa
   // comprobación. El xlsx llega en base64 (≈ 4/3 del tamaño real); el CSV, como texto.
   // Constante local a propósito: en un fichero 'use server' solo se exporta async.
-  const TOPE_ARCHIVO_BYTES = 6 * 1024 * 1024   // 6 MB (margen sobre los 5 MB que anuncia el cliente)
+  // El mismo número que anuncia el cliente: para el CSV `length` cuenta unidades
+  // UTF-16 y se queda algo por debajo de los bytes reales, así que el servidor nunca
+  // resulta MÁS estricto que el aviso de antes de subir (que sí mide bytes).
+  const TOPE_ARCHIVO_BYTES = 5 * 1024 * 1024
   const bytesAprox = formato === 'xlsx' ? Math.floor(contenido.length * 3 / 4) : contenido.length
   if (bytesAprox > TOPE_ARCHIVO_BYTES) {
     return { ok: false, error: 'El archivo es demasiado grande (máx. 5 MB). Divídelo en partes más pequeñas y súbelas por separado.' }

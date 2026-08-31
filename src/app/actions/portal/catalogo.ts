@@ -521,7 +521,7 @@ export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; 
   const file    = formData.get('foto') as File | null
   if (!item_id) return { ok: false, error: 'item_id requerido.' }
   if (!file || file.size === 0) return { ok: false, error: 'No se recibió archivo.' }
-  if (file.size > 8 * 1024 * 1024) return { ok: false, error: 'La imagen no puede superar 8 MB.' }
+  if (file.size > 4 * 1024 * 1024) return { ok: false, error: 'La imagen no puede superar 4 MB.' }
   if (!file.type.startsWith('image/')) return { ok: false, error: 'El archivo debe ser una imagen.' }
 
   const db = createAdminClient()

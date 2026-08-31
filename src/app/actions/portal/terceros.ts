@@ -169,8 +169,8 @@ export async function guardarTercero(
   let   contrato_url = existingUrl
 
   if (contratoFile && contratoFile.size > 0) {
-    if (contratoFile.size > 10 * 1024 * 1024)
-      return { ok: false, error: 'El contrato no puede superar 10 MB.' }
+    if (contratoFile.size > 4 * 1024 * 1024)
+      return { ok: false, error: 'El contrato no puede superar 4 MB.' }
 
     const tiposOk = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
     if (!tiposOk.includes(contratoFile.type))
