@@ -303,7 +303,7 @@ export async function obtenerProductos(modo: ModoCatalogo = 'PRODUCTO'): Promise
     modo,
     categorias:  (catRes.data  ?? []) as Categoria[],
     proveedores: (provRes.data ?? []) as ProductosPageData['proveedores'],
-    monedas:     monedas.length ? monedas : ['USD'],   // fallback si no hay monedas configuradas
+    monedas,
     almacenes,
     empresas:    empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     stockPorAlmacen,
@@ -1274,7 +1274,7 @@ export async function obtenerProductoDetalle(
     producto,
     categoria,
     proveedor,
-    monedas: monedas.length ? monedas : ['USD'],
+    monedas,
     categorias,
     proveedores,
     empresas: empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),

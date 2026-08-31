@@ -2,6 +2,9 @@ import { redirect }            from 'next/navigation'
 import { getPortalSession }     from '@/app/actions/portal/auth'
 import { obtenerEtiquetasNegocio } from '@/app/actions/portal/sector'
 import { accesoImportCliente, etiquetaEntidadImport } from '@/lib/importador/acceso-cliente'
+import { obtenerEmpresas } from '@/app/actions/portal/empresas'
+import { createAdminClient } from '@/lib/supabase/admin'
+import ImportarPrerequisitos from '@/components/portal/ImportarPrerequisitos'
 import ImportarClienteWizard    from './ImportarClienteWizard'
 
 export const dynamic = 'force-dynamic'
@@ -26,5 +29,15 @@ export default async function ImportarDatosPage() {
     ...e, etiqueta: etiquetaEntidadImport(e.entidad, e.etiqueta, etiquetas),
   }))
 
-  return <ImportarClienteWizard entidades={entidades} />
+  const [empresas, monedas] = await Promise.all([
+    obtenerEmpresas(),
+    createAdminClient().from('monedas').select('moneda_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id).eq('activa', true),
+  ])
+  const faltanPrerequisitos = empresas.length === 0 || !monedas.count
+
+  return <>
+    <ImportarPrerequisitos empresa={empresas.length === 0} moneda={!monedas.count} />
+    {!faltanPrerequisitos && <ImportarClienteWizard entidades={entidades} />}
+  </>
 }

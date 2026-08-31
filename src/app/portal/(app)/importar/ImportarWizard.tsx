@@ -444,7 +444,7 @@ function PanelRepetidas({
   )
 }
 
-export default function ImportarWizard() {
+export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermitidas?: string[] }) {
   const [paso, setPaso]         = useState<Paso>('entidad')
   const [cargando, setCargando] = useState(false)
   const [progreso, setProgreso] = useState<{ hechas: number; total: number } | null>(null)
@@ -496,6 +496,9 @@ export default function ImportarWizard() {
   const [deshecho, setDeshecho]   = useState<{ deshechas: number; intactas: number; motivos: { fila: number; motivo: string }[] } | null>(null)
 
   const idxPaso = PASOS.findIndex(p => p.id === paso)
+  const entidadesVisibles = entidadesPermitidas
+    ? ENTIDADES.filter(e => entidadesPermitidas.includes(e.id))
+    : ENTIDADES
 
   /**
    * Volver a un paso ya recorrido. Solo hacia atrás y solo si ese paso todavía
@@ -797,13 +800,16 @@ export default function ImportarWizard() {
         <div className="card">
           <p className="modal-body-text">¿Qué vas a importar?</p>
           <div className="imprt-entidad-grid">
-            {ENTIDADES.map(en => (
+            {entidadesVisibles.map(en => (
               <button key={en.id} type="button" className="imprt-entidad"
                 disabled={!en.disponible || cargando} onClick={() => elegirEntidad(en)}>
                 <strong>{en.etiqueta}</strong>
                 <span>{en.disponible ? en.desc : 'Próximamente'}</span>
               </button>
             ))}
+            {entidadesVisibles.length === 0 && (
+              <p className="input-hint">No hay entidades de importación disponibles para los módulos contratados.</p>
+            )}
           </div>
         </div>
       )}

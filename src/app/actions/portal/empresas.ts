@@ -118,7 +118,8 @@ export async function guardarEmpresa(
   // `empresas.moneda_funcional` es NOT NULL. Sin esta comprobación llegaba un null
   // explícito (que NO toma el default de la columna) y el usuario veía el error crudo
   // de Postgres en vez de saber qué campo le falta.
-  if (!((formData.get('moneda_funcional') as string) ?? '').trim()) {
+  const moneda_funcional = ((formData.get('moneda_funcional') as string) ?? '').trim()
+  if (!moneda_funcional) {
     return { ok: false, error: 'Elige la moneda funcional de la empresa.' }
   }
 
@@ -127,6 +128,16 @@ export async function guardarEmpresa(
   if (!colorResult.ok) return { ok: false, error: colorResult.error }
   const color           = colorResult.color
   const db              = createAdminClient()
+
+  const { data: monedaActiva } = await db.from('monedas')
+    .select('moneda_id')
+    .eq('client_id', session.client_id)
+    .eq('codigo', moneda_funcional)
+    .eq('activa', true)
+    .maybeSingle()
+  if (!monedaActiva) {
+    return { ok: false, error: 'La moneda funcional debe estar activa en «Monedas y tasas».' }
+  }
 
   // Letra de facturación: 1 carácter A-Z, opcional pero único por client_id
   const letraRaw = ((formData.get('letra_facturacion') as string) ?? '').trim().toUpperCase()
@@ -160,7 +171,7 @@ export async function guardarEmpresa(
     direccion:        ((formData.get('direccion')       as string) ?? '').trim() || null,
     telefono:         ((formData.get('telefono')        as string) ?? '').trim() || null,
     email:            ((formData.get('email')           as string) ?? '').trim() || null,
-    moneda_funcional: ((formData.get('moneda_funcional') as string) ?? '').trim() || null,
+    moneda_funcional: moneda_funcional || null,
     letra_facturacion,
     // Textos de facturación (mig. 151). No se recortan los saltos de línea internos: son
     // datos de pago escritos en varias líneas a propósito (tarjeta, Enzona, banco).

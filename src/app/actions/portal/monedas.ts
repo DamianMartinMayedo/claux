@@ -162,7 +162,10 @@ export async function guardarMoneda(
   const codigoOriginal = ((formData.get('codigo_original') as string) ?? '').trim()
   const catalogo       = ((formData.get('catalogo')        as string) ?? '').trim()
   const codigoCustom   = ((formData.get('codigo')          as string) ?? '').trim().toUpperCase()
-  const codigo         = catalogo && catalogo !== 'OTRA' ? catalogo : codigoCustom
+  // En edición el código no se modifica desde el formulario. Algunos flujos
+  // internos (p. ej. desactivar al eliminar una moneda usada) solo necesitan
+  // enviar `codigo_original`, así que se usa como respaldo.
+  const codigo         = catalogo && catalogo !== 'OTRA' ? catalogo : (codigoCustom || codigoOriginal.toUpperCase())
   const nombre         = ((formData.get('nombre')          as string) ?? '').trim()
   const simbolo        = ((formData.get('simbolo')         as string) ?? '').trim()
   const activa         = formData.get('activa') !== 'false'
@@ -220,10 +223,26 @@ export async function guardarMoneda(
     // ── Editar ─────────────────────────────────────────────────────────────
     const { data: mon } = await db
       .from('monedas')
-      .select('es_consolidacion')
+    .select('es_consolidacion, activa')
       .eq('client_id', session.client_id)
       .eq('codigo', codigoOriginal)
       .single()
+
+    if (!mon) return { ok: false, error: 'Moneda no encontrada.' }
+    if (mon.activa && !activa) {
+      const [{ count: activas }, { count: empresasVinculadas }] = await Promise.all([
+        db.from('monedas').select('moneda_id', { count: 'exact', head: true })
+          .eq('client_id', session.client_id).eq('activa', true),
+        db.from('empresas').select('empresa_id', { count: 'exact', head: true })
+          .eq('client_id', session.client_id).eq('moneda_funcional', codigoOriginal),
+      ])
+      if ((activas ?? 0) <= 1) {
+        return { ok: false, error: 'No puedes desactivar la única moneda activa. Configura otra moneda antes.' }
+      }
+      if ((empresasVinculadas ?? 0) > 0) {
+        return { ok: false, error: 'No puedes desactivar esta moneda: está asignada a una empresa. Cambia primero su moneda funcional.' }
+      }
+    }
 
     const { error } = await db
       .from('monedas')
@@ -493,7 +512,7 @@ export async function eliminarMoneda(
 
   const { data: mon } = await db
     .from('monedas')
-    .select('es_consolidacion')
+      .select('es_consolidacion, activa')
     .eq('client_id', session.client_id)
     .eq('codigo', codigo)
     .maybeSingle()
@@ -501,6 +520,22 @@ export async function eliminarMoneda(
   if (!mon) return { ok: false, error: 'Moneda no encontrada.' }
   if (mon.es_consolidacion) {
     return { ok: false, error: 'Es la moneda de consolidación. Cambia la consolidación antes de eliminarla.' }
+  }
+
+  if (mon.activa) {
+    const { count: activas } = await db.from('monedas')
+      .select('moneda_id', { count: 'exact', head: true })
+      .eq('client_id', session.client_id).eq('activa', true)
+    if ((activas ?? 0) <= 1) {
+      return { ok: false, error: 'No puedes eliminar la única moneda activa. Configura otra moneda antes.' }
+    }
+  }
+
+  const { count: empresasVinculadas } = await db.from('empresas')
+    .select('empresa_id', { count: 'exact', head: true })
+    .eq('client_id', session.client_id).eq('moneda_funcional', codigo)
+  if ((empresasVinculadas ?? 0) > 0) {
+    return { ok: false, error: 'No puedes eliminar esta moneda: está asignada a una empresa. Cambia primero su moneda funcional.' }
   }
 
   const uso = await contarUsoMoneda(codigo)

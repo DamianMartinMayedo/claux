@@ -13,5 +13,6 @@ export default async function Page() {
   if (!puedeEditar) redirect('/portal/ventas')
   const contexto = await obtenerContextoDocumento()
   if (!contexto) notFound()
+  if (contexto.monedas.length === 0) redirect('/portal/ventas')
   return <NuevaFacturaPage contexto={contexto} />
 }

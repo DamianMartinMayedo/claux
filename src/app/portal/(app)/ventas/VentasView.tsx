@@ -184,6 +184,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
 
   const empresasConLetra = data.empresas.filter(e => !!e.letra_facturacion)
   const sinSetupEmpresas = data.empresas.length === 0
+  const sinMoneda        = data.monedas.length === 0
   const sinLetra         = data.empresas.length > 0 && empresasConLetra.length === 0
 
   // ── Orquestación de acciones en lote ──
@@ -236,11 +237,11 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
           resumen={resumenDe(declaracion)}
         />
         {puedeEditar && (tab === 'ofertas' ? (
-          sinSetupEmpresas || sinLetra ? (
+          sinSetupEmpresas || sinMoneda || sinLetra ? (
             <button
               className="btn btn-primary"
               disabled
-              title={sinSetupEmpresas ? 'Primero crea una empresa.' : 'Asigna letra de facturación a alguna empresa.'}
+              title={sinSetupEmpresas ? 'Primero crea una empresa.' : sinMoneda ? 'Primero configura una moneda activa.' : 'Asigna letra de facturación a alguna empresa.'}
             >
               <Plus size={18} strokeWidth={2} /> Nueva oferta
             </button>
@@ -250,11 +251,11 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
             </Link>
           )
         ) : (
-          sinSetupEmpresas || sinLetra ? (
+          sinSetupEmpresas || sinMoneda || sinLetra ? (
             <button
               className="btn btn-primary"
               disabled
-              title={sinSetupEmpresas ? 'Primero crea una empresa.' : 'Asigna letra de facturación a alguna empresa.'}
+              title={sinSetupEmpresas ? 'Primero crea una empresa.' : sinMoneda ? 'Primero configura una moneda activa.' : 'Asigna letra de facturación a alguna empresa.'}
             >
               <Plus size={18} strokeWidth={2} /> Nueva factura
             </button>
@@ -269,9 +270,16 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
       {children}
 
       {/* ── Prerrequisitos de configuración ── */}
-      {sinSetupEmpresas ? (
-        <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear ofertas y facturas necesitas <strong>una empresa</strong>.
+      {sinSetupEmpresas || sinMoneda ? (
+        <PrerequisitoAviso acciones={[
+          ...(sinSetupEmpresas ? [{ label: 'Crear empresa', href: '/portal/empresas' }] : []),
+          ...(sinMoneda ? [{ label: 'Configurar moneda', href: '/portal/monedas' }] : []),
+        ]}>
+          {sinSetupEmpresas && sinMoneda
+            ? <>Para crear ofertas y facturas necesitas <strong>una empresa</strong> y <strong>una moneda activa</strong>.</>
+            : sinSetupEmpresas
+              ? <>Para crear ofertas y facturas necesitas <strong>una empresa</strong>.</>
+              : <>Para crear ofertas y facturas necesitas <strong>una moneda activa</strong>.</>}
         </PrerequisitoAviso>
       ) : sinLetra ? (
         <PrerequisitoAviso acciones={[{ label: 'Ir a Empresas', href: '/portal/empresas' }]}>

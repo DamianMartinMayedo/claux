@@ -108,6 +108,7 @@ function MonedaModal({
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-body-wide">
             {esEdicion && <input type="hidden" name="codigo_original" value={moneda.codigo} />}
+            {esEdicion && <input type="hidden" name="codigo" value={moneda.codigo} />}
 
             <div className="mon-form-grid">
 

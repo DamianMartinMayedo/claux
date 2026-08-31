@@ -545,7 +545,7 @@ async function cargarFormCompra(
   const almacen_nombres: Record<string, string> = {}
   for (const a of almacenes) almacen_nombres[a.almacen_id] = a.nombre
 
-  const monedasFinal = monedas.length ? monedas : ['USD']
+  const monedasFinal = monedas
   return {
     proveedores, almacenes, productos,
     monedas: monedasFinal,

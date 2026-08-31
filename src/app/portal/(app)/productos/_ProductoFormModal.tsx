@@ -19,8 +19,6 @@ import { parseNumeroEs, textoNumeroEs } from '@/lib/numeros'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-export const MONEDAS_FALLBACK = ['USD']
-
 export const UNIDADES_GRUPOS: { label: string; opciones: string[] }[] = [
   { label: 'General',         opciones: ['unidad', 'pieza', 'par', 'servicio'] },
   { label: 'Tiempo',          opciones: ['hora', 'día', 'semana', 'mes', 'año'] },
@@ -283,7 +281,7 @@ export function ProductoFormModal({
   // su fila, así que ocupa la mitad y no un tercio.
   const hayProveedores = proveedores.length > 0
   const catSpan        = hayProveedores ? provSpan : 'ter-col-span-3'
-  const monedasDisponibles = monedas.length ? monedas : MONEDAS_FALLBACK
+  const monedasDisponibles = monedas
   // Un producto FÍSICO necesita un almacén donde vivir su stock; un servicio no.
   // Al crear un físico sin almacén, se bloquea el guardado y se ofrece crear uno.
   // Un físico necesita almacén… solo si el cliente LLEVA existencias. Con Caja a

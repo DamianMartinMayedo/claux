@@ -86,6 +86,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
   const [cargando, setCargando] = useState(false)
 
   const sinAlmacenes = data.almacenes.length === 0
+  const sinMonedas   = data.monedas.length === 0
 
   // ── Selección múltiple sobre las compras visibles (filtradas) ──
   const ids = useMemo(() => filtradas.map(c => c.compra_id), [filtradas])
@@ -157,10 +158,10 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
           {/* Cierra la cadena del módulo: el mínimo detecta la falta, la cobertura la
               ordena y esto la convierte en la compra. Nada se confirma solo. */}
           {puedeEditar && (<>
-            <button className="btn btn-secondary" onClick={() => setReponiendo(true)} disabled={sinAlmacenes || isPending}>
+            <button className="btn btn-secondary" onClick={() => setReponiendo(true)} disabled={sinAlmacenes || sinMonedas || isPending}>
               <PackageSearch size={14} strokeWidth={2} /> Comprar lo que falta
             </button>
-            <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes}>
+            <button className="btn btn-primary" onClick={() => setModalOpen(true)} disabled={sinAlmacenes || sinMonedas}>
               <Plus size={14} strokeWidth={2.5} /> Nueva compra
             </button>
           </>)}
@@ -168,9 +169,16 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
       </div>
       {children}
 
-      {sinAlmacenes && puedeEditar && (
-        <PrerequisitoAviso acciones={[{ label: 'Crear almacén', href: '/portal/almacenes' }]}>
-          Para registrar compras necesitas <strong>al menos un almacén</strong>.
+      {(sinAlmacenes || sinMonedas) && puedeEditar && (
+        <PrerequisitoAviso acciones={[
+          ...(sinAlmacenes ? [{ label: 'Crear almacén', href: '/portal/almacenes' }] : []),
+          ...(sinMonedas ? [{ label: 'Configurar moneda', href: '/portal/monedas' }] : []),
+        ]}>
+          {sinAlmacenes && sinMonedas
+            ? <>Para registrar compras necesitas <strong>un almacén</strong> y <strong>una moneda activa</strong>.</>
+            : sinAlmacenes
+              ? <>Para registrar compras necesitas <strong>al menos un almacén</strong>.</>
+              : <>Para registrar compras necesitas <strong>una moneda activa</strong>.</>}
         </PrerequisitoAviso>
       )}
 
