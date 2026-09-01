@@ -5059,6 +5059,132 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-map-campo { font-size: var(--text-sm); }
 .imprt-map-ayuda { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
 
+/* ── Importador · migración desde LiangApp ── */
+/* La PUERTA del origen, encima de la rejilla de entidades: quien viene de
+   LiangApp tiene que ver que esto es para él, y no deducirlo. Es una fila y no
+   otra tarjeta de la rejilla porque no es «una cosa más que importar»: es otro
+   camino, y de ahí el acento de marca. */
+.imprt-origen {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%;
+  margin: var(--space-3) 0 var(--space-5);
+  padding: var(--space-4); text-align: left; cursor: pointer;
+  border: 1px solid var(--color-primary); border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text);
+  transition: background var(--transition);
+}
+.imprt-origen:hover:not(:disabled) { background: var(--color-surface-2); }
+.imprt-origen:disabled { opacity: 0.55; cursor: not-allowed; }
+.imprt-origen > svg:first-child { color: var(--color-primary-text); flex-shrink: 0; }
+.imprt-origen > svg:last-child  { color: var(--color-text-muted); flex-shrink: 0; margin-left: auto; }
+.imprt-origen-que { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.imprt-origen-que strong { font-size: var(--text-sm); }
+.imprt-origen-que span   { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+/* Una TARJETA POR ARCHIVO: en una migración no se mapean columnas, se comprueba
+   qué se ha entendido de cada reporte. Y con la salida a mano —apartar la
+   cuenta—, que es lo único que desatasca un reparto equivocado. */
+.imprt-mig-fichas {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-3); margin-top: var(--space-4);
+}
+.imprt-mig-ficha {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); border-radius: var(--radius-md);
+  border: 1px solid var(--color-border); background: var(--color-surface-2);
+}
+/* Apartada o ajena: sigue legible (hay que poder volver a meterla), solo deja de
+   pedir atención. Se atenúa el texto, no el contenedor: `opacity` en la tarjeta
+   se heredaría a cualquier hijo flotante. */
+.imprt-mig-ficha-fuera { border-style: dashed; }
+.imprt-mig-ficha-fuera .imprt-mig-ficha-cab,
+.imprt-mig-ficha-fuera .imprt-mig-ficha-que,
+.imprt-mig-ficha-fuera .imprt-mig-ficha-destino,
+.imprt-mig-ficha-fuera .imprt-mig-ficha-datos { color: var(--color-text-faint); }
+.imprt-mig-ficha-cab {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-xs); color: var(--color-text-muted); min-width: 0;
+}
+.imprt-mig-ficha-cab svg { flex-shrink: 0; }
+/* `cell-truncate` solo existe dentro de `.table`: aquí el nombre necesita el suyo. */
+.imprt-mig-ficha-nombre {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.imprt-mig-quitar { flex-shrink: 0; }
+.imprt-mig-ficha-que     { margin: 0; font-size: var(--text-sm); }
+.imprt-mig-ficha-destino { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
+.imprt-mig-ficha-datos   { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; }
+.imprt-mig-ficha-datos div { display: flex; flex-direction: column; }
+.imprt-mig-ficha-datos dt { font-size: var(--text-xs); color: var(--color-text-muted); }
+.imprt-mig-ficha-datos dd { margin: 0; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.imprt-mig-ficha-nota  { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
+.imprt-mig-ficha-aviso {
+  display: flex; align-items: flex-start; gap: var(--space-1); margin: 0;
+  font-size: var(--text-xs); color: var(--color-warning);
+}
+.imprt-mig-ficha-aviso svg { flex-shrink: 0; margin-top: 0.15em; }
+.imprt-mig-escape { margin-top: var(--space-1); }
+/* Añadir el archivo que faltaba sin repetir la subida entera: una tarjeta más de
+   la rejilla, en el sitio donde se ve que falta algo. */
+.imprt-mig-anadir {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); min-height: 7rem;
+  padding: var(--space-4); border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border-strong); background: transparent;
+  color: var(--color-text-muted); font-size: var(--text-sm); cursor: pointer;
+  transition: all var(--transition);
+}
+.imprt-mig-anadir:hover:not(:disabled) {
+  border-color: var(--color-primary); color: var(--color-primary-text);
+  background: var(--color-surface-2);
+}
+.imprt-mig-anadir:disabled { cursor: not-allowed; color: var(--color-text-faint); }
+
+/* El estado de rendimiento ya aceptado. Es un `.alert alert-success`: aquí solo
+   se centra la fila y se recorta el nombre largo, que el botón de cambiarlo va
+   al final y no debe empujarlo. */
+.imprt-mig-listo { align-items: center; }
+.imprt-mig-listo-nombre {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.imprt-mig-listo .btn { flex-shrink: 0; }
+
+/* El aviso de un proceso que se cortó al salir de la pantalla. Va en cualquier
+   paso, así que el texto es largo: manda el ancho y la acción de descartarlo se
+   queda al final (el `margin-left:auto` de `.alert > .btn` ya la coloca). */
+.imprt-corte > span { flex: 1; min-width: 0; }
+
+/* La clasificación propuesta, por GRUPOS: sobre ochocientos apuntes, confirmar
+   de uno en uno no es revisar, es teclear. */
+.imprt-mig-grupos { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); }
+.imprt-mig-grupo {
+  display: grid; grid-template-columns: 1fr 18rem; gap: var(--space-3); align-items: center;
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--color-divider);
+}
+/* El que aún no tiene categoría, marcado: en una lista larga es lo único que
+   impide seguir, y buscarlo a ojo es lo que atasca al operador. */
+.imprt-mig-grupo-falta select { border-color: var(--color-warning); }
+.imprt-mig-grupo-que { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.imprt-mig-grupo-que strong { font-size: var(--text-sm); }
+.imprt-mig-grupo-que span {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* La tarjeta del cuadre es `card-table`, o sea padding 0 para que la tabla vaya al
+   ras: un aviso dentro sale a sangre y desalineado del título. Se le da el margen
+   que la tarjeta no pone, igual que hacen la cabecera y el pie. */
+.imprt-mig-cuadre > .alert { margin: var(--space-4) var(--space-6); }
+
+/* Lo que el estado oficial dice y no se ha subido: no es un fallo del cuadre, es
+   que falta un archivo, y decir cuál es más útil que decir «no cuadra». */
+.imprt-mig-falta { padding: var(--space-4) var(--space-6); }
+.imprt-mig-falta-lista { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.imprt-mig-falta-lista li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); }
+.imprt-mig-falta-lista strong { font-variant-numeric: tabular-nums; }
+.imprt-mig-utilidad { margin: 0; padding: 0 var(--space-6) var(--space-5); font-size: var(--text-sm); color: var(--color-text-muted); }
+
 /* ── Importador · nombres por decidir ── */
 /* Cada nombre es una FICHA apilada, no una fila de rejilla: la de antes ponía el
    desplegable a la derecha y todo lo demás a la izquierda, y con el buscador más
@@ -5107,7 +5233,12 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 /* ── Importador · filas que dicen lo mismo que otra ── */
 /* Se enfrentan las dos filas y se enseña EN QUÉ se diferencian: sin esa
    comparación el operador tiene que abrir el Excel y buscarlas a mano. */
-.imprt-rep { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.imprt-rep { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+/* Aquí los botones de decidir son hijos DIRECTOS de la tarjeta (dentro de una
+   ficha de nombre pendiente los separa el flex del contenedor): sin margen propio
+   quedan pegados a la lista de arriba y a la línea de confirmación de abajo. */
+.imprt-rep ~ .imprt-pend-botones { margin-top: var(--space-4); }
+.imprt-pend-botones + .imprt-pend-decidido { margin-top: var(--space-3); }
 .imprt-rep-item {
   display: flex; flex-direction: column; gap: var(--space-1);
   padding: var(--space-3); border-radius: var(--radius-md);
@@ -5134,6 +5265,13 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-tile strong { display: block; font-size: var(--text-2xl); line-height: 1.1; }
 .imprt-tile span { font-size: var(--text-xs); color: var(--color-text-muted); }
 
+/* Por qué el botón de seguir está apagado. Un control muerto sin explicación es
+   media hora del operador buscando qué le falta. */
+.imprt-bloqueo {
+  display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3);
+  font-size: var(--text-sm); color: var(--color-warning);
+}
+.imprt-bloqueo svg { flex-shrink: 0; }
 .imprt-acciones { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-5); }
 /* Cierre del asistente: deshacer a un lado, seguir al otro (y apilados en móvil). */
 .imprt-acciones-fin { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-left: auto; }

@@ -352,6 +352,12 @@
   }
 }
 
+/* Migración desde LiangApp: el grupo y su categoría se apilan. A 360px el
+   desplegable de categorías no cabe al lado del texto sin comerse las dos cosas. */
+@media (max-width: 640px) {
+  .imprt-mig-grupo { grid-template-columns: 1fr; gap: var(--space-2); }
+}
+
 /* Área táctil mínima (WCAG 2.2 §2.5.8): en dispositivos de puntero grueso los
    controles interactivos garantizan ~44px de alto. No afecta al ratón (fino). */
 @media (pointer: coarse) {

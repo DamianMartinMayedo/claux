@@ -24,7 +24,7 @@ export interface ArchivoLeido {
 /** Error con mensaje pensado para el operador (la acción lo devuelve tal cual). */
 export class ArchivoIlegible extends Error {}
 
-const MAX_FILAS = 20_000
+export const MAX_FILAS = 20_000
 
 /** Cabeceras: fuera las vacías, y las repetidas se numeran para poder elegirlas. */
 function normalizarCabeceras(brutas: string[]): { cabeceras: string[]; indices: number[] } {
@@ -89,20 +89,33 @@ function celdaATexto(v: unknown): string {
   return v.toString().trim()
 }
 
-type HojaExcel = { sheet: string; data: unknown[][] }
+export type HojaExcel = { sheet: string; data: unknown[][] }
 
-async function leerXlsx(base64: string): Promise<ArchivoLeido> {
-  let hojas: HojaExcel[]
+/**
+ * Las hojas del Excel TAL CUAL: cada celda con su tipo (Date, number, string),
+ * sin pasar por `celdaATexto`.
+ *
+ * Esto es para los perfiles de origen (`origenes/`), que leen archivos ajenos y
+ * no pueden asumir que la cabecera está en la primera fila. Y en algún caso
+ * —el libro mayor de LiangApp— la celda de fecha viene corrompida de un modo que
+ * solo se puede deshacer viendo el valor crudo: convertirla a texto antes de
+ * interpretarla pierde la información que hace falta para arreglarla.
+ */
+export async function leerHojas(base64: string): Promise<HojaExcel[]> {
   try {
     const salida = await readXlsxFile(Buffer.from(base64, 'base64')) as unknown
     const lista  = (salida ?? []) as unknown[]
     // Según el libro, la librería devuelve las filas o una lista de hojas.
-    hojas = lista.length && !Array.isArray(lista[0])
+    return lista.length && !Array.isArray(lista[0])
       ? lista as HojaExcel[]
       : [{ sheet: '', data: lista as unknown[][] }]
   } catch (e) {
     throw new ArchivoIlegible(`No se pudo leer el Excel: ${(e as Error).message}`)
   }
+}
+
+async function leerXlsx(base64: string): Promise<ArchivoLeido> {
+  const hojas = await leerHojas(base64)
 
   // La plantilla modelo lleva una hoja de ayuda («Cómo rellenar», con la marca y
   // los pasos): se ignora al re-subir, no es datos. Así nunca se elige por error ni

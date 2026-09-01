@@ -25,17 +25,19 @@
 .btn-success:hover:not(:disabled)   { background: var(--color-success); color: #fff; }
 .btn-info      { background: var(--color-info-bg); color: var(--color-primary-text); border-color: transparent; }
 .btn-info:hover:not(:disabled)      { background: var(--color-primary); color: #fff; }
-/* Acción DENTRO de un aviso ámbar (.dos-desfase, .imp-banner, cualquier caja de
-   --color-warning-bg). Se nombra por DÓNDE vive, no por su color, y esa es toda
-   la idea: no es «un botón ámbar» —no lo uses de acento suelto sobre superficie
-   normal, ahí se pierde—, es el botón que convive con un fondo ámbar.
+/* Acción DENTRO de una caja de color claro (.dos-desfase, .imp-banner, cualquier
+   caja de --color-warning-bg, y los `.alert-*` por la regla de más abajo). Se
+   nombra por DÓNDE vive, no por su color, y esa es toda la idea: no es «un botón
+   ámbar» —no lo uses de acento suelto sobre superficie normal, ahí se pierde—,
+   es el botón que convive con un fondo de estado.
    Por qué no vale --btn-primary: el teal sobre ámbar son dos colores de marca
    compitiendo en 3 cm, y el aviso deja de leerse como aviso. Y por qué no
    .btn-secondary: su borde (--color-border) desaparece contra el ámbar. Este
    levanta la superficie y toma prestado el borde del propio aviso, así que el
-   botón se lee sin discutirle el protagonismo. */
-.btn-aviso     { background: var(--color-surface); color: var(--color-text); border-color: var(--color-warning); }
-.btn-aviso:hover:not(:disabled)     { background: var(--color-surface-2); border-color: var(--color-warning); color: var(--color-text); }
+   botón se lee sin discutirle el protagonismo.
+   El color lo pone la caja en `--aviso-color`; suelto, ámbar. */
+.btn-aviso     { background: var(--color-surface); color: var(--color-text); border-color: var(--aviso-color, var(--color-warning)); }
+.btn-aviso:hover:not(:disabled)     { background: var(--color-surface-2); border-color: var(--aviso-color, var(--color-warning)); color: var(--color-text); }
 /* Botón de acción-IA: identifica lo que gasta IA (solo activo con el addon). En
    reposo conserva el aspecto secundario, con un lavado muy suave y borde de marca.
    El borde se construye en el mismo background que el relleno: así no hay una
@@ -693,10 +695,32 @@ a.row-actions-item, a.row-actions-item:link, a.row-actions-item:visited, a.row-a
    Solo hijos directos, para no descolocar los botones de `.alert-cta-acciones`. */
 .alert > .btn,
 .alert > .alert-cta-acciones { display: flex; width: fit-content; margin-left: auto; flex-shrink: 0; }
-.alert-error   { background: var(--color-error-bg);   color: var(--color-error);   border: 1px solid rgba(183,28,28,0.15); }
-.alert-success { background: var(--color-success-bg); color: var(--color-success); }
-.alert-warning { background: var(--color-warning-bg); color: var(--color-warning); }
-.alert-info    { background: var(--color-info-bg);    color: var(--color-info); }
+.alert-error   { background: var(--color-error-bg);   color: var(--color-error);   border: 1px solid rgba(183,28,28,0.15); --aviso-color: var(--color-error); }
+.alert-success { background: var(--color-success-bg); color: var(--color-success); --aviso-color: var(--color-success); }
+.alert-warning { background: var(--color-warning-bg); color: var(--color-warning); --aviso-color: var(--color-warning); }
+.alert-info    { background: var(--color-info-bg);    color: var(--color-info);    --aviso-color: var(--color-info); }
+
+/* REGLA DE LOS FONDOS DE COLOR: la ACCIÓN que va dentro de un aviso toma el color
+   OSCURO del aviso en el BORDE y el papel de fondo. Es lo que hace `.btn-aviso`
+   sobre ámbar, generalizado a los cuatro estados y aplicado solo al
+   `.btn-secondary`, cuyo borde gris desaparece contra el fondo de color — el
+   fallo que esto corrige. Al escribir una vista basta con `.btn-aviso`, que ya
+   lee `--aviso-color` de la caja.
+   El `.btn-ghost` NO se convierte en botón con borde: es el «ahora no» de los
+   avisos y debe seguir siendo el hermano callado. Solo se le da el color del
+   propio aviso, para que se lea sobre él.
+   `.btn-primary` y `.btn-danger` se dejan como están: quien los pone sobre un
+   aviso quiere justamente ese peso. */
+:is(.alert-error, .alert-success, .alert-warning, .alert-info) .btn-secondary {
+  background: var(--color-surface); color: var(--color-text); border-color: var(--aviso-color);
+}
+:is(.alert-error, .alert-success, .alert-warning, .alert-info) .btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-2); color: var(--color-text); border-color: var(--aviso-color);
+}
+:is(.alert-error, .alert-success, .alert-warning, .alert-info) .btn-ghost { color: var(--aviso-color); }
+:is(.alert-error, .alert-success, .alert-warning, .alert-info) .btn-ghost:hover:not(:disabled) {
+  background: var(--color-surface); color: var(--aviso-color);
+}
 /* LEGADO: `.alert-intro` era el que ponía la separación de abajo, que ahora trae la
    base. Se conserva porque está puesto en varias vistas y quitarlo sería un barrido
    sin ganancia; no hace falta en código nuevo. */
