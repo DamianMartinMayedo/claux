@@ -68,7 +68,9 @@ export async function avisarAmpliacionSolicitada(params: {
     tipo:        'ampliacion_solicitada',
     titulo:      `${params.empresa} quiere ${params.nombreModulo}`,
     cuerpo:      'Lo pidió desde el panel de su portal.',
-    enlace:      '/admin/soporte',
+    // Las ampliaciones se trabajan en Ventas desde que dejaron de vivir mezcladas
+    // con las incidencias; el aviso seguía mandando a la bandeja de soporte.
+    enlace:      '/admin/ventas/ampliaciones',
     clientId:    params.clientId,
     entidadTipo: 'ampliacion',
     // Cliente + módulo: dos módulos distintos del mismo cliente son dos avisos.

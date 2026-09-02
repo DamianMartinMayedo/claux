@@ -853,6 +853,7 @@ textarea:focus-visible {
   text-transform: uppercase; letter-spacing: 0.03em;
 }
 .sol-value { flex: 1 1 12rem; min-width: 0; color: var(--color-text); word-break: break-word; }
+.sol-presupuesto { display: block; color: var(--color-primary-text); }
 
 /* ── Presupuesto de instalación: calculadora + resultado ── */
 .pres-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }

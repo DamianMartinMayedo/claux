@@ -302,6 +302,9 @@ textarea.input { resize: vertical; min-height: 80px; }
   -webkit-line-clamp: 2; line-clamp: 2;
   overflow: hidden; overflow-wrap: anywhere;
 }
+/* Nombre + distintivo en la misma celda: el clamp necesita su propio elemento,
+   así que el badge va al lado y no dentro. */
+.cell-nombre { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .table td {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);

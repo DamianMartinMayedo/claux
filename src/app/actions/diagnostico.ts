@@ -1,8 +1,10 @@
 'use server'
 
 import { after } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
+import { logActividad } from '@/lib/audit'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo, TIPO_AVISO_LEAD } from '@/lib/email/enviar'
 import { avisarLeadNuevo, avisarLeadPideContacto } from '@/lib/notificaciones/admin/eventos'
@@ -70,6 +72,18 @@ export interface DiagnosticoLead {
       fue sin pedirlo: es la diferencia entre un curioso y alguien esperando una
       llamada, y hasta ahora no se veía en ninguna pantalla. */
   contacto_solicitado_at: string | null
+  /** Los presupuestos que salieron de esta solicitud. Es lo que decide si se
+      puede borrar, y la pantalla lo necesita ANTES de ofrecer el botón: un
+      candado que solo se descubre al pulsar es un candado que enfada. */
+  presupuestos: PresupuestoDeLead[]
+}
+
+/** Lo justo para explicar por qué un lead no se borra. */
+export interface PresupuestoDeLead {
+  id:             number
+  nombre_negocio: string
+  /** Si el presupuesto ya se convirtió en cliente, esto NO es una prueba. */
+  client_id:      string | null
 }
 
 // Lista de solicitudes de diagnóstico (leads) para el admin. El guardado lo hace
@@ -81,7 +95,26 @@ export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
     .from('diagnosticos')
     .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, nivel_rec, tamano, estado, created_at, contacto_solicitado_at')
     .order('created_at', { ascending: false })
-  return (data ?? []) as DiagnosticoLead[]
+
+  // Los presupuestos de TODOS los leads en UNA consulta y se reparten en memoria:
+  // son unas pocas filas y una consulta por lead convertiría la pantalla en 27.
+  const { data: presus } = await db
+    .from('presupuestos_instalacion')
+    .select('id, diagnostico_id, nombre_negocio, client_id')
+    .not('diagnostico_id', 'is', null)
+    .order('id')
+
+  const porLead = new Map<number, PresupuestoDeLead[]>()
+  for (const p of (presus ?? []) as (PresupuestoDeLead & { diagnostico_id: number })[]) {
+    const lista = porLead.get(p.diagnostico_id) ?? []
+    lista.push({ id: p.id, nombre_negocio: p.nombre_negocio, client_id: p.client_id })
+    porLead.set(p.diagnostico_id, lista)
+  }
+
+  return ((data ?? []) as DiagnosticoLead[]).map((l) => ({
+    ...l,
+    presupuestos: porLead.get(l.id) ?? [],
+  }))
 }
 
 // Marcar una solicitud como 'nuevo' o 'contactado'.
@@ -279,4 +312,140 @@ export async function solicitarContactoDiagnostico(
   }))
 
   return { ok: true }
+}
+
+// ── Borrar solicitudes de prueba ──────────────────────────────────────────────
+//
+// El diagnóstico es un formulario público sin más validación que el formato del
+// correo, así que cada prueba de desarrollo deja una fila idéntica a la de un
+// lead real. En producción son 24 de 27, y la pantalla que debería decir «tienes
+// tres personas esperando una llamada» dice «tienes 27 solicitudes».
+//
+// EL CANDADO VIVE EN LA BASE DE DATOS (`eliminar_lead`, mig. 227), no aquí. Dos
+// razones, las dos aprendidas con los datos de producción delante:
+//
+// · Mirar solo el presupuesto enlazado NO PROTEGE NADA. 5 de los 6 presupuestos
+//   reales tienen `diagnostico_id` a null porque se crean desde cero y no desde
+//   el lead: con ese candado, Silvia Padrón (CLI-0013) y Oniel Díaz (CLI-0008)
+//   —dos clientes— quedaban borrables y el único protegido era el que todavía no
+//   es cliente. La señal fiable está en la propia fila: `contacto_solicitado_at`
+//   (lo pidió él) y `estado = 'contactado'` (lo trabajó alguien). Cruzar por
+//   correo sigue prohibido: `clients` no lo guarda y comparar textos acaba
+//   borrando lo que no era.
+// · Comprobar y borrar tienen que ser la MISMA operación. Ver la cabecera de la
+//   migración.
+//
+// Los presupuestos de prueba ya se borran por su cuenta (`eliminarPresupuesto`),
+// así que la limpieza se encadena: se borra el presupuesto y el lead que estaba
+// bloqueado queda libre. Por eso el mensaje de bloqueo dice cuál es.
+
+/** Resultado de una acción en lote. Gemelo del `ResultadoLote` del portal: la
+ *  forma es la misma, pero no se importa para no atar el panel a las acciones
+ *  del portal (que arrastran sesión de tenant y gating de módulos). */
+export interface ResultadoLoteLeads {
+  hechas:   number
+  omitidas: { etiqueta: string; motivo: string }[]
+  errores:  { etiqueta: string; error: string }[]
+  error?:   string
+}
+
+/** El código que devuelve `eliminar_lead`, traducido a lo que hay que hacer. El
+ *  del presupuesto se redacta con la ficha delante para poder decir cuál es. */
+async function motivoBloqueo(
+  db: ReturnType<typeof createAdminClient>,
+  id: number,
+  codigo: string,
+): Promise<string> {
+  if (codigo === 'pidio_contacto') {
+    return 'Esta persona pidió que la llamemos, así que no se borra desde aquí.'
+  }
+  if (codigo === 'contactado') {
+    return 'Está marcada como contactada: alguien ya la trabajó. Si era una prueba, márcala como nueva y vuelve a intentarlo.'
+  }
+  if (codigo === 'presupuesto') {
+    const { data } = await db
+      .from('presupuestos_instalacion')
+      .select('id, nombre_negocio, client_id')
+      .eq('diagnostico_id', id)
+      .order('id')
+    const ps = (data ?? []) as PresupuestoDeLead[]
+    const cual = ps.length === 1
+      ? `el presupuesto #${ps[0]?.id}`
+      : `${ps.length} presupuestos (${ps.map((p) => `#${p.id}`).join(', ')})`
+    const cliente = ps.find((p) => p.client_id)?.client_id
+    return cliente
+      ? `Tiene ${cual}, que ya es del cliente ${cliente}. Esta solicitud no es de prueba.`
+      : `Tiene ${cual}. Bórralo primero si también es de prueba.`
+  }
+  return 'No se pudo eliminar.'
+}
+
+export async function eliminarDiagnostico(
+  id: number,
+): Promise<{ ok: boolean; error?: string; yaEliminado?: boolean }> {
+  const ctx = await requirePermiso('solicitudes')
+  const db = createAdminClient()
+
+  const { data: lead } = await db
+    .from('diagnosticos')
+    .select('id, nombre, email')
+    .eq('id', id)
+    .maybeSingle()
+  // La lista puede estar abierta en otra pestaña: si ya no está, se trata como
+  // hecho para que refrescar limpie la fila obsoleta en vez de dar un error.
+  if (!lead) return { ok: true, yaEliminado: true }
+
+  // Comprobar y borrar, en la misma operación y con la fila bloqueada.
+  const { data: codigo, error } = await db.rpc('eliminar_lead', { p_id: id })
+  if (error) return { ok: false, error: error.message }
+  if (codigo === 'no_existe') return { ok: true, yaEliminado: true }
+  if (codigo !== 'ok') return { ok: false, error: await motivoBloqueo(db, id, String(codigo)) }
+
+  // Los avisos de la bandeja apuntan al lead por `entidad_id`, y no es una FK:
+  // sin esto, «Nuevo lead — sss» se queda pidiendo atención sobre una ficha que
+  // ya no existe. Se archivan, no se borran, y un fallo aquí no tumba el borrado.
+  const { error: errAviso } = await db
+    .from('admin_notificaciones')
+    .update({ resuelta: true, estado: 'archivada' })
+    .eq('entidad_tipo', 'lead')
+    .eq('entidad_id', String(id))
+    .eq('resuelta', false)
+  if (errAviso) console.error('[leads] no se pudieron archivar los avisos del lead', id, errAviso.message)
+
+  await logActividad(db, {
+    user_email:  ctx.email,
+    entity:      'lead',
+    entity_id:   String(id),
+    action:      'eliminar',
+    description: `Solicitud de diagnóstico eliminada: ${lead.nombre} (${lead.email ?? 'sin correo'})`,
+  })
+
+  revalidatePath('/admin/solicitudes')
+  return { ok: true }
+}
+
+/**
+ * En lote: envuelve la individual y hereda su candado y su auditoría. Cada fila
+ * se resuelve por separado —un lead con presupuesto no aborta el resto— y vuelve
+ * el reparto para que el resumen diga qué se hizo y qué no.
+ */
+export async function eliminarDiagnosticosEnLote(ids: number[]): Promise<ResultadoLoteLeads> {
+  await requirePermiso('solicitudes')
+  const res: ResultadoLoteLeads = { hechas: 0, omitidas: [], errores: [] }
+  if (ids.length === 0) return res
+
+  const db = createAdminClient()
+  // Los nombres de una vez: el resumen tiene que decir «Elina Díaz», no «#28».
+  const { data: filas } = await db.from('diagnosticos').select('id, nombre').in('id', ids)
+  const nombres = new Map((filas ?? []).map((f: { id: number; nombre: string }) => [f.id, f.nombre]))
+
+  for (const id of ids) {
+    const etiqueta = nombres.get(id) ?? `#${id}`
+    const r = await eliminarDiagnostico(id)
+    if (r.ok) res.hechas++
+    else res.omitidas.push({ etiqueta, motivo: r.error ?? 'No se pudo eliminar' })
+  }
+
+  revalidatePath('/admin/solicitudes')
+  return res
 }
