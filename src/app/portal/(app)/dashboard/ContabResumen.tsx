@@ -16,8 +16,8 @@ const VentasGastosChart = dynamic(() => import('./charts/VentasGastosChart'), {
 
 interface Opcion { key: string; label: string; entry: ContabMonedaResumen }
 
-// Ventas/gastos del mes + gráfica de 6 meses, con un switch dentro del propio
-// gráfico para alternar entre el consolidado y cada moneda. Los KPIs siguen al
+// Ventas/gastos/neto ACUMULADOS de los seis meses que pinta la gráfica, con un
+// switch para alternar entre el consolidado y cada moneda. Los KPIs siguen al
 // switch. Cliente porque el switch es interactivo.
 export default function ContabResumen({
   consolidado,
@@ -40,6 +40,14 @@ export default function ContabResumen({
   const activa = opciones.find(o => o.key === sel) ?? opciones[0]
   const e = activa.entry
 
+  // El acumulado de los SEIS MESES que pinta la gráfica, no el mes en curso. Los
+  // KPIs decían «del mes» bajo un rótulo que dice «6 meses», así que el día 1 de
+  // cada mes la portada del negocio abría con tres ceros —y con el neto en cero
+  // aunque el semestre fuera bueno—. Se lee lo mismo que se ve debajo.
+  const ventas = e.serie.reduce((s, m) => s + m.ventas, 0)
+  const gastos = e.serie.reduce((s, m) => s + m.gastos, 0)
+  const neto   = ventas - gastos
+
   return (
     <>
       {opciones.length > 1 && (
@@ -61,16 +69,16 @@ export default function ContabResumen({
 
       <div className="dash-kpis">
         <div className="dash-kpi">
-          <span className="dash-kpi-label">Ventas del mes</span>
-          <span className="dash-kpi-value dash-kpi-value-sm">{formatMoneda(e.ventasMes, e.moneda)}</span>
+          <span className="dash-kpi-label">Ventas</span>
+          <span className="dash-kpi-value dash-kpi-value-sm">{formatMoneda(ventas, e.moneda)}</span>
         </div>
         <div className="dash-kpi">
-          <span className="dash-kpi-label">Gastos del mes</span>
-          <span className="dash-kpi-value dash-kpi-value-sm">{formatMoneda(e.gastosMes, e.moneda)}</span>
+          <span className="dash-kpi-label">Gastos</span>
+          <span className="dash-kpi-value dash-kpi-value-sm">{formatMoneda(gastos, e.moneda)}</span>
         </div>
         <div className="dash-kpi">
-          <span className="dash-kpi-label">Neto del mes</span>
-          <span className={`dash-kpi-value dash-kpi-value-sm ${e.netoMes >= 0 ? 'is-pos' : 'is-neg'}`}>{formatMoneda(e.netoMes, e.moneda)}</span>
+          <span className="dash-kpi-label">Neto</span>
+          <span className={`dash-kpi-value dash-kpi-value-sm ${neto >= 0 ? 'is-pos' : 'is-neg'}`}>{formatMoneda(neto, e.moneda)}</span>
         </div>
       </div>
 

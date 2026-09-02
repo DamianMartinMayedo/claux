@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
-import { Download, ChevronDown, BarChart3, Check, Send } from 'lucide-react'
-import { hoyEnTz } from '@/lib/fecha-tz'
+import { Download, ChevronDown, BarChart3, CalendarRange, Check, Send } from 'lucide-react'
+import { hoyEnTz, etiquetaRangoCorto } from '@/lib/fecha-tz'
 import { generarXlsxReportes, type ReportesData, type ConversionVer } from '@/app/actions/portal/reportes'
 import type { Asesor }             from '@/app/actions/portal/asesores'
-import EmpresaPills                from '@/components/portal/EmpresaPills'
+import { empresaColorVar }         from '@/components/portal/EmpresaTag'
 import { useEmpresas }             from '@/components/portal/EmpresaColorContext'
 import IaTouchpoint                from '@/components/portal/ia/IaTouchpoint'
 import Tabs                        from '@/components/Tabs'
@@ -33,6 +33,7 @@ const ORIGEN_LABEL: Record<string, string> = {
 
 // Presets de rango por duración (el período en curso).
 type RangoPreset = 'mes' | 'trimestre' | 'semestre' | 'anio'
+const PRESETS: RangoPreset[] = ['mes', 'trimestre', 'semestre', 'anio']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 // Normaliza un nombre para usarlo en el nombre de archivo (sin acentos ni símbolos).
-/** Nombres de mes para las píldoras de período. En minúscula no: encabezan la píldora. */
+/** Nombres de mes para las opciones de período. En minúscula no: encabezan la opción. */
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
@@ -79,6 +80,12 @@ export default function ReportesView({ data, asesores, gaveta }: {
   const [desde,   setDesde]   = useState(data.desde)
   const [hasta,   setHasta]   = useState(data.hasta)
   const [empresa, setEmpresa] = useState(data.empresa_id)
+  // El período REALMENTE aplicado, adelantado al clic. En 3G pasan segundos entre
+  // elegir y la respuesta del servidor, y un botón que no cambia parece que ignoró
+  // el clic. `desde`/`hasta` no sirven para esto: cambian con cada tecla del rango
+  // a mano, y el botón enseñaría fechas a medio escribir.
+  const [aplicado, setAplicado] = useState({ desde: data.desde, hasta: data.hasta })
+  const [periodoAbierto, setPeriodoAbierto] = useState(false)
   // Pestañas, no scroll: cuatro secciones apiladas convertían la pantalla en un
   // reguero donde ninguna se leía entera. El control "Ver en" se queda FUERA de
   // las pestañas porque afecta a las dos.
@@ -88,9 +95,6 @@ export default function ReportesView({ data, asesores, gaveta }: {
   const [verConsolidado, setVerConsolidado] = useState(true)
 
   const { colorOf } = useEmpresas()
-  const empresasFiltro = data.empresas.map(e => ({
-    empresa_id: e.empresa_id, nombre: e.nombre, color: colorOf(e.empresa_id),
-  }))
 
   const antPorMoneda = new Map(data.anterior.map(a => [a.moneda, a]))
   const comparando   = data.comparar !== 'no' && data.anterior.length > 0
@@ -323,7 +327,7 @@ export default function ReportesView({ data, asesores, gaveta }: {
   // elegida) para que la próxima visita arranque igual, y viaja en la URL.
   function cambiarVer(v: string) {
     document.cookie = `rep_ver=${v}; path=/; max-age=31536000`
-    navegar(desde, hasta, empresa, data.comparar, v)
+    navegar(aplicado.desde, aplicado.hasta, empresa, data.comparar, v)
   }
 
   // Presets por DURACIÓN, apuntando al último período COMPLETO (mes/trimestre/
@@ -368,26 +372,45 @@ export default function ReportesView({ data, asesores, gaveta }: {
 
   function preset(tipo: RangoPreset) {
     const { d, h } = rangoPreset(tipo)
-    setDesde(d); setHasta(h); navegar(d, h, empresa)
+    setDesde(d); setHasta(h); setAplicado({ desde: d, hasta: h })
+    setPeriodoAbierto(false)   // elegir es terminar: el panel no se queda tapando el informe
+    navegar(d, h, empresa)
   }
 
-  // ¿Qué preset coincide con el período aplicado? (para resaltar el botón activo)
+  function aplicarRango() {
+    if (!desde || !hasta) return
+    setAplicado({ desde, hasta })
+    setPeriodoAbierto(false)
+    navegar(desde, hasta, empresa)
+  }
+
+  // ¿Qué preset coincide con el período aplicado? (para marcarlo en el panel)
   const presetActivo = (tipo: RangoPreset) => {
     const { d, h } = rangoPreset(tipo)
-    return data.desde === d && data.hasta === h
+    return aplicado.desde === d && aplicado.hasta === h
   }
 
   // Hay rango escrito sin aplicar: el botón «Aplicar» solo se enciende entonces.
-  const rangoSinAplicar = desde !== data.desde || hasta !== data.hasta
+  const rangoSinAplicar = desde !== aplicado.desde || hasta !== aplicado.hasta
 
-  // El borrador se pone al día cuando el servidor aplica otro período (una píldora, volver
+  // El borrador se pone al día cuando el servidor aplica otro período (un preset, volver
   // atrás), DURANTE EL RENDER: con un efecto se pinta un fotograma con las fechas viejas.
   const [rangoVisto, setRangoVisto] = useState({ desde: data.desde, hasta: data.hasta })
   if (rangoVisto.desde !== data.desde || rangoVisto.hasta !== data.hasta) {
     setRangoVisto({ desde: data.desde, hasta: data.hasta })
+    setAplicado({ desde: data.desde, hasta: data.hasta })
     setDesde(data.desde)
     setHasta(data.hasta)
   }
+
+  // Lo que DICE el botón del período: el nombre del preset si el período es uno de
+  // ellos, y si no las fechas. Antes había que deducirlo de cuál de las cuatro
+  // píldoras estaba encendida.
+  const anioActual = Number(hoyEnTz().slice(0, 4))
+  const presetAplicado = PRESETS.find(presetActivo)
+  const etiquetaPeriodo = presetAplicado
+    ? etiquetaPreset(presetAplicado)
+    : etiquetaRangoCorto(aplicado.desde, aplicado.hasta, anioActual)
 
   const sinDatos = data.resultado.length === 0 && data.flujo.length === 0
 
@@ -440,59 +463,139 @@ export default function ReportesView({ data, asesores, gaveta }: {
           nota de esto; ahí se avisa antes, al congelar y al publicar. */}
       <GavetaLanzador resumen={gaveta} />
 
-      {/* ── Barra de control: PERÍODO (agrupado) a la izquierda, empresa a la
-          derecha ───────────────────────────────────────────────────────────
-          El período es una sola decisión —presets que rellenan el rango, o el
-          rango a mano—, así que van juntos en un grupo; antes flotaban como tres
-          islas sueltas. El buscador y la comparación bajan a la sección sobre la
-          que actúan; la moneda de la vista, a su propia fila. */}
+      {/* ── Barra de filtros: UNA fila, tres decisiones ───────────────────────
+          Período · Empresa · Ver en. Eran trece controles sueltos repartidos en tres
+          bandas —cuatro píldoras de preset, dos fechas y «Aplicar», cuatro de empresa
+          y cinco de moneda—, así que la pantalla abría pareciendo un panel de mandos
+          antes de enseñar una sola cifra. El período pasa al patrón del resto del
+          portal: UN botón que dice el período aplicado y un panel con los presets y el
+          rango a mano (`.rango-*`, el mismo de `RangoBusqueda`). El buscador y la
+          comparación siguen en la sección sobre la que actúan. */}
       <div className="rep-barra">
-        <div className="rep-periodo">
-          <div className="rep-barra-presets">
-            {/* El período por su NOMBRE, no por su duración: ver `etiquetaPreset`. */}
-            {(['mes', 'trimestre', 'semestre', 'anio'] as RangoPreset[]).map(t => (
-              <button key={t} className={`cxx-chip${presetActivo(t) ? ' active' : ''}`}
-                onClick={() => preset(t)} disabled={isPending}>
-                {etiquetaPreset(t)}
-              </button>
-            ))}
-          </div>
-          {/* El rango a mano se APLICA con el botón, no en cada `change`.
-              Navegaba por tecla: el navegador dispara el evento con la fecha a medio
-              escribir —«0002-01-01» incluido—, así que teclear un rango lanzaba varios
-              informes completos (estado de resultados + flujo, la consulta más cara del
-              portal) con períodos absurdos antes de llegar al que se quería. Mismo patrón
-              que `RangoBusqueda`, y con `min`/`max` cruzados para que no se pueda pedir un
-              «hasta» anterior al «desde» —que devolvía un informe vacío sin explicar nada—. */}
-          <form className="rep-barra-fechas"
-            onSubmit={e => { e.preventDefault(); if (desde && hasta) navegar(desde, hasta, empresa) }}>
-            <input
-              className="input ter-filter-select" type="date" value={desde} aria-label="Desde"
-              max={hasta || undefined}
-              onChange={e => setDesde(e.target.value)}
-            />
-            <span className="rep-rango-sep">–</span>
-            <input
-              className="input ter-filter-select" type="date" value={hasta} aria-label="Hasta"
-              min={desde || undefined}
-              onChange={e => setHasta(e.target.value)}
-            />
-            <button type="submit" className={`btn btn-sm ${rangoSinAplicar ? 'btn-primary' : 'btn-secondary'}`}
-              disabled={!rangoSinAplicar || isPending}>
-              <Check size={13} strokeWidth={2.5} /> Aplicar
+        <div className="filtros-campo">
+          <span className="filtros-campo-rotulo">Período</span>
+          <div className="rango-wrap">
+            <button
+              type="button"
+              className="rango-boton"
+              aria-expanded={periodoAbierto}
+              aria-label={`Período: ${etiquetaPeriodo}`}
+              onClick={() => setPeriodoAbierto(v => !v)}
+            >
+              <CalendarRange size={14} strokeWidth={2} />
+              <span className="rango-boton-txt">{etiquetaPeriodo}</span>
+              <ChevronDown size={13} strokeWidth={2.5} />
             </button>
-          </form>
+
+            {periodoAbierto && (
+              <>
+                <div className="rango-panel-overlay" onClick={() => setPeriodoAbierto(false)} />
+                <div className="rango-panel" role="group" aria-label="Período">
+                  <div className="rango-opciones">
+                    {/* El período por su NOMBRE, no por su duración (ver `etiquetaPreset`), y
+                        con sus fechas al lado: «2.º trimestre» no dice cuál es hasta que se
+                        aplica, y comprobarlo costaba un informe entero. */}
+                    {PRESETS.map(t => {
+                      const { d, h } = rangoPreset(t)
+                      const activo = presetActivo(t)
+                      return (
+                        <button
+                          key={t} type="button"
+                          className={`rango-opcion${activo ? ' active' : ''}`}
+                          aria-pressed={activo}
+                          onClick={() => preset(t)}
+                        >
+                          <span>{etiquetaPreset(t)}</span>
+                          <span className="rep-preset-fechas">{etiquetaRangoCorto(d, h, anioActual)}</span>
+                          {activo && <Check size={13} strokeWidth={2.5} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* El rango a mano se APLICA con el botón, no en cada `change`.
+                      Navegaba por tecla: el navegador dispara el evento con la fecha a medio
+                      escribir —«0002-01-01» incluido—, así que teclear un rango lanzaba varios
+                      informes completos (estado de resultados + flujo, la consulta más cara del
+                      portal) con períodos absurdos antes de llegar al que se quería. Mismo patrón
+                      que `RangoBusqueda`, y con `min`/`max` cruzados para que no se pueda pedir un
+                      «hasta» anterior al «desde» —que devolvía un informe vacío sin explicar nada—. */}
+                  <form className="rango-fechas" onSubmit={e => { e.preventDefault(); aplicarRango() }}>
+                    <div className="rango-fecha-campo">
+                      <label htmlFor="rep-desde">Desde</label>
+                      <input
+                        id="rep-desde" className="input input-sm" type="date" value={desde}
+                        max={hasta || undefined}
+                        onChange={e => setDesde(e.target.value)}
+                      />
+                    </div>
+                    <div className="rango-fecha-campo">
+                      <label htmlFor="rep-hasta">Hasta</label>
+                      <input
+                        id="rep-hasta" className="input input-sm" type="date" value={hasta}
+                        min={desde || undefined}
+                        onChange={e => setHasta(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className={`btn btn-sm ${rangoSinAplicar ? 'btn-primary' : 'btn-secondary'}`}
+                      disabled={!rangoSinAplicar || isPending}>
+                      <Check size={13} strokeWidth={2.5} /> Aplicar
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        <div className="rep-barra-fin">
-          <EmpresaPills
-            empresas={empresasFiltro}
-            value={empresa}
-            onChange={id => { setEmpresa(id); navegar(desde, hasta, id) }}
-            todasLabel="Todas"
-          />
-          {isPending && <span className="spinner spinner-sm" aria-label="Actualizando" />}
-        </div>
+
+        {data.empresas.length > 1 && (
+          <div className="filtros-campo">
+            <label className="filtros-campo-rotulo" htmlFor="rep-empresa">Empresa</label>
+            <div className="rep-filtro-color">
+              {/* El punto de color sobrevive al cambio de pastillas a desplegable: es la
+                  identidad que el dueño reconoce en la tabla, en el dossier y en la factura,
+                  y un `<option>` nativo no admite color. Sin empresa elegida se queda en el
+                  gris del token, así que la fila no baila al cambiar de empresa. */}
+              <span className="empresa-dot" style={empresaColorVar(colorOf(empresa))} />
+              <select
+                id="rep-empresa" className="input ter-filter-select" value={empresa}
+                onChange={e => { setEmpresa(e.target.value); navegar(aplicado.desde, aplicado.hasta, e.target.value) }}
+              >
+                <option value="">Todas las empresas</option>
+                {data.empresas.map(em => (
+                  <option key={em.empresa_id} value={em.empresa_id}>{em.nombre}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* «Ver en» NO es un filtro: no quita filas, convierte las cifras. «Cada moneda»
+            es el informe nativo, sin convertir —la verdad contable—; elegir una lo colapsa
+            a ella. Solo aparece si hay más de una moneda posible. */}
+        {data.verOpciones.length >= 2 && (
+          <div className="filtros-campo">
+            <label className="filtros-campo-rotulo" htmlFor="rep-ver">Ver en</label>
+            <select
+              id="rep-ver" className="input ter-filter-select" value={data.ver}
+              onChange={e => cambiarVer(e.target.value || 'nativo')}
+            >
+              <option value="">Cada moneda</option>
+              {data.verOpciones.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+        )}
+
+        {isPending && <span className="spinner spinner-sm" aria-label="Actualizando" />}
       </div>
+
+      {/* De qué tasa salen las cifras convertidas y qué moneda se ha quedado fuera. */}
+      {data.convertido && (data.convertido.convertidas.length > 0 || data.convertido.excluidas.length > 0 || (data.convertido.congeladas?.length ?? 0) > 0) && (
+        <p className="rep-ver-nota">
+          {fraseConversion(data.convertido, data.ver)}
+          {data.convertido.excluidas.length > 0 && ` Sin tasa hacia ${data.ver}: ${data.convertido.excluidas.join(', ')} (no incluidas).`}
+        </p>
+      )}
 
       {sinDatos ? (
         <div className="card mon-empty">
@@ -501,35 +604,6 @@ export default function ReportesView({ data, asesores, gaveta }: {
         </div>
       ) : (
         <>
-          {/* ── "Ver en [moneda]" ──────────────────────────────────────────────
-              Reemplaza a la banda fija "Consolidado en…". "Cada moneda" muestra
-              el informe nativo, sin convertir (la verdad contable); elegir una
-              moneda lo colapsa a ella, convirtiendo solo lo que no está ya en esa
-              moneda y marcándolo. Solo aparece si hay más de una moneda posible. */}
-          {data.verOpciones.length >= 2 && (
-            <div className="rep-ver">
-              <span className="rep-ver-label">Ver en</span>
-              <div className="rep-ver-chips" role="group" aria-label="Moneda de la vista">
-                <button
-                  className={`cxx-chip${data.ver === '' ? ' active' : ''}`}
-                  onClick={() => cambiarVer('nativo')} disabled={isPending}
-                >Cada moneda</button>
-                {data.verOpciones.map(m => (
-                  <button
-                    key={m} className={`cxx-chip${data.ver === m ? ' active' : ''}`}
-                    onClick={() => cambiarVer(m)} disabled={isPending}
-                  >{m}</button>
-                ))}
-              </div>
-              {data.convertido && (data.convertido.convertidas.length > 0 || data.convertido.excluidas.length > 0 || (data.convertido.congeladas?.length ?? 0) > 0) && (
-                <span className="rep-ver-nota">
-                  {fraseConversion(data.convertido, data.ver)}
-                  {data.convertido.excluidas.length > 0 && ` Sin tasa hacia ${data.ver}: ${data.convertido.excluidas.join(', ')} (no incluidas).`}
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Dos informes, dos pestañas. Apilados eran una página de cuatro
               bloques que competían entre sí y ninguno se leía entero. */}
           <Tabs
@@ -560,7 +634,7 @@ export default function ReportesView({ data, asesores, gaveta }: {
                     <button
                       key={m} type="button"
                       className={`cxx-chip${data.comparar === m ? ' active' : ''}`}
-                      onClick={() => navegar(desde, hasta, empresa, m)} disabled={isPending}
+                      onClick={() => navegar(aplicado.desde, aplicado.hasta, empresa, m)} disabled={isPending}
                     >
                       {labelComparar(m)}
                     </button>

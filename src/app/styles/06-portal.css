@@ -1960,37 +1960,43 @@
    REPORTES FINANCIEROS — estado de resultados + flujo de caja
    ════════════════════════════════════════════════════════════════════════ */
 
-.rep-rango-sep { color: var(--color-text-muted); }
 .rep-nota { font-size: var(--text-sm); color: var(--color-text-muted); margin: calc(-1 * var(--space-2)) 0 var(--space-3); }
 
-/* ── Barra de control ─────────────────────────────────────────────────────────
-   El PERÍODO (presets + rango) es una sola decisión → van agrupados en un
-   contenedor sutil, no como islas sueltas. La empresa, a la derecha. */
+/* ── Barra de filtros: UNA fila de campos rotulados ───────────────────────────
+   Período · Empresa · Ver en, cada uno con su rótulo encima (`.filtros-campo`, el
+   mismo del panel de filtros del portal). Eran trece controles en tres bandas —las
+   píldoras de preset, las dos fechas con su «Aplicar», las de empresa y las de
+   moneda—, y la primera cifra del informe empezaba a tres alturas del título. Los
+   rótulos no sobran: sin ellos, dos desplegables seguidos que dicen «AUGE Cuba» y
+   «CUP» no dicen cuál filtra y cuál convierte. */
 .rep-barra {
-  display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between;
+  display: flex; align-items: flex-end; flex-wrap: wrap;
   gap: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-4);
-}
-.rep-periodo {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3);
-  padding: var(--space-1) var(--space-2);
-  background: var(--color-surface-2); border-radius: var(--radius-md);
-}
-.rep-barra-presets { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
-.rep-barra-fechas  { display: flex; align-items: center; gap: var(--space-2); }
-.rep-barra-fin     { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-
-/* ── "Ver en [moneda]" ── */
-.rep-ver {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3);
   margin-bottom: var(--space-5);
 }
-.rep-ver-label {
-  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--color-text-muted);
+/* El spinner se centra con los controles, no con el borde inferior de la fila: como
+   todo se alinea por abajo, sin subirlo quedaría a la altura del pie de los selects. */
+.rep-barra .spinner { margin-bottom: var(--space-3); }
+/* El panel del período lleva una columna más que el de los listados —las fechas de
+   cada preset—, así que no cabe en los 14rem de la base y las partía en dos líneas. */
+.rep-barra .rango-panel { min-width: 18rem; }
+/* Fechas del preset dentro del panel: «2.º trimestre» no dice cuál es, y
+   comprobarlo costaba aplicarlo. Secundarias, que el nombre es lo que se elige. */
+.rep-preset-fechas {
+  margin-left: auto;
+  font-size: var(--text-xs); color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.rep-ver-chips { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
-.rep-ver-nota { font-size: var(--text-xs); color: var(--color-text-muted); flex: 1 1 14rem; }
+/* Desplegable precedido del punto de color de la empresa: un `<option>` nativo no
+   admite color y esa identidad se usa en toda la app. */
+.rep-filtro-color { display: flex; align-items: center; gap: var(--space-2); }
+
+/* La nota de conversión de «Ver en»: qué tasa se ha usado y qué moneda quedó fuera. */
+.rep-ver-nota {
+  display: block;
+  margin: calc(-1 * var(--space-3)) 0 var(--space-4);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+}
 
 /* ── Chips de comparación (dentro de la sección) ── */
 .rep-comparar { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
@@ -2030,13 +2036,14 @@
 /* Móvil: los controles pasan a ocupar el ancho, no a partirse a la mitad. Un
    selector de fecha a media columna en 360px no deja leer el día. */
 @media (max-width: 640px) {
+  /* Cada filtro a lo ancho: tres campos a medio ancho en 360px dejan el nombre de la
+     empresa cortado y el botón del período sin sitio para decir el período. */
   .rep-barra { gap: var(--space-3); }
-  .rep-periodo { width: 100%; }
-  .rep-barra-presets { width: 100%; }
-  .rep-barra-presets .cxx-chip { flex: 1 1 auto; justify-content: center; }
-  .rep-barra-fechas  { width: 100%; }
-  .rep-barra-fechas .ter-filter-select { flex: 1 1 0; max-width: none; min-width: 0; }
-  .rep-barra-fin { width: 100%; }
+  .rep-barra .filtros-campo { width: 100%; }
+  .rep-barra .ter-filter-select { max-width: none; flex: 1 1 auto; width: 100%; }
+  /* El panel al ancho del botón, como en los listados: los 18rem de escritorio se
+     salen de un teléfono. */
+  .rep-barra .rango-panel { min-width: 0; }
   .rep-seccion-tools { width: 100%; }
   .rep-comparar { width: 100%; }
   .rep-comparar .cxx-chip { flex: 1 1 auto; justify-content: center; }
@@ -2985,6 +2992,14 @@
 }
 .dash-tip-title { font-weight: 700; margin-bottom: 2px; }
 .dash-tip-row { display: flex; align-items: center; gap: var(--space-2); }
+/* El neto del mes señalado: separado de las dos series porque no es una tercera
+   barra, es lo que sale de restarlas —y era justo lo que había que hacer a ojo. */
+.dash-tip-neto {
+  margin-top: var(--space-1); padding-top: var(--space-1);
+  border-top: 1px solid var(--color-divider);
+}
+.dash-tip-neto .is-pos { color: var(--color-success); }
+.dash-tip-neto .is-neg { color: var(--color-error); }
 
 /* Listas (últimas facturas, bajo mínimo, agenda de hoy) */
 .dash-list { display: flex; flex-direction: column; }

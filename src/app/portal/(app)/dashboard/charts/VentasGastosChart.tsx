@@ -13,6 +13,11 @@ import { useHydrated } from './useHydrated'
 interface TipPayload { dataKey: string; name: string; value: number }
 function ChartTooltip({ active, payload, label, moneda }: { active?: boolean; payload?: TipPayload[]; label?: string; moneda: string }) {
   if (!active || !payload?.length) return null
+  // El neto del mes señalado, que es la cifra que se busca al mirar una barra y
+  // había que restarla a ojo. Se calcula sobre el payload —no sobre la serie—
+  // para que sea exactamente lo que se está viendo.
+  const valor = (k: string) => payload.find(p => p.dataKey === k)?.value ?? 0
+  const neto = valor('ventas') - valor('gastos')
   return (
     <div className="dash-tip">
       <div className="dash-tip-title">{label}</div>
@@ -22,6 +27,9 @@ function ChartTooltip({ active, payload, label, moneda }: { active?: boolean; pa
           {p.name}: <strong>{formatNumCompacto(p.value)} {moneda}</strong>
         </div>
       ))}
+      <div className="dash-tip-neto">
+        Neto: <strong className={neto >= 0 ? 'is-pos' : 'is-neg'}>{formatNumCompacto(neto)} {moneda}</strong>
+      </div>
     </div>
   )
 }

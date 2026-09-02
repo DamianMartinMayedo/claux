@@ -162,6 +162,33 @@ export function etiquetaMes(mes: string): string {
 }
 
 /**
+ * Un rango de fechas en una etiqueta corta —«12 mar – 30 abr»—, para el botón que DICE el
+ * rango aplicado. Lo comparten el rango de los listados (`RangoBusqueda`) y el período de
+ * Reportes: dos formatos parecidos para lo mismo es como acaban diciendo días distintos.
+ *
+ * El año solo cuando aporta: si las dos fechas caen en el mismo, sobra decirlo dos veces.
+ * `anioRef` (normalmente el año en curso) hace que un rango entero de OTRO año sí lo lleve
+ * —«1 ene – 31 dic» a secas, en un informe financiero, no dice de qué ejercicio es—.
+ *
+ * Se formatea a mano desde 'YYYY-MM-DD' y NO con `new Date(iso)`: eso interpreta la cadena
+ * como UTC y en La Habana (UTC−4/−5) devuelve el día anterior.
+ */
+export function etiquetaRangoCorto(desde: string, hasta: string, anioRef?: number): string {
+  const corto = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number)
+    return { txt: `${d} ${MESES_CORTOS[m - 1]}`, anio: y }
+  }
+  if (desde && hasta) {
+    const a = corto(desde), b = corto(hasta)
+    if (a.anio !== b.anio) return `${a.txt} ${a.anio} – ${b.txt} ${b.anio}`
+    return a.anio === (anioRef ?? a.anio) ? `${a.txt} – ${b.txt}` : `${a.txt} – ${b.txt} ${b.anio}`
+  }
+  if (desde) return `Desde ${corto(desde).txt}`
+  if (hasta) return `Hasta ${corto(hasta).txt}`
+  return 'Todo'
+}
+
+/**
  * Meses consecutivos entre dos claves YYYY-MM, ambas incluidas y sin huecos.
  * Para series de "todo el histórico", donde el rango lo marcan los datos y no
  * una ventana fija (ahí va `clavesMes`, que cuenta N meses hacia atrás desde hoy).

@@ -41,38 +41,22 @@ import { CalendarRange, Check, ChevronDown, Search, X } from 'lucide-react'
 import {
   PRESETS_RANGO, PRESETS_HISTORICO, fechasDePreset, presetDeFechas, type PresetRango,
 } from '@/lib/listados'
+import { etiquetaRangoCorto } from '@/lib/fecha-tz'
 
 /** Espera antes de buscar mientras se teclea. Suficiente para no lanzar una consulta por
  *  letra, corta para que no parezca que el buscador no hace nada. */
 const ESPERA_BUSQUEDA = 600
 
-const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-
 /**
  * El rango en la etiqueta del botón. Con un preset, su nombre; con fechas a mano, las fechas
- * —«12 mar – 30 abr»—, que es más útil que la palabra «Personalizado».
- *
- * Se formatea a mano desde `'YYYY-MM-DD'` y NO con `new Date(iso)`: eso interpreta la cadena
- * como UTC y en La Habana (UTC−4/−5) devuelve el día anterior.
+ * —«12 mar – 30 abr»—, que es más útil que la palabra «Personalizado». El formato de esas
+ * fechas es el compartido con Reportes (`etiquetaRangoCorto`).
  */
 function etiquetaRango(preset: PresetRango, desde: string, hasta: string): string {
   if (preset !== 'personalizado') {
     return PRESETS_RANGO.find(p => p.id === preset)?.label ?? 'Todo'
   }
-  const corto = (iso: string) => {
-    const [y, m, d] = iso.split('-').map(Number)
-    return { txt: `${d} ${MES_CORTO[m - 1]}`, anio: y }
-  }
-  if (desde && hasta) {
-    const a = corto(desde), b = corto(hasta)
-    // El año solo cuando aporta: si los dos caen en el mismo, sobra decirlo dos veces.
-    return a.anio === b.anio
-      ? `${a.txt} – ${b.txt}`
-      : `${a.txt} ${a.anio} – ${b.txt} ${b.anio}`
-  }
-  if (desde) return `Desde ${corto(desde).txt}`
-  if (hasta) return `Hasta ${corto(hasta).txt}`
-  return 'Todo'
+  return etiquetaRangoCorto(desde, hasta)
 }
 
 interface Props {
