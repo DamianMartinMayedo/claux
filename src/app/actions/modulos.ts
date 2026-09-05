@@ -45,10 +45,14 @@ export async function editarModulo(formData: FormData) {
   const clave                = (formData.get('clave')                as string ?? '').trim()
   const nombre               = (formData.get('nombre')               as string ?? '').trim()
   const descripcion          = (formData.get('descripcion')          as string ?? '').trim() || null
+  // Los otros dos textos del módulo (mig. 230 y 232): el «por qué le sirve» de la
+  // propuesta y la variante de dos líneas de la ficha de precios. Vacío es null y
+  // no cadena vacía: el respaldo de la propuesta es `?? `, y un '' lo esquiva.
+  const beneficio            = (formData.get('beneficio')            as string ?? '').trim() || null
+  const resumen              = (formData.get('resumen')              as string ?? '').trim() || null
   const tipo                 = (formData.get('tipo')                 as string ?? '').trim() || null
   const precios              = leerPrecios(formData)
   const activo               = formData.get('activo') === 'true'
-  const orden                = parseInt(formData.get('orden') as string ?? '0', 10)
 
   const paginasRaw = formData.get('paginas') as string ?? null
   const paginas = paginasRaw ? JSON.parse(paginasRaw) : null
@@ -64,10 +68,13 @@ export async function editarModulo(formData: FormData) {
     .single()
 
   const update: Record<string, unknown> = {
-    nombre, descripcion, ...precios, activo,
+    nombre, descripcion, beneficio, resumen, ...precios, activo,
     updated_at: new Date().toISOString(),
   }
-  if (!isNaN(orden)) update.orden = orden
+  // `orden` no se toca aquí: es la posición en la lista y la fija `reordenar
+  // Modulos` al soltar la fila, renumerando el catálogo entero. Este update lo
+  // deja como está —y no lo reescribe con el valor que tuviera al abrir el
+  // modal, que es lo que hacía el `hidden` que el formulario mandaba—.
   // Solo permitir cambio entre modulo ↔ funcionalidad, no desde/hacia addon o base
   if (tipo && actual && actual.tipo !== 'base' && actual.tipo !== 'addon' && ['modulo', 'funcionalidad'].includes(tipo)) {
     update.tipo = tipo
@@ -111,6 +118,8 @@ export async function crearModulo(formData: FormData) {
   const nombre               = (formData.get('nombre')               as string ?? '').trim()
   const tipo                 = (formData.get('tipo')                 as string ?? 'modulo').trim()
   const descripcion          = (formData.get('descripcion')          as string ?? '').trim() || null
+  const beneficio            = (formData.get('beneficio')            as string ?? '').trim() || null
+  const resumen              = (formData.get('resumen')              as string ?? '').trim() || null
   const precios              = leerPrecios(formData)
 
   if (!clave || !nombre) return { ok: false, error: 'Clave y nombre son obligatorios.' }
@@ -134,7 +143,7 @@ export async function crearModulo(formData: FormData) {
   const { error } = await supabase
     .from('modulos_catalogo')
     .insert({
-      clave, nombre, tipo, descripcion, ...precios,
+      clave, nombre, tipo, descripcion, beneficio, resumen, ...precios,
       es_base: false, orden, activo: true,
       paginas: JSON.stringify([]),
     })

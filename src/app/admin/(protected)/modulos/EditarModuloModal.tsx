@@ -36,6 +36,8 @@ type Modulo = {
   clave: string
   nombre: string
   descripcion: string | null
+  beneficio: string | null
+  resumen: string | null
   precio_inicial_usd: number
   precio_empresa_usd: number
   precio_pro_usd: number
@@ -197,7 +199,6 @@ export default function EditarModuloModal({
         </div>
         <form ref={formRef} onSubmit={handleSubmit}>
           <input type="hidden" name="clave" value={modulo.clave} />
-          <input type="hidden" name="orden" value={modulo.orden} />
           <div className="modal-body">
             {/* ── Datos básicos ── */}
             <div className="grid-cols-2">
@@ -222,15 +223,31 @@ export default function EditarModuloModal({
                 </select>
               </div>
             </div>
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Orden</label>
-                <input name="orden" className="input" type="number" min="1" defaultValue={modulo.orden} />
-              </div>
-              <div className="input-group">
-                <label>Descripción</label>
-                <input name="descripcion" className="input" defaultValue={modulo.descripcion ?? ''} />
-              </div>
+            {/* Los tres textos, juntos y con su destino escrito. Separados no hay
+                forma de ver que uno repite al otro, y son distintos a propósito:
+                uno describe, otro vende y el tercero cabe.
+
+                Aquí NO está el orden. Era una casilla muerta: el formulario lo
+                mandaba dos veces —un `hidden` y esta— y `FormData.get` devuelve
+                el primero, así que lo tecleado no llegaba nunca al servidor y no
+                lo decía. Y no se arregla dejando la casilla: el orden es la
+                POSICIÓN en la lista, se cambia arrastrando la fila y `reordenar
+                Modulos` renumera el catálogo entero; un número a mano solo puede
+                empatar con el de otro módulo. */}
+            <div className="input-group">
+              <label htmlFor="mod-descripcion">Descripción</label>
+              <input id="mod-descripcion" name="descripcion" className="input" defaultValue={modulo.descripcion ?? ''} />
+              <span className="input-hint">Qué es. Landing y factura.</span>
+            </div>
+            <div className="input-group">
+              <label htmlFor="mod-beneficio">Beneficio</label>
+              <textarea id="mod-beneficio" name="beneficio" className="input" rows={2} defaultValue={modulo.beneficio ?? ''} />
+              <span className="input-hint">Por qué le sirve al negocio. Diapositiva «Pensado para tu negocio» de la propuesta.</span>
+            </div>
+            <div className="input-group">
+              <label htmlFor="mod-resumen">Resumen</label>
+              <input id="mod-resumen" name="resumen" className="input" maxLength={80} defaultValue={modulo.resumen ?? ''} />
+              <span className="input-hint">Dos líneas, unos 55 caracteres. Ficha de precios de la propuesta, cuatro por página: más largo y la ficha crece.</span>
             </div>
             {/* Un precio por nivel Y POR MONEDA: seis casillas, las seis a mano. El
                 de euros no es el de dólares al cambio del día —ese era justo el

@@ -42,6 +42,9 @@ export type Modulo = {
   clave: string
   nombre: string
   descripcion: string | null
+  /** El «por qué le sirve» y la variante de dos líneas, los dos de la propuesta. */
+  beneficio: string | null
+  resumen: string | null
   tipo: string
   precio_inicial_usd: number
   precio_empresa_usd: number

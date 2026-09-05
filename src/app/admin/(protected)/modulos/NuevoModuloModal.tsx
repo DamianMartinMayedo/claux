@@ -63,9 +63,24 @@ export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Recor
               <label>Nombre <span className="required">*</span></label>
               <input name="nombre" className="input" required placeholder="ej: Fidelización" />
             </div>
+            {/* Los tres textos del módulo, cada uno con su destino: uno describe,
+                otro vende y el tercero cabe. Se piden en el alta porque un módulo
+                sin ellos sale mudo en la landing y en la propuesta, y nadie vuelve
+                a por lo que no pidió nadie. */}
             <div className="input-group">
               <label>Descripción</label>
               <textarea name="descripcion" className="input" rows={2} placeholder="Describe qué incluye este módulo…" />
+              <span className="input-hint">Qué es. Landing y factura.</span>
+            </div>
+            <div className="input-group">
+              <label>Beneficio</label>
+              <textarea name="beneficio" className="input" rows={2} placeholder="Qué gana el negocio con esto…" />
+              <span className="input-hint">Por qué le sirve. Diapositiva «Pensado para tu negocio» de la propuesta.</span>
+            </div>
+            <div className="input-group">
+              <label>Resumen</label>
+              <input name="resumen" className="input" maxLength={80} placeholder="En dos líneas…" />
+              <span className="input-hint">Ficha de precios de la propuesta, cuatro por página: unos 55 caracteres.</span>
             </div>
             {/* Un precio por nivel Y POR MONEDA. Las seis se piden aquí, en el alta:
                 un módulo sin precio en euros sale GRATIS al que se le factura en
