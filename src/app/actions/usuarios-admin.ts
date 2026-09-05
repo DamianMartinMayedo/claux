@@ -15,6 +15,10 @@ export interface UsuarioAdmin {
   created_at:  string
   esBootstrap: boolean   // super_admin fijado por ADMIN_EMAILS (env), no por la tabla
   gestionable: boolean   // tiene fila en admin_users editable/eliminable desde el panel
+  // El contacto de TRABAJO: lo que ve un cliente en la propuesta que esta
+  // persona firma. Nulo ⇒ el de la empresa (mig. 233). No es el de acceso.
+  emailPublico:    string | null
+  telefonoPublico: string | null
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -52,7 +56,7 @@ export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
   const db = createAdminClient()
 
   const [filasRes, authRes] = await Promise.all([
-    db.from('admin_users').select('email, nombre, rol, permisos, activo, created_at'),
+    db.from('admin_users').select('email, nombre, rol, permisos, activo, created_at, email_publico, telefono_publico'),
     db.auth.admin.listUsers({ page: 1, perPage: 200 }),
   ])
 
@@ -84,6 +88,8 @@ export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
       created_at:  f.created_at,
       esBootstrap: boot,
       gestionable: !boot,
+      emailPublico:    f.email_publico ?? null,
+      telefonoPublico: f.telefono_publico ?? null,
     })
   }
 
@@ -100,6 +106,8 @@ export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
       created_at:  a?.created_at || new Date(0).toISOString(),
       esBootstrap: true,
       gestionable: false,
+      emailPublico:    null,
+      telefonoPublico: null,
     })
   }
 
@@ -209,6 +217,77 @@ export async function actualizarUsuarioAdmin(email: string, args: {
     entity_id:   clave,
     action:      'editar',
     description: `Editó usuario ${clave} — rol ${rol} · activo ${args.activo} · permisos [${permisos.join(', ')}]`,
+  })
+
+  revalidatePath('/admin/usuarios')
+  return { ok: true }
+}
+
+/**
+ * El contacto de trabajo que sale en las propuestas que firma esta persona.
+ *
+ * Va aparte de «editar usuario» porque alcanza a quien aquel no alcanza: las
+ * **cuentas base** (super admins por ADMIN_EMAILS, o por el fail-open cuando esa
+ * variable no está puesta) no tienen fila en `admin_users` y por eso no se
+ * editan desde el panel. Su contacto sí hace falta —son quienes más venden—, así
+ * que la primera vez se les crea la fila.
+ *
+ * Crear esa fila no cambia lo que ven ni lo que pueden: `obtenerContextoAdmin`
+ * mira la whitelist ANTES que la tabla, y sin whitelist el fail-open ya les daba
+ * super_admin. La fila solo pasa a ser donde vive su nombre y su contacto.
+ */
+export async function guardarContactoPropuestas(email: string, args: {
+  emailPublico: string
+  telefonoPublico: string
+  /** Solo para una cuenta base: es la única pantalla donde se puede poner su
+   *  nombre, y lo que se pone acaba impreso en la portada de la propuesta.
+   *  Para las demás se ignora — su nombre se edita en «Editar usuario». */
+  nombre?: string
+}): Promise<Resp> {
+  const ctx = await requireSuperAdmin()
+
+  const clave = (email || '').trim().toLowerCase()
+  if (!clave) return { ok: false, error: 'Usuario no válido.' }
+
+  const emailPublico    = (args.emailPublico || '').trim().toLowerCase() || null
+  const telefonoPublico = (args.telefonoPublico || '').trim() || null
+  if (emailPublico && !EMAIL_RE.test(emailPublico)) {
+    return { ok: false, error: 'El correo de trabajo no es válido.' }
+  }
+
+  const db = createAdminClient()
+  const { data: fila } = await db.from('admin_users').select('email').eq('email', clave).maybeSingle()
+
+  if (fila) {
+    const { error } = await db.from('admin_users')
+      .update({ email_publico: emailPublico, telefono_publico: telefonoPublico })
+      .eq('email', clave)
+    if (error) return { ok: false, error: error.message }
+  } else {
+    // La cuenta base no tiene fila, así que esta es la primera vez que su nombre
+    // se guarda en ninguna parte. Lo escrito manda; si no se escribe nada, el de
+    // Supabase Auth, y en último caso el correo sin el dominio —que es lo que
+    // firmaría hoy, y por eso el formulario lo pide.
+    const { data: auth } = await db.auth.admin.listUsers({ page: 1, perPage: 200 })
+    const cuenta = (auth?.users ?? []).find(u => (u.email ?? '').toLowerCase() === clave)
+    if (!cuenta) return { ok: false, error: 'Esa cuenta no existe.' }
+    const nombre = (args.nombre || '').trim()
+      || (cuenta.user_metadata?.full_name as string | undefined)?.trim()
+      || clave.split('@')[0]
+
+    const { error } = await db.from('admin_users').insert({
+      email: clave, nombre, rol: 'super_admin', permisos: [], activo: true,
+      email_publico: emailPublico, telefono_publico: telefonoPublico,
+    })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  await logActividad(db, {
+    user_email:  ctx.email,
+    entity:      'usuario',
+    entity_id:   clave,
+    action:      'editar',
+    description: `Cambió el contacto en propuestas de ${clave} — ${emailPublico ?? 'el de la empresa'} · ${telefonoPublico ?? 'el de la empresa'}`,
   })
 
   revalidatePath('/admin/usuarios')

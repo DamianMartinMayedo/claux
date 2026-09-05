@@ -13,6 +13,7 @@ import { NIVELES, NOMBRE_NIVEL, precioModulo, type Nivel } from '@/lib/niveles'
 import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { NO_OCULTABLES, ORDEN_POR_DEFECTO, seccionDe } from '@/lib/propuesta/secciones'
 import type { ResumenEditor } from '@/lib/propuesta/editor'
+import type { Firmante } from '@/lib/propuesta/firmantes'
 import {
   despublicarPropuesta, guardarPropuesta, publicarPropuesta, revocarEnlacePropuesta,
   type ModuloParaPropuesta, type PresupuestoVinculable, type PropuestaDetalle,
@@ -76,7 +77,7 @@ function mover<T>(lista: T[], i: number, delta: number): T[] {
 }
 
 export default function PropuestaEditor({
-  detalle, catalogo, presupuestos, resumen,
+  detalle, catalogo, presupuestos, resumen, firmantes,
 }: {
   detalle: PropuestaDetalle
   catalogo: ModuloParaPropuesta[]
@@ -85,6 +86,8 @@ export default function PropuestaEditor({
    *  en blanco y lo que lleva dentro cada sección. Del servidor y del mismo
    *  motor que imprime, así que es lo que va a leer el cliente. */
   resumen: ResumenEditor
+  /** El equipo, para elegir quién la presenta sin teclear tres campos. */
+  firmantes: Firmante[]
 }) {
   const router = useRouter()
   const p = detalle.fila
@@ -102,6 +105,13 @@ export default function PropuestaEditor({
   const [firma, setFirma] = useState({
     nombre: p.comercial_nombre ?? '', email: p.comercial_email ?? '', tel: p.comercial_tel ?? '',
   })
+  // Quién está elegido NO se guarda: se deduce de los tres campos. Así corregir
+  // un teléfono a mano deja el selector en «A mano» solo, sin un estado paralelo
+  // que dijera que sigue siendo Claudia cuando ya no lo es.
+  const quien = firmantes.find(f =>
+    f.nombre === firma.nombre && (f.email ?? '') === firma.email && (f.tel ?? '') === firma.tel,
+  )?.cuenta ?? ''
+
   const [ocultas, setOcultas] = useState<string[]>(detalle.secciones_ocultas)
   const [orden, setOrden] = useState<string[]>(
     detalle.secciones_orden.length > 0 ? detalle.secciones_orden : ORDEN_POR_DEFECTO,
@@ -123,6 +133,12 @@ export default function PropuestaEditor({
   }
   const cambiarFirma = (campo: 'nombre' | 'email' | 'tel') => (v: string) => {
     setFirma(f => ({ ...f, [campo]: v }))
+    setSucio(true)
+  }
+  const elegirFirmante = (cuenta: string) => {
+    const f = firmantes.find(x => x.cuenta === cuenta)
+    if (!f) return
+    setFirma({ nombre: f.nombre, email: f.email ?? '', tel: f.tel ?? '' })
     setSucio(true)
   }
   const alternarOculta = (clave: string) => {
@@ -398,10 +414,24 @@ export default function PropuestaEditor({
           </div>
 
           <div className="card">
-            <h2 className="card-title card-title-sm">Quién la firma</h2>
+            <h2 className="card-title card-title-sm">Quién la presenta</h2>
             <p className="text-sm-muted">
               Sale en la portada y en el cierre. Lo que dejes en blanco no se pinta.
             </p>
+            <div className="input-group">
+              <label htmlFor="prp-firmante">Persona</label>
+              <select id="prp-firmante" className="input" value={quien}
+                onChange={e => elegirFirmante(e.target.value)}>
+                <option value="">A mano</option>
+                {firmantes.map(f => (
+                  <option key={f.cuenta} value={f.cuenta}>{f.nombre}</option>
+                ))}
+              </select>
+              <span className="input-hint">
+                El contacto de trabajo de cada persona se pone en Usuarios del equipo. Sin él,
+                firma con el de la empresa.
+              </span>
+            </div>
             <div className="prp-grid">
               <div className="input-group">
                 <label htmlFor="prp-firma-nombre">Nombre</label>

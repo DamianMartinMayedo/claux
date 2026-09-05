@@ -12,7 +12,7 @@ cómo sigue creciendo después.
 
 ## 1 — Por qué CLAUX
 
-### 1.1 La propuesta, en una frase
+### 1.1 La propuesta de valor, en una frase
 > etiquetas: vender · básico
 
 **CLAUX es el sistema de gestión de un negocio cubano: se contrata solo lo que se necesita, se
@@ -91,7 +91,72 @@ para dos cosas a la vez: al dueño le pone nombre a lo que le pasa, y al equipo 
 En la práctica es también la mejor herramienta de una visita presencial: se rellena **con** el
 dueño delante, en el móvil, y el informe se convierte en el guion de la conversación.
 
-### 2.3 Solicitudes, presupuestos y ampliaciones
+### 2.3 La propuesta: un enlace, no un PDF
+> etiquetas: vender · básico
+
+Cada interesado tiene **su propia presentación en una dirección web**, no un PDF genérico con el
+nombre cambiado. Se crea desde su solicitud, desde su presupuesto o a mano, y si sale de un
+presupuesto hereda el nivel, la moneda y los módulos ya pactados.
+
+```claux:flujo:propuesta
+```
+
+Cuatro cosas que cambian la conversación, y conviene saberlas antes de mandar la primera:
+
+- **Los precios no están copiados dentro.** Se leen del presupuesto y del catálogo cada vez que se
+  abre. Si se corrige el presupuesto, el enlace que ya tiene el cliente enseña lo corregido: no hay
+  una versión vieja circulando por WhatsApp.
+- **Se sabe si la abrió**, cuántas veces y cuándo. Cambia la llamada de seguimiento entera.
+- **La tabla de precios es un configurador.** El cliente marca y desmarca módulos y ve moverse su
+  cuota mensual. Lo que se mueve es **solo la cuota**: la puesta en marcha depende del volumen de
+  datos, no de los módulos, y darle una cifra baja ahora para subirla después es la peor forma de
+  empezar.
+- **De lo que marcó sale el presupuesto con un botón**, con esos módulos y no con los que sugirió el
+  formulario hace tres semanas.
+
+Y lo que **no** hace: no le escribe al cliente ni avisa a nadie cuando la abre o cuando marca algo.
+Lo abierto y lo marcado se ven en el listado de propuestas, en las columnas «Acuse» y «Qué marcó».
+Hay que ir a mirar.
+
+### 2.4 Quién la presenta, y con qué contacto
+> etiquetas: vender · básico
+
+La portada y el cierre llevan **nombre, correo y WhatsApp de quien la presenta**, que es a quien va
+a contestar el cliente. Tres reglas:
+
+- **La firma se elige, no se hereda de quien la creó.** El editor tiene un selector con el equipo:
+  se elige la persona y los tres campos se rellenan solos. Se puede cambiar hasta publicarla.
+- **Queda congelada al crearla.** Un cambio en el equipo no reescribe la portada de una propuesta
+  que el cliente ya tiene abierta.
+- **El contacto es el de trabajo, no la cuenta de acceso.** Se entra al panel con un correo
+  personal; lo que ve el cliente se configura una vez en Usuarios del equipo, en «Contacto en
+  propuestas». **En blanco sale el de la empresa**, que es la salida correcta mientras alguien no
+  tenga correo propio — nunca el gmail con el que entró.
+
+### 2.5 El editor: qué se personaliza y qué no
+> etiquetas: vender · avanzado
+
+La presentación tiene dieciséis diapositivas, pero **no son dieciséis fijas**: las que no aplican se
+quitan y las demás se reordenan, una a una. Dos se repiten solas —una por cada tres módulos, y una
+por cada captura de pantalla—.
+
+Lo que se escribe para **este** negocio: lo que entendimos de él, cómo lo lleva hoy y qué le aporta
+cada módulo, que viene prellenado con el beneficio del catálogo y se pisa cuando hay algo mejor que
+decir. Lo que **no** se toca desde aquí son los cuatro textos de producto —qué es CLAUX, el
+problema, por qué confiar y cómo empezamos— y el reparto del pago: valen para todas las propuestas
+y se editan en Propuestas → Textos, una vez y para todos.
+
+Dos cosas más que evitan un ridículo:
+
+- **Las capturas de pantalla caducan a los noventa días.** La interfaz cambia; enseñar una pantalla
+  que ya no existe es peor que no enseñar ninguna. El sistema las marca solo.
+- **Si falta un dato, la diapositiva no sale.** No hay diapositivas a medias ni «[completar]»: es
+  preferible una presentación de doce láminas que una de dieciséis con un hueco.
+
+«Presentar» abre la presentación sin publicarla, que es como se lleva a la reunión. El configurador
+funciona igual ahí, así que lo que se marque delante del cliente queda guardado.
+
+### 2.6 Solicitudes, presupuestos y ampliaciones
 > etiquetas: vender · avanzado
 
 Todo el recorrido vive en un solo sitio del panel interno, con pestañas: **Solicitudes** (los leads
@@ -100,7 +165,7 @@ del diagnóstico), **Ampliaciones** (el «Me interesa» de quien ya es cliente),
 diferencia es que del otro lado ya hay un negocio funcionando y la conversación es mucho más
 corta.
 
-### 2.4 El alta y el primer cobro
+### 2.7 El alta y el primer cobro
 > etiquetas: operar · avanzado
 
 Aprobar un presupuesto abre el alta **con los módulos ya marcados**. No es un atajo cómodo: es lo
@@ -309,10 +374,11 @@ manual.
 
 - *«Ahora no, más adelante.»* → Preguntar qué tendría que pasar para que fuera el momento. La
   respuesta suele ser un mes concreto, y entonces es una fecha de seguimiento, no un no.
-- *«Déjame pensarlo.»* → Dejar el informe del diagnóstico y el presupuesto en PDF. Lo que se
-  piensa sin papel delante se olvida.
-- *«Tengo que hablarlo con mi socio.»* → Ofrecer enseñárselo directamente. Una demostración de
-  quince minutos convence mejor que un resumen de segunda mano.
+- *«Déjame pensarlo.»* → Dejarle su propuesta (§2.3). Lo que se piensa sin nada delante se olvida,
+  y un enlace con sus módulos y sus precios se puede volver a abrir a las once de la noche.
+- *«Tengo que hablarlo con mi socio.»* → El enlace se reenvía y el socio lo abre por su cuenta; se
+  verá en el acuse. Aun así, ofrecer enseñárselo: quince minutos convencen más que un resumen de
+  segunda mano.
 
 ---
 
@@ -368,23 +434,62 @@ gana es diaria. Si vende en mostrador, el **punto de venta** cierra el círculo.
 
 ## 7 — La visita, de principio a fin
 
-### 7.1 Un guion de veinte minutos
+### 7.1 Antes: dejar la propuesta lista
 > etiquetas: vender · básico
+
+La visita empieza el día antes, en el panel. Cuatro cosas, y ninguna lleva más de diez minutos:
+
+1. **Crear su propuesta** desde la solicitud o desde el presupuesto, para que llegue con sus
+   módulos, su nivel y su moneda ya puestos.
+2. **Escribir «Lo que entendimos»** con lo que dijo en la primera conversación, en sus palabras.
+   Es la diapositiva que decide si la presentación es suya o es un catálogo.
+3. **Quitar lo que no aplique** y dejar delante el módulo por el que va a entrar (§3.2).
+4. **Comprobar quién la presenta** (§2.4): que la firma sea la de quien va a la visita y que el
+   contacto sea el de trabajo.
+
+Lo que **no** se hace antes de haber hablado con él es mandársela. Sin «Lo que entendimos», la
+propuesta es una lista de precios, y una lista de precios sin conversación se contesta con un
+silencio.
+
+### 7.2 Un guion de veinte minutos
+> etiquetas: vender · básico
+
+Las diapositivas **son** el guion: se presenta desde la propuesta, no desde una demostración suelta.
 
 1. **Preguntar, no presentar** (5 min). Qué vende, cuánta gente tiene, cómo lleva hoy las cuentas
-   y qué es lo que más tiempo le quita. Se toma nota; eso es el diagnóstico.
-2. **Enseñar el inicio del portal** (3 min). La pantalla donde sale lo que hay que atender hoy. Es
-   la que hace clic mentalmente.
-3. **Enseñar UN módulo, el suyo** (7 min). El que responde a lo que acaba de contar, con el guion
-   de demostración de su ficha en la Parte II.
-4. **Enseñar el precio con las dos cifras separadas** (3 min). Cuota mensual de ese módulo y pago
-   único de la puesta en marcha.
+   y qué es lo que más tiempo le quita. Se toma nota; eso es el diagnóstico —y si algo no cuadra
+   con lo escrito, se corrige delante de él, que es la mejor señal que se puede dar—.
+2. **Devolverle su negocio** (2 min). «Lo que entendimos» y «cómo lo llevas hoy». Aquí es donde
+   decide si le estamos vendiendo a él o a cualquiera.
+3. **Enseñar UN módulo, el suyo** (7 min). El que responde a lo que acaba de contar, en el sistema
+   de verdad, con el guion de demostración de su ficha en la Parte II. Las capturas de la
+   presentación son el respaldo para cuando no hay conexión, no el sustituto.
+4. **Abrir precios y marcar con él** (4 min). Las dos cifras separadas —cuota mensual y pago único—
+   y el configurador delante: «¿y si además quiero el menú digital?» se contesta marcando la
+   casilla. Guardar la selección antes de cerrar el portátil.
 5. **Cerrar con un paso concreto** (2 min). No «piénselo»: una fecha para la instalación, o una
-   segunda visita con el socio delante.
+   segunda visita con el socio delante. Y dejarle el enlace, que sigue vivo cuando nos vamos.
 
-### 7.2 Errores que cuestan la venta
+### 7.3 Después: el enlace trabaja solo
 > etiquetas: vender · básico
 
+Lo que hay que mirar en los días siguientes, y qué hacer con cada cosa:
+
+- **Si la abrió** —y cuántas veces— sale en el listado de propuestas. Dos aperturas y un socio de
+  por medio es una visita conjunta, no una llamada.
+- **Si marcó módulos**, ahí está lo que de verdad quiere, que casi nunca es exactamente lo que se
+  le propuso. De esa selección sale el presupuesto con un botón.
+- **Si cambió algo del precio o del alcance**, se corrige el presupuesto: el enlace que él tiene
+  enseña lo nuevo sin volver a mandarle nada ni pedirle que ignore el anterior.
+- **Si no la abrió en una semana**, el problema no es la propuesta: es que la conversación no llegó
+  a arrancar. Se vuelve al §5.4.
+
+### 7.4 Errores que cuestan la venta
+> etiquetas: vender · básico
+
+- **Mandar la propuesta antes de haber hablado.** Sin conversación detrás no es una propuesta: es
+  una lista de precios, y encima con «Lo que entendimos» en blanco o con lo que rellenó un
+  formulario. El enlace es el resultado de la conversación, no el sustituto.
 - **Enseñar diez módulos.** El dueño sale sin saber qué compró y con la cifra más alta en la
   cabeza.
 - **Hablar de funcionalidades antes de conocer el negocio.** Sin el problema encima de la mesa,

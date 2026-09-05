@@ -3,7 +3,8 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { cargarBorradorParaEditor } from '@/lib/propuesta/cargar'
 import { resumirParaEditor } from '@/lib/propuesta/editor'
 import {
-  listarModulosParaPropuesta, listarPresupuestosVinculables, obtenerPropuesta,
+  listarFirmantesPropuesta, listarModulosParaPropuesta, listarPresupuestosVinculables,
+  obtenerPropuesta,
 } from '@/app/actions/propuestas'
 import PropuestaEditor from './PropuestaEditor'
 
@@ -18,17 +19,18 @@ export default async function PropuestaPage({ params }: { params: Promise<{ id: 
   // El borrador ARMADO viaja con lo demás: es lo que deja al editor enseñar en
   // cada caja lo que va a decir el documento, y qué lleva dentro cada sección,
   // sin abrir la presentación en otra pestaña.
-  const [detalle, catalogo, presupuestos, borrador] = await Promise.all([
+  const [detalle, catalogo, presupuestos, borrador, firmantes] = await Promise.all([
     obtenerPropuesta(num),
     listarModulosParaPropuesta(),
     listarPresupuestosVinculables(),
     cargarBorradorParaEditor(num),
+    listarFirmantesPropuesta(),
   ])
   if (!detalle || !borrador) notFound()
 
   return (
     <PropuestaEditor
-      detalle={detalle} catalogo={catalogo} presupuestos={presupuestos}
+      detalle={detalle} catalogo={catalogo} presupuestos={presupuestos} firmantes={firmantes}
       resumen={resumirParaEditor(borrador.resuelta, borrador.prefill, borrador.capturas)}
     />
   )

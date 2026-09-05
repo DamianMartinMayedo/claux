@@ -4,9 +4,9 @@ import { anclaEncabezado } from './slug'
  * Los atajos de la portada: entradas por SITUACIÓN, no por título de apartado.
  *
  * Quien abre el manual con un cliente delante no viene buscando «4.1 Dos números
- * que no se mezclan»: viene buscando qué contestar. Estas seis entradas son las
- * situaciones que más se repiten, y cada una cae directamente en el apartado que
- * la resuelve —no en la pieza, en el apartado—.
+ * que no se mezclan»: viene buscando qué contestar. Son las situaciones que más
+ * se repiten, y cada una cae directamente en el apartado que la resuelve —no en
+ * la pieza, en el apartado—.
  *
  * El `encabezado` es el texto EXACTO del `###`/`##` de destino, del que sale el
  * ancla igual que la saca el renderizador. La portada solo pinta los atajos cuyo
@@ -38,8 +38,13 @@ export const ATAJOS: Atajo[] = [
   },
   {
     situacion: 'Mañana tengo la visita',
-    pieza: 'vender', encabezado: '7.1 Un guion de veinte minutos',
+    pieza: 'vender', encabezado: '7.2 Un guion de veinte minutos',
     donde: 'La visita, de principio a fin',
+  },
+  {
+    situacion: 'Tengo que mandarle la propuesta',
+    pieza: 'vender', encabezado: '2.3 La propuesta: un enlace, no un PDF',
+    donde: 'El recorrido comercial',
   },
   {
     situacion: 'Me dicen que es caro',

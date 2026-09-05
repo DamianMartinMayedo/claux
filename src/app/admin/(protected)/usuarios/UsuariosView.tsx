@@ -1,6 +1,6 @@
 'use client'
 
-import { KeyRound, Pencil, Plus, Trash2, UserCog, X } from 'lucide-react'
+import { AtSign, KeyRound, Pencil, Plus, Trash2, UserCog, X } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
@@ -12,6 +12,7 @@ import {
   type UsuarioAdmin,
 } from '@/app/actions/usuarios-admin'
 import UsuarioModal from './UsuarioModal'
+import ContactoPropuestasModal from './ContactoPropuestasModal'
 import { ROL_LABEL, type RolAdmin } from '@/lib/roles'
 
 /** Color del rol en el listado. */
@@ -34,6 +35,7 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
   const { success: toastSuccess, error: toastError } = useToast()
   const [modalNuevo, setModalNuevo] = useState(false)
   const [editando, setEditando]     = useState<UsuarioAdmin | null>(null)
+  const [contacto, setContacto]     = useState<UsuarioAdmin | null>(null)
   const [aEliminar, setAEliminar]   = useState<UsuarioAdmin | null>(null)
   const [borrando, setBorrando]     = useState(false)
   const [aResetear, setAResetear]   = useState<UsuarioAdmin | null>(null)
@@ -141,6 +143,9 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
                             <Pencil size={15} strokeWidth={2} /> Editar
                           </button>
                         )}
+                        <button className="row-actions-item" onClick={() => setContacto(u)}>
+                          <AtSign size={15} strokeWidth={2} /> Contacto en propuestas
+                        </button>
                         <button className="row-actions-item" onClick={() => abrirResetear(u)}>
                           <KeyRound size={15} strokeWidth={2} /> Regenerar contraseña
                         </button>
@@ -162,6 +167,13 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
 
       {(modalNuevo || editando) && (
         <UsuarioModal usuario={editando} onClose={cerrarModal} />
+      )}
+
+      {contacto && (
+        <ContactoPropuestasModal
+          usuario={contacto}
+          onClose={guardado => { setContacto(null); if (guardado) router.refresh() }}
+        />
       )}
 
       {aEliminar && (

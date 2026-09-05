@@ -773,10 +773,25 @@ export const GRAFO: Record<string, Grafo> = {
       pasos: [
         { titulo: 'Llega el interesado', detalle: 'Por el diagnóstico de la web, que le pregunta sector, qué necesita y cómo lo lleva hoy, y le devuelve un informe con lo que le encaja.' },
         { titulo: 'Aparece como solicitud', detalle: 'El lead cae en el panel interno con todo lo que respondió. Nadie transcribe nada.' },
-        { titulo: 'Se le arma el presupuesto', detalle: 'La calculadora separa el pago único de la puesta en marcha de la cuota mensual, y sale en PDF con la marca.' },
+        { titulo: 'Se le presenta', detalle: 'Su propia propuesta en un enlace: lo que entendimos de su negocio, sus módulos y sus precios. Se sabe si la abrió, y ahí mismo marca lo que quiere.' },
+        { titulo: 'Se le arma el presupuesto', detalle: 'Con lo que marcó, no con lo que sugirió un formulario. La calculadora separa el pago único de la puesta en marcha de la cuota mensual, y lo que se corrija ahí actualiza el enlace ya enviado.' },
         { titulo: 'Aprobado, se da de alta', detalle: 'El alta se abre con los módulos del presupuesto ya marcados: no se vuelve a elegir, ni se puede elegir otra cosa por descuido.' },
         { titulo: 'Empieza a contar al cobrar', detalle: 'El cliente nace desactivado y se activa al confirmar el primer cobro, o dándole un plazo de gracia.' },
         { titulo: 'Y sigue creciendo', detalle: 'Desde su portal el dueño pide ampliaciones con un «Me interesa», que vuelve al panel como una solicitud más.' },
+      ],
+    },
+  },
+
+  propuesta: {
+    flujo: {
+      titulo: 'La propuesta: del borrador al presupuesto que sale de ella',
+      pasos: [
+        { titulo: 'Se crea desde lo que ya hay', detalle: 'Desde la solicitud del lead, desde un presupuesto o a mano. Si viene de un presupuesto hereda nivel, moneda y módulos: no se teclean dos veces, y así la diapositiva del precio no puede contradecir al papel.' },
+        { titulo: 'Se personaliza lo que es suyo', detalle: 'Lo que entendimos de su negocio, cómo lo lleva hoy y qué le aporta cada módulo. Las diapositivas que no aplican se quitan y las demás se reordenan.' },
+        { titulo: 'Se publica y se manda', detalle: 'Queda en una dirección propia que se copia o se envía por WhatsApp. Hasta entonces es un borrador que solo ve el equipo, y el enlace se puede revocar cuando haga falta.' },
+        { titulo: 'Los precios no se copian, se leen', detalle: 'Salen del presupuesto y del catálogo cada vez que se abre. Corregir el presupuesto actualiza lo que ve el cliente sin volver a mandarle nada.' },
+        { titulo: 'Se sabe si la abrió', detalle: 'Cuántas veces y cuándo. Es la diferencia entre llamar sabiendo y llamar a ciegas.' },
+        { titulo: 'Y él marca lo que quiere', detalle: 'La tabla de precios es un configurador: marca módulos, ve moverse su cuota y la deja guardada. De esa selección sale el presupuesto con un botón.' },
       ],
     },
   },

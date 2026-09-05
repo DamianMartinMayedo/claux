@@ -6,6 +6,7 @@ import { requirePermiso } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
 import { leerSetting } from '@/lib/settings'
 import { CLAVES_PROVEEDOR } from '@/lib/documentos/proveedor'
+import { contactoEmpresa, firmaDe, listarFirmantes, type Firma, type Firmante } from '@/lib/propuesta/firmantes'
 import { DEV_ADMIN, isAuthBypassed } from '@/lib/dev-auth'
 import { nuevoToken } from '@/lib/publico/token'
 import { COLUMNAS_PRECIO, normalizarNivel, type ModuloPrecios } from '@/lib/niveles'
@@ -218,32 +219,33 @@ export async function listarPresupuestosVinculables(): Promise<PresupuestoVincul
  *
  * Se congela al crear —no se lee en cada render— porque quien la presenta es
  * quien la montó, y cambiar de comercial en el equipo no debería reescribir la
- * portada de una propuesta ya entregada. Corregible después desde el editor.
+ * portada de una propuesta ya entregada. Se corrige después desde el editor,
+ * que ofrece al equipo en un selector (`lib/propuesta/firmantes.ts`).
  *
- * Dos cosas no salen de la sesión:
+ * Lo que NO sale de la sesión es el contacto. La cuenta de acceso de cada uno
+ * es un correo personal, y eso no se enseña a un cliente: lo que se firma es el
+ * contacto de trabajo de esa persona y, si no tiene, el de la empresa.
  *
- *  · el **teléfono**, que sale de Configuración: hoy CLAUX tiene un número y en
- *    las dos propuestas de agosto está tecleado distinto en cada una;
- *  · la **identidad del bypass de desarrollo** (`Dev (bypass)` / `dev@local`),
- *    que en local es la sesión de todo el mundo y se estaba imprimiendo en la
- *    portada y en la diapositiva de cierre. Ahí se firma con los datos del
- *    proveedor, que es lo que un cliente puede llamar de verdad.
+ * La **identidad del bypass de desarrollo** (`Dev (bypass)` / `dev@local`) no es
+ * nadie —en local es la sesión de todo el mundo— y se estaba imprimiendo en la
+ * portada y en el cierre. Ahí se firma entero con los datos de la empresa, que
+ * es lo que un cliente puede llamar de verdad.
  */
-async function comercialDe(ctx: { email: string; nombre: string }): Promise<{
-  nombre: string | null; email: string | null; tel: string | null
-}> {
-  const [tel, nombreProv, emailProv] = await Promise.all([
-    leerSetting(CLAVES_PROVEEDOR.telefono, ''),
-    leerSetting(CLAVES_PROVEEDOR.nombre, ''),
-    leerSetting(CLAVES_PROVEEDOR.email, ''),
-  ])
-  const esDev = isAuthBypassed() && ctx.email === DEV_ADMIN.email
-  const limpiar = (s: string) => s.trim() || null
-  return {
-    nombre: esDev ? limpiar(nombreProv) : limpiar(ctx.nombre),
-    email:  esDev ? limpiar(emailProv)  : limpiar(ctx.email),
-    tel:    limpiar(tel),
+async function comercialDe(db: ReturnType<typeof createAdminClient>, ctx: { email: string; nombre: string }): Promise<Firma> {
+  if (isAuthBypassed() && ctx.email === DEV_ADMIN.email) {
+    const [nombreProv, empresa] = await Promise.all([
+      leerSetting(CLAVES_PROVEEDOR.nombre, ''),
+      contactoEmpresa(),
+    ])
+    return { nombre: nombreProv.trim() || null, email: empresa.email, tel: empresa.tel }
   }
+  return firmaDe(db, ctx.email, ctx.nombre)
+}
+
+/** El equipo, para el selector «Quién la presenta» del editor. */
+export async function listarFirmantesPropuesta(): Promise<Firmante[]> {
+  await requirePermiso('propuestas')
+  return listarFirmantes(createAdminClient())
 }
 
 export async function crearPropuesta(
@@ -276,7 +278,7 @@ export async function crearPropuesta(
     clientId      = clientId ?? pre.client_id ?? null
   }
 
-  const firma = await comercialDe(ctx)
+  const firma = await comercialDe(db, ctx)
 
   const { data, error } = await db.from('propuestas').insert({
     diagnostico_id:   diagnosticoId,

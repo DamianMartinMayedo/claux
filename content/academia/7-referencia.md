@@ -147,6 +147,8 @@ como para acabar diciendo una por otra delante de quien no debe.
 | **Vendedor** | La **cuenta** con la que se entra a vender, sea del equipo o de un partner. Lo que ve del panel son sus secciones; lo que ve de este manual lo decide su capa. Un partner que solo lee es un vendedor sin ninguna sección | Con partner: partner es quién es, vendedor es qué cuenta tiene |
 | **Capa** | Con qué ojos se lee este manual: interna, vendedor o cliente. Cada apartado declara para quién es, y la capa deja pasar unos y no otros | Con permiso: la capa filtra el manual, no el portal |
 | **Nivel** | El tamaño contratado del cliente. Decide el precio de cada módulo **y** cuánto le cabe dentro | Con módulo: el módulo es qué tiene, el nivel es cuánto |
+| **Propuesta** | La **presentación** de un interesado, en un enlace propio: qué entendimos de su negocio, qué módulos le proponemos y qué cuesta. Se enseña en la visita y se le deja | Con presupuesto: la propuesta convence, el presupuesto cifra. Y con «la propuesta de valor», que es la frase con la que se explica CLAUX |
+| **Presupuesto** | El **documento con los números**: las horas de la puesta en marcha y la cuota mensual. Es lo que se aprueba, y de él sale el alta | Con propuesta: se le puede presentar una propuesta sin haberle cifrado nada todavía |
 
 ---
 
@@ -179,6 +181,11 @@ Cuando una funcionalidad cambia lo que se puede prometer, lo que cambia es la fi
 Por si alguien vuelve al manual después de un tiempo, lo reciente que **cambia una conversación de
 venta o de soporte**:
 
+- **Cada interesado tiene su propia presentación, en un enlace.** Se acabó el PDF de plantilla con
+  el nombre cambiado: la propuesta se arma con lo que él contó, se le manda por WhatsApp, se sabe si
+  la abrió y él marca ahí los módulos que quiere. Los precios no van copiados dentro —se leen del
+  presupuesto y del catálogo—, así que una corrección actualiza lo que el cliente ya tiene abierto.
+  Cambia la visita entera; está en la Parte III, §2.3 y §7.
 - **El precio y el tamaño se contratan juntos: hay tres niveles.** Antes había dos tarifas que eran
   el mismo producto a distinto precio; ahora Inicial, Empresa y Pro se diferencian en las dos cosas
   que importan —**cuánto cuesta cada módulo** y **cuánto cabe dentro**—. Cambia el orden de la

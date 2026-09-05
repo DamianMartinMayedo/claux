@@ -28,11 +28,13 @@ import { guardarSeleccionBorrador } from '@/app/actions/propuesta-seleccion'
 // con token, la ruta pública; sin él (la vista previa del comercial), la acción
 // con permiso. La cuota se recalcula en el servidor en las dos.
 //
-// Y NO ABRE NADA MÁS. Guardar la selección es todo lo que hace: el aviso le
-// llega al comercial por la bandeja, que es por donde se atiende. Sacar al
-// cliente a WhatsApp con un mensaje escrito por nosotros era meterle en la mano
-// un canal que quizá no quiere usar, y encima delante del comercial en la
-// reunión. Si falla, se dice y se reintenta —callarlo pierde la selección—.
+// Y NO ABRE NADA MÁS. Guardar la selección es todo lo que hace: lo marcado se
+// ve en la columna «Qué marcó» del listado de propuestas, y de ahí sale el
+// presupuesto. No sale ningún aviso —hay que ir a mirar, y así está dicho en el
+// manual—. Sacar al cliente a WhatsApp con un mensaje escrito por nosotros era
+// meterle en la mano un canal que quizá no quiere usar, y encima delante del
+// comercial en la reunión. Si falla, se dice y se reintenta —callarlo pierde la
+// selección—.
 
 export default function Configurador({
   opciones, moneda, cuotaPropuesta, diasPrueba, descuentoAnualPct,
