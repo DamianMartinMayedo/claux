@@ -1,4 +1,8 @@
-// ── Token del enlace público del deck — fuente única de formato ──────────────
+// ── Token de enlace público — fuente única de formato ────────────────────────
+//
+// Lo comparten el dossier (`/d/<token>`) y la propuesta comercial (`/p/<token>`):
+// el mecanismo es el mismo y el formato tiene que ser uno solo, o vuelven los
+// tres regex sueltos que había antes de centralizarlo aquí.
 //
 // El token ES la credencial (capability URL): la des-adivinabilidad la da la
 // ENTROPÍA, no el formato — por eso el guard solo evita escanear basura (no-match
@@ -7,15 +11,14 @@
 // Dos formatos conviven a propósito:
 //   · Histórico: 32 hex (uuid v4 sin guiones) — los enlaces ya repartidos.
 //   · Nuevo:     16 base62 (~95 bits) — más corto y legible, igual de inadivinable.
-// El validador acepta AMBOS para no romper ningún enlace vivo. Centralizado aquí
-// para que no vuelva a haber tres regex sueltos que haya que mantener en sync.
+// El validador acepta AMBOS para no romper ningún enlace vivo.
 
 /** Los dos formatos emitidos: el histórico de 32 hex y el nuevo base62 de 16. */
 export const TOKEN_PAT = '(?:[0-9a-f]{32}|[0-9A-Za-z]{16})'
 
 const TOKEN_RE = new RegExp(`^${TOKEN_PAT}$`)
 
-/** ¿Tiene forma de token del deck? Acepta el hex de 32 y el base62 nuevo. */
+/** ¿Tiene forma de token público? Acepta el hex de 32 y el base62 nuevo. */
 export function esTokenValido(token: string): boolean {
   return TOKEN_RE.test(token)
 }

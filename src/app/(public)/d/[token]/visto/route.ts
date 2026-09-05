@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { esTokenValido } from '@/lib/dossier/token'
+import { esTokenValido } from '@/lib/publico/token'
 
 // ── Beacon de apertura del deck — POST /d/<token>/visto ──────────────────────
 //
