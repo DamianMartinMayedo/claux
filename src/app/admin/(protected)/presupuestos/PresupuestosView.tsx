@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Eye, FileText, Pencil, Plus, Trash2, UserPlus, X, Download } from 'lucide-react'
+import { Check, Eye, FileText, Pencil, Plus, Presentation, Trash2, UserPlus, X, Download } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import FormHelp from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import VentasTabs from '@/components/admin/VentasTabs'
-import { useToast, toastTono } from '@/app/contexts/ToastContext'
+import { useToast, toastLoading, toastTono } from '@/app/contexts/ToastContext'
 import ClienteFormModal, {
   type ModuloCatalogo,
   type PlantillaSector,
@@ -28,6 +28,7 @@ import {
   eliminarPresupuesto,
   type PresupuestoRow,
 } from '@/app/actions/presupuestos'
+import { crearPropuesta } from '@/app/actions/propuestas'
 
 type DesgloseFase = { fase: string; horas: number; subtotal: number; detalle?: string }
 type Revision = { linea: string; motivo: string }
@@ -94,6 +95,7 @@ export default function PresupuestosView({
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
   const [filtro, setFiltro] = useState<Filtro>('todos')
+  const puedePropuestas = rol === 'super_admin' || permisos.includes('propuestas')
 
   /**
    * El presupuesto en PDF, con la misma plantilla de marca que la factura.
@@ -204,6 +206,17 @@ export default function PresupuestosView({
     if (r.aviso) toastTono(r.avisoTono ?? 'info', r.aviso)
     if (detalle?.id === id) setDetalle({ ...detalle, estado: aprobado ? 'aprobado' : 'guardado' })
     router.refresh()
+  }
+
+  // La propuesta hereda del presupuesto el nivel, la moneda y los módulos: son
+  // decisiones ya pactadas aquí, y volver a teclearlas es cómo la diapositiva 13
+  // acabó contradiciendo a la 14. Lo hace la acción; esto solo abre el editor.
+  async function nuevaPropuesta(p: PresupuestoRow) {
+    const ld = toastLoading('Creando…')
+    const r = await crearPropuesta({ nombreNegocio: p.nombre_negocio, presupuestoId: p.id })
+    await ld.dismiss()
+    if (!r.ok || !r.id) { toastError(r.error ?? 'No se pudo crear la propuesta'); return }
+    router.push(`/admin/ventas/propuestas/${r.id}`)
   }
 
   // Ir a la ficha del cliente NAVEGA fuera de aquí: las horas escritas y sin guardar
@@ -329,6 +342,11 @@ export default function PresupuestosView({
                         <button className="row-actions-item" onClick={() => abrir(p.id)}>
                           <Eye size={15} strokeWidth={2} /> Ver detalles
                         </button>
+                        {puedePropuestas && (
+                          <button className="row-actions-item" onClick={() => nuevaPropuesta(p)}>
+                            <Presentation size={15} strokeWidth={2} /> Crear propuesta
+                          </button>
+                        )}
                         {/* Editar solo en borrador: aprobado/instalado son foto congelada. */}
                         {p.estado === 'guardado' && (
                           <Link href={`/admin/presupuestos/${p.id}/editar`} className="row-actions-item">

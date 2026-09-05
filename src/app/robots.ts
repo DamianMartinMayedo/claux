@@ -12,8 +12,9 @@ import { SITIO } from '@/lib/publico/sitio'
  *  · `/academia` y `/partners` son el manual completo y su puerta: llevan
  *    márgenes, costes y trabajo interno, y ya se cierran también con `noindex`
  *    en su layout (esto es el segundo candado, no el único);
- *  · `/d/` son los dossiers por token — el enlace ES la llave, así que rastrear
- *    uno lo publicaría;
+ *  · `/d/` son los dossiers por token y `/p/` las propuestas comerciales — el
+ *    enlace ES la llave, así que rastrear uno lo publicaría, y en las propuestas
+ *    además hay precios negociados;
  *  · `/api` no son páginas.
  *
  * Las páginas públicas de cada NEGOCIO (`/<negocio>/menu`, `/carta`,
@@ -25,7 +26,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/admin', '/portal', '/academia', '/partners', '/d/', '/api'],
+      disallow: ['/admin', '/portal', '/academia', '/partners', '/d/', '/p/', '/api'],
     },
     sitemap: `${SITIO}/sitemap.xml`,
   }

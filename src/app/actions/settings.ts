@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logActividad } from '@/lib/audit'
 import { leerSetting } from '@/lib/settings'
+import { refrescarTodasLasPropuestas } from '@/lib/propuesta/refrescar'
 
 /** Lectura de un ajuste desde el ADMIN (mantiene el guard como defensa en
  *  profundidad). El portal NO debe usar esta acción — usa `leerSetting` de
@@ -24,11 +25,14 @@ export async function guardarSetting(key: string, value: string) {
   if (error) return { ok: false as const, error: error.message }
 
   const { data: { user } } = await supabase.auth.getUser()
+  // El valor se recorta en el log: los textos de la propuesta son párrafos y un
+  // JSON de tarjetas entero convierte la actividad en un volcado ilegible.
+  const resumen = value.length > 120 ? `${value.slice(0, 120)}…` : value
   await logActividad(supabase, {
     user_email:  user?.email ?? 'sistema',
     entity:      'sistema',
     action:      'configuracion',
-    description: `Actualizó configuración: ${key} = ${value}`,
+    description: `Actualizó configuración: ${key} = ${resumen}`,
   })
 
   revalidatePath('/admin/notificaciones')
@@ -37,5 +41,9 @@ export async function guardarSetting(key: string, value: string) {
   // cambio tardaría hasta una hora en verse. Con 'layout' caen las tres rutas
   // de /legal/[slug] de una vez.
   if (key.startsWith('legal_')) revalidatePath('/legal', 'layout')
+  // Los textos fijos de la propuesta salen en TODAS: la propuesta no los guarda,
+  // los lee de aquí al renderizar. Sin esto, cambiar «cómo empezamos» tardaría
+  // hasta una hora en verse en los enlaces que ya están en manos de un cliente.
+  if (key.startsWith('propuesta_')) await refrescarTodasLasPropuestas(supabase)
   return { ok: true as const }
 }

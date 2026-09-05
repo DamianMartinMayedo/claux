@@ -1,0 +1,516 @@
+/* ── Propuesta comercial pública — /p/<token> ──
+   Hoja propia y autocontenida, mismo criterio que `dossier-publica.css` y
+   `catalogo-publica.css`: sin el design system, sin tokens del portal, sin
+   librerías. Presupuesto < 100 KB (skill de UI §6 / CONTEXTO §3).
+
+   Hermana del deck del dossier en el MOTOR —slide a viewport, scroll-snap, rail
+   de puntos, bloque de impresión— y deliberadamente distinta en el diseño, con
+   prefijo `.pp-*`. El dossier es del cliente: viste su color (`paleta.ts`) y se
+   lee como una presentación —color pleno alternando, rejilla de fondo—. Esto es
+   NUESTRO documento comercial, y se lee como un documento: membrete con el
+   logotipo y el folio en cada hoja, papel crema de principio a fin, y el color
+   pleno reservado a las dos tapas (portada y cierre).
+
+   Animaciones OPT-IN bajo `.pp-anim` (lo añade PropuestaReveal solo si puede
+   animar): sin él, todo se ve entero y quieto (3G, JS off, reduced-motion). */
+
+.pp-page {
+  --pp-verde: #0b3b36;
+  --pp-teal: #007571;
+  --pp-teal-claro: #00afaa;
+  --pp-crema: #fdf8ee;
+  --pp-crema-borde: #e6dcc4;
+  --pp-tinta: #14171a;
+  --pp-tinta-suave: #5c5b52;
+  --pp-alerta: #b4443a;
+
+  /* Las unidades de ventana, con nombre. En pantalla valen lo de siempre; en
+     papel el bloque de impresión las cambia por el 1 % de la página REAL. Se
+     escribe `calc(4 * var(--pp-vw))` y no `4vw` porque en impresión «la ventana»
+     no es una medida del CSS: depende del navegador, del papel del diálogo y de
+     la escala, y con ella se colaban las reglas de móvil en el PDF. */
+  --pp-vw: 1vw;
+  --pp-vh: 1vh;
+
+  /* El marco de la hoja y el alto que se reserva el membrete. Con nombre porque
+     el bloque de impresión recalcula el vertical: en papel el margen se mide en
+     milímetros y el de pantalla se pasaba de largo. */
+  --pp-marco-x: clamp(1.25rem, calc(5 * var(--pp-vw)), 4rem);
+  --pp-marco-y: clamp(2.5rem, calc(7 * var(--pp-vw)), 5.5rem);
+  --pp-membrete: clamp(1.5rem, calc(3.5 * var(--pp-vh)), 2.2rem);
+
+  --pp-font: var(--fuente-body, system-ui), -apple-system, "Segoe UI", sans-serif;
+  --pp-font-display: var(--fuente-display, system-ui), -apple-system, "Segoe UI", sans-serif;
+
+  height: 100dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  color-scheme: only light;
+  font-family: var(--pp-font);
+  background: var(--pp-crema);
+  color: var(--pp-tinta);
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+}
+
+/* ── Slide ── */
+.pp-slide {
+  position: relative;
+  min-height: 100dvh;
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pp-marco-y) var(--pp-marco-x);
+  /* Arriba, además, el hueco del membrete: la banda va posicionada sobre el
+     margen y sin esto el contenido se le metería debajo. */
+  padding-top: calc(var(--pp-marco-y) + var(--pp-membrete));
+}
+/* La portada no lleva membrete —ya lleva la marca grande—, así que tampoco
+   reserva su hueco. */
+.pp-slide-portada { padding-top: var(--pp-marco-y); }
+/* Dos fondos, no tres: crema para el documento y verde para las tapas. `--acc`
+   es el color de acento y `--pp-linea` el de los filetes (membrete, portada),
+   que son el recurso que aquí sustituye al cambio de color de fondo. */
+.pp-slide[data-bg="crema"] { --acc: var(--pp-teal);       --pp-linea: var(--pp-crema-borde);      background: var(--pp-crema); color: var(--pp-tinta); }
+.pp-slide[data-bg="verde"] { --acc: var(--pp-teal-claro); --pp-linea: rgba(255, 255, 255, 0.22); background: var(--pp-verde);  color: #fff; }
+
+/* Sin rejilla de fondo: era el gesto del deck del dossier, y es lo que hacía que
+   las dos se leyeran como la misma cosa con otra paleta. El papel va limpio. */
+
+.pp-slide-inner {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 1100px;
+}
+
+/* ── Membrete ──
+   La banda de cabecera de cada hoja: logotipo, de qué documento es y por dónde
+   va. El folio no está en el margen izquierdo, que sería su sitio en un libro,
+   porque en papel ese margen no existe: la columna de contenido mide 1100 px y
+   la página impresa 297 mm, o sea casi lo mismo. En la banda es además donde lo
+   busca quien dice «en la página nueve pone…».
+
+   El dibujo del logotipo vive una sola vez, aquí escondido; ver `Marca.tsx`. */
+.pp-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.pp-membrete {
+  position: absolute; z-index: 2;
+  top: calc(var(--pp-marco-y) * 0.55); left: var(--pp-marco-x); right: var(--pp-marco-x);
+  display: flex; align-items: center; gap: clamp(0.6rem, calc(1.5 * var(--pp-vw)), 1rem);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--pp-linea);
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+}
+/* Se mide por el ALTO —es lo que fija el ritmo de la banda— y el ancho lo saca
+   el navegador de la proporción del `viewBox`. */
+.pp-membrete-logo { height: 0.95rem; width: auto; flex-shrink: 0; fill: currentColor; color: var(--acc); }
+.pp-membrete-doc { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.62; }
+.pp-membrete-folio { flex-shrink: 0; font-variant-numeric: tabular-nums; opacity: 0.62; }
+
+/* ── Titulares ── */
+/* Sin el guion delante: es el mismo gesto que el kicker del dossier, y de los
+   dos calcados era el que más se veía. Queda la etiqueta sola. */
+.pp-kicker {
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--acc); margin: 0 0 clamp(0.75rem, calc(2 * var(--pp-vh)), 1.25rem);
+}
+
+.pp-titulo {
+  font-family: var(--pp-font-display);
+  font-size: clamp(1.7rem, calc(4 * var(--pp-vw)), 3rem); font-weight: 800; letter-spacing: -0.025em;
+  line-height: 1.08; text-wrap: balance; margin: 0 0 clamp(1rem, calc(3 * var(--pp-vh)), 2rem);
+}
+
+/* ── 1 · Portada ──
+   A la izquierda y con el logotipo de verdad. Antes iba centrada y la marca era
+   la palabra «CLAUX» escrita con la fuente de titulares: nuestro propio
+   documento comercial era el único sitio donde no aparecía nuestro logotipo. */
+.pp-portada-logo {
+  display: block; height: clamp(2.1rem, calc(5 * var(--pp-vw)), 3.4rem); width: auto;
+  fill: currentColor; color: var(--acc);
+  margin-bottom: clamp(1.5rem, calc(5 * var(--pp-vh)), 3rem);
+}
+.pp-portada .pp-titulo { font-size: clamp(2.1rem, calc(6 * var(--pp-vw)), 4.2rem); margin-bottom: clamp(1.4rem, calc(4 * var(--pp-vh)), 2.4rem); }
+/* Cada dato con su rótulo y bajo un filete, como la ficha de la primera página
+   de un documento; no una línea de pie centrada. */
+.pp-portada-ficha {
+  margin: 0; display: grid; grid-template-columns: auto 1fr;
+  gap: 0.25rem clamp(1rem, calc(2.5 * var(--pp-vw)), 2rem); align-items: baseline;
+  padding-top: clamp(0.9rem, calc(2.4 * var(--pp-vh)), 1.4rem);
+  border-top: 1px solid var(--pp-linea);
+}
+.pp-portada-ficha dt { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.6; }
+.pp-portada-ficha dd { margin: 0; font-size: clamp(0.95rem, calc(1.2 * var(--pp-vw)), 1.1rem); font-weight: 700; }
+
+/* ── 2 · Lo que entendimos: viñetas numeradas ── */
+.pp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(0.85rem, calc(2.2 * var(--pp-vh)), 1.4rem); }
+.pp-lista li {
+  display: flex; gap: clamp(0.85rem, calc(2 * var(--pp-vw)), 1.4rem); align-items: baseline;
+  font-size: clamp(1rem, calc(1.5 * var(--pp-vw)), 1.35rem); line-height: 1.5;
+}
+.pp-lista li::before {
+  content: counter(pp-item, decimal-leading-zero); counter-increment: pp-item;
+  font-family: var(--pp-font-display); font-size: 0.92em; font-weight: 800;
+  color: var(--acc); opacity: 0.55; flex-shrink: 0;
+}
+.pp-lista { counter-reset: pp-item; }
+
+/* ── 3 y 15 · Tarjetas ── */
+.pp-tarjetas {
+  display: grid; gap: clamp(0.7rem, calc(1.6 * var(--pp-vw)), 1.1rem);
+  grid-template-columns: repeat(auto-fit, minmax(clamp(170px, calc(18 * var(--pp-vw)), 230px), 1fr));
+}
+.pp-tarjeta {
+  padding: clamp(0.9rem, calc(2 * var(--pp-vw)), 1.4rem);
+  border: 1px solid; border-radius: 14px;
+  border-color: var(--pp-crema-borde);
+  background: rgba(255, 255, 255, 0.55);
+}
+.pp-slide[data-bg="verde"] .pp-tarjeta { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); }
+.pp-tarjeta h3 {
+  font-family: var(--pp-font-display); font-size: clamp(0.98rem, calc(1.3 * var(--pp-vw)), 1.18rem); font-weight: 700;
+  margin: 0 0 0.45rem; color: var(--acc);
+}
+.pp-tarjeta p { margin: 0; font-size: clamp(0.86rem, calc(1.05 * var(--pp-vw)), 1rem); line-height: 1.55; opacity: 0.88; }
+
+/* ── 4 · El problema: dos columnas ── */
+.pp-columnas { display: grid; gap: clamp(0.9rem, calc(2.5 * var(--pp-vw)), 2rem); grid-template-columns: 1fr; }
+@media (min-width: 720px) { .pp-columnas { grid-template-columns: 1fr 1fr; } }
+.pp-columna { padding: clamp(1rem, calc(2.2 * var(--pp-vw)), 1.6rem); border-radius: 16px; border: 1px solid; }
+.pp-columna h3 {
+  font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  margin: 0 0 clamp(0.7rem, calc(1.8 * var(--pp-vh)), 1.1rem);
+}
+.pp-columna ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.pp-columna li { font-size: clamp(0.92rem, calc(1.2 * var(--pp-vw)), 1.08rem); line-height: 1.5; padding-left: 1.35rem; position: relative; }
+.pp-columna li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 9px; height: 2px; background: currentColor; opacity: 0.5; }
+.pp-columna-hoy   { border-color: rgba(180, 68, 58, 0.35); background: rgba(180, 68, 58, 0.06); }
+.pp-columna-hoy h3 { color: var(--pp-alerta); }
+.pp-columna-claux { border-color: rgba(0, 117, 113, 0.35); background: rgba(0, 117, 113, 0.07); }
+.pp-columna-claux h3 { color: var(--acc); }
+.pp-slide[data-bg="verde"] .pp-columna-claux { border-color: rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.07); }
+
+/* ── 5 · Pensado para tu negocio ── */
+.pp-modulos { display: grid; gap: clamp(0.8rem, calc(1.8 * var(--pp-vw)), 1.3rem); grid-template-columns: 1fr; }
+@media (min-width: 800px) { .pp-modulos { grid-template-columns: repeat(3, 1fr); } }
+.pp-modulo { padding: clamp(1rem, calc(2.2 * var(--pp-vw)), 1.6rem); border-radius: 16px; border: 1px solid var(--pp-crema-borde); background: #fff; }
+.pp-slide[data-bg="verde"] .pp-modulo { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); }
+.pp-modulo h3 {
+  font-family: var(--pp-font-display); font-size: clamp(1.05rem, calc(1.5 * var(--pp-vw)), 1.35rem); font-weight: 700;
+  margin: 0 0 0.6rem; color: var(--acc);
+}
+.pp-modulo p { margin: 0; font-size: clamp(0.9rem, calc(1.1 * var(--pp-vw)), 1.02rem); line-height: 1.6; opacity: 0.9; }
+.pp-paginacion { margin-top: clamp(0.9rem, calc(2.4 * var(--pp-vh)), 1.6rem); font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.5; }
+
+/* ── 6-11 · Capturas ──
+   El marco es un borde y un color plano, nunca una sombra ni un filtro: sobre una
+   imagen rasterizada, Chrome la reencoda a JPEG con halos al imprimir. */
+.pp-captura { max-width: 1160px; }
+.pp-captura-marco {
+  border: 1px solid var(--pp-crema-borde); border-radius: 14px; overflow: hidden; background: #fff;
+}
+.pp-slide[data-bg="verde"] .pp-captura-marco { border-color: rgba(255, 255, 255, 0.22); }
+.pp-captura-barra {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0.5rem 0.75rem; background: var(--pp-crema); border-bottom: 1px solid var(--pp-crema-borde);
+}
+.pp-captura-barra span { width: 9px; height: 9px; border-radius: 50%; background: var(--pp-crema-borde); }
+.pp-captura-marco img { display: block; width: 100%; height: auto; }
+.pp-captura-pie { margin: clamp(0.7rem, calc(1.8 * var(--pp-vh)), 1.1rem) 0 0; font-size: 0.95rem; opacity: 0.75; }
+
+/* ── 12 · Precios / configurador ── */
+.pp-precios { display: grid; gap: clamp(0.9rem, calc(2.4 * var(--pp-vh)), 1.6rem); }
+.pp-tabla { width: 100%; border-collapse: collapse; font-size: clamp(0.85rem, calc(1.05 * var(--pp-vw)), 1rem); }
+.pp-tabla th, .pp-tabla td { padding: 0.62rem 0.7rem; text-align: left; border-bottom: 1px solid var(--pp-crema-borde); }
+.pp-slide[data-bg="verde"] .pp-tabla th, .pp-slide[data-bg="verde"] .pp-tabla td { border-bottom-color: rgba(255, 255, 255, 0.16); }
+.pp-tabla th { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.6; }
+.pp-tabla .pp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* El catálogo, en fichas. Era una tabla de once filas con su descripción: había
+   que leerla entera para encontrar un módulo, no cabía en el 16:9 —scrolleaba
+   por dentro— y en el PDF se llevaba página y media, la segunda casi en blanco.
+   En rejilla el catálogo entero se ve de golpe, la marcada se distingue desde el
+   otro lado de la mesa y cabe en una página. */
+.pp-catalogo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: clamp(0.45rem, calc(1 * var(--pp-vw)), 0.8rem);
+}
+/* Es un botón: marcar un módulo es pulsar la ficha entera, no acertarle a una
+   casilla de 18 px con el móvil en la mano. */
+.pp-modulo-op {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1rem 0.55rem;
+  align-content: start;
+  text-align: left;
+  padding: clamp(0.55rem, calc(1.1 * var(--pp-vw)), 0.9rem);
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid var(--pp-crema-borde);
+  border-radius: 0.7rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.pp-slide[data-bg="verde"] .pp-modulo-op { border-color: rgba(255, 255, 255, 0.18); }
+.pp-modulo-op:hover { border-color: var(--acc); }
+.pp-modulo-op[data-on="si"] { border-color: var(--acc); background: rgba(0, 117, 113, 0.07); }
+.pp-slide[data-bg="verde"] .pp-modulo-op[data-on="si"] { background: rgba(255, 255, 255, 0.08); }
+/* La marca la dibujamos nosotros y no es una casilla del sistema: tiene que
+   verse igual en el navegador y en el PDF, y ahí no hay `input` que valga. */
+.pp-modulo-marca {
+  grid-column: 1; grid-row: 1 / span 2;
+  width: 14px; height: 14px; margin-top: 0.2rem;
+  border: 1.5px solid currentColor; border-radius: 4px; opacity: 0.4;
+}
+.pp-modulo-op[data-on="si"] .pp-modulo-marca { opacity: 1; border-color: var(--acc); background: var(--acc); }
+.pp-modulo-nombre { grid-column: 2; font-weight: 700; line-height: 1.25; }
+.pp-modulo-precio {
+  grid-column: 2;
+  font-family: var(--pp-font-display); font-weight: 800;
+  font-size: clamp(1rem, calc(1.5 * var(--pp-vw)), 1.3rem);
+  color: var(--acc); font-variant-numeric: tabular-nums;
+}
+.pp-modulo-precio small { font-size: 0.55em; font-weight: 600; opacity: 0.7; margin-left: 0.15em; }
+.pp-modulo-desc {
+  grid-column: 2;
+  margin-top: 0.15rem;
+  font-size: 0.85rem; line-height: 1.35; opacity: 0.68;
+}
+
+/* La cifra y el botón, en la misma línea. */
+.pp-pie-precios {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: clamp(0.8rem, calc(2 * var(--pp-vw)), 1.6rem);
+}
+.pp-pie-precios .pp-resumen { flex: 1 1 auto; }
+.pp-pie-precios .pp-cta { margin-top: 0; }
+
+.pp-resumen {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: clamp(0.6rem, calc(2 * var(--pp-vw)), 1.6rem);
+  padding: clamp(0.85rem, calc(2 * var(--pp-vw)), 1.3rem); border-radius: 14px;
+  border: 1px solid var(--pp-crema-borde); background: rgba(255, 255, 255, 0.6);
+}
+.pp-slide[data-bg="verde"] .pp-resumen { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.07); }
+.pp-resumen-bloque { display: grid; gap: 0.15rem; }
+.pp-resumen-label { font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.6; }
+.pp-resumen-cifra { font-family: var(--pp-font-display); font-size: clamp(1.4rem, calc(2.6 * var(--pp-vw)), 2.1rem); font-weight: 800; color: var(--acc); }
+.pp-resumen-cifra small { font-size: 0.46em; font-weight: 600; opacity: 0.7; margin-left: 0.2em; }
+.pp-nota { margin: 0; font-size: 0.88rem; line-height: 1.5; opacity: 0.72; }
+
+/* ── 13 · Tu propuesta ── */
+.pp-propuesta { display: grid; gap: clamp(0.9rem, calc(2.4 * var(--pp-vh)), 1.6rem); grid-template-columns: 1fr; }
+@media (min-width: 860px) { .pp-propuesta { grid-template-columns: 1.15fr 1fr; } }
+.pp-bloque { padding: clamp(0.9rem, calc(2 * var(--pp-vw)), 1.4rem); border-radius: 16px; border: 1px solid var(--pp-crema-borde); background: rgba(255, 255, 255, 0.6); }
+.pp-slide[data-bg="verde"] .pp-bloque { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); }
+.pp-bloque h3 { font-size: 0.76rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; opacity: 0.6; margin: 0 0 0.8rem; }
+.pp-total { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding-top: 0.7rem; margin-top: 0.3rem; border-top: 2px solid var(--acc); }
+.pp-total-label { font-weight: 700; }
+.pp-total-cifra { font-family: var(--pp-font-display); font-size: clamp(1.3rem, calc(2.2 * var(--pp-vw)), 1.9rem); font-weight: 800; color: var(--acc); font-variant-numeric: tabular-nums; }
+.pp-anual { margin: 0.7rem 0 0; font-size: 0.9rem; line-height: 1.5; opacity: 0.78; }
+
+/* ── 14 · Cómo se configura ── */
+.pp-fases { display: grid; gap: clamp(0.7rem, calc(1.6 * var(--pp-vw)), 1.1rem); grid-template-columns: 1fr; }
+@media (min-width: 760px) { .pp-fases { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); } }
+.pp-fase { padding: clamp(0.85rem, calc(1.8 * var(--pp-vw)), 1.25rem); border-radius: 14px; border: 1px solid var(--pp-crema-borde); background: rgba(255, 255, 255, 0.55); }
+.pp-slide[data-bg="verde"] .pp-fase { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); }
+/* El número va a color pleno: con `opacity: 0.45` se leía como marca de agua y
+   en el PDF, sobre crema, casi desaparecía. Es el ordinal del paso, no adorno. */
+.pp-fase-num { font-family: var(--pp-font-display); font-size: 1.6rem; font-weight: 800; color: var(--acc); line-height: 1; }
+.pp-fase-nombre { display: block; margin-top: 0.5rem; font-weight: 700; font-size: clamp(0.92rem, calc(1.1 * var(--pp-vw)), 1.05rem); }
+.pp-fase-horas { display: block; margin-top: 0.25rem; font-size: 0.85rem; opacity: 0.65; }
+
+/* ── 16 · Empecemos ── */
+.pp-pasos { display: grid; gap: clamp(0.7rem, calc(1.6 * var(--pp-vw)), 1.1rem); grid-template-columns: 1fr; counter-reset: pp-paso; }
+@media (min-width: 760px) { .pp-pasos { grid-template-columns: repeat(4, 1fr); } }
+.pp-paso { padding: clamp(0.85rem, calc(1.8 * var(--pp-vw)), 1.25rem); border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); }
+.pp-paso::before {
+  content: counter(pp-paso); counter-increment: pp-paso;
+  font-family: var(--pp-font-display); font-size: 1.5rem; font-weight: 800; color: var(--acc);
+}
+.pp-paso h3 { font-size: clamp(0.95rem, calc(1.2 * var(--pp-vw)), 1.1rem); font-weight: 700; margin: 0.4rem 0 0.35rem; }
+.pp-paso p { margin: 0; font-size: 0.9rem; line-height: 1.5; opacity: 0.82; }
+.pp-contacto {
+  margin-top: clamp(1.2rem, calc(3.5 * var(--pp-vh)), 2.2rem); display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem;
+  align-items: baseline; font-size: clamp(0.95rem, calc(1.2 * var(--pp-vw)), 1.1rem);
+}
+.pp-contacto strong { font-weight: 700; }
+.pp-contacto a { color: inherit; }
+/* El CTA es un botón, no una franja: `align-self: start` es lo que le faltaba
+   —dentro de un grid de una columna se estiraba de lado a lado y ocupaba el
+   ancho de la diapositiva—, y el texto va CLARO sobre el verde de marca: en
+   turquesa con texto oscuro parecía un aviso, no algo que se pulsa. */
+.pp-cta {
+  align-self: start; display: inline-flex; align-items: center; gap: 0.5rem;
+  margin-top: clamp(0.9rem, calc(2.4 * var(--pp-vh)), 1.5rem);
+  padding: 0.62rem 1.15rem; border: 0; border-radius: 999px; cursor: pointer;
+  font-family: inherit; font-size: 0.9rem; font-weight: 700; line-height: 1.2;
+  background: var(--pp-teal); color: #fff;
+  transition: filter 0.2s;
+}
+.pp-cta:hover { filter: brightness(1.12); }
+.pp-cta[disabled] { opacity: 0.6; cursor: default; }
+/* Anotado: ya está hecho, así que deja de invitar. Verde de confirmación y el
+   mismo tamaño, para que la diapositiva no dé un salto al pulsar. */
+.pp-cta[data-hecho="si"] { background: rgba(255, 255, 255, 0.14); color: #fff; opacity: 1; }
+.pp-slide[data-bg="crema"] .pp-cta[data-hecho="si"] { background: rgba(11, 59, 54, 0.1); color: var(--pp-teal); }
+
+/* ── Cromo: rail, botón de PDF, distintivo de borrador ── */
+.pp-nav {
+  position: fixed; right: clamp(0.5rem, calc(2 * var(--pp-vw)), 1.25rem); top: 50%; transform: translateY(-50%);
+  z-index: 20; display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.55rem 0.45rem; border-radius: 999px;
+  background: rgba(11, 59, 54, 0.32);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.pp-nav-dot { display: flex; align-items: center; justify-content: center; width: 22px; height: 20px; }
+.pp-nav-dot span { display: block; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: 0.45; transition: opacity 0.25s, transform 0.25s; }
+.pp-nav-dot:hover span { opacity: 0.85; }
+.pp-nav-dot.active span { opacity: 1; transform: scale(1.5); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
+/* En móvil el rail (fixed) se solapa con el final de las líneas y parecen
+   cortadas. Se oculta: ahí se navega con el dedo. Los puntos siguen en el DOM
+   —display:none no los quita— así que el JS no falla. */
+/* `screen and`: en papel no hay ventana que medir, y sin acotarlo esta regla se
+   colaba en el PDF —contenido pegado arriba y media página en blanco debajo—. */
+@media screen and (max-width: 768px) {
+  .pp-nav { display: none; }
+  .pp-slide:not(.pp-slide-portada) { align-items: flex-start; padding-top: calc(10 * var(--pp-vh) + var(--pp-membrete)); }
+}
+
+.pp-print-btn {
+  position: fixed; right: clamp(0.5rem, calc(2 * var(--pp-vw)), 1.25rem); bottom: clamp(0.75rem, calc(3 * var(--pp-vh)), 1.5rem);
+  z-index: 20; display: none; align-items: center; gap: 0.45rem;
+  padding: 0.6rem 0.9rem; border: 0; border-radius: 999px; cursor: pointer;
+  font-family: inherit; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #fff; background: rgba(11, 59, 54, 0.38);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: background 0.25s;
+}
+.pp-print-btn:hover { background: rgba(11, 59, 54, 0.62); }
+.pp-print-btn svg { flex-shrink: 0; }
+/* Solo escritorio: en táctil el print del navegador sale roto, y un PDF que
+   decepciona es peor que no ofrecerlo. Se filtra por PUNTERO, no por ancho. */
+@media (hover: hover) and (pointer: fine) { .pp-print-btn { display: inline-flex; } }
+
+.pp-borrador {
+  position: fixed; top: clamp(0.5rem, calc(2 * var(--pp-vw)), 1rem); left: 50%; transform: translateX(-50%);
+  z-index: 30; padding: 0.4rem 0.9rem; border-radius: 999px;
+  background: rgba(11, 59, 54, 0.66);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  color: #fff; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+}
+
+/* ══ Animaciones — OPT-IN bajo .pp-anim ══ */
+.pp-anim .pp-slide .pp-slide-inner { opacity: 0; transform: translateY(26px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.pp-anim .pp-slide.is-visible .pp-slide-inner { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-page { scroll-behavior: auto; }
+  .pp-anim .pp-slide .pp-slide-inner,
+  .pp-anim .pp-slide.is-visible .pp-slide-inner { opacity: 1; transform: none; transition: none; }
+}
+
+/* ══ Impresión / PDF ══
+   El PDF no es un documento aparte: es ESTA página paginada. Se hereda entero del
+   deck del dossier, que ya pagó estas trampas una por una — con una regla nueva,
+   la de las capturas, que el dossier no tiene porque no lleva imágenes. */
+@page { size: 297mm 167mm; margin: 0; }
+
+@media print {
+  /* ⚠️ LA REGLA DE FONDO DE TODO ESTE BLOQUE: en papel no hay ventana.
+     Cuánto mide el «viewport» de impresión no lo fija esta hoja —lo deciden el
+     navegador, el papel del diálogo y la escala—, así que una hoja calibrada en
+     `vw`/`vh` y en media queries de ancho sale distinta en cada máquina. Salía
+     con las reglas de MÓVIL puestas: una columna, contenido pegado arriba y los
+     clamp() en su mínimo, o sea media página en blanco por diapositiva.
+     Aquí se corta esa dependencia: las unidades pasan a ser la página real
+     (1 % de 297×167 mm) y lo que decidía una media query se reafirma a mano. */
+  /* En pantalla el que scrollea es este contenedor; en papel el flujo lo lleva
+     el documento: sin soltarlo, el PDF es una sola página —la primera pantalla—. */
+  .pp-page { --pp-vw: 2.97mm; --pp-vh: 1.67mm; height: auto; overflow: visible; scroll-snap-type: none; }
+
+  /* Con las unidades ya atadas a la página, la raíz solo ajusta la escala del
+     texto: la página impresa es menos lienzo que el escritorio para el que están
+     calibrados los máximos en rem de esta hoja. */
+  html { font-size: 80%; }
+
+  /* Lo que en pantalla decide una media query de ancho, aquí se dice. Sin esto
+     el PDF depende de qué ancho crea el navegador que tiene. */
+  .pp-columnas  { grid-template-columns: 1fr 1fr; }
+  .pp-modulos   { grid-template-columns: repeat(3, 1fr); }
+  .pp-fases,
+  .pp-pasos     { grid-template-columns: repeat(4, 1fr); }
+  .pp-propuesta { grid-template-columns: 1.15fr 1fr; }
+  .pp-tarjetas  { grid-template-columns: repeat(auto-fit, minmax(52mm, 1fr)); }
+
+  /* Una diapositiva, una página. `height` exacto y no `min-height`: con
+     min-height el redondeo de mm→px mete páginas fantasma en blanco. */
+  .pp-slide { height: 167mm; min-height: 0; break-after: page; break-inside: avoid; overflow: hidden; }
+  .pp-slide:last-child { break-after: auto; }
+
+  /* El aire de arriba y abajo, medido en la página y no en la ventana. El máximo
+     en rem de la hoja de pantalla son 18,6 mm por lado: en un escritorio es el
+     margen justo, en una página de 167 mm es el 22 % del papel. Con él, Precios
+     se pasaba nueve milímetros y —como es de las que pueden crecer— arrastraba
+     una página entera en blanco detrás. A las demás no las mueve: van centradas
+     y les sobra sitio, así que el contenido cae exactamente donde caía.
+     Son 9 mm y no 12 porque arriba se suma el membrete (≈5,8 mm en la página):
+     9 + 5,8 arriba y 9 abajo dan los mismos 24 mm de antes, que es la holgura
+     con la que Precios cabe en una sola hoja. */
+  .pp-page { --pp-marco-y: 9mm; }
+
+  /* …salvo las que pueden crecer. Precios lleva TODO el catálogo (once módulos
+     con su descripción) y Tu propuesta las fases, los módulos y el bloque anual:
+     con la altura clavada, lo que sobraba se recortaba y el cliente recibía una
+     tabla sin final. Aquí sí `min-height`, para que una corta no deje media
+     página en blanco, y `break-inside: auto`, que es lo que la deja continuar. */
+  .pp-slide[data-largo="si"] { height: auto; min-height: 167mm; break-inside: auto; overflow: visible; }
+  /* Una fila partida por la mitad es peor que una página más. */
+  .pp-slide[data-largo="si"] tr,
+  .pp-slide[data-largo="si"] .pp-bloque,
+  .pp-slide[data-largo="si"] .pp-resumen { break-inside: avoid; }
+
+  /* ⚠️ REGLA NUEVA, la que el dossier no necesitaba: NI SOMBRA NI FILTRO sobre
+     una captura. Un box-shadow o un filter sobre una imagen rasterizada obliga a
+     Chrome a exportarla como JPEG —con pérdida y sin alfa— más una máscara gris
+     aparte: de ahí los halos. El marco de ventana se dibuja con borde y color
+     plano justo por esto. */
+  .pp-captura-marco, .pp-captura-marco img { box-shadow: none; filter: none; }
+
+  /* Y no puede pasar del alto de la página: con el ancho al 100 %, una captura
+     apaisada mide más que los 167 mm menos el título, y `overflow: hidden` se
+     la comía por abajo. Se limita el ALTO en milímetros —medida de la página, no
+     de la ventana— y el marco se encoge con ella en vez de quedarse ancho. */
+  .pp-captura-marco { width: fit-content; max-width: 100%; margin-inline: auto; }
+  .pp-captura-marco img { max-height: 108mm; width: auto; max-width: 100%; }
+
+  /* El color de fondo ES el diseño: por defecto el navegador lo descarta para
+     ahorrar tinta y la presentación saldría en blanco con texto suelto. */
+  .pp-page, .pp-slide, .pp-tarjeta, .pp-columna, .pp-modulo, .pp-bloque,
+  .pp-fase, .pp-paso, .pp-resumen, .pp-captura-barra,
+  .pp-modulo-op, .pp-modulo-marca {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  /* Cromo de pantalla: en papel no navega nadie. */
+  .pp-nav, .pp-print-btn, .pp-borrador, .pp-cta { display: none; }
+
+  /* El catálogo, en cuatro columnas: once fichas en tres filas caben en la
+     página con la cuota debajo. En una o dos columnas se pasaba a la siguiente
+     por dos módulos y esa página salía casi en blanco. */
+  .pp-catalogo { grid-template-columns: repeat(4, 1fr); gap: 2.5mm; }
+  .pp-modulo-op { break-inside: avoid; padding: 2.2mm; }
+  /* La caja de la cuota, sin el aire que necesitaba en pantalla: allí comparte
+     fila con el botón «Me interesa así», y el botón no se imprime. */
+  .pp-resumen { padding: 3mm 4mm; }
+  .pp-tabla th, .pp-tabla td { padding: 0.3rem 0.55rem; }
+
+  /* ⚠️ SIN ESTO EL PDF SALE CON CASI TODAS LAS PÁGINAS EN BLANCO.
+     Bajo `.pp-anim` cada diapositiva arranca en opacity:0 y solo la revela
+     `.is-visible`, que el observer pone en las que han pasado por el viewport.
+     Nadie recorre las dieciséis antes de pulsar Descargar. */
+  .pp-anim .pp-slide .pp-slide-inner { opacity: 1; transform: none; transition: none; }
+}

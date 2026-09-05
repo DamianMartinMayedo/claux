@@ -3,10 +3,11 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Check, Copy, Eye, FileText, Trash2, X } from 'lucide-react'
+import { Check, Copy, Eye, FileText, Presentation, Trash2, X } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
+import HeaderCheck from '@/components/portal/HeaderCheck'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -22,6 +23,7 @@ import {
   type DiagnosticoLead,
   type EstadoLead,
 } from '@/app/actions/diagnostico'
+import { crearPropuesta } from '@/app/actions/propuestas'
 
 type Filtro = 'todos' | 'nuevo' | 'contactado' | 'pruebas'
 
@@ -61,17 +63,6 @@ function EstadoBadge({ estado }: { estado: EstadoLead }) {
   return estado === 'contactado'
     ? <span className="badge badge-success">Contactado</span>
     : <span className="badge badge-info">Nuevo</span>
-}
-
-/** Checkbox de cabecera, con el estado intermedio que solo se puede poner por JS. */
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input type="checkbox" className="row-check" checked={checked}
-      ref={(el) => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange} aria-label="Seleccionar todo" />
-  )
 }
 
 export default function SolicitudesView({
@@ -125,9 +116,29 @@ export default function SolicitudesView({
   )
   const sel = useRowSelection(borrables)
 
+  const puedePropuestas = rol === 'super_admin' || permisos.includes('propuestas')
+
   function cambiarFiltro(f: Filtro) {
     setFiltro(f)
     sel.clear()
+  }
+
+  // La propuesta se CREA aquí y se abre ya: llevar el lead por la barra de
+  // direcciones (`?lead=`) obligaría al editor a decidir de dónde salen el nivel
+  // y los módulos, que es justo lo que hace la acción. Un viaje, un sitio.
+  function nuevaPropuesta(l: DiagnosticoLead) {
+    const ld = toastLoading('Creando…')
+    startTransition(async () => {
+      const r = await crearPropuesta({
+        nombreNegocio: l.nombre,
+        diagnosticoId: l.id,
+        nivel:   l.nivel_rec ?? undefined,
+        modulos: l.modulos_rec,
+      })
+      await ld.dismiss()
+      if (!r.ok || !r.id) { toastError(r.error ?? 'No se pudo crear la propuesta'); return }
+      router.push(`/admin/ventas/propuestas/${r.id}`)
+    })
   }
 
   async function copiar(texto: string, etiqueta: string) {
@@ -280,6 +291,11 @@ export default function SolicitudesView({
                         <RowActions>
                           <button className="row-actions-item" onClick={() => setDetalle(l)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                           <Link href={`/admin/presupuestos/nuevo?lead=${l.id}`} className="row-actions-item"><FileText size={15} strokeWidth={2} /> Crear presupuesto</Link>
+                          {puedePropuestas && (
+                            <button className="row-actions-item" disabled={pending} onClick={() => nuevaPropuesta(l)}>
+                              <Presentation size={15} strokeWidth={2} /> Crear propuesta
+                            </button>
+                          )}
                           <button
                             className="row-actions-item row-actions-item-danger"
                             onClick={() => setPorBorrar(l)}
@@ -426,6 +442,11 @@ export default function SolicitudesView({
               <Link href={`/admin/presupuestos/nuevo?lead=${detalle.id}`} className="btn btn-secondary">
                 <FileText size={15} strokeWidth={2} /> Crear presupuesto
               </Link>
+              {puedePropuestas && (
+                <button className="btn btn-secondary" disabled={pending} onClick={() => nuevaPropuesta(detalle)}>
+                  <Presentation size={15} strokeWidth={2} /> Crear propuesta
+                </button>
+              )}
               {detalle.estado === 'nuevo' ? (
                 <button className="btn btn-primary" disabled={saving} onClick={() => marcar(detalle, 'contactado')}>
                   <Check size={15} strokeWidth={2} /> Marcar como contactada

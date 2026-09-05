@@ -37,7 +37,7 @@ export function normalizarRol(valor: unknown): RolAdmin {
 }
 
 export type SeccionKey =
-  | 'dashboard' | 'metricas' | 'solicitudes' | 'presupuestos' | 'clientes_ro'
+  | 'dashboard' | 'metricas' | 'solicitudes' | 'presupuestos' | 'propuestas' | 'clientes_ro'
   | 'clientes' | 'modulos' | 'ia' | 'diagnostico'
   | 'pagos' | 'soporte' | 'configuracion' | 'notificaciones' | 'actividad' | 'usuarios'
 
@@ -45,6 +45,7 @@ export type SeccionKey =
 export const SECCIONES: { key: SeccionKey; label: string }[] = [
   { key: 'solicitudes',    label: 'Solicitudes' },
   { key: 'presupuestos',   label: 'Presupuestos de instalación' },
+  { key: 'propuestas',     label: 'Propuestas comerciales' },
   { key: 'clientes_ro',    label: 'Clientes (solo lectura)' },
   { key: 'clientes',       label: 'Clientes (gestión completa)' },
   { key: 'modulos',        label: 'Módulos' },
@@ -61,7 +62,7 @@ export const SECCIONES: { key: SeccionKey; label: string }[] = [
 ]
 
 /** Secciones marcadas por defecto al crear un vendedor. */
-export const PERMISOS_VENDEDOR_DEFAULT: SeccionKey[] = ['solicitudes', 'presupuestos', 'clientes_ro']
+export const PERMISOS_VENDEDOR_DEFAULT: SeccionKey[] = ['solicitudes', 'presupuestos', 'propuestas', 'clientes_ro']
 
 /** Ruta de la página de cada sección (para nav y redirecciones). */
 export const RUTA_SECCION: Record<SeccionKey, string> = {
@@ -69,6 +70,7 @@ export const RUTA_SECCION: Record<SeccionKey, string> = {
   metricas:      '/admin/metricas',
   solicitudes:   '/admin/solicitudes',
   presupuestos:  '/admin/presupuestos',
+  propuestas:    '/admin/ventas/propuestas',
   clientes_ro:   '/admin/ventas/clientes',
   clientes:      '/admin/clientes',
   modulos:       '/admin/modulos',
@@ -115,7 +117,7 @@ export function soloManual(ctx: ContextoAdmin | null): boolean {
 export function primeraRutaPermitida(ctx: ContextoAdmin | null): string {
   if (!ctx) return '/admin/login'
   if (ctx.rol === 'super_admin') return '/admin/dashboard'
-  const orden: SeccionKey[] = ['solicitudes', 'presupuestos', 'clientes_ro', 'dashboard']
+  const orden: SeccionKey[] = ['solicitudes', 'presupuestos', 'propuestas', 'clientes_ro', 'dashboard']
   const key = orden.find(k => ctx.permisos.includes(k)) ?? ctx.permisos[0]
   // Sin ninguna sección marcada, el sitio de un vendedor es el manual: es lo que
   // tiene siempre, y mandarlo al login otra vez parecería que su cuenta no vale.

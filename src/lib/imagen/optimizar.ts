@@ -41,3 +41,52 @@ export async function optimizarImagen(entrada: Buffer): Promise<ImagenOptimizada
 
   return { full, thumb }
 }
+
+// ── Capturas de producto (biblioteca de la propuesta comercial) ──────────────
+
+const CAPTURA_ANCHO = 1200        // px de ancho; una captura de UI no se recorta
+const CAPTURA_TOPE  = 180 * 1024  // el techo del §10.4 del plan: 180 KB
+const CAPTURA_ESCALERA = [82, 72, 62, 52]
+
+export interface CapturaOptimizada {
+  webp:  Buffer
+  ancho: number
+  alto:  number
+}
+
+/**
+ * Una captura de pantalla lista para la propuesta: WebP a 1200 px de ancho y
+ * **por debajo de 180 KB**, con sus medidas reales.
+ *
+ * Quien abre la propuesta suele estar en Cuba con 3G y son ocho imágenes: el
+ * peso no se pide, se garantiza. Por eso hay escalera de calidad en vez de un
+ * número fijo —una captura con foto dentro pesa el triple que una de tablas— y
+ * por eso, si ni al 52 baja del tope, se rechaza aquí: el sitio donde eso se
+ * arregla es el admin, no la casa del cliente.
+ *
+ * Las medidas salen del fichero YA redimensionado, no del original: van al
+ * `<img>` como `width`/`height` para reservar el hueco, y con las del original
+ * reservarían uno del tamaño equivocado.
+ */
+export async function optimizarCaptura(entrada: Buffer): Promise<CapturaOptimizada> {
+  const sharpMod = (await import('sharp')).default
+  const base = sharpMod(entrada)
+    .rotate()
+    .resize({ width: CAPTURA_ANCHO, withoutEnlargement: true })
+
+  let ultima: { data: Buffer; info: { width: number; height: number; size: number } } | null = null
+  for (const quality of CAPTURA_ESCALERA) {
+    const { data, info } = await base.clone().webp({ quality }).toBuffer({ resolveWithObject: true })
+    ultima = { data, info }
+    if (info.size <= CAPTURA_TOPE) break
+  }
+  if (!ultima) throw new Error('No se pudo procesar la imagen.')
+  if (ultima.info.size > CAPTURA_TOPE) {
+    throw new Error(
+      `La imagen no baja de 180 KB (${Math.round(ultima.info.size / 1024)} KB). ` +
+      'Recorta la captura a la parte que se quiere enseñar.',
+    )
+  }
+
+  return { webp: ultima.data, ancho: ultima.info.width, alto: ultima.info.height }
+}

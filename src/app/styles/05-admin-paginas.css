@@ -1204,3 +1204,203 @@ textarea:focus-visible {
   .acad-entry-header { width: 36px; padding: 0; justify-content: center; }
   .acad-entry-label { display: none; }
 }
+/* ── Propuestas comerciales: el editor (/admin/ventas/propuestas/[id]) ───────
+   Un panel por pestaña, con varias tarjetas apiladas dentro. La separación va
+   aquí y no en `.card` porque la tarjeta no lleva margen —lo pone quien las
+   apila—, igual que hace `.pres-layout` con la calculadora del presupuesto. */
+.prp-panel { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
+/* Dentro de una tarjeta, el título y su nota van pegados a lo que explican. */
+.prp-panel > .card > .card-title + p,
+.prp-panel > .card > .prp-card-head + p { margin-top: var(--space-1); }
+/* Título de tarjeta con una acción a la derecha («Traer lo del diagnóstico»). */
+.prp-card-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-3);
+}
+.prp-panel > .card > p + p { margin-top: var(--space-2); }
+.prp-panel > .card > * + .prp-grid,
+.prp-panel > .card > * + .prp-lineas,
+.prp-panel > .card > * + .prp-modulos,
+.prp-panel > .card > * + .prp-textos,
+.prp-panel > .card > * + .prp-secciones,
+.prp-panel > .card > * + .prp-capturas,
+.prp-panel > .card > * + .alert,
+.prp-panel > .card > * + .btn,
+.prp-panel > .card > * + .prp-enlace,
+.prp-panel > .card > * + .prt-grupo,
+.prp-panel > .card > * + .prt-acciones,
+.prp-panel > .card > * + .input-group { margin-top: var(--space-4); }
+
+.prp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-4);
+}
+/* Las tres frases de «Cómo lo lleva hoy» van UNA DEBAJO DE OTRA: en la rejilla
+   de arriba caían en columnas de 15rem y una frase entera no cabe —se leía
+   media—. Son texto, no datos. */
+.prp-lineas { display: grid; grid-template-columns: 1fr; gap: var(--space-3); }
+/* El presupuesto vinculado se lee entero o no se lee: la opción trae número,
+   negocio, importe y cuota, y partida en dos columnas se corta a la mitad. */
+.prp-ancho { grid-column: 1 / -1; }
+
+/* Los módulos que se presentan. Rejilla y no lista: son catorce y en una
+   columna la pantalla se va al doble de alto que el resto del editor. */
+.prp-modulos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--space-2);
+}
+.prp-modulo-check {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  cursor: pointer; transition: border-color var(--transition), background var(--transition);
+}
+.prp-modulo-check:hover { border-color: var(--color-primary); background: var(--color-surface-2); }
+.prp-modulo-check input { flex-shrink: 0; cursor: pointer; }
+/* El nombre se queda con lo que sobra y el precio no se mueve de la derecha:
+   con `flex: 1` en los dos, la columna de importes bailaba por cada nombre. */
+.prp-modulo-nombre {
+  flex: 1 1 auto; min-width: 0; font-size: var(--text-sm); color: var(--color-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prp-modulo-precio {
+  flex-shrink: 0; font-size: var(--text-xs); font-weight: 700;
+  color: var(--color-text-muted); font-variant-numeric: tabular-nums;
+}
+
+.prp-textos { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
+.prp-textos textarea.input { resize: vertical; min-height: 4.5rem; }
+
+/* Las secciones de la presentación: mostrar/ocultar y reordenar. */
+.prp-secciones { list-style: none; margin: 0; padding: 0; }
+.prp-seccion {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.prp-seccion:last-child { border-bottom: 0; }
+/* La casilla se alinea con la primera línea del nombre, no con el centro del
+   bloque: con tres o cuatro líneas dentro se quedaba flotando en medio. */
+.prp-seccion input { flex-shrink: 0; margin-top: 0.2rem; cursor: pointer; }
+.prp-seccion input:disabled { cursor: not-allowed; }
+.prp-seccion-cuerpo { flex: 1 1 auto; min-width: 0; display: grid; gap: var(--space-1); }
+.prp-seccion-linea { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.prp-seccion-nombre { font-size: var(--text-sm); color: var(--color-text); }
+.prp-seccion-flechas { display: flex; flex-shrink: 0; gap: var(--space-1); }
+/* Lo que la sección lleva dentro, tal cual saldrá. Una línea por cosa y
+   cortada con puntos suspensivos: es una muestra, no el documento. */
+.prp-muestra { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.prp-muestra li {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prp-seccion-origen { margin: 0; font-size: var(--text-xs); color: var(--color-text-faint); }
+.prp-seccion-origen a { color: var(--color-primary); text-decoration: none; }
+.prp-seccion-origen a:hover { text-decoration: underline; }
+/* Oculta no es lo mismo que borrada: sigue en la lista, en su sitio y con su
+   flecha, y se ve de un vistazo que hoy no sale. */
+.prp-seccion-oculta .prp-seccion-nombre { color: var(--color-text-faint); text-decoration: line-through; }
+
+/* Las capturas de ESTA propuesta, en el orden en que van a salir. Con la
+   imagen delante: el nombre del módulo no dice si la captura es la buena. */
+.prp-capturas { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.prp-captura {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.prp-captura input { flex-shrink: 0; cursor: pointer; }
+.prp-captura-img {
+  width: 96px; height: 60px; flex-shrink: 0;
+  object-fit: cover; object-position: top left;
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+}
+.prp-captura-cuerpo { flex: 1 1 auto; min-width: 0; }
+.prp-captura-nombre {
+  display: block; font-size: var(--text-sm); color: var(--color-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prp-captura-donde { display: block; font-size: var(--text-xs); color: var(--color-text-faint); }
+/* Fuera de la presentación: sigue en la lista y en su sitio, apagada. */
+.prp-captura-oculta { opacity: 0.5; }
+
+/* El enlace público, en bloque y entero: se copia con el botón, pero cuando el
+   botón falla (portapapeles sin permiso) hay que poder seleccionarlo a mano. */
+.prp-enlace {
+  display: block; width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: var(--text-sm); color: var(--color-text);
+  word-break: break-all;
+}
+.prp-acciones { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* ── Biblioteca de capturas (/admin/ventas/propuestas/capturas) ──────────────
+   Tabla, no rejilla de fichas: con veinte capturas la rejilla eran cuatro
+   pantallas de scroll y las operaciones iban de una en una. Lo único que la
+   tabla no puede dar es juzgar la imagen —para eso está la miniatura, que se
+   pulsa y abre la captura entera—. */
+.cap-col-img { width: 7.5rem; }
+.cap-thumb {
+  /* `max-width` y no solo el ancho de la columna: bajo 640 px la tabla se
+     vuelve tarjetas y la celda deja de tener columna que la ciña. */
+  display: block; width: 100%; max-width: 7.5rem; padding: 0; cursor: zoom-in;
+  /* Fondo propio: casi todas las capturas tienen el fondo claro de la app y sin
+     esto no se ve dónde acaban. */
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.cap-thumb:hover { border-color: var(--color-border-strong); }
+.cap-thumb img { display: block; width: 100%; height: auto; }
+/* Retirada = no sale en ninguna propuesta. Se apaga la fila entera; solo el
+   badge de estado se queda a plena luz, que es lo que hay que leer. */
+.cap-fila-retirada td { opacity: 0.55; }
+.cap-fila-retirada .badge { opacity: 1; }
+.cap-vista { display: block; color: var(--color-text); }
+.cap-alt { font-size: var(--text-xs); color: var(--color-text-muted); }
+/* La imagen elegida, antes de subirla: es lo único que dice si es la buena. */
+.cap-previo {
+  display: block; width: 100%; max-height: 320px; object-fit: contain;
+  object-position: top left;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+.cap-otra { align-self: flex-start; }
+/* Lo que falta por rellenar, junto al botón apagado y no en su lugar: un botón
+   deshabilitado sin motivo es el defecto que esto viene a tapar. */
+.cap-falta {
+  flex: 1 1 auto; margin: 0;
+  font-size: var(--text-xs); color: var(--color-warning);
+}
+.cap-sectores { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+
+/* Los sectores del formulario, en columnas: son once y en una sola lista
+   obligan a bajar el modal entero para ver la última. */
+.cap-sector-lista {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: var(--space-2);
+}
+.cap-sector-check {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-sm); color: var(--color-text); cursor: pointer;
+}
+
+/* ── Textos fijos de la propuesta (/admin/ventas/propuestas/textos) ─────────
+   Grupos de tarjetas «título + cuerpo» que se añaden y se quitan. La ficha se
+   enmarca porque son cuatro grupos seguidos y sin marco no se ve dónde acaba
+   una tarjeta y empieza la siguiente. */
+.prt-grupo { display: grid; grid-template-columns: 1fr; gap: var(--space-3); }
+.prt-tarjeta {
+  display: grid; grid-template-columns: 1fr auto; gap: var(--space-3);
+  align-items: start; padding: var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+.prt-tarjeta-campos { display: grid; grid-template-columns: 1fr; gap: var(--space-2); min-width: 0; }
+.prt-tarjeta textarea.input { resize: vertical; min-height: 3.5rem; }
+.prt-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }

@@ -10,6 +10,7 @@ import type { FormatoDatos } from '@/lib/presupuesto/config'
 import { COLUMNAS_PRECIO, normalizarNivel, sumarModulos, type Nivel, type ModuloPrecios } from '@/lib/niveles'
 import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { avisoPropuestas, propuestasDe, refrescarPropuestas, refrescarPropuestasDe } from '@/lib/propuesta/refrescar'
 
 export interface ModuloPresupuesto extends ModuloPrecios {
   clave:   string
@@ -265,6 +266,12 @@ function avisoCobro(r: ResultadoCobro): string | null {
 /** Un cobro ya confirmado que deja de cuadrar es lo único que exige mano humana. */
 function tonoCobro(r: ResultadoCobro): 'info' | 'warning' {
   return r.accion === 'congelado' ? 'warning' : 'info'
+}
+
+/** Los avisos del guardado en una sola línea. El del cobro va primero: toca dinero. */
+function juntar(...avisos: (string | null)[]): string | null {
+  const vivos = avisos.filter((a): a is string => !!a)
+  return vivos.length > 0 ? vivos.join(' ') : null
 }
 
 /** Siguiente `pago_id` correlativo (PAG-0001, PAG-0002…). */
@@ -526,9 +533,17 @@ export async function actualizarPresupuesto(
   // el cliente sigue viendo en su panel la cifra del borrador anterior.
   const cobro = await sincronizarCobroConfiguracion(db, id, ctx)
 
+  // La propuesta que enseña este presupuesto no guarda copia de sus cifras: hay
+  // que tirarle la caché o seguiría enseñando el precio de antes.
+  const propuestas = await refrescarPropuestasDe(db, id)
+
   revalidatePath('/admin/presupuestos')
   revalidatePath('/admin/pagos')
-  return { ok: true, id, aviso: avisoCobro(cobro), avisoTono: tonoCobro(cobro) }
+  return {
+    ok: true, id,
+    aviso: juntar(avisoCobro(cobro), avisoPropuestas(propuestas)),
+    avisoTono: tonoCobro(cobro),
+  }
 }
 
 // ── Aprobar / desaprobar un presupuesto ──
@@ -573,9 +588,17 @@ export async function aprobarPresupuesto(
     ? await sincronizarCobroConfiguracion(db, id, ctx)
     : { accion: 'ninguna' as const }
 
+  // Aprobar no cambia las cifras, pero sí la diapositiva de fases (el sello del
+  // presupuesto) y la fecha «Actualizada el…» de la portada.
+  const propuestas = await refrescarPropuestasDe(db, id)
+
   revalidatePath('/admin/presupuestos')
   revalidatePath('/admin/pagos')
-  return { ok: true, aviso: avisoCobro(cobro), avisoTono: tonoCobro(cobro) }
+  return {
+    ok: true,
+    aviso: juntar(avisoCobro(cobro), avisoPropuestas(propuestas)),
+    avisoTono: tonoCobro(cobro),
+  }
 }
 
 // ── Eliminar un presupuesto (solo borradores) ──
@@ -626,6 +649,10 @@ export async function eliminarPresupuesto(
     }
   }
 
+  // Las propuestas se leen AQUÍ, antes de borrar: la FK es `on delete set null`
+  // y después de borrar ya no hay ninguna fila que referencie a este id.
+  const propuestas = await propuestasDe(db, id)
+
   const { data: eliminado, error } = await db
     .from('presupuestos_instalacion')
     .delete()
@@ -651,6 +678,11 @@ export async function eliminarPresupuesto(
     action:      'eliminar',
     description: `Eliminó el borrador de presupuesto de ${pres.nombre_negocio} — ${importeClaux(pres.total_final, pres.moneda)} de instalación${pres.client_id ? ` · ${pres.client_id}` : ''}`,
   })
+
+  // La propuesta no se rompe al borrar el presupuesto: se queda sin la
+  // diapositiva del importe. Pero si no se refresca, sigue enseñando las cifras
+  // de algo que ya no existe.
+  refrescarPropuestas(propuestas)
 
   revalidatePath('/admin/presupuestos')
   if (pres.client_id) revalidatePath(`/admin/clientes/${pres.client_id}`)

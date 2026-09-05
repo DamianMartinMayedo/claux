@@ -128,6 +128,8 @@ Detalles ya resueltos en los componentes, no los reinventes: `blur` con 120 ms d
 
 Toda pestaña interna usa **`<Tabs>`** (`src/components/Tabs.tsx`) + clases `.tabs`/`.tab`/`.tab-count` de `03-components.css`. Es presentacional y **controlado**: el padre guarda la pestaña activa (`useState`) y pasa `tabs`, `active`, `onChange`. Conteos opcionales con `count` (pill); `countTone: 'warning'` para conteos de alerta (p. ej. sin leer). **No crees familias nuevas** de pestañas: `.usr-/.ven-/.detail-/.prd-/.res-/.rrhh-/.caja-/.pv-` son **legado a converger**, no a imitar. El portal todavía usa algunas; al tocar esas vistas, migra a `<Tabs>`. Desde un Server Component, extrae un envoltorio cliente (patrón: `configuracion/ConfiguracionTabs.tsx`, recibe los paneles ya resueltos como props).
 
+**Segundo nivel ⇒ `<SubTabs>`** (`src/components/SubTabs.tsx`), no `.tabs` en pequeño. Recibe `tabs` (`{ href, label, count?, countTone? }`), `ariaLabel` y, opcionalmente, `activo`; la activa la decide la **URL** por prefijo más largo (así el detalle `…/propuestas/12` sigue marcando «Propuestas»), porque un segundo nivel navega —cada sub-pestaña es una ruta— en vez de guardar estado. Con **menos de dos** visibles no se pinta: los permisos filtran la lista y un menú de un elemento no es un menú. Clases `.subtabs`/`.subtab`; el pill de conteo es el mismo `.tab-count`. **No lo maquilles con `.tabs`**: rebajar la familia no funciona —dos filas con la misma forma pegadas se leen como una sola barra y no se ve cuál cuelga de cuál—, por eso el segundo nivel cambia de forma (pastillero en bandeja, sangrado, con guía vertical). Referencia: `components/admin/PropuestasTabs.tsx`, que solo declara rutas y permisos.
+
 ## 3.3 Filtros — un solo sistema, y una sola declaración
 
 Todo listado del portal filtra con **`<Filtros>`** (`src/components/portal/Filtros.tsx`), que recibe una **declaración** (`src/lib/filtros.ts`). De esa única declaración salen **tres cosas** que antes se escribían por separado: la barra, el `FiltroExport` de la descarga y el texto de «lo que vas a descargar». Escribirlas a mano es cómo la pantalla y el fichero acabaron diciendo cosas distintas (un desplegable imprimía un UUID; pedir «Sin categoría» descargaba todo el catálogo). Vista de referencia: `gastos/GastosView.tsx` + su `page.tsx` + `actions/portal/gastos.ts`.
@@ -193,7 +195,7 @@ Se sirven desde nuestro dominio (`next/font`, descargadas en el build), nunca de
 | Componente | Lo montan | Cursiva |
 |---|---|---|
 | `<BrandFonts>` | `portal/`, `admin/`, `(academia)/`, `ayuda/` | sí |
-| `<BrandFontsSinCursiva>` | `(landing)/`, `legal/`, `diagnostico/`, el deck `/d/[token]` | no |
+| `<BrandFontsSinCursiva>` | `(landing)/`, `legal/`, `diagnostico/`, el deck `/d/[token]`, la propuesta `/p/[token]` | no |
 
 Publican `--fuente-display` / `--fuente-body` en `:root` (no como clase en un `<div>`: los modales y los toasts se pintan con `createPortal` colgando de `<body>` y se quedarían fuera). `01-tokens.css` las consume en `--font-display` / `--font-body`, que son las que se usan en el CSS.
 

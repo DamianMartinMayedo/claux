@@ -31,6 +31,14 @@ export default async function NuevoPresupuestoPage({
 
   const db = createAdminClient()
 
+  // `?modulos=` MANDA sobre lo que se deduce del origen (el lead o el cliente).
+  // Es la vía por la que llega lo que se marcó en el configurador de una
+  // propuesta: sin esto, el origen pisaba lo acordado en la reunión con lo que
+  // sugirió un formulario hace semanas o con los módulos que el cliente ya tenía.
+  // Se filtra contra el catálogo vivo — una clave retirada no puede entrar.
+  const modulosPedidos = (modulosQs ?? '').split(',').map(c => c.trim())
+    .filter(c => c && modulos.some(m => m.clave === c))
+
   // Prefill desde un lead de diagnóstico o desde un CLIENTE QUE YA EXISTE (opcionales).
   let prefill = {
     diagnosticoId: null as number | null,
@@ -69,9 +77,11 @@ export default async function NuevoPresupuestoPage({
         // copie a mano lo que está en la ficha de al lado.
         nombreResponsable: data.nombre_contacto ?? '',
         contacto:          data.email_admin ?? '',
-        modulos:           Array.isArray(data.modulos_activos)
-          ? data.modulos_activos.filter((c: string) => modulos.some(m => m.clave === c))
-          : [],
+        modulos: modulosPedidos.length > 0
+          ? modulosPedidos
+          : Array.isArray(data.modulos_activos)
+            ? data.modulos_activos.filter((c: string) => modulos.some(m => m.clave === c))
+            : [],
         // Y su nivel, que es el que decide el precio de los módulos: la ampliación de un
         // cliente Inicial se cotiza a precio Inicial.
         nivel: normalizarNivel(data.nivel),
@@ -92,8 +102,7 @@ export default async function NuevoPresupuestoPage({
       nombreNegocio:     negocio ?? '',
       nombreResponsable: responsable ?? '',
       contacto:          contactoQs ?? '',
-      modulos: (modulosQs ?? '').split(',').map(c => c.trim())
-        .filter(c => c && modulos.some(m => m.clave === c)),
+      modulos:           modulosPedidos,
       nivel: nivelQs ? normalizarNivel(nivelQs) : null,
       moneda: monedaQs ? normalizarMonedaClaux(monedaQs) : null,
     }
@@ -108,7 +117,9 @@ export default async function NuevoPresupuestoPage({
         .eq('id', id)
         .maybeSingle()
       if (data) {
-        const rec = (data.modulos_rec ?? []).filter((c: string) => modulos.some(m => m.clave === c))
+        const rec = modulosPedidos.length > 0
+          ? modulosPedidos
+          : (data.modulos_rec ?? []).filter((c: string) => modulos.some(m => m.clave === c))
         prefill = {
           diagnosticoId:     data.id,
           clientId:          null,
@@ -119,9 +130,11 @@ export default async function NuevoPresupuestoPage({
           // El nivel que salió del diagnóstico (mig. 219). El comercial puede
           // cambiarlo, pero arrancar en el que declaró el propio cliente evita
           // cotizarle un nivel donde ya sabemos que no cabe.
-          nivel:             data.nivel_rec ? normalizarNivel(data.nivel_rec) : null,
-          // Un lead no tiene moneda: el comercial la elige al cotizar.
-          moneda:            null,
+          nivel:             nivelQs ? normalizarNivel(nivelQs)
+                             : data.nivel_rec ? normalizarNivel(data.nivel_rec) : null,
+          // Un lead no tiene moneda: la elige el comercial al cotizar, salvo que
+          // venga en la URL desde una propuesta que ya la tiene decidida.
+          moneda:            monedaQs ? normalizarMonedaClaux(monedaQs) : null,
         }
       }
     }
