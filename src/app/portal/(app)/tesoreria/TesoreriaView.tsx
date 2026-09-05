@@ -8,6 +8,7 @@ import TablaCargando                     from '@/components/portal/TablaCargando
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
+import HeaderCheck from '@/components/portal/HeaderCheck'
 import { RowActions } from '@/components/portal/RowActions'
 import FormHelp from '@/components/portal/FormHelp'
 import { useRowSelection } from '@/components/portal/useRowSelection'
@@ -994,18 +995,6 @@ function ConfirmEliminar({
         </div>
       </div>
     </div>
-  )
-}
-
-// ── Checkbox de cabecera (con estado indeterminado) ──────────────────────────────
-
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input type="checkbox" className="row-check" checked={checked}
-      ref={el => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }
 

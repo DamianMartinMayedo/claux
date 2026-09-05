@@ -26,6 +26,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import { RowActions }                   from '@/components/portal/RowActions'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
 import BulkBar                          from '@/components/portal/BulkBar'
+import HeaderCheck                      from '@/components/portal/HeaderCheck'
 import { useRowSelection }              from '@/components/portal/useRowSelection'
 import { fmtFechaEs } from '@/lib/date-utils'
 
@@ -327,17 +328,5 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
         />
       )}
     </div>
-  )
-}
-
-// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
-
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input type="checkbox" className="row-check" checked={checked}
-      ref={el => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }

@@ -51,6 +51,7 @@ import Tabs                            from '@/components/Tabs'
 import AsistenteCatalogo               from './AsistenteCatalogo'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
+import HeaderCheck                     from '@/components/portal/HeaderCheck'
 import Filtros                        from '@/components/portal/Filtros'
 import AvisoTope                      from '@/components/portal/AvisoTope'
 import ExportarMenu                   from '@/components/portal/ExportarMenu'
@@ -816,18 +817,6 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
         </form>
       </div>
     </div>
-  )
-}
-
-// ── Checkbox de cabecera (con estado indeterminado) ──────────────────────────────
-
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input type="checkbox" className="row-check" checked={checked}
-      ref={el => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }
 

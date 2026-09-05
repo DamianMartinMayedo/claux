@@ -87,6 +87,8 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 
 **Acciones de fila:** con **2+ acciones**, un único menú `⋯` con `RowActions` (`src/components/portal/RowActions.tsx`) — nunca una fila de botones-icono (se amontonan). Items: `<button className="row-actions-item">` o `<Link className="row-actions-item">` (+ `-danger`/`-success`) con icono **y** texto. El menú va `fixed` (escapa del `overflow` de `.card-table`) y ya hace `stopPropagation`. Los enlaces heredan el color del texto; solo `-danger` va rojo. Con **1 sola acción**, icono directo (`.ter-action-btn`). Referencia: `GastosView.tsx`, `TercerosView.tsx`.
 
+**Selección múltiple:** los tres van juntos y viven en `src/components/portal/`: `useRowSelection` (qué filas hay marcadas), `<HeaderCheck>` en el `th.col-check` (el «Seleccionar todo», con el estado intermedio que solo se puede poner por JS) y `<BulkBar>` con las acciones en lote — no redefinas el checkbox de cabecera en la vista.
+
 **Filas clickables** (tabla con detalle): `<tr className="table-row-clickable" onClick={() => router.push(...)}>`; el `<Link>` del nombre lleva `onClick={(e) => e.stopPropagation()}`.
 
 **Color de empresa** (tablas multi-empresa): `<tr className="… row-empresa-accent" style={empresaColorVar(colorOf(id))}>` (única excepción al no-inline: custom property de runtime). Acento lateral izquierdo; en tarjeta pasa a `border-left`. No añadas más color que ese acento.

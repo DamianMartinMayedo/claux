@@ -7,6 +7,7 @@ import { Check, ExternalLink, PhoneCall, Trash2 } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
+import HeaderCheck from '@/components/portal/HeaderCheck'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
@@ -50,17 +51,6 @@ function bloqueoDe(a: Ampliacion): string | null {
   if (!a.es_prueba) return 'Es de un cliente real: su petición no se borra'
   if (a.respondida) return 'Ya tiene una respuesta escrita'
   return null
-}
-
-/** Checkbox de cabecera, con el estado intermedio que solo se puede poner por JS. */
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input type="checkbox" className="row-check" checked={checked}
-      ref={(el) => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange} aria-label="Seleccionar todo" />
-  )
 }
 
 export default function AmpliacionesView({

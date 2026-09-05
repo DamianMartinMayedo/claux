@@ -42,6 +42,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import BulkBar                         from '@/components/portal/BulkBar'
+import HeaderCheck                     from '@/components/portal/HeaderCheck'
 import { useConfigurador }             from '@/components/portal/ConfiguradorContext'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
@@ -586,22 +587,6 @@ function AccionesFacturas({
         </button>
       )}
     </>
-  )
-}
-
-// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
-
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input
-      type="checkbox" className="row-check"
-      checked={checked}
-      ref={el => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange}
-      aria-label="Seleccionar todo"
-    />
   )
 }
 

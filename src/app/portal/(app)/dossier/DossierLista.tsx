@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, Copy, ExternalLink, Pencil, Files, Trash2, Loader2, X, EyeOff, AlertTriangle } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
+import HeaderCheck from '@/components/portal/HeaderCheck'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { useOrden, ThOrden } from '@/components/TableSort'
@@ -306,17 +307,5 @@ export default function DossierLista({
         </div>
       )}
     </div>
-  )
-}
-
-// ── Checkbox de cabecera (con estado indeterminado) ───────────────────────────
-
-function HeaderCheck({ checked, indeterminate, onChange }: {
-  checked: boolean; indeterminate: boolean; onChange: () => void
-}) {
-  return (
-    <input type="checkbox" className="row-check" checked={checked}
-      ref={el => { if (el) el.indeterminate = indeterminate }}
-      onChange={onChange} aria-label="Seleccionar todo" />
   )
 }
